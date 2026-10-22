@@ -1350,7 +1350,7 @@ export default function SourcesWorkspace({
       <h2 id={importResultLabelId} className="text-sm font-semibold">
         {latestSourceTaskLabel}
       </h2>
-      <p className="text-xs text-[var(--muted-foreground)]">
+      <p role="status" data-ltm-import-result-summary className="text-xs text-[var(--muted-foreground)]">
         {localizeUi("ui.longTermMemory.sourcesworkspace.importResultSummary", {
           requested: restoredImportResult.counts?.requested ?? latestSourceTask?.sourceCount ?? 0,
           wrote: restoredImportResult.counts?.sourceNotesWritten ?? 0,
@@ -1382,7 +1382,12 @@ export default function SourcesWorkspace({
         <article key={item.sourceId} className="space-y-1 border-t border-[var(--border)] pt-3 text-xs">
           <strong>{item.title}</strong>
           {item.status ? <p className="text-[var(--muted-foreground)]">{humanizeLabel(item.status)}</p> : null}
-          {item.error?.message ? <StatusSurface tone="danger">{item.error.message}</StatusSurface> : null}
+          {item.error?.message ? (
+            <p data-ltm-import-item-error className="flex items-start gap-2 text-xs text-[var(--destructive)]">
+              <CircleAlert aria-hidden="true" size="0.875rem" className="mt-0.5 shrink-0" />
+              {item.error.message}
+            </p>
+          ) : null}
           {item.diagnostics?.length ? (
             <ul className="space-y-1 text-[var(--muted-foreground)]">
               {item.diagnostics.map((diagnostic, index) => (
@@ -1392,18 +1397,29 @@ export default function SourcesWorkspace({
           ) : null}
         </article>
       ))}
-      {restoredImportResult.writeFailures?.map((failure) => (
-        <StatusSurface key={failure.sourceId} tone="danger" data-ltm-source-write-failure={failure.sourceId}>
-          <CircleAlert aria-hidden="true" size="0.875rem" /> {failure.title}: {failure.error.message} (
-          {importStatusLabel(failure.sourceWriteStatus, localizeUi)},{" "}
-          {importStatusLabel(failure.extractionStatus, localizeUi)})
-        </StatusSurface>
-      ))}
-      {restoredImportResult.missingSourceIds?.map((id) => (
-        <StatusSurface key={id} tone="danger">
-          <CircleAlert aria-hidden="true" size="0.875rem" /> {id}
-        </StatusSurface>
-      ))}
+      {restoredImportResult.writeFailures?.length || restoredImportResult.missingSourceIds?.length ? (
+        <ul data-ltm-source-import-failures className="space-y-2 text-xs text-[var(--destructive)]">
+          {restoredImportResult.writeFailures?.map((failure) => (
+            <li
+              key={failure.sourceId}
+              data-ltm-source-write-failure={failure.sourceId}
+              className="flex items-start gap-2"
+            >
+              <CircleAlert aria-hidden="true" size="0.875rem" className="mt-0.5 shrink-0" />
+              <span>
+                {failure.title}: {failure.error.message} ({importStatusLabel(failure.sourceWriteStatus, localizeUi)},{" "}
+                {importStatusLabel(failure.extractionStatus, localizeUi)})
+              </span>
+            </li>
+          ))}
+          {restoredImportResult.missingSourceIds?.map((id) => (
+            <li key={id} data-ltm-source-missing={id} className="flex items-start gap-2">
+              <CircleAlert aria-hidden="true" size="0.875rem" className="mt-0.5 shrink-0" />
+              {id}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <Button onClick={closeTaskResult}>{localizeUi("ui.longTermMemory.sourcesworkspace.backToPreview")}</Button>
     </section>
   ) : null;
@@ -2590,7 +2606,8 @@ export default function SourcesWorkspace({
                   </Button>
                 ) : null}
               </div>
-              <p className="text-xs text-[var(--muted-foreground)]">
+              {/* One polite summary for the batch; the per-source failures below are not live regions. */}
+              <p role="status" data-ltm-import-result-summary className="text-xs text-[var(--muted-foreground)]">
                 {localizeUi("ui.longTermMemory.sourcesworkspace.importResultSummary", {
                   requested: importResult.counts.requested,
                   wrote: importResult.counts.sourceNotesWritten,
@@ -2641,7 +2658,10 @@ export default function SourcesWorkspace({
                     </span>
                   </div>
                   {item.extractionStatus === "failed" || item.extractionStatus === "cancelled" ? (
-                    <StatusSurface tone={resultTone(item.extractionStatus)}>{item.error.message}</StatusSurface>
+                    <p data-ltm-import-item-error className="flex items-start gap-2 text-xs text-[var(--destructive)]">
+                      <CircleAlert aria-hidden="true" size="0.875rem" className="mt-0.5 shrink-0" />
+                      {item.error.message}
+                    </p>
                   ) : null}
                   {(item.extractionStatus === "succeeded" || item.extractionStatus === "incomplete") &&
                   item.outcome.droppedUnits > 0 ? (
@@ -2696,19 +2716,30 @@ export default function SourcesWorkspace({
                   </div>
                 </article>
               ))}
-              {importResult.writeFailures.map((failure) => (
-                <StatusSurface key={failure.sourceId} tone="danger" data-ltm-source-write-failure={failure.sourceId}>
-                  <CircleAlert aria-hidden="true" size="0.875rem" /> {failure.title}: {failure.error.message} (
-                  {importStatusLabel(failure.sourceWriteStatus, localizeUi)},{" "}
-                  {importStatusLabel(failure.extractionStatus, localizeUi)})
-                </StatusSurface>
-              ))}
-              {importResult.missingSourceIds.map((id) => (
-                <StatusSurface key={id} tone="danger" data-ltm-source-missing={id}>
-                  <CircleAlert aria-hidden="true" size="0.875rem" />{" "}
-                  {localizeUi("ui.longTermMemory.sourcesworkspace.missingSourceMemory")}
-                </StatusSurface>
-              ))}
+              {importResult.writeFailures.length || importResult.missingSourceIds.length ? (
+                <ul data-ltm-source-import-failures className="space-y-2 text-xs text-[var(--destructive)]">
+                  {importResult.writeFailures.map((failure) => (
+                    <li
+                      key={failure.sourceId}
+                      data-ltm-source-write-failure={failure.sourceId}
+                      className="flex items-start gap-2"
+                    >
+                      <CircleAlert aria-hidden="true" size="0.875rem" className="mt-0.5 shrink-0" />
+                      <span>
+                        {failure.title}: {failure.error.message} (
+                        {importStatusLabel(failure.sourceWriteStatus, localizeUi)},{" "}
+                        {importStatusLabel(failure.extractionStatus, localizeUi)})
+                      </span>
+                    </li>
+                  ))}
+                  {importResult.missingSourceIds.map((id) => (
+                    <li key={id} data-ltm-source-missing={id} className="flex items-start gap-2">
+                      <CircleAlert aria-hidden="true" size="0.875rem" className="mt-0.5 shrink-0" />
+                      {localizeUi("ui.longTermMemory.sourcesworkspace.missingSourceMemory")}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
               <Button onClick={closeTaskResult}>
                 {localizeUi("ui.longTermMemory.sourcesworkspace.backToPreview")}
               </Button>

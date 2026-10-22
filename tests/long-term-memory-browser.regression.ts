@@ -2035,6 +2035,8 @@ async function main() {
         .evaluate((description) => description.getBoundingClientRect().width);
       await page.getByRole("button", { name: "Next: How recall works" }).click();
       assert.equal(await onboardingTitle.innerText(), "How Recall Works");
+      // #1588: each step moves focus to its title, so the step change is read and Tab starts at the top.
+      await page.waitForFunction(() => document.activeElement?.id === "ltm-onboarding-title");
       const onboardingNext = page.getByRole("button", {
         name: "Next: Enabling it for the Current Chat",
       });
@@ -2315,7 +2317,10 @@ async function main() {
       releaseDeletedChatBatch?.();
       // When the change finishes, the row actions work again, the list reloads and the open memory keeps its unsaved
       // title; the availability panel below shows the places after the change.
-      await branchCard.locator("[data-ltm-note-actions-desktop] button:enabled").first().waitFor();
+      await branchCard
+        .locator("[data-ltm-note-actions-desktop] button:enabled:not([aria-disabled='true'])")
+        .first()
+        .waitFor();
       assert.ok(noteQueries.length > noteQueriesBeforeBatch, "the memory list reloads after the change");
       assert.equal(await branchTitle.inputValue(), "Memory outside current chat, edited");
       await branchTitle.fill("Memory outside current chat");
@@ -2326,6 +2331,10 @@ async function main() {
       assert.equal(await branchAvailability.locator("[data-ltm-availability-pills] button").count(), 4);
       await wholeChatPill.click();
       assert.equal(await wholeChatPill.count(), 0);
+      // #1588: focus stays in the chip list on a neighbouring chip's Remove button.
+      await page.waitForFunction(
+        () => document.activeElement?.matches("[data-ltm-availability-pills] [data-ltm-pill-remove]") ?? false,
+      );
       assert.equal(await branchPills.count(), 0, "removing the whole chat removes its branches");
       await branchAvailability.getByRole("button", { name: "Cancel", exact: true }).click();
       await page.getByRole("button", { name: "Edit availability" }).click();
@@ -2415,6 +2424,10 @@ async function main() {
       );
       releaseRename?.();
       await renameDialog.waitFor({ state: "detached" });
+      // #1588: closing Rename details returns focus to a Rename button, here the renamed detail's.
+      const renameButtonFocused = () =>
+        page.waitForFunction(() => document.activeElement?.matches("[data-ltm-rename-detail]") ?? false);
+      await renameButtonFocused();
       await page.unroute(renameRoute);
       // Below 48rem the memory list's pane is hidden while the details show; Rename detail still opens a
       // visible dialog instead of an invisible one that freezes the page (#1584).
@@ -2437,6 +2450,7 @@ async function main() {
       );
       await renameDialog.getByRole("button", { name: "Cancel" }).click();
       await renameDialog.waitFor({ state: "detached" });
+      await renameButtonFocused();
       if (vaultViewport) await page.setViewportSize(vaultViewport);
       await memorySearch.fill("Scoped desktop memory");
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
@@ -3051,6 +3065,10 @@ async function main() {
       let debugLogError = false;
       let debugClearDeletes = 0;
       let debugLogDelayMs = 0;
+      // Older filler events, so the default 200-event window is full and "Show up to 1,000" shows.
+      let debugLogPadding = 0;
+      // Holds debug-log responses until the test releases them.
+      let debugLogGate: Promise<void> | null = null;
       let debugLogRequests = 0;
       const debugReviewSources = structuredClone(reviewSources);
       const assertDebugActivity = async (activityPage: typeof page, navigation: "desktop" | "mobile") => {
@@ -3500,6 +3518,12 @@ async function main() {
         await debugDirty.getByText(/Unsaved change to recall explanations/u).waitFor();
         await debugDirty.getByRole("button", { name: "Save now" }).click();
         await activityPage.getByText("Memory settings saved.").waitFor();
+        // #1588: "Save now" leaves with the saved change, so focus moves to its result.
+        await activityPage.waitForFunction(
+          () =>
+            document.activeElement?.matches("[data-ltm-settings-message]") &&
+            document.activeElement.textContent?.includes("Memory settings saved."),
+        );
         assert.equal(
           await activityPage
             .locator('[data-ltm-surface="memory-settings"] [data-ltm-status]')
@@ -3509,6 +3533,16 @@ async function main() {
           "save feedback is shown once in the Debug panel",
         );
         assert.equal(await debugToggle.isChecked(), !debugChecked, "saving persists the toggled Debug setting");
+        // #1588: Discard also leaves with the change; focus goes to the open tab, not to the earlier save's result.
+        await debugToggle.click();
+        await debugDirty.waitFor();
+        await activityPage
+          .locator('[data-ltm-surface="memory-settings"]')
+          .getByRole("button", { name: "Discard changes" })
+          .click();
+        await debugDirty.waitFor({ state: "detached" });
+        await activityPage.waitForFunction(() => document.activeElement?.id === "settings-tab-debug");
+        assert.equal(await debugToggle.isChecked(), !debugChecked, "Discard keeps the saved Debug setting");
         // D06 repair: a same-turn double Refresh must coalesce into one debug-log
         // request; the button guard reads React Query's rendered `isFetching`, which is
         // still false for a second activation in the same task.
@@ -3539,6 +3573,35 @@ async function main() {
           "a same-turn double Refresh coalesces into one debug-log request",
         );
         debugLogDelayMs = 0;
+        if (navigation === "desktop") {
+          // #1588: "Show up to 1,000 events" keeps the log and keeps focus while the longer
+          // log loads, then hands focus to the log once the control is gone.
+          debugLogPadding = 250;
+          await activityPage.locator("#settings-tab-recall").click();
+          await activityPage.locator("#settings-tab-debug").click();
+          const showMore = activity.locator("[data-ltm-activity-show-more]");
+          await showMore.waitFor();
+          let releaseDebugLog = () => {};
+          debugLogGate = new Promise<void>((resolve) => {
+            releaseDebugLog = resolve;
+          });
+          await showMore.focus();
+          await activityPage.keyboard.press("Enter");
+          await activityPage.waitForFunction(
+            () => document.activeElement?.matches('[data-ltm-activity-show-more][aria-disabled="true"]') ?? false,
+          );
+          assert.equal(await activity.locator("[data-ltm-debug-list]").count(), 1, "the log stays while it grows");
+          debugLogGate = null;
+          releaseDebugLog();
+          await showMore.waitFor({ state: "detached" });
+          await activityPage.waitForFunction(
+            () => document.activeElement?.matches('[data-ltm-surface="activity"] [data-ltm-debug-list]') ?? false,
+          );
+          debugLogPadding = 0;
+          await activityPage.locator("#settings-tab-recall").click();
+          await activityPage.locator("#settings-tab-debug").click();
+          await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
+        }
         // M2: a recall whose chat resolves through /scope-targets shows the chat label.
         const resolvedRecall = await operation("recall-desktop");
         assert.match(resolvedRecall, /Recall from Current Final Branch/u);
@@ -3754,6 +3817,7 @@ async function main() {
           debugLogRequests += 1;
           // A delay keeps the first request in flight so a same-turn second activation is observable.
           if (debugLogDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, debugLogDelayMs));
+          if (debugLogGate) await debugLogGate;
           if (debugLogError) {
             route.fulfill({ status: 500, json: { error: "Activity fixture failed." } });
             return;
@@ -3774,8 +3838,12 @@ async function main() {
               matches(record.phase, query.get("phase"))
             );
           });
+          const padding = Array.from({ length: debugLogPadding }, (_, index) =>
+            debugEvent(`padding-${index}`, "extract_source_note", "ok"),
+          );
+          const events = [...padding, ...filtered];
           const limit = Number(query.get("limit") ?? 0);
-          route.fulfill({ json: { events: limit > 0 ? filtered.slice(-limit) : filtered } });
+          route.fulfill({ json: { events: limit > 0 ? events.slice(-limit) : events } });
         });
         await debugPage.route("**/api/long-term-memory/debug-log/export", async (route) => {
           // A small delay lets the test observe the pending/disabled guard.
@@ -4343,6 +4411,8 @@ async function main() {
       assert.equal(await restoredGuide.getByText("Step 4 of 7 · Import").count(), 1);
       await restoredGuide.getByRole("button", { name: "Close" }).click();
       await restoredGuide.waitFor({ state: "detached" });
+      // #1588: closing the guide returns focus to the button that reopens it.
+      await page.waitForFunction(() => document.activeElement?.matches("[data-ltm-onboarding-help]") ?? false);
       assert.equal(
         await page
           .locator('[data-ltm-control="navigation"]')
@@ -4533,6 +4603,15 @@ async function main() {
       const reviewWorkspace = page.locator('[data-ltm-surface="review-queue"] [data-ltm-workspace-container]');
       const reviewContextRoute = (url: URL) =>
         url.pathname.endsWith("/api/long-term-memory/notes") && url.searchParams.has("ids");
+      // #1588: focus moves to the next change, or to the result, instead of the page.
+      const reviewFocusMoved = async () => {
+        await page.waitForFunction(
+          () =>
+            document.activeElement?.matches(
+              '[data-ltm-surface="review-queue"] :is([data-ltm-review-mutation-toggle], [data-ltm-review-result])',
+            ) ?? false,
+        );
+      };
       const acceptWithReviewContextHeld = async (
         mutationId: string,
         accept: () => Promise<void>,
@@ -4567,7 +4646,13 @@ async function main() {
         assert.deepEqual(
           await page
             .locator('[data-ltm-surface="review-queue"] [data-ltm-review-action]')
-            .evaluateAll((actions) => actions.filter((action) => !(action as HTMLButtonElement).disabled).length),
+            .evaluateAll(
+              (actions) =>
+                actions.filter(
+                  (action) =>
+                    !(action as HTMLButtonElement).disabled && action.getAttribute("aria-disabled") !== "true",
+                ).length,
+            ),
           0,
           "no change can be accepted against the reloading context",
         );
@@ -4593,6 +4678,7 @@ async function main() {
             .click(),
         async () => {
           assert.equal(await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.second}"]`).count(), 1);
+          await reviewFocusMoved();
           await page.keyboard.press("Tab");
           assert.equal(
             await page.evaluate(() => Boolean(document.activeElement?.closest('[data-ltm-surface="review-queue"]'))),
@@ -4759,8 +4845,12 @@ async function main() {
       assert.match(await editedPartial.locator("[data-ltm-review-summary]").innerText(), /Edited proposal/u);
       // This accept drops the second change's merge target from the memory context, so the context reloads under a
       // new id list while the last one stays on screen (#1584).
-      await acceptWithReviewContextHeld(reviewMutationIds.second, () =>
-        page.getByRole("button", { name: /^Apply preflighted \(/ }).click(),
+      // The batch bar leaves with its selection while the applied rows stay until the queue reloads, so focus
+      // must skip those rows.
+      await acceptWithReviewContextHeld(
+        reviewMutationIds.second,
+        () => page.getByRole("button", { name: /^Apply preflighted \(/ }).click(),
+        reviewFocusMoved,
       );
       assert.deepEqual(reviewEditedMutationIds.at(-1), [reviewMutationIds.partial]);
       assert.deepEqual(reviewActionCalls, [
@@ -5424,6 +5514,16 @@ async function main() {
         .locator("[data-ltm-vault-feedback]")
         .getByText(/2 memories archived/u)
         .waitFor();
+      // #1588: the batch bar leaves with the selection, so focus moves to the result, which holds Undo.
+      const vaultFeedbackFocused = (text: string) =>
+        page.waitForFunction(
+          (expected) =>
+            (document.activeElement?.matches("[data-ltm-vault-feedback] [data-ltm-status]") &&
+              document.activeElement.textContent?.includes(expected)) ??
+            false,
+          text,
+        );
+      await vaultFeedbackFocused("2 memories archived");
       const undoButton = page.locator("[data-ltm-vault-feedback]").getByRole("button", { name: "Undo" });
       assert.equal(await undoButton.count(), 1);
 
@@ -5431,6 +5531,7 @@ async function main() {
       batchNotesPartial = true;
       await undoButton.click();
       await page.locator('[data-ltm-vault-feedback] [role="alert"]').waitFor();
+      await vaultFeedbackFocused("Could not undo the archive");
       assert.match(
         await page.locator('[data-ltm-vault-feedback] [role="alert"]').innerText(),
         /Could not undo the archive/u,
@@ -5465,7 +5566,9 @@ async function main() {
       );
       releaseUndo?.();
       // The undo still rolls back the partial restore, and Undo works again.
-      await page.locator("[data-ltm-vault-feedback] button:enabled", { hasText: "Undo" }).waitFor();
+      await page
+        .locator("[data-ltm-vault-feedback] button:enabled:not([aria-disabled='true'])", { hasText: "Undo" })
+        .waitFor();
       assert.equal(batchNotesCalls.length, batchCallsBeforeUndo + 3);
       assert.deepEqual(batchNotesCalls.at(-1), { noteIds: ["world_second_mobile"], status: "archived" });
       batchNotesPartial = false;
@@ -5486,7 +5589,9 @@ async function main() {
         .waitFor();
       const freshUndoButton = page.locator("[data-ltm-vault-feedback]").getByRole("button", { name: "Undo" });
       // The undo reloads the open memory it restored, as the archive did.
-      await page.locator("[data-ltm-vault-feedback] button:enabled", { hasText: "Undo" }).waitFor();
+      await page
+        .locator("[data-ltm-vault-feedback] button:enabled:not([aria-disabled='true'])", { hasText: "Undo" })
+        .waitFor();
       const restoredNoteReload = page.waitForRequest(
         (request) =>
           request.method() === "GET" && request.url().endsWith("/long-term-memory/notes/world_second_mobile"),
@@ -5618,7 +5723,10 @@ async function main() {
       assert.deepEqual(permanentDeleteCalls.at(-1), deleteTargetIds);
       // When the deletion finishes, the list reloads, the deleted memories leave the selection, and the deleted memory
       // opened meanwhile closes with the notice that says why.
-      await deleteTargetCards[0]!.locator("[data-ltm-note-actions-desktop] button:enabled").first().waitFor();
+      await deleteTargetCards[0]!
+        .locator("[data-ltm-note-actions-desktop] button:enabled:not([aria-disabled='true'])")
+        .first()
+        .waitFor();
       assert.ok(noteQueries.length > noteQueriesBeforeDelete, "the memory list reloads after the deletion");
       assert.equal(await deleteTargetCards[0]!.locator('input[type="checkbox"]').isChecked(), false);
       assert.equal(await page.locator("[data-ltm-note-editor]").count(), 0);
@@ -6303,6 +6411,10 @@ async function main() {
       await page.locator('[data-ltm-source-management-action="copy"]').click();
       const sourceOperationWorkbench = page.locator("[data-ltm-source-operation-workbench]");
       await sourceOperationWorkbench.waitFor();
+      // #1588: the opened action takes focus at its heading, not on the closed menu.
+      await page.waitForFunction(
+        () => document.activeElement?.matches("[data-ltm-source-operation-workbench] h2") ?? false,
+      );
       assert.equal(
         await sourceOperationWorkbench.evaluate((element) => Boolean(element.closest("[data-ltm-source-workbench]"))),
         true,

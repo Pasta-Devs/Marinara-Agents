@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Loader2, Send } from "lucide-react";
 import type {
@@ -33,6 +33,9 @@ export function SourceOperationWorkbench({
   onComplete: () => Promise<void>;
 }) {
   const { t: localizeUi } = useLtmTranslation();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  // Opening hides the control that opened it, so focus starts on this region's heading.
+  useEffect(() => headingRef.current?.focus(), []);
   const [operation, setOperation] = useState<SourceOperation>(initialOperation ?? "copy");
   const [destinationChatId, setDestinationChatId] = useState("");
   const [selectedLinkedIds, setSelectedLinkedIds] = useState<string[]>([]);
@@ -201,7 +204,7 @@ export function SourceOperationWorkbench({
       className="space-y-3 border-b border-[var(--border)] bg-[var(--secondary)]/20 p-3"
     >
       <div className="flex items-center gap-1">
-        <h2 id="ltm-source-operation-heading" className="text-sm font-semibold">
+        <h2 ref={headingRef} id="ltm-source-operation-heading" tabIndex={-1} className="text-sm font-semibold">
           {localizeUi("ui.longTermMemory.sourceoperation.manageSource")}
         </h2>
         <InfoPopover

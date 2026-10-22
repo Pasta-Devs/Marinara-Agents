@@ -666,7 +666,18 @@ export default function ActivityView({
   const activity = useQuery({
     queryKey: [...queryKeys.activity, limit],
     queryFn: () => request<DebugLogResponse>(`/debug-log?limit=${limit}`),
+    // A larger limit keeps the current log, selection and "Show up to 1,000" control on screen
+    // while the longer log loads.
+    placeholderData: keepPreviousData,
   });
+  const listRef = useRef<HTMLElement>(null);
+  const showMorePendingRef = useRef(false);
+  // When the longer log arrives, the "Show up to 1,000" control is gone; focus moves to the log.
+  useEffect(() => {
+    if (!showMorePendingRef.current || activity.isFetching) return;
+    showMorePendingRef.current = false;
+    if (!document.activeElement || document.activeElement === document.body) listRef.current?.focus();
+  }, [activity.isFetching]);
   // Shares the shell's cached /status query rather than adding an endpoint; pending or
   // errored status is never flattened into "healthy".
   const health = useQuery({
@@ -1787,6 +1798,8 @@ export default function ActivityView({
               </div>
 
               <section
+                ref={listRef}
+                tabIndex={-1}
                 data-ltm-debug-list
                 aria-label={localizeUi("ui.longTermMemory.activityview.longTermMemoryActivityLog")}
                 className="mari-editor-panel min-w-0"
@@ -1902,15 +1915,30 @@ export default function ActivityView({
                 )}
               </section>
 
-              {activity.data && activity.data.events.length >= limit ? (
+              {activity.data && (activity.data.events.length >= limit || activity.isPlaceholderData) ? (
                 <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
                   <span>
                     {localizeUi("ui.longTermMemory.activityview.newestEventsShown", {
-                      count: limit.toLocaleString(locale),
+                      count: (activity.isPlaceholderData ? activity.data.events.length : limit).toLocaleString(locale),
                     })}
                   </span>
-                  {limit < 1_000 ? (
-                    <Button onClick={() => setLimit(1_000)}>
+                  {limit < 1_000 || activity.isPlaceholderData ? (
+                    <Button
+                      aria-disabled={activity.isFetching || undefined}
+                      data-ltm-activity-show-more
+                      onClick={() => {
+                        if (activity.isFetching || limit >= 1_000) return;
+                        showMorePendingRef.current = true;
+                        setLimit(1_000);
+                      }}
+                    >
+                      {activity.isFetching ? (
+                        <Loader2
+                          aria-hidden="true"
+                          size="0.875rem"
+                          className="animate-spin motion-reduce:animate-none"
+                        />
+                      ) : null}
                       {localizeUi("ui.longTermMemory.activityview.showUpTo1_000Events")}
                     </Button>
                   ) : null}

@@ -305,6 +305,7 @@
   "ui.longTermMemory.longtermmemorydetail.proposedMemoryDefinition": "A smaller fact squeezed out of that source and waiting on your desk for review.",
   "ui.longTermMemory.longtermmemorydetail.savedMemory": "Saved memory",
   "ui.longTermMemory.longtermmemorydetail.savedMemoryDefinition": "A proposal you accepted. It lives in the Vault.",
+  "ui.longTermMemory.longtermmemorydetail.saveBeforeLeavingFailed": "Your changes were not saved. Stay to see what needs fixing, or discard them and continue.",
   "ui.longTermMemory.longtermmemorydetail.recalledMemory": "Recalled memory",
   "ui.longTermMemory.longtermmemorydetail.recalledMemoryDefinition": "A relevant saved memory that the Engine slips into model context for one reply because the conversation matched it.",
   "ui.longTermMemory.longtermmemorydetail.recallNotEveryReply": "Saving something does not mean it shows up in every reply.",

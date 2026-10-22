@@ -98,7 +98,8 @@ export const VaultRow = memo(function VaultRow({
               label={localizeUi("ui.longTermMemory.memoryvault.archiveValue1", {
                 value1: label,
               })}
-              disabled={busy}
+              className={busy ? "opacity-50" : ""}
+              aria-disabled={busy || undefined}
               onClick={(event) => actions.current?.runNoteAction(event, note, "archive")}
             />
             <IconButton
@@ -107,7 +108,8 @@ export const VaultRow = memo(function VaultRow({
                 value1: label,
               })}
               destructive
-              disabled={busy}
+              className={busy ? "opacity-50" : ""}
+              aria-disabled={busy || undefined}
               onClick={(event) => actions.current?.runNoteAction(event, note, "delete")}
             />
           </div>
@@ -129,17 +131,17 @@ export const VaultRow = memo(function VaultRow({
       {note.type !== "source" && actionsOpen ? (
         <div id={`ltm-note-actions-${note.id}`} className="ml-10 flex gap-2 pt-2 md:hidden">
           <Button
-            className="flex-1"
-            disabled={busy}
+            className={`flex-1 ${busy ? "opacity-50" : ""}`}
+            aria-disabled={busy || undefined}
             onClick={(event) => actions.current?.runNoteAction(event, note, "archive")}
           >
             <Archive aria-hidden="true" size="1rem" className="shrink-0" />
             {localizeUi("ui.longTermMemory.memoryvault.archive")}
           </Button>
           <Button
-            className="flex-1"
+            className={`flex-1 ${busy ? "opacity-50" : ""}`}
             destructive
-            disabled={busy}
+            aria-disabled={busy || undefined}
             onClick={(event) => actions.current?.runNoteAction(event, note, "delete")}
           >
             <Trash2 aria-hidden="true" size="1rem" className="shrink-0" />

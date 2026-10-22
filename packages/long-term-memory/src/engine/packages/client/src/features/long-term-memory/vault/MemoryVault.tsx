@@ -478,6 +478,19 @@ export default function MemoryVault({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [archiveUndo, setArchiveUndo] = useState<ArchiveUndoState | null>(null);
+  // Batch, row and Undo actions use `aria-disabled` so the control keeps focus while it runs, and
+  // `batchPendingRef` blocks a second run before React re-renders. When one finishes, focus moves to
+  // the result banner, which holds Undo, unless the user moved it elsewhere meanwhile.
+  const batchPendingRef = useRef(false);
+  const feedbackTriggerRef = useRef<Element | null>(null);
+  const [feedbackFocusRequest, setFeedbackFocusRequest] = useState(0);
+  const focusFeedback = () => setFeedbackFocusRequest((count) => count + 1);
+  useEffect(() => {
+    if (!feedbackFocusRequest) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && active !== feedbackTriggerRef.current) return;
+    vaultRef.current?.querySelector<HTMLElement>("[data-ltm-vault-feedback] [data-ltm-status]")?.focus();
+  }, [feedbackFocusRequest]);
   const [recoverySuggestionId, setRecoverySuggestionId] = useState<string | null>(null);
   const [bulkStatus, setBulkStatus] = useState<LtmStatus>("active");
   const [bulkModes, setBulkModes] = useState<LtmMode[]>(["roleplay"]);
@@ -493,11 +506,18 @@ export default function MemoryVault({
   const [linkTarget, setLinkTarget] = useState("");
   const [linkRelation, setLinkRelation] = useState<LtmLink["relation"]>("involves");
   const [keywordInput, setKeywordInput] = useState("");
+  // A keyword error belongs to the text that caused it, so it hides once that text changes.
+  const [keywordError, setKeywordError] = useState<{ input: string; message: string } | null>(null);
+  const visibleKeywordError = keywordError?.input === keywordInput ? keywordError.message : "";
   const [sectionKey, setSectionKey] = useState("");
   const [addingSection, setAddingSection] = useState(false);
   const [renamingSectionKey, setRenamingSectionKey] = useState<string | null>(null);
   const [renamedSectionKey, setRenamedSectionKey] = useState("");
   const [renamePreview, setRenamePreview] = useState<LtmRenameNoteSectionPreviewResponse | null>(null);
+  const [renameError, setRenameError] = useState("");
+  // The rename dialog unmounts on close, so focus returns to its trigger (or the button now in its
+  // place, after the key changed) once the rename is no longer busy.
+  const renameTriggerRef = useRef<{ element: Element | null; index: number } | null>(null);
   const [validation, setValidation] = useState<ValidationIssue[]>([]);
   const validationRef = useRef<HTMLDivElement>(null);
   const navigatorContextRef = useRef<string | null>(null);
@@ -1261,6 +1281,19 @@ export default function MemoryVault({
     dialog.querySelector<HTMLInputElement>("input")?.focus();
   }, [renamingSectionKey]);
   useEffect(() => {
+    const pending = renameTriggerRef.current;
+    if (renamingSectionKey || busy || !pending) return;
+    renameTriggerRef.current = null;
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    const buttons = [...(vaultRef.current?.querySelectorAll<HTMLElement>("[data-ltm-rename-detail]") ?? [])];
+    const target =
+      pending.element instanceof HTMLElement && pending.element.isConnected
+        ? pending.element
+        : buttons[Math.min(pending.index, buttons.length - 1)];
+    target?.focus();
+  }, [renamingSectionKey, busy]);
+  useEffect(() => {
     if (unsavedNavigation) return;
     const trigger = unsavedTriggerRef.current;
     if (trigger?.isConnected) trigger.focus();
@@ -1439,7 +1472,9 @@ export default function MemoryVault({
     setSaved(fingerprint(next));
   }
   async function undoArchive(recovery: ArchiveUndoState) {
-    if (archiveUndo !== recovery) return;
+    if (archiveUndo !== recovery || batchPendingRef.current) return;
+    batchPendingRef.current = true;
+    feedbackTriggerRef.current = document.activeElement;
     const session = editorSession.current;
     setBusy("undo-archive");
     setError("");
@@ -1502,11 +1537,14 @@ export default function MemoryVault({
           { count: recovery.notes.length },
         ),
       );
+      focusFeedback();
     } catch {
       if (session === editorSession.current) {
         setError(localizeUi("ui.longTermMemory.memoryvault.archiveUndoFailed"));
+        focusFeedback();
       }
     } finally {
+      batchPendingRef.current = false;
       setBusy((current) => (current === "undo-archive" ? "" : current));
     }
   }
@@ -1737,9 +1775,12 @@ export default function MemoryVault({
           { count: result.deletedIds.length },
         ),
       );
+      focusFeedback();
     } catch (cause) {
-      if (session === editorSession.current)
+      if (session === editorSession.current) {
         setError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories")));
+        focusFeedback();
+      }
     } finally {
       if (session === editorSession.current) setBusy("");
     }
@@ -1785,12 +1826,12 @@ export default function MemoryVault({
     const fromSectionKey = renamingSectionKey;
     const toSectionKey = normalizeDetailName(renamedSectionKey);
     if (!toSectionKey) {
-      setError(localizeUi("ui.longTermMemory.memoryvault.detailNameRequired"));
+      setRenameError(localizeUi("ui.longTermMemory.memoryvault.detailNameRequired"));
       return;
     }
     if (toSectionKey === fromSectionKey) return;
     if (Object.hasOwn(draft.sections, toSectionKey)) {
-      setError(localizeUi("ui.longTermMemory.memoryvault.detailNameAlreadyExists"));
+      setRenameError(localizeUi("ui.longTermMemory.memoryvault.detailNameAlreadyExists"));
       return;
     }
     const session = editorSession.current;
@@ -1798,6 +1839,7 @@ export default function MemoryVault({
     const submittedFingerprint = fingerprint(draft);
     setBusy("rename-section");
     setError("");
+    setRenameError("");
     try {
       const result = await request<EditorMutationResponse>(
         `/notes/${encodeURIComponent(noteId)}/sections/rename`,
@@ -1835,7 +1877,7 @@ export default function MemoryVault({
       await invalidate();
     } catch (cause) {
       if (session === editorSession.current)
-        setError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories")));
+        setRenameError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories")));
     } finally {
       if (session === editorSession.current) setBusy("");
     }
@@ -1845,7 +1887,20 @@ export default function MemoryVault({
     action: "status" | "modes" | "availability" | "remove-availability" | "archive" | "delete",
     options?: { preserveSelection?: boolean },
   ) {
-    if (!ids.length) return;
+    if (!ids.length || batchPendingRef.current) return;
+    batchPendingRef.current = true;
+    feedbackTriggerRef.current = document.activeElement;
+    try {
+      await applyBatchForIds(ids, action, options);
+    } finally {
+      batchPendingRef.current = false;
+    }
+  }
+  async function applyBatchForIds(
+    ids: string[],
+    action: "status" | "modes" | "availability" | "remove-availability" | "archive" | "delete",
+    options?: { preserveSelection?: boolean },
+  ) {
     const session = editorSession.current;
     if (action === "delete") {
       const deleteRevision = deleteTargetRevision.current;
@@ -1855,14 +1910,17 @@ export default function MemoryVault({
         try {
           deleteTargets = await requestNotesByIds<LtmNote>(ids);
         } catch {
-          if (session === editorSession.current)
+          if (session === editorSession.current) {
             setError(localizeUi("ui.longTermMemory.memoryvault.deleteTargetsCouldNotLoad"));
+            focusFeedback();
+          }
           return;
         }
         if (session !== editorSession.current || deleteRevision !== deleteTargetRevision.current) return;
         const targetsById = new Map(deleteTargets.map((note) => [note.id, note]));
         if (targetsById.size !== ids.length || ids.some((id) => !targetsById.has(id))) {
           setError(localizeUi("ui.longTermMemory.memoryvault.deleteTargetsCouldNotLoad"));
+          focusFeedback();
           return;
         }
         const confirmedTargets = ids.map((id) => targetsById.get(id)!);
@@ -2016,10 +2074,13 @@ export default function MemoryVault({
         setNotice(message);
         setError("");
       }
+      focusFeedback();
       await refreshAfterBatch(result.affectedNoteIds);
     } catch (cause) {
-      if (session === editorSession.current)
+      if (session === editorSession.current) {
         setError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories")));
+        focusFeedback();
+      }
     } finally {
       setBusy((current) => (current === action ? "" : current));
     }
@@ -2027,6 +2088,7 @@ export default function MemoryVault({
   async function batch(action: "status" | "modes" | "availability" | "remove-availability" | "archive" | "delete") {
     await runBatchForIds([...checked], action);
   }
+  const busyActionProps = busy ? ({ "aria-disabled": true, className: "opacity-50" } as const) : {};
   const runNoteAction = async (
     event: { preventDefault: () => void; stopPropagation: () => void },
     note: LtmNote,
@@ -2034,6 +2096,7 @@ export default function MemoryVault({
   ) => {
     event.preventDefault();
     event.stopPropagation();
+    if (busy) return;
     setOpenActionNoteId(null);
     await runBatchForIds([note.id], action, { preserveSelection: true });
   };
@@ -2068,16 +2131,19 @@ export default function MemoryVault({
       .filter(Boolean);
     if (!values.length) return;
     if (values.some((value) => value.length > 80)) {
-      setError(localizeUi("ui.longTermMemory.memoryvault.manualKeywordTooLong"));
+      setKeywordError({
+        input: keywordInput,
+        message: localizeUi("ui.longTermMemory.memoryvault.manualKeywordTooLong"),
+      });
       return;
     }
     const manualKeywords = [...getLtmKeywordIntent(draft).manual, ...values];
     const next = setLtmManualKeywords(draft, manualKeywords);
     if (next.manualKeywords.length > 30) {
-      setError(localizeUi("ui.longTermMemory.memoryvault.manualKeywordLimit"));
+      setKeywordError({ input: keywordInput, message: localizeUi("ui.longTermMemory.memoryvault.manualKeywordLimit") });
       return;
     }
-    setError("");
+    setKeywordError(null);
     setSaveState("idle");
     setDraft((current) => {
       if (!current) return current;
@@ -2107,19 +2173,25 @@ export default function MemoryVault({
       if (saveFirst) await save();
       return;
     }
+    const buttons = [...(vaultRef.current?.querySelectorAll("[data-ltm-rename-detail]") ?? [])];
+    renameTriggerRef.current = {
+      element: document.activeElement,
+      index: Math.max(0, buttons.indexOf(document.activeElement as Element)),
+    };
     setRenamingSectionKey(key);
     setRenamedSectionKey(key);
     setRenamePreview(null);
+    setRenameError("");
   };
   const previewRename = async () => {
     if (!draft || !renamingSectionKey) return;
     const toSectionKey = normalizeDetailName(renamedSectionKey);
     if (!toSectionKey) {
-      setError(localizeUi("ui.longTermMemory.memoryvault.detailNameRequired"));
+      setRenameError(localizeUi("ui.longTermMemory.memoryvault.detailNameRequired"));
       return;
     }
     if (Object.hasOwn(draft.sections, toSectionKey) && toSectionKey !== renamingSectionKey) {
-      setError(localizeUi("ui.longTermMemory.memoryvault.detailNameAlreadyExists"));
+      setRenameError(localizeUi("ui.longTermMemory.memoryvault.detailNameAlreadyExists"));
       return;
     }
     try {
@@ -2130,9 +2202,9 @@ export default function MemoryVault({
           { fromSectionKey: renamingSectionKey, toSectionKey },
         ),
       );
-      setError("");
+      setRenameError("");
     } catch (cause) {
-      setError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories")));
+      setRenameError(errorMessage(cause, localizeUi("ui.longTermMemory.memoryvault.couldNotUpdateMemories")));
     }
   };
   const copyDiagnostics = async () => {
@@ -2221,12 +2293,22 @@ export default function MemoryVault({
       `}</style>
       {error || notice || archiveUndo ? (
         <div data-ltm-vault-feedback className="contents">
-          {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
+          {error ? (
+            <StatusSurface tone="danger" tabIndex={-1}>
+              {error}
+            </StatusSurface>
+          ) : null}
           {notice || archiveUndo ? (
-            <StatusSurface tone="success">
+            <StatusSurface tone="success" tabIndex={-1}>
               <span className="min-w-0 flex-1">{notice}</span>
               {archiveUndo ? (
-                <Button disabled={Boolean(busy)} onClick={() => void undoArchive(archiveUndo)}>
+                <Button
+                  className={busy ? "opacity-50" : ""}
+                  aria-disabled={Boolean(busy) || undefined}
+                  onClick={() => {
+                    if (!busy) void undoArchive(archiveUndo);
+                  }}
+                >
                   {localizeUi("ui.longTermMemory.memoryvault.undo")}
                 </Button>
               ) : null}
@@ -2427,7 +2509,12 @@ export default function MemoryVault({
                         </option>
                       ))}
                     </select>
-                    <Button disabled={Boolean(busy)} onClick={() => void batch("status")}>
+                    <Button
+                      {...busyActionProps}
+                      onClick={() => {
+                        if (!busy) void batch("status");
+                      }}
+                    >
                       {localizeUi("ui.longTermMemory.memoryvault.setStatus")}
                     </Button>
                     <fieldset className="flex flex-wrap items-center gap-2">
@@ -2450,7 +2537,13 @@ export default function MemoryVault({
                         </label>
                       ))}
                     </fieldset>
-                    <Button disabled={Boolean(busy) || !bulkModes.length} onClick={() => void batch("modes")}>
+                    <Button
+                      {...busyActionProps}
+                      disabled={!bulkModes.length}
+                      onClick={() => {
+                        if (!busy) void batch("modes");
+                      }}
+                    >
                       {localizeUi("ui.longTermMemory.memoryvault.setModes")}
                     </Button>
                     <Button
@@ -2465,11 +2558,22 @@ export default function MemoryVault({
                     >
                       {localizeUi("ui.longTermMemory.memoryvault.changeAvailability")}
                     </Button>
-                    <Button disabled={Boolean(busy)} onClick={() => void batch("archive")}>
+                    <Button
+                      {...busyActionProps}
+                      onClick={() => {
+                        if (!busy) void batch("archive");
+                      }}
+                    >
                       <Archive aria-hidden="true" size="1rem" className="shrink-0" />
                       {localizeUi("ui.longTermMemory.memoryvault.archive")}
                     </Button>
-                    <Button destructive disabled={Boolean(busy)} onClick={() => void batch("delete")}>
+                    <Button
+                      destructive
+                      {...busyActionProps}
+                      onClick={() => {
+                        if (!busy) void batch("delete");
+                      }}
+                    >
                       <Trash2 aria-hidden="true" size="1rem" className="shrink-0" />
                       {localizeUi("ui.longTermMemory.extractionprompttemplates.delete")}
                     </Button>
@@ -2848,23 +2952,25 @@ export default function MemoryVault({
                     <div data-ltm-note-layout data-details-open={detailsOpen} className="min-w-0">
                       <div data-ltm-note-editor className="space-y-4">
                         <div className="grid gap-3 sm:grid-cols-2">
-                          <label className="space-y-1 text-xs font-medium">
-                            <span className="flex min-h-7 items-center">
+                          <div className="space-y-1 text-xs font-medium">
+                            <label htmlFor={`${statusInputId}-title`} className="flex min-h-7 items-center">
                               {localizeUi("ui.longTermMemory.memoryvault.title")}
-                            </span>
+                            </label>
                             <input
+                              id={`${statusInputId}-title`}
                               className={inputClass}
                               data-ltm-field="title"
                               value={draft.title ?? ""}
                               aria-invalid={!draft.title?.trim()}
+                              aria-describedby={!draft.title?.trim() ? `${statusInputId}-title-error` : undefined}
                               onChange={(event) => update("title", event.target.value)}
                             />
                             {!draft.title?.trim() ? (
-                              <p className="text-xs text-[var(--destructive)]">
+                              <p id={`${statusInputId}-title-error`} className="text-xs text-[var(--destructive)]">
                                 {localizeUi("ui.longTermMemory.memoryvault.memoryTitleRequired")}
                               </p>
                             ) : null}
-                          </label>
+                          </div>
                           <div className="space-y-1 text-xs font-medium">
                             <div className="flex min-h-7 items-center gap-1">
                               <label htmlFor={statusInputId}>
@@ -3017,6 +3123,7 @@ export default function MemoryVault({
                                   style={{ maxHeight: "16rem", overflowY: "auto" }}
                                   value={section.text}
                                   aria-invalid={!section.text.trim()}
+                                  aria-describedby={!section.text.trim() ? `ltm-section-${key}-error` : undefined}
                                   onInput={(event) => {
                                     const textarea = event.currentTarget;
                                     textarea.style.height = "auto";
@@ -3034,7 +3141,7 @@ export default function MemoryVault({
                                   }
                                 />
                                 {!section.text.trim() ? (
-                                  <p className="text-xs text-[var(--destructive)]">
+                                  <p id={`ltm-section-${key}-error`} className="text-xs text-[var(--destructive)]">
                                     {localizeUi("ui.longTermMemory.memoryvault.detailTextRequired")}
                                   </p>
                                 ) : null}
@@ -3127,6 +3234,8 @@ export default function MemoryVault({
                                       }}
                                       placeholder={localizeUi("ui.longTermMemory.memoryvault.addKeyword")}
                                       aria-label={localizeUi("ui.longTermMemory.memoryvault.addKeyword")}
+                                      aria-invalid={visibleKeywordError ? true : undefined}
+                                      aria-describedby={visibleKeywordError ? "ltm-keyword-error" : undefined}
                                       data-ltm-keyword-input
                                     />
                                     <Button disabled={!keywordInput.trim()} onClick={addKeywords} data-ltm-keyword-add>
@@ -3134,6 +3243,16 @@ export default function MemoryVault({
                                       {localizeUi("ui.longTermMemory.tokeneditor.add")}
                                     </Button>
                                   </div>
+                                  {visibleKeywordError ? (
+                                    <p
+                                      id="ltm-keyword-error"
+                                      role="alert"
+                                      data-ltm-keyword-error
+                                      className="text-xs text-[var(--destructive)]"
+                                    >
+                                      {visibleKeywordError}
+                                    </p>
+                                  ) : null}
                                 </section>
                                 {draft.type === "thread" || draft.type === "world" || draft.type === "tone" ? (
                                   <section className="space-y-2 border-t border-[var(--border)] px-3 pt-3">
@@ -3191,6 +3310,7 @@ export default function MemoryVault({
                                     {Object.keys(draft.sections).map((key) => (
                                       <Button
                                         key={key}
+                                        data-ltm-rename-detail={key}
                                         disabled={Boolean(busy) || isNew}
                                         onClick={() => void beginRename(key)}
                                       >
@@ -3572,15 +3692,25 @@ export default function MemoryVault({
                 className={inputClass}
                 value={renamedSectionKey}
                 aria-label={localizeUi("ui.longTermMemory.memoryvault.newSectionName")}
-                onChange={(event) => setRenamedSectionKey(event.target.value)}
+                aria-invalid={renameError ? true : undefined}
+                aria-describedby={renameError ? "ltm-rename-detail-error" : undefined}
+                onChange={(event) => {
+                  setRenamedSectionKey(event.target.value);
+                  setRenameError("");
+                }}
               />
               <span className="block text-[var(--muted-foreground)]">
                 {localizeUi("ui.longTermMemory.memoryvault.storedKey")}:{" "}
                 {normalizeDetailName(renamedSectionKey) || localizeUi("ui.longTermMemory.memoryvault.notSet")}
               </span>
             </label>
+            {renameError ? (
+              <p id="ltm-rename-detail-error" role="alert" className="text-xs text-[var(--destructive)]">
+                {renameError}
+              </p>
+            ) : null}
             {renamePreview ? (
-              <p className="text-xs text-[var(--muted-foreground)]">
+              <p role="status" className="text-xs text-[var(--muted-foreground)]">
                 {localizeUi("ui.longTermMemory.memoryvault.renamePreview", {
                   name: renamedSectionKey,
                   key: renamePreview.toSectionKey,

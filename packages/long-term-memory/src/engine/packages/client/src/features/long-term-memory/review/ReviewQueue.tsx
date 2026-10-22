@@ -23,8 +23,6 @@ import { LtmWorkspace, type LtmWorkspacePane } from "../LtmWorkspace";
 import SubjectIdentityReview from "./SubjectIdentityReview";
 import { ambiguousLinkDetails, type AmbiguousLinkDiagnostic } from "./review-queue-ambiguous-link";
 import {
-  MAX_APPEND_TEXT_LENGTH,
-  MAX_SECTION_TEXT_LENGTH,
   acceptedMutationIds,
   buildPersistedReviewState,
   buildReviewRows,
@@ -38,7 +36,6 @@ import {
   linkChoiceKey,
   mutationDisplayLabel,
   mutationFingerprint,
-  mutationHasOverlongText,
   mutationLabels,
   mutationProposedText,
   noteBody,
@@ -96,6 +93,9 @@ type BatchResult = {
 };
 
 const CONFLICT_PREVIEW_LIMIT = 3;
+
+const focusable = (element: HTMLElement | null): element is HTMLElement =>
+  Boolean(element?.isConnected && !element.matches(":disabled") && element.getClientRects().length);
 
 const freshnessLabel: Record<string, string> = {
   fresh: "ui.longTermMemory.reviewqueue.fresh",
@@ -441,6 +441,34 @@ export default function ReviewQueue({
   const [reviewStatePersisted, setReviewStatePersisted] = useState(true);
   const [reviewStateMismatch, setReviewStateMismatch] = useState(false);
   const batchControllerRef = useRef<AbortController | null>(null);
+  // A run keeps focus on the control that started it. When that control is gone (an applied or
+  // discarded row, or an emptied selection) or disabled (a blocked row), focus moves to the row
+  // now at the first acted row's place, else to the result. Acted rows stay on screen until the
+  // queue reloads, so they are skipped. Focus the user moved elsewhere stays.
+  const runFocusRef = useRef<{ trigger: HTMLElement | null; index: number; acted: ReadonlySet<string> } | null>(null);
+  useEffect(() => {
+    const pending = runFocusRef.current;
+    const root = reviewRef.current;
+    if (!pending || !root) return;
+    const { trigger, index, acted } = pending;
+    const active = document.activeElement;
+    const focusLost = !active || active === document.body || active === trigger;
+    if (focusable(trigger) && active !== trigger && running !== null && focusLost) {
+      trigger.focus({ preventScroll: true });
+      return;
+    }
+    if (focusable(trigger) && active === trigger) return;
+    runFocusRef.current = null;
+    if (!focusLost || focusable(trigger)) return;
+    const toggles = [...root.querySelectorAll<HTMLElement>("[data-ltm-review-mutation-toggle]")].filter(
+      (toggle) => focusable(toggle) && !acted.has(toggle.dataset.ltmReviewMutationToggle ?? ""),
+    );
+    (
+      toggles[Math.min(index, toggles.length - 1)] ?? root.querySelector<HTMLElement>("[data-ltm-review-result]")
+    )?.focus({
+      preventScroll: true,
+    });
+  }, [running, reviewedIds, review.data]);
   const selectedIdsRef = useRef(selectedIds);
   const editedByIdRef = useRef(editedById);
   const linkChoicesByIdRef = useRef(linkChoicesById);
@@ -886,6 +914,7 @@ export default function ReviewQueue({
     ),
   };
   const preflightApplyDisabled = result?.phase === "preflight" && result.ready === 0;
+  const runBusy = !reviewContextReady || running !== null;
 
   const clearPreflight = () => {
     setPreflightRows(new Map());
@@ -1019,7 +1048,18 @@ export default function ReviewQueue({
     retrying = false,
   ) => {
     const applicableRows = explicitRows ?? (action === "accept" ? eligibleSelectedRows : skippableSelectedRows);
-    if (!applicableRows.length) return;
+    // The run controls use `aria-disabled` so they keep focus; this blocks a second run that
+    // starts before React re-renders them.
+    if (!applicableRows.length || batchControllerRef.current) return;
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const actedIds = new Set(applicableRows.map((row) => row.mutation.id));
+    const rowToggles = [
+      ...(reviewRef.current?.querySelectorAll<HTMLElement>("[data-ltm-review-mutation-toggle]") ?? []),
+    ].filter(focusable);
+    const focusIndex = Math.max(
+      0,
+      rowToggles.findIndex((toggle) => actedIds.has(toggle.dataset.ltmReviewMutationToggle ?? "")),
+    );
     if (action === "accept" && (!reviewContextReady || applicableRows.some((row) => !noteById.has(row.sourceNoteId))))
       return;
     const invalidEditIds = action === "accept" ? invalidClosureEditIds(applicableRows, allRows) : [];
@@ -1056,9 +1096,11 @@ export default function ReviewQueue({
       return;
     }
     if (action === "skip" && !(await confirmDiscard(applicableRows))) return;
+    // A second Skip can confirm while the first run already started.
+    if (batchControllerRef.current) return;
+    runFocusRef.current = { trigger, index: focusIndex, acted: actedIds };
     const acceptRequests = action === "accept" ? buildAcceptRequests(applicableRows, allRows) : [];
     const requestKey = action === "accept" ? acceptRequestKey(acceptRequests) : null;
-    batchControllerRef.current?.abort();
     const controller = new AbortController();
     batchControllerRef.current = controller;
     if (action === "accept" && preflightKey !== requestKey) {
@@ -1713,16 +1755,13 @@ export default function ReviewQueue({
               label={rowActionLabel}
               data-ltm-review-action={preflightReady ? "apply" : preflightBlocked ? "blocked" : "review"}
               iconSize="1rem"
-              className="mari-editor-action--primary"
+              className={`mari-editor-action--primary ${runBusy ? "opacity-50" : ""}`}
               style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
-              disabled={
-                !eligibleIds.has(row.mutation.id) ||
-                !valid ||
-                preflightBlocked ||
-                !reviewContextReady ||
-                running !== null
-              }
-              onClick={() => void runBatch("accept", [row])}
+              disabled={!eligibleIds.has(row.mutation.id) || !valid || preflightBlocked}
+              aria-disabled={runBusy || undefined}
+              onClick={() => {
+                if (!runBusy) void runBatch("accept", [row]);
+              }}
             />
             <IconButton
               icon={X}
@@ -1732,8 +1771,12 @@ export default function ReviewQueue({
               iconSize="1rem"
               style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
               destructive
-              disabled={!skippableDraftIds.has(row.draftId) || running !== null}
-              onClick={() => void runBatch("skip", [row])}
+              className={running !== null ? "opacity-50" : ""}
+              disabled={!skippableDraftIds.has(row.draftId)}
+              aria-disabled={running !== null || undefined}
+              onClick={() => {
+                if (running === null) void runBatch("skip", [row]);
+              }}
             />
           </div>
         </div>
@@ -1945,17 +1988,6 @@ export default function ReviewQueue({
               onChange={(next) => updateMutation(row.mutation, next)}
               onBlur={() => queueMicrotask(() => flushReviewStateRef.current())}
             />
-            {mutationHasOverlongText(mutation) ? (
-              <p role="alert" className="text-xs text-[var(--destructive)]">
-                {localizeUi("ui.longTermMemory.reviewqueue.textExceedsLimit", {
-                  limit: mutation.kind === "append_section" ? MAX_APPEND_TEXT_LENGTH : MAX_SECTION_TEXT_LENGTH,
-                })}
-              </p>
-            ) : !valid ? (
-              <p role="alert" className="text-xs text-[var(--destructive)]">
-                {localizeUi("ui.longTermMemory.reviewqueue.sectionTextCannotBeEmpty")}
-              </p>
-            ) : null}
           </div>
         ) : null}
       </article>
@@ -2020,6 +2052,8 @@ export default function ReviewQueue({
       ) : null}
       {result ? (
         <StatusSurface
+          data-ltm-review-result
+          tabIndex={-1}
           tone={
             result.failed || result.blockedMutationIds.length || result.indexRebuildFailures.length
               ? "danger"
@@ -2527,14 +2561,12 @@ export default function ReviewQueue({
                 >
                   <Button
                     primary
-                    disabled={
-                      !eligibleSelectedRows.length ||
-                      invalidSelectedEdits.length > 0 ||
-                      preflightApplyDisabled ||
-                      !reviewContextReady ||
-                      running !== null
-                    }
-                    onClick={() => void runBatch("accept")}
+                    className={runBusy ? "opacity-50" : ""}
+                    disabled={!eligibleSelectedRows.length || invalidSelectedEdits.length > 0 || preflightApplyDisabled}
+                    aria-disabled={runBusy || undefined}
+                    onClick={() => {
+                      if (!runBusy) void runBatch("accept");
+                    }}
                   >
                     {running === "accept"
                       ? localizeUi("ui.longTermMemory.reviewqueue.accepting")
@@ -2548,8 +2580,12 @@ export default function ReviewQueue({
                   </Button>
                   <Button
                     destructive
-                    disabled={!skippableSelectedRows.length || running !== null}
-                    onClick={() => void runBatch("skip")}
+                    className={running !== null ? "opacity-50" : ""}
+                    disabled={!skippableSelectedRows.length}
+                    aria-disabled={running !== null || undefined}
+                    onClick={() => {
+                      if (running === null) void runBatch("skip");
+                    }}
                   >
                     {running === "skip"
                       ? localizeUi("ui.longTermMemory.reviewqueue.skipping")
