@@ -37,6 +37,7 @@ async function main() {
   );
   const { withLtmVaultLock } = await import(`${source}/persistence/vault-lock.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
+  const { createLtmStorageReadService } = await import(`${source}/services/storage-read.ts`);
   const { notePathForId } = await import(`${source}/persistence/paths.ts`);
   const { invalidateLtmVaultSnapshot } = await import(`${source}/persistence/vault-snapshot.ts`);
   const { ltmIndexStatePath, readLtmIndexState } = await import(`${source}/persistence/index-state.ts`);
@@ -302,8 +303,66 @@ async function main() {
         "explicit adapter",
         "explicit test adapters must bypass the runtime resolver",
       );
-      storage = services.get("long-term-memory:storage").storage;
+      // The registered storage service is a filtered read for other packages; the test writes to the vault directly.
+      storage = new LongTermMemoryStorage(join(dataDir, "long-term-memory"));
       runtime = services.get("long-term-memory:runtime");
+      const storageService = services.get("long-term-memory:storage");
+      assert.deepEqual(
+        Object.keys(storageService),
+        ["storage"],
+        "the storage service must not hand out the vault folder or drafts",
+      );
+      assert.deepEqual(
+        Object.keys(storageService.storage),
+        ["listNotes"],
+        "the storage service must offer only listNotes",
+      );
+      // Its own vault, so these notes stay out of the recall checks below.
+      const sharedRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-shared-read-"));
+      const sharedStorage = new LongTermMemoryStorage(sharedRoot);
+      try {
+        for (const [id, overrides] of [
+          ["world_shared_character", { scope: { characterIds: ["char-shared"] } }],
+          [
+            "world_shared_chat_and_character",
+            { scope: { chatId: "chat-x", chatIds: ["chat-x"], characterIds: ["char-shared"] } },
+          ],
+          ["world_shared_chat_only", {}],
+          ["world_shared_other_character", { scope: { characterIds: ["char-other"] } }],
+          ["world_shared_archived", { scope: { characterIds: ["char-shared"] }, status: "archived" }],
+          ["world_shared_game_only", { scope: { characterIds: ["char-shared"] }, modes: ["game"] }],
+          ["char_shared_own", { type: "character", scope: { characterIds: ["char-shared"] } }],
+          [
+            "source_shared_summary",
+            {
+              type: "source",
+              scope: { chatId: "chat-x", chatIds: ["chat-x"], characterIds: ["char-shared"] },
+              provenance: { kind: "chat_summary", sourceId: "chat-x", entryId: "shared" },
+              sections: { source: { text: "the raw summary", updatedAt: timestamp } },
+            },
+          ],
+        ] as const)
+          await sharedStorage.createNote(note(id, "chat-x", `${id} text`, overrides));
+        const sharedRead = createLtmStorageReadService(sharedStorage).storage;
+        const sharedIds = async (filter: unknown) =>
+          ((await sharedRead.listNotes(filter)) as Array<{ id: string }>).map((entry) => entry.id);
+        assert.deepEqual(
+          await sharedIds({ characterIds: ["char-shared"] }),
+          ["char_shared_own", "world_shared_character", "world_shared_chat_and_character"],
+          "another package must see only memories available to the character everywhere, not sources, archived or game-only",
+        );
+        assert.deepEqual(await sharedIds({ type: "character", characterIds: ["char-shared"] }), ["char_shared_own"]);
+        assert.deepEqual(await sharedIds({}), [], "a read without character ids must list nothing");
+        assert.deepEqual(await sharedIds({ characterIds: [] }), [], "an empty character list must list nothing");
+        assert.deepEqual(
+          await sharedIds({ characterIds: ["char-shared"], scope: { chatId: "chat-x", chatIds: ["chat-x"] } }),
+          ["char_shared_own", "world_shared_character", "world_shared_chat_and_character"],
+          "a chat in the filter must not open memories limited to that chat",
+        );
+      } finally {
+        await sharedStorage.cleanup();
+        await rm(sharedRoot, { recursive: true, force: true });
+      }
       for (const testCase of [
         {
           input: {

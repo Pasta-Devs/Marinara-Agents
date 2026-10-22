@@ -10,12 +10,13 @@ server  -> persistence, extraction, retrieval, routes, runtime integration
 client  -> vault, review queue, sources, settings, and injection summary
 ```
 
-The server registers `long-term-memory:storage` and
-`long-term-memory:runtime` with the Engine and mounts privileged routes under
-`/api/long-term-memory`. Registration is in `server-entry.ts`; `routes.ts`
-composes one file per area under `routes/` (notes, drafts, imports, maintenance,
-settings), with shared limits, errors and the post-mutation rebuild in
-`routes/shared.ts`.
+The server registers `long-term-memory:storage` (a filtered note list other
+packages read, from `services/`) and `long-term-memory:runtime` (chat recall,
+receipts and the vault lock for the Engine) with the Engine and mounts
+privileged routes under `/api/long-term-memory`. Registration is in
+`server-entry.ts`; `routes.ts` composes one file per area under `routes/`
+(notes, drafts, imports, maintenance, settings), with shared limits, errors and
+the post-mutation rebuild in `routes/shared.ts`.
 
 ### Shared schema
 
@@ -74,6 +75,7 @@ folder owns one area.
 | `drafts/` | the draft store, projection and review, applying drafts to notes, rejected suggestions | `draft-store`, `draft-projector`, `draft-review`, `reconciliation`, `rejected-suggestions` |
 | `maintenance/` | integrity checks and repair, note transfer, legacy adoption and quarantine, the debug log | `maintenance`, `note-transfer`, `legacy-adoption`, `legacy-source-quarantine`, `debug-log` |
 | `sources/` | Engine chats and summaries read as sources | `interop`, `source-identity` |
+| `services/` | what other packages can look up through the Engine: a character's memories available everywhere (`storage-read`) | `storage-read` |
 
 The folders are areas, not enforced layers. `persistence/` still imports from
 the areas above it: `storage.ts` uses `drafts/draft-projector`,
@@ -205,6 +207,11 @@ Scope resolution is shared between chat context and server retrieval. Changes
 must preserve isolation between chat, character, lorebook, persona, universe,
 and global targets. Inspect shared `scope.ts`, `identity/chat-scope.ts`, and
 `extraction/scoped-targets.ts` before changing identity or visibility behavior.
+
+Any installed package can look up a registered service, so whatever `services/`
+hands out lists only memories available to the named characters everywhere:
+never memories limited to a chat or group, imported sources, archived or
+game-only memories, drafts, or the vault folder.
 
 For storage or recovery changes, inspect `paths.ts`, `atomic-json.ts`,
 `mutation-transaction.ts`, `vault-lock.ts`, `restore-recovery.ts`, and the

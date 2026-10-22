@@ -8,6 +8,7 @@ import {
   recordGenerationLongTermMemoryDispatch,
 } from "./recall/generation-injection.js";
 import { createLongTermMemoryRoutes } from "./routes.js";
+import { createLtmStorageReadService } from "./services/storage-read.js";
 import { adoptLegacyLongTermMemoryAgentConfig, adoptLegacyLongTermMemoryChats } from "./maintenance/legacy-adoption.js";
 import type { FastifyPluginAsync } from "fastify";
 
@@ -35,11 +36,10 @@ export async function activate({ api, dataDir }: ActivationContext) {
     const releaseRoutes = await api.registerPrivilegedRoutes(createLongTermMemoryRoutes(active), {
       prefix: "/api/long-term-memory",
     });
-    const releaseStorageService = api.registerService("long-term-memory:storage", {
-      root: active.root,
-      storage: active.storage,
-      drafts: active.draftStore,
-    });
+    const releaseStorageService = api.registerService(
+      "long-term-memory:storage",
+      createLtmStorageReadService(active.storage),
+    );
     const releaseRuntimeService = api.registerService("long-term-memory:runtime", {
       refresh: async ({ signal }: { signal: AbortSignal }) => {
         await refreshLongTermMemoryIndexes(activationRoot, signal);

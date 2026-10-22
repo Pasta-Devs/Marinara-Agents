@@ -85,6 +85,10 @@ async function main(routeScenario: RouteScenario) {
   );
   const { activate } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/server-entry.ts");
+  const { LongTermMemoryStorage } =
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/storage.ts");
+  const { LongTermMemoryDraftStore } =
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/drafts/draft-store.ts");
   const {
     ltmDraftNoteInputSchema,
     ltmDraftPreflightResponseSchema,
@@ -510,15 +514,19 @@ async function main(routeScenario: RouteScenario) {
             },
           },
         },
-        registerService(name: string, service: unknown) {
-          if (name === "long-term-memory:storage") storageService = service;
-          return () => undefined;
-        },
+        registerService: () => () => undefined,
         registerPrivilegedRoutes: (routes: any, options: { prefix: string }) =>
           registerCapabilityPrivilegedRoutes(app, installed as any, routes, options),
       },
     });
     await app.ready();
+    // Direct handles on the vault the package activated; other packages get only a filtered note list.
+    const ltmRoot = join(dataDir, "long-term-memory");
+    storageService = {
+      root: ltmRoot,
+      storage: new LongTermMemoryStorage(ltmRoot),
+      drafts: new LongTermMemoryDraftStore(ltmRoot),
+    };
     assert.deepEqual(registeredRoutes.sort(), EXPECTED_ROUTES);
     const headers = { "x-admin-secret": "ltm-route-secret" };
     const routeNoteFixture = {
