@@ -1,5 +1,13 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Keyboard focus now moves somewhere sensible after you act in Review, the Memory Vault, Sources, the setup guide, Settings and Debug, and field errors sit under their fields and are read with them.
+- Results show beside the action that made them. Sources names a failed or partial import as such, and Review and Sources say why Accept or Import is off.
+- Long-Term Memory lays out by the width of its own panel, so a narrow side panel gets the phone layout. Batch bars stay in view while you scroll, and checkboxes, toggles, links and info buttons are easier to tap.
+- Long lists stay responsive: Sources searches once you pause typing and keeps the current rows meanwhile, and place pickers show 100 places at a time with a Show more row.
+- Warning notices show a warning icon and a stronger border instead of relying on color, and error notices show their border and have room inside.
+
 ## 1.4.85 — 2026-10-22
 
 - Five keyboard and focus fixes. In Sources, Tab now reaches the name of each chat or character source in the list, and Enter or Space opens it, so Re-extract, Manage, Review and Open memory work without a mouse. Accepting a change in the Review Queue no longer hides the queue while the memories it shows reload: the list, your place in it and the keyboard position stay, a small spinner shows beside "Review Queue", and Accept waits until the memories have reloaded. On a narrow panel, the Memory Vault's "Rename details" and unsaved-changes dialogs now show instead of leaving the screen frozen. Arrow keys in the place picker keep the highlighted place in view. In Memory Settings, Tab after "Choose backup" goes straight to "Reset settings", and screen readers name "Choose backup" once.
