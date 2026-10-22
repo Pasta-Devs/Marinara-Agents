@@ -1350,9 +1350,20 @@ async function continueCutOffEvidenceUnitAnswer({
       model: extractionOptions.languageModel.model,
     };
     try {
-      const result = await chatCompleteWithReasoningFallback({
-        messages: evidenceUnitContinuationMessages(messages, held.response.units),
+      // Fit the longer continuation prompt to the model's context like the first request;
+      // a budget that cannot fit throws into the catch below.
+      const continuationMessages = evidenceUnitContinuationMessages(messages, held.response.units);
+      const fittedMaxOutputTokens = await preflightExtractionPromptContext({
+        messages: continuationMessages,
         chatOptions,
+        extractionOptions,
+      });
+      const result = await chatCompleteWithReasoningFallback({
+        messages: continuationMessages,
+        chatOptions:
+          typeof fittedMaxOutputTokens === "number"
+            ? { ...chatOptions, maxTokens: fittedMaxOutputTokens }
+            : chatOptions,
         extractionOptions,
       });
       const content = result.content?.trim() ?? "";

@@ -225,7 +225,7 @@ async function main() {
       JSON.stringify(unit) +
       ',{"bucket":"timeline_event","subjectId":"partial_event","sectionKey":"event","text":"Mara was interrup';
     const laterUnit = (subjectId: string) => ({ ...validUnit, subjectId, text: `Mara reached ${subjectId}.` });
-    const continuationRun = async (answers: any[], signal?: AbortSignal) => {
+    const continuationRun = async (answers: any[], signal?: AbortSignal, model: any = {}) => {
       const requests: any[] = [];
       const operationId = randomUUID();
       const run = await runLongTermMemoryEvidenceUnitExtraction({
@@ -235,6 +235,7 @@ async function main() {
         signal,
         languageModel: {
           ...options.languageModel,
+          ...model,
           async chatComplete(messages: any[], chatOptions: any) {
             const user = JSON.parse(messages.find((message) => message.role === "user").content);
             requests.push({ user, chatOptions });
@@ -284,6 +285,34 @@ async function main() {
       completed.rounds.map((event) => [event.counts!.round, event.counts!.addedUnits]),
       [[1, 1]],
     );
+
+    // The longer continuation prompt gets its output budget fitted to a known model context, like the first request.
+    const fitted = await continuationRun(
+      [
+        { content: cutContent(validUnit), finishReason: "length" },
+        {
+          content: JSON.stringify({ summary: "Rest.", units: [laterUnit("observatory_lamp_lit")] }),
+          finishReason: "stop",
+        },
+      ],
+      undefined,
+      {
+        maxContext: 16_000,
+        fitContext: (messages: any[], fitOptions: any) => ({
+          messages,
+          maxTokens: messages.some((message) => message.role === "user" && message.content.includes('"continuation":'))
+            ? 2_000
+            : fitOptions.maxTokens,
+          estimatedTokensBefore: 20,
+          estimatedTokensAfter: 20,
+          trimmed: false,
+        }),
+      },
+    );
+    assert.equal(fitted.requests.length, 2);
+    assert.notEqual(fitted.requests[0].chatOptions.maxTokens, 2_000);
+    assert.equal(fitted.requests[1].chatOptions.maxTokens, 2_000);
+    assert.equal(fitted.run.response.incomplete, false);
 
     const roundLimit = await continuationRun([
       { content: cutContent(validUnit), finishReason: "length" },
