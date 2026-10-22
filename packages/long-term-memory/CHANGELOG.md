@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Other Agents can now ask Long-Term Memory for memories about the characters they write as, ranked against what they are about to write. They get only memories available to that character everywhere: never memories limited to a chat or group, archived memories or suggestions, and they can't change anything. A new setting in Memory Settings, "Other Agents can read memories" (on by default), turns this off, also for Slurp's "What your other Agents know", and names the Agents that read memories lately. Each read shows in Activity as "Read by another Agent".
+
 ## 1.4.83 — 2026-10-22
 
 - Other installed Agents can no longer reach the memory vault itself. The storage service Long-Term Memory shares with other packages now offers one read, the memories available to a character everywhere, which is what Slurp's flavour brief uses. Memories limited to a chat or group, imported sources, archived and game-only memories, suggestions and the vault folder stay private.
