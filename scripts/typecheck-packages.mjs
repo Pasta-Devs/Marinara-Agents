@@ -144,9 +144,8 @@ const isReportedMissingModule = (line) => {
 const packages = process.argv.slice(2);
 if (packages.length === 0) packages.push("slurp2");
 
-// Checks one package and returns its report lines as [console method, text]; true in `failed` when the gate fails.
-async function checkPackage(id) {
-  const lines = [];
+// Checks one package, appending its report to `lines` as [console method, text]; true in `failed` when the gate fails.
+async function checkPackage(id, lines) {
   const log = (text) => lines.push(["log", text]);
   const error = (text) => lines.push(["error", text]);
   let failed = false;
@@ -227,16 +226,16 @@ async function checkPackage(id) {
   return { lines, failed };
 }
 
-// Each package settles on its own: one package whose setup or compiler fails must not discard the others' reports.
-const results = await Promise.allSettled(packages.map(checkPackage));
-let failed = false;
-for (const [index, result] of results.entries()) {
-  if (result.status === "fulfilled") {
-    for (const [method, text] of result.value.lines) console[method](text);
-    failed ||= result.value.failed;
-  } else {
-    console.error(`${packages[index]}: ${result.reason?.message ?? result.reason}`);
-    failed = true;
-  }
-}
-process.exitCode = failed ? 1 : 0;
+// Each package settles on its own: a setup or compiler failure is reported by name after whatever that package had
+// already gathered, and never discards the other packages' reports.
+const results = await Promise.all(
+  packages.map((id) => {
+    const lines = [];
+    return checkPackage(id, lines).catch((cause) => ({
+      lines: [...lines, ["error", `${id}: ${cause.message}`]],
+      failed: true,
+    }));
+  }),
+);
+for (const { lines } of results) for (const [method, text] of lines) console[method](text);
+process.exitCode = results.some((result) => result.failed) ? 1 : 0;

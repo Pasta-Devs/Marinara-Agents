@@ -66,7 +66,9 @@ async function worker() {
 function run(command) {
   return new Promise((resolve) => {
     const output = { started: performance.now(), text: "" };
-    const child = spawn(command, { shell: true, stdio: ["ignore", "pipe", "pipe"] });
+    // Its own process group, so the ceiling kills the command's children too: killing only the shell would leave them
+    // holding the pipes, and `close` would never fire.
+    const child = spawn(command, { shell: true, detached: true, stdio: ["ignore", "pipe", "pipe"] });
     for (const stream of [child.stdout, child.stderr]) {
       stream.setEncoding("utf8");
       stream.on("data", (chunk) => (output.text += chunk));
@@ -74,7 +76,11 @@ function run(command) {
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGKILL");
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
     }, timeoutSeconds * 1000);
     child.on("error", (error) =>
       resolve({ code: 1, signal: null, timedOut, output: { ...output, text: `${error}\n` } }),
