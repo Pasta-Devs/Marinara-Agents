@@ -401,11 +401,11 @@ export function renderSlurpHomeCreatorFlow({
     ) : undefined;
     return (
       <SlpShell {...shellProps} contextualRail={profileRail ? "populated" : "spanning"} rightRail={profileRail}>
-        {liveShow.data?.hostId === selectedProfile.id && <button type="button" onClick={() => onNavigate({ mode: "creator", view: "live", showId: liveShow.data!.id, returnTo: navigation })} className="fixed right-4 top-20 z-20 rounded-full bg-red-600 px-3 py-2 text-xs font-bold text-white">LIVE · Watch</button>}
         <div className={cn("h-full min-h-0 overflow-y-auto", SLP_PAGE_SCROLL_CLASS)}>
           <StageProfileView
             key={`${selectedProfile.id}:${shellPersonaAccount?.id ?? "no-viewer"}`}
             profile={selectedProfile}
+            onOpenLive={(showId) => onNavigate({ mode: "creator", view: "live", showId, returnTo: navigation })}
             openDashboard={
               navigation.mode === "creator" && navigation.view === "profile" && navigation.dashboard === true
             }

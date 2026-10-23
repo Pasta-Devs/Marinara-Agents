@@ -295,6 +295,8 @@ export function StageProfileView({
     <>
       <SlurpProfileSurface
         storyCreatorId={profile.id}
+        liveShowId={model.liveShowId}
+        onOpenLive={model.onOpenLive}
         mobileHeader={
           <>
             <button

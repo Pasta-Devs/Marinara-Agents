@@ -488,7 +488,7 @@ function SlurpNotificationsView({
 
   const activityGroups = items.flatMap<SlurpEventGroup>((group) => {
     const events = (group.type === "single" ? [group.event] : group.events).filter(
-      (event) => (event.kind !== "message" || event.kind === "live") && !(event.subjectId && hiddenSubjectIds.has(event.subjectId)),
+      (event) => event.kind !== "message" && !(event.subjectId && hiddenSubjectIds.has(event.subjectId)),
     );
     if (events.length === 0) return [];
     if (events.length === 1) return [{ type: "single", event: events[0]! }];

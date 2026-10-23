@@ -3914,5 +3914,11 @@
   "ui.slurp.live.goal": "{{raised}} / {{goal}} 코인",
   "ui.slurp.live.unavailable": "라이브 방송을 찾을 수 없어요.",
   "ui.slurp.live.loading": "라이브 방송을 불러오는 중…",
-  "ui.slurp.live.tipEvent": "{{name}}님이 {{amount}} 코인을 팁으로 보냈어요"
+  "ui.slurp.live.tipEvent": "{{name}}님이 {{amount}} 코인을 팁으로 보냈어요",
+  "ui.slurp.live.raised": "{{name}}님이 {{amount}} 코인을 모았어요.",
+  "ui.slurp.live.goalLabel": "팁 목표",
+  "ui.slurp.live.crowd": "시청자",
+  "ui.slurp.live.chatLabel": "라이브 채팅 메시지",
+  "ui.slurp.live.firstTipper": "첫 번째 팁 보내기 · {{amount}}",
+  "ui.slurp.live.watch": "라이브 보기"
 }

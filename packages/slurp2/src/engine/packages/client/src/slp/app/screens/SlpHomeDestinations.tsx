@@ -84,7 +84,7 @@ export function renderSlurpHomeDestinations({
           initialActivity
           onBack={exitToCreatorHub}
           onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
-          onOpenLive={(showId) => onNavigate({ mode: "creator", view: "live", showId })}
+          onOpenLive={(showId) => onNavigate({ mode: "creator", view: "live", showId, returnTo: navigation })}
         />
       </SlpShell>
     );
@@ -112,7 +112,7 @@ export function renderSlurpHomeDestinations({
           onBack={navigation.returnTo ? () => onNavigate(navigation.returnTo!) : exitToCreatorHub}
           leaveOnExit={Boolean(navigation.returnTo)}
           onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
-          onOpenLive={(showId) => onNavigate({ mode: "creator", view: "live", showId })}
+          onOpenLive={(showId) => onNavigate({ mode: "creator", view: "live", showId, returnTo: navigation })}
           onOpenDesk={() => onNavigate({ mode: "creator", view: "stir" })}
         />
       </SlpShell>

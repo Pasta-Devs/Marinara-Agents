@@ -30,6 +30,8 @@ interface SlurpProfileSurfaceProps<TTab extends string = SlurpProfileTab> {
   account: Parameters<typeof Avatar>[0]["account"];
   /** The Creator whose Story ring the hero avatar wears (none without a live Story). */
   storyCreatorId?: string;
+  liveShowId?: string | null;
+  onOpenLive?: (showId: string) => void;
   displayHandle: string;
   banner?: {
     url: string | null;
@@ -89,6 +91,8 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
   mobileHeader,
   account,
   storyCreatorId,
+  liveShowId,
+  onOpenLive,
   displayHandle,
   banner,
   avatarUpload,
@@ -164,7 +168,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
           // A live Story: the avatar plays it, like everywhere else the ring shows.
           <button
             type="button"
-            onClick={() => storyRings.open?.(storyCreatorId!)}
+            onClick={() => liveShowId ? onOpenLive?.(liveShowId) : storyRings.open?.(storyCreatorId!)}
             className="relative block rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
             aria-label={localizeUi("ui.slurp.moments.open", { name: account.displayName })}
           >
@@ -173,6 +177,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
         ) : (
           <ProfileAvatar account={account} />
         )}
+        {!editing && liveShowId && <button type="button" onClick={() => onOpenLive?.(liveShowId)} aria-label={localizeUi("ui.slurp.live.watch", { defaultValue: "Watch live" })} className="absolute -bottom-1 -end-1 z-20 rounded-full bg-red-600 px-2 py-1 text-[10px] font-bold text-white">LIVE</button>}
         {/* The ring means "has a live Story" only: glint while unwatched, muted once watched (T). */}
         {!editing && heroRing && <SlpRingGlint seen={heroRing === "seen"} />}
       </span>

@@ -3136,5 +3136,11 @@
   "ui.slurp.live.goal": "{{raised}} / {{goal}} monet",
   "ui.slurp.live.unavailable": "Transmisja jest niedostępna.",
   "ui.slurp.live.loading": "Wczytywanie transmisji…",
-  "ui.slurp.live.tipEvent": "{{name}} przekazuje napiwek: {{amount}} monet"
+  "ui.slurp.live.tipEvent": "{{name}} przekazuje napiwek: {{amount}} monet",
+  "ui.slurp.live.raised": "{{name}} zebrała {{amount}} monet.",
+  "ui.slurp.live.goalLabel": "Cel napiwków",
+  "ui.slurp.live.crowd": "Widownia",
+  "ui.slurp.live.chatLabel": "Wiadomość na czacie transmisji",
+  "ui.slurp.live.firstTipper": "Bądź pierwszą osobą z napiwkiem · {{amount}}",
+  "ui.slurp.live.watch": "Oglądaj na żywo"
 }

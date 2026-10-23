@@ -6652,5 +6652,11 @@
   "ui.slurp.live.goal": "{{raised}} / {{goal}} coins",
   "ui.slurp.live.unavailable": "Live show unavailable.",
   "ui.slurp.live.loading": "Loading live show…",
-  "ui.slurp.live.tipEvent": "{{name}} tipped {{amount}} coins"
+  "ui.slurp.live.tipEvent": "{{name}} tipped {{amount}} coins",
+  "ui.slurp.live.raised": "{{name}} raised {{amount}} coins.",
+  "ui.slurp.live.goalLabel": "Tip goal",
+  "ui.slurp.live.crowd": "Crowd",
+  "ui.slurp.live.chatLabel": "Live chat message",
+  "ui.slurp.live.firstTipper": "Be the first tipper · {{amount}}",
+  "ui.slurp.live.watch": "Watch live"
 }

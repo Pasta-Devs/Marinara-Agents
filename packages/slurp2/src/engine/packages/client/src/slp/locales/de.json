@@ -3100,5 +3100,11 @@
   "ui.slurp.live.goal": "{{raised}} / {{goal}} Coins",
   "ui.slurp.live.unavailable": "Live-Show nicht verfügbar.",
   "ui.slurp.live.loading": "Live-Show wird geladen …",
-  "ui.slurp.live.tipEvent": "{{name}} gab {{amount}} Coins Trinkgeld"
+  "ui.slurp.live.tipEvent": "{{name}} gab {{amount}} Coins Trinkgeld",
+  "ui.slurp.live.raised": "{{name}} hat {{amount}} Coins gesammelt.",
+  "ui.slurp.live.goalLabel": "Trinkgeldziel",
+  "ui.slurp.live.crowd": "Publikum",
+  "ui.slurp.live.chatLabel": "Nachricht im Live-Chat",
+  "ui.slurp.live.firstTipper": "Sei der erste Tipper · {{amount}}",
+  "ui.slurp.live.watch": "Live ansehen"
 }

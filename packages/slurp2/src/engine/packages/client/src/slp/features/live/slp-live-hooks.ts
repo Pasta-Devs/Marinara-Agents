@@ -8,7 +8,7 @@ export function useSlpLiveShow(id: string | null) {
     queryKey: key(id),
     queryFn: () => api.get<SlpLiveShowResponse>(`/slurp2/live/${encodeURIComponent(id!)}`),
     enabled: Boolean(id),
-    refetchInterval: id ? 3_000 : false,
+    refetchInterval: (query) => (id && !query.state.data?.endedAt ? 3_000 : false),
     refetchIntervalInBackground: false,
   });
 }
@@ -17,7 +17,9 @@ export function useSlpCurrentLiveShow(enabled = true) {
     queryKey: ["slurp2", "live", "current"],
     queryFn: () => api.get<{ shows: SlpLiveShow[] }>("/slurp2/live").then(({ shows }) => shows[0] ?? null),
     enabled,
-    staleTime: 5_000,
+    staleTime: 30_000,
+    refetchInterval: enabled ? 60_000 : false,
+    refetchIntervalInBackground: false,
   });
 }
 export function useSlpLiveActions(showId: string) {
@@ -27,7 +29,7 @@ export function useSlpLiveActions(showId: string) {
     qc.invalidateQueries({ queryKey: ["slurp2", "live", "current"] }),
   ]);
   const tip = useMutation({
-    mutationFn: (input: { personaId: string; amount: number; requestId?: string }) =>
+    mutationFn: (input: { personaId: string; amount: number; requestId: string }) =>
       api.post<{ show: SlpLiveShow; wallet: unknown }>(`/slurp2/live/${encodeURIComponent(showId)}/tip`, input),
     onSettled: invalidate,
   });

@@ -119,6 +119,7 @@ export interface SlpPostCardImageEditingCap {
 }
 
 export interface SlpPostCardCtx {
+  liveHostId?: string | null;
   /**
    * The AI assist for a post's text, handed in by the app (a module cannot reach a feature). Absent,
    * the edit sheet shows no assist.
