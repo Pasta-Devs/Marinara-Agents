@@ -924,6 +924,22 @@ export const slurpDemandTrends = fileTable("slurp2_creator_demand_trends", {
   expiresAt: text("expires_at").notNull(),
 });
 
+export const slurpLiveShows = fileTable("slurp2_live_shows", {
+  id: text("id").primaryKey(),
+  hostKind: text("host_kind").notNull(),
+  hostId: text("host_id").notNull(),
+  startedAt: text("started_at").notNull(),
+  endsAt: text("ends_at").notNull(),
+  endedAt: text("ended_at"),
+  goal: text("goal").notNull(),
+  raised: text("raised").notNull().default("0"),
+  goalHitAt: text("goal_hit_at"),
+  script: text("script").notNull().default("[]"),
+  events: text("events").notNull().default("[]"),
+  lastReplyAt: text("last_reply_at"),
+  recapPostId: text("recap_post_id"),
+});
+
 /** One cross-process lease for the free world tick. */
 export const slurpWorldClaims = fileTable("slurp2_world_claims", {
   id: text("id").primaryKey(),

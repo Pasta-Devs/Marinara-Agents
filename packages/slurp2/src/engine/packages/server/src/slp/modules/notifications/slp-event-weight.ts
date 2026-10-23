@@ -44,13 +44,15 @@ export type SlurpEventKind =
   /** A fan's note to the player's own page: fans write notes there, never open a chat. */
   | "fan_note"
   /** A background sign-up finished: how many Creators joined (amount). */
-  | "sign_up";
+  | "sign_up"
+  | "live";
 
 /**
  * Base weights. The gaps matter more than the numbers: anything at or above `SLURP_EVENT_NOTABLE`
  * is worth a line of its own, and everything below is grouped or dropped.
  */
 const BASE: Record<SlurpEventKind, number> = {
+  live: 55,
   commission_requested: 90,
   commission_accepted: 85,
   subscribed: 80,
