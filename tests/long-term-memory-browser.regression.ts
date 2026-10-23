@@ -5231,10 +5231,15 @@ async function main() {
       // This accept drops the second change's merge target from the memory context, so the context reloads under a
       // new id list while the last one stays on screen (#1584).
       // The batch bar leaves with its selection while the applied rows stay until the queue reloads, so focus
-      // must skip those rows.
+      // must skip those rows. #1588: the click leaves the page focused, as a click does in Safari, and focus
+      // still moves.
       await acceptWithReviewContextHeld(
         reviewMutationIds.second,
-        () => page.getByRole("button", { name: /^Apply preflighted \(/ }).click(),
+        async () => {
+          await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+          assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+          await page.getByRole("button", { name: /^Apply preflighted \(/ }).dispatchEvent("click");
+        },
         reviewFocusMoved,
       );
       assert.deepEqual(reviewEditedMutationIds.at(-1), [reviewMutationIds.partial]);

@@ -95,8 +95,15 @@ type BatchResult = {
 
 const CONFLICT_PREVIEW_LIMIT = 3;
 
+// The page itself is never a control: a click that does not focus its button (Safari) leaves the body active.
 const focusable = (element: HTMLElement | null): element is HTMLElement =>
-  Boolean(element?.isConnected && !element.matches(":disabled") && element.getClientRects().length);
+  Boolean(
+    element?.isConnected &&
+    element !== document.body &&
+    element !== document.documentElement &&
+    !element.matches(":disabled") &&
+    element.getClientRects().length,
+  );
 
 const freshnessLabel: Record<string, string> = {
   fresh: "ui.longTermMemory.reviewqueue.fresh",
@@ -460,16 +467,19 @@ export default function ReviewQueue({
       return;
     }
     if (focusable(trigger) && active === trigger) return;
-    runFocusRef.current = null;
-    if (!focusLost || focusable(trigger)) return;
+    if (!focusLost || focusable(trigger)) {
+      runFocusRef.current = null;
+      return;
+    }
     const toggles = [...root.querySelectorAll<HTMLElement>("[data-ltm-review-mutation-toggle]")].filter(
       (toggle) => focusable(toggle) && !acted.has(toggle.dataset.ltmReviewMutationToggle ?? ""),
     );
-    (
-      toggles[Math.min(index, toggles.length - 1)] ?? root.querySelector<HTMLElement>("[data-ltm-review-result]")
-    )?.focus({
-      preventScroll: true,
-    });
+    const next =
+      toggles[Math.min(index, toggles.length - 1)] ?? root.querySelector<HTMLElement>("[data-ltm-review-result]");
+    // With every row acted on, a run that is still going has no result to land on yet.
+    if (!next && running !== null) return;
+    runFocusRef.current = null;
+    next?.focus({ preventScroll: true });
   }, [running, reviewedIds, review.data]);
   const selectedIdsRef = useRef(selectedIds);
   const editedByIdRef = useRef(editedById);
