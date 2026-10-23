@@ -2,7 +2,7 @@ import type { DB } from "../../../db/connection.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createSlurpLiveStorage } from "../../data/live/slp-live-storage.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
-import { slurpLiveCapEvents, slurpLiveDurationMinutes, slurpLiveParseLines, slurpLiveScriptFailed, slurpLiveShouldStart, type SlurpLiveEvent } from "../../modules/live/slp-live.js";
+import { slurpLiveCapEvents, slurpLiveDurationMinutes, slurpLiveParseLines, slurpLivePlayerTipAmount, slurpLiveScriptFailed, slurpLiveShouldStart, type SlurpLiveEvent } from "../../modules/live/slp-live.js";
 import { logger } from "../../../lib/logger.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
@@ -16,9 +16,13 @@ import { claimSlurpModelBudget } from "../../base/model/slp-model-worker.js";
 import { tryBackgroundConnection } from "../../../services/generation/connection-admission.js";
 import { resolveCreatorFanConnection } from "../audience/slp-audience-contract.js";
 import { slurpLiveFinishPrompt, slurpLiveReplyPrompt, slurpLiveScriptPrompt } from "../../modules/live/slp-live-prompt.js";
-import { slurpLivePhase } from "../../modules/live/slp-live.js";
+import { slurpLivePhase, slurpLiveTipTopper } from "../../modules/live/slp-live.js";
 import { createSlurpEventsStorage } from "../../data/notifications/slp-notification-storage.js";
 import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
+import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
+import { slurpFanTypeForPinnedOrSeed, slurpResolveFanType, slurpFanTypeWeeklyBudget } from "../../../../../shared/src/slp/slp-fan-types.js";
+import { slurpMembersActiveAt } from "../../../../../shared/src/slp/slp-population.js";
+import { slurpLivePlayerCrowdPrompt } from "../../modules/live/slp-live-prompt.js";
 
 export async function advanceSlurpLive(db: DB, at = new Date()): Promise<void> {
   const storage = createSlurpLiveStorage(db);
@@ -33,13 +37,14 @@ export async function advanceSlurpLive(db: DB, at = new Date()): Promise<void> {
       const creator = creators[0];
       if (!creator || !slurpLiveShouldStart({ active: false })) return null;
       const duration = slurpLiveDurationMinutes(Date.now());
-      const created = await storage.create({
+      const created = await storage.createIfNone({
         hostKind: "creator",
         hostId: creator.id,
         startedAt: at,
         endsAt: new Date(at.getTime() + duration * 60_000),
         goal: Math.max(10, Number(creator.settings?.messaging?.ppvPrice ?? 25)),
       });
+      if (!created) return { show: await storage.active(), startedNow: false };
       const script = await runLiveModel(
         db,
         settings,
@@ -67,13 +72,48 @@ export async function advanceSlurpLive(db: DB, at = new Date()): Promise<void> {
   }
   if (show.endedAt || at.getTime() >= Date.parse(show.endsAt)) {
     if (!show.endedAt) {
-      const recap = await createSlurpStorage(db).createPost({ authorAccountId: show.hostId, content: `Live show recap: ${show.raised} coins raised.`, source: "generated", metadata: { liveShowId: show.id } });
-      await storage.update(show.id, { endedAt: at.toISOString(), recapPostId: recap?.id ?? null });
-      await notifyLive(db, (await createSlurpStorage(db).getNoodlerAccountById(show.hostId))!, "ended", show.id);
+      if (show.hostKind === "player") await endSlurpPlayerLiveShow(db, show.id, at);
+      else {
+        const recap = await createSlurpStorage(db).createPost({ authorAccountId: show.hostId, content: `Live show recap: ${show.raised} coins raised.`, source: "generated", metadata: { liveShowId: show.id } });
+        await storage.update(show.id, { endedAt: at.toISOString(), recapPostId: recap?.id ?? null });
+        const creator = await createSlurpStorage(db).getNoodlerAccountById(show.hostId);
+        if (creator) await notifyLive(db, creator, "ended", show.id);
+      }
     }
     return;
   }
   const settingsFans = settings.fanTypes ?? [];
+  if (show.hostKind === "player") {
+    const population = createSlurpPopulationStorage(db);
+    const all = await population.listTiesForCreator(show.hostId);
+    const currentFans = (await population.listAll()).filter((member) => slurpMembersActiveAt(member, at));
+    const fansById = new Map(currentFans.map((fan) => [fan.id, fan]));
+    const eligible = all.filter((tie) => tie.stage !== "lapsed" && fansById.has(tie.memberId)).slice(0, 120);
+    const newEvents: SlurpLiveEvent[] = [];
+    for (const tie of eligible) {
+      const fan = fansById.get(tie.memberId)!;
+      const type = fan.fanTypeId ? slurpResolveFanType(settingsFans, fan) : slurpFanTypeForPinnedOrSeed(settingsFans, null, fan.id);
+      if (!type.enabled || type.spend.tipChance <= 0) continue;
+      const amount = slurpLivePlayerTipAmount(type, fan.id);
+      if (!(await population.reserveWeeklySpend(fan.id, show.hostId, amount, slurpFanTypeWeeklyBudget(type, fan.id), at))) continue;
+      try {
+        const operationId = `live:${show.id}:fan-tip:${fan.id}`;
+        await createSlurpStorage(db).creditCreatorIncome(show.hostId, amount, "tip", operationId);
+        await population.advanceTie(fan.id, show.hostId, { stage: "follower", spent: amount, tipped: amount, interactions: 1 });
+        newEvents.push({ at: at.getTime() - Date.parse(show.startedAt), kind: "tip", name: fan.displayName, amount, text: "", requestId: operationId });
+      } catch (error) {
+        await population.releaseWeeklySpend(fan.id, show.hostId, amount, at);
+        logger.warn(error, "[slurp-live] Could not process audience tip");
+      }
+    }
+    if (newEvents.length) {
+      const current = await storage.get(show.id);
+      const combined = slurpLiveCapEvents([...(current?.events ?? []), ...newEvents]);
+      const raised = (current?.raised ?? show.raised) + newEvents.reduce((sum, event) => sum + (event.amount ?? 0), 0);
+      await storage.update(show.id, { events: combined, raised, ...(raised >= show.goal && !show.goalHitAt ? { goalHitAt: at.toISOString() } : {}) });
+    }
+    return;
+  }
   const elapsed = at.getTime() - Date.parse(show.startedAt);
   const scheduled: SlurpLiveEvent[] = settingsFans.flatMap((fan, index) => {
     if (!fan.enabled || fan.spend.tipChance <= 0) return [];
@@ -129,6 +169,37 @@ export async function replyToSlurpLiveChat(db: DB, showId: string, at = new Date
     await storage.releaseReply(show.id, at);
     logger.warn(error, "[slurp-live] Reply failed");
   }
+}
+
+export async function narrateSlurpPlayerLiveShow(db: DB, showId: string, text: string, at = new Date()): Promise<void> {
+  const storage = createSlurpLiveStorage(db);
+  const show = await storage.get(showId);
+  if (!show || show.endedAt || show.hostKind !== "player") return;
+  const elapsed = at.getTime() - Date.parse(show.startedAt);
+  await storage.appendLine(showId, { at: elapsed, kind: "narration", name: "Host", text: text.slice(0, 500) });
+  const current = await storage.get(showId);
+  if (!current || !(await storage.claimCrowd(showId, at))) return;
+  const since = show.lastReplyAt ? Date.parse(show.lastReplyAt) - Date.parse(show.startedAt) : -1;
+  const narration = current.script.filter((line) => line.kind === "narration" && line.at > since).map((line) => line.text).join("\n");
+  const population = createSlurpPopulationStorage(db);
+  const fans = (await population.listNamedCast(show.hostId, 6)).map(({ member }) => ({ name: member.displayName, voice: member.archetype }));
+  const settings = await createSlurpStorage(db).getSettings();
+  const lines = await runLiveModel(db, settings, "Player", "main", 0, slurpLivePlayerCrowdPrompt({ narration, fans }), "script");
+  for (const line of lines) await storage.appendLine(showId, { at: elapsed + line.at, kind: "crowd", name: line.name ?? "Crowd", text: line.text });
+}
+
+export async function endSlurpPlayerLiveShow(db: DB, showId: string, at = new Date()) {
+  const storage = createSlurpLiveStorage(db);
+  const claimed = await storage.claimEnd(showId, at);
+  if (!claimed) return null;
+  const topTipper = slurpLiveTipTopper(claimed.events);
+  const post = await createSlurpStorage(db).createNoodlerPost({
+    authorAccountId: claimed.hostId,
+    content: `Live show recap: ${claimed.raised} coins raised.${topTipper ? ` Top tipper: ${topTipper.name} (${topTipper.amount} coins).` : " No tips were received."}`,
+    source: "generated",
+    metadata: { liveShowId: claimed.id },
+  });
+  return storage.setRecap(claimed.id, post?.id ?? null);
 }
 
 async function runLiveModel(db: DB, settings: any, creatorName: string, phase: string, minutes: number, prompt: string, kind: "script" | "finish" | "reply") {

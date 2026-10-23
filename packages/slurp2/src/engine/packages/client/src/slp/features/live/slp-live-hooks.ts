@@ -38,5 +38,21 @@ export function useSlpLiveActions(showId: string) {
       api.post<{ show: SlpLiveShow; replyQueued: boolean }>(`/slurp2/live/${encodeURIComponent(showId)}/chat`, input),
     onSettled: invalidate,
   });
-  return { tip, chat };
+  const narrate = useMutation({
+    mutationFn: (input: { personaId: string; text: string }) => api.post<{ show: SlpLiveShow }>(`/slurp2/live/${encodeURIComponent(showId)}/narrate`, input),
+    onSettled: invalidate,
+  });
+  const end = useMutation({
+    mutationFn: (input: { personaId: string }) => api.post<{ show: SlpLiveShow }>(`/slurp2/live/${encodeURIComponent(showId)}/end`, input),
+    onSettled: invalidate,
+  });
+  return { tip, chat, narrate, end };
+}
+
+export function useStartSlpPlayerLive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; duration: 20 | 30 | 40 }) => api.post<{ show: SlpLiveShow }>("/slurp2/live/start", input),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["slurp2", "live"] }),
+  });
 }

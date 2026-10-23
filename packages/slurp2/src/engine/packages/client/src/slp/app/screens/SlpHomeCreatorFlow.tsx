@@ -5,7 +5,7 @@ import { StageProfileSourcePicker, DisclosureStep } from "./SlpScreenCreateProfi
 import { toast } from "sonner";
 import { StageProfileForm } from "../../features/creators/SlpStageProfileForm";
 import { openSlpCreatorSettings } from "../../features/creators/settings/slp-creator-settings-store";
-import { ChevronRight, LayoutGrid, Pencil, Plus } from "lucide-react";
+import { ChevronRight, LayoutGrid, Pencil, Plus, Radio } from "lucide-react";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import { cn } from "../../../lib/utils";
 import { SLP_EYEBROW_CLASS, SLP_PAGE_SCROLL_CLASS, SLP_RAIL_GROUP_CLASS } from "../../base/chrome/SlpChrome";
@@ -14,7 +14,7 @@ import { StageProfileView } from "./SlpScreenProfile";
 import type { ReactNode } from "react";
 import type { SlpShellProps } from "../../modules/chrome/slp-shell.types";
 import type { useSlurpHomeState } from "../slp-home-actions";
-import { useSlpCurrentLiveShow } from "../../features/live/slp-live-hooks";
+import { useSlpCurrentLiveShow, useStartSlpPlayerLive } from "../../features/live/slp-live-hooks";
 
 export type SlurpHomeHostView = {
   model: ReturnType<typeof useSlurpHomeState>;
@@ -108,6 +108,7 @@ export function renderSlurpHomeCreatorFlow({
     viewerQuery,
   } = model;
   const liveShow = useSlpCurrentLiveShow(navigation.mode === "creator" && navigation.view === "profile");
+  const startPlayerLive = useStartSlpPlayerLive();
   if (creationStep === "source") {
     return (
       <SlpShell {...shellProps}>
@@ -330,6 +331,18 @@ export function renderSlurpHomeCreatorFlow({
           </h2>
           <section className="overflow-hidden rounded-2xl bg-[var(--slurp-surface)] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]">
             {[
+              {
+                label: localizeUi("ui.slurp.live.goLive", { defaultValue: "Go live" }),
+                icon: Radio,
+                action: () => {
+                  const duration = window.prompt("Duration in minutes: 20, 30, or 40", "20");
+                  if (!["20", "30", "40"].includes(duration ?? "")) return;
+                  startPlayerLive.mutate({ personaId: viewerPersonaId!, duration: Number(duration) as 20 | 30 | 40 }, {
+                    onSuccess: ({ show }) => onNavigate({ mode: "creator", view: "live", showId: show.id, returnTo: navigation }),
+                    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not start live show"),
+                  });
+                },
+              },
               {
                 label: localizeUi("ui.slurp.profile.editProfile", { defaultValue: "Edit profile" }),
                 icon: Pencil,

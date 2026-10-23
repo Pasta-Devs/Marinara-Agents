@@ -1,1 +1,6 @@
-export { advanceSlurpLive, replyToSlurpLiveChat } from "./slp-live-service.js";
+export {
+  advanceSlurpLive,
+  endSlurpPlayerLiveShow,
+  narrateSlurpPlayerLiveShow,
+  replyToSlurpLiveChat,
+} from "./slp-live-service.js";

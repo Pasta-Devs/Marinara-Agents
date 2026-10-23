@@ -1,4 +1,4 @@
-import type { SlurpFanType } from "../../../../../shared/src/slp/slp-fan-types.js";
+import { slurpFanTypeWeeklyBudget, type SlurpFanType } from "../../../../../shared/src/slp/slp-fan-types.js";
 
 export type SlurpLivePhase = "warmup" | "main" | "finish";
 export type SlurpLiveLineKind = "narration" | "crowd" | "reaction";
@@ -55,6 +55,28 @@ export function slurpLiveClaimTipEvent(
 
 export function slurpLiveReplyClaimAllowed(lastReplyAt: string | null, at: Date): boolean {
   return !lastReplyAt || Date.parse(lastReplyAt) <= at.getTime() - 60_000;
+}
+
+export function slurpLiveCrowdClaimAllowed(lastCrowdAt: string | null, at: Date): boolean {
+  return !lastCrowdAt || Date.parse(lastCrowdAt) <= at.getTime() - 30_000;
+}
+
+export function slurpLivePlayerTipAmount(type: SlurpFanType, memberId: string): number {
+  return Math.max(1, Math.round(slurpFanTypeWeeklyBudget(type, memberId) * type.spend.tipChance));
+}
+
+export function slurpLiveTipTopper(events: readonly SlurpLiveEvent[]): SlurpLiveEvent | null {
+  return events.filter((event) => event.kind === "tip").reduce<SlurpLiveEvent | null>(
+    (best, event) => (!best || (event.amount ?? 0) > (best.amount ?? 0) ? event : best),
+    null,
+  );
+}
+
+export function slurpLivePlayerTipDue(input: { fanId: string; showId: string; tipChance: number; seed: number }): boolean {
+  if (!(input.tipChance > 0)) return false;
+  let hash = 0x811c9dc5;
+  for (const char of `${input.showId}:${input.fanId}:${input.seed}`) hash = Math.imul(hash ^ char.charCodeAt(0), 0x01000193);
+  return ((hash >>> 0) / 0x100000000) < Math.min(1, input.tipChance);
 }
 
 export function slurpLiveParseLines(value: unknown): SlurpLiveLine[] {

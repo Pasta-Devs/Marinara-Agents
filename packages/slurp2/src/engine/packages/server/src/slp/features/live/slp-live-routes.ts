@@ -4,12 +4,12 @@ import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { createSlurpLiveStorage } from "../../data/live/slp-live-storage.js";
 import { createSlurpStorage, createSlurpMessagesStorage } from "../../data/slp-storage.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
-import { replyToSlurpLiveChat } from "./slp-live-contract.js";
+import { endSlurpPlayerLiveShow, narrateSlurpPlayerLiveShow, replyToSlurpLiveChat } from "./slp-live-contract.js";
 import { newId } from "../../../utils/id-generator.js";
 
 const body = z.object({ personaId: z.string().trim().min(1) }).passthrough();
 
-export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona }: SlpRouteDeps) {
+export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona, noodle }: SlpRouteDeps) {
   const storage = createSlurpLiveStorage(app.db);
   const enabled = async () => slpExtensionOn(await createSlurpStorage(app.db).getSettings(), "live");
   app.get("/live", async (_request, reply) => (await enabled()) ? { shows: await storage.list() } : reply.code(404).send({ error: "Live is switched off." }));
@@ -17,6 +17,42 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     if (!(await enabled())) return reply.code(404).send({ error: "Live is switched off." });
     const show = await storage.get((request.params as { id: string }).id);
     return show ?? reply.code(404).send({ error: "Live show not found." });
+  });
+  app.post("/live/start", async (request, reply) => {
+    const parsed = z.object({ personaId: z.string().trim().min(1), duration: z.union([z.literal(20), z.literal(30), z.literal(40)]) }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (!(await enabled())) return reply.code(404).send({ error: "Live is switched off." });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    const player = viewer && (await noodle.getSlurpAccountForEntity("persona", viewer.entityId, "viewer"));
+    if (!viewer || !player) return reply.code(404).send({ error: "Player account not found." });
+    const active = await storage.active();
+    if (active) return reply.code(409).send({ error: "A live show is already active.", show: active });
+    const goal = await noodle.getCreatorSubscriptionPrice(player.id);
+    const show = await storage.createIfNone({ hostKind: "player", hostId: player.id, startedAt: new Date(), endsAt: new Date(Date.now() + parsed.data.duration * 60_000), goal: Math.max(1, goal) });
+    if (!show) return reply.code(409).send({ error: "A live show is already active.", show: await storage.active() });
+    return { show };
+  });
+  app.post("/live/:id/narrate", async (request, reply) => {
+    const parsed = body.extend({ text: z.string().trim().min(1).max(500) }).safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (!(await enabled())) return reply.code(404).send({ error: "Live is switched off." });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    const show = await storage.get((request.params as { id: string }).id);
+    const player = viewer && (await noodle.getSlurpAccountForEntity("persona", viewer.entityId, "viewer"));
+    if (!viewer || !player || !show || show.hostKind !== "player" || show.hostId !== player.id || show.endedAt) return reply.code(404).send({ error: "Live show not found." });
+    await narrateSlurpPlayerLiveShow(app.db, show.id, parsed.data.text);
+    return { show: await storage.get(show.id) };
+  });
+  app.post("/live/:id/end", async (request, reply) => {
+    const parsed = body.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (!(await enabled())) return reply.code(404).send({ error: "Live is switched off." });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    const show = await storage.get((request.params as { id: string }).id);
+    const player = viewer && (await noodle.getSlurpAccountForEntity("persona", viewer.entityId, "viewer"));
+    if (!viewer || !player || !show || show.hostKind !== "player" || show.hostId !== player.id) return reply.code(404).send({ error: "Live show not found." });
+    const ended = await endSlurpPlayerLiveShow(app.db, show.id);
+    return { show: ended ?? await storage.get(show.id) };
   });
   app.post("/live/:id/tip", async (request, reply) => {
     const parsed = body.extend({ amount: z.number().int().positive(), requestId: z.string().trim().min(1).optional() }).safeParse(request.body ?? {});
