@@ -73,6 +73,24 @@ async function main() {
     const planned = await live.plan("creator-a", future, end, future.toISOString(), 10, menu);
     assert.ok(planned);
     assert.equal(await live.plan("creator-a", future, end, null, 10, menu), null);
+    const stirPlan = await live.plan(
+      "creator-stir",
+      future,
+      end,
+      future.toISOString(),
+      10,
+      menu,
+      "stir-request",
+      "pictures",
+    );
+    assert.equal(
+      (await live.plan("creator-stir", future, end, future.toISOString(), 10, menu, "stir-request", "pictures"))?.id,
+      stirPlan?.id,
+    );
+    assert.equal(stirPlan?.mode, "pictures");
+    assert.equal((await live.byStirRequestId("stir-request"))?.id, stirPlan?.id);
+    assert.equal((await live.planned()).filter((show: any) => show.hostId === "creator-stir").length, 1);
+    assert.equal(await live.remind(stirPlan.id, "player", at), false);
     assert.equal((await live.list(20, at))[0]?.id, "old-live");
     assert.equal((await live.upcomingAnnounced(at)).length, 0);
     await live.setAnnouncement(planned.id, "post-a");
@@ -112,6 +130,16 @@ async function main() {
       menu,
     });
     assert.ok(creatorB && creatorC);
+    const blocked = await live.plan("creator-blocked", at, end, null, 10, menu, "full-request");
+    assert.ok(blocked);
+    assert.equal(await live.startPlanned(blocked.id, at), null);
+    await live.cancelUnstarted(blocked.id);
+    assert.equal(await live.byStirRequestId("full-request"), null);
+    const immediate = await live.plan("creator-now", at, end, null, 10, menu, "now-request", "text");
+    assert.ok(immediate);
+    await live.update(creatorC.id, { endedAt: at.toISOString() });
+    assert.equal((await live.startPlanned(immediate.id, at))?.id, immediate.id);
+    assert.equal((await live.byStirRequestId("now-request"))?.startedNoticeAt, at.toISOString());
     assert.equal(await live.privateClaim(creatorB.id, "viewer-a", "private-1", at), "new");
     assert.equal(await live.privateClaim(creatorB.id, "viewer-b", "private-2", at), "busy");
     assert.equal(await live.privateClaim(creatorB.id, "viewer-a", "private-1", at), "resume");

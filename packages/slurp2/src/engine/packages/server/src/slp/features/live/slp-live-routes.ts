@@ -19,6 +19,8 @@ import {
   slurpLiveViewerCount,
 } from "../../modules/live/slp-live.js";
 import { resolveCreatorMediaAbsolutePath, sendSlurpImageFile } from "../../base/media/slp-media.js";
+import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
+import { announceSlurpLive } from "./slp-live-service.js";
 
 const body = z.object({ personaId: z.string().trim().min(1) }).passthrough();
 
@@ -83,6 +85,63 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     const reminded = await storage.remind((request.params as { id: string }).id, viewer.entityId);
     if (!reminded) return reply.code(404).send({ error: "Upcoming show not found." });
     return { reminded: true };
+  });
+  app.post("/live/stir", async (request, reply) => {
+    const parsed = z
+      .object({
+        creatorAccountId: z.string().trim().min(1),
+        when: z.union([z.literal("now"), z.string().datetime()]),
+        minutes: z.union([z.literal(20), z.literal(30), z.literal(40)]),
+        mode: z.enum(["text", "pictures"]),
+        requestId: z.string().trim().min(1),
+      })
+      .safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (!(await enabled())) return reply.code(404).send({ error: "Live is switched off." });
+    const creator = await createSlurpStorage(app.db).getNoodlerAccountById(parsed.data.creatorAccountId);
+    if (!creator || creator.kind !== "character") return reply.code(404).send({ error: "Creator not found." });
+    const storage = createSlurpLiveStorage(app.db);
+    const previous = await storage.byStirRequestId(parsed.data.requestId);
+    if (previous) {
+      if (previous.hostId !== creator.id)
+        return reply.code(409).send({ error: "Request ID belongs to another Creator." });
+      return {
+        show:
+          previous.announcedFor && !previous.announcementPostId ? await announceSlurpLive(app.db, previous) : previous,
+        started: !!previous.startedNoticeAt,
+      };
+    }
+    const now = new Date();
+    const startsAt = parsed.data.when === "now" ? now : new Date(parsed.data.when);
+    if (startsAt < now || startsAt.getTime() > now.getTime() + 48 * 60 * 60_000)
+      return reply.code(400).send({ error: "Choose a time within the next 48 hours." });
+    const endsAt = new Date(startsAt.getTime() + parsed.data.minutes * 60_000);
+    const menu = slurpLiveMenuItems(0, [], Math.max(10, Number(creator.settings?.messaging?.ppvPrice ?? 25)));
+    const planned = await storage.plan(
+      creator.id,
+      startsAt,
+      endsAt,
+      parsed.data.when === "now" ? null : startsAt.toISOString(),
+      Math.max(10, Number(creator.settings?.messaging?.ppvPrice ?? 25)),
+      menu,
+      parsed.data.requestId,
+      parsed.data.mode,
+    );
+    if (!planned) return reply.code(409).send({ error: "This Creator already has a live show planned." });
+    if (planned.hostId !== creator.id) return reply.code(409).send({ error: "Request ID belongs to another Creator." });
+    if (planned.startedNoticeAt) return { show: planned, started: true };
+    if (parsed.data.when !== "now") {
+      const announced = await announceSlurpLive(app.db, planned);
+      if (!announced.announcementPostId) return reply.code(503).send({ error: "Could not post the announcement." });
+      return { show: announced, started: false };
+    }
+    const claim = await trySlpOperation("slurp-live-start", () => storage.startPlanned(planned.id, new Date()));
+    if (!claim.acquired || !claim.value) {
+      await storage.cancelUnstarted(planned.id);
+      return reply.code(409).send({ error: "The live show cap is full." });
+    }
+    const started = claim.value;
+    return { show: await storage.get(started.id), started: true };
   });
   app.post("/live/start", async (request, reply) => {
     const parsed = z

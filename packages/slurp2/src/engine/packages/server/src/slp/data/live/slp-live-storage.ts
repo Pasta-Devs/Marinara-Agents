@@ -81,6 +81,10 @@ export function createSlurpLiveStorage(db: DB) {
       const rows = await db.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id));
       return rows[0] ? map(rows[0]) : null;
     },
+    async byStirRequestId(requestId: string) {
+      const rows = await db.select().from(slurpLiveShows).where(eq(slurpLiveShows.stirRequestId, requestId));
+      return rows[0] ? map(rows[0]) : null;
+    },
     async active() {
       const rows = await db
         .select()
@@ -135,19 +139,28 @@ export function createSlurpLiveStorage(db: DB) {
       announcedFor: string | null,
       goal: number,
       menu: SlurpLiveMenuItem[],
+      requestId?: string,
+      mode: "text" | "pictures" = "text",
     ) {
       return db.transaction(async (tx) => {
+        if (requestId) {
+          const existing = (
+            await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.stirRequestId, requestId))
+          )[0];
+          if (existing) return map(existing);
+        }
         const rows = await tx
           .select()
           .from(slurpLiveShows)
           .where(eq(slurpLiveShows.hostId, hostId))
           .orderBy(desc(slurpLiveShows.startedAt));
         for (const planned of rows) {
-          if (!planned.endedAt && !planned.startedNoticeAt && planned.startedAt < startsAt.toISOString())
+          if (!requestId && !planned.endedAt && !planned.startedNoticeAt && planned.startedAt < startsAt.toISOString())
             await tx.delete(slurpLiveShows).where(eq(slurpLiveShows.id, planned.id));
         }
         const current = rows.filter(
-          (planned) => !planned.endedAt && (!planned.startedNoticeAt || planned.startedAt >= startsAt.toISOString()),
+          (planned) =>
+            !planned.endedAt && (requestId || !planned.startedNoticeAt || planned.startedAt >= startsAt.toISOString()),
         );
         if (current.some((planned) => !planned.endedAt)) return null;
         const row = {
@@ -174,13 +187,14 @@ export function createSlurpLiveStorage(db: DB) {
           reminders: "[]",
           announcementPostId: null,
           startedNoticeAt: null,
-          mode: "text",
+          mode,
           privateState: null,
           privateClaims: "[]",
           privateRequestId: null,
           pictureStates: "[]",
           pictureViewerId: null,
           pictureSeenAt: null,
+          stirRequestId: requestId ?? null,
         };
         await tx.insert(slurpLiveShows).values(row);
         return map(row);
@@ -212,6 +226,11 @@ export function createSlurpLiveStorage(db: DB) {
         .update(slurpLiveShows)
         .set({ announcementPostId: postId })
         .where(and(eq(slurpLiveShows.id, id), isNull(slurpLiveShows.announcementPostId)));
+    },
+    async cancelUnstarted(id: string) {
+      await db
+        .delete(slurpLiveShows)
+        .where(and(eq(slurpLiveShows.id, id), isNull(slurpLiveShows.startedNoticeAt), isNull(slurpLiveShows.endedAt)));
     },
     async startPlanned(id: string, at: Date) {
       return db.transaction(async (tx) => {
@@ -302,6 +321,7 @@ export function createSlurpLiveStorage(db: DB) {
         pictureStates: "[]",
         pictureViewerId: null,
         pictureSeenAt: null,
+        stirRequestId: null,
       };
       await db.insert(slurpLiveShows).values(row);
       return map(row);
@@ -352,6 +372,7 @@ export function createSlurpLiveStorage(db: DB) {
           pictureStates: "[]",
           pictureViewerId: null,
           pictureSeenAt: null,
+          stirRequestId: null,
         };
         await tx.insert(slurpLiveShows).values(row);
         return map(row);

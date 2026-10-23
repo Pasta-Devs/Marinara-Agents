@@ -86,6 +86,18 @@ export function useSlurpStirDismiss() {
   });
 }
 
+export function useSlurpStirLive() {
+  return useMutation({
+    mutationFn: (input: {
+      creatorAccountId: string;
+      when: "now" | string;
+      minutes: 20 | 30 | 40;
+      mode: "text" | "pictures";
+      requestId: string;
+    }) => api.post<{ show: { id: string }; started: boolean }>("/slurp2/live/stir", input),
+  });
+}
+
 /** Brands and products for the brand deal card (R), each product marked with its fit for this Creator. */
 export function useSlurpStirBrands(accountId: string | null) {
   return useQuery({

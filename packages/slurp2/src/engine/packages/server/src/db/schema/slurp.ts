@@ -954,6 +954,7 @@ export const slurpLiveShows = fileTable("slurp2_live_shows", {
   pictureStates: text("picture_states").notNull().default("[]"),
   pictureViewerId: text("picture_viewer_id"),
   pictureSeenAt: text("picture_seen_at"),
+  stirRequestId: text("stir_request_id"),
   lastReplyAt: text("last_reply_at"),
   recapPostId: text("recap_post_id"),
 });

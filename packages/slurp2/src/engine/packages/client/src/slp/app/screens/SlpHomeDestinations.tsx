@@ -287,6 +287,7 @@ export function renderSlurpHomeDestinations({
 /** The Stir tab inside the shell: "See all" opens the shell's Pulse sheet; a recent play opens what it touched. */
 function SlpStirTab({
   personaId,
+  onOpenLive,
   onOpenDashboard,
   onOpenTarget,
   onOpenSupport,
@@ -294,6 +295,7 @@ function SlpStirTab({
   sheet,
 }: {
   personaId: string | null;
+  onOpenLive?: (showId: string) => void;
   sheet?: ComponentProps<typeof SlpStirScreen>["sheet"];
   onOpenSettings?: () => void;
   onOpenDashboard?: () => void;
@@ -303,6 +305,7 @@ function SlpStirTab({
   return (
     <SlpStirScreen
       personaId={personaId}
+      onOpenLive={onOpenLive}
       onOpenSupport={onOpenSupport}
       onOpenSettings={onOpenSettings}
       onOpenPulse={openSlpPulse}
@@ -320,6 +323,8 @@ function slpStirLinks(
 ) {
   return {
     personaId: viewerPersonaId,
+    onOpenLive: (showId: string) =>
+      onNavigate({ mode: "creator", view: "live", showId, returnTo: { mode: "creator", view: "stir" } }),
     onOpenSettings: () =>
       onNavigate({ mode: "creator-settings", section: "content", target: "drama", settingKey: "drama" }),
     onOpenTarget,

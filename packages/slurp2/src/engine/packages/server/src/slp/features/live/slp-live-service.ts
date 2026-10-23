@@ -96,21 +96,7 @@ export async function advanceSlurpLive(db: DB, at = new Date()): Promise<void> {
     const upcoming = (await storage.upcoming(at)).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
     for (const show of upcoming) {
       if (slurpLiveAnnouncementDue(show, at)) {
-        const existing = (await createSlurpStorage(db).listPosts({ limit: 300 })).find(
-          (post) => post.metadata?.liveShowId === show.id && post.metadata?.liveAnnouncement === true,
-        );
-        if (existing) {
-          await storage.setAnnouncement(show.id, existing.id);
-          continue;
-        }
-        const text = slurpLiveAnnouncementText(new Date(show.startedAt));
-        const post = await createSlurpStorage(db).createPost({
-          authorAccountId: show.hostId,
-          content: text,
-          source: "generated",
-          metadata: { liveShowId: show.id, liveAnnouncement: true },
-        });
-        if (post) await storage.setAnnouncement(show.id, post.id);
+        await announceSlurpLive(db, show);
       }
     }
     const due = (await storage.planned())
@@ -142,6 +128,25 @@ export async function advanceSlurpLive(db: DB, at = new Date()): Promise<void> {
     }
   });
   for (const show of await storage.activeShows(at)) await advanceShow(db, show, settings, at);
+}
+
+export async function announceSlurpLive(db: DB, show: SlurpLiveShow): Promise<SlurpLiveShow> {
+  const storage = createSlurpLiveStorage(db);
+  if (show.announcementPostId) return show;
+  const posts = createSlurpStorage(db);
+  const existing = (await posts.listPosts({ limit: 300 })).find(
+    (post) => post.metadata?.liveShowId === show.id && post.metadata?.liveAnnouncement === true,
+  );
+  const post =
+    existing ??
+    (await posts.createPost({
+      authorAccountId: show.hostId,
+      content: slurpLiveAnnouncementText(new Date(show.startedAt)),
+      source: "generated",
+      metadata: { liveShowId: show.id, liveAnnouncement: true },
+    }));
+  if (post) await storage.setAnnouncement(show.id, post.id);
+  return (await storage.get(show.id)) ?? show;
 }
 
 async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date): Promise<void> {
