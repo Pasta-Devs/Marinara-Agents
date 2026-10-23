@@ -41,11 +41,10 @@ the locked dev dependencies (`npm ci`) and no Engine:
 ```bash
 set -e
 for test in candidate-reconciliation conversation-summary-import debug-log debug-activity delta-review \
-  extraction-graph extraction-reliability index-keys local-characters reconciliation-recall \
+  extraction-graph extraction-reliability index-keys local-characters \
   review-queue-ambiguous-link runtime scope-fallback-labels scope-targets source-pagination source-task storage tab-keys; do
   npx tsx "tests/long-term-memory-${test}.regression.ts"
 done
-node tests/long-term-memory-loading.regression.mjs
 node tests/long-term-memory-feedback-clarity-ui.regression.mjs
 ```
 
@@ -121,10 +120,10 @@ check exercises the same inputs and cannot pass while the removed check fails.
 
 | Layer | Owning suites (`long-term-memory-*.regression.*`) | Contracts |
 | --- | --- | --- |
-| Direct services | `storage`, `runtime`, `extraction-graph`, `extraction-reliability`, `conversation-summary-import`, `candidate-reconciliation`, `reconciliation-recall`, `delta-review` | Storage recovery/quarantine, lineage-safe retraction, draft dependencies, activity persistence, retrieval lanes and scope, receipt idempotency/redaction, extraction graph validation, identity/dedup boundaries, bounded candidate reconciliation and recall beyond the prompt window, import invariants |
+| Direct services | `storage`, `runtime`, `extraction-graph`, `extraction-reliability`, `conversation-summary-import`, `candidate-reconciliation`, `delta-review` | Storage recovery/quarantine, lineage-safe retraction, draft dependencies, activity persistence, retrieval lanes and scope, receipt idempotency/redaction, extraction graph validation, identity/dedup boundaries, bounded candidate reconciliation and recall beyond the prompt window, import invariants |
 | Focused helpers | `index-keys`, `local-characters`, `scope-targets`, `scope-fallback-labels`, `source-task`, `source-pagination`, `tab-keys`, `review-queue-ambiguous-link`, `debug-log`, `debug-activity` | Unsafe keys, per-lane score calibration, local identity isolation, scope selection/labels, task cancellation, debug persistence, debug event filtering/status and id lookup |
 | HTTP integration | `routes-scope-identity`, `routes-backup`, and the direct `routes` scenario | Auth/permissions, validation, statuses and client-consumed errors, request-to-service and response-to-persistence mapping, scope translation, applied mutation IDs, preflight, cancellation, backup semantics |
-| Browser | `browser`, `loading`, `feedback-clarity-ui` | Visible workflows, request construction, response consumption, archive undo/partial failure, review/re-extraction, activation, loading and layout; retain explicit static contracts where behavioral proof is absent |
+| Browser | `browser`, `feedback-clarity-ui` | Visible workflows, request construction, response consumption, archive undo/partial failure, review/re-extraction, activation, loading and layout; retain explicit static contracts where behavioral proof is absent |
 | Installation and styles | `installation`, `host-styles` | Exact ZIP install, offline restart, full-backup inclusion, uninstall/reinstall and durable-byte preservation; every utility class the package uses exists in the Engine's compiled stylesheet |
 | Repository integrity | `node scripts/validate-catalog.mjs` | Manifest-derived lanes and legacy alias, catalog/manifest agreement, artifact URLs, hashes, sizes, archive contents and package contracts |
 
@@ -157,6 +156,47 @@ durability checks unchanged. No route/service mapping or user-visible assertion
 is removed: cancellation, schema limits, persisted/response/draft/mutation
 scopes, applied mutation IDs, backup/preflight payloads, and browser request
 payloads can fail independently at their respective boundaries.
+
+### Phase 6: merges and static-check removals
+
+Baseline `97fb847e6ea090e6cc12f56d112d8c87d3353720`. Line numbers in the first
+two columns are from that commit.
+
+Merged, nothing removed: `reconciliation-recall` now runs as the second block of
+`candidate-reconciliation` (same service, issue #1085); the client `api.ts`
+note-request checks moved from `storage` to `source-pagination`; the
+`display-labels` unit checks moved from `browser` to `scope-fallback-labels`.
+`loading` moved into `feedback-clarity-ui`, except the route-source checks
+(`scope-targets` returns `localCharacters: []`, `/local-characters` loads the
+trusted catalog), which `routes` proves over HTTP, and a `vault`
+`scopeTargetsQueryOptions` check that `feedback-clarity-ui` already makes.
+
+| Removed check | Surviving check | Why it cannot fail independently |
+| --- | --- | --- |
+| `runtime` 12-17: manifest `capabilityApi` is `{1, 6}` | `scripts/validate-catalog.mjs` compares `manifest.capabilityApi` to `engine-boundary.json`, and `readPackageEngineBoundary` requires that file to declare `{1, 6}` | Both read the same manifest field; any other value fails the equality or the boundary check. The `engine.min` assertion stays: the catalog validator only enforces a `2.3.0` floor, not `2.4.1`. |
+| `browser` 119-123: description names `Chat Settings → Agents → Long-Term Memory` | `validate-catalog.mjs` requires the description to end with the activation text for the package | That text contains the asserted string. The `Misc Agents for Conversation` exclusion stays because the base description is not constrained. |
+| `feedback-clarity-ui` 316, 317, 509 | The same regexes at 280, 282, 259 | Exact duplicates in the same file against the same source. |
+| `feedback-clarity-ui` locale and key checks: 114, 116, 146, 740 (activity labels), 141 (index rebuild failure), 197, 198, 200 (availability controls), 378, 380 (scope view and `No second place`), 417 (`Open debug log`), 461, 463, 464 (archive undo), 683 (`Retry failed review actions`) | The `browser` suite asserts the same visible text against the built client at 2747-2947, 3543, 2056, 2060, 4633, 1688, 1964, 3247, 4697-4745, 4025 | The browser renders these keys from the committed ZIP's `client.js`, so a changed or missing string fails there. |
+| `feedback-clarity-ui` 429-433 (`deleteConfirmation*` fields) | `browser` 4809-4817 asserts the confirmation title, hidden-by-filters notice, ids, excerpt and scope | The fields exist only to build that message. |
+| `feedback-clarity-ui` 664, 665 (`data-ltm-review-preflight`, `data-ltm-review-conflicts`) | `browser` 3994-3999 | Locates and counts both attributes in the rendered review queue. |
+| `feedback-clarity-ui` 271 (`radiogroup`/`radio` roles) | `browser` 1704, 1811 | Locates the scope rows by those roles. |
+| `feedback-clarity-ui` 503 (memory group summary is `min-h-11` with a focus outline) | `browser` 1887 | Tabs to the summary and asserts a visible outline and a height of at least 44px. |
+| `feedback-clarity-ui` 312 (`TargetPicker` uses `nextTabIndex`) | `browser` 4565-4573 | Drives ArrowRight, Home and End across the availability tabs. |
+| `feedback-clarity-ui` 86-89 (`#ltm-bulk-destination-list` is `overflow-y-auto`) | `browser` 5222-5257 | Asserts the computed `overflow-y` and wheel scrolling on that element. |
+| `feedback-clarity-ui` 101-105 (two `data-ltm-source-task-count` owners) | `browser` 5378-5385 | Asserts exactly one visible count owner while a source task runs. |
+| `delta-review` `export const completion` | None needed | Nothing imports it. |
+
+The browser asserts the committed ZIP's `client.js` and these checks read
+source. They diverge only when the bundle is stale, which `validate-catalog.mjs`
+already rejects for manifests and hashes and the repository's rebuild rule
+forbids. Kept because the browser has no clear counterpart: the one-memory
+archive message (462), the `combinedScope` and `noMemoriesInCombinedScope`
+strings (381-383), every `min-h-11` check except 503 (504-508), the workspace
+`nextTabIndex` check (330), the destination panel size and `details` classes
+(84, 90-92), the locale-key completeness block, and every check in the
+no-browser-coverage set (source-task live region, keyword editor,
+rename/unsaved dialogs, import result modes, `data-ltm-tab-focus`, activity
+warnings, last-injection outcomes, availability loading/error).
 
 ## Exact-artifact lifecycle regression
 

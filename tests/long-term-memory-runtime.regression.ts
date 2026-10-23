@@ -7,11 +7,6 @@ import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-help
 async function main() {
   const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
   const packageManifest = JSON.parse(await readFile(join(repoRoot, "packages/long-term-memory/manifest.json"), "utf8"));
-  assert.deepEqual(
-    packageManifest.capabilityApi,
-    { major: 1, minor: 6 },
-    "Long-Term Memory must remain installable on the API 1.7 Engine host",
-  );
   assert.equal(packageManifest.engine.min, "2.4.1", "Long-Term Memory must support the API 1.7 Engine release");
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { activate } = await import(`${source}/server-entry.ts`);

@@ -343,7 +343,7 @@ async function main() {
   );
 }
 
-export const completion = runRegressionToCompletion("long-term-memory-delta-review", main);
+const completion = runRegressionToCompletion("long-term-memory-delta-review", main);
 void completion.catch((error) => {
   process.stderr.write(`${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`);
   process.exitCode = 1;

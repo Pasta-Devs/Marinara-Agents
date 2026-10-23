@@ -105,7 +105,6 @@ jobs:
       - name: Run Long-Term Memory Engine-free regressions
         run: |
           for test in candidate-reconciliation conversation-summary-import debug-log delta-review extraction-graph \
-            extraction-reliability local-characters reconciliation-recall storage runtime; do
+            extraction-reliability local-characters storage runtime; do
             npx tsx "tests/long-term-memory-$test.regression.ts"
           done
-          node tests/long-term-memory-loading.regression.mjs

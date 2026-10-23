@@ -35,24 +35,6 @@ async function main() {
     engineRoot,
     join(repoRoot, "packages/long-term-memory/src/engine/packages/client/src/**/*.{ts,tsx}"),
   );
-  const { labelKeys, localizedLabel } = await import(
-    pathToFileURL(
-      join(
-        repoRoot,
-        "packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/display-labels.ts",
-      ),
-    ).href
-  );
-  const testLocalize = (key: string) => `translated:${key}`;
-  assert.equal(
-    localizedLabel("critical", testLocalize, labelKeys.importance),
-    "translated:ui.longTermMemory.memoryvault.critical",
-  );
-  assert.equal(
-    localizedLabel("roleplay", testLocalize, labelKeys.mode),
-    "translated:ui.longTermMemory.sourcesworkspace.roleplay",
-  );
-  assert.equal(localizedLabel("future_value", testLocalize, labelKeys.mode), "Future value");
   let browser: { close: () => Promise<void> } | null = null;
   let browserServer: ReturnType<typeof createServer> | null = null;
   let releaseReextraction: (() => void) | null = null;
@@ -69,11 +51,6 @@ async function main() {
     async () => {
       assert.equal(artifactManifest.id, "long-term-memory");
       assert.equal(artifactManifest.version, packageManifest.version);
-      assert.match(
-        String(artifactManifest.description),
-        /Chat Settings → Agents → Long-Term Memory/u,
-        "Long-Term Memory guidance must name its dedicated activation path",
-      );
       assert.doesNotMatch(
         String(artifactManifest.description),
         /Misc Agents for Conversation/u,
