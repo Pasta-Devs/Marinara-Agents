@@ -152,7 +152,7 @@ async function main() {
     assert.equal(extension?.private?.until, "2026-10-23T12:20:00.000Z");
     assert.equal(extension?.script.filter((line: any) => line.text === "she went private 🔒").length, 1);
     assert.equal(await live.setMode(creatorB.id, "viewer-a", "pictures", at), "pictures");
-    assert.equal(await live.setMode(creatorB.id, "viewer-b", "pictures", at), null);
+    assert.equal(await live.setMode(creatorB.id, "viewer-b", "pictures", at), "pictures");
     assert.equal(await live.pictureClaim(creatorB.id, "viewer-a", "private:2", at), true);
     assert.equal(await live.pictureClaim(creatorB.id, "viewer-a", "private:2", at), false);
     assert.equal(await live.pictureClaim(creatorB.id, "viewer-b", "private:2", at), false);

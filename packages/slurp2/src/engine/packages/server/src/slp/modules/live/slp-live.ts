@@ -22,6 +22,7 @@ export type SlurpLiveLine = {
   name?: string;
   text: string;
   personaId?: string;
+  private?: boolean;
   mediaId?: string;
 };
 export type SlurpLiveEvent = {
@@ -32,6 +33,7 @@ export type SlurpLiveEvent = {
   text: string;
   requestId?: string;
   personaId?: string;
+  private?: boolean;
 };
 export type SlurpLivePrivate = { personaId: string; until: string; block: number };
 export type SlurpLivePrivateClaim = {
@@ -49,6 +51,7 @@ export type SlurpLivePicture = {
   mediaId?: string;
   mediaPath?: string;
 };
+export type SlurpLivePictureViewer = { personaId: string; mode: "text" | "pictures"; seenAt: string | null };
 export type SlurpLiveShow = {
   id: string;
   hostKind: "creator" | "player";
@@ -77,6 +80,7 @@ export type SlurpLiveShow = {
   private: SlurpLivePrivate | null;
   privateClaims: SlurpLivePrivateClaim[];
   pictures: SlurpLivePicture[];
+  pictureViewers: SlurpLivePictureViewer[];
   pictureViewerId: string | null;
   pictureSeenAt: string | null;
   pictureModeBusy?: boolean;
@@ -97,8 +101,10 @@ export function slurpLivePrivateUntil(current: SlurpLivePrivate | null, personaI
 }
 
 export function slurpLivePictureTriggers(show: SlurpLiveShow, personaId: string, at: Date): string[] {
-  if (show.mode !== "pictures" || show.pictureViewerId !== personaId || !slurpLiveWatched(show.pictureSeenAt, at))
-    return [];
+  const viewer = (show.pictureViewers ?? []).find((item) => item.personaId === personaId);
+  const pictureViewer =
+    viewer ?? (show.pictureViewerId === personaId ? { mode: show.mode, seenAt: show.pictureSeenAt } : null);
+  if (pictureViewer?.mode !== "pictures" || !slurpLiveWatched(pictureViewer.seenAt, at)) return [];
   const triggers: string[] = [];
   if (show.goalHitAt && Date.parse(show.goalHitAt) <= at.getTime()) triggers.push("goal");
   if (
@@ -123,6 +129,12 @@ export function slurpLivePictureTriggers(show: SlurpLiveShow, personaId: string,
 export function slurpLiveForViewer(show: SlurpLiveShow, personaId: string | null, at: Date): SlurpLiveShow {
   const isPrivate = !!show.private && Date.parse(show.private.until) > at.getTime();
   const privateViewer = isPrivate && show.private?.personaId === personaId;
+  const pictureViewers = show.pictureViewers ?? [];
+  const pictureViewer = pictureViewers.find((item) => item.personaId === personaId);
+  const pictureMode = pictureViewer?.mode ?? (show.pictureViewerId === personaId ? show.mode : "text");
+  const pictureModeBusy =
+    pictureViewers.some((item) => item.mode === "pictures" && item.personaId !== personaId) ||
+    (!!show.pictureViewerId && show.pictureViewerId !== personaId);
   return {
     ...show,
     private: isPrivate
@@ -134,8 +146,11 @@ export function slurpLiveForViewer(show: SlurpLiveShow, personaId: string | null
       : null,
     privateClaims: [],
     pictures: [],
-    pictureViewerId: show.pictureViewerId === personaId ? show.pictureViewerId : null,
-    pictureModeBusy: !!show.pictureViewerId && show.pictureViewerId !== personaId,
+    pictureViewers: pictureViewers.filter((item) => item.personaId === personaId),
+    mode: pictureMode,
+    pictureViewerId: pictureViewer?.mode === "pictures" ? personaId : null,
+    pictureSeenAt: pictureViewer?.seenAt ?? null,
+    pictureModeBusy,
     script: show.script.filter(
       (line) => (!line.personaId || line.personaId === personaId) && (!isPrivate || privateViewer || !line.personaId),
     ),

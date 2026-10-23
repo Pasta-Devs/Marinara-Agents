@@ -3,6 +3,7 @@ import { eq } from "../../../db/file-query.js";
 import { slurpLiveShows } from "../../../db/schema/slurp.js";
 import {
   slurpLivePictureTriggers,
+  slurpLiveWatched,
   slurpLivePrivateUntil,
   type SlurpLiveLine,
   type SlurpLivePicture,
@@ -46,6 +47,7 @@ const map = (row: typeof slurpLiveShows.$inferSelect): SlurpLiveShow => ({
   private: parse(row.privateState ?? "null", null),
   privateClaims: parse(row.privateClaims ?? "[]", []),
   pictures: parse(row.pictureStates ?? "[]", []),
+  pictureViewers: parse(row.pictureViewers ?? "[]", []),
   pictureViewerId: row.pictureViewerId ?? null,
   pictureSeenAt: row.pictureSeenAt ?? null,
 });
@@ -55,15 +57,21 @@ export function createSlurpLivePrivateStorage(db: DB) {
     async setMode(id: string, personaId: string, mode: "text" | "pictures", at: Date) {
       return db.transaction(async (tx) => {
         const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
-        if (!row || row.endedAt || row.hostKind !== "creator" || !row.startedNoticeAt || row.endsAt <= at.toISOString())
-          return null;
-        if (row.pictureViewerId && row.pictureViewerId !== personaId) return null;
+        if (!row || row.hostKind !== "creator" || !row.startedNoticeAt || row.endsAt <= at.toISOString()) return null;
+        const viewers = parse<SlurpLiveShow["pictureViewers"]>(row.pictureViewers ?? "[]", []);
+        const current = viewers.find((viewer) => viewer.personaId === personaId);
         await tx
           .update(slurpLiveShows)
           .set({
             mode,
-            pictureViewerId: mode === "pictures" ? personaId : null,
-            pictureSeenAt: mode === "pictures" ? at.toISOString() : null,
+            pictureViewers: JSON.stringify([
+              ...viewers.filter((viewer) => viewer.personaId !== personaId),
+              { personaId, mode, seenAt: mode === "pictures" ? at.toISOString() : (current?.seenAt ?? null) },
+            ]),
+            pictureViewerId:
+              mode === "pictures" ? personaId : row.pictureViewerId === personaId ? null : row.pictureViewerId,
+            pictureSeenAt:
+              mode === "pictures" ? at.toISOString() : row.pictureViewerId === personaId ? null : row.pictureSeenAt,
           })
           .where(eq(slurpLiveShows.id, id));
         return mode;
@@ -72,10 +80,11 @@ export function createSlurpLivePrivateStorage(db: DB) {
     async privateClaim(id: string, personaId: string, requestId: string, at: Date) {
       return db.transaction(async (tx) => {
         const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
-        if (!row || row.hostKind !== "creator" || row.endedAt || !row.startedNoticeAt || row.endsAt <= at.toISOString())
-          return "unavailable" as const;
+        if (!row) return "unavailable" as const;
         const claims = parse<SlurpLivePrivateClaim[]>(row.privateClaims ?? "[]", []);
         const found = claims.find((claim) => claim.requestId === requestId);
+        if (!row.hostKind || (!found && (row.endedAt || !row.startedNoticeAt || row.endsAt <= at.toISOString())))
+          return "unavailable" as const;
         if (found)
           return found.personaId !== personaId || (found.showId !== undefined && found.showId !== id)
             ? ("conflict" as const)
@@ -116,7 +125,7 @@ export function createSlurpLivePrivateStorage(db: DB) {
     async privateConfirm(id: string, requestId: string, at: Date) {
       return db.transaction(async (tx) => {
         const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
-        if (!row || row.endedAt || row.privateRequestId !== requestId) return null;
+        if (!row) return null;
         const claims = parse<SlurpLivePrivateClaim[]>(row.privateClaims ?? "[]", []);
         const claim = claims.find((item) => item.requestId === requestId);
         if (!claim || (claim.showId && claim.showId !== id)) return null;
@@ -125,7 +134,7 @@ export function createSlurpLivePrivateStorage(db: DB) {
         if (current && current.personaId !== claim.personaId && current.until > at.toISOString()) return null;
         const privateState = {
           personaId: claim.personaId,
-          until: slurpLivePrivateUntil(current, claim.personaId, at),
+          until: row.endedAt ? at.toISOString() : slurpLivePrivateUntil(current, claim.personaId, at),
           block: claim.block,
         };
         const script = parse<SlurpLiveLine[]>(row.script, []);
@@ -138,7 +147,9 @@ export function createSlurpLivePrivateStorage(db: DB) {
                 { at: at.getTime() - Date.parse(row.startedAt), kind: "crowd" as const, text: "she went private 🔒" },
               ];
         const patch = {
-          endsAt: new Date(Math.max(Date.parse(row.endsAt), Date.parse(privateState.until))).toISOString(),
+          endsAt: row.endedAt
+            ? row.endsAt
+            : new Date(Math.max(Date.parse(row.endsAt), Date.parse(privateState.until))).toISOString(),
           privateState: JSON.stringify(privateState),
           privateRequestId: null,
           privateClaims: JSON.stringify(
@@ -153,9 +164,11 @@ export function createSlurpLivePrivateStorage(db: DB) {
     async pictureClaim(id: string, personaId: string, trigger: string, at: Date) {
       return db.transaction(async (tx) => {
         const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
-        if (!row || row.endedAt || row.mode !== "pictures" || row.pictureViewerId !== personaId) return false;
+        if (!row || row.endedAt) return false;
         const show = map(row);
-        if (!slurpLivePictureTriggers(show, personaId, at).includes(trigger)) return false;
+        const viewer = show.pictureViewers.find((item) => item.personaId === personaId);
+        const viewerShow = viewer ? { ...show, mode: viewer.mode, pictureSeenAt: viewer.seenAt } : show;
+        if (!slurpLivePictureTriggers(viewerShow, personaId, at).includes(trigger)) return false;
         await tx
           .update(slurpLiveShows)
           .set({
@@ -175,7 +188,12 @@ export function createSlurpLivePrivateStorage(db: DB) {
     ) {
       return db.transaction(async (tx) => {
         const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
-        if (!row || row.endedAt || row.pictureViewerId !== personaId || row.mode !== "pictures") return false;
+        if (!row || row.endedAt) return false;
+        const viewers = parse<SlurpLiveShow["pictureViewers"]>(row.pictureViewers ?? "[]", []);
+        const viewer = viewers.find((item) => item.personaId === personaId);
+        if ((viewer?.mode ?? (row.pictureViewerId === personaId ? "pictures" : "text")) !== "pictures") return false;
+        if (!slurpLiveWatched(viewer?.seenAt ?? (row.pictureViewerId === personaId ? row.pictureSeenAt : null), at))
+          return false;
         const pictures = parse<SlurpLivePicture[]>(row.pictureStates ?? "[]", []);
         if (
           !pictures.some(

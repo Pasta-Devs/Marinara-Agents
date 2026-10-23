@@ -46,6 +46,7 @@ export type SlpLiveShow = {
   announcedFor: string | null;
   mode: "text" | "pictures";
   pictureViewerId?: string | null;
+  pictureViewers?: { personaId: string; mode: "text" | "pictures"; seenAt: string | null }[];
   pictureModeBusy?: boolean;
   private?: { personaId: string; until: string; block: number } | null;
   privatePrice?: number;

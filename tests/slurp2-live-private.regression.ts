@@ -40,6 +40,7 @@ const show: SlurpLiveShow = {
   private: { personaId: "a", until: new Date(now.getTime() + 10 * 60_000).toISOString(), block: 1 },
   privateClaims: [{ requestId: "paid", personaId: "a", status: "paid", block: 1, at: now.toISOString() }],
   pictures: [],
+  pictureViewers: [{ personaId: "a", mode: "pictures", seenAt: now.toISOString() }],
   pictureViewerId: "a",
   pictureSeenAt: now.toISOString(),
 };
@@ -63,7 +64,14 @@ assert.equal(slurpLiveForViewer(show, "a", now).pictureModeBusy, false);
 assert.equal(slurpLiveForViewer(show, "a", now).script.length, 2);
 assert.deepEqual(slurpLivePictureTriggers(show, "a", now), ["goal", "menu:order", "private:1"]);
 assert.deepEqual(slurpLivePictureTriggers(show, "b", now), []);
-assert.deepEqual(slurpLivePictureTriggers({ ...show, pictureSeenAt: null }, "a", now), []);
+assert.deepEqual(
+  slurpLivePictureTriggers(
+    { ...show, pictureSeenAt: null, pictureViewers: [{ personaId: "a", mode: "pictures", seenAt: null }] },
+    "a",
+    now,
+  ),
+  [],
+);
 assert.deepEqual(
   slurpLivePictureTriggers({ ...show, pictures: [{ personaId: "a", trigger: "goal", status: "pending" }] }, "a", now),
   ["menu:order", "private:1"],

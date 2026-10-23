@@ -258,6 +258,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
       name: viewer.displayName,
       text: parsed.data.text,
       personaId: show.private && Date.parse(show.private.until) > Date.now() ? viewer.id : undefined,
+      private: !!show.private && Date.parse(show.private.until) > Date.now(),
     });
     void replyToSlurpLiveChat(app.db, show.id);
     return { show: await showForViewer(show.id, viewer.id), replyQueued: true };
@@ -329,13 +330,16 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     if (!(await enabled())) return reply.code(404).send({ error: "Live is switched off." });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     const show = await storage.get((request.params as { id: string }).id);
+    const resumed = show?.privateClaims.find(
+      (claim) => claim.requestId === parsed.data.requestId && claim.personaId === viewer?.id,
+    );
     if (
       !viewer ||
       !show ||
       show.hostKind !== "creator" ||
-      show.endedAt ||
+      (show.endedAt && !resumed) ||
       !show.startedNoticeAt ||
-      Date.now() >= Date.parse(show.endsAt)
+      (Date.now() >= Date.parse(show.endsAt) && !resumed)
     )
       return reply.code(404).send({ error: "Live show not found." });
     const creator = await createSlurpStorage(app.db).getNoodlerAccountById(show.hostId);

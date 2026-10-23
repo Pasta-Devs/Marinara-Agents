@@ -170,7 +170,6 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
     }
     return;
   }
-  if (privateActive) return;
   const settingsFans = settings.fanTypes ?? [];
   if (!privateActive) {
     const population = createSlurpPopulationStorage(db);
@@ -299,8 +298,12 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
   }
   const current = await storage.get(show.id);
   if (!current || !slurpLiveWatched(current.lastSeenAt, at)) return;
-  if (show.hostKind === "creator" && current.pictureViewerId && slurpLiveWatched(current.pictureSeenAt, at))
-    await makeLivePictures(db, current, current.pictureViewerId, at);
+  if (show.hostKind === "creator") {
+    for (const viewer of current.pictureViewers.filter(
+      (item) => item.mode === "pictures" && slurpLiveWatched(item.seenAt, at),
+    ))
+      await makeLivePictures(db, current, viewer.personaId, at);
+  }
   const index = slurpLiveSegmentIndex(show, at);
   const lease = await storage.claimSegment(show.id, index, at);
   if (!lease) return;
@@ -349,7 +352,7 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
               .filter((order) => !order.served && order.status !== "pending")
               .map((order) => order.label),
             recentPlayerChatLines: current.events
-              .filter((event) => event.kind === "chat")
+              .filter((event) => event.kind === "chat" && !event.private && !event.personaId)
               .slice(-5)
               .map((event) => event.text),
             recentTips: current.events
@@ -367,6 +370,7 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
     lines.map((line) => ({
       ...line,
       personaId: privateActive ? current.private?.personaId : undefined,
+      private: privateActive,
       at: index * 240_000 + Math.max(0, Math.min(239_999, line.at)),
     })),
   );
@@ -431,7 +435,7 @@ export async function replyToSlurpLiveChat(db: DB, showId: string, at = new Date
           event.kind === "chat" &&
           event.name !== creator.displayName &&
           event.at > since &&
-          (!privateViewer || event.personaId === privateViewer),
+          (privateViewer ? event.personaId === privateViewer : !event.private && !event.personaId),
       )
       .map((event) => `${event.name}: ${event.text}`)
       .join("\n");
@@ -470,6 +474,7 @@ export async function replyToSlurpLiveChat(db: DB, showId: string, at = new Date
         name: creator.displayName,
         text,
         personaId: privateViewer ?? undefined,
+        private: !!privateViewer,
       });
     else await storage.releaseReply(show.id, at);
   } catch (error) {
@@ -644,7 +649,10 @@ async function makeLivePictures(db: DB, show: SlurpLiveShow, personaId: string, 
       const mediaId = newId();
       if (await storage.pictureComplete(show.id, personaId, trigger, mediaId, image.mediaPath, new Date()))
         image.promote();
-      else image.compensate();
+      else {
+        await storage.pictureRelease(show.id, personaId, trigger);
+        image.compensate();
+      }
     } catch (error) {
       await storage.pictureRelease(show.id, personaId, trigger);
       logger.warn(error, "[slurp-live] Picture generation failed");

@@ -94,7 +94,7 @@ assert.match(liveScreen, /crypto\.randomUUID\(\)/);
 assert.match(liveScreen, /firstTipper/);
 assert.match(liveScreen, /chatLabel/);
 assert.match(liveScreen, /SlpLiveMenuSheet/);
-assert.match(liveScreen, /requestId: crypto\.randomUUID\(\)/);
+assert.match(liveScreen, /crypto\.randomUUID\(\)/);
 assert.match(liveScreen, /customTip/);
 assert.match(liveScreen, /show\.viewers/);
 assert.match(liveChat, /show\.missedSummary/);

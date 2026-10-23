@@ -55,6 +55,7 @@ const map = (row: typeof slurpLiveShows.$inferSelect): SlurpLiveShow => ({
   private: parse(row.privateState ?? "null", null),
   privateClaims: parse(row.privateClaims ?? "[]", []),
   pictures: parse(row.pictureStates ?? "[]", []),
+  pictureViewers: parse(row.pictureViewers ?? "[]", []),
   pictureViewerId: row.pictureViewerId ?? null,
   pictureSeenAt: row.pictureSeenAt ?? null,
 });
@@ -407,12 +408,21 @@ export function createSlurpLiveStorage(db: DB) {
       return this.get(id);
     },
     async seen(id: string, at: Date, viewerId?: string) {
+      const current = viewerId ? await this.get(id) : null;
+      const pictureViewer = current?.pictureViewers.find((viewer) => viewer.personaId === viewerId);
       await db
         .update(slurpLiveShows)
         .set({
           lastSeenAt: at.toISOString(),
-          ...(viewerId && (await this.get(id))?.pictureViewerId === viewerId
-            ? { pictureSeenAt: at.toISOString() }
+          ...(viewerId && pictureViewer?.mode === "pictures"
+            ? {
+                pictureSeenAt: at.toISOString(),
+                pictureViewers: JSON.stringify(
+                  current!.pictureViewers.map((viewer) =>
+                    viewer.personaId === viewerId ? { ...viewer, seenAt: at.toISOString() } : viewer,
+                  ),
+                ),
+              }
             : {}),
         })
         .where(and(eq(slurpLiveShows.id, id), isNull(slurpLiveShows.endedAt)));

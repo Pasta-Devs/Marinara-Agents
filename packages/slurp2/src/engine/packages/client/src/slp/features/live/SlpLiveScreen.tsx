@@ -64,6 +64,9 @@ function SlpLiveContent({
   const { t } = useTranslation();
   const { tip, chat, menu, privateShow, mode, narrate, end } = useSlpLiveActions(show.id);
   const [message, setMessage] = useState("");
+  const [privateRequestId, setPrivateRequestId] = useState<string | null>(null);
+  const [tipRequestIds, setTipRequestIds] = useState<Record<number, string>>({});
+  const [menuRequestIds, setMenuRequestIds] = useState<Record<string, string>>({});
   const [customAmount, setCustomAmount] = useState("");
   const [narration, setNarration] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -99,13 +102,39 @@ function SlpLiveContent({
     if (!personaId || !narration.trim() || narrate.isPending) return;
     narrate.mutate({ personaId, text: narration.trim() }, { onSuccess: () => setNarration("") });
   };
-  const tipLive = (amount: number) => personaId && tip.mutate({ personaId, amount, requestId: crypto.randomUUID() });
-  const buy = (item: SlpLiveMenuItem) =>
-    personaId &&
-    menu.mutate(
-      { personaId, itemId: item.id, requestId: crypto.randomUUID() },
-      { onSuccess: () => setMenuOpen(false) },
+  const tipLive = (amount: number) => {
+    if (!personaId) return;
+    const requestId = tipRequestIds[amount] ?? crypto.randomUUID();
+    setTipRequestIds((current) => ({ ...current, [amount]: requestId }));
+    tip.mutate(
+      { personaId, amount, requestId },
+      {
+        onSettled: () =>
+          setTipRequestIds((current) => {
+            const next = { ...current };
+            delete next[amount];
+            return next;
+          }),
+      },
     );
+  };
+  const buy = (item: SlpLiveMenuItem) => {
+    if (!personaId) return;
+    const requestId = menuRequestIds[item.id] ?? crypto.randomUUID();
+    setMenuRequestIds((current) => ({ ...current, [item.id]: requestId }));
+    menu.mutate(
+      { personaId, itemId: item.id, requestId },
+      {
+        onSuccess: () => setMenuOpen(false),
+        onSettled: () =>
+          setMenuRequestIds((current) => {
+            const next = { ...current };
+            delete next[item.id];
+            return next;
+          }),
+      },
+    );
+  };
   const host = show.hostKind === "player";
   const privateActive = !!show.private && Date.parse(show.private.until) > now;
   const privateViewer = privateActive && !!personaId && show.private?.personaId === personaId;
@@ -179,7 +208,11 @@ function SlpLiveContent({
             <button
               type="button"
               disabled={privateShow.isPending}
-              onClick={() => privateShow.mutate({ personaId, requestId: crypto.randomUUID() })}
+              onClick={() => {
+                const requestId = privateRequestId ?? crypto.randomUUID();
+                setPrivateRequestId(requestId);
+                privateShow.mutate({ personaId, requestId }, { onSettled: () => setPrivateRequestId(null) });
+              }}
               className="min-h-11 rounded border border-[var(--border)] px-3"
             >
               {privateViewer
