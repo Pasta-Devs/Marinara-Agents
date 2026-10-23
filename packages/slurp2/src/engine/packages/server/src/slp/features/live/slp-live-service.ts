@@ -13,6 +13,7 @@ import {
   SLURP_LIVE_REACTIONS,
   slurpLiveRecap,
   slurpLiveTipTopper,
+  slurpLiveAudienceTipDue,
   type SlurpLiveShow,
 } from "../../modules/live/slp-live.js";
 import { logger } from "../../../lib/logger.js";
@@ -52,6 +53,7 @@ export async function advanceSlurpLive(db: DB, at = new Date()): Promise<void> {
   const storage = createSlurpLiveStorage(db);
   const settings = await createSlurpStorage(db).getSettings();
   if (!slpExtensionOn(settings, "live")) return;
+  await storage.pruneEnded(at);
   const active = await storage.activeShows();
   if (active.filter((show) => show.hostKind === "creator").length < 2) {
     await trySlpOperation("slurp-live-start", async () => {
@@ -130,7 +132,7 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
       if (
         due === null ||
         at.getTime() - Date.parse(show.startedAt) < due ||
-        show.events.some((event) => event.requestId === `live:${show.id}:fan-tip:${fan.id}`)
+        !slurpLiveAudienceTipDue(show.audienceTipKeys, `live:${show.id}:fan-tip:${fan.id}`)
       )
         continue;
       const amount = slurpLivePlayerTipAmount(type, fan.id);
@@ -208,6 +210,7 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
               itemId: item.id,
               label: item.label,
               name: orderFan.displayName,
+              viewerId: orderFan.id,
               at: elapsed,
               served: false,
               requestId,

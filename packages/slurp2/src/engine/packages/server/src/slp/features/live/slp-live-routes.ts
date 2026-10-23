@@ -12,7 +12,7 @@ import {
 } from "./slp-live-contract.js";
 import { slurpLiveMenuItems } from "../../modules/live/slp-live-menu.js";
 import { newId } from "../../../utils/id-generator.js";
-import { slurpLiveViewerCount } from "../../modules/live/slp-live.js";
+import { slurpLiveCanWatch, slurpLiveViewerCount } from "../../modules/live/slp-live.js";
 
 const body = z.object({ personaId: z.string().trim().min(1) }).passthrough();
 
@@ -28,7 +28,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     const show = await storage.get(id);
     if (!show) return reply.code(404).send({ error: "Live show not found." });
     const personaId = (request.query as { personaId?: string }).personaId;
-    if (!personaId || (await resolveViewerPersona(personaId))) {
+    if (slurpLiveCanWatch(personaId, !!(personaId && (await resolveViewerPersona(personaId))))) {
       await storage.seen(id, new Date());
       const current = (await getSlurpLiveMissed(app.db, id)) ?? show;
       const elapsed = Math.max(0, Date.now() - Date.parse(current.startedAt));
@@ -149,25 +149,29 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     const item = show.menu.find((entry) => entry.id === parsed.data.itemId);
     if (!item) return reply.code(404).send({ error: "Menu item not found." });
     const claimId = parsed.data.requestId;
-    if (
-      !(await storage.claimMenu(
-        show.id,
-        {
-          itemId: item.id,
-          label: item.label,
-          name: viewer.displayName,
-          at: Date.now() - Date.parse(show.startedAt),
-          served: false,
-          requestId: claimId,
-        },
-        item.price,
-      ))
-    )
-      return {
-        show: await storage.get(show.id),
-        duplicate: true,
-        wallet: await createSlurpStorage(app.db).getWallet(viewer.id),
-      };
+    const claimed = await storage.claimMenu(
+      show.id,
+      {
+        itemId: item.id,
+        label: item.label,
+        name: viewer.displayName,
+        viewerId: viewer.id,
+        at: Date.now() - Date.parse(show.startedAt),
+        served: false,
+        requestId: claimId,
+      },
+      item.price,
+    );
+    if (!claimed) {
+      const state = await storage.menuClaimState(show.id, claimId, item.id, viewer.id);
+      if (state === "conflict") return reply.code(409).send({ error: "Request ID already used." });
+      if (state !== "resume")
+        return {
+          show: await storage.get(show.id),
+          duplicate: true,
+          wallet: await createSlurpStorage(app.db).getWallet(viewer.id),
+        };
+    }
     let result;
     try {
       result = await createSlurpMessagesStorage(app.db).tipInThread(
@@ -178,11 +182,11 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
         claimId,
       );
     } catch (error) {
-      await storage.releaseMenu(show.id, claimId);
+      // The payment may have settled. Keep the claim for a retry with the same request ID.
       throw error;
     }
     if (result.status !== "sent") {
-      await storage.releaseMenu(show.id, claimId);
+      if (result.status === "insufficient_funds") await storage.releaseMenu(show.id, claimId);
       return reply.code(result.status === "insufficient_funds" ? 402 : 403).send(result);
     }
     await storage.confirmMenu(show.id, claimId);

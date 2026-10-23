@@ -8,6 +8,10 @@ import {
   SLURP_LIVE_EVENT_LIMIT,
   slurpLiveTipOffset,
   slurpLiveRecap,
+  slurpLiveCanWatch,
+  slurpLiveAudienceTipDue,
+  slurpLivePruneBefore,
+  slurpLiveMenuClaimState,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/live/slp-live.ts";
 import { slurpLiveMenuItems } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/live/slp-live-menu.ts";
 import { slurp2Source } from "./slurp2-source.ts";
@@ -45,6 +49,46 @@ assert.ok(offsets.some((offset) => offset > 960_000));
 assert.ok(offsets.every((offset) => offset >= 0 && offset < 1_200_000));
 assert.equal(slurpLiveMenuItems(2, ["topic"], 30).length, 7);
 
+assert.equal(slurpLiveCanWatch(undefined, true), false, "GET without persona never marks a watcher");
+assert.equal(slurpLiveCanWatch("missing", false), false);
+assert.equal(slurpLiveCanWatch("player", true), true);
+const keys = ["live:show:fan-tip:fan-1"];
+assert.equal(
+  capped.some((event) => event.requestId === keys[0]),
+  false,
+  "capped events cannot dedupe tips",
+);
+assert.equal(slurpLiveAudienceTipDue(keys, keys[0]!), false, "keep tip keys outside capped events");
+assert.equal(slurpLiveAudienceTipDue(keys, "live:show:fan-tip:fan-2"), true);
+assert.equal(slurpLivePruneBefore(new Date("2026-10-23T12:00:00.000Z")), "2026-10-16T12:00:00.000Z");
+const pendingOrder = {
+  itemId: "item-1",
+  label: "Request",
+  name: "Fan",
+  viewerId: "player",
+  at: 0,
+  served: false,
+  requestId: "menu-1",
+  status: "pending" as const,
+};
+assert.equal(slurpLiveMenuClaimState([], "menu-1", "item-1", "player"), "new");
+assert.equal(slurpLiveMenuClaimState([pendingOrder], "menu-1", "item-1", "player"), "resume");
+assert.equal(slurpLiveMenuClaimState([pendingOrder], "menu-1", "item-1", "other"), "conflict");
+let charges = 0;
+let settled = false;
+const pay = () => {
+  if (!settled) {
+    charges++;
+    settled = true;
+  }
+  return "sent";
+};
+assert.equal(pay(), "sent");
+assert.equal(slurpLiveMenuClaimState([pendingOrder], "menu-1", "item-1", "player"), "resume");
+assert.equal(pay(), "sent");
+assert.equal(charges, 1, "retry uses the settled payment once");
+assert.equal(slurpLiveMenuClaimState([{ ...pendingOrder, status: "paid" }], "menu-1", "item-1", "player"), "duplicate");
+
 const service = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/live/slp-live-service.ts");
 const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/live/slp-live-routes.ts");
 const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/data/live/slp-live-storage.ts");
@@ -61,9 +105,14 @@ assert.match(routes, /releaseMenu/);
 assert.match(storage, /claimTip/);
 assert.match(storage, /claimSegment/);
 assert.match(storage, /segment\.index > index/);
-assert.match(storage, /queue\.some\(\(entry\) => entry.requestId === order.requestId\)/);
+assert.match(storage, /slurpLiveMenuClaimState\(queue/);
 assert.match(storage, /row\.hostKind === input\.hostKind\)\.length >= \(input\.hostKind === "creator" \? 2 : 1\)/);
 assert.match(storage, /row\.missedSummary !== null/);
 assert.match(storage, /claimReply/);
 assert.match(storage, /slurpLiveCapEvents/);
+assert.match(storage, /\.where\(isNull\(slurpLiveShows\.endedAt\)\)/);
+assert.match(storage, /\.delete\(slurpLiveShows\)\.where\(lt\(slurpLiveShows\.endedAt, slurpLivePruneBefore\(at\)\)\)/);
+assert.match(storage, /audienceTipKeys: JSON\.stringify\(\[\.\.\.keys, audienceKey\]\)/);
+assert.match(service, /await storage\.pruneEnded\(at\)/);
+assert.match(routes, /slurpLiveCanWatch\(personaId/);
 console.log("slurp2 live shows money and claims: ok");

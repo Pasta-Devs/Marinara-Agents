@@ -8,6 +8,7 @@ export type SlurpLiveOrder = {
   itemId: string;
   label: string;
   name: string;
+  viewerId?: string;
   at: number;
   served: boolean;
   requestId: string;
@@ -35,6 +36,7 @@ export type SlurpLiveShow = {
   goalHitAt: string | null;
   script: SlurpLiveLine[];
   events: SlurpLiveEvent[];
+  audienceTipKeys: string[];
   lastReplyAt: string | null;
   recapPostId: string | null;
   menu: SlurpLiveMenuItem[];
@@ -48,6 +50,30 @@ export type SlurpLiveShow = {
 
 export const SLURP_LIVE_EVENT_LIMIT = 200;
 export const SLURP_LIVE_SEGMENT_MS = 4 * 60_000;
+
+export function slurpLiveCanWatch(personaId: string | undefined, validPersona: boolean): boolean {
+  return !!personaId && validPersona;
+}
+
+export function slurpLiveAudienceTipDue(keys: readonly string[], key: string): boolean {
+  return !keys.includes(key);
+}
+
+export function slurpLivePruneBefore(at: Date): string {
+  return new Date(at.getTime() - 7 * 86_400_000).toISOString();
+}
+
+export function slurpLiveMenuClaimState(
+  queue: readonly SlurpLiveOrder[],
+  requestId: string,
+  itemId: string,
+  viewerId: string,
+): "new" | "resume" | "duplicate" | "conflict" {
+  const existing = queue.find((order) => order.requestId === requestId);
+  if (!existing) return "new";
+  if (existing.itemId !== itemId || existing.viewerId !== viewerId) return "conflict";
+  return existing.status === "pending" ? "resume" : "duplicate";
+}
 
 export function slurpLiveSegmentIndex(show: Pick<SlurpLiveShow, "startedAt">, at: Date): number {
   return Math.max(0, Math.floor((at.getTime() - Date.parse(show.startedAt)) / SLURP_LIVE_SEGMENT_MS));

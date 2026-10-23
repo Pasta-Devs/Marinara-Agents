@@ -936,6 +936,7 @@ export const slurpLiveShows = fileTable("slurp2_live_shows", {
   goalHitAt: text("goal_hit_at"),
   script: text("script").notNull().default("[]"),
   events: text("events").notNull().default("[]"),
+  audienceTipKeys: text("audience_tip_keys"),
   menu: text("menu"),
   queue: text("queue"),
   segment: text("segment"),

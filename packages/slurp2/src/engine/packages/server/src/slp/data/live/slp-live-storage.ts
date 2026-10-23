@@ -1,5 +1,5 @@
 import type { DB } from "../../../db/connection.js";
-import { and, desc, eq, isNull, lte, or } from "../../../db/file-query.js";
+import { and, desc, eq, isNull, lt, lte, or } from "../../../db/file-query.js";
 import { slurpLiveShows } from "../../../db/schema/slurp.js";
 import { newId } from "../../../utils/id-generator.js";
 import {
@@ -8,6 +8,9 @@ import {
   slurpLiveCrowdClaimAllowed,
   slurpLiveReplyClaimAllowed,
   slurpLiveSegmentIndex,
+  slurpLiveMenuClaimState,
+  slurpLiveAudienceTipDue,
+  slurpLivePruneBefore,
   type SlurpLiveEvent,
   type SlurpLiveLine,
   type SlurpLiveShow,
@@ -34,6 +37,7 @@ const map = (row: typeof slurpLiveShows.$inferSelect): SlurpLiveShow => ({
   goalHitAt: row.goalHitAt ?? null,
   script: parse(row.script, []),
   events: parse(row.events, []),
+  audienceTipKeys: parse(row.audienceTipKeys ?? "[]", []),
   lastReplyAt: row.lastReplyAt ?? null,
   recapPostId: row.recapPostId ?? null,
   menu: parse(row.menu ?? "[]", []),
@@ -57,11 +61,14 @@ export function createSlurpLiveStorage(db: DB) {
       return rows[0] ? map(rows[0]) : null;
     },
     async active() {
-      const rows = await db.select().from(slurpLiveShows);
-      return rows.map(map).find((show) => !show.endedAt) ?? null;
+      const rows = await db.select().from(slurpLiveShows).where(isNull(slurpLiveShows.endedAt)).limit(1);
+      return rows[0] ? map(rows[0]) : null;
     },
     async activeShows() {
-      return (await db.select().from(slurpLiveShows)).map(map).filter((show) => !show.endedAt);
+      return (await db.select().from(slurpLiveShows).where(isNull(slurpLiveShows.endedAt))).map(map);
+    },
+    async pruneEnded(at: Date) {
+      await db.delete(slurpLiveShows).where(lt(slurpLiveShows.endedAt, slurpLivePruneBefore(at)));
     },
     async create(input: {
       hostKind: "creator" | "player";
@@ -85,6 +92,7 @@ export function createSlurpLiveStorage(db: DB) {
         goalHitAt: null,
         script: JSON.stringify(input.script ?? []),
         events: "[]",
+        audienceTipKeys: "[]",
         lastReplyAt: null,
         recapPostId: null,
         menu: JSON.stringify(input.menu ?? []),
@@ -108,8 +116,7 @@ export function createSlurpLiveStorage(db: DB) {
       mode?: "text" | "pictures";
     }) {
       return db.transaction(async (tx) => {
-        const rows = await tx.select().from(slurpLiveShows);
-        const active = rows.filter((row) => !row.endedAt);
+        const active = await tx.select().from(slurpLiveShows).where(isNull(slurpLiveShows.endedAt));
         if (
           active.some((row) => row.hostId === input.hostId) ||
           active.filter((row) => row.hostKind === input.hostKind).length >= (input.hostKind === "creator" ? 2 : 1)
@@ -127,6 +134,7 @@ export function createSlurpLiveStorage(db: DB) {
           goalHitAt: null,
           script: "[]",
           events: "[]",
+          audienceTipKeys: "[]",
           lastReplyAt: null,
           recapPostId: null,
           menu: JSON.stringify(input.menu ?? []),
@@ -246,7 +254,7 @@ export function createSlurpLiveStorage(db: DB) {
         )
           return false;
         const queue = parse<SlurpLiveOrder[]>(row.queue ?? "[]", []);
-        if (queue.some((entry) => entry.requestId === order.requestId)) return false;
+        if (slurpLiveMenuClaimState(queue, order.requestId, order.itemId, order.viewerId ?? "") !== "new") return false;
         const claim = slurpLiveClaimTipEvent(decodeEvents(row.events), Number(row.raised), Number(row.goal), {
           at: order.at,
           kind: "tip",
@@ -267,6 +275,10 @@ export function createSlurpLiveStorage(db: DB) {
           .where(eq(slurpLiveShows.id, id));
         return true;
       });
+    },
+    async menuClaimState(id: string, requestId: string, itemId: string, viewerId: string) {
+      const show = await this.get(id);
+      return show ? slurpLiveMenuClaimState(show.queue, requestId, itemId, viewerId) : "conflict";
     },
     async releaseMenu(id: string, requestId: string) {
       await this.releaseTip(id, requestId);
@@ -323,12 +335,16 @@ export function createSlurpLiveStorage(db: DB) {
         const row = rows[0];
         if (!row || row.endedAt) return false;
         const events = decodeEvents(row.events);
+        const audienceKey = event.requestId?.startsWith(`live:${id}:fan-tip:`) ? event.requestId : null;
+        const keys = parse<string[]>(row.audienceTipKeys ?? "[]", []);
+        if (audienceKey && !slurpLiveAudienceTipDue(keys, audienceKey)) return false;
         const claim = slurpLiveClaimTipEvent(events, Number(row.raised), Number(row.goal), event);
         if (!claim) return false;
         await tx
           .update(slurpLiveShows)
           .set({
             events: JSON.stringify(claim.events),
+            ...(audienceKey ? { audienceTipKeys: JSON.stringify([...keys, audienceKey]) } : {}),
             raised: String(claim.raised),
             ...(claim.hitGoal && !row.goalHitAt ? { goalHitAt: new Date().toISOString() } : {}),
           })
@@ -343,12 +359,16 @@ export function createSlurpLiveStorage(db: DB) {
         if (!row) return false;
         const events = decodeEvents(row.events);
         const removed = events.find((item) => item.requestId === requestId);
+        const keys = parse<string[]>(row.audienceTipKeys ?? "[]", []);
         if (!removed) return false;
         const raised = Math.max(0, Number(row.raised) - (removed.amount ?? 0));
         await tx
           .update(slurpLiveShows)
           .set({
             events: JSON.stringify(capEvents(events.filter((item) => item !== removed))),
+            ...(keys.includes(requestId)
+              ? { audienceTipKeys: JSON.stringify(keys.filter((key) => key !== requestId)) }
+              : {}),
             raised: String(raised),
             ...(raised < Number(row.goal) ? { goalHitAt: null } : {}),
           })
