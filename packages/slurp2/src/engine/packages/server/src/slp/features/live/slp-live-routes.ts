@@ -4,8 +4,8 @@ import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { createSlurpLiveStorage } from "../../data/live/slp-live-storage.js";
 import { createSlurpStorage, createSlurpMessagesStorage } from "../../data/slp-storage.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
-import { slurpLiveReplyAllowed } from "../../modules/live/slp-live.js";
 import { replyToSlurpLiveChat } from "./slp-live-contract.js";
+import { newId } from "../../../utils/id-generator.js";
 
 const body = z.object({ personaId: z.string().trim().min(1) }).passthrough();
 
@@ -19,15 +19,26 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     return show ?? reply.code(404).send({ error: "Live show not found." });
   });
   app.post("/live/:id/tip", async (request, reply) => {
-    const parsed = body.extend({ amount: z.number().int().positive(), requestId: z.string().optional() }).safeParse(request.body ?? {});
+    const parsed = body.extend({ amount: z.number().int().positive(), requestId: z.string().trim().min(1).optional() }).safeParse(request.body ?? {});
     if (!parsed.success || !(await enabled())) return reply.code(404).send({ error: "Live is switched off." });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     const show = await storage.get((request.params as { id: string }).id);
     if (!viewer || !show || show.endedAt) return reply.code(404).send({ error: "Live show not found." });
-    const result = await createSlurpMessagesStorage(app.db).tipInThread(viewer.id, show.hostId, parsed.data.amount, "Live show tip", parsed.data.requestId);
-    if (result.status !== "sent") return reply.code(result.status === "insufficient_funds" ? 402 : 403).send(result);
-    const events = [...show.events, { at: Date.now() - Date.parse(show.startedAt), kind: "tip" as const, name: viewer.displayName, amount: parsed.data.amount, text: "" }];
-    await storage.update(show.id, { events, raised: show.raised + parsed.data.amount, ...(show.raised < show.goal && show.raised + parsed.data.amount >= show.goal ? { goalHitAt: new Date().toISOString() } : {}) });
+    const requestId = parsed.data.requestId;
+    const claimId = requestId ?? `live-tip:${newId()}`;
+    const event = { at: Date.now() - Date.parse(show.startedAt), kind: "tip" as const, name: viewer.displayName, amount: parsed.data.amount, text: "", requestId: claimId };
+    if (!(await storage.claimTip(show.id, event))) return { show, duplicate: true, wallet: await createSlurpStorage(app.db).getWallet(viewer.id) };
+    let result;
+    try {
+      result = await createSlurpMessagesStorage(app.db).tipInThread(viewer.id, show.hostId, parsed.data.amount, "Live show tip", claimId);
+    } catch (error) {
+      await storage.releaseTip(show.id, claimId);
+      throw error;
+    }
+    if (result.status !== "sent") {
+      await storage.releaseTip(show.id, claimId);
+      return reply.code(result.status === "insufficient_funds" ? 402 : 403).send(result);
+    }
     return { show: await storage.get(show.id), wallet: await createSlurpStorage(app.db).getWallet(viewer.id) };
   });
   app.post("/live/:id/chat", async (request, reply) => {
@@ -36,9 +47,8 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     const show = await storage.get((request.params as { id: string }).id);
     if (!viewer || !show || show.endedAt) return reply.code(404).send({ error: "Live show not found." });
-    const events = [...show.events, { at: Date.now() - Date.parse(show.startedAt), kind: "chat" as const, name: viewer.displayName, text: parsed.data.text }];
-    await storage.update(show.id, { events });
-    if (slurpLiveReplyAllowed(show.lastReplyAt)) void replyToSlurpLiveChat(app.db, show.id, parsed.data.text);
-    return { show: await storage.get(show.id), replyQueued: !slurpLiveReplyAllowed(show.lastReplyAt) };
+    await storage.appendEvent(show.id, { at: Date.now() - Date.parse(show.startedAt), kind: "chat", name: viewer.displayName, text: parsed.data.text });
+    void replyToSlurpLiveChat(app.db, show.id);
+    return { show: await storage.get(show.id), replyQueued: true };
   });
 }

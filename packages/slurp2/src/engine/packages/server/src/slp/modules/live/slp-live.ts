@@ -4,7 +4,14 @@ export type SlurpLivePhase = "warmup" | "main" | "finish";
 export type SlurpLiveLineKind = "narration" | "crowd" | "reaction";
 export type SlurpLiveEventKind = "tip" | "chat";
 export type SlurpLiveLine = { at: number; kind: SlurpLiveLineKind; name?: string; text: string };
-export type SlurpLiveEvent = { at: number; kind: SlurpLiveEventKind; name: string; amount?: number; text: string };
+export type SlurpLiveEvent = {
+  at: number;
+  kind: SlurpLiveEventKind;
+  name: string;
+  amount?: number;
+  text: string;
+  requestId?: string;
+};
 export type SlurpLiveShow = {
   id: string;
   hostKind: "creator" | "player";
@@ -20,6 +27,66 @@ export type SlurpLiveShow = {
   lastReplyAt: string | null;
   recapPostId: string | null;
 };
+
+export const SLURP_LIVE_EVENT_LIMIT = 200;
+
+export function slurpLiveCapEvents(events: readonly SlurpLiveEvent[]): SlurpLiveEvent[] {
+  return events.slice(-SLURP_LIVE_EVENT_LIMIT);
+}
+
+export function slurpLiveTipRequestSeen(events: readonly SlurpLiveEvent[], requestId: string): boolean {
+  return events.some((event) => event.kind === "tip" && event.requestId === requestId);
+}
+
+export function slurpLiveClaimTipEvent(
+  events: readonly SlurpLiveEvent[],
+  raised: number,
+  goal: number,
+  event: SlurpLiveEvent,
+) {
+  if (event.requestId && slurpLiveTipRequestSeen(events, event.requestId)) return null;
+  const nextRaised = raised + (event.amount ?? 0);
+  return {
+    events: slurpLiveCapEvents([...events, event]),
+    raised: nextRaised,
+    hitGoal: raised < goal && nextRaised >= goal,
+  };
+}
+
+export function slurpLiveReplyClaimAllowed(lastReplyAt: string | null, at: Date): boolean {
+  return !lastReplyAt || Date.parse(lastReplyAt) <= at.getTime() - 60_000;
+}
+
+export function slurpLiveParseLines(value: unknown): SlurpLiveLine[] {
+  let parsed = value;
+  if (typeof parsed === "string") {
+    const unfenced = parsed.trim().replace(/^```(?:json)?\s*/iu, "").replace(/\s*```$/u, "");
+    try {
+      parsed = JSON.parse(unfenced) as unknown;
+    } catch {
+      return [];
+    }
+  }
+  const rows = Array.isArray(parsed) ? parsed : parsed && typeof parsed === "object" ? (parsed as { lines?: unknown }).lines : null;
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((line) => {
+    if (!line || typeof line !== "object") return [];
+    const item = line as Record<string, unknown>;
+    const kind = item.kind;
+    if (kind !== "narration" && kind !== "crowd" && kind !== "reaction") return [];
+    if (typeof item.text !== "string" || typeof item.at !== "number" || !Number.isFinite(item.at)) return [];
+    return [{
+      at: Math.max(0, item.at),
+      kind,
+      ...(typeof item.name === "string" ? { name: item.name } : {}),
+      text: item.text.slice(0, 1000),
+    }];
+  });
+}
+
+export function slurpLiveScriptFailed(lines: readonly SlurpLiveLine[]): boolean {
+  return lines.length === 0;
+}
 
 export function slurpLiveDurationMinutes(seed: number): number {
   const value = Math.abs(Math.trunc(seed)) % 21;
