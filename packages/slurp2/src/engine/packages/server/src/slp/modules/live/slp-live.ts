@@ -3,6 +3,17 @@ import { slurpFanTypeWeeklyBudget, type SlurpFanType } from "../../../../../shar
 export type SlurpLivePhase = "warmup" | "main" | "finish";
 export type SlurpLiveLineKind = "narration" | "crowd" | "reaction";
 export type SlurpLiveEventKind = "tip" | "chat";
+export type SlurpLiveMenuItem = { id: string; label: string; price: number; picture: boolean };
+export type SlurpLiveOrder = {
+  itemId: string;
+  label: string;
+  name: string;
+  at: number;
+  served: boolean;
+  requestId: string;
+  status?: "pending" | "paid";
+};
+export type SlurpLiveSegment = { index: number; lease: string | null; claimedAt: string | null };
 export type SlurpLiveLine = { at: number; kind: SlurpLiveLineKind; name?: string; text: string };
 export type SlurpLiveEvent = {
   at: number;
@@ -26,9 +37,48 @@ export type SlurpLiveShow = {
   events: SlurpLiveEvent[];
   lastReplyAt: string | null;
   recapPostId: string | null;
+  menu: SlurpLiveMenuItem[];
+  queue: SlurpLiveOrder[];
+  segment: SlurpLiveSegment | null;
+  lastSeenAt: string | null;
+  missedSummary: string[] | null;
+  announcedFor: string | null;
+  mode: "text" | "pictures";
 };
 
 export const SLURP_LIVE_EVENT_LIMIT = 200;
+export const SLURP_LIVE_SEGMENT_MS = 4 * 60_000;
+
+export function slurpLiveSegmentIndex(show: Pick<SlurpLiveShow, "startedAt">, at: Date): number {
+  return Math.max(0, Math.floor((at.getTime() - Date.parse(show.startedAt)) / SLURP_LIVE_SEGMENT_MS));
+}
+
+export function slurpLiveWatched(lastSeenAt: string | null, at: Date): boolean {
+  return !!lastSeenAt && Date.parse(lastSeenAt) <= at.getTime() && Date.parse(lastSeenAt) >= at.getTime() - 90_000;
+}
+
+export function slurpLiveTipOffset(showId: string, fanId: string, durationMs: number): number {
+  let hash = 0x811c9dc5;
+  for (const char of `${showId}:${fanId}`) hash = Math.imul(hash ^ char.charCodeAt(0), 0x01000193);
+  return Math.floor(((hash >>> 0) / 0x100000000) * Math.max(1, durationMs));
+}
+
+export function slurpLiveFanDue(showId: string, fanId: string, durationMs: number, tipChance: number): number | null {
+  if (!slurpLivePlayerTipDue({ fanId, showId, tipChance, seed: 1 })) return null;
+  return slurpLiveTipOffset(showId, fanId, durationMs);
+}
+
+export const SLURP_LIVE_REACTIONS = ["Nice!", "Wow", "Yes!", "🔥", "❤️", "👏"] as const;
+
+export function slurpLiveViewerCount(elapsed: number, duration: number, audience: number): number {
+  const progress = Math.min(1, Math.max(0, elapsed / Math.max(1, duration)));
+  return Math.max(1, Math.round(audience * (0.2 + 0.8 * Math.sin(Math.PI * progress))));
+}
+
+export function slurpLiveRecap(show: SlurpLiveShow): string {
+  const top = slurpLiveTipTopper(show.events);
+  return `Live show recap: ${show.raised} coins raised. Goal ${show.raised >= show.goal ? "reached" : "not reached"} (${show.goal}). ${top ? `Top tipper: ${top.name} (${top.amount} coins).` : "No tips were received."} ${show.queue.filter((order) => order.served).length} menu items served.`;
+}
 
 export function slurpLiveCapEvents(events: readonly SlurpLiveEvent[]): SlurpLiveEvent[] {
   return events.slice(-SLURP_LIVE_EVENT_LIMIT);
@@ -66,30 +116,45 @@ export function slurpLivePlayerTipAmount(type: SlurpFanType, memberId: string): 
 }
 
 export function slurpLiveTipTopper(events: readonly SlurpLiveEvent[]): SlurpLiveEvent | null {
-  return events.filter((event) => event.kind === "tip").reduce<SlurpLiveEvent | null>(
-    (best, event) => (!best || (event.amount ?? 0) > (best.amount ?? 0) ? event : best),
-    null,
-  );
+  return events
+    .filter((event) => event.kind === "tip")
+    .reduce<SlurpLiveEvent | null>(
+      (best, event) => (!best || (event.amount ?? 0) > (best.amount ?? 0) ? event : best),
+      null,
+    );
 }
 
-export function slurpLivePlayerTipDue(input: { fanId: string; showId: string; tipChance: number; seed: number }): boolean {
+export function slurpLivePlayerTipDue(input: {
+  fanId: string;
+  showId: string;
+  tipChance: number;
+  seed: number;
+}): boolean {
   if (!(input.tipChance > 0)) return false;
   let hash = 0x811c9dc5;
-  for (const char of `${input.showId}:${input.fanId}:${input.seed}`) hash = Math.imul(hash ^ char.charCodeAt(0), 0x01000193);
-  return ((hash >>> 0) / 0x100000000) < Math.min(1, input.tipChance);
+  for (const char of `${input.showId}:${input.fanId}:${input.seed}`)
+    hash = Math.imul(hash ^ char.charCodeAt(0), 0x01000193);
+  return (hash >>> 0) / 0x100000000 < Math.min(1, input.tipChance);
 }
 
 export function slurpLiveParseLines(value: unknown): SlurpLiveLine[] {
   let parsed = value;
   if (typeof parsed === "string") {
-    const unfenced = parsed.trim().replace(/^```(?:json)?\s*/iu, "").replace(/\s*```$/u, "");
+    const unfenced = parsed
+      .trim()
+      .replace(/^```(?:json)?\s*/iu, "")
+      .replace(/\s*```$/u, "");
     try {
       parsed = JSON.parse(unfenced) as unknown;
     } catch {
       return [];
     }
   }
-  const rows = Array.isArray(parsed) ? parsed : parsed && typeof parsed === "object" ? (parsed as { lines?: unknown }).lines : null;
+  const rows = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === "object"
+      ? (parsed as { lines?: unknown }).lines
+      : null;
   if (!Array.isArray(rows)) return [];
   return rows.flatMap((line) => {
     if (!line || typeof line !== "object") return [];
@@ -97,12 +162,14 @@ export function slurpLiveParseLines(value: unknown): SlurpLiveLine[] {
     const kind = item.kind;
     if (kind !== "narration" && kind !== "crowd" && kind !== "reaction") return [];
     if (typeof item.text !== "string" || typeof item.at !== "number" || !Number.isFinite(item.at)) return [];
-    return [{
-      at: Math.max(0, item.at),
-      kind,
-      ...(typeof item.name === "string" ? { name: item.name } : {}),
-      text: item.text.slice(0, 1000),
-    }];
+    return [
+      {
+        at: Math.max(0, item.at),
+        kind,
+        ...(typeof item.name === "string" ? { name: item.name } : {}),
+        text: item.text.slice(0, 1000),
+      },
+    ];
   });
 }
 
@@ -115,11 +182,18 @@ export function slurpLiveDurationMinutes(seed: number): number {
   return 20 + value;
 }
 
-export function slurpLivePhase(show: Pick<SlurpLiveShow, "startedAt" | "endsAt" | "goal" | "raised" | "goalHitAt">, now = new Date()): SlurpLivePhase {
+export function slurpLivePhase(
+  show: Pick<SlurpLiveShow, "startedAt" | "endsAt" | "goal" | "raised" | "goalHitAt">,
+  now = new Date(),
+): SlurpLivePhase {
   if (show.goalHitAt || show.raised >= show.goal) return "finish";
   const start = Date.parse(show.startedAt);
   const end = Date.parse(show.endsAt);
-  return now.getTime() >= start + Math.max(0, end - start) * 0.8 ? "finish" : now.getTime() < start + (end - start) * 0.2 ? "warmup" : "main";
+  return now.getTime() >= start + Math.max(0, end - start) * 0.8
+    ? "finish"
+    : now.getTime() < start + (end - start) * 0.2
+      ? "warmup"
+      : "main";
 }
 
 export function slurpLiveVisible(show: Pick<SlurpLiveShow, "startedAt" | "script" | "events">, now = new Date()) {
