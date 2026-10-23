@@ -62,10 +62,33 @@ export function validatePullRequestTriage() {
   assert.ok(jobIds.includes("template-check"));
   assert.doesNotMatch(triageWorkflow, /pull_request_review|github\.event\.review/u);
 
+  const [policyEnvironment, policyBody] = extractNamedStep(triageWorkflow, "Validate pull request target").split(
+    "        run: |\n",
+  );
+  assert.equal(
+    policyEnvironment,
+    [
+      "      - name: Validate pull request target",
+      "        env:",
+      "          AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}",
+      "          BASE_REF: ${{ github.event.pull_request.base.ref }}",
+      "          HEAD_REF: ${{ github.event.pull_request.head.ref }}",
+      "          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}",
+      "          REPOSITORY: ${{ github.repository }}",
+      "",
+    ].join("\n"),
+  );
+  assert.deepEqual([...new Set([...policyBody.matchAll(/\$\{?([A-Z][A-Z0-9_]*)/gu)].map((match) => match[1]))].sort(), [
+    "AUTHOR_LOGIN",
+    "BASE_REF",
+    "HEAD_REF",
+    "HEAD_REPO",
+    "REPOSITORY",
+  ]);
+
   // This trusted workflow runs on Ubuntu; execute its real Bash policy where Bash is native.
   if (process.platform !== "win32") {
-    const policy = extractNamedStep(triageWorkflow, "Validate pull request target")
-      .split("        run: |\n")[1]
+    const policy = policyBody
       .split("\n")
       .map((line) => line.slice(10))
       .join("\n");
