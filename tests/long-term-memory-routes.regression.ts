@@ -7,8 +7,12 @@ import { dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { runRegressionToCompletion } from "./regression-helpers.ts";
 
-export type RouteScenario = "all" | "notes" | "imports" | "drafts" | "scope-identity" | "backup";
+export type RouteScenario = "all" | "scope-identity" | "backup";
 
+// Scenarios: "all" is the direct run and covers every route assertion. "scope-identity" and "backup" are separate
+// processes (see the long-term-memory-routes-* wrappers) because they start from a pre-seeded note and assert
+// state that "all" has already changed by the time it reaches the same blocks (for example the rejected-suggestion
+// count at the backup reset/rebuild checks).
 async function main(routeScenario: RouteScenario) {
   const engineRoot =
     process.env.MARINARA_ENGINE_ROOT ?? join(dirname(fileURLToPath(import.meta.url)), "../../Marinara-Engine");
@@ -464,7 +468,7 @@ async function main(routeScenario: RouteScenario) {
         },
       },
     };
-    if (routeScenario !== "all" && routeScenario !== "notes") {
+    if (routeScenario !== "all") {
       const seededRouteNote = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes",
@@ -472,26 +476,6 @@ async function main(routeScenario: RouteScenario) {
         payload: routeNoteFixture,
       });
       assert.equal(seededRouteNote.statusCode, 201, seededRouteNote.body);
-      if (routeScenario === "imports") {
-        await storageService.storage.createNote({
-          id: "source_route_extract",
-          title: "Observatory report",
-          type: "source",
-          status: "active",
-          modes: ["roleplay"],
-          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
-          tags: ["source_summary"],
-          keywords: [],
-          links: [],
-          provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "route-extract" },
-          sections: {
-            source: {
-              text: "Mara seals the observatory gate at dusk.",
-              updatedAt: "2026-07-17T00:00:00.000Z",
-            },
-          },
-        });
-      }
       if (routeScenario === "backup") {
         const backupDraft = await storageService.drafts.createDraft({
           source: { sourceNoteId: "source_route_review", chatId: "chat-a" },
@@ -522,7 +506,7 @@ async function main(routeScenario: RouteScenario) {
         );
       }
     }
-    if (routeScenario === "all" || routeScenario === "notes") {
+    if (routeScenario === "all") {
       assert.equal(
         (
           await app.inject({
@@ -3869,7 +3853,7 @@ async function main(routeScenario: RouteScenario) {
         personaIds: ["persona-fixture"],
       });
     }
-    if (routeScenario === "all" || routeScenario === "imports") {
+    if (routeScenario === "all") {
       const preview = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/import/preview",
@@ -4966,7 +4950,7 @@ async function main(routeScenario: RouteScenario) {
         true,
       );
     }
-    if (routeScenario === "all" || routeScenario === "drafts") {
+    if (routeScenario === "all") {
       const source = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes",

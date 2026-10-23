@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { compileEngineVisualStyles } from "./engine-visual-styles.ts";
@@ -11,13 +9,10 @@ import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-help
 
 const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
-const catalogUrl = "https://1.1.1.1/catalog/catalog.json";
 const packageManifest = JSON.parse(readFileSync(join(repoRoot, "packages/long-term-memory/manifest.json"), "utf8")) as {
   version: string;
 };
 const artifactPath = join(repoRoot, `artifacts/long-term-memory-${packageManifest.version}.zip`);
-const artifactUrl = `https://1.1.1.1/artifacts/long-term-memory-${packageManifest.version}.zip`;
-const artifactBytes = readFileSync(artifactPath);
 const visualOutputDir = process.env.MARINARA_VISUAL_OUTPUT_DIR ? resolve(process.env.MARINARA_VISUAL_OUTPUT_DIR) : null;
 function unzip(args: string[], purpose: string) {
   try {
@@ -34,36 +29,6 @@ const artifactManifest = JSON.parse(
   unzip(["-p", artifactPath, "manifest.json"], `read ${artifactPath}/manifest.json`),
 ) as Record<string, unknown>;
 const artifactClient = unzip(["-p", artifactPath, "client.js"], `read ${artifactPath}/client.js`);
-const originalFetch = globalThis.fetch;
-const catalogOnline = true;
-
-process.env.AUTO_CREATE_DEFAULT_CONNECTION = "false";
-process.env.LOG_DISABLE_REQUEST_LOGGING = "true";
-process.env.LOG_LEVEL = "silent";
-process.env.MARINARA_AGENT_CATALOG_URL = catalogUrl;
-process.env.MARINARA_LITE = "true";
-process.env.NODE_ENV = "test";
-
-function sha256(value: Buffer) {
-  return createHash("sha256").update(value).digest("hex");
-}
-function catalog() {
-  return {
-    schemaVersion: 1,
-    generatedAt: "2026-07-18T00:00:00.000Z",
-    packages: [
-      {
-        manifest: artifactManifest,
-        category: "misc",
-        artifact: {
-          url: artifactUrl,
-          sha256: sha256(artifactBytes),
-          bytes: artifactBytes.byteLength,
-        },
-      },
-    ],
-  };
-}
 async function main() {
   if (visualOutputDir) mkdirSync(visualOutputDir, { recursive: true });
   const engineStyles = await compileEngineVisualStyles(
@@ -88,20 +53,6 @@ async function main() {
     "translated:ui.longTermMemory.sourcesworkspace.roleplay",
   );
   assert.equal(localizedLabel("future_value", testLocalize, labelKeys.mode), "Future value");
-  const dataDir = mkdtempSync(join(tmpdir(), "marinara-ltm-lifecycle-"));
-  process.env.DATA_DIR = dataDir;
-  process.env.MARINARA_ENV_FILE = join(dataDir, ".env");
-  globalThis.fetch = (async (input: string | URL | Request) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-    if (!catalogOnline) throw new Error("LTM lifecycle fixture is offline");
-    if (url === catalogUrl)
-      return new Response(JSON.stringify(catalog()), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    if (url === artifactUrl) return new Response(artifactBytes, { status: 200 });
-    throw new Error(`Unexpected lifecycle URL: ${url}`);
-  }) as typeof fetch;
   let browser: { close: () => Promise<void> } | null = null;
   let browserServer: ReturnType<typeof createServer> | null = null;
   let releaseReextraction: (() => void) | null = null;
@@ -114,7 +65,7 @@ async function main() {
     markReextractionStarted = resolve;
   });
   await runWithSafeCleanup(
-    "LTM lifecycle",
+    "LTM browser",
     async () => {
       assert.equal(artifactManifest.id, "long-term-memory");
       assert.equal(artifactManifest.version, packageManifest.version);
@@ -5990,14 +5941,10 @@ async function main() {
           if (!browserServer) return resolveClose();
           browserServer.close((error) => (error ? reject(error) : resolveClose()));
         }),
-      () => {
-        globalThis.fetch = originalFetch;
-      },
-      () => rmSync(dataDir, { recursive: true, force: true }),
     ],
   );
   console.log(
-    "Long-Term Memory browser lifecycle: onboarding, review, availability, re-extraction, mobile, and loading ok",
+    "Long-Term Memory browser regression: onboarding, review, availability, re-extraction, mobile, and loading ok",
   );
 }
 export const completion = runRegressionToCompletion("long-term-memory-browser", main);

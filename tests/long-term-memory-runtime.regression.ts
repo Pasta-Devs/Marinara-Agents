@@ -1,13 +1,11 @@
 import assert from "node:assert/strict";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { Module } from "node:module";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-helpers.ts";
 
 async function main() {
   const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
-  const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
   const packageManifest = JSON.parse(await readFile(join(repoRoot, "packages/long-term-memory/manifest.json"), "utf8"));
   assert.deepEqual(
     packageManifest.capabilityApi,
@@ -15,14 +13,6 @@ async function main() {
     "Long-Term Memory must remain installable on the API 1.7 Engine host",
   );
   assert.equal(packageManifest.engine.min, "2.4.1", "Long-Term Memory must support the API 1.7 Engine release");
-  process.env.NODE_PATH = [
-    join(engineRoot, "packages/server/node_modules"),
-    join(engineRoot, "packages/shared/node_modules"),
-    process.env.NODE_PATH,
-  ]
-    .filter(Boolean)
-    .join(delimiter);
-  Module._initPaths();
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { activate } = await import(`${source}/server-entry.ts`);
   const {
