@@ -350,12 +350,12 @@ export async function materializeAssistantSpatialState(input: {
         const destination = definition.locations.find(
           (location) => location.id === requestedDestinationId && location.status === "active",
         );
-        // A destination further than one step is reached by the shortest route over the same one-step
-        // moves, so a reply that takes the party across the map (a boat to the next town) moves it there.
+        // A destination further than one step moves the party when resolveSpatialRoute, which routes the
+        // player's own travel, finds a path of at least one step to it (a boat to the next town).
         const routed =
           destination &&
           !reachable.has(destination.id) &&
-          resolveSpatialRoute(definition, state.currentLocationId, destination.id) !== null;
+          (resolveSpatialRoute(definition, state.currentLocationId, destination.id)?.length ?? 0) > 0;
         if (destination && (destination.id === state.currentLocationId || reachable.has(destination.id) || routed)) {
           destinationId = destination.id;
           transitionApplied = destinationId !== state.currentLocationId;
