@@ -1,6 +1,7 @@
 import {
   resolveSpatialBreadcrumb,
   resolveSpatialDestinations,
+  resolveSpatialRoute,
   SPATIAL_CONTEXT_LIMITS,
   type CapabilityPersistenceSession,
   type SpatialContextDefinition,
@@ -349,7 +350,13 @@ export async function materializeAssistantSpatialState(input: {
         const destination = definition.locations.find(
           (location) => location.id === requestedDestinationId && location.status === "active",
         );
-        if (destination && (destination.id === state.currentLocationId || reachable.has(destination.id))) {
+        // A destination further than one step is reached by the shortest route over the same one-step
+        // moves, so a reply that takes the party across the map (a boat to the next town) moves it there.
+        const routed =
+          destination &&
+          !reachable.has(destination.id) &&
+          resolveSpatialRoute(definition, state.currentLocationId, destination.id) !== null;
+        if (destination && (destination.id === state.currentLocationId || reachable.has(destination.id) || routed)) {
           destinationId = destination.id;
           transitionApplied = destinationId !== state.currentLocationId;
         }
