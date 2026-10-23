@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -60,6 +61,67 @@ export function validatePullRequestTriage() {
   assert.ok(jobIds.includes("owner-approval"));
   assert.ok(jobIds.includes("template-check"));
   assert.doesNotMatch(triageWorkflow, /pull_request_review|github\.event\.review/u);
+
+  const [policyEnvironment, policyBody] = extractNamedStep(triageWorkflow, "Validate pull request target").split(
+    "        run: |\n",
+  );
+  assert.equal(
+    policyEnvironment,
+    [
+      "      - name: Validate pull request target",
+      "        env:",
+      "          AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}",
+      "          BASE_REF: ${{ github.event.pull_request.base.ref }}",
+      "          HEAD_REF: ${{ github.event.pull_request.head.ref }}",
+      "          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}",
+      "          REPOSITORY: ${{ github.repository }}",
+      "",
+    ].join("\n"),
+  );
+  assert.deepEqual([...new Set([...policyBody.matchAll(/\$\{?([A-Z][A-Z0-9_]*)/gu)].map((match) => match[1]))].sort(), [
+    "AUTHOR_LOGIN",
+    "BASE_REF",
+    "HEAD_REF",
+    "HEAD_REPO",
+    "REPOSITORY",
+  ]);
+
+  // This trusted workflow runs on Ubuntu; execute its real Bash policy where Bash is native.
+  if (process.platform !== "win32") {
+    const policy = policyBody
+      .split("\n")
+      .map((line) => line.slice(10))
+      .join("\n");
+    for (const [name, overrides, expected] of [
+      ["staging contribution", { BASE_REF: "staging", AUTHOR_LOGIN: "contributor" }, 0],
+      ["staging fork", { BASE_REF: "staging", HEAD_REPO: "contributor/fork" }, 0],
+      ["owner staging promotion", { HEAD_REF: "staging" }, 0],
+      ["owner same-repository hotfix", {}, 0],
+      ["owner ordinary branch", { HEAD_REF: "fix/example" }, 1],
+      ["outsider hotfix", { AUTHOR_LOGIN: "contributor" }, 1],
+      ["member hotfix", { AUTHOR_LOGIN: "another-maintainer" }, 1],
+      ["owner hotfix from fork", { HEAD_REPO: "SpicyMarinara/fork" }, 1],
+      ["owner staging from fork", { HEAD_REF: "staging", HEAD_REPO: "SpicyMarinara/fork" }, 1],
+      ["outsider staging promotion", { HEAD_REF: "staging", AUTHOR_LOGIN: "contributor" }, 1],
+      ["unrelated target", { BASE_REF: "development" }, 1],
+      ["non-prefix branch", { HEAD_REF: "hotfix" }, 1],
+    ]) {
+      const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", policy], {
+        encoding: "utf8",
+        timeout: 5_000,
+        env: {
+          PATH: process.env.PATH,
+          BASE_REF: "main",
+          AUTHOR_LOGIN: "SpicyMarinara",
+          HEAD_REF: "hotfix/example",
+          HEAD_REPO: "Pasta-Devs/Marinara-Agents",
+          REPOSITORY: "Pasta-Devs/Marinara-Agents",
+          ...overrides,
+        },
+      });
+      assert.equal(result.status, expected, `${name}: ${result.stderr || result.stdout}`);
+    }
+  }
 
   const ownerApprovalJob = extractJob(triageWorkflow, "owner-approval");
   assert.match(ownerApprovalJob, /if: github\.event\.pull_request\.base\.ref == 'staging'/u);
