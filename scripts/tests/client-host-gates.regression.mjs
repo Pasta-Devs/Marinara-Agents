@@ -93,6 +93,8 @@ for (const library of [
   ".pnpm/scheduler@0.28.0/node_modules/scheduler/index.js",
   ".pnpm/@tanstack+query-core@5.0.0/node_modules/@tanstack/query-core/build/modern/query.js",
   "node_modules/zod/lib/index.mjs",
+  "node_modules/framer-motion-v13/dist/es/index.mjs",
+  "node_modules/motion/dist/es/react.mjs",
   ".pnpm/i18next@26.4.2/node_modules/i18next/dist/esm/i18next.js",
   ".pnpm/html-parse-stringify@3.0.1/node_modules/html-parse-stringify/dist/html-parse-stringify.module.js",
   ".pnpm/motion-dom@13.3.0/node_modules/motion-dom/dist/es/index.mjs",

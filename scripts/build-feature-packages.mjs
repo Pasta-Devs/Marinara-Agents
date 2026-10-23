@@ -971,14 +971,26 @@ export async function selfCheck() {
 // Package clients bundle with the Engine's host: its libraries through hostModulesPlugin, its stores, services and
 // components through sources/host-client-overlay, and only the vendored shared modules they use. Both client gates
 // run on every bundle (scripts/client-host-gates.mjs).
-let hostModules = null;
 const sharedRoots = [
   join(sourcesRoot, "packages/shared/dist"),
   ...(process.env.MARINARA_ENGINE_SHARED_ROOT ? [dirname(sharedBundleEntry)] : []),
 ];
 
 async function bundleClientEntry(feature, entry, output, metafilePath, buildRoot) {
-  hostModules ??= hostModulesPlugin({ engineRoot });
+  const boundary =
+    feature.id === "hierarchical-maps"
+      ? hierarchicalMapsBoundary
+      : feature.id === "long-term-memory"
+        ? longTermMemoryBoundary
+        : feature.id === "memory-nag"
+          ? memoryNagBoundary
+          : null;
+  const hostModules = hostModulesPlugin({
+    engineRoot,
+    // Boundary packages emit this same validated API in their manifest below; a feature override
+    // must not unlock host imports that the installable manifest does not require.
+    capabilityApi: boundary?.capabilityApi ?? feature.capabilityApi ?? PACKAGE_CAPABILITY_API,
+  });
   // The other games reach UNO's query keys through the vendored game hooks, and with them UNO's game store, which only
   // UNO may carry (scripts/client-host-gates.mjs).
   const sharedTreeShaking = sharedTreeShakingPlugin({
