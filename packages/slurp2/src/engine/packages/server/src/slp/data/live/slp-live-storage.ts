@@ -141,9 +141,15 @@ export function createSlurpLiveStorage(db: DB) {
           .select()
           .from(slurpLiveShows)
           .where(eq(slurpLiveShows.hostId, hostId))
-          .orderBy(desc(slurpLiveShows.startedAt))
-          .limit(1);
-        if (rows[0] && !rows[0].endedAt) return null;
+          .orderBy(desc(slurpLiveShows.startedAt));
+        for (const planned of rows) {
+          if (!planned.endedAt && !planned.startedNoticeAt && planned.startedAt < startsAt.toISOString())
+            await tx.delete(slurpLiveShows).where(eq(slurpLiveShows.id, planned.id));
+        }
+        const current = rows.filter(
+          (planned) => !planned.endedAt && (!planned.startedNoticeAt || planned.startedAt >= startsAt.toISOString()),
+        );
+        if (current.some((planned) => !planned.endedAt)) return null;
         const row = {
           id: newId(),
           hostKind: "creator",
@@ -222,8 +228,20 @@ export function createSlurpLiveStorage(db: DB) {
           endsAt: new Date(Date.parse(row.endsAt) + delay).toISOString(),
           startedNoticeAt: at.toISOString(),
         };
-        await tx.update(slurpLiveShows).set(patch).where(eq(slurpLiveShows.id, id));
-        return map({ ...row, ...patch });
+        await tx
+          .update(slurpLiveShows)
+          .set(patch)
+          .where(
+            and(
+              eq(slurpLiveShows.id, id),
+              isNull(slurpLiveShows.endedAt),
+              isNull(slurpLiveShows.startedNoticeAt),
+              lte(slurpLiveShows.startedAt, at.toISOString()),
+            ),
+          );
+        const startedRow = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
+        if (!startedRow || startedRow.startedNoticeAt !== at.toISOString()) return null;
+        return map(startedRow);
       });
     },
     async deferPlanned(id: string, at: Date) {

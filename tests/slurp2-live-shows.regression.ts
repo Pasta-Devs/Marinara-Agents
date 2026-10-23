@@ -49,6 +49,7 @@ assert.equal(slurpLiveWatched(startedAt, new Date("2026-10-23T12:01:29.000Z")), 
 assert.equal(slurpLiveWatched(startedAt, new Date("2026-10-23T12:01:31.000Z")), false);
 const service = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/live/slp-live-service.ts");
 const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/live/slp-live-routes.ts");
+const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/data/live/slp-live-storage.ts");
 const scheduler = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/slp/features/world/slp-world-scheduler-service.ts",
 );
@@ -65,6 +66,13 @@ assert.match(service, /if \(!current \|\| !slurpLiveWatched\(current.lastSeenAt,
 assert.doesNotMatch(service, /slurpLiveScriptPrompt|slurpLiveFinishPrompt/);
 assert.match(service, /createSlurpEventsStorage/);
 assert.match(service, /createPost/);
+assert.match(service, /liveShowId === show\.id/);
+assert.match(service, /menuLabel:/);
+assert.match(service, /slurp-live-start/);
+assert.match(storage, /!row\.announcedFor/);
+assert.match(storage, /!row\.announcementPostId/);
+assert.match(storage, /isNull\(slurpLiveShows\.startedNoticeAt\)/);
+assert.match(storage, /started\.startedNoticeAt !== at\.toISOString\(\)/);
 assert.match(routes, /tipInThread\([\s\S]*?"Live show tip"/);
 assert.match(routes, /replyToSlurpLiveChat/);
 assert.match(routes, /getSlurpLiveMissed/);

@@ -96,6 +96,13 @@ export async function advanceSlurpLive(db: DB, at = new Date()): Promise<void> {
     const upcoming = (await storage.upcoming(at)).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
     for (const show of upcoming) {
       if (slurpLiveAnnouncementDue(show, at)) {
+        const existing = (await createSlurpStorage(db).listPosts({ limit: 300 })).find(
+          (post) => post.metadata?.liveShowId === show.id && post.metadata?.liveAnnouncement === true,
+        );
+        if (existing) {
+          await storage.setAnnouncement(show.id, existing.id);
+          continue;
+        }
         const text = slurpLiveAnnouncementText(new Date(show.startedAt));
         const post = await createSlurpStorage(db).createPost({
           authorAccountId: show.hostId,
@@ -618,6 +625,9 @@ async function makeLivePictures(db: DB, show: SlurpLiveShow, personaId: string, 
         brief: slurpLivePictureBrief({
           hostName: creator.displayName,
           trigger,
+          menuLabel: trigger.startsWith("menu:")
+            ? show.queue.find((order) => order.requestId === trigger.slice("menu:".length))?.label
+            : undefined,
           level: spice.level,
           spiceLines: spice.spiceLines,
         }),
