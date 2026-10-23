@@ -948,6 +948,12 @@ export const slurpLiveShows = fileTable("slurp2_live_shows", {
   // Rows written before scheduling were already started; new plans explicitly store null.
   startedNoticeAt: text("started_notice_at").default("legacy"),
   mode: text("mode"),
+  privateState: text("private_state"),
+  privateClaims: text("private_claims").notNull().default("[]"),
+  privateRequestId: text("private_request_id"),
+  pictureStates: text("picture_states").notNull().default("[]"),
+  pictureViewerId: text("picture_viewer_id"),
+  pictureSeenAt: text("picture_seen_at"),
   lastReplyAt: text("last_reply_at"),
   recapPostId: text("recap_post_id"),
 });

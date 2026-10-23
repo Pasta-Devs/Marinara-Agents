@@ -2,6 +2,7 @@ import type { DB } from "../../../db/connection.js";
 import { and, desc, eq, isNotNull, isNull, lt, lte, or } from "../../../db/file-query.js";
 import { slurpLiveShows } from "../../../db/schema/slurp.js";
 import { newId } from "../../../utils/id-generator.js";
+import { createSlurpLivePrivateStorage } from "./slp-live-private-storage.js";
 import {
   slurpLiveCapEvents,
   slurpLiveClaimTipEvent,
@@ -51,6 +52,11 @@ const map = (row: typeof slurpLiveShows.$inferSelect): SlurpLiveShow => ({
   announcementPostId: row.announcementPostId ?? null,
   startedNoticeAt: row.startedNoticeAt === "legacy" ? row.startedAt : (row.startedNoticeAt ?? null),
   mode: row.mode === "pictures" ? "pictures" : "text",
+  private: parse(row.privateState ?? "null", null),
+  privateClaims: parse(row.privateClaims ?? "[]", []),
+  pictures: parse(row.pictureStates ?? "[]", []),
+  pictureViewerId: row.pictureViewerId ?? null,
+  pictureSeenAt: row.pictureSeenAt ?? null,
 });
 const decodeEvents = (value: string) => parse<SlurpLiveEvent[]>(value, []);
 const capEvents = (events: SlurpLiveEvent[]) => slurpLiveCapEvents(events);
@@ -163,6 +169,12 @@ export function createSlurpLiveStorage(db: DB) {
           announcementPostId: null,
           startedNoticeAt: null,
           mode: "text",
+          privateState: null,
+          privateClaims: "[]",
+          privateRequestId: null,
+          pictureStates: "[]",
+          pictureViewerId: null,
+          pictureSeenAt: null,
         };
         await tx.insert(slurpLiveShows).values(row);
         return map(row);
@@ -266,6 +278,12 @@ export function createSlurpLiveStorage(db: DB) {
         announcementPostId: null,
         startedNoticeAt: input.startedAt.toISOString(),
         mode: input.mode ?? "text",
+        privateState: null,
+        privateClaims: "[]",
+        privateRequestId: null,
+        pictureStates: "[]",
+        pictureViewerId: null,
+        pictureSeenAt: null,
       };
       await db.insert(slurpLiveShows).values(row);
       return map(row);
@@ -310,6 +328,12 @@ export function createSlurpLiveStorage(db: DB) {
           announcementPostId: null,
           startedNoticeAt: input.startedAt.toISOString(),
           mode: input.mode ?? "text",
+          privateState: null,
+          privateClaims: "[]",
+          privateRequestId: null,
+          pictureStates: "[]",
+          pictureViewerId: null,
+          pictureSeenAt: null,
         };
         await tx.insert(slurpLiveShows).values(row);
         return map(row);
@@ -343,13 +367,19 @@ export function createSlurpLiveStorage(db: DB) {
         .where(eq(slurpLiveShows.id, id));
       return this.get(id);
     },
-    async seen(id: string, at: Date) {
+    async seen(id: string, at: Date, viewerId?: string) {
       await db
         .update(slurpLiveShows)
-        .set({ lastSeenAt: at.toISOString() })
+        .set({
+          lastSeenAt: at.toISOString(),
+          ...(viewerId && (await this.get(id))?.pictureViewerId === viewerId
+            ? { pictureSeenAt: at.toISOString() }
+            : {}),
+        })
         .where(and(eq(slurpLiveShows.id, id), isNull(slurpLiveShows.endedAt)));
       return this.get(id);
     },
+    ...createSlurpLivePrivateStorage(db),
     async claimMissed(id: string) {
       return db.transaction(async (tx) => {
         const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
@@ -393,9 +423,14 @@ export function createSlurpLiveStorage(db: DB) {
         if (!row || row.endedAt) return false;
         const segment = parse<SlurpLiveShow["segment"]>(row.segment ?? "null", null);
         if (segment?.index !== index || segment.lease !== lease) return false;
+        const current = parse<SlurpLiveShow["private"]>(row.privateState ?? "null", null);
+        const isPrivate =
+          !!current &&
+          current.until > new Date(Date.parse(row.startedAt) + index * 240_000).toISOString() &&
+          lines.some((line) => line.personaId === current.personaId);
         const queue = parse<SlurpLiveOrder[]>(row.queue ?? "[]", []).map((order) => ({
           ...order,
-          served: order.served || (order.status !== "pending" && order.at <= (index + 1) * 240_000),
+          served: order.served || (!isPrivate && order.status !== "pending" && order.at <= (index + 1) * 240_000),
         }));
         await tx
           .update(slurpLiveShows)
@@ -547,8 +582,10 @@ export function createSlurpLiveStorage(db: DB) {
         const rows = await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id));
         const row = rows[0];
         if (!row || row.endedAt) return false;
-        const cutoff = new Date(at.getTime() - 60_000).toISOString();
-        if (!slurpLiveReplyClaimAllowed(row.lastReplyAt ?? null, at)) return false;
+        const current = parse<SlurpLiveShow["private"]>(row.privateState ?? "null", null);
+        const privateShow = !!current && current.until > at.toISOString();
+        const cutoff = new Date(at.getTime() - (privateShow ? 20_000 : 60_000)).toISOString();
+        if (!slurpLiveReplyClaimAllowed(row.lastReplyAt ?? null, at, privateShow)) return false;
         await tx
           .update(slurpLiveShows)
           .set({ lastReplyAt: at.toISOString() })

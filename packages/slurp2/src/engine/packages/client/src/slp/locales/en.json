@@ -6688,5 +6688,13 @@
   "ui.slurp.live.liveNow": "Live now",
   "ui.slurp.live.creator": "Creator",
   "ui.slurp.live.badge": "LIVE",
-  "ui.slurp.live.playerHost": "Your live show"
+  "ui.slurp.live.playerHost": "Your live show",
+  "ui.slurp.live.goPrivate": "Go private · {{price}} coins",
+  "ui.slurp.live.extend": "Extend · 10 min",
+  "ui.slurp.live.privateTimer": "Private · {{count}}s left",
+  "ui.slurp.live.inPrivate": "In private 🔒",
+  "ui.slurp.live.viewMode": "Show mode",
+  "ui.slurp.live.text": "Text",
+  "ui.slurp.live.pictures": "Pictures",
+  "ui.slurp.live.pictureAlt": "Picture from {{name}}"
 }

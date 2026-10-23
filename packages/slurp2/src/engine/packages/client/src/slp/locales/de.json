@@ -3136,5 +3136,13 @@
   "ui.slurp.live.liveNow": "Jetzt live",
   "ui.slurp.live.creator": "Creator",
   "ui.slurp.live.badge": "LIVE",
-  "ui.slurp.live.playerHost": "Deine Live-Show"
+  "ui.slurp.live.playerHost": "Deine Live-Show",
+  "ui.slurp.live.goPrivate": "Privatshow · {{price}} Münzen",
+  "ui.slurp.live.extend": "Um 10 Min. verlängern",
+  "ui.slurp.live.privateTimer": "Privat · noch {{count}} Sek.",
+  "ui.slurp.live.inPrivate": "Gerade privat 🔒",
+  "ui.slurp.live.viewMode": "Anzeigemodus",
+  "ui.slurp.live.text": "Text",
+  "ui.slurp.live.pictures": "Bilder",
+  "ui.slurp.live.pictureAlt": "Bild von {{name}}"
 }

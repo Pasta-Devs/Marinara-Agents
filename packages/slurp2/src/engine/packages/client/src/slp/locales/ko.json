@@ -3950,5 +3950,13 @@
   "ui.slurp.live.liveNow": "현재 라이브",
   "ui.slurp.live.creator": "크리에이터",
   "ui.slurp.live.badge": "LIVE",
-  "ui.slurp.live.playerHost": "내 라이브 방송"
+  "ui.slurp.live.playerHost": "내 라이브 방송",
+  "ui.slurp.live.goPrivate": "비공개 쇼 · {{price}} 코인",
+  "ui.slurp.live.extend": "10분 연장",
+  "ui.slurp.live.privateTimer": "비공개 · {{count}}초 남음",
+  "ui.slurp.live.inPrivate": "비공개 중 🔒",
+  "ui.slurp.live.viewMode": "보기 모드",
+  "ui.slurp.live.text": "텍스트",
+  "ui.slurp.live.pictures": "사진",
+  "ui.slurp.live.pictureAlt": "{{name}}의 사진"
 }

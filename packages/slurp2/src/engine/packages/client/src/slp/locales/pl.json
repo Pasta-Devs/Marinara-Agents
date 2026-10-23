@@ -3172,5 +3172,13 @@
   "ui.slurp.live.liveNow": "Teraz na żywo",
   "ui.slurp.live.creator": "Twórca",
   "ui.slurp.live.badge": "NA ŻYWO",
-  "ui.slurp.live.playerHost": "Twoja transmisja na żywo"
+  "ui.slurp.live.playerHost": "Twoja transmisja na żywo",
+  "ui.slurp.live.goPrivate": "Pokaz prywatny · {{price}} monet",
+  "ui.slurp.live.extend": "Przedłuż o 10 min",
+  "ui.slurp.live.privateTimer": "Prywatnie · pozostało {{count}} s",
+  "ui.slurp.live.inPrivate": "Trwa pokaz prywatny 🔒",
+  "ui.slurp.live.viewMode": "Tryb wyświetlania",
+  "ui.slurp.live.text": "Tekst",
+  "ui.slurp.live.pictures": "Zdjęcia",
+  "ui.slurp.live.pictureAlt": "Zdjęcie od {{name}}"
 }

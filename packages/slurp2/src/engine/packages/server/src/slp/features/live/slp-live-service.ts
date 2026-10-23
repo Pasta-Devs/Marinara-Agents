@@ -16,6 +16,7 @@ import {
   slurpLiveRecap,
   slurpLiveTipTopper,
   slurpLiveAudienceTipDue,
+  slurpLivePictureTriggers,
   type SlurpLiveShow,
 } from "../../modules/live/slp-live.js";
 import { logger } from "../../../lib/logger.js";
@@ -47,7 +48,11 @@ import {
 import { slurpMembersActiveAt } from "../../../../../shared/src/slp/slp-population.js";
 import { slurpLivePlayerCrowdPrompt } from "../../modules/live/slp-live-prompt.js";
 import { slurpLiveMenuItems } from "../../modules/live/slp-live-menu.js";
-import { slpSpiceFromStrategyText } from "../../../../../shared/src/slp/slp-spice.js";
+import { resolveSlurpCreatorSpice } from "../../data/creators/slp-spice-storage.js";
+import { slurpSpiceBriefLines } from "../../modules/creators/slp-spice.js";
+import { slurpLivePictureBrief, slurpLivePrivatePrompt } from "../../modules/live/slp-live-private-prompt.js";
+import { generateSlurpCommissionImage } from "../messages/slp-messages-contract.js";
+import { newId } from "../../../utils/id-generator.js";
 import { slurpTrendScore } from "../../modules/discovery/slp-trends.js";
 import { readSlurpTrendPosts } from "../../data/discovery/slp-trends-signals.js";
 
@@ -73,15 +78,19 @@ export async function advanceSlurpLive(db: DB, at = new Date()): Promise<void> {
         Math.max(0, ...posts.map(slurpTrendScore)),
         settings,
       );
-      const spice = slpSpiceFromStrategyText(creator.settings?.strategyText ?? "");
-      const level = Math.max(0, ["flirty", "suggestive", "explicit"].indexOf(spice.level ?? "") + 1);
+      const spice = await liveSpice(db, creator);
       await storage.plan(
         creator.id,
         slot.startsAt,
         slot.endsAt,
         slot.announcedFor,
         Math.max(10, Number(creator.settings?.messaging?.ppvPrice ?? 25)),
-        slurpLiveMenuItems(level, spice.turnOns, Number(creator.settings?.messaging?.ppvPrice ?? 25)),
+        slurpLiveMenuItems(
+          spice.level,
+          spice.turnOns,
+          Number(creator.settings?.messaging?.ppvPrice ?? 25),
+          spice.hardNoes,
+        ),
       );
     }
     const upcoming = (await storage.upcoming(at)).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
@@ -130,10 +139,12 @@ export async function advanceSlurpLive(db: DB, at = new Date()): Promise<void> {
 
 async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date): Promise<void> {
   const storage = createSlurpLiveStorage(db);
+  const privateActive = !!show.private && Date.parse(show.private.until) > at.getTime();
   if (show.endedAt || at.getTime() >= Date.parse(show.endsAt)) {
     if (!show.endedAt) {
       if (show.hostKind === "player") await endSlurpPlayerLiveShow(db, show.id, at);
       else {
+        if (privateActive) return;
         const recap = await createSlurpStorage(db).createPost({
           authorAccountId: show.hostId,
           content: slurpLiveRecap(show),
@@ -147,8 +158,9 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
     }
     return;
   }
+  if (privateActive) return;
   const settingsFans = settings.fanTypes ?? [];
-  {
+  if (!privateActive) {
     const population = createSlurpPopulationStorage(db);
     const all = await population.listTiesForCreator(show.hostId);
     const currentFans = (await population.listAll()).filter((member) => slurpMembersActiveAt(member, at));
@@ -275,14 +287,18 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
   }
   const current = await storage.get(show.id);
   if (!current || !slurpLiveWatched(current.lastSeenAt, at)) return;
+  if (show.hostKind === "creator" && current.pictureViewerId && slurpLiveWatched(current.pictureSeenAt, at))
+    await makeLivePictures(db, current, current.pictureViewerId, at);
   const index = slurpLiveSegmentIndex(show, at);
   const lease = await storage.claimSegment(show.id, index, at);
   if (!lease) return;
   const creator = await createSlurpStorage(db).getNoodlerAccountById(show.hostId);
+  const spice = creator ? await liveSpice(db, creator) : null;
   const minutes = Math.round((at.getTime() - Date.parse(show.startedAt)) / 60_000);
   const prompt =
     show.hostKind === "player"
       ? slurpLivePlayerCrowdPrompt({
+          hostName: creator?.displayName ?? "Host",
           narration: current.script
             .filter((line) => line.kind === "narration" && line.at >= index * 240_000)
             .map((line) => line.text)
@@ -292,23 +308,43 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
             voice: member.archetype,
           })),
         })
-      : slurpLiveSegmentPrompt({
-          hostName: creator?.displayName ?? "Host",
-          segmentIndex: index,
-          minutes,
-          level: Number(creator?.settings?.spiceLevel ?? 0),
-          queuedMenuLabels: current.queue
-            .filter((order) => !order.served && order.status !== "pending")
-            .map((order) => order.label),
-          recentPlayerChatLines: current.events
-            .filter((event) => event.kind === "chat")
-            .slice(-5)
-            .map((event) => event.text),
-          recentTips: current.events
-            .filter((event) => event.kind === "tip")
-            .slice(-5)
-            .map((event) => `${event.name}: ${event.amount}`),
-        });
+      : privateActive && current.private
+        ? slurpLivePrivatePrompt({
+            hostName: creator?.displayName ?? "Host",
+            viewerName:
+              current.events.filter((event) => event.personaId === current.private?.personaId).at(-1)?.name ?? "Viewer",
+            minutes,
+            level: spice?.level ?? 0,
+            spiceLines: spice?.spiceLines ?? [],
+            chat: current.events
+              .filter((event) => event.personaId === current.private?.personaId && event.kind === "chat")
+              .slice(-5)
+              .map((event) => `${event.name}: ${event.text}`)
+              .join("\n"),
+          })
+        : slurpLiveSegmentPrompt({
+            hostName: creator?.displayName ?? "Host",
+            segmentIndex: index,
+            minutes,
+            level: spice?.level ?? 0,
+            spiceLines: spice?.spiceLines,
+            fans: (await createSlurpPopulationStorage(db).listNamedCast(show.hostId, 8)).map(
+              ({ member }) => member.displayName,
+            ),
+            totalSegments: Math.ceil((Date.parse(show.endsAt) - Date.parse(show.startedAt)) / 240_000),
+            goalReached: show.raised >= show.goal,
+            queuedMenuLabels: current.queue
+              .filter((order) => !order.served && order.status !== "pending")
+              .map((order) => order.label),
+            recentPlayerChatLines: current.events
+              .filter((event) => event.kind === "chat")
+              .slice(-5)
+              .map((event) => event.text),
+            recentTips: current.events
+              .filter((event) => event.kind === "tip")
+              .slice(-5)
+              .map((event) => `${event.name}: ${event.amount}`),
+          });
   const lines = creator
     ? await runLiveModel(db, settings, creator.displayName, "main", minutes, prompt, "segment")
     : [];
@@ -316,7 +352,11 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
     show.id,
     index,
     lease,
-    lines.map((line) => ({ ...line, at: index * 240_000 + Math.max(0, Math.min(239_999, line.at)) })),
+    lines.map((line) => ({
+      ...line,
+      personaId: privateActive ? current.private?.personaId : undefined,
+      at: index * 240_000 + Math.max(0, Math.min(239_999, line.at)),
+    })),
   );
 }
 
@@ -334,6 +374,7 @@ export async function getSlurpLiveMissed(db: DB, showId: string, at = new Date()
     "main",
     0,
     slurpLiveMissedPrompt({
+      hostName: creator?.displayName ?? "Host",
       elapsedMinutes: Math.round((at.getTime() - Date.parse(show.startedAt)) / 60_000),
       raised: show.raised,
       goal: show.goal,
@@ -367,19 +408,39 @@ export async function replyToSlurpLiveChat(db: DB, showId: string, at = new Date
       return;
     }
     const settings = await createSlurpStorage(db).getSettings();
+    const spice = await liveSpice(db, creator);
+    const privateViewer =
+      current.private && Date.parse(current.private.until) > at.getTime() ? current.private.personaId : null;
     const minutes = Math.max(0, Math.round((at.getTime() - Date.parse(show.startedAt)) / 60_000));
     const since = previousReplyAt ? Date.parse(previousReplyAt) - Date.parse(show.startedAt) : -1;
     const lines = current.events
-      .filter((event) => event.kind === "chat" && event.name !== creator.displayName && event.at > since)
+      .filter(
+        (event) =>
+          event.kind === "chat" &&
+          event.name !== creator.displayName &&
+          event.at > since &&
+          (!privateViewer || event.personaId === privateViewer),
+      )
       .map((event) => `${event.name}: ${event.text}`)
       .join("\n");
-    const prompt = slurpLiveReplyPrompt({
-      creatorName: creator.displayName,
-      phase: slurpLivePhase(current, at),
-      spiceLevel: Number(creator.settings?.spiceLevel ?? 0),
-      minutes,
-      chat: lines,
-    });
+    const prompt = privateViewer
+      ? slurpLivePrivatePrompt({
+          hostName: creator.displayName,
+          viewerName: current.events.findLast((event) => event.personaId === privateViewer)?.name ?? "Viewer",
+          minutes,
+          level: spice.level,
+          spiceLines: spice.spiceLines,
+          chat: lines,
+        })
+      : slurpLiveReplyPrompt({
+          creatorName: creator.displayName,
+          phase: slurpLivePhase(current, at),
+          spiceLevel: spice.level,
+          level: spice.level,
+          spiceLines: spice.spiceLines,
+          minutes,
+          chat: lines,
+        });
     const answer = await runLiveModel(
       db,
       settings,
@@ -396,6 +457,7 @@ export async function replyToSlurpLiveChat(db: DB, showId: string, at = new Date
         kind: "chat",
         name: creator.displayName,
         text,
+        personaId: privateViewer ?? undefined,
       });
     else await storage.releaseReply(show.id, at);
   } catch (error) {
@@ -473,7 +535,8 @@ async function runLiveModel(
           stream: false,
         },
       );
-      const parsed = parseGameJsonish(requireModelAnswer(response.content ?? "", `live ${kind}`));
+      const raw = requireModelAnswer(response.content ?? "", `live ${kind}`);
+      const parsed = kind === "reply" ? raw : parseGameJsonish(raw);
       if (kind === "missed") {
         const rows = Array.isArray(parsed) ? parsed : typeof parsed === "string" ? parsed.split("\n") : [];
         return rows
@@ -481,8 +544,15 @@ async function runLiveModel(
           .slice(0, 3)
           .map((text, index) => ({ at: index, kind: "reaction" as const, text: text.slice(0, 300) }));
       }
-      if (kind === "reply")
-        return typeof parsed === "string" ? [{ at: Date.now(), kind: "reaction", text: parsed }] : [];
+      if (kind === "reply") {
+        const text =
+          typeof parsed === "string"
+            ? parsed
+            : typeof parsed === "object" && parsed !== null && "lines" in parsed
+              ? (slurpLiveParseLines(parsed)[0]?.text ?? "")
+              : "";
+        return text ? [{ at: Date.now(), kind: "reaction", text: text.slice(0, 1000) }] : [];
+      }
       return slurpLiveParseLines(parsed);
     } finally {
       admission.release();
@@ -513,5 +583,56 @@ export function parseSlurpLiveScript(value: string) {
     return slurpLiveParseLines(parseGameJsonish(value));
   } catch {
     return [];
+  }
+}
+
+async function liveSpice(db: DB, creator: { id: string; settings?: { strategy?: unknown } | null }) {
+  const spice = await resolveSlurpCreatorSpice(db, {
+    id: creator.id,
+    settings: { strategy: creator.settings?.strategy },
+  });
+  return {
+    ...spice,
+    level: Math.max(0, ["none", "suggestive", "nudity", "explicit"].indexOf(spice.level)),
+    spiceLines: slurpSpiceBriefLines({
+      use: "dm",
+      level: spice.level,
+      turnOns: spice.turnOns,
+      hardNoes: spice.hardNoes,
+      never: spice.spice.never,
+      language: spice.spice.language,
+    }),
+  };
+}
+
+async function makeLivePictures(db: DB, show: SlurpLiveShow, personaId: string, at: Date) {
+  const storage = createSlurpLiveStorage(db);
+  const creator = await createSlurpStorage(db).getNoodlerAccountById(show.hostId);
+  if (!creator || creator.settings?.scheduler?.autoPosting?.imagesEnabled !== true) return;
+  const spice = await liveSpice(db, creator);
+  for (const trigger of slurpLivePictureTriggers(show, personaId, at)) {
+    if (!(await storage.pictureClaim(show.id, personaId, trigger, at))) continue;
+    try {
+      const image = await generateSlurpCommissionImage(db, {
+        creatorAccountId: show.hostId,
+        brief: slurpLivePictureBrief({
+          hostName: creator.displayName,
+          trigger,
+          level: spice.level,
+          spiceLines: spice.spiceLines,
+        }),
+      });
+      if (image === "unavailable") {
+        await storage.pictureRelease(show.id, personaId, trigger);
+        continue;
+      }
+      const mediaId = newId();
+      if (await storage.pictureComplete(show.id, personaId, trigger, mediaId, image.mediaPath, new Date()))
+        image.promote();
+      else image.compensate();
+    } catch (error) {
+      await storage.pictureRelease(show.id, personaId, trigger);
+      logger.warn(error, "[slurp-live] Picture generation failed");
+    }
   }
 }

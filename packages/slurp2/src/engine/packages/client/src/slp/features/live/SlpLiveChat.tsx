@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { SlpLiveShow } from "./slp-live-contract";
 
-type ChatItem = { at: number; kind: "host" | "crowd" | "tip" | "menu"; name: string; text: string };
+type ChatItem = {
+  at: number;
+  kind: "host" | "crowd" | "tip" | "menu" | "picture";
+  name: string;
+  text: string;
+  mediaId?: string;
+};
 const nameColors = [
   "text-[var(--slurp-violet)]",
   "text-[var(--slurp-success)]",
@@ -17,11 +23,13 @@ export function SlpLiveChat({
   show,
   creatorName,
   elapsed,
+  personaId,
   t,
 }: {
   show: SlpLiveShow;
   creatorName: string;
   elapsed: number;
+  personaId: string | null;
   t: (key: string, values?: Record<string, unknown>) => string;
 }) {
   const scroll = useRef<HTMLDivElement>(null);
@@ -35,9 +43,10 @@ export function SlpLiveChat({
       .filter((line) => line.at <= elapsed)
       .map((line): ChatItem => ({
         at: line.at,
-        kind: line.kind === "narration" ? "host" : "crowd",
+        kind: line.kind === "picture" ? "picture" : line.kind === "narration" ? "host" : "crowd",
         name: line.name ?? creatorName,
         text: line.text,
+        mediaId: line.mediaId,
       })),
     ...show.events
       .filter((event) => event.at <= elapsed)
@@ -110,7 +119,15 @@ export function SlpLiveChat({
         </div>
       )}
       {lines.map((line, index) =>
-        line.kind === "host" ? (
+        line.kind === "picture" && line.mediaId && personaId ? (
+          <img
+            key={`${line.at}-${index}`}
+            src={`/api/slurp2/live/${encodeURIComponent(show.id)}/picture/${encodeURIComponent(line.mediaId)}?personaId=${encodeURIComponent(personaId)}`}
+            alt={t("ui.slurp.live.pictureAlt", { name: creatorName })}
+            className="max-h-80 max-w-full rounded object-contain"
+            loading="lazy"
+          />
+        ) : line.kind === "host" ? (
           <article key={`${line.at}-${index}`} className="rounded-lg bg-[var(--card)] p-3 text-sm">
             <strong className="mb-1 block text-xs">{creatorName}</strong>
             {line.text}

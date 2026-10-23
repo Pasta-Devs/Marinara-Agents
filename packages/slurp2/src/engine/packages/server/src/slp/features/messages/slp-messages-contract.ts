@@ -7,5 +7,6 @@ export { settleSlurpStuckMessages } from "./slp-stuck-messages-service.js";
 export { advanceSlurpSupportDesk } from "./desk/slp-desk-tick-operation.js";
 // Drama: a Creator who is with the player texts like a partner.
 export { textSlurpPartners } from "./slp-partner-texts-service.js";
+export { generateSlurpCommissionImage } from "./commissions/slp-commission-image-operation.js";
 // Roleplay scenes (docs/SCENES.md): a Creator in a locking scene is busy everywhere on Slurp.
 export { slpCreatorsInScene, slurpCreatorInScene } from "./scenes/slp-roleplay-scene-lock.js";

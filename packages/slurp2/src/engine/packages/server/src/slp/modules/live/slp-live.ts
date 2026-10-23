@@ -1,7 +1,7 @@
 import { slurpFanTypeWeeklyBudget, type SlurpFanType } from "../../../../../shared/src/slp/slp-fan-types.js";
 
 export type SlurpLivePhase = "warmup" | "main" | "finish";
-export type SlurpLiveLineKind = "narration" | "crowd" | "reaction";
+export type SlurpLiveLineKind = "narration" | "crowd" | "reaction" | "picture";
 export type SlurpLiveEventKind = "tip" | "chat";
 export type SlurpLiveMenuItem = { id: string; label: string; price: number; picture: boolean };
 export type SlurpLiveOrder = {
@@ -9,13 +9,21 @@ export type SlurpLiveOrder = {
   label: string;
   name: string;
   viewerId?: string;
+  personaId?: string;
   at: number;
   served: boolean;
   requestId: string;
   status?: "pending" | "paid";
 };
 export type SlurpLiveSegment = { index: number; lease: string | null; claimedAt: string | null };
-export type SlurpLiveLine = { at: number; kind: SlurpLiveLineKind; name?: string; text: string };
+export type SlurpLiveLine = {
+  at: number;
+  kind: SlurpLiveLineKind;
+  name?: string;
+  text: string;
+  personaId?: string;
+  mediaId?: string;
+};
 export type SlurpLiveEvent = {
   at: number;
   kind: SlurpLiveEventKind;
@@ -23,6 +31,23 @@ export type SlurpLiveEvent = {
   amount?: number;
   text: string;
   requestId?: string;
+  personaId?: string;
+};
+export type SlurpLivePrivate = { personaId: string; until: string; block: number };
+export type SlurpLivePrivateClaim = {
+  requestId: string;
+  personaId: string;
+  showId?: string;
+  status: "pending" | "paid";
+  block: number;
+  at: string;
+};
+export type SlurpLivePicture = {
+  personaId: string;
+  trigger: string;
+  status: "pending" | "ready";
+  mediaId?: string;
+  mediaPath?: string;
 };
 export type SlurpLiveShow = {
   id: string;
@@ -49,7 +74,75 @@ export type SlurpLiveShow = {
   announcementPostId: string | null;
   startedNoticeAt: string | null;
   mode: "text" | "pictures";
+  private: SlurpLivePrivate | null;
+  privateClaims: SlurpLivePrivateClaim[];
+  pictures: SlurpLivePicture[];
+  pictureViewerId: string | null;
+  pictureSeenAt: string | null;
+  pictureModeBusy?: boolean;
+  privatePrice?: number;
+  picturesAllowed?: boolean;
 };
+
+export function slurpLivePrivatePrice(ppvPrice: number): number {
+  return Math.max(1, Math.round((Number.isFinite(ppvPrice) ? ppvPrice : 1) * 3));
+}
+
+export function slurpLivePrivateUntil(current: SlurpLivePrivate | null, personaId: string, at: Date): string {
+  const base =
+    current?.personaId === personaId && Date.parse(current.until) > at.getTime()
+      ? Date.parse(current.until)
+      : at.getTime();
+  return new Date(base + 10 * 60_000).toISOString();
+}
+
+export function slurpLivePictureTriggers(show: SlurpLiveShow, personaId: string, at: Date): string[] {
+  if (show.mode !== "pictures" || show.pictureViewerId !== personaId || !slurpLiveWatched(show.pictureSeenAt, at))
+    return [];
+  const triggers: string[] = [];
+  if (show.goalHitAt && Date.parse(show.goalHitAt) <= at.getTime()) triggers.push("goal");
+  if (
+    show.segment?.index ===
+      Math.ceil((Date.parse(show.endsAt) - Date.parse(show.startedAt)) / SLURP_LIVE_SEGMENT_MS) - 1 &&
+    !show.segment.lease &&
+    show.script.some((line) => line.at >= show.segment!.index * SLURP_LIVE_SEGMENT_MS && line.kind === "narration")
+  )
+    triggers.push("finale");
+  for (const order of show.queue.filter(
+    (item) => item.served && show.menu.some((entry) => entry.id === item.itemId && entry.picture),
+  ))
+    triggers.push(`menu:${order.requestId}`);
+  if (show.private?.personaId === personaId && Date.parse(show.private.until) > at.getTime())
+    triggers.push(`private:${show.private.block}`);
+  const used = show.pictures.filter((picture) => picture.personaId === personaId);
+  return triggers
+    .filter((trigger) => !used.some((picture) => picture.trigger === trigger))
+    .slice(0, Math.max(0, 6 - used.length));
+}
+
+export function slurpLiveForViewer(show: SlurpLiveShow, personaId: string | null, at: Date): SlurpLiveShow {
+  const isPrivate = !!show.private && Date.parse(show.private.until) > at.getTime();
+  const privateViewer = isPrivate && show.private?.personaId === personaId;
+  return {
+    ...show,
+    private: isPrivate
+      ? {
+          personaId: privateViewer ? show.private!.personaId : "",
+          until: show.private!.until,
+          block: show.private!.block,
+        }
+      : null,
+    privateClaims: [],
+    pictures: [],
+    pictureViewerId: show.pictureViewerId === personaId ? show.pictureViewerId : null,
+    pictureModeBusy: !!show.pictureViewerId && show.pictureViewerId !== personaId,
+    script: show.script.filter(
+      (line) => (!line.personaId || line.personaId === personaId) && (!isPrivate || privateViewer || !line.personaId),
+    ),
+    events: show.events.filter((event) => !event.personaId || event.personaId === personaId),
+    queue: show.queue.filter((order) => !order.personaId || order.personaId === personaId),
+  };
+}
 
 export const SLURP_LIVE_EVENT_LIMIT = 200;
 export const SLURP_LIVE_SEGMENT_MS = 4 * 60_000;
@@ -219,8 +312,8 @@ export function slurpLiveClaimTipEvent(
   };
 }
 
-export function slurpLiveReplyClaimAllowed(lastReplyAt: string | null, at: Date): boolean {
-  return !lastReplyAt || Date.parse(lastReplyAt) <= at.getTime() - 60_000;
+export function slurpLiveReplyClaimAllowed(lastReplyAt: string | null, at: Date, privateShow = false): boolean {
+  return !lastReplyAt || Date.parse(lastReplyAt) <= at.getTime() - (privateShow ? 20_000 : 60_000);
 }
 
 export function slurpLiveCrowdClaimAllowed(lastCrowdAt: string | null, at: Date): boolean {
@@ -276,13 +369,14 @@ export function slurpLiveParseLines(value: unknown): SlurpLiveLine[] {
     if (!line || typeof line !== "object") return [];
     const item = line as Record<string, unknown>;
     const kind = item.kind;
-    if (kind !== "narration" && kind !== "crowd" && kind !== "reaction") return [];
+    if (kind !== "narration" && kind !== "crowd" && kind !== "reaction" && kind !== "picture") return [];
     if (typeof item.text !== "string" || typeof item.at !== "number" || !Number.isFinite(item.at)) return [];
     return [
       {
         at: Math.max(0, item.at),
         kind,
         ...(typeof item.name === "string" ? { name: item.name } : {}),
+        ...(typeof item.mediaId === "string" ? { mediaId: item.mediaId } : {}),
         text: item.text.slice(0, 1000),
       },
     ];

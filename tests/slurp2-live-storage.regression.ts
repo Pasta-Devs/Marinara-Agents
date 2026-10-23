@@ -112,6 +112,22 @@ async function main() {
       menu,
     });
     assert.ok(creatorB && creatorC);
+    assert.equal(await live.privateClaim(creatorB.id, "viewer-a", "private-1", at), "new");
+    assert.equal(await live.privateClaim(creatorB.id, "viewer-b", "private-2", at), "busy");
+    assert.equal(await live.privateClaim(creatorB.id, "viewer-a", "private-1", at), "resume");
+    const firstPrivate = await live.privateConfirm(creatorB.id, "private-1", at);
+    assert.equal(firstPrivate?.private?.until, "2026-10-23T12:10:00.000Z");
+    assert.equal(await live.privateClaim(creatorB.id, "viewer-a", "private-1", at), "duplicate");
+    assert.equal(await live.privateClaim(creatorB.id, "viewer-b", "private-3", at), "busy");
+    assert.equal(await live.privateClaim(creatorB.id, "viewer-a", "private-4", at), "new");
+    const extension = await live.privateConfirm(creatorB.id, "private-4", new Date(at.getTime() + 60_000));
+    assert.equal(extension?.private?.until, "2026-10-23T12:20:00.000Z");
+    assert.equal(extension?.script.filter((line: any) => line.text === "she went private 🔒").length, 1);
+    assert.equal(await live.setMode(creatorB.id, "viewer-a", "pictures", at), "pictures");
+    assert.equal(await live.setMode(creatorB.id, "viewer-b", "pictures", at), null);
+    assert.equal(await live.pictureClaim(creatorB.id, "viewer-a", "private:2", at), true);
+    assert.equal(await live.pictureClaim(creatorB.id, "viewer-a", "private:2", at), false);
+    assert.equal(await live.pictureClaim(creatorB.id, "viewer-b", "private:2", at), false);
     assert.equal(await live.startPlanned(planned.id, future), null);
     const deferred = await live.deferPlanned(planned.id, future);
     assert.equal(deferred.startedAt, "2026-10-23T13:15:00.000Z");
