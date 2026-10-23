@@ -3924,5 +3924,20 @@
   "ui.slurp.live.crowd": "시청자",
   "ui.slurp.live.chatLabel": "라이브 채팅 메시지",
   "ui.slurp.live.firstTipper": "첫 번째 팁 보내기 · {{amount}}",
-  "ui.slurp.live.watch": "라이브 보기"
+  "ui.slurp.live.watch": "라이브 보기",
+  "ui.slurp.live.missed": "놓친 내용",
+  "ui.slurp.live.newMessages": "새 메시지 {{count}}개",
+  "ui.slurp.live.menuEvent": "{{name}}님이 {{item}} 구매",
+  "ui.slurp.live.menuTitle": "팁 메뉴",
+  "ui.slurp.live.close": "닫기",
+  "ui.slurp.live.buy": "구매",
+  "ui.slurp.live.openMenu": "팁 메뉴 열기",
+  "ui.slurp.live.nextUp": "다음 순서",
+  "ui.slurp.live.customTip": "직접 입력할 팁 금액",
+  "ui.slurp.live.tipCustom": "팁 보내기",
+  "ui.slurp.live.viewers": "{{count}}명 시청 중",
+  "ui.slurp.live.liveNow": "현재 라이브",
+  "ui.slurp.live.creator": "크리에이터",
+  "ui.slurp.live.badge": "LIVE",
+  "ui.slurp.live.playerHost": "내 라이브 방송"
 }

@@ -798,6 +798,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.1",
+          "date": "2026-10-23",
+          "notes": "- Live rooms show timed chat, missed-show summaries, viewer counts, tip goals, menu orders, and queue progress. Viewers can send chat, buy menu items, or send a custom tip; player hosts can narrate and end a show.\n- Home shows an active live room and opens it. Room polling includes the viewer persona so the server counts viewers.",
+          "highlight": false
+        },
+        {
           "version": "0.4.0",
           "date": "2026-10-23",
           "notes": "One release for everything built since 0.3.53 (unreleased 0.3.54 to 0.3.65 folded in):\n\n- Storylines: arcs, dramas and situations run on one storyline engine; Story Packs import v2 files, one JSON `fit`, one Packs list with a gate and Remove, topic switches `<pack>:<topic>`.\n- Packs (off by default): Family pack and five kink packs (Lingerie, Cosplay, Feet, Dom/sub, Exhibition).\n- Intimacy ladder: rapport tiers open doors in DMs (`slurpRapportDoors`), the highest tier is kept.\n- Paid sexting sessions (`SlpSextingBar`); Stir as a slide-up sheet (`SlpStirDeck`); Stories in Slurp's own layer.\n- Fixes: DM prompts know the player's latest public posts, @tagged Creators join the picture cast, tag-list looks go over whole, picture prompt rewrite floor 8192, wardrobe tag commas, neutral wording; Images > Advanced \"Keep original picture files\".",
@@ -909,12 +915,6 @@
           "version": "0.3.36",
           "date": "2026-10-13",
           "notes": "- Fixed: a Creator's bio and stage voice now steer what she posts about. The post planner reads them beside the character card (hidden identities stay hidden), so a hobby named only in the bio, such as cosplay, becomes post subjects. The post prompt also says that interests named in the bio and stage voice count. (#1358)\n- Changed: the no-repeat rule no longer blocks a theme that the bio, stage voice, or card names as what the Creator does. A new setting, framing, and look each time is still required, and the same outfit or wording is still a repeat. (#1358)",
-          "highlight": false
-        },
-        {
-          "version": "0.3.35",
-          "date": "2026-10-13",
-          "notes": "- Added: \"The image model knows this character\" can be chosen while adding a Creator, in Quick setup, in the customise path, in the role-play sign-up and in the manual Create flow. It starts on, like before, and is saved with the new Creator. You can still change it later in the Creator's settings. (#1353)",
           "highlight": false
         }
       ]

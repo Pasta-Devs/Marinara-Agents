@@ -6662,5 +6662,20 @@
   "ui.slurp.live.crowd": "Crowd",
   "ui.slurp.live.chatLabel": "Live chat message",
   "ui.slurp.live.firstTipper": "Be the first tipper · {{amount}}",
-  "ui.slurp.live.watch": "Watch live"
+  "ui.slurp.live.watch": "Watch live",
+  "ui.slurp.live.missed": "You missed",
+  "ui.slurp.live.newMessages": "{{count}} new messages",
+  "ui.slurp.live.menuEvent": "{{name}} bought {{item}}",
+  "ui.slurp.live.menuTitle": "Tip menu",
+  "ui.slurp.live.close": "Close",
+  "ui.slurp.live.buy": "Buy",
+  "ui.slurp.live.openMenu": "Open tip menu",
+  "ui.slurp.live.nextUp": "Next up",
+  "ui.slurp.live.customTip": "Custom tip amount",
+  "ui.slurp.live.tipCustom": "Tip",
+  "ui.slurp.live.viewers": "{{count}} watching",
+  "ui.slurp.live.liveNow": "Live now",
+  "ui.slurp.live.creator": "Creator",
+  "ui.slurp.live.badge": "LIVE",
+  "ui.slurp.live.playerHost": "Your live show"
 }

@@ -53,10 +53,7 @@ import { SlurpInlineSuggestedCreators } from "./SlpScreenSuggestedCreators";
 import { SlpHubDiscover } from "./SlpHubDiscover";
 import { useSlurpSettings, useTurnOnSlurpAutoPosting } from "../../features/settings/slp-settings-hooks";
 import { SlpExtrasOfferCard } from "../../features/settings/SlpExtrasOffer";
-
-// ---------------------------------------------------------------------------
-// Local types
-// ---------------------------------------------------------------------------
+import { SlpLiveNowRow } from "../../features/live/SlpLiveNowRow";
 
 // ---------------------------------------------------------------------------
 // ViewerHub
@@ -526,6 +523,7 @@ export function ViewerHub({
         isLoading={isLoading || (!scope && !isError)}
         isError={isError}
       />
+      <SlpLiveNowRow creators={scope?.creators} onOpen={postCardCtx.openLive} />
       {!isLoading && !isError && scope && (
         <div className="pb-2 pt-4 @min-[1024px]:bg-[var(--slurp-canvas)]">
           <div className="relative isolate overflow-hidden px-3 @min-[1024px]:px-5" data-slurp-home-masthead>
@@ -796,5 +794,4 @@ export function ViewerHub({
 }
 
 export { SlurpInlineSuggestedCreators } from "./SlpScreenSuggestedCreators";
-export { SlurpMomentShelfTile } from "./SlpScreenMoments";
-export { SlurpMomentsShelf, SlurpMomentViewer };
+export { SlurpMomentShelfTile, SlurpMomentsShelf, SlurpMomentViewer } from "./SlpScreenMoments";

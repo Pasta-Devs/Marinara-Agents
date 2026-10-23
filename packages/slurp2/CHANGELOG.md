@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 0.4.1 — 2026-10-23
+
+- Live rooms show timed chat, missed-show summaries, viewer counts, tip goals, menu orders, and queue progress. Viewers can send chat, buy menu items, or send a custom tip; player hosts can narrate and end a show.
+- Home shows an active live room and opens it. Room polling includes the viewer persona so the server counts viewers.
+
 ## 0.4.0 — 2026-10-23
 
 One release for everything built since 0.3.53 (unreleased 0.3.54 to 0.3.65 folded in):

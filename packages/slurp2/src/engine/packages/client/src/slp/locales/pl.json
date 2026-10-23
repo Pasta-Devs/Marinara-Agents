@@ -3146,5 +3146,20 @@
   "ui.slurp.live.crowd": "Widownia",
   "ui.slurp.live.chatLabel": "Wiadomość na czacie transmisji",
   "ui.slurp.live.firstTipper": "Bądź pierwszą osobą z napiwkiem · {{amount}}",
-  "ui.slurp.live.watch": "Oglądaj na żywo"
+  "ui.slurp.live.watch": "Oglądaj na żywo",
+  "ui.slurp.live.missed": "Co Cię ominęło",
+  "ui.slurp.live.newMessages": "Nowe wiadomości: {{count}}",
+  "ui.slurp.live.menuEvent": "{{name}} kupuje {{item}}",
+  "ui.slurp.live.menuTitle": "Menu napiwków",
+  "ui.slurp.live.close": "Zamknij",
+  "ui.slurp.live.buy": "Kup",
+  "ui.slurp.live.openMenu": "Otwórz menu napiwków",
+  "ui.slurp.live.nextUp": "Następne",
+  "ui.slurp.live.customTip": "Własna kwota napiwku",
+  "ui.slurp.live.tipCustom": "Przekaż napiwek",
+  "ui.slurp.live.viewers": "Ogląda: {{count}}",
+  "ui.slurp.live.liveNow": "Teraz na żywo",
+  "ui.slurp.live.creator": "Twórca",
+  "ui.slurp.live.badge": "NA ŻYWO",
+  "ui.slurp.live.playerHost": "Twoja transmisja na żywo"
 }

@@ -3110,5 +3110,20 @@
   "ui.slurp.live.crowd": "Publikum",
   "ui.slurp.live.chatLabel": "Nachricht im Live-Chat",
   "ui.slurp.live.firstTipper": "Sei der erste Tipper · {{amount}}",
-  "ui.slurp.live.watch": "Live ansehen"
+  "ui.slurp.live.watch": "Live ansehen",
+  "ui.slurp.live.missed": "Das hast du verpasst",
+  "ui.slurp.live.newMessages": "{{count}} neue Nachrichten",
+  "ui.slurp.live.menuEvent": "{{name}} kaufte {{item}}",
+  "ui.slurp.live.menuTitle": "Trinkgeld-Menü",
+  "ui.slurp.live.close": "Schließen",
+  "ui.slurp.live.buy": "Kaufen",
+  "ui.slurp.live.openMenu": "Trinkgeld-Menü öffnen",
+  "ui.slurp.live.nextUp": "Als Nächstes",
+  "ui.slurp.live.customTip": "Eigenes Trinkgeld",
+  "ui.slurp.live.tipCustom": "Trinkgeld geben",
+  "ui.slurp.live.viewers": "{{count}} sehen zu",
+  "ui.slurp.live.liveNow": "Jetzt live",
+  "ui.slurp.live.creator": "Creator",
+  "ui.slurp.live.badge": "LIVE",
+  "ui.slurp.live.playerHost": "Deine Live-Show"
 }

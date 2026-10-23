@@ -552,6 +552,8 @@ export function useSlurpHomeBaseState({ navigation, onNavigate: navigateRaw, onL
     // never means — so it opens the chat picker instead.
     sharePost: viewerPersonaId ? (post: SlpPostCardModel) => setSharingPost(post) : undefined,
     liveHostId: liveShow.data?.hostId ?? null,
+    openLive: (showId: string) =>
+      onNavigate({ mode: "creator", view: "live", showId, returnTo: { mode: "creator", view: "hub" } }),
   };
   const selectedProfile =
     navigation.mode === "creator" && navigation.view === "profile"

@@ -1,5 +1,15 @@
 export type SlpLiveLine = { at: number; kind: "narration" | "crowd" | "reaction"; name?: string; text: string };
 export type SlpLiveEvent = { at: number; kind: "tip" | "chat"; name: string; amount?: number; text: string };
+export type SlpLiveMenuItem = { id: string; label: string; price: number; picture: boolean };
+export type SlpLiveOrder = {
+  itemId: string;
+  label: string;
+  name: string;
+  at: number;
+  served: boolean;
+  requestId: string;
+  status?: "pending" | "paid";
+};
 export type SlpLiveShow = {
   id: string;
   hostKind: "creator" | "player";
@@ -14,5 +24,13 @@ export type SlpLiveShow = {
   events: SlpLiveEvent[];
   lastReplyAt: string | null;
   recapPostId: string | null;
+  menu: SlpLiveMenuItem[];
+  queue: SlpLiveOrder[];
+  segment: { index: number; lease: string | null; claimedAt: string | null } | null;
+  lastSeenAt: string | null;
+  missedSummary: string[] | null;
+  announcedFor: string | null;
+  mode: "text" | "pictures";
+  viewers?: number;
 };
 export type SlpLiveShowResponse = SlpLiveShow;
