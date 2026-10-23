@@ -6638,5 +6638,19 @@
   "ui.slurp.sexting.left": "{{count}} min left",
   "ui.slurp.sexting.over": "Session over. Leave a tip?",
   "ui.slurp.sexting.running": "Sexting session",
-  "ui.slurp.sexting.tip": "Send a tip"
+  "ui.slurp.sexting.tip": "Send a tip",
+  "ui.slurp.settings.overview.yours.live": "Live shows",
+  "ui.slurp.settings.overview.yours.liveOnStatus": "Creators can host live shows",
+  "ui.slurp.live.ended": "Show ended",
+  "ui.slurp.live.recap": "Open recap post",
+  "ui.slurp.live.back": "Back",
+  "ui.slurp.live.send": "Send",
+  "ui.slurp.live.chatPlaceholder": "Say something…",
+  "ui.slurp.live.tip": "Tip {{amount}}",
+  "ui.slurp.live.matchTop": "Match the top tipper · {{amount}}",
+  "ui.slurp.live.left": "{{count}} min left",
+  "ui.slurp.live.goal": "{{raised}} / {{goal}} coins",
+  "ui.slurp.live.unavailable": "Live show unavailable.",
+  "ui.slurp.live.loading": "Loading live show…",
+  "ui.slurp.live.tipEvent": "{{name}} tipped {{amount}} coins"
 }

@@ -3122,5 +3122,19 @@
   "ui.slurp.sexting.left": "Zostało {{count}} min",
   "ui.slurp.sexting.over": "Sesja skończona. Zostawisz napiwek?",
   "ui.slurp.sexting.running": "Sesja sextingu",
-  "ui.slurp.sexting.tip": "Wyślij napiwek"
+  "ui.slurp.sexting.tip": "Wyślij napiwek",
+  "ui.slurp.settings.overview.yours.live": "Transmisje na żywo",
+  "ui.slurp.settings.overview.yours.liveOnStatus": "Twórcy mogą prowadzić transmisje na żywo",
+  "ui.slurp.live.ended": "Transmisja zakończona",
+  "ui.slurp.live.recap": "Otwórz podsumowanie",
+  "ui.slurp.live.back": "Wstecz",
+  "ui.slurp.live.send": "Wyślij",
+  "ui.slurp.live.chatPlaceholder": "Napisz coś…",
+  "ui.slurp.live.tip": "Napiwek {{amount}}",
+  "ui.slurp.live.matchTop": "Wyrównaj najwyższy napiwek · {{amount}}",
+  "ui.slurp.live.left": "Pozostało {{count}} min",
+  "ui.slurp.live.goal": "{{raised}} / {{goal}} monet",
+  "ui.slurp.live.unavailable": "Transmisja jest niedostępna.",
+  "ui.slurp.live.loading": "Wczytywanie transmisji…",
+  "ui.slurp.live.tipEvent": "{{name}} przekazuje napiwek: {{amount}} monet"
 }

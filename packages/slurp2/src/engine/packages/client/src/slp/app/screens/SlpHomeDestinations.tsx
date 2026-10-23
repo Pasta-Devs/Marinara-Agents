@@ -12,6 +12,8 @@ import { ProfileInitial, SLP_PAGE_SCROLL_CLASS } from "../../base/chrome/SlpChro
 import { cn } from "../../../lib/utils";
 import { isSlurpDiscoveryProfileIncomplete } from "../../features/discovery/slp-discovery";
 import type { SlurpHomeHostView } from "./SlpHomeCreatorFlow";
+import { SlpLiveScreen } from "../../features/live/SlpLiveScreen";
+import { useSlpCurrentLiveShow } from "../../features/live/slp-live-hooks";
 
 /** The navigation destinations that are pages of their own: wallet, notifications, Stir, messages, profiles. */
 export function renderSlurpHomeDestinations({
@@ -36,7 +38,13 @@ export function renderSlurpHomeDestinations({
     shellPersonaAccount,
     sourcePickerLoading,
     viewerPersonaId,
+    accountsQuery,
   } = model;
+  const currentLive = useSlpCurrentLiveShow(navigation.mode === "creator" && navigation.view === "profile");
+  if (navigation.mode === "creator" && navigation.view === "live") {
+    const host = accountsQuery.data?.find((account) => account.id === (navigation.returnTo?.mode === "creator" && navigation.returnTo.view === "profile" ? navigation.returnTo.accountId : null));
+    return <SlpShell {...shellProps}><SlpLiveScreen showId={navigation.showId} personaId={viewerPersonaId} creatorName={host?.displayName ?? "Creator"} avatarUrl={host?.avatarUrl} onBack={() => navigation.returnTo ? onNavigate(navigation.returnTo) : exitToCreatorHub()} onOpenRecap={(postId) => onNavigate({ mode: "creator", view: "hub" })} /></SlpShell>;
+  }
   // These pages all read one persona's data; with none there is nothing to load, so they said
   // "Still connecting…" forever or offered a Try again that could not work (R1-139).
   if (
@@ -76,6 +84,7 @@ export function renderSlurpHomeDestinations({
           initialActivity
           onBack={exitToCreatorHub}
           onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
+          onOpenLive={(showId) => onNavigate({ mode: "creator", view: "live", showId })}
         />
       </SlpShell>
     );
@@ -103,6 +112,7 @@ export function renderSlurpHomeDestinations({
           onBack={navigation.returnTo ? () => onNavigate(navigation.returnTo!) : exitToCreatorHub}
           leaveOnExit={Boolean(navigation.returnTo)}
           onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
+          onOpenLive={(showId) => onNavigate({ mode: "creator", view: "live", showId })}
           onOpenDesk={() => onNavigate({ mode: "creator", view: "stir" })}
         />
       </SlpShell>

@@ -3086,5 +3086,19 @@
   "ui.slurp.sexting.left": "noch {{count}} Min.",
   "ui.slurp.sexting.over": "Session vorbei. Ein Trinkgeld geben?",
   "ui.slurp.sexting.running": "Sexting-Session",
-  "ui.slurp.sexting.tip": "Trinkgeld senden"
+  "ui.slurp.sexting.tip": "Trinkgeld senden",
+  "ui.slurp.settings.overview.yours.live": "Live-Shows",
+  "ui.slurp.settings.overview.yours.liveOnStatus": "Creator können Live-Shows starten",
+  "ui.slurp.live.ended": "Show beendet",
+  "ui.slurp.live.recap": "Rückblick öffnen",
+  "ui.slurp.live.back": "Zurück",
+  "ui.slurp.live.send": "Senden",
+  "ui.slurp.live.chatPlaceholder": "Schreib etwas …",
+  "ui.slurp.live.tip": "{{amount}} Trinkgeld",
+  "ui.slurp.live.matchTop": "Höchstes Trinkgeld ausgleichen · {{amount}}",
+  "ui.slurp.live.left": "Noch {{count}} Min.",
+  "ui.slurp.live.goal": "{{raised}} / {{goal}} Coins",
+  "ui.slurp.live.unavailable": "Live-Show nicht verfügbar.",
+  "ui.slurp.live.loading": "Live-Show wird geladen …",
+  "ui.slurp.live.tipEvent": "{{name}} gab {{amount}} Coins Trinkgeld"
 }

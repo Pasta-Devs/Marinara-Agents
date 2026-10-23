@@ -171,6 +171,7 @@ export const SLURP_SETTINGS_NOT_RESET: readonly (keyof SlurpSettings)[] = [
   "extStorylines",
   "extWorld",
   "extStir",
+  "extLive",
   "extSupportDesk",
   "extEngineLink",
   // Living world's own sub-switch, the same kind of choice.

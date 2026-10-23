@@ -18,6 +18,7 @@ export type SlurpSettings = {
   extStorylines: boolean;
   extWorld: boolean;
   extStir: boolean;
+  extLive: boolean;
   extSupportDesk: boolean;
   extEngineLink: boolean;
   inlineAdsEnabled: boolean;

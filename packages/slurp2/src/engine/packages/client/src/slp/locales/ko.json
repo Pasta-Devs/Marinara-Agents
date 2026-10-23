@@ -3900,5 +3900,19 @@
   "ui.slurp.sexting.left": "{{count}}분 남음",
   "ui.slurp.sexting.over": "세션이 끝났어요. 팁을 남길까요?",
   "ui.slurp.sexting.running": "섹스팅 세션",
-  "ui.slurp.sexting.tip": "팁 보내기"
+  "ui.slurp.sexting.tip": "팁 보내기",
+  "ui.slurp.settings.overview.yours.live": "라이브 방송",
+  "ui.slurp.settings.overview.yours.liveOnStatus": "크리에이터가 라이브 방송을 할 수 있어요",
+  "ui.slurp.live.ended": "방송이 끝났어요",
+  "ui.slurp.live.recap": "요약 게시물 열기",
+  "ui.slurp.live.back": "뒤로",
+  "ui.slurp.live.send": "보내기",
+  "ui.slurp.live.chatPlaceholder": "메시지를 입력하세요…",
+  "ui.slurp.live.tip": "{{amount}} 팁",
+  "ui.slurp.live.matchTop": "최고 팁과 맞추기 · {{amount}}",
+  "ui.slurp.live.left": "{{count}}분 남음",
+  "ui.slurp.live.goal": "{{raised}} / {{goal}} 코인",
+  "ui.slurp.live.unavailable": "라이브 방송을 찾을 수 없어요.",
+  "ui.slurp.live.loading": "라이브 방송을 불러오는 중…",
+  "ui.slurp.live.tipEvent": "{{name}}님이 {{amount}} 코인을 팁으로 보냈어요"
 }

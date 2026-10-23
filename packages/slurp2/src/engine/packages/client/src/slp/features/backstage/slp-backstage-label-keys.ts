@@ -10,6 +10,7 @@ export const SLP_BACKSTAGE_LABEL_KEYS: Partial<Record<keyof SlurpSettings, strin
   extStorylines: "ui.slurp.settings.overview.yours.storylines",
   extWorld: "ui.slurp.settings.overview.yours.world",
   extStir: "ui.slurp.settings.overview.yours.stir",
+  extLive: "ui.slurp.settings.overview.yours.live",
   extSupportDesk: "ui.slurp.settings.overview.yours.desk",
   inlineAdsEnabled: "ui.slurp.settings.inlinePromotions",
   inlineAdsFrequency: "ui.slurp.settings.ads.frequency",

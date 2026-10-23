@@ -14,6 +14,7 @@ import { StageProfileView } from "./SlpScreenProfile";
 import type { ReactNode } from "react";
 import type { SlpShellProps } from "../../modules/chrome/slp-shell.types";
 import type { useSlurpHomeState } from "../slp-home-actions";
+import { useSlpCurrentLiveShow } from "../../features/live/slp-live-hooks";
 
 export type SlurpHomeHostView = {
   model: ReturnType<typeof useSlurpHomeState>;
@@ -106,6 +107,7 @@ export function renderSlurpHomeCreatorFlow({
     viewerPersonaId,
     viewerQuery,
   } = model;
+  const liveShow = useSlpCurrentLiveShow(navigation.mode === "creator" && navigation.view === "profile");
   if (creationStep === "source") {
     return (
       <SlpShell {...shellProps}>
@@ -399,6 +401,7 @@ export function renderSlurpHomeCreatorFlow({
     ) : undefined;
     return (
       <SlpShell {...shellProps} contextualRail={profileRail ? "populated" : "spanning"} rightRail={profileRail}>
+        {liveShow.data?.hostId === selectedProfile.id && <button type="button" onClick={() => onNavigate({ mode: "creator", view: "live", showId: liveShow.data!.id, returnTo: navigation })} className="fixed right-4 top-20 z-20 rounded-full bg-red-600 px-3 py-2 text-xs font-bold text-white">LIVE · Watch</button>}
         <div className={cn("h-full min-h-0 overflow-y-auto", SLP_PAGE_SCROLL_CLASS)}>
           <StageProfileView
             key={`${selectedProfile.id}:${shellPersonaAccount?.id ?? "no-viewer"}`}

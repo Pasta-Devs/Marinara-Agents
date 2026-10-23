@@ -10,6 +10,7 @@ import {
   Headset,
   Image,
   Link2,
+  Radio,
   Megaphone,
   MessageCircle,
   Pause,
@@ -212,6 +213,14 @@ export function SlpBackstageOverviewPanel(page: SlpBackstagePageProps) {
       open: () =>
         slpExtensionOn(settings, "stir") ? onNavigate({ mode: "creator", view: "stir" }) : go("stir", "stir"),
       toggle: { on: slpExtensionOn(settings, "stir"), set: (on) => void update("extStir", on) },
+    },
+    {
+      id: "live",
+      title: tx("live", "Live shows"),
+      status: slpExtensionOn(settings, "live") ? tx("liveOnStatus", "Creators can host live shows") : onOff(false),
+      Icon: Radio,
+      open: () => go("basic", "basic"),
+      toggle: { on: slpExtensionOn(settings, "live"), set: (on) => void update("extLive", on) },
     },
     {
       id: "desk",
