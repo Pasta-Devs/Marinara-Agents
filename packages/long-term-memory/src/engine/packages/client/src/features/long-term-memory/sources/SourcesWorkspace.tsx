@@ -347,12 +347,13 @@ export default function SourcesWorkspace({
   } | null>(null);
   const [openSourceActionId, setOpenSourceActionId] = useState<string | null>(null);
   const sourceOperationTriggerRef = useRef<HTMLElement | null>(null);
-  const openSourceOperation = (next: { id: string; title: string; operation?: SourceOperation }) => {
-    // A click that does not focus its button (Safari) leaves the body active, which is no trigger.
-    sourceOperationTriggerRef.current =
-      document.activeElement instanceof HTMLElement && document.activeElement !== document.body
-        ? document.activeElement
-        : null;
+  // The trigger is the pressed button, not the focused element: a click that does not focus its button
+  // (Safari) leaves focus wherever it was, such as the search field.
+  const openSourceOperation = (
+    next: { id: string; title: string; operation?: SourceOperation },
+    trigger: HTMLElement,
+  ) => {
+    sourceOperationTriggerRef.current = trigger;
     setSourceOperation(next);
   };
   // The operation panel hides the workbench, including an inline Manage button, so Close returns
@@ -557,7 +558,12 @@ export default function SourcesWorkspace({
     return target ? [target] : [];
   });
   const currentDestinationScope = mergedDestinationScope(selectedDestinationTargets);
-  // A visible reason beside Import and Refresh while they wait for a destination.
+  // While Import and Refresh wait for a destination they stay focusable, so the reason beside them is read
+  // as their description; a click does nothing.
+  const destinationWait = (reasonId: string) =>
+    currentDestinationScope
+      ? {}
+      : ({ "aria-disabled": true, "aria-describedby": reasonId, className: "opacity-50" } as const);
   const importReason = (id: string) =>
     currentDestinationScope ? null : (
       <p
@@ -1335,7 +1341,7 @@ export default function SourcesWorkspace({
           })}
           onClick={(event) => {
             stopRowAction(event);
-            openSourceOperation({ id: noteId, title, operation: "copy" });
+            openSourceOperation({ id: noteId, title, operation: "copy" }, event.currentTarget);
           }}
           data-ltm-source-action="manage"
           data-ltm-source-note-id={noteId}
@@ -1369,7 +1375,7 @@ export default function SourcesWorkspace({
               onClick={(event) => {
                 stopRowAction(event);
                 setOpenSourceActionId(null);
-                openSourceOperation({ id: noteId, title, operation: "copy" });
+                openSourceOperation({ id: noteId, title, operation: "copy" }, event.currentTarget);
               }}
               data-ltm-source-action="manage"
             />
@@ -2008,11 +2014,12 @@ export default function SourcesWorkspace({
                       <div ref={lorebookBarRef} className={lorebookPrimaryActionsClass} data-ltm-source-primary-actions>
                         <Button
                           primary
-                          disabled={!currentDestinationScope || importDisabled || selectedBookImportIds.length === 0}
-                          aria-describedby={currentDestinationScope ? undefined : importReasonId}
-                          onClick={() =>
-                            void runImport(selectedBookImportIds, "import", undefined, lorebookImportSelectionKey)
-                          }
+                          disabled={importDisabled || selectedBookImportIds.length === 0}
+                          {...destinationWait(importReasonId)}
+                          onClick={() => {
+                            if (currentDestinationScope)
+                              void runImport(selectedBookImportIds, "import", undefined, lorebookImportSelectionKey);
+                          }}
                           data-ltm-lorebook-action="import-selected"
                         >
                           <Check aria-hidden="true" size="0.75rem" />{" "}
@@ -2021,11 +2028,12 @@ export default function SourcesWorkspace({
                           })}
                         </Button>
                         <Button
-                          disabled={!currentDestinationScope || importDisabled || selectedBookRefreshIds.length === 0}
-                          aria-describedby={currentDestinationScope ? undefined : importReasonId}
-                          onClick={() =>
-                            void runImport(selectedBookRefreshIds, "refresh", undefined, lorebookRefreshSelectionKey)
-                          }
+                          disabled={importDisabled || selectedBookRefreshIds.length === 0}
+                          {...destinationWait(importReasonId)}
+                          onClick={() => {
+                            if (currentDestinationScope)
+                              void runImport(selectedBookRefreshIds, "refresh", undefined, lorebookRefreshSelectionKey);
+                          }}
                           data-ltm-lorebook-action="refresh-selected"
                         >
                           <RefreshCw aria-hidden="true" size="0.75rem" />{" "}
@@ -2226,8 +2234,8 @@ export default function SourcesWorkspace({
                       onOpenMemory={onOpenMemory}
                       onOpenReview={onOpenReview}
                       onReextract={(id) => void reextract(id)}
-                      onManage={(id, title, operation) => {
-                        openSourceOperation({ id, title, operation });
+                      onManage={(id, title, operation, trigger) => {
+                        openSourceOperation({ id, title, operation }, trigger);
                         setWorkspacePane("workbench");
                       }}
                     />
@@ -2427,9 +2435,11 @@ export default function SourcesWorkspace({
                         {selectedIds.size ? (
                           <Button
                             primary
-                            disabled={!currentDestinationScope || importDisabled}
-                            aria-describedby={currentDestinationScope ? undefined : `${importReasonId}-list`}
-                            onClick={() => void runImport([...selectedIds])}
+                            disabled={importDisabled}
+                            {...destinationWait(`${importReasonId}-list`)}
+                            onClick={() => {
+                              if (currentDestinationScope) void runImport([...selectedIds]);
+                            }}
                             data-ltm-source-action="import-selected"
                           >
                             <Check aria-hidden="true" size="0.75rem" />
@@ -2438,9 +2448,11 @@ export default function SourcesWorkspace({
                         ) : null}
                         {selectedImportedIds.size ? (
                           <Button
-                            disabled={!currentDestinationScope || importDisabled}
-                            aria-describedby={currentDestinationScope ? undefined : `${importReasonId}-list`}
-                            onClick={() => void runImport([...selectedImportedIds], "refresh")}
+                            disabled={importDisabled}
+                            {...destinationWait(`${importReasonId}-list`)}
+                            onClick={() => {
+                              if (currentDestinationScope) void runImport([...selectedImportedIds], "refresh");
+                            }}
                             data-ltm-source-action="refresh-selected"
                           >
                             <RefreshCw aria-hidden="true" size="0.75rem" />
@@ -2612,9 +2624,11 @@ export default function SourcesWorkspace({
                         {selectedIds.size ? (
                           <Button
                             primary
-                            disabled={!currentDestinationScope || importDisabled}
-                            aria-describedby={currentDestinationScope ? undefined : importReasonId}
-                            onClick={() => void runImport([...selectedIds])}
+                            disabled={importDisabled}
+                            {...destinationWait(importReasonId)}
+                            onClick={() => {
+                              if (currentDestinationScope) void runImport([...selectedIds]);
+                            }}
                             data-ltm-source-action="import-selected"
                           >
                             <FileInput aria-hidden="true" size="0.75rem" />
@@ -2624,9 +2638,11 @@ export default function SourcesWorkspace({
                           </Button>
                         ) : selectedImportedIds.size ? (
                           <Button
-                            disabled={!currentDestinationScope || importDisabled}
-                            aria-describedby={currentDestinationScope ? undefined : importReasonId}
-                            onClick={() => void runImport([...selectedImportedIds], "refresh")}
+                            disabled={importDisabled}
+                            {...destinationWait(importReasonId)}
+                            onClick={() => {
+                              if (currentDestinationScope) void runImport([...selectedImportedIds], "refresh");
+                            }}
                             data-ltm-source-action="refresh-selected"
                           >
                             <RefreshCw aria-hidden="true" size="0.75rem" />
@@ -2637,9 +2653,11 @@ export default function SourcesWorkspace({
                         ) : focusedFlatRow.status === "pending" || retryableIdSet.has(focusedFlatRow.sourceId) ? (
                           <Button
                             primary
-                            disabled={!currentDestinationScope || importDisabled}
-                            aria-describedby={currentDestinationScope ? undefined : importReasonId}
-                            onClick={() => void runImport([focusedFlatRow.sourceId])}
+                            disabled={importDisabled}
+                            {...destinationWait(importReasonId)}
+                            onClick={() => {
+                              if (currentDestinationScope) void runImport([focusedFlatRow.sourceId]);
+                            }}
                             data-ltm-source-action="import"
                           >
                             <FileInput aria-hidden="true" size="0.75rem" />
@@ -2650,9 +2668,11 @@ export default function SourcesWorkspace({
                         ) : (
                           <>
                             <Button
-                              disabled={!currentDestinationScope || importing}
-                              aria-describedby={currentDestinationScope ? undefined : importReasonId}
-                              onClick={() => void runImport([focusedFlatRow.sourceId], "refresh")}
+                              disabled={importing}
+                              {...destinationWait(importReasonId)}
+                              onClick={() => {
+                                if (currentDestinationScope) void runImport([focusedFlatRow.sourceId], "refresh");
+                              }}
                               data-ltm-source-action="refresh"
                             >
                               <RefreshCw aria-hidden="true" size="0.75rem" />
@@ -2716,8 +2736,8 @@ export default function SourcesWorkspace({
                       onOpenMemory={onOpenMemory}
                       onOpenReview={onOpenReview}
                       onReextract={(id) => void reextract(id)}
-                      onManage={(id, title, operation) => {
-                        openSourceOperation({ id, title, operation });
+                      onManage={(id, title, operation, trigger) => {
+                        openSourceOperation({ id, title, operation }, trigger);
                         setWorkspacePane("workbench");
                       }}
                     />

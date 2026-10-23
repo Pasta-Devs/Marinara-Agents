@@ -246,11 +246,14 @@ export function DestinationScopePanel({
           onToggle={toggleRail}
         />
       </details>
-      {!selectedTargets.length ? (
-        <span role="status" className="block shrink-0 text-xs">
-          {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
-        </span>
-      ) : null}
+      {/* Always mounted, so emptying the selection is read as a change; empty, it takes no space. */}
+      <span
+        role="status"
+        className={selectedTargets.length ? "sr-only" : "block shrink-0 text-xs"}
+        data-ltm-destination-hint
+      >
+        {selectedTargets.length ? null : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
+      </span>
       <p className="shrink-0 text-xs text-[var(--muted-foreground)]" data-ltm-import-mode-summary>
         {availabilityModes.length > 1
           ? `${localizeUi("ui.longTermMemory.memoryvault.availableIn")}: ${availabilityModes

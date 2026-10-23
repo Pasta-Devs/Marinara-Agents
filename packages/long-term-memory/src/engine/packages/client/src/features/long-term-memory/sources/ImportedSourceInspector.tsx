@@ -18,7 +18,7 @@ export function ImportedSourceInspector({
   onOpenMemory?: (id: string) => void;
   onOpenReview?: (id: string) => void;
   onReextract: (id: string) => void;
-  onManage: (id: string, title: string, operation: SourceOperation) => void;
+  onManage: (id: string, title: string, operation: SourceOperation, trigger: HTMLElement) => void;
 }) {
   const { t: localizeUi } = useLtmTranslation();
   if (bulkActive) return null;
@@ -50,7 +50,7 @@ export function ImportedSourceInspector({
               key={operation}
               disabled={disabled}
               destructive={operation === "delete"}
-              onClick={() => onManage(source.id, source.title, operation)}
+              onClick={(event) => onManage(source.id, source.title, operation, event.currentTarget)}
               data-ltm-source-management-action={operation}
             >
               {localizeUi(`ui.longTermMemory.sourceoperation.${operation}`)}

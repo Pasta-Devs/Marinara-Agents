@@ -4757,6 +4757,41 @@ async function main() {
         inPopover: false,
         afterBanner: true,
       });
+      // #1588: the result shows once, not a second time inside the health popover.
+      await page.locator('[data-ltm-surface="vault-health-warning"] [data-ltm-info]').click();
+      await healthInfoPanel.waitFor();
+      assert.equal(await page.getByText("Recall index repair completed.").count(), 1);
+      await page.mouse.move(0, 0);
+      await page.locator("body").dispatchEvent("pointerdown");
+      await healthInfoPanel.waitFor({ state: "detached" });
+      // #1588: a reindex that ends after you leave its screen shows its outcome on no screen, including the
+      // one you return to.
+      await page.unroute("**/api/long-term-memory/repair");
+      let releaseLateReindex = () => {};
+      const lateReindexHeld = new Promise<void>((resolve) => {
+        releaseLateReindex = resolve;
+      });
+      await page.route("**/api/long-term-memory/repair", async (route) => {
+        await lateReindexHeld;
+        return route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Late reindex failed" }),
+        });
+      });
+      await reindexButton.click();
+      await page.locator('[data-ltm-reindex-result="pending"]').waitFor();
+      await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"]').click();
+      await page.locator("[data-ltm-reindex-result]").waitFor({ state: "detached" });
+      releaseLateReindex();
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll<HTMLButtonElement>('[data-ltm-surface="vault-health-warning"] button')].some(
+          (button) => button.textContent?.includes("Reindex recall") && !button.disabled,
+        ),
+      );
+      assert.equal(await page.locator("[data-ltm-reindex-result]").count(), 0);
+      await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="vault"]').click();
+      assert.equal(await page.locator("[data-ltm-reindex-result]").count(), 0);
       await page.unroute("**/api/long-term-memory/repair");
 
       const showWorkspacePane = async (pane: "navigator" | "workbench" | "inspector") => {
@@ -6461,6 +6496,18 @@ async function main() {
       const importReasonLine = page.locator(`[id="${importReasonId}"][data-ltm-import-reason]:visible`);
       assert.equal(await importReasonLine.count(), 1, "the reason the button points at is on screen");
       assert.equal(await importReasonLine.innerText(), "Choose a destination before importing scoped memories.");
+      // The button stays focusable, so a keyboard user hears that reason as its description, and pressing it
+      // does nothing.
+      const waitingImport = page
+        .locator(':is([data-ltm-source-action="import-selected"], [data-ltm-source-action="refresh-selected"]):visible')
+        .first();
+      assert.equal(await waitingImport.getAttribute("aria-disabled"), "true");
+      await waitingImport.focus();
+      assert.equal(await waitingImport.evaluate((button) => button === document.activeElement), true);
+      const destinationReasons = page.getByText("Choose a destination before importing scoped memories.");
+      const destinationReasonCount = await destinationReasons.count();
+      await page.keyboard.press("Enter");
+      assert.equal(await destinationReasons.count(), destinationReasonCount);
       await firstSourceSelect.uncheck();
       await page
         .locator('[data-ltm-source-preview="chats"]')
@@ -6571,8 +6618,23 @@ async function main() {
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
       const currentDestination = destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]');
       assert.match(await currentDestination.innerText(), /^Current\nCurrent Final Branch$/u);
+      // #1588: the destination hint is one status line that stays mounted, so emptying the selection is read
+      // as a change.
+      const destinationHint = destinationPanel.locator('[role="status"][data-ltm-destination-hint]');
+      const destinationHintMounted = () =>
+        destinationHint.evaluate((hint) => (hint as HTMLElement & { ltmMounted?: boolean }).ltmMounted);
+      await destinationHint.evaluate((hint) => {
+        (hint as HTMLElement & { ltmMounted?: boolean }).ltmMounted = true;
+      });
+      assert.equal(await destinationHint.textContent(), "Choose a destination before importing scoped memories.");
+      await currentDestination.click();
+      assert.equal(await destinationHint.textContent(), "");
+      await destinationPanel.locator('button[aria-label^="Remove Current"]').click();
+      assert.equal(await destinationHint.textContent(), "Choose a destination before importing scoped memories.");
+      assert.equal(await destinationHintMounted(), true);
       await currentDestination.click();
       assert.equal(await currentDestination.getAttribute("aria-pressed"), "true");
+      assert.equal(await destinationHintMounted(), true);
       assert.equal(await destinationPanel.locator('button[aria-label^="Remove Current"]').count(), 1);
       await destinationPanel.locator('[data-ltm-availability-tab="persona"]').click();
       await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').click();
@@ -6967,6 +7029,53 @@ async function main() {
       await page.waitForFunction(
         () => document.activeElement?.matches('[data-ltm-source-management-action="copy"]') ?? false,
       );
+      // #1588: the pressed menu item is the trigger even when the click leaves focus in the search field, as a
+      // click does in Safari.
+      await page.locator("[data-ltm-source-search]:visible").focus();
+      await page.locator('[data-ltm-source-management-action="copy"]').dispatchEvent("click");
+      await sourceOperationWorkbench.waitFor();
+      await sourceOperationWorkbench.locator("[data-ltm-source-operation-close]").click();
+      await sourceOperationWorkbench.waitFor({ state: "detached" });
+      await page.waitForFunction(
+        () => document.activeElement?.matches('[data-ltm-source-management-action="copy"]') ?? false,
+      );
+      // #1588: Close also leaves while a preview is loading; only an apply holds the action open.
+      const derivedRoute = "**/api/long-term-memory/notes/*/derived";
+      await page.route(derivedRoute, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            sourceNoteId: decodeURIComponent(new URL(route.request().url()).pathname.split("/").at(-2) ?? ""),
+            sourceIncomingLinkCount: 0,
+            sourceOutgoingLinkCount: 0,
+            memories: [],
+          }),
+        }),
+      );
+      await page.locator('[data-ltm-source-management-action="copy"]').click();
+      await sourceOperationWorkbench.waitFor();
+      const transferDestination = sourceOperationWorkbench.locator("[data-ltm-source-operation-destination]");
+      assert.ok((await transferDestination.locator("option").count()) > 1, "the fixture offers a destination chat");
+      await transferDestination.selectOption({ index: 1 });
+      let releaseTransferPreview = () => {};
+      const transferPreviewHeld = new Promise<void>((resolve) => {
+        releaseTransferPreview = resolve;
+      });
+      await page.route("**/api/long-term-memory/notes/transfer-preview", async (route) => {
+        await transferPreviewHeld;
+        await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "held" }) });
+      });
+      const transferPreviewButton = sourceOperationWorkbench.locator('[data-ltm-source-operation-action="preview"]');
+      await transferPreviewButton.click();
+      await page.waitForFunction(
+        () => document.querySelector('[data-ltm-source-operation-action="preview"]')?.hasAttribute("disabled") ?? false,
+      );
+      await sourceOperationWorkbench.locator("[data-ltm-source-operation-close]").click();
+      await sourceOperationWorkbench.waitFor({ state: "detached" });
+      releaseTransferPreview();
+      await page.unroute("**/api/long-term-memory/notes/transfer-preview");
+      await page.unroute(derivedRoute);
       await page.locator("[data-ltm-source-workbench] h2", { hasText: "Desktop re-extract source" }).waitFor();
       await page.locator('[data-ltm-source-tab="characters"]').click();
       await page.locator('[data-ltm-source-preview="characters"]').waitFor();

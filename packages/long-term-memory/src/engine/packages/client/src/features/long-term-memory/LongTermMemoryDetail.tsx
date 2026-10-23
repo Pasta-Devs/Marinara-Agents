@@ -59,7 +59,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState("");
   const [repairPending, setRepairPending] = useState(false);
-  const [repairResult, setRepairResult] = useState<{ text: string; tone: "success" | "danger" } | null>(null);
+  const [repairResult, setRepairResult] = useState<{ text: string; tone: "neutral" | "success" | "danger" } | null>(
+    null,
+  );
   const [addOpen, setAddOpen] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const addTriggerRef = useRef<HTMLButtonElement>(null);
@@ -287,14 +289,18 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const healthNeedsDangerTone = health === "corrupt" || health === "failed";
   const indexedChunks = status.data?.indexes.chunkCount ?? "--";
   const repairRecall = async () => {
+    const running = { text: localizeUi("ui.longTermMemory.longtermmemorydetail.reindexing"), tone: "neutral" as const };
+    // Leaving the screen clears the running surface, and the run's outcome is then not shown on another screen.
+    const finish = (result: { text: string; tone: "success" | "danger" }) =>
+      setRepairResult((current) => (current === running ? result : current));
     setRepairPending(true);
-    setRepairResult(null);
+    setRepairResult(running);
     try {
       await request("/repair", "POST", { actions: ["rebuild_indexes"] });
-      setRepairResult({ text: localizeUi("ui.longTermMemory.longtermmemorydetail.reindexComplete"), tone: "success" });
+      finish({ text: localizeUi("ui.longTermMemory.longtermmemorydetail.reindexComplete"), tone: "success" });
       await status.refetch();
     } catch (error) {
-      setRepairResult({
+      finish({
         text: errorMessage(error, localizeUi("ui.longTermMemory.longtermmemorydetail.reindexFailed")),
         tone: "danger",
       });
@@ -342,25 +348,21 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       ) : null}
       <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.embeddingSourceHelp")}</p>
       {repairButton()}
-      {repairResult ? (
-        <p className={repairResult.tone === "danger" ? "text-[var(--destructive)]" : ""}>{repairResult.text}</p>
-      ) : null}
     </div>
   );
   // The result sits under the health banners, not inside them: a successful reindex can clear the
   // banner that held the button. The busy surface stays mounted into a success, so the result is
   // read as a change; a failure mounts its own alert.
-  const repairStatus =
-    repairPending || repairResult ? (
-      <StatusSurface
-        key={repairResult?.tone === "danger" ? "failed" : "status"}
-        tone={repairResult?.tone ?? "neutral"}
-        busy={repairPending}
-        data-ltm-reindex-result={repairPending ? "pending" : repairResult?.tone}
-      >
-        {repairPending ? localizeUi("ui.longTermMemory.longtermmemorydetail.reindexing") : repairResult?.text}
-      </StatusSurface>
-    ) : null;
+  const repairStatus = repairResult ? (
+    <StatusSurface
+      key={repairResult.tone === "danger" ? "failed" : "status"}
+      tone={repairResult.tone}
+      busy={repairResult.tone === "neutral"}
+      data-ltm-reindex-result={repairResult.tone === "neutral" ? "pending" : repairResult.tone}
+    >
+      {repairResult.text}
+    </StatusSurface>
+  ) : null;
   const chatLabel = props.chatName ?? localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat");
   const connectedChat = Boolean(props.chatId);
   const activeChat = connectedChat && props.enabledForChat === true;

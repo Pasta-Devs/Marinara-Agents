@@ -216,11 +216,11 @@ export function SourceOperationWorkbench({
           content={localizeUi("ui.longTermMemory.sourceoperation.description")}
         />
         <Button
-          className={`ml-auto ${busy ? "opacity-50" : ""}`}
-          aria-disabled={busy ? true : undefined}
+          className={`ml-auto ${busy === "apply" ? "opacity-50" : ""}`}
+          aria-disabled={busy === "apply" || undefined}
           onClick={() => {
-            // Closing during an apply would hide its result.
-            if (!busy) onClose();
+            // Closing during an apply would hide its result; a preview can be left.
+            if (busy !== "apply") onClose();
           }}
           data-ltm-source-operation-close
         >
