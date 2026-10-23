@@ -9,10 +9,10 @@ export function useSlpLiveShow(id: string | null, personaId: string | null) {
     queryKey: key(id, personaId),
     queryFn: () =>
       api.get<SlpLiveShowResponse>(
-        `/slurp2/live/${encodeURIComponent(id!)}?personaId=${encodeURIComponent(personaId ?? "")}`,
+        `/slurp2/live/${encodeURIComponent(id!)}${personaId ? `?personaId=${encodeURIComponent(personaId)}` : ""}`,
       ),
-    enabled: Boolean(id && personaId),
-    refetchInterval: (query) => (id && personaId && !query.state.data?.endedAt ? 3_000 : false),
+    enabled: Boolean(id),
+    refetchInterval: (query) => (id && !query.state.data?.endedAt ? 3_000 : false),
     refetchIntervalInBackground: false,
   });
 }
