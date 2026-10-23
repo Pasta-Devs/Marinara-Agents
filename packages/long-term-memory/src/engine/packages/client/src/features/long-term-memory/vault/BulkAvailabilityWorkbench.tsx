@@ -91,12 +91,14 @@ export function BulkAvailabilityWorkbench({
     ...missingPersonas.map((target) => `persona:${target.id}`),
   ]);
   const removing = action === "remove";
-  const wholeChats = removing ? [...availabilityTargets.chats, ...missingGroups] : availabilityTargets.chats;
-  const chats = removing ? [...wholeChats, ...branchAssignments, ...missingChats] : availabilityTargets.chats;
+  // Remove lists each kind's remove-only places first, so within a kind tab the rail's "Show more" limit never hides
+  // them behind other places. The All tab keeps the chats, characters, personas order.
+  const wholeChats = removing ? [...missingGroups, ...availabilityTargets.chats] : availabilityTargets.chats;
+  const chats = removing ? [...branchAssignments, ...missingChats, ...wholeChats] : availabilityTargets.chats;
   const characters = removing
-    ? [...availabilityTargets.characters, ...missingCharacters]
+    ? [...missingCharacters, ...availabilityTargets.characters]
     : availabilityTargets.characters;
-  const personas = removing ? [...availabilityTargets.personas, ...missingPersonas] : availabilityTargets.personas;
+  const personas = removing ? [...missingPersonas, ...availabilityTargets.personas] : availabilityTargets.personas;
   const changeAction = (nextAction: "add" | "remove") => {
     if (nextAction === "add" && selectedTargets.some((target) => removeOnlyTargets.has(target)))
       onTargetsChange(selectedTargets.filter((target) => !removeOnlyTargets.has(target)));

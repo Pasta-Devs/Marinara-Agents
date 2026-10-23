@@ -127,10 +127,19 @@ export function LtmWorkspace({
           background: var(--background);
           color: var(--foreground);
         }
+        [data-ltm-workspace] [data-ltm-row-actions="inline"] {
+          display: none;
+        }
         @container ltm-workspace (min-width: ${compactBreakpointRem}rem) {
           [data-ltm-workspace] [data-ltm-workspace-pane] {
             min-height: 0;
             overflow: visible;
+          }
+          [data-ltm-workspace] [data-ltm-row-actions="inline"] {
+            display: flex;
+          }
+          [data-ltm-workspace] [data-ltm-row-actions="menu"] {
+            display: none;
           }
           [data-ltm-workspace][data-ltm-workspace-inspector="false"][data-ltm-workspace-navigator="true"] {
             grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr);

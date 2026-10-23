@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   LtmExtractionSettingsPatch,
@@ -279,8 +279,32 @@ export default function MemorySettings({
     return () => onDirtyChange?.(false);
   }, [dirty, onDirtyChange]);
 
+  // Save and Discard unmount once the form is clean, so focus moves to the save result, or to
+  // the active tab when there is none, instead of dropping to the page. A dismissed host
+  // confirmation settles first, hence the frame.
+  const [focusAfterSaveRequest, setFocusAfterSaveRequest] = useState(0);
+  useEffect(() => {
+    if (!focusAfterSaveRequest) return;
+    const frame = requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (active && active !== document.body && active.isConnected) return;
+      const result = Array.from(document.querySelectorAll<HTMLElement>("[data-ltm-settings-message]")).find(
+        (element) => element.getClientRects().length > 0,
+      );
+      const tab = document.querySelector<HTMLElement>(
+        '[data-ltm-surface="memory-settings"] [role="tab"][aria-selected="true"]',
+      );
+      (result ?? tab)?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusAfterSaveRequest]);
+  // Save keeps its button focusable while it runs (aria-disabled), so this synchronous guard
+  // blocks a second save before React re-renders.
+  const savingRef = useRef(false);
+
   const saveSettings = async () => {
-    if (!globalDirty && !extractionDirty) return;
+    if (savingRef.current || (!globalDirty && !extractionDirty)) return;
+    savingRef.current = true;
     // Keep the Debug panel's surface for saves started there; every other save shows in
     // the shared surface (D05).
     const surface: "shared" | "debug" = activeTab === "debug" ? "debug" : "shared";
@@ -334,7 +358,9 @@ export default function MemorySettings({
         surface,
       );
     } finally {
+      savingRef.current = false;
       setPending("");
+      setFocusAfterSaveRequest((request) => request + 1);
     }
   };
 
@@ -351,6 +377,9 @@ export default function MemorySettings({
     ) {
       if (savedGlobal) setGlobalForm(savedGlobal);
       if (savedExtraction) setExtractionFormState(savedExtraction);
+      // An earlier save's result no longer describes the form, so focus goes to the tab.
+      setMessage("");
+      setFocusAfterSaveRequest((request) => request + 1);
     }
   };
 
@@ -413,6 +442,7 @@ export default function MemorySettings({
     );
 
   const busy = pending !== "" || maintenanceBusy;
+  const busyActionProps = busy ? ({ "aria-disabled": true, className: "opacity-50" } as const) : {};
 
   return (
     <section
@@ -457,10 +487,22 @@ export default function MemorySettings({
         </div>
         {dirty ? (
           <div className="flex flex-wrap gap-2">
-            <Button primary disabled={busy} onClick={() => void saveSettings()}>
+            <Button
+              primary
+              {...busyActionProps}
+              onClick={() => {
+                if (!busy) void saveSettings();
+              }}
+            >
               {localizeUi("ui.longTermMemory.memorysettings.saveSettings")}
             </Button>
-            <Button destructive disabled={busy} onClick={() => void discard()}>
+            <Button
+              destructive
+              {...busyActionProps}
+              onClick={() => {
+                if (!busy) void discard();
+              }}
+            >
               {localizeUi("ui.longTermMemory.memorysettings.discardChanges")}
             </Button>
           </div>
@@ -502,7 +544,11 @@ export default function MemorySettings({
       </div>
       {/* The Debug panel renders its own message beside the toggle, so the shared
           surface yields there instead of showing the same save feedback twice. */}
-      {message && activeTab !== "debug" ? <StatusSurface tone={messageState.tone}>{message}</StatusSurface> : null}
+      {message && activeTab !== "debug" ? (
+        <StatusSurface tone={messageState.tone} tabIndex={-1} data-ltm-settings-message>
+          {message}
+        </StatusSurface>
+      ) : null}
 
       <section
         id="settings-panel-recall"
@@ -968,13 +1014,21 @@ export default function MemorySettings({
             <span className="text-xs text-[var(--muted-foreground)]">
               {localizeUi("ui.longTermMemory.memorysettings.unsavedDebugChange")}
             </span>
-            <Button primary disabled={busy} onClick={() => void saveSettings()}>
+            <Button
+              primary
+              {...busyActionProps}
+              onClick={() => {
+                if (!busy) void saveSettings();
+              }}
+            >
               {localizeUi("ui.longTermMemory.memorysettings.saveDebugChange")}
             </Button>
           </div>
         ) : null}
         {message && messageState.surface === "debug" ? (
-          <StatusSurface tone={messageState.tone}>{message}</StatusSurface>
+          <StatusSurface tone={messageState.tone} tabIndex={-1} data-ltm-settings-message>
+            {message}
+          </StatusSurface>
         ) : null}
         {activeTab === "debug" ? (
           <ActivityView

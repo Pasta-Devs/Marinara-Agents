@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "./shared-controls";
 import { useLtmTranslation } from "./localization";
 import type { CapabilityProps, SourceTab } from "./types";
@@ -89,6 +89,8 @@ type OnboardingProps = {
   onOpenVault: () => Promise<boolean>;
   /** Hands the parent the function that reopens the guide at its first step. */
   onOpen: (open: () => void) => void;
+  /** Called after Close hides the guide, so the parent can return focus to the control that reopens it. */
+  onClose: () => void;
 };
 
 export function Onboarding({
@@ -105,18 +107,30 @@ export function Onboarding({
   onOpenSources,
   onOpenVault,
   onOpen,
+  onClose,
 }: OnboardingProps) {
   const { t: localizeUi } = useLtmTranslation();
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [onboardingSource, setOnboardingSource] = useState<SourceTab>("chats");
+  // A step change replaces the action buttons, so focus moves to the step title when the user
+  // opens the guide or changes step; the guide's automatic first-run open leaves focus alone.
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const focusTitleRef = useRef(false);
 
   useEffect(() => {
     onOpen(() => {
+      focusTitleRef.current = true;
       setOnboardingStep(0);
       setOnboardingOpen(true);
     });
   }, [onOpen]);
+
+  useEffect(() => {
+    if (!onboardingOpen || !focusTitleRef.current) return;
+    focusTitleRef.current = false;
+    titleRef.current?.focus();
+  }, [onboardingOpen, onboardingStep]);
 
   useEffect(() => {
     if (!ready) return;
@@ -160,12 +174,14 @@ export function Onboarding({
     suspendOnboarding();
     props.onOpenChatSummarySettings?.();
   };
-  const advanceOnboarding = () =>
+  const advanceOnboarding = () => {
+    focusTitleRef.current = true;
     setOnboardingStep((step) => {
       const next = Math.min(step + 1, onboardingSteps.length - 1);
       persistOnboardingStep(next);
       return next;
     });
+  };
   const activateForOnboarding = async () => {
     if (await onActivate()) advanceOnboarding();
   };
@@ -286,8 +302,15 @@ export function Onboarding({
       </div>
       <div data-ltm-onboarding-body className="p-4 sm:p-6">
         <div className="space-y-4">
-          <div className="space-y-2" aria-live="polite" aria-atomic="true">
-            <h2 id="ltm-onboarding-title" className="text-lg font-semibold">
+          <div className="space-y-2">
+            <h2
+              ref={titleRef}
+              id="ltm-onboarding-title"
+              tabIndex={-1}
+              // Focus lands here on each step, so the step's text is read with its title.
+              aria-describedby="ltm-onboarding-description"
+              className="text-lg font-semibold"
+            >
               {localizeUi(onboardingSteps[onboardingStep].titleKey)}
             </h2>
             <div
@@ -579,13 +602,14 @@ export function Onboarding({
           <div data-ltm-onboarding-actions>
             {onboardingStep > 0 ? (
               <Button
-                onClick={() =>
+                onClick={() => {
+                  focusTitleRef.current = true;
                   setOnboardingStep((step) => {
                     const previous = step - 1;
                     persistOnboardingStep(previous);
                     return previous;
-                  })
-                }
+                  });
+                }}
               >
                 {localizeUi("ui.longTermMemory.longtermmemorydetail.back")}
               </Button>
@@ -743,7 +767,13 @@ export function Onboarding({
         </div>
       </div>
       <div data-ltm-onboarding-footer className="items-center gap-3">
-        <Button data-ltm-onboarding-close onClick={completeOnboarding}>
+        <Button
+          data-ltm-onboarding-close
+          onClick={() => {
+            completeOnboarding();
+            onClose();
+          }}
+        >
           {localizeUi("ui.longTermMemory.longtermmemorydetail.close")}
         </Button>
         <p className="text-xs text-[var(--muted-foreground)]">

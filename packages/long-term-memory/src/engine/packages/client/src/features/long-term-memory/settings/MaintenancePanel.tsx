@@ -68,12 +68,20 @@ export function MaintenancePanel({
     queryFn: () => request<LtmIntegrityResponse>("/integrity"),
   });
   const [pending, setPending] = useState("");
-  const [messageState, setMessageState] = useState<{ text: string; tone: "success" | "danger" }>({
-    text: "",
-    tone: "success",
-  });
-  const message = messageState.text;
-  const setMessage = (text: string, tone: "success" | "danger" = "success") => setMessageState({ text, tone });
+  // Each result shows under the controls that produced it; an action names its area when it starts.
+  const [messageState, setMessageState] = useState<{
+    text: string;
+    tone: "success" | "danger";
+    area: "backup" | "repair" | "identity";
+  }>({ text: "", tone: "success", area: "backup" });
+  const setMessage = (text: string, tone: "success" | "danger" = "success", area?: "backup" | "repair" | "identity") =>
+    setMessageState((current) => ({ text, tone, area: area ?? current.area }));
+  const resultFor = (area: "backup" | "repair" | "identity", className = "") =>
+    messageState.text && messageState.area === area ? (
+      <StatusSurface tone={messageState.tone} className={className} data-ltm-maintenance-result={area}>
+        {messageState.text}
+      </StatusSurface>
+    ) : null;
   const busy = pending !== "" || disabled;
   useEffect(() => {
     onBusyChange(pending !== "");
@@ -129,7 +137,7 @@ export function MaintenancePanel({
     )
       return;
     setPending("repair");
-    setMessage("");
+    setMessage("", "success", "repair");
     try {
       const result = await request<{
         actions: Array<{ action: string; result: string; count?: number }>;
@@ -164,7 +172,10 @@ export function MaintenancePanel({
 
   const previewIdentities = async () => {
     setPending("identity-preview");
-    setMessage("");
+    setMessage("", "success", "identity");
+    // A failed preview must not leave Apply counting candidates from the cleared one.
+    setIdentityPreview(null);
+    setSelectedIdentityCandidates([]);
     try {
       const preview = await request<LtmIdentityRepairPreviewResponse>("/identity-repair/preview", "POST", {});
       setIdentityPreview(preview);
@@ -193,7 +204,7 @@ export function MaintenancePanel({
       [candidateId]: canonicalNoteId,
     };
     setPending(`identity-canonical-${candidateId}`);
-    setMessage("");
+    setMessage("", "success", "identity");
     try {
       const preview = await request<LtmIdentityRepairPreviewResponse>("/identity-repair/preview", "POST", {
         scope: identityPreview.scope,
@@ -262,11 +273,15 @@ export function MaintenancePanel({
       0,
     );
     if (includedDuplicateCount === 0) {
-      setMessage(localizeUi("ui.longTermMemory.memorysettings.includeDuplicateBeforeApplyingRepairs"), "danger");
+      setMessage(
+        localizeUi("ui.longTermMemory.memorysettings.includeDuplicateBeforeApplyingRepairs"),
+        "danger",
+        "identity",
+      );
       return;
     }
     setPending("identity-confirm");
-    setMessage("");
+    setMessage("", "success", "identity");
     let confirmed = false;
     try {
       confirmed = await confirm(
@@ -337,7 +352,7 @@ export function MaintenancePanel({
 
   const exportBackup = async () => {
     setPending("backup-export");
-    setMessage("");
+    setMessage("", "success", "backup");
     try {
       const response = await requestRaw("/backup/export");
       if (!response.ok) throw await failedResponseError(response);
@@ -361,7 +376,7 @@ export function MaintenancePanel({
 
   const previewBackup = async (file: File) => {
     setPending("backup-preview");
-    setMessage("");
+    setMessage("", "success", "backup");
     try {
       const backup = JSON.parse(await file.text());
       const preview = await request<{
@@ -401,7 +416,7 @@ export function MaintenancePanel({
     )
       return;
     setPending("backup-import");
-    setMessage("");
+    setMessage("", "success", "backup");
     focusAfterReload.current = chooseBackupButton.current;
     try {
       await request("/backup/import", "POST", backupPreview.backup);
@@ -441,7 +456,7 @@ export function MaintenancePanel({
     )
       return;
     setPending("settings-reset");
-    setMessage("");
+    setMessage("", "success", "backup");
     focusAfterReload.current = resetButton.current;
     try {
       const response = await request<{ rebuild?: SettingsRebuildOutcome | null }>("/settings/reset", "POST");
@@ -487,7 +502,7 @@ export function MaintenancePanel({
     )
       return;
     setPending("data-delete");
-    setMessage("");
+    setMessage("", "success", "backup");
     try {
       await request("/data", "DELETE");
       setBackupPreview(null);
@@ -530,7 +545,6 @@ export function MaintenancePanel({
       hidden={hidden}
       className="mari-editor-panel space-y-3 p-3"
     >
-      {message ? <StatusSurface tone={messageState.tone}>{message}</StatusSurface> : null}
       <div>
         <h3 className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memorysettings.vaultMaintenance")}</h3>
         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -602,6 +616,7 @@ export function MaintenancePanel({
             </Button>
           </div>
         ) : null}
+        {resultFor("backup", "mt-2")}
       </div>
       {integrity.isError ? (
         <StatusSurface tone="danger">
@@ -649,6 +664,7 @@ export function MaintenancePanel({
       <Button destructive disabled={busy || !selectedActions.length} onClick={() => void runRepair()}>
         {localizeUi("ui.longTermMemory.memorysettings.runSelectedMaintenance")}
       </Button>
+      {resultFor("repair")}
       <div className="border-t border-[var(--border)] pt-3">
         <div className="flex items-center gap-1">
           <h4 className="text-xs font-semibold">{localizeUi("ui.longTermMemory.memorysettings.identityRepair")}</h4>
@@ -671,13 +687,19 @@ export function MaintenancePanel({
             {localizeUi("ui.longTermMemory.memorysettings.applySelectedRepairs", { count: selectedIdentityCount })}
           </Button>
         </div>
-        {identityPreview ? (
-          <div className="mt-3 space-y-2 text-xs">
-            <p>
+        {resultFor("identity", "mt-2")}
+        {/* Always mounted, so a finished preview is read out; a new preview clears it first. */}
+        <p role="status" data-ltm-identity-preview-summary className={identityPreview ? "mt-3 text-xs" : "sr-only"}>
+          {identityPreview ? (
+            <>
               {identityPreview.counts.candidateCount} {localizeUi("ui.longTermMemory.memorysettings.candidateGroupS")}{" "}
               {identityPreview.counts.duplicateNotes} {localizeUi("ui.longTermMemory.memorysettings.duplicateNoteS")}{" "}
               {identityPreview.counts.unresolvedNotes} {localizeUi("ui.longTermMemory.memorysettings.unresolved")}
-            </p>
+            </>
+          ) : null}
+        </p>
+        {identityPreview ? (
+          <div className="mt-2 space-y-2 text-xs">
             {identityPreview.candidates.map((candidate) => (
               <div key={candidate.id} className="space-y-2 rounded border border-[var(--border)] p-3">
                 <label className="flex min-h-11 items-start gap-2">

@@ -8,14 +8,15 @@ visual and accessibility rules, and `ARCHITECTURE.md` for server and data flow.
 
 `LongTermMemoryDetail.tsx` owns the capability shell, destination changes,
 activation, vault-health feedback, recovery handoffs, and dirty navigation
-guards; `Onboarding.tsx` owns the setup guide. The shell's destinations are lazy-loaded:
+guards; `Onboarding.tsx` owns the setup guide. The shell's four destinations and
+the separate Chat Settings entry:
 
 | Surface | Owner | User task |
 | --- | --- | --- |
 | Memory Vault | `vault/MemoryVault.tsx` | Browse, search, filter, edit, link, archive, restore, and manage memory availability. |
 | Review Queue | `review/ReviewQueue.tsx` | Inspect evidence, edit or preflight proposed mutations, then accept or skip them. |
 | Sources | `sources/SourcesWorkspace.tsx` | Select source and destination scopes; import, refresh, re-extract, cancel, and inspect source results. |
-| Memory Settings | `settings/MemorySettings.tsx` | Configure extraction and retention, repair indexes or identities, and inspect activity. |
+| Memory Settings | `settings/MemorySettings.tsx` | Configure recall and extraction, run maintenance (index and identity repair, backup, reset, delete all data), and inspect activity. |
 | Chat Settings | `ChatSettings.tsx` | Set per-chat recall style, token budget, and maximum memories; inspect the last injection. |
 
 Each screen lives in its own folder (`vault/`, `review/`, `sources/`, `settings/`)
@@ -23,8 +24,8 @@ with the components cut out of it; modules shared across screens stay at the
 feature root.
 
 `LongTermMemoryNavigation.tsx` owns the four destination buttons and their
-memory, review, and source-task status badges. `settings/ActivityView.tsx` is opened
-from Memory Settings rather than being a fifth destination.
+memory, review, and source-task status badges. `settings/ActivityView.tsx` is the
+Debug tab of Memory Settings rather than a fifth destination.
 
 ## Navigation Contract
 
@@ -42,9 +43,9 @@ selection and closes transient menus. Save and discard decisions restore focus
 to the control that initiated navigation.
 
 On first successful status load, onboarding opens for an empty vault. Its step
-is stored in local storage; closing it suspends at the current step, while
-completion records `complete`. Opening related chat settings or prompt editors
-suspends onboarding rather than completing it.
+is stored in local storage; Close records `complete`, and the Help button
+replays the guide. Opening related chat settings or prompt editors suspends
+onboarding at the current step rather than completing it.
 
 ## Responsive Contract
 
@@ -61,6 +62,15 @@ Pane state belongs to each destination. Pane tabs use `ArrowLeft`, `ArrowRight`,
 `Home`, and `End`; changing panes moves focus to the selected pane control.
 Disabled panes are excluded from the tab sequence. The destination rail becomes
 the mobile bottom navigation; reduced-motion behavior is defined in `DESIGN.md`.
+
+Layout inside a destination also follows container width, so a narrow panel on
+a wide window gets the phone layout. Below `48rem` of workspace, row actions
+collapse into a menu, the Review batch bar and the Sources lorebook bar stick
+to the top while rows scroll, and the flat source bar sticks to the bottom;
+from `48rem` they sit in the flow. Review
+widens its fields and padding from `40rem`. The Sources scope row stacks until
+its destination container reaches `40rem`. Vault note title and status share a
+row from a `28rem` workbench, and the Vault list scrolls on its own from `48rem`.
 
 ## Workflow Contracts
 
@@ -91,6 +101,9 @@ rejected-suggestion cleanup preserve access to relevant diagnostics.
 Import and refresh require a source scope and a destination scope. Source and
 destination target pickers support search, pinned current targets, grouped
 target kinds, keyboard selection, and explicit capacity/validation feedback.
+Place pickers and the destination rail render 100 places per list or memory
+group, with a Show more row for the rest. The source search waits for a pause
+in typing and keeps the current rows, marked busy, until its results arrive.
 Long-running source tasks expose running, completed, cancelled, partial-failure,
 and failed states through the Sources navigation and workspace feedback. A
 running task can be cancelled and its latest result can be revisited.
@@ -100,8 +113,10 @@ running task can be cancelled and its latest result can be revisited.
 Global settings and per-chat settings are distinct. Chat Settings shows whether
 values inherit global defaults, disables edits when the host owns settings, and
 shows last-injection loading, error, retry, and result states. Memory Settings
-groups extraction, retention, maintenance, identity repair, and activity; repair
-actions report their result without hiding vault-health warnings.
+has Recall, Extraction, Maintenance, and Debug tabs; Maintenance holds index and
+identity repair, backup, reset, and delete all data, and Debug is the activity
+view. Repair actions
+report their result without hiding vault-health warnings.
 
 Debug operation details lead with recorded problems and guidance, then extraction,
 recall, or apply outcomes before diagnostic facts and the timeline. Dropped

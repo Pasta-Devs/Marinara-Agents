@@ -59,7 +59,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState("");
   const [repairPending, setRepairPending] = useState(false);
-  const [repairMessage, setRepairMessage] = useState("");
+  const [repairResult, setRepairResult] = useState<{ text: string; tone: "neutral" | "success" | "danger" } | null>(
+    null,
+  );
   const [addOpen, setAddOpen] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const addTriggerRef = useRef<HTMLButtonElement>(null);
@@ -69,6 +71,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const navigationSaveInFlightRef = useRef(false);
   const [navigationSaveInFlight, setNavigationSaveInFlight] = useState(false);
   const [navigationPrompt, setNavigationPrompt] = useState<string | null>(null);
+  const [navigationSaveFailed, setNavigationSaveFailed] = useState(false);
   const navigationDialogRef = useRef<HTMLDialogElement>(null);
   const navigationResolveRef = useRef<((allow: boolean) => void) | null>(null);
   const navigationTriggerRef = useRef<HTMLElement | null>(null);
@@ -118,6 +121,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     props.onDirtyChange?.(destinationDirty);
     return () => props.onDirtyChange?.(false);
   }, [destinationDirty, props.onDirtyChange]);
+  // A Reindex result belongs to the screen it ran on; every way of leaving that screen clears it.
+  useEffect(() => setRepairResult(null), [destination]);
 
   const confirmDestinationChange = async (next: string) => {
     if (!destinationDirty) return true;
@@ -126,6 +131,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         navigationResolveRef.current?.(false);
         navigationResolveRef.current = resolve;
         navigationTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        setNavigationSaveFailed(false);
         setNavigationPrompt(next);
       });
     }
@@ -138,12 +144,22 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     );
   };
   const finishNavigationPrompt = async (decision: "save" | "discard" | "stay") => {
+    // The dialog's buttons stay focusable with `aria-disabled` while a save runs; this ignores
+    // them, and Escape, until it ends.
+    if (navigationSaveInFlightRef.current) return;
     if (decision === "save") {
-      if (navigationSaveInFlightRef.current) return;
       navigationSaveInFlightRef.current = true;
       setNavigationSaveInFlight(true);
+      setNavigationSaveFailed(false);
       try {
-        if (!(await destinationSaveRef.current?.())) return;
+        // A failed save keeps the dialog open; its own errors sit behind the modal, so say so here.
+        if (!(await destinationSaveRef.current?.())) {
+          setNavigationSaveFailed(true);
+          return;
+        }
+      } catch {
+        setNavigationSaveFailed(true);
+        return;
       } finally {
         navigationSaveInFlightRef.current = false;
         setNavigationSaveInFlight(false);
@@ -154,8 +170,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     navigationDialogRef.current?.close();
     setNavigationPrompt(null);
     resolve?.(decision !== "stay");
-    requestAnimationFrame(() => navigationTriggerRef.current?.focus({ preventScroll: true }));
+    const trigger = navigationTriggerRef.current;
     navigationTriggerRef.current = null;
+    requestAnimationFrame(() => trigger?.focus({ preventScroll: true }));
   };
   const selectDestination = async (next: LongTermMemoryDestination) => {
     if (next === destination) return true;
@@ -272,14 +289,21 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const healthNeedsDangerTone = health === "corrupt" || health === "failed";
   const indexedChunks = status.data?.indexes.chunkCount ?? "--";
   const repairRecall = async () => {
+    const running = { text: localizeUi("ui.longTermMemory.longtermmemorydetail.reindexing"), tone: "neutral" as const };
+    // Leaving the screen clears the running surface, and the run's outcome is then not shown on another screen.
+    const finish = (result: { text: string; tone: "success" | "danger" }) =>
+      setRepairResult((current) => (current === running ? result : current));
     setRepairPending(true);
-    setRepairMessage("");
+    setRepairResult(running);
     try {
       await request("/repair", "POST", { actions: ["rebuild_indexes"] });
-      setRepairMessage(localizeUi("ui.longTermMemory.longtermmemorydetail.reindexComplete"));
+      finish({ text: localizeUi("ui.longTermMemory.longtermmemorydetail.reindexComplete"), tone: "success" });
       await status.refetch();
     } catch (error) {
-      setRepairMessage(errorMessage(error, localizeUi("ui.longTermMemory.longtermmemorydetail.reindexFailed")));
+      finish({
+        text: errorMessage(error, localizeUi("ui.longTermMemory.longtermmemorydetail.reindexFailed")),
+        tone: "danger",
+      });
     } finally {
       setRepairPending(false);
     }
@@ -324,9 +348,21 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       ) : null}
       <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.embeddingSourceHelp")}</p>
       {repairButton()}
-      {repairMessage ? <p role="status">{repairMessage}</p> : null}
     </div>
   );
+  // The result sits under the health banners, not inside them: a successful reindex can clear the
+  // banner that held the button. The busy surface stays mounted into a success, so the result is
+  // read as a change; a failure mounts its own alert.
+  const repairStatus = repairResult ? (
+    <StatusSurface
+      key={repairResult.tone === "danger" ? "failed" : "status"}
+      tone={repairResult.tone}
+      busy={repairResult.tone === "neutral"}
+      data-ltm-reindex-result={repairResult.tone === "neutral" ? "pending" : repairResult.tone}
+    >
+      {repairResult.text}
+    </StatusSurface>
+  ) : null;
   const chatLabel = props.chatName ?? localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat");
   const connectedChat = Boolean(props.chatId);
   const activeChat = connectedChat && props.enabledForChat === true;
@@ -346,6 +382,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       setActivationPending(false);
     }
   };
+  const navigationBusyProps = navigationSaveInFlight
+    ? ({ "aria-disabled": true, className: "opacity-50" } as const)
+    : {};
 
   return (
     <main
@@ -404,7 +443,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         }
         [data-ltm-activation-label] {
           color: var(--marinara-editor-text);
-          font-size: 0.8125rem;
+          font-size: 0.75rem;
           font-weight: 600;
           line-height: 1.25;
         }
@@ -532,22 +571,23 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             <p id="ltm-destination-unsaved-description" className="text-sm text-[var(--muted-foreground)]">
               {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationDescription", { action: navigationPrompt })}
             </p>
+            {navigationSaveFailed ? (
+              <StatusSurface tone="danger" data-ltm-destination-save-failed>
+                {localizeUi("ui.longTermMemory.longtermmemorydetail.saveBeforeLeavingFailed")}
+              </StatusSurface>
+            ) : null}
             <div className="flex flex-wrap justify-end gap-2">
               <Button
-                disabled={navigationSaveInFlight}
+                {...navigationBusyProps}
                 data-ltm-destination-stay
                 onClick={() => void finishNavigationPrompt("stay")}
               >
                 {localizeUi("ui.longTermMemory.memoryvault.stay")}
               </Button>
-              <Button
-                disabled={navigationSaveInFlight}
-                destructive
-                onClick={() => void finishNavigationPrompt("discard")}
-              >
+              <Button {...navigationBusyProps} destructive onClick={() => void finishNavigationPrompt("discard")}>
                 {localizeUi("ui.longTermMemory.memoryvault.discardAndContinue")}
               </Button>
-              <Button disabled={navigationSaveInFlight} primary onClick={() => void finishNavigationPrompt("save")}>
+              <Button {...navigationBusyProps} primary onClick={() => void finishNavigationPrompt("save")}>
                 {localizeUi("ui.longTermMemory.memoryvault.saveAndContinue")}
               </Button>
             </div>
@@ -556,16 +596,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       ) : null}
       <header className="mari-editor-header relative z-20">
         <div className="mari-editor-header-main">
-          <button
-            type="button"
-            aria-label={backToAgentsLabel}
-            title={backToAgentsLabel}
+          <IconButton
+            icon={ArrowLeft}
+            iconSize="1.125rem"
+            label={backToAgentsLabel}
             data-ltm-control="back"
             onClick={() => void close()}
-            className="mari-editor-action inline-flex"
-          >
-            <ArrowLeft aria-hidden="true" size="1.125rem" />
-          </button>
+          />
           <span className="mari-editor-icon-tile">
             <Sparkles aria-hidden="true" size="1.125rem" className="max-md:!h-[0.875rem] max-md:!w-[0.875rem]" />
           </span>
@@ -697,6 +734,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             label={localizeUi("ui.longTermMemory.longtermmemorydetail.showSetupGuide")}
             onClick={() => openOnboardingRef.current?.()}
             className="h-11 min-h-11 w-11 min-w-11"
+            data-ltm-onboarding-help
           />
           {props.onManagePackage ? (
             <IconButton
@@ -755,8 +793,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   data-ltm-surface="vault-health-warning"
                   className="min-h-12 justify-between px-3 py-2 text-sm font-medium"
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <TriangleAlert aria-hidden="true" size="1rem" className="shrink-0" />
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                    {healthNeedsDangerTone ? (
+                      <TriangleAlert aria-hidden="true" size="1rem" className="shrink-0" />
+                    ) : null}
                     <span className="font-semibold">{healthLabel}</span>
                     <span className="hidden truncate sm:inline">
                       {localizeUi("ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData")}
@@ -775,8 +815,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   data-ltm-surface="semantic-recall-warning"
                   className="min-h-12 justify-between px-3 py-2 text-sm font-medium"
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <TriangleAlert aria-hidden="true" size="1rem" className="shrink-0" />
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
                     <span className="font-semibold">
                       {localizeUi("ui.longTermMemory.longtermmemorydetail.savedButNotSearchable")}
                     </span>
@@ -787,6 +826,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   />
                 </StatusSurface>
               ) : null}
+              {repairStatus}
               <div
                 data-ltm-destination-content
                 role="region"
@@ -819,6 +859,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   onOpen={(open) => {
                     openOnboardingRef.current = open;
                   }}
+                  onClose={() =>
+                    requestAnimationFrame(() =>
+                      document
+                        .querySelector<HTMLElement>('[data-ltm-surface="detail"] [data-ltm-onboarding-help]')
+                        ?.focus({ preventScroll: true }),
+                    )
+                  }
                 />
                 <Destination
                   props={props}

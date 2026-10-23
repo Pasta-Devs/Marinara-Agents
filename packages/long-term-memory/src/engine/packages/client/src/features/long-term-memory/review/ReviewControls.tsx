@@ -33,7 +33,7 @@ export function ConflictValue({ label, value }: { label: string; value: string }
   if (value.length <= CONFLICT_TEXT_PREVIEW_LENGTH) return renderedLabel;
   return (
     <details>
-      <summary className="cursor-pointer">{renderedLabel}</summary>
+      <summary className="min-h-11 cursor-pointer py-3">{renderedLabel}</summary>
       <p className="mt-1 break-words">{value}</p>
     </details>
   );
@@ -91,7 +91,9 @@ export function SelectionCheckbox({
   }, [indeterminate]);
 
   return (
-    <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs font-medium text-[var(--foreground)]">
+    <label
+      className={`flex min-h-11 cursor-pointer items-center gap-2 text-xs font-medium text-[var(--foreground)] ${compact ? "min-w-11 shrink-0 justify-center" : ""}`}
+    >
       <input
         ref={inputRef}
         type="checkbox"

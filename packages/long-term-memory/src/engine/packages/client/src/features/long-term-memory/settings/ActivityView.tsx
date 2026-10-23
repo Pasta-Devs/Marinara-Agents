@@ -647,8 +647,8 @@ export default function ActivityView({
   };
   const [chip, setChip] = useState<DebugChip>("all");
   const [search, setSearch] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [selectedOperationId, setSelectedOperationId] = useState<string | null>(null);
-  const [hoveredOperationId, setHoveredOperationId] = useState<string | null>(null);
   const [activePane, setActivePane] = useState<LtmWorkspacePane>("navigator");
   const [limit, setLimit] = useState(200);
   // D31: a memory handoff opens the navigator filtered to that memory and with nothing
@@ -666,7 +666,18 @@ export default function ActivityView({
   const activity = useQuery({
     queryKey: [...queryKeys.activity, limit],
     queryFn: () => request<DebugLogResponse>(`/debug-log?limit=${limit}`),
+    // A larger limit keeps the current log, selection and "Show up to 1,000" control on screen
+    // while the longer log loads.
+    placeholderData: keepPreviousData,
   });
+  const listRef = useRef<HTMLElement>(null);
+  const showMorePendingRef = useRef(false);
+  // When the longer log arrives, the "Show up to 1,000" control is gone; focus moves to the log.
+  useEffect(() => {
+    if (!showMorePendingRef.current || activity.isFetching) return;
+    showMorePendingRef.current = false;
+    if (!document.activeElement || document.activeElement === document.body) listRef.current?.focus();
+  }, [activity.isFetching]);
   // Shares the shell's cached /status query rather than adding an endpoint; pending or
   // errored status is never flattened into "healthy".
   const health = useQuery({
@@ -1601,6 +1612,13 @@ export default function ActivityView({
 
   return (
     <section ref={activityRef} data-ltm-surface="activity" aria-labelledby="ltm-activity-title" className="space-y-4">
+      {/* Unlayered, so it wins over the editor shell's muted-text rule; hover stays out of React state, so
+          moving the pointer down a long log re-renders nothing. */}
+      <style>{`
+        [data-ltm-debug-operation]:hover [data-ltm-debug-muted] {
+          color: var(--marinara-editor-text, var(--foreground));
+        }
+      `}</style>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1">
           <h3 id="ltm-activity-title" className="text-xs font-semibold">
@@ -1739,6 +1757,7 @@ export default function ActivityView({
                     className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
                   />
                   <input
+                    ref={searchInputRef}
                     className={`${inputClass} pl-9 pr-10`}
                     data-ltm-debug-search
                     value={search}
@@ -1751,7 +1770,10 @@ export default function ActivityView({
                       type="button"
                       aria-label={localizeUi("ui.longTermMemory.activityview.clearSearch")}
                       title={localizeUi("ui.longTermMemory.activityview.clearSearch")}
-                      onClick={() => setSearch("")}
+                      onClick={() => {
+                        setSearch("");
+                        searchInputRef.current?.focus();
+                      }}
                       className="absolute right-1 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
                     >
                       <X aria-hidden="true" size="0.875rem" />
@@ -1787,6 +1809,8 @@ export default function ActivityView({
               </div>
 
               <section
+                ref={listRef}
+                tabIndex={-1}
                 data-ltm-debug-list
                 aria-label={localizeUi("ui.longTermMemory.activityview.longTermMemoryActivityLog")}
                 className="mari-editor-panel min-w-0"
@@ -1831,13 +1855,12 @@ export default function ActivityView({
                             const subject = operationSubject(operation, noteTitles, chatLabel);
                             // The editor shell restyles `text-[var(--muted-foreground)]` and `.mari-editor-action`
                             // backgrounds above any utility, and its hover rule recolours only the span under the
-                            // pointer, so the selected and hovered states are a swapped class and inline style
-                            // rather than a layered variant.
+                            // pointer, so the selected state is a swapped class and inline style, and hover is the
+                            // `data-ltm-debug-muted` rule above, rather than a layered variant.
                             const isSelected = selectedOperationId === operation.operationId;
-                            const mutedText =
-                              isSelected || hoveredOperationId === operation.operationId
-                                ? "text-[var(--foreground)]"
-                                : "text-[var(--muted-foreground)]";
+                            const mutedText = isSelected
+                              ? "text-[var(--foreground)]"
+                              : "text-[var(--muted-foreground)]";
                             return (
                               <li key={operation.operationId}>
                                 <button
@@ -1850,8 +1873,6 @@ export default function ActivityView({
                                       : undefined
                                   }
                                   onClick={() => selectOperation(operation.operationId)}
-                                  onPointerEnter={() => setHoveredOperationId(operation.operationId)}
-                                  onPointerLeave={() => setHoveredOperationId(null)}
                                   data-ltm-tab-focus
                                   className="flex min-h-11 w-full items-start gap-2 px-3 py-2 text-left hover:bg-[var(--accent)]"
                                 >
@@ -1872,20 +1893,26 @@ export default function ActivityView({
                                         {actionLabel(firstEvent.action, localizeUi)}
                                       </span>
                                       {subject ? (
-                                        <span className={`min-w-0 truncate font-normal ${mutedText}`}>
+                                        <span
+                                          data-ltm-debug-muted
+                                          className={`min-w-0 truncate font-normal ${mutedText}`}
+                                        >
                                           {localizeUi("ui.longTermMemory.activityview.metaSeparator")}
                                           {subject.value}
                                         </span>
                                       ) : null}
                                     </span>
                                     {summary ? (
-                                      <span className={`mt-1 line-clamp-2 text-xs ${mutedText}`}>{summary}</span>
+                                      <span data-ltm-debug-muted className={`mt-1 line-clamp-2 text-xs ${mutedText}`}>
+                                        {summary}
+                                      </span>
                                     ) : null}
                                   </span>
                                   {/* ponytail: the age is computed at render and refreshes with the list; there is no
                                       ticking timer, so a row reads stale until the next render. Upgrade: a
                                       once-a-minute tick in state if that matters. */}
                                   <time
+                                    data-ltm-debug-muted
                                     dateTime={lastEvent.ts}
                                     className={`shrink-0 whitespace-nowrap text-[0.6875rem] ${mutedText}`}
                                   >
@@ -1902,15 +1929,30 @@ export default function ActivityView({
                 )}
               </section>
 
-              {activity.data && activity.data.events.length >= limit ? (
+              {activity.data && (activity.data.events.length >= limit || activity.isPlaceholderData) ? (
                 <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
                   <span>
                     {localizeUi("ui.longTermMemory.activityview.newestEventsShown", {
-                      count: limit.toLocaleString(locale),
+                      count: (activity.isPlaceholderData ? activity.data.events.length : limit).toLocaleString(locale),
                     })}
                   </span>
-                  {limit < 1_000 ? (
-                    <Button onClick={() => setLimit(1_000)}>
+                  {limit < 1_000 || activity.isPlaceholderData ? (
+                    <Button
+                      aria-disabled={activity.isFetching || undefined}
+                      data-ltm-activity-show-more
+                      onClick={() => {
+                        if (activity.isFetching || limit >= 1_000) return;
+                        showMorePendingRef.current = true;
+                        setLimit(1_000);
+                      }}
+                    >
+                      {activity.isFetching ? (
+                        <Loader2
+                          aria-hidden="true"
+                          size="0.875rem"
+                          className="animate-spin motion-reduce:animate-none"
+                        />
+                      ) : null}
                       {localizeUi("ui.longTermMemory.activityview.showUpTo1_000Events")}
                     </Button>
                   ) : null}

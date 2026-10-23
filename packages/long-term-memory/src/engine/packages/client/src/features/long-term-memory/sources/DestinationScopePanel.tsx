@@ -108,7 +108,6 @@ export function DestinationScopePanel({
       role="group"
       aria-labelledby={labelId}
       className="mari-editor-panel flex min-h-0 flex-col gap-3 p-3"
-      style={{ maxHeight: "calc(100vh - 12rem)" }}
     >
       <div className="flex shrink-0 items-center gap-2 text-xs font-semibold">
         <span id={labelId}>{localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}</span>
@@ -247,11 +246,14 @@ export function DestinationScopePanel({
           onToggle={toggleRail}
         />
       </details>
-      {!selectedTargets.length ? (
-        <span role="alert" className="block shrink-0 text-xs">
-          {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
-        </span>
-      ) : null}
+      {/* Always mounted, so emptying the selection is read as a change; empty, it takes no space. */}
+      <span
+        role="status"
+        className={selectedTargets.length ? "sr-only" : "block shrink-0 text-xs"}
+        data-ltm-destination-hint
+      >
+        {selectedTargets.length ? null : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
+      </span>
       <p className="shrink-0 text-xs text-[var(--muted-foreground)]" data-ltm-import-mode-summary>
         {availabilityModes.length > 1
           ? `${localizeUi("ui.longTermMemory.memoryvault.availableIn")}: ${availabilityModes

@@ -80,7 +80,14 @@ Since capability API 1.341, Marinara Engine hands every package the code it alre
 - **Never fall back to a copy.** When the Engine lacks a member, report the feature unavailable ("needs a newer Marinara Engine"). Only the UI and chat store adapters keep a read-only copy, and it never writes.
 - **Never write the Engine's browser storage.** `validate-catalog.mjs` refuses a client that writes `marinara-engine-ui`, the active chat, drafts, pending map moves or pinned gallery images, or opens the TTS audio cache.
 - **Gate on the capability API, not `engine.min`.** A package built this way declares `schemaVersion: 2` and the capability API it needs, so an older Engine never installs it and keeps the version it has.
-- **React majors.** Packages render with the Engine's React. A host React major upgrade (or any other host library major) requires a capability API major, so a package built against one major never runs against another.
+- **React majors.** Packages render with the Engine's React. Replacing a host slot with a new React major (or another library major) requires a capability API major, so a package built against one major never runs against another.
+- **Motion slots.** The existing `framer-motion` host slot stays on Motion 13. The Engine may run Motion 14 itself,
+  with the complete legacy namespace retained through its `framer-motion-v13` npm alias. Opt in to Motion 14 by
+  importing `motion/react` and declaring capability API 1.377 or newer. Pass the package's declared `capabilityApi`
+  to `hostModulesPlugin`; it rejects the new slot under an older declaration. Export inventories use
+  `MARINARA_HOST_MODULE_IMPORTS` from the Engine contract, so legacy builds probe the alias, not the primary 14
+  dependency. Engine-backed strict package typechecks apply the same mapping through TypeScript paths. Keep each animation tree on one slot: their presence, config and layout contexts are distinct.
+
 
 ## Building Packages
 

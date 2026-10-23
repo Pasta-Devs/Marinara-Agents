@@ -84,9 +84,10 @@ assert.equal(
   "live and restored results derive one retry set",
 );
 assert.match(workspace, /restoredImportResult\.writeFailures\?\.map\(\(failure\) =>/u);
+// #1588: the destination panel follows the page, with no window-height cap; its place list caps itself.
 assert.match(
   workspaceScreen,
-  /<div\s+id="ltm-destination-scope-control"[^>]*className="mari-editor-panel flex min-h-0 flex-col gap-3 p-3"[^>]*style=\{\{ maxHeight: "calc\(100vh - 12rem\)" \}\}[^>]*>/u,
+  /<div\s+id="ltm-destination-scope-control"\s+role="group"\s+aria-labelledby=\{labelId\}\s+className="mari-editor-panel flex min-h-0 flex-col gap-3 p-3"\s*>/u,
 );
 // #1420: the destination place list is the shared availability rail.
 assert.match(workspaceScreen, /<AvailabilityTabRail[\s\S]*disabled=\{disabled\}[\s\S]*onToggle=\{toggleRail\}/u);
@@ -328,7 +329,10 @@ assert.match(availabilityTabRail, /@container \(min-width: 22rem\)[\s\S]*repeat\
 assert.doesNotMatch(availabilityTabRail, /grid-template-columns: minmax\(0, 1fr\)/u);
 assert.match(availabilityTabRail, /border-radius: 0/u);
 assert.match(availabilityTabRail, /data-ltm-availability-panel=\{activeKind\}[\s\S]*className="space-y-3 p-3"/u);
-assert.match(availabilityTabRail, /<div data-ltm-availability-list className="max-h-52 overflow-y-auto">/u);
+assert.match(
+  availabilityTabRail,
+  /<div ref=\{listRef\} data-ltm-availability-list className="max-h-52 overflow-y-auto">/u,
+);
 assert.doesNotMatch(availabilityTabRail, /border-t border-\[var\(--marinara-editor-divider\)\]/u);
 assert.match(availabilityTabRail, /nextTabIndex\(event\.key/u);
 assert.doesNotMatch(availabilityTabRail, /aria-expanded/u);
@@ -477,7 +481,8 @@ assert.equal(locale["ui.longTermMemory.memoryvault.deletePermanentlyOne"], "Dele
 assert.equal(locale["ui.longTermMemory.memoryvault.deletePermanentlyOther"], "Delete {{count}} memories permanently");
 assert.equal(locale["ui.longTermMemory.memoryvault.deleteConfirmationExcerpt"], "Excerpt");
 assert.equal(locale["ui.longTermMemory.memoryvault.deleteConfirmationMemoryId"], "Memory ID");
-assert.match(vaultRow, /data-ltm-note-actions-desktop[\s\S]*md:flex/u);
+// #1588: wide-panel row actions show by the workspace container query (LtmWorkspace), not a viewport class.
+assert.match(vaultRow, /data-ltm-note-actions-desktop\s+data-ltm-row-actions="inline"/u);
 assert.doesNotMatch(vaultRow, /data-ltm-note-actions-desktop[\s\S]*opacity-0/u);
 assert.doesNotMatch(vaultRow, /data-ltm-note-actions-desktop[\s\S]*pointer-events-none/u);
 assert.match(vaultRow, /data-ltm-note-actions-open/u);
@@ -566,7 +571,8 @@ assert.match(detail, /onSaveRequest=\{\(save\) =>/u);
 assert.match(detail, /navigationPrompt/u);
 assert.match(detail, /navigationResolveRef\.current\?\.\(false\)/u);
 assert.match(detail, /navigationSaveInFlightRef/u);
-assert.match(detail, /disabled=\{navigationSaveInFlight\}/u);
+assert.match(detail, /navigationBusyProps = navigationSaveInFlight\s+\? \(\{ "aria-disabled": true/u);
+assert.match(detail, /\{\.\.\.navigationBusyProps\}/u);
 assert.match(detail, /finishNavigationPrompt\("save"\)/u);
 assert.match(detail, /aria-modal="true"/u);
 assert.match(detail, /event\.key !== "Tab"/u);
@@ -610,7 +616,7 @@ assert.match(workspaceScreen, /const sourceCheckboxClass = "h-4 w-4 shrink-0 acc
 assert.match(workspaceScreen, /linked\.isError[\s\S]*linkedMemoriesCouldNotLoad/u);
 assert.match(workspaceScreen, /!linked\.data \|\| linked\.isError \|\| !previewed/u);
 assert.match(workspace, /tone === "danger"[\s\S]*var\(--destructive\)/u);
-assert.match(workspace, /className="hidden items-start gap-1 md:flex"/u);
+assert.match(workspace, /className="items-start gap-1" data-ltm-row-actions="inline"/u);
 assert.doesNotMatch(workspace, /group-hover:pointer-events-auto|transition-opacity/u);
 assert.match(workspace, /className="space-y-2 border-t border-\[var\(--border\)\] py-3"/u);
 assert.match(workspace, /\[changeSource, onRequestedSourceHandled, requestedSource\]/u);
@@ -690,7 +696,7 @@ assert.match(reviewQueue, /reviewProgress/u);
 assert.match(reviewQueueScreen, /MAX_APPEND_TEXT_LENGTH = 20_000/u);
 assert.match(reviewQueueScreen, /MAX_SECTION_TEXT_LENGTH = 24_000/u);
 assert.match(reviewQueueScreen, /charactersRemaining(?:One|Other)/u);
-assert.match(reviewQueue, /textExceedsLimit/u);
+assert.match(reviewQueueScreen, /textExceedsLimit/u);
 assert.match(reviewQueue, /preflight/u);
 assert.match(reviewQueue, /data-ltm-review-preflight/u);
 assert.match(reviewQueue, /data-ltm-review-conflicts/u);

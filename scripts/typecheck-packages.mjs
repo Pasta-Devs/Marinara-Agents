@@ -37,13 +37,14 @@
  * The packages are checked concurrently (#1579); each package's output is printed together, in argument order, once
  * every run has finished.
  */
-import { cp, mkdtemp, rm, symlink } from "node:fs/promises";
+import { cp, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { execFile, execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspect, promisify } from "node:util";
+import { readHostModuleTypePaths } from "./esbuild-host-plugins.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const engineSources = join(repoRoot, "sources/engine");
@@ -207,11 +208,27 @@ async function checkPackage(id, report) {
           ...declarations.filter((file) => run.roots.some((root) => file.startsWith(root))),
           ...ownFiles,
         ];
-        const lib = run.lib.length ? ["--lib", run.lib.join(",")] : [];
-        const strictOutput = await runTsc(
-          [...COMPILER_ARGS, "--strict", "--types", "node", ...lib, ...runFiles],
-          overlay,
+        // Compiler paths must follow the same versioned slots as esbuild's runtime shims.
+        const config = join(overlay, "host-strict.tsconfig.json");
+        await writeFile(
+          config,
+          JSON.stringify({
+            compilerOptions: {
+              noEmit: true,
+              skipLibCheck: true,
+              jsx: "react-jsx",
+              target: "es2022",
+              module: "esnext",
+              moduleResolution: "bundler",
+              strict: true,
+              types: ["node"],
+              ...(run.lib.length ? { lib: run.lib } : {}),
+              paths: readHostModuleTypePaths(engineRoot),
+            },
+            files: runFiles,
+          }),
         );
+        const strictOutput = await runTsc(["--project", config], overlay);
         const errors = strictOutput.split("\n").filter((line) => /\berror TS\d+: /.test(line)).length;
         if (strictOutput) {
           failed = true;

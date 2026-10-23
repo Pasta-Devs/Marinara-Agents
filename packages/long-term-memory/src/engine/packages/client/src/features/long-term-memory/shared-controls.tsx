@@ -5,18 +5,35 @@ import {
   useRef,
   useState,
   type ButtonHTMLAttributes,
+  type FocusEvent,
   type HTMLAttributes,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { Info, Loader2, type LucideIcon } from "lucide-react";
+import { Info, Loader2, TriangleAlert, type LucideIcon } from "lucide-react";
 import { useLtmTranslation } from "./localization";
 
 let activePopover: { id: string; close: () => void } | null = null;
 
 export const inputClass = "mari-editor-field min-h-11 w-full px-3 text-sm";
 export const compactInputClass = "mari-chrome-field min-h-9 w-full !rounded-md px-3 py-2 text-xs";
-export const compactInputStyle = { color: "var(--foreground)" } as const;
+// `relative` paints the field above a compact info button's enlarged hit area.
+export const compactInputStyle = { color: "var(--foreground)", position: "relative" } as const;
+
+/**
+ * Scrolls a keyboard-focused control out from under a pinned batch bar. The browser scrolls focus
+ * only to the edge of the scroller, which leaves Shift+Tab under a top bar and Tab under a bottom one.
+ */
+export function revealFocusUnderStickyBar(event: FocusEvent<HTMLElement>, bar: HTMLElement | null) {
+  const target = event.target;
+  if (!bar || bar.contains(target)) return;
+  requestAnimationFrame(() => {
+    if (getComputedStyle(bar).position !== "sticky" || !target.matches(":focus-visible")) return;
+    const barRect = bar.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    if (targetRect.bottom > barRect.top && targetRect.top < barRect.bottom) target.scrollIntoView({ block: "center" });
+  });
+}
 
 export const Button = forwardRef<
   HTMLButtonElement,
@@ -181,7 +198,7 @@ export function InfoPopover({
         className={`${compact ? "h-7 w-7" : "h-11 w-11"} inline-flex shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]`}
         style={
           compact
-            ? { height: "1.75rem", width: "1.75rem", flexShrink: 0 }
+            ? { position: "relative", height: "1.75rem", width: "1.75rem", flexShrink: 0 }
             : { height: "2.75rem", width: "2.75rem", flexShrink: 0 }
         }
         onMouseEnter={show}
@@ -199,6 +216,8 @@ export function InfoPopover({
         }}
       >
         <Info aria-hidden="true" size="0.875rem" />
+        {/* The compact glyph keeps its 1.75rem box; this layer widens the touch target to 2.75rem. */}
+        {compact ? <span aria-hidden="true" style={{ position: "absolute", inset: "-0.5rem" }} /> : null}
       </button>
       {open
         ? createPortal(
@@ -312,6 +331,7 @@ export function StatusSurface({
   busy = false,
   compact = false,
   className = "",
+  style,
   ...props
 }: {
   children: ReactNode;
@@ -323,18 +343,35 @@ export function StatusSurface({
   const toneClass = {
     neutral: "text-[var(--marinara-editor-muted)]",
     success: "text-[var(--marinara-editor-accent)]",
-    warning: "",
-    danger: "border-[var(--destructive)]/35 text-[var(--destructive)]",
+    warning: "text-[var(--marinara-editor-text)]",
+    danger: "text-[var(--destructive)]",
   }[tone];
+  // No Engine defines a warning color, so a warning says so with an icon and the strong editor border. Tone
+  // borders are inline because the Engine's unlayered .mari-editor-panel border outranks utility classes.
+  const warning = tone === "warning";
+  const borderColor = warning
+    ? "var(--marinara-editor-border-strong)"
+    : tone === "danger"
+      ? "color-mix(in oklab, var(--destructive) 35%, transparent)"
+      : undefined;
   return (
     <div
       role={tone === "danger" ? "alert" : "status"}
       aria-live="polite"
       data-ltm-status={tone}
-      className={`${compact ? "rounded-md border border-[var(--border)] bg-[var(--background)]/75 px-2 py-1.5 text-[0.625rem]" : "mari-editor-panel mari-editor-panel--soft min-h-11 px-3 text-xs"} flex items-center gap-2 ${toneClass} ${className}`}
+      className={`${compact ? `rounded-md border ${borderColor ? "" : "border-[var(--border)]"} bg-[var(--background)]/75 px-2 py-1.5 text-[0.625rem]` : "mari-editor-panel mari-editor-panel--soft min-h-11 px-3 py-2 text-xs"} flex items-center gap-2 ${toneClass} ${className}`}
+      style={borderColor ? { borderColor, ...style } : style}
       {...props}
     >
       {busy ? <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin motion-reduce:animate-none" /> : null}
+      {warning ? (
+        <TriangleAlert
+          aria-hidden="true"
+          size={compact ? "0.75rem" : "1rem"}
+          className="shrink-0"
+          data-ltm-status-icon
+        />
+      ) : null}
       {children}
     </div>
   );

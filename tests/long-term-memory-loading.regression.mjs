@@ -18,13 +18,17 @@ const testRun = (async () => {
   assert.match(vault, /useQuery\(scopeTargetsQueryOptions\(props\.chatId\)\)/u);
   assert.match(sources, /useQuery\(scopeTargetsQueryOptions\(props\.chatId\)\)/u);
 
-  const previewBlock = sources.slice(
-    sources.indexOf("const preview = useInfiniteQuery({"),
-    sources.indexOf("const rows ="),
+  const previewBlock = sources.slice(sources.indexOf("const previewEnabled ="), sources.indexOf("const rows ="));
+  assert.match(
+    previewBlock,
+    /const previewEnabled = sourceContextMatchesProps && sourceTargetResolved && source !== "lorebooks"/u,
   );
-  assert.match(previewBlock, /sourceContextMatchesProps && sourceTargetResolved && source !== "lorebooks"/u);
-  assert.match(previewBlock, /const lorebookPreview = useInfiniteQuery\(/u);
-  assert.match(previewBlock, /sourceContextMatchesProps && sourceTargetResolved && source === "lorebooks"/u);
+  assert.match(
+    previewBlock,
+    /const lorebookPreviewEnabled = sourceContextMatchesProps && sourceTargetResolved && source === "lorebooks"/u,
+  );
+  assert.match(previewBlock, /const preview = useInfiniteQuery\(\{[\s\S]*?enabled: previewEnabled,/u);
+  assert.match(previewBlock, /const lorebookPreview = useInfiniteQuery\(\{[\s\S]*?enabled: lorebookPreviewEnabled,/u);
   const sourceDetailsBlock = sources.slice(
     sources.indexOf("const sourceDetails = useQuery({"),
     sources.indexOf("const previewData ="),

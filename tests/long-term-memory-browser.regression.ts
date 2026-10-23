@@ -1641,6 +1641,41 @@ async function main() {
       browser = await chromium.launch({ args: ["--disable-gpu"] });
       const browserContext = await browser.newContext({ hasTouch: true });
       const page = await browserContext.newPage();
+      // #1588: "fits" when a touch target is at least 2.75rem (44px) both ways, else its size.
+      const touchTargetSize = (target: ReturnType<typeof page.locator>) =>
+        target.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.width >= 44 && rect.height >= 44 ? "fits" : `${rect.width}x${rect.height}`;
+        });
+      // #1588: scrolls the bar's scroller to one end; "in view" when the bar is still inside the scrollport and
+      // the window.
+      const stickyBarInView = (bar: ReturnType<typeof page.locator>, end: "top" | "bottom") =>
+        bar.evaluate((element, scrollEnd) => {
+          let scroller = element.parentElement;
+          while (
+            scroller &&
+            !(
+              /auto|scroll/u.test(getComputedStyle(scroller).overflowY) && scroller.scrollHeight > scroller.clientHeight
+            )
+          )
+            scroller = scroller.parentElement;
+          const scrolling = scroller ?? document.scrollingElement!;
+          scrolling.scrollTop = scrollEnd === "bottom" ? scrolling.scrollHeight : 0;
+          const box = scroller?.getBoundingClientRect() ?? { top: 0, bottom: innerHeight };
+          const port = { top: Math.max(box.top, 0), bottom: Math.min(box.bottom, innerHeight) };
+          const rect = element.getBoundingClientRect();
+          return rect.top >= port.top - 1 && rect.bottom <= port.bottom + 1
+            ? "in view"
+            : `bar ${rect.top}-${rect.bottom} outside ${port.top}-${port.bottom} at scrollTop ${scrolling.scrollTop}`;
+        }, end);
+      // #1588: sizes the detail panel as a host panel does: the window's height, so its content scrolls inside
+      // it, and a width ("" for full, "24rem" for a narrow side panel on a wide window); null undocks it.
+      const dockDetailPanel = (target: typeof page, maxWidth: string | null) =>
+        target.locator('[data-ltm-surface="detail"]').evaluate((surface, width) => {
+          (surface as HTMLElement).style.height = width === null ? "" : "100vh";
+          (surface as HTMLElement).style.maxWidth = width ?? "";
+          if (width !== null) surface.scrollIntoView({ block: "start" });
+        }, maxWidth);
       page.on("request", (request) => {
         if (request.method() !== "POST") return;
         const body = request.postDataJSON() as Record<string, unknown>;
@@ -2035,6 +2070,8 @@ async function main() {
         .evaluate((description) => description.getBoundingClientRect().width);
       await page.getByRole("button", { name: "Next: How recall works" }).click();
       assert.equal(await onboardingTitle.innerText(), "How Recall Works");
+      // #1588: each step moves focus to its title, so the step change is read and Tab starts at the top.
+      await page.waitForFunction(() => document.activeElement?.id === "ltm-onboarding-title");
       const onboardingNext = page.getByRole("button", {
         name: "Next: Enabling it for the Current Chat",
       });
@@ -2223,6 +2260,8 @@ async function main() {
       // Bulk remove lists the branch assignment the selected memory already has.
       await page.locator("[data-ltm-select-mode]").click();
       await branchCard.locator('input[type="checkbox"]').check();
+      // #1588: the whole label around a row checkbox is a 44px target, not just the box.
+      assert.equal(await touchTargetSize(branchCard.locator('label:has(input[type="checkbox"])')), "fits");
       await page.locator("[data-ltm-bulk-availability]").click();
       const bulkBranchRemoval = page.locator("[data-ltm-bulk-availability-workbench]");
       await bulkBranchRemoval.waitFor();
@@ -2315,7 +2354,10 @@ async function main() {
       releaseDeletedChatBatch?.();
       // When the change finishes, the row actions work again, the list reloads and the open memory keeps its unsaved
       // title; the availability panel below shows the places after the change.
-      await branchCard.locator("[data-ltm-note-actions-desktop] button:enabled").first().waitFor();
+      await branchCard
+        .locator("[data-ltm-note-actions-desktop] button:enabled:not([aria-disabled='true'])")
+        .first()
+        .waitFor();
       assert.ok(noteQueries.length > noteQueriesBeforeBatch, "the memory list reloads after the change");
       assert.equal(await branchTitle.inputValue(), "Memory outside current chat, edited");
       await branchTitle.fill("Memory outside current chat");
@@ -2326,6 +2368,10 @@ async function main() {
       assert.equal(await branchAvailability.locator("[data-ltm-availability-pills] button").count(), 4);
       await wholeChatPill.click();
       assert.equal(await wholeChatPill.count(), 0);
+      // #1588: focus stays in the chip list on a neighbouring chip's Remove button.
+      await page.waitForFunction(
+        () => document.activeElement?.matches("[data-ltm-availability-pills] [data-ltm-pill-remove]") ?? false,
+      );
       assert.equal(await branchPills.count(), 0, "removing the whole chat removes its branches");
       await branchAvailability.getByRole("button", { name: "Cancel", exact: true }).click();
       await page.getByRole("button", { name: "Edit availability" }).click();
@@ -2415,6 +2461,10 @@ async function main() {
       );
       releaseRename?.();
       await renameDialog.waitFor({ state: "detached" });
+      // #1588: closing Rename details returns focus to a Rename button, here the renamed detail's.
+      const renameButtonFocused = () =>
+        page.waitForFunction(() => document.activeElement?.matches("[data-ltm-rename-detail]") ?? false);
+      await renameButtonFocused();
       await page.unroute(renameRoute);
       // Below 48rem the memory list's pane is hidden while the details show; Rename detail still opens a
       // visible dialog instead of an invisible one that freezes the page (#1584).
@@ -2437,7 +2487,24 @@ async function main() {
       );
       await renameDialog.getByRole("button", { name: "Cancel" }).click();
       await renameDialog.waitFor({ state: "detached" });
+      await renameButtonFocused();
       if (vaultViewport) await page.setViewportSize(vaultViewport);
+
+      // #1588: docked narrow on a wide window, the Vault lays out by its own width: row actions move into
+      // the More menu and the memory list follows the page instead of a viewport-height scroller.
+      const vaultLayout = () =>
+        page.locator("[data-ltm-memory-list]").evaluate((list) => ({
+          inline: getComputedStyle(list.querySelector('[data-ltm-row-actions="inline"]')!).display,
+          menu: getComputedStyle(list.querySelector('[data-ltm-row-actions="menu"]')!).display,
+          capped: getComputedStyle(list).maxHeight !== "none",
+        }));
+      assert.deepEqual(await vaultLayout(), { inline: "flex", menu: "none", capped: true });
+      await dockDetailPanel(page, "24rem");
+      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      assert.deepEqual(await vaultLayout(), { inline: "none", menu: "block", capped: false });
+      if (visualOutputDir) await page.screenshot({ path: join(visualOutputDir, "long-term-memory-vault-docked.png") });
+      assert.equal(await touchTargetSize(page.locator('[data-ltm-control="back"]')), "fits");
+      await dockDetailPanel(page, null);
       await memorySearch.fill("Scoped desktop memory");
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
       const recoverySource = page.locator('[data-ltm-review-source-select="source_mobile_recovery"]');
@@ -2595,6 +2662,26 @@ async function main() {
       await page.locator('[data-ltm-surface="detail"]').waitFor();
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
       await page.locator("[data-ltm-review-state-warning]").waitFor();
+      // #1588: a warning carries an icon and the strong editor border, not only a tone attribute.
+      const reviewStateWarning = page.locator("[data-ltm-review-state-warning]");
+      assert.equal(await reviewStateWarning.locator("[data-ltm-status-icon]").count(), 1);
+      assert.equal(
+        await reviewStateWarning.evaluate((surface) => {
+          const probe = document.createElement("div");
+          probe.style.border = "1px solid var(--marinara-editor-border-strong)";
+          surface.parentElement?.append(probe);
+          const expected = getComputedStyle(probe).borderTopColor;
+          probe.remove();
+          const actual = getComputedStyle(surface).borderTopColor;
+          return actual === expected ? "strong" : `${actual} is not ${expected}`;
+        }),
+        "strong",
+      );
+      assert.equal(
+        await reviewStateWarning.evaluate((surface) => getComputedStyle(surface).paddingTop),
+        "8px",
+        "a status surface keeps its text and actions off its border",
+      );
       reviewFingerprintRevision = 0;
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: How recall works" }).click();
@@ -3051,6 +3138,10 @@ async function main() {
       let debugLogError = false;
       let debugClearDeletes = 0;
       let debugLogDelayMs = 0;
+      // Older filler events, so the default 200-event window is full and "Show up to 1,000" shows.
+      let debugLogPadding = 0;
+      // Holds debug-log responses until the test releases them.
+      let debugLogGate: Promise<void> | null = null;
       let debugLogRequests = 0;
       const debugReviewSources = structuredClone(reviewSources);
       const assertDebugActivity = async (activityPage: typeof page, navigation: "desktop" | "mobile") => {
@@ -3294,7 +3385,13 @@ async function main() {
         assert.match(searchedEstimated, /AI extraction/u);
         assert.match(searchedEstimated, /500 ms/u);
         await showEvents();
-        await searchBox.fill("");
+        // #1588: clearing the search keeps focus in the search box.
+        await activity.getByRole("button", { name: "Clear activity search" }).click();
+        assert.deepEqual(
+          await searchBox.evaluate((input) => [input === document.activeElement, (input as HTMLInputElement).value]),
+          [true, ""],
+          "clearing the activity search keeps focus in the empty search box",
+        );
         // A recorded recall is an ordinary history row naming its source chat, and
         // its selected/rejected memory names read before the run parameters.
         const recall = await operation("recall");
@@ -3500,6 +3597,12 @@ async function main() {
         await debugDirty.getByText(/Unsaved change to recall explanations/u).waitFor();
         await debugDirty.getByRole("button", { name: "Save now" }).click();
         await activityPage.getByText("Memory settings saved.").waitFor();
+        // #1588: "Save now" leaves with the saved change, so focus moves to its result.
+        await activityPage.waitForFunction(
+          () =>
+            document.activeElement?.matches("[data-ltm-settings-message]") &&
+            document.activeElement.textContent?.includes("Memory settings saved."),
+        );
         assert.equal(
           await activityPage
             .locator('[data-ltm-surface="memory-settings"] [data-ltm-status]')
@@ -3509,6 +3612,16 @@ async function main() {
           "save feedback is shown once in the Debug panel",
         );
         assert.equal(await debugToggle.isChecked(), !debugChecked, "saving persists the toggled Debug setting");
+        // #1588: Discard also leaves with the change; focus goes to the open tab, not to the earlier save's result.
+        await debugToggle.click();
+        await debugDirty.waitFor();
+        await activityPage
+          .locator('[data-ltm-surface="memory-settings"]')
+          .getByRole("button", { name: "Discard changes" })
+          .click();
+        await debugDirty.waitFor({ state: "detached" });
+        await activityPage.waitForFunction(() => document.activeElement?.id === "settings-tab-debug");
+        assert.equal(await debugToggle.isChecked(), !debugChecked, "Discard keeps the saved Debug setting");
         // D06 repair: a same-turn double Refresh must coalesce into one debug-log
         // request; the button guard reads React Query's rendered `isFetching`, which is
         // still false for a second activation in the same task.
@@ -3539,6 +3652,35 @@ async function main() {
           "a same-turn double Refresh coalesces into one debug-log request",
         );
         debugLogDelayMs = 0;
+        if (navigation === "desktop") {
+          // #1588: "Show up to 1,000 events" keeps the log and keeps focus while the longer
+          // log loads, then hands focus to the log once the control is gone.
+          debugLogPadding = 250;
+          await activityPage.locator("#settings-tab-recall").click();
+          await activityPage.locator("#settings-tab-debug").click();
+          const showMore = activity.locator("[data-ltm-activity-show-more]");
+          await showMore.waitFor();
+          let releaseDebugLog = () => {};
+          debugLogGate = new Promise<void>((resolve) => {
+            releaseDebugLog = resolve;
+          });
+          await showMore.focus();
+          await activityPage.keyboard.press("Enter");
+          await activityPage.waitForFunction(
+            () => document.activeElement?.matches('[data-ltm-activity-show-more][aria-disabled="true"]') ?? false,
+          );
+          assert.equal(await activity.locator("[data-ltm-debug-list]").count(), 1, "the log stays while it grows");
+          debugLogGate = null;
+          releaseDebugLog();
+          await showMore.waitFor({ state: "detached" });
+          await activityPage.waitForFunction(
+            () => document.activeElement?.matches('[data-ltm-surface="activity"] [data-ltm-debug-list]') ?? false,
+          );
+          debugLogPadding = 0;
+          await activityPage.locator("#settings-tab-recall").click();
+          await activityPage.locator("#settings-tab-debug").click();
+          await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
+        }
         // M2: a recall whose chat resolves through /scope-targets shows the chat label.
         const resolvedRecall = await operation("recall-desktop");
         assert.match(resolvedRecall, /Recall from Current Final Branch/u);
@@ -3754,6 +3896,7 @@ async function main() {
           debugLogRequests += 1;
           // A delay keeps the first request in flight so a same-turn second activation is observable.
           if (debugLogDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, debugLogDelayMs));
+          if (debugLogGate) await debugLogGate;
           if (debugLogError) {
             route.fulfill({ status: 500, json: { error: "Activity fixture failed." } });
             return;
@@ -3774,8 +3917,12 @@ async function main() {
               matches(record.phase, query.get("phase"))
             );
           });
+          const padding = Array.from({ length: debugLogPadding }, (_, index) =>
+            debugEvent(`padding-${index}`, "extract_source_note", "ok"),
+          );
+          const events = [...padding, ...filtered];
           const limit = Number(query.get("limit") ?? 0);
-          route.fulfill({ json: { events: limit > 0 ? filtered.slice(-limit) : filtered } });
+          route.fulfill({ json: { events: limit > 0 ? events.slice(-limit) : events } });
         });
         await debugPage.route("**/api/long-term-memory/debug-log/export", async (route) => {
           // A small delay lets the test observe the pending/disabled guard.
@@ -3921,6 +4068,62 @@ async function main() {
         await capPage.locator("[data-ltm-selection-count]").filter({ hasText: "250 selected" }).waitFor();
         await capPage.close();
       }
+      // #1588: each memory group in the place picker shows 100 places at a time, so with more than 100 places
+      // holding memories, "Show N places with no memories" still opens its group.
+      {
+        const groupCapPage = await browserContext.newPage();
+        await groupCapPage.route(
+          (url) => url.pathname.endsWith("/api/long-term-memory/scope-targets"),
+          async (route) => {
+            const response = await route.fetch();
+            const targets = await response.json();
+            const capChats = Array.from({ length: 101 }, (_, index) => ({
+              id: `cap-chat-${index}`,
+              label: `Cap chat ${index}`,
+              mode: "conversation",
+              groupId: null,
+              personaId: null,
+              characterIds: [],
+            }));
+            await route.fulfill({
+              response,
+              json: {
+                ...targets,
+                chats: [...targets.chats, ...capChats],
+                memoryPresence: [...targets.memoryPresence, ...capChats.map((chat) => ({ chatId: chat.id }))],
+              },
+            });
+          },
+        );
+        await groupCapPage.goto(`http://127.0.0.1:${address.port}/`);
+        await groupCapPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await groupCapPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await groupCapPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+        const groupCapPicker = groupCapPage.locator('[data-ltm-scope-picker="vault"]');
+        const groupCapWith = groupCapPicker.locator('[data-ltm-scope-presence="with-memories"]');
+        const groupCapWithout = groupCapPicker.locator('[data-ltm-scope-presence="no-memories"]');
+        await groupCapPicker.locator("[data-ltm-scope-picker-trigger]").click();
+        await groupCapPicker.locator('[data-ltm-scope-tab="chat"]').click();
+        assert.equal(await groupCapWith.locator("[data-ltm-scope-option]").count(), 100);
+        await groupCapPicker.locator("[data-ltm-scope-show-no-memories]").click();
+        await groupCapWithout.waitFor({ timeout: 5000 });
+        assert.equal(
+          await groupCapWithout.locator('[data-ltm-scope-option][data-highlighted="true"]').count(),
+          1,
+          "opening the group highlights its first place",
+        );
+        const groupCapWithMore = groupCapWith.locator("[data-ltm-scope-show-more]");
+        assert.match((await groupCapWithMore.innerText()).trim(), /^Show \d more$/u);
+        await groupCapWithMore.click();
+        assert.equal(await groupCapWithMore.count(), 0);
+        assert.equal(await groupCapWith.locator('[data-ltm-scope-option="chat:cap-chat-100"]').count(), 1);
+        await groupCapPage.close();
+      }
       // #1376: Reset settings reloads the forms. The Maintenance panel stays mounted, so its
       // result survives and its buttons stay disabled until the settings refetch resolves.
       {
@@ -3986,6 +4189,45 @@ async function main() {
           .waitFor({ timeout: 5000 });
         assert.equal(await resetButton.isDisabled(), false, "Reset is available again once the refetch resolves");
         assert.equal(settingsReads, 1, "Reset reads the settings once");
+        // #1588: each result shows under the controls that produced it, not at the top of the panel.
+        const maintenanceResultPlace = (text: RegExp) =>
+          maintenancePanel
+            .locator("[data-ltm-status]")
+            .filter({ hasText: text })
+            .evaluate((result) => {
+              const buttons = [...document.querySelectorAll<HTMLButtonElement>("#settings-panel-maintenance button")];
+              const reset = buttons.find((item) => item.textContent?.trim() === "Reset settings")!;
+              const run = buttons.find((item) => item.textContent?.trim() === "Run selected maintenance")!;
+              return {
+                afterReset: Boolean(reset.compareDocumentPosition(result) & Node.DOCUMENT_POSITION_FOLLOWING),
+                beforeRun: Boolean(result.compareDocumentPosition(run) & Node.DOCUMENT_POSITION_FOLLOWING),
+                afterRun: Boolean(run.compareDocumentPosition(result) & Node.DOCUMENT_POSITION_FOLLOWING),
+              };
+            });
+        assert.deepEqual(await maintenanceResultPlace(/^Memory settings reset to defaults, but/u), {
+          afterReset: true,
+          beforeRun: true,
+          afterRun: false,
+        });
+        await resetPage.route("**/api/long-term-memory/repair", (route) =>
+          route.fulfill({ json: { actions: [{ action: "rebuild_indexes", result: "completed", count: 4 }] } }),
+        );
+        await maintenancePanel.getByRole("checkbox", { name: "Reindex recall data", exact: true }).check();
+        await maintenancePanel.getByRole("button", { name: "Run selected maintenance" }).click();
+        await maintenancePanel
+          .locator("[data-ltm-status]")
+          .filter({ hasText: /\(4\)$/u })
+          .waitFor();
+        assert.deepEqual(await maintenanceResultPlace(/\(4\)$/u), {
+          afterReset: true,
+          beforeRun: false,
+          afterRun: true,
+        });
+        assert.equal(
+          await maintenancePanel.getByText(/^Memory settings reset to defaults, but/u).count(),
+          0,
+          "a new run replaces the previous result",
+        );
         await resetPage.locator("#settings-tab-recall").click();
         assert.equal(
           await maxChunks.inputValue(),
@@ -4211,6 +4453,46 @@ async function main() {
         }
         await focusPage.close();
       }
+      {
+        // #1588: clearing the memory search keeps focus in the search box, Create detail moves focus into the
+        // new detail's text, and Cancel returns it to the button that opened the form.
+        const detailPage = await browserContext.newPage();
+        await detailPage.goto(`http://127.0.0.1:${address.port}/`);
+        await detailPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await detailPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        const detailSearch = detailPage.getByLabel("Search memories", { exact: true });
+        await detailSearch.fill("Scoped desktop memory");
+        await detailPage.getByRole("button", { name: "Clear memory search" }).click();
+        assert.deepEqual(
+          await detailSearch.evaluate((input) => [input === document.activeElement, (input as HTMLInputElement).value]),
+          [true, ""],
+          "clearing the memory search keeps focus in the empty search box",
+        );
+        await detailSearch.fill("Scoped desktop memory");
+        const detailCard = detailPage
+          .locator('[data-ltm-note-type="world"]')
+          .filter({ hasText: /^Scoped desktop memory/u })
+          .first();
+        await detailCard.waitFor();
+        await detailCard.locator("button").first().click();
+        const createDetail = detailPage.getByRole("button", { name: "Create new memory detail" });
+        await createDetail.waitFor();
+        await createDetail.click();
+        await detailPage.locator("[data-ltm-details]").getByRole("button", { name: "Cancel", exact: true }).click();
+        await detailPage.waitForFunction(
+          () => document.activeElement?.textContent?.trim() === "Create new memory detail",
+        );
+        await createDetail.click();
+        await detailPage.locator("[data-ltm-details]").getByLabel("New detail name").fill("habits");
+        await detailPage.getByRole("button", { name: "Create detail", exact: true }).click();
+        await detailPage.waitForFunction(() => document.activeElement?.id === "ltm-section-habits");
+        await detailPage.close();
+      }
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
       await page.evaluate((version) => {
         const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
@@ -4229,6 +4511,17 @@ async function main() {
       const selectBox = await chatSettings.locator('select[data-ltm-control="select"]').boundingBox();
       assert.ok(selectBox);
       assert.ok(selectBox.height <= 38, `Expected compact select height <= 38px, got ${selectBox.height}`);
+      // #1588: the compact info button keeps its 1.75rem look but answers taps 0.5rem around it.
+      assert.equal(
+        await chatSettings.locator('[data-ltm-info="Recall style"]').evaluate((button) => {
+          button.scrollIntoView({ block: "center" });
+          const rect = button.getBoundingClientRect();
+          const hit = document.elementFromPoint(rect.left - 6, rect.top + rect.height / 2);
+          return button.contains(hit) ? "inside" : `${rect.width}x${rect.height} hit ${hit?.outerHTML.slice(0, 120)}`;
+        }),
+        "inside",
+      );
+      assert.equal(await touchTargetSize(chatSettings.locator('[data-ltm-info="Recall style"] > span')), "fits");
       const lastInjection = chatSettings.locator("[data-ltm-last-injection]");
       await lastInjection.getByText(/1 saved memory included in the latest model context/u).waitFor();
       await lastInjection.click();
@@ -4343,6 +4636,8 @@ async function main() {
       assert.equal(await restoredGuide.getByText("Step 4 of 7 · Import").count(), 1);
       await restoredGuide.getByRole("button", { name: "Close" }).click();
       await restoredGuide.waitFor({ state: "detached" });
+      // #1588: closing the guide returns focus to the button that reopens it.
+      await page.waitForFunction(() => document.activeElement?.matches("[data-ltm-onboarding-help]") ?? false);
       assert.equal(
         await page
           .locator('[data-ltm-control="navigation"]')
@@ -4388,11 +4683,116 @@ async function main() {
       assert.ok(navigatorBox);
       await page.locator('[data-ltm-surface="vault-health-warning"]').waitFor();
       assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"] [data-ltm-info]').count(), 1);
+      // #1588: the warning banner shows StatusSurface's icon once, not a second one of its own.
+      assert.equal(
+        await page.locator('[data-ltm-surface="vault-health-warning"]').getAttribute("data-ltm-status"),
+        "warning",
+      );
+      assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"] [data-ltm-status-icon]').count(), 1);
+      assert.equal(
+        await page.locator('[data-ltm-surface="vault-health-warning"] svg.lucide-triangle-alert').count(),
+        1,
+      );
       await page.locator('[data-ltm-surface="vault-health-warning"] [data-ltm-info]').click();
       const healthInfoPanel = page.locator("[data-ltm-info-panel]").last();
       await healthInfoPanel.waitFor();
       assert.match(await healthInfoPanel.innerText(), /12 indexed chunks/u);
       assert.match(await healthInfoPanel.innerText(), /Check Settings > Maintenance > Reindex recall data\./u);
+      // #1588: the Reindex result shows under the health banner, not only inside its closed info popover.
+      // A pointer press outside closes the popover; Escape would refocus the trigger, which reopens it.
+      await page.mouse.move(0, 0);
+      await page.locator("body").dispatchEvent("pointerdown");
+      await healthInfoPanel.waitFor({ state: "detached" });
+      let failReindex = true;
+      let releaseReindex: (() => void) | null = null;
+      const reindexHeld = new Promise<void>((resolve) => {
+        releaseReindex = resolve;
+      });
+      await page.route("**/api/long-term-memory/repair", async (route) => {
+        if (failReindex) {
+          failReindex = false;
+          return route.fulfill({
+            status: 500,
+            contentType: "application/json",
+            body: JSON.stringify({ error: "Reindex fixture failed" }),
+          });
+        }
+        await reindexHeld;
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+      });
+      const reindexButton = page
+        .locator('[data-ltm-surface="vault-health-warning"]')
+        .getByRole("button", { name: "Reindex recall" });
+      const reindexResult = (state: string) =>
+        page.locator(`[data-ltm-reindex-result="${state}"]`).evaluate((result) => ({
+          role: result.getAttribute("role"),
+          text: result.textContent?.trim(),
+          inPopover: Boolean(result.closest("[data-ltm-info-panel]")),
+          afterBanner: Boolean(
+            document.querySelector('[data-ltm-surface="vault-health-warning"]')?.compareDocumentPosition(result) ===
+            Node.DOCUMENT_POSITION_FOLLOWING,
+          ),
+        }));
+      await reindexButton.click();
+      await page.locator('[data-ltm-reindex-result="danger"]').waitFor();
+      assert.deepEqual(await reindexResult("danger"), {
+        role: "alert",
+        text: "Reindex fixture failed",
+        inPopover: false,
+        afterBanner: true,
+      });
+      await reindexButton.click();
+      await page.locator('[data-ltm-reindex-result="pending"]').waitFor();
+      assert.deepEqual(await reindexResult("pending"), {
+        role: "status",
+        text: "Rebuilding the recall index...",
+        inPopover: false,
+        afterBanner: true,
+      });
+      releaseReindex?.();
+      await page.locator('[data-ltm-reindex-result="success"]').waitFor();
+      assert.deepEqual(await reindexResult("success"), {
+        role: "status",
+        text: "Recall index repair completed.",
+        inPopover: false,
+        afterBanner: true,
+      });
+      // #1588: the result shows once, not a second time inside the health popover.
+      await page.locator('[data-ltm-surface="vault-health-warning"] [data-ltm-info]').click();
+      await healthInfoPanel.waitFor();
+      assert.equal(await page.getByText("Recall index repair completed.").count(), 1);
+      await page.mouse.move(0, 0);
+      await page.locator("body").dispatchEvent("pointerdown");
+      await healthInfoPanel.waitFor({ state: "detached" });
+      // #1588: a reindex that ends after you leave its screen shows its outcome on no screen, including the
+      // one you return to.
+      await page.unroute("**/api/long-term-memory/repair");
+      let releaseLateReindex = () => {};
+      const lateReindexHeld = new Promise<void>((resolve) => {
+        releaseLateReindex = resolve;
+      });
+      await page.route("**/api/long-term-memory/repair", async (route) => {
+        await lateReindexHeld;
+        return route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Late reindex failed" }),
+        });
+      });
+      await reindexButton.click();
+      await page.locator('[data-ltm-reindex-result="pending"]').waitFor();
+      await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"]').click();
+      await page.locator("[data-ltm-reindex-result]").waitFor({ state: "detached" });
+      releaseLateReindex();
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll<HTMLButtonElement>('[data-ltm-surface="vault-health-warning"] button')].some(
+          (button) => button.textContent?.includes("Reindex recall") && !button.disabled,
+        ),
+      );
+      assert.equal(await page.locator("[data-ltm-reindex-result]").count(), 0);
+      await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="vault"]').click();
+      assert.equal(await page.locator("[data-ltm-reindex-result]").count(), 0);
+      await page.unroute("**/api/long-term-memory/repair");
 
       const showWorkspacePane = async (pane: "navigator" | "workbench" | "inspector") => {
         const target = page.locator(`[data-ltm-workspace-pane="${pane}"]`);
@@ -4533,6 +4933,15 @@ async function main() {
       const reviewWorkspace = page.locator('[data-ltm-surface="review-queue"] [data-ltm-workspace-container]');
       const reviewContextRoute = (url: URL) =>
         url.pathname.endsWith("/api/long-term-memory/notes") && url.searchParams.has("ids");
+      // #1588: focus moves to the next change, or to the result, instead of the page.
+      const reviewFocusMoved = async () => {
+        await page.waitForFunction(
+          () =>
+            document.activeElement?.matches(
+              '[data-ltm-surface="review-queue"] :is([data-ltm-review-mutation-toggle], [data-ltm-review-result])',
+            ) ?? false,
+        );
+      };
       const acceptWithReviewContextHeld = async (
         mutationId: string,
         accept: () => Promise<void>,
@@ -4567,7 +4976,13 @@ async function main() {
         assert.deepEqual(
           await page
             .locator('[data-ltm-surface="review-queue"] [data-ltm-review-action]')
-            .evaluateAll((actions) => actions.filter((action) => !(action as HTMLButtonElement).disabled).length),
+            .evaluateAll(
+              (actions) =>
+                actions.filter(
+                  (action) =>
+                    !(action as HTMLButtonElement).disabled && action.getAttribute("aria-disabled") !== "true",
+                ).length,
+            ),
           0,
           "no change can be accepted against the reloading context",
         );
@@ -4593,6 +5008,7 @@ async function main() {
             .click(),
         async () => {
           assert.equal(await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.second}"]`).count(), 1);
+          await reviewFocusMoved();
           await page.keyboard.press("Tab");
           assert.equal(
             await page.evaluate(() => Boolean(document.activeElement?.closest('[data-ltm-surface="review-queue"]'))),
@@ -4706,12 +5122,93 @@ async function main() {
       await page
         .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-review-mutation-toggle]`)
         .click();
+      // #1588: on a phone the batch bar sits above the rows and sticks to the top of the scroller, so it stays
+      // in view at the end of a long draft; the compact row checkbox and the preview summary are 44px targets.
+      const reviewWorkbench = page.locator("[data-ltm-review-workbench]");
+      const reviewBatchBar = page.locator("[data-ltm-review-batch-actions]");
+      await dockDetailPanel(page, "");
+      await reviewWorkbench.evaluate((workbench) => {
+        (workbench as HTMLElement).style.minHeight = "250vh";
+      });
+      assert.equal(await stickyBarInView(reviewBatchBar, "bottom"), "in view");
+      if (visualOutputDir)
+        await page.screenshot({ path: join(visualOutputDir, "long-term-memory-review-batch-bar-mobile.png") });
+      // Shift+Tab onto a row checkbox that sits under the stuck bar scrolls it out from under the bar.
+      const partialRowCheckbox = page.locator(
+        `[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`,
+      );
+      const partialCheckboxState = () =>
+        partialRowCheckbox.evaluate((checkbox) => {
+          const bar = document.querySelector("[data-ltm-review-batch-actions]")!.getBoundingClientRect();
+          const rect = checkbox.getBoundingClientRect();
+          const focus = document.activeElement === checkbox ? "focused" : "unfocused";
+          return `${focus} ${rect.bottom > bar.top && rect.top < bar.bottom ? "under bar" : "clear"}`;
+        });
+      await partialRowCheckbox.evaluate((checkbox) => {
+        const bar = document.querySelector("[data-ltm-review-batch-actions]")!;
+        let scroller = bar.parentElement;
+        while (
+          scroller &&
+          !(/auto|scroll/u.test(getComputedStyle(scroller).overflowY) && scroller.scrollHeight > scroller.clientHeight)
+        )
+          scroller = scroller.parentElement;
+        (scroller ?? document.scrollingElement!).scrollTop +=
+          checkbox.getBoundingClientRect().top - (bar.getBoundingClientRect().bottom - 8);
+      });
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-review-mutation-toggle]`)
+        .evaluate((toggle) => (toggle as HTMLElement).focus({ preventScroll: true }));
+      assert.equal(await partialCheckboxState(), "unfocused under bar");
+      await page.keyboard.press("Shift+Tab");
+      let partialCheckboxAfterTab = "";
+      for (let attempt = 0; attempt < 20 && partialCheckboxAfterTab !== "focused clear"; attempt += 1) {
+        await page.waitForTimeout(50);
+        partialCheckboxAfterTab = await partialCheckboxState();
+      }
+      assert.equal(partialCheckboxAfterTab, "focused clear");
+      await reviewWorkbench.evaluate((workbench) => {
+        (workbench as HTMLElement).style.minHeight = "";
+      });
+      await dockDetailPanel(page, null);
+      const partialRow = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"]`);
+      assert.equal(await touchTargetSize(partialRow.locator('label:has([data-ltm-control="review-select"])')), "fits");
+      assert.equal(await touchTargetSize(partialRow.locator("[data-ltm-review-preview] > summary")), "fits");
+      // Docked narrow on a wide window, the bar keeps sticking and the workbench keeps its phone padding.
+      const reviewBarLayout = () =>
+        reviewBatchBar.evaluate((bar) => ({
+          position: getComputedStyle(bar).position,
+          workbenchPadding: getComputedStyle(bar.closest("[data-ltm-review-workbench]")!).paddingTop,
+        }));
+      await page.setViewportSize({ width: 1280, height: 900 });
+      assert.deepEqual(await reviewBarLayout(), { position: "static", workbenchPadding: "16px" });
+      await dockDetailPanel(page, "24rem");
+      await showWorkspacePane("workbench");
+      assert.deepEqual(await reviewBarLayout(), { position: "sticky", workbenchPadding: "12px" });
+      if (visualOutputDir) await page.screenshot({ path: join(visualOutputDir, "long-term-memory-review-docked.png") });
+      await dockDetailPanel(page, null);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await showWorkspacePane("workbench");
+      // #1588: an emptied edit says why Accept is off, on the row and in the batch bar.
+      const emptiedPartial = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"]`);
+      await emptiedPartial.locator("textarea").fill("");
+      const partialAcceptReason = emptiedPartial.locator("[data-ltm-review-accept-reason]");
+      assert.equal(await partialAcceptReason.innerText(), "Can't accept yet: an edited section is empty.");
+      assert.equal(
+        await emptiedPartial.locator('[data-ltm-review-action="review"]').getAttribute("aria-describedby"),
+        await partialAcceptReason.getAttribute("id"),
+      );
+      await emptiedPartial.locator('[data-ltm-control="review-select"]').check();
+      assert.match(
+        await page.locator("[data-ltm-review-batch-accept-reason]").innerText(),
+        /^Fix 1 invalid edited mutation before accepting: /u,
+      );
       await page
         .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] textarea`)
         .fill("Edited pending partial memory");
-      await page
-        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`)
-        .check();
+      assert.equal(
+        await page.locator("[data-ltm-review-accept-reason], [data-ltm-review-batch-accept-reason]").count(),
+        0,
+      );
       reviewPreflightBlocked = true;
       failSecondReviewAccept = false;
       await page.getByRole("button", { name: "Accept eligible (2)" }).click();
@@ -4752,6 +5249,15 @@ async function main() {
         await page.getByText(/Applied \d+ mutations?; [1-9]\d* failed\. .*Draft action failed: .+\./u).count(),
         1,
       );
+      // #1588: failed changes are not counted again as "other pending", and the result stays when the
+      // selection changes, until the next run.
+      assert.doesNotMatch(await page.locator("[data-ltm-review-result]").innerText(), /other mutations? pending/u);
+      const partialSelect = page.locator(
+        `[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`,
+      );
+      await partialSelect.uncheck();
+      await partialSelect.check();
+      assert.equal(await page.getByRole("button", { name: "Retry failed review actions" }).count(), 1);
       failSecondReviewAccept = false;
       await page.getByRole("button", { name: "Retry failed review actions" }).click();
       await page.getByText("Retry preflight complete. Review the results before applying again.").waitFor();
@@ -4759,8 +5265,17 @@ async function main() {
       assert.match(await editedPartial.locator("[data-ltm-review-summary]").innerText(), /Edited proposal/u);
       // This accept drops the second change's merge target from the memory context, so the context reloads under a
       // new id list while the last one stays on screen (#1584).
-      await acceptWithReviewContextHeld(reviewMutationIds.second, () =>
-        page.getByRole("button", { name: /^Apply preflighted \(/ }).click(),
+      // The batch bar leaves with its selection while the applied rows stay until the queue reloads, so focus
+      // must skip those rows. #1588: the click leaves the page focused, as a click does in Safari, and focus
+      // still moves.
+      await acceptWithReviewContextHeld(
+        reviewMutationIds.second,
+        async () => {
+          await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+          assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+          await page.getByRole("button", { name: /^Apply preflighted \(/ }).dispatchEvent("click");
+        },
+        reviewFocusMoved,
       );
       assert.deepEqual(reviewEditedMutationIds.at(-1), [reviewMutationIds.partial]);
       assert.deepEqual(reviewActionCalls, [
@@ -5424,6 +5939,16 @@ async function main() {
         .locator("[data-ltm-vault-feedback]")
         .getByText(/2 memories archived/u)
         .waitFor();
+      // #1588: the batch bar leaves with the selection, so focus moves to the result, which holds Undo.
+      const vaultFeedbackFocused = (text: string) =>
+        page.waitForFunction(
+          (expected) =>
+            (document.activeElement?.matches("[data-ltm-vault-feedback] [data-ltm-status]") &&
+              document.activeElement.textContent?.includes(expected)) ??
+            false,
+          text,
+        );
+      await vaultFeedbackFocused("2 memories archived");
       const undoButton = page.locator("[data-ltm-vault-feedback]").getByRole("button", { name: "Undo" });
       assert.equal(await undoButton.count(), 1);
 
@@ -5431,9 +5956,23 @@ async function main() {
       batchNotesPartial = true;
       await undoButton.click();
       await page.locator('[data-ltm-vault-feedback] [role="alert"]').waitFor();
+      await vaultFeedbackFocused("Could not undo the archive");
       assert.match(
         await page.locator('[data-ltm-vault-feedback] [role="alert"]').innerText(),
         /Could not undo the archive/u,
+      );
+      // #1588: the danger border applies; the Engine's unlayered panel border used to outrank its utility class.
+      assert.equal(
+        await page.locator('[data-ltm-vault-feedback] [role="alert"]').evaluate((surface) => {
+          const probe = document.createElement("div");
+          probe.style.border = "1px solid color-mix(in oklab, var(--destructive) 35%, transparent)";
+          surface.parentElement?.append(probe);
+          const expected = getComputedStyle(probe).borderTopColor;
+          probe.remove();
+          const actual = getComputedStyle(surface).borderTopColor;
+          return actual === expected ? "danger" : `${actual} is not ${expected}`;
+        }),
+        "danger",
       );
       // The rollback call re-archives only the successfully restored active note, leaving the failed resolved note untouched
       const rollbackCall = batchNotesCalls.at(-1);
@@ -5465,7 +6004,9 @@ async function main() {
       );
       releaseUndo?.();
       // The undo still rolls back the partial restore, and Undo works again.
-      await page.locator("[data-ltm-vault-feedback] button:enabled", { hasText: "Undo" }).waitFor();
+      await page
+        .locator("[data-ltm-vault-feedback] button:enabled:not([aria-disabled='true'])", { hasText: "Undo" })
+        .waitFor();
       assert.equal(batchNotesCalls.length, batchCallsBeforeUndo + 3);
       assert.deepEqual(batchNotesCalls.at(-1), { noteIds: ["world_second_mobile"], status: "archived" });
       batchNotesPartial = false;
@@ -5486,7 +6027,9 @@ async function main() {
         .waitFor();
       const freshUndoButton = page.locator("[data-ltm-vault-feedback]").getByRole("button", { name: "Undo" });
       // The undo reloads the open memory it restored, as the archive did.
-      await page.locator("[data-ltm-vault-feedback] button:enabled", { hasText: "Undo" }).waitFor();
+      await page
+        .locator("[data-ltm-vault-feedback] button:enabled:not([aria-disabled='true'])", { hasText: "Undo" })
+        .waitFor();
       const restoredNoteReload = page.waitForRequest(
         (request) =>
           request.method() === "GET" && request.url().endsWith("/long-term-memory/notes/world_second_mobile"),
@@ -5618,7 +6161,10 @@ async function main() {
       assert.deepEqual(permanentDeleteCalls.at(-1), deleteTargetIds);
       // When the deletion finishes, the list reloads, the deleted memories leave the selection, and the deleted memory
       // opened meanwhile closes with the notice that says why.
-      await deleteTargetCards[0]!.locator("[data-ltm-note-actions-desktop] button:enabled").first().waitFor();
+      await deleteTargetCards[0]!
+        .locator("[data-ltm-note-actions-desktop] button:enabled:not([aria-disabled='true'])")
+        .first()
+        .waitFor();
       assert.ok(noteQueries.length > noteQueriesBeforeDelete, "the memory list reloads after the deletion");
       assert.equal(await deleteTargetCards[0]!.locator('input[type="checkbox"]').isChecked(), false);
       assert.equal(await page.locator("[data-ltm-note-editor]").count(), 0);
@@ -5787,7 +6333,29 @@ async function main() {
       );
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
+      // #1588: the list renders 100 places at a time. The fixture's 100 bulk chats come before the group, so the
+      // group is one "Show more" away, and the next tab or search starts again at 100. From the search box the
+      // arrows reach "Show more" and Enter moves the highlight to the first place it adds.
+      const sourceScopeShowMore = sourceScopePicker.locator("[data-ltm-scope-show-more]");
+      const sourceScopeSearch = sourceScopePicker.locator("[data-ltm-scope-picker-popup] input");
+      assert.equal(await sourceScopePicker.locator("[data-ltm-scope-option]").count(), 102);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(), 0);
+      assert.equal((await sourceScopeShowMore.innerText()).trim(), "Show 6 more");
+      await sourceScopeSearch.focus();
+      await page.keyboard.press("ArrowUp");
+      await page.keyboard.press("ArrowUp");
+      assert.equal(
+        await sourceScopeSearch.getAttribute("aria-activedescendant"),
+        await sourceScopeShowMore.getAttribute("id"),
+      );
+      await page.keyboard.press("Enter");
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(), 1);
+      assert.equal(await sourceScopeShowMore.count(), 0);
+      assert.equal(
+        await sourceScopeSearch.getAttribute("aria-activedescendant"),
+        await sourceScopePicker.locator("[data-ltm-scope-option]").nth(102).getAttribute("id"),
+        "Enter on Show more highlights the 101st place",
+      );
       await sourceScopePicker.locator('[data-ltm-scope-tab="chat"]').click();
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-tab="chat"][data-active="true"]').count(), 1);
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-tabpanel="chat"][role="tabpanel"]').count(), 1);
@@ -5802,6 +6370,7 @@ async function main() {
       assert.equal(await sourceScopePicker.locator('[role="tabpanel"] [role="listbox"]').count(), 1);
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
+      await sourceScopeShowMore.click();
       assert.match(
         await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').innerText(),
         /^Conversation A\nAll branches$/u,
@@ -5834,6 +6403,7 @@ async function main() {
         "branch family is searchable by a member branch display name",
       );
       await sourceScopePicker.locator("[data-ltm-scope-picker-popup] input").fill("");
+      await sourceScopeShowMore.click();
       assert.equal(
         await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').count(),
         0,
@@ -5910,8 +6480,55 @@ async function main() {
         await destinationPanel.getByText("Choose a destination before importing scoped memories.").count(),
         1,
       );
+      // #1588: the selection bar says why Import is off, and the button points at that reason.
+      const chatsSelectToggle = page
+        .locator('[data-ltm-source-preview="chats"]')
+        .getByRole("button", { name: "Select", exact: true });
+      await chatsSelectToggle.click();
+      await page.locator('[data-ltm-source-status-filter="ready"]').click();
+      const firstSourceSelect = page.locator('[data-ltm-source-select="character-outside-current-chat"]');
+      await firstSourceSelect.check();
+      const importReasonId = await page
+        .locator(':is([data-ltm-source-action="import-selected"], [data-ltm-source-action="refresh-selected"]):visible')
+        .first()
+        .getAttribute("aria-describedby");
+      assert.ok(importReasonId, "the off Import button points at its reason");
+      const importReasonLine = page.locator(`[id="${importReasonId}"][data-ltm-import-reason]:visible`);
+      assert.equal(await importReasonLine.count(), 1, "the reason the button points at is on screen");
+      assert.equal(await importReasonLine.innerText(), "Choose a destination before importing scoped memories.");
+      // The button stays focusable, so a keyboard user hears that reason as its description, and pressing it
+      // does nothing.
+      const waitingImport = page
+        .locator(':is([data-ltm-source-action="import-selected"], [data-ltm-source-action="refresh-selected"]):visible')
+        .first();
+      assert.equal(await waitingImport.getAttribute("aria-disabled"), "true");
+      await waitingImport.focus();
+      assert.equal(await waitingImport.evaluate((button) => button === document.activeElement), true);
+      const destinationReasons = page.getByText("Choose a destination before importing scoped memories.");
+      const destinationReasonCount = await destinationReasons.count();
+      await page.keyboard.press("Enter");
+      assert.equal(await destinationReasons.count(), destinationReasonCount);
+      await firstSourceSelect.uncheck();
+      await page
+        .locator('[data-ltm-source-preview="chats"]')
+        .getByRole("button", { name: "Done", exact: true })
+        .click();
+      await chatsSelectToggle.waitFor();
+      await page.locator('[data-ltm-source-status-filter="all"]').click();
 
-      // The All tab lists every place kind and labels each row with its kind.
+      // The All tab lists every place kind and labels each row with its kind. #1588: the rail renders 100 places
+      // at a time, and the fixture's 100 bulk chats push the rest behind "Show more"; a new tab starts again at 100.
+      const destinationShowMore = destinationPanel.locator("[data-ltm-availability-show-more]");
+      assert.equal(await destinationPanel.locator("[data-ltm-availability-target]").count(), 100);
+      assert.equal((await destinationShowMore.innerText()).trim(), "Show 6 more");
+      await destinationShowMore.click();
+      // Show more focuses the first place it adds, the 101st row.
+      await page.waitForFunction(
+        () =>
+          document.activeElement ===
+          document.querySelectorAll("#ltm-destination-scope-control [data-ltm-availability-target]")[100],
+      );
+      assert.equal(await destinationShowMore.count(), 0);
       for (const [target, kind] of [
         ["chat:desktop-chat", "Chat · Current Final Branch"],
         ["chat:conversation-a", "Chat · All branches"],
@@ -5926,6 +6543,7 @@ async function main() {
 
       // Each kind tab shows only its own places; a chat with branches is one Chats row.
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      await destinationShowMore.click();
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 1);
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 0);
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:conversation-a"]').count(), 1);
@@ -5954,6 +6572,7 @@ async function main() {
 
       // All chats picks every chat that still fits the 100-ID limit, then clears them again.
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      await destinationShowMore.click();
       const allChatsDestination = destinationPanel.locator('[data-ltm-availability-target="chat:all"]');
       assert.equal(await allChatsDestination.getAttribute("aria-pressed"), "false");
       await allChatsDestination.click();
@@ -5999,8 +6618,23 @@ async function main() {
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
       const currentDestination = destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]');
       assert.match(await currentDestination.innerText(), /^Current\nCurrent Final Branch$/u);
+      // #1588: the destination hint is one status line that stays mounted, so emptying the selection is read
+      // as a change.
+      const destinationHint = destinationPanel.locator('[role="status"][data-ltm-destination-hint]');
+      const destinationHintMounted = () =>
+        destinationHint.evaluate((hint) => (hint as HTMLElement & { ltmMounted?: boolean }).ltmMounted);
+      await destinationHint.evaluate((hint) => {
+        (hint as HTMLElement & { ltmMounted?: boolean }).ltmMounted = true;
+      });
+      assert.equal(await destinationHint.textContent(), "Choose a destination before importing scoped memories.");
+      await currentDestination.click();
+      assert.equal(await destinationHint.textContent(), "");
+      await destinationPanel.locator('button[aria-label^="Remove Current"]').click();
+      assert.equal(await destinationHint.textContent(), "Choose a destination before importing scoped memories.");
+      assert.equal(await destinationHintMounted(), true);
       await currentDestination.click();
       assert.equal(await currentDestination.getAttribute("aria-pressed"), "true");
+      assert.equal(await destinationHintMounted(), true);
       assert.equal(await destinationPanel.locator('button[aria-label^="Remove Current"]').count(), 1);
       await destinationPanel.locator('[data-ltm-availability-tab="persona"]').click();
       await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').click();
@@ -6022,6 +6656,7 @@ async function main() {
 
       // Capacity: the per-kind 100-ID limit blocks the 100th additional chat.
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      await destinationShowMore.click();
       const toggleBulkDestinationChats = async () => {
         for (let index = 0; index < 99; index += 1)
           await destinationPanel
@@ -6089,6 +6724,14 @@ async function main() {
         .click();
       await page.locator('[data-ltm-source-status-filter="ready"]').click();
       await page.locator('[data-ltm-source-select="character-outside-current-chat"]').check();
+      assert.equal(
+        await page.locator("[data-ltm-import-result-status]").count(),
+        1,
+        "the import status line is mounted before the import",
+      );
+      await page.locator("[data-ltm-import-result-status]").evaluate((line) => {
+        (line as HTMLElement & { ltmMountedBeforeImport?: boolean }).ltmMountedBeforeImport = true;
+      });
       const mergedDestinationRequestPromise = page.waitForRequest(
         (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-notes"),
       );
@@ -6103,6 +6746,20 @@ async function main() {
         personaIds: ["persona-a"],
       });
       await page.locator("[data-ltm-import-scope-result]").waitFor();
+      // #1588: the fixture batch fails, so the result is named as failed, never "complete", and the
+      // status line that was already mounted reads it out.
+      assert.equal(await page.locator("[data-ltm-import-result-heading]").innerText(), "Source import failed");
+      assert.match(
+        (await page.locator("[data-ltm-import-result-status]").textContent()) ?? "",
+        /Requested 1; .*missing 1;/u,
+      );
+      assert.equal(
+        await page
+          .locator("[data-ltm-import-result-status]")
+          .evaluate((line) => (line as HTMLElement & { ltmMountedBeforeImport?: boolean }).ltmMountedBeforeImport),
+        true,
+        "the status line stays mounted, so the result is read as a change",
+      );
       await destinationPanel.locator('button[aria-label^="Remove Current"]').click();
       // A whole chat and a character found by keyboard search import into the chosen places.
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
@@ -6182,6 +6839,31 @@ async function main() {
         sourcePreviewRequests.filter((request) => request.source === "characters").at(-1)?.cursor,
         "characters-page-2",
       );
+      // #1588: docked narrow on a wide window, a source's Import bar stays pinned to the bottom of a long
+      // preview, the row checkbox label is a 44px target and the destination panel has no viewport-height cap.
+      await dockDetailPanel(page, "24rem");
+      await showWorkspacePane("navigator");
+      assert.equal(
+        await touchTargetSize(page.locator('label:has([data-ltm-source-select="character-outside-current-chat"])')),
+        "fits",
+      );
+      await page.locator('[data-ltm-source-open="character-outside-current-chat"]').click();
+      await showWorkspacePane("workbench");
+      const flatSourceBar = page.locator("[data-ltm-source-workbench] [data-ltm-source-primary-actions]");
+      await flatSourceBar.evaluate((bar) => {
+        (bar.previousElementSibling as HTMLElement).style.minHeight = "150vh";
+      });
+      assert.equal(await stickyBarInView(flatSourceBar, "top"), "in view");
+      if (visualOutputDir)
+        await page.screenshot({ path: join(visualOutputDir, "long-term-memory-source-bar-docked.png") });
+      await flatSourceBar.evaluate((bar) => {
+        (bar.previousElementSibling as HTMLElement).style.minHeight = "";
+      });
+      assert.equal(
+        await page.locator("#ltm-destination-scope-control").evaluate((panel) => getComputedStyle(panel).maxHeight),
+        "none",
+      );
+      await dockDetailPanel(page, null);
       if (visualOutputDir)
         await page.screenshot({
           path: join(visualOutputDir, "long-term-memory-source-pagination-desktop.png"),
@@ -6252,21 +6934,51 @@ async function main() {
       assert.equal(await importingButton.isEnabled(), true);
       assert.equal(await importingButton.locator("svg").getAttribute("class"), idleIcon);
       await selectedCharacter.check();
-      const searchRestart = page.waitForRequest(
-        (request) =>
-          request.method() === "POST" &&
-          request.url().endsWith("/import/preview") &&
-          request.postDataJSON()?.query === "Navigator",
-      );
-      await page.locator("[data-ltm-source-search]").fill("Navigator");
-      assert.equal(
-        Object.hasOwn((await searchRestart).postDataJSON(), "cursor"),
-        false,
-        "changing search restarts at the first page",
-      );
+      const searchRoute = "**/api/long-term-memory/import/preview";
+      let releaseSearch!: () => void;
+      const searchPending = new Promise<void>((resolve) => {
+        releaseSearch = resolve;
+      });
+      // A failed check below unroutes before the held request continues, so that late continue may find the
+      // route already handled.
+      await page.route(searchRoute, async (route) => {
+        await searchPending;
+        await route.continue().catch(() => undefined);
+      });
+      try {
+        const searchRestart = page.waitForRequest(
+          (request) =>
+            request.method() === "POST" &&
+            request.url().endsWith("/import/preview") &&
+            request.postDataJSON()?.query === "Navigator",
+        );
+        await page.locator("[data-ltm-source-search]").fill("Navigator");
+        assert.equal(
+          Object.hasOwn((await searchRestart).postDataJSON(), "cursor"),
+          false,
+          "changing search restarts at the first page",
+        );
+        // #1588: the rows stay on screen until the search results arrive, and the list says it is loading.
+        assert.equal(
+          await page.locator('[data-ltm-source-row-status][data-ltm-source-id="character-next-page"]').count(),
+          1,
+          "a new search keeps the current rows while it loads",
+        );
+        assert.equal(await page.locator("#ltm-source-results-characters").getAttribute("aria-busy"), "true");
+        const searchResponse = page.waitForResponse(
+          (response) =>
+            response.url().endsWith("/import/preview") && response.request().postDataJSON()?.query === "Navigator",
+        );
+        releaseSearch();
+        await searchResponse;
+      } finally {
+        releaseSearch();
+        await page.unroute(searchRoute);
+      }
       await page
         .locator('[data-ltm-source-row-status][data-ltm-source-id="character-next-page"]')
         .waitFor({ state: "detached" });
+      assert.equal(await page.locator("#ltm-source-results-characters").getAttribute("aria-busy"), "false");
       await page.locator("[data-ltm-source-search]").fill("");
       await page.locator('[data-ltm-source-row-status][data-ltm-source-id="character-next-page"]').waitFor();
       assert.equal(await selectedCharacter.isChecked(), true);
@@ -6303,10 +7015,68 @@ async function main() {
       await page.locator('[data-ltm-source-management-action="copy"]').click();
       const sourceOperationWorkbench = page.locator("[data-ltm-source-operation-workbench]");
       await sourceOperationWorkbench.waitFor();
+      // #1588: the opened action takes focus at its heading, not on the closed menu.
+      await page.waitForFunction(
+        () => document.activeElement?.matches("[data-ltm-source-operation-workbench] h2") ?? false,
+      );
       assert.equal(
         await sourceOperationWorkbench.evaluate((element) => Boolean(element.closest("[data-ltm-source-workbench]"))),
         true,
       );
+      // #1588: Close leaves the action and returns focus to the menu item that opened it.
+      await sourceOperationWorkbench.locator("[data-ltm-source-operation-close]").click();
+      await sourceOperationWorkbench.waitFor({ state: "detached" });
+      await page.waitForFunction(
+        () => document.activeElement?.matches('[data-ltm-source-management-action="copy"]') ?? false,
+      );
+      // #1588: the pressed menu item is the trigger even when the click leaves focus in the search field, as a
+      // click does in Safari.
+      await page.locator("[data-ltm-source-search]:visible").focus();
+      await page.locator('[data-ltm-source-management-action="copy"]').dispatchEvent("click");
+      await sourceOperationWorkbench.waitFor();
+      await sourceOperationWorkbench.locator("[data-ltm-source-operation-close]").click();
+      await sourceOperationWorkbench.waitFor({ state: "detached" });
+      await page.waitForFunction(
+        () => document.activeElement?.matches('[data-ltm-source-management-action="copy"]') ?? false,
+      );
+      // #1588: Close also leaves while a preview is loading; only an apply holds the action open.
+      const derivedRoute = "**/api/long-term-memory/notes/*/derived";
+      await page.route(derivedRoute, (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            sourceNoteId: decodeURIComponent(new URL(route.request().url()).pathname.split("/").at(-2) ?? ""),
+            sourceIncomingLinkCount: 0,
+            sourceOutgoingLinkCount: 0,
+            memories: [],
+          }),
+        }),
+      );
+      await page.locator('[data-ltm-source-management-action="copy"]').click();
+      await sourceOperationWorkbench.waitFor();
+      const transferDestination = sourceOperationWorkbench.locator("[data-ltm-source-operation-destination]");
+      assert.ok((await transferDestination.locator("option").count()) > 1, "the fixture offers a destination chat");
+      await transferDestination.selectOption({ index: 1 });
+      let releaseTransferPreview = () => {};
+      const transferPreviewHeld = new Promise<void>((resolve) => {
+        releaseTransferPreview = resolve;
+      });
+      await page.route("**/api/long-term-memory/notes/transfer-preview", async (route) => {
+        await transferPreviewHeld;
+        await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "held" }) });
+      });
+      const transferPreviewButton = sourceOperationWorkbench.locator('[data-ltm-source-operation-action="preview"]');
+      await transferPreviewButton.click();
+      await page.waitForFunction(
+        () => document.querySelector('[data-ltm-source-operation-action="preview"]')?.hasAttribute("disabled") ?? false,
+      );
+      await sourceOperationWorkbench.locator("[data-ltm-source-operation-close]").click();
+      await sourceOperationWorkbench.waitFor({ state: "detached" });
+      releaseTransferPreview();
+      await page.unroute("**/api/long-term-memory/notes/transfer-preview");
+      await page.unroute(derivedRoute);
+      await page.locator("[data-ltm-source-workbench] h2", { hasText: "Desktop re-extract source" }).waitFor();
       await page.locator('[data-ltm-source-tab="characters"]').click();
       await page.locator('[data-ltm-source-preview="characters"]').waitFor();
       await page.locator('[data-ltm-source-tab="chats"]').click();
@@ -6372,6 +7142,7 @@ async function main() {
       const destinationChipRemovers = destinationPanel.locator('button[aria-label^="Remove "]');
       while (await destinationChipRemovers.count()) await destinationChipRemovers.first().click();
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      await destinationShowMore.click();
       const wholeChatDestination = destinationPanel.locator('[data-ltm-availability-target="chat:conversation-a"]');
       await wholeChatDestination.click();
       assert.equal(await wholeChatDestination.getAttribute("aria-pressed"), "true");
@@ -6384,6 +7155,11 @@ async function main() {
       );
       await page.locator("[data-ltm-lorebook-browser]").getByRole("button", { name: "Select", exact: true }).click();
       await page.locator('[data-ltm-lorebook-entry-select="entry_mobile_harbor"]').check();
+      // #1588: the label around an entry checkbox is a 44px target.
+      assert.equal(
+        await touchTargetSize(page.locator('label:has([data-ltm-lorebook-entry-select="entry_mobile_harbor"])')),
+        "fits",
+      );
       await page.locator('[data-ltm-lorebook-id="lorebook_outside_current_chat"]').click();
       await page.locator('[data-ltm-lorebook-entry-select="entry_outside_current_chat"]').check();
       const selectionDialog = new Promise<void>((resolveDialog) => {
@@ -6426,6 +7202,8 @@ async function main() {
       }, packageManifest.version);
       await page.locator('[data-ltm-surface="detail"]').waitFor();
       await page.locator('[data-ltm-control="navigation"][data-ltm-destination="sources"]').first().click();
+      // #1588: the last task shows its batch outcome as a label, not the raw task state.
+      assert.match(await page.locator("[data-ltm-latest-source-task]").innerText(), / · Failed$/u);
       await page.locator("[data-ltm-latest-source-task]").click();
       const restoredSourceResult = page.locator('[data-ltm-safe-source-task-result="completed"]');
       await restoredSourceResult.waitFor();
@@ -6728,6 +7506,23 @@ async function main() {
         await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
         true,
       );
+      // #1588: on a phone the lorebook's Import bar sits above the entries and sticks to the top of the
+      // scroller through a long list.
+      const lorebookWorkbench = mobilePage.locator('[data-ltm-lorebook-workbench="lorebook_mobile_fixture"]');
+      await dockDetailPanel(mobilePage, "");
+      await lorebookWorkbench.evaluate((workbench) => {
+        (workbench as HTMLElement).style.minHeight = "250vh";
+      });
+      assert.equal(
+        await stickyBarInView(lorebookWorkbench.locator("[data-ltm-source-primary-actions]"), "bottom"),
+        "in view",
+      );
+      if (visualOutputDir)
+        await mobilePage.screenshot({ path: join(visualOutputDir, "long-term-memory-lorebook-bar-mobile.png") });
+      await lorebookWorkbench.evaluate((workbench) => {
+        (workbench as HTMLElement).style.minHeight = "";
+      });
+      await dockDetailPanel(mobilePage, null);
       await mobileNavigation.locator('[data-ltm-destination="settings"]').click();
       await mobilePage.locator("#settings-tab-extraction").click();
       const mobileExtractionLayout = await mobilePage

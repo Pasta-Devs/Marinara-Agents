@@ -48,6 +48,8 @@ export const HOST_PROVIDED_LIBRARIES = [
   "react-i18next",
   "html-parse-stringify",
   "framer-motion",
+  "framer-motion-v13",
+  "motion",
   "motion-dom",
   "motion-utils",
   "tailwind-merge",

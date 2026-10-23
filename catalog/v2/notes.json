@@ -322,6 +322,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.86",
+          "date": "2026-10-23",
+          "notes": "- Keyboard focus now moves somewhere sensible after you act in Review, the Memory Vault, Sources, the setup guide, Settings and Debug, and field errors sit under their fields and are read with them.\n- Results show beside the action that made them. Sources names a failed or partial import as such, and Review and Sources say why Accept or Import is off.\n- Long-Term Memory lays out by the width of its own panel, so a narrow side panel gets the phone layout. Batch bars stay in view while you scroll, and checkboxes, toggles, links and info buttons are easier to tap.\n- Long lists stay responsive: Sources searches once you pause typing and keeps the current rows meanwhile, and place pickers show 100 places at a time with a Show more row.\n- Warning notices show a warning icon and a stronger border instead of relying on color, and error notices show their border and have room inside.",
+          "highlight": false
+        },
+        {
           "version": "1.4.85",
           "date": "2026-10-22",
           "notes": "- Five keyboard and focus fixes. In Sources, Tab now reaches the name of each chat or character source in the list, and Enter or Space opens it, so Re-extract, Manage, Review and Open memory work without a mouse. Accepting a change in the Review Queue no longer hides the queue while the memories it shows reload: the list, your place in it and the keyboard position stay, a small spinner shows beside \"Review Queue\", and Accept waits until the memories have reloaded. On a narrow panel, the Memory Vault's \"Rename details\" and unsaved-changes dialogs now show instead of leaving the screen frozen. Arrow keys in the place picker keep the highlighted place in view. In Memory Settings, Tab after \"Choose backup\" goes straight to \"Reset settings\", and screen readers name \"Choose backup\" once.",
@@ -433,12 +439,6 @@
           "version": "1.4.67",
           "date": "2026-10-21",
           "notes": "- Applying several Review suggestions in a row, and extraction that applies memories, no longer rebuild the recall index after each one. One rebuild runs in the background a second after the last change (at most 10 seconds after the first). While it embeds, other saves and debug log entries no longer wait, unless new changes interrupt it three times in a row; it then finishes under the vault lock, as before. Recall still sees every applied memory, because it waits for that rebuild first. After you switch the embedding source, recall answers straight away from keyword matching while the vault is embedded again in the background, then uses the new embeddings; before, the first recall waited for the whole vault to be embedded again. Review no longer says the index rebuild failed after you accept a suggestion. The index status shows stale or building until it is next loaded, then failed (or stale if the embedding source could not be loaded), and the next change or recall rebuilds it.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.66",
-          "date": "2026-10-21",
-          "notes": "- Extraction from a prose summary (a summary written as a narrative rather than under the memory-stream headings, whether from a custom summary prompt, another app's summary or a transcript recap) now keeps each narrated beat as its own timeline event, keeps a quoted line with its event when the summary presents it as memorable, and records recurring motifs and the durable register the prose states. Before, the prompt told the model to omit incidental actions and prefer a few substantial units for prose, which dropped about a third of the events and the quotes that a summary with headings kept. Summaries with headings, character cards and lorebooks are extracted as before.",
           "highlight": false
         }
       ]
