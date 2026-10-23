@@ -6,6 +6,7 @@ import {
 } from "../../base/prompting/slp-prompt-blocks.js";
 import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { normalizeSlurpSettings, slurpSettingsSchema } from "../../modules/settings/slp-settings.js";
+import { slurpLiveSettingsValid } from "../../modules/settings/slp-live-settings.js";
 import {
   countSlurpActiveCreators,
   getSlurpModelBudgetLedger,
@@ -145,6 +146,8 @@ export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps
   app.patch("/settings", async (req, reply) => {
     const body = slurpSettingsSchema.partial().safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const merged = { ...(await noodle.getSlurpSettings()), ...body.data };
+    if (!slurpLiveSettingsValid(merged)) return reply.code(400).send({ error: "Invalid live show hours or length." });
     return noodle.updateSlurpSettings(body.data);
   });
   // The Creator count sizes every limit the player did not set; Settings shows the sized numbers.

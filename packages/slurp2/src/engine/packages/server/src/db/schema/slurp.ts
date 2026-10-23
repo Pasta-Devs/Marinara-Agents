@@ -943,6 +943,10 @@ export const slurpLiveShows = fileTable("slurp2_live_shows", {
   lastSeenAt: text("last_seen_at"),
   missedSummary: text("missed_summary"),
   announcedFor: text("announced_for"),
+  reminders: text("reminders").notNull().default("[]"),
+  announcementPostId: text("announcement_post_id"),
+  // Rows written before scheduling were already started; new plans explicitly store null.
+  startedNoticeAt: text("started_notice_at").default("legacy"),
   mode: text("mode"),
   lastReplyAt: text("last_reply_at"),
   recapPostId: text("recap_post_id"),

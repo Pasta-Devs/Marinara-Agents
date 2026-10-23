@@ -20,7 +20,9 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
   const storage = createSlurpLiveStorage(app.db);
   const enabled = async () => slpExtensionOn(await createSlurpStorage(app.db).getSettings(), "live");
   app.get("/live", async (_request, reply) =>
-    (await enabled()) ? { shows: await storage.list() } : reply.code(404).send({ error: "Live is switched off." }),
+    (await enabled())
+      ? { shows: await storage.list(), upcoming: await storage.upcomingAnnounced() }
+      : reply.code(404).send({ error: "Live is switched off." }),
   );
   app.get("/live/:id", async (request, reply) => {
     if (!(await enabled())) return reply.code(404).send({ error: "Live is switched off." });
@@ -28,7 +30,10 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     const show = await storage.get(id);
     if (!show) return reply.code(404).send({ error: "Live show not found." });
     const personaId = (request.query as { personaId?: string }).personaId;
-    if (slurpLiveCanWatch(personaId, !!(personaId && (await resolveViewerPersona(personaId))))) {
+    if (
+      show.startedNoticeAt &&
+      slurpLiveCanWatch(personaId, !!(personaId && (await resolveViewerPersona(personaId))))
+    ) {
       await storage.seen(id, new Date());
       const current = (await getSlurpLiveMissed(app.db, id)) ?? show;
       const elapsed = Math.max(0, Date.now() - Date.parse(current.startedAt));
@@ -37,6 +42,16 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
       return { ...current, viewers: slurpLiveViewerCount(elapsed, duration, audience) };
     }
     return show;
+  });
+  app.post("/live/:id/remind", async (request, reply) => {
+    const parsed = body.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (!(await enabled())) return reply.code(404).send({ error: "Live is switched off." });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Player not found." });
+    const reminded = await storage.remind((request.params as { id: string }).id, viewer.entityId);
+    if (!reminded) return reply.code(404).send({ error: "Upcoming show not found." });
+    return { reminded: true };
   });
   app.post("/live/start", async (request, reply) => {
     const parsed = z
@@ -90,7 +105,8 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     if (!parsed.success || !(await enabled())) return reply.code(404).send({ error: "Live is switched off." });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     const show = await storage.get((request.params as { id: string }).id);
-    if (!viewer || !show || show.endedAt) return reply.code(404).send({ error: "Live show not found." });
+    if (!viewer || !show || show.endedAt || !show.startedNoticeAt || Date.now() >= Date.parse(show.endsAt))
+      return reply.code(404).send({ error: "Live show not found." });
     const requestId = parsed.data.requestId;
     const claimId = requestId ?? `live-tip:${newId()}`;
     const event = {
@@ -127,7 +143,8 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     if (!parsed.success || !(await enabled())) return reply.code(404).send({ error: "Live is switched off." });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     const show = await storage.get((request.params as { id: string }).id);
-    if (!viewer || !show || show.endedAt) return reply.code(404).send({ error: "Live show not found." });
+    if (!viewer || !show || show.endedAt || !show.startedNoticeAt || Date.now() >= Date.parse(show.endsAt))
+      return reply.code(404).send({ error: "Live show not found." });
     await storage.appendEvent(show.id, {
       at: Date.now() - Date.parse(show.startedAt),
       kind: "chat",
@@ -145,7 +162,8 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     if (!(await enabled())) return reply.code(404).send({ error: "Live is switched off." });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     const show = await storage.get((request.params as { id: string }).id);
-    if (!viewer || !show || show.endedAt) return reply.code(404).send({ error: "Live show not found." });
+    if (!viewer || !show || show.endedAt || !show.startedNoticeAt || Date.now() >= Date.parse(show.endsAt))
+      return reply.code(404).send({ error: "Live show not found." });
     const item = show.menu.find((entry) => entry.id === parsed.data.itemId);
     if (!item) return reply.code(404).send({ error: "Menu item not found." });
     const claimId = parsed.data.requestId;

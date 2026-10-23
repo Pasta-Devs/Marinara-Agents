@@ -23,6 +23,11 @@ export type SlurpResettableSection =
 
 export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonly (keyof SlurpSettings)[]> = {
   general: [
+    "liveFrequency",
+    "liveStartHour",
+    "liveEndHour",
+    "liveMinMinutes",
+    "liveMaxMinutes",
     "storyRate",
     "professorMariCreatorSource",
     "storyImagesEnabled",

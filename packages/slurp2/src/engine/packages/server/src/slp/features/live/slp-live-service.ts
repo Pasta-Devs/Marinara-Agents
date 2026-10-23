@@ -3,10 +3,12 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createSlurpLiveStorage } from "../../data/live/slp-live-storage.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import {
-  slurpLiveDurationMinutes,
+  slurpLiveNextSlot,
+  slurpLiveAnnouncementDue,
+  slurpLiveAnnouncementText,
+  slurpLiveDueNotifications,
   slurpLiveParseLines,
   slurpLivePlayerTipAmount,
-  slurpLiveShouldStart,
   slurpLiveSegmentIndex,
   slurpLiveWatched,
   slurpLiveFanDue,
@@ -54,41 +56,76 @@ export async function advanceSlurpLive(db: DB, at = new Date()): Promise<void> {
   const settings = await createSlurpStorage(db).getSettings();
   if (!slpExtensionOn(settings, "live")) return;
   await storage.pruneEnded(at);
-  const active = await storage.activeShows();
-  if (active.filter((show) => show.hostKind === "creator").length < 2) {
-    await trySlpOperation("slurp-live-start", async () => {
-      const current = await storage.activeShows();
-      if (current.filter((show) => show.hostKind === "creator").length >= 2) return;
-      const creators = (await createSlurpStorage(db).listNoodlerAccounts()).filter(
-        (account) => account.kind !== "persona" && !current.some((show) => show.hostId === account.id),
+  for (const show of await storage.activeShows(at))
+    if (at.getTime() >= Date.parse(show.endsAt)) await advanceShow(db, show, settings, at);
+  await trySlpOperation("slurp-live-start", async () => {
+    const creators = (await createSlurpStorage(db).listNoodlerAccounts()).filter(
+      (account) => account.kind !== "persona",
+    );
+    for (const creator of creators) {
+      const previous = await storage.latestFor(creator.id);
+      if (previous && !previous.endedAt) continue;
+      const posts = await readSlurpTrendPosts(db, creator.id, new Set(), at, 0);
+      const slot = slurpLiveNextSlot(
+        creator.id,
+        previous ? new Date(previous.startedAt) : null,
+        at,
+        Math.max(0, ...posts.map(slurpTrendScore)),
+        settings,
       );
-      if (!creators.length || !slurpLiveShouldStart({ active: false })) return;
-      const scored = await Promise.all(
-        creators.map(async (creator) => {
-          const posts = await readSlurpTrendPosts(db, creator.id, new Set(), at, 0);
-          return {
-            creator,
-            weight: 1 + Math.max(0, ...posts.map(slurpTrendScore)),
-          };
-        }),
-      );
-      let draw = Math.random() * scored.reduce((sum, item) => sum + item.weight, 0);
-      const creator = (scored.find((item) => (draw -= item.weight) <= 0) ?? scored[scored.length - 1])!.creator;
-      const duration = slurpLiveDurationMinutes(Date.now());
       const spice = slpSpiceFromStrategyText(creator.settings?.strategyText ?? "");
       const level = Math.max(0, ["flirty", "suggestive", "explicit"].indexOf(spice.level ?? "") + 1);
-      const created = await storage.createIfNone({
-        hostKind: "creator",
-        hostId: creator.id,
-        startedAt: at,
-        endsAt: new Date(at.getTime() + duration * 60_000),
-        goal: Math.max(10, Number(creator.settings?.messaging?.ppvPrice ?? 25)),
-        menu: slurpLiveMenuItems(level, spice.turnOns, Number(creator.settings?.messaging?.ppvPrice ?? 25)),
-      });
-      if (created) await notifyLive(db, creator, "started", created.id);
-    });
-  }
-  for (const show of await storage.activeShows()) await advanceShow(db, show, settings, at);
+      await storage.plan(
+        creator.id,
+        slot.startsAt,
+        slot.endsAt,
+        slot.announcedFor,
+        Math.max(10, Number(creator.settings?.messaging?.ppvPrice ?? 25)),
+        slurpLiveMenuItems(level, spice.turnOns, Number(creator.settings?.messaging?.ppvPrice ?? 25)),
+      );
+    }
+    const upcoming = (await storage.upcoming(at)).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+    for (const show of upcoming) {
+      if (slurpLiveAnnouncementDue(show, at)) {
+        const text = slurpLiveAnnouncementText(new Date(show.startedAt));
+        const post = await createSlurpStorage(db).createPost({
+          authorAccountId: show.hostId,
+          content: text,
+          source: "generated",
+          metadata: { liveShowId: show.id, liveAnnouncement: true },
+        });
+        if (post) await storage.setAnnouncement(show.id, post.id);
+      }
+    }
+    const due = (await storage.planned())
+      .filter((show) => show.startedAt <= at.toISOString())
+      .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+    for (const show of due) {
+      const started = await storage.startPlanned(show.id, at);
+      if (!started) {
+        const deferred = await storage.deferPlanned(show.id, at);
+        if (deferred?.announcementPostId)
+          await createSlurpStorage(db).updatePost(deferred.announcementPostId, {
+            content: slurpLiveAnnouncementText(new Date(deferred.startedAt)),
+          });
+        continue;
+      }
+      const creator = creators.find((item) => item.id === show.hostId);
+      if (creator) {
+        await notifyLive(db, creator, "started", show.id);
+        for (const recipient of slurpLiveDueNotifications(started.reminders, creator.sourceEntityId ?? null))
+          await createSlurpEventsStorage(db).recordAndPrune({
+            recipientPersonaId: recipient,
+            kind: "live",
+            creatorAccountId: show.hostId,
+            subjectId: show.id,
+            note: "reminder",
+            operationId: `live:${show.id}:reminder:${recipient}`,
+          });
+      }
+    }
+  });
+  for (const show of await storage.activeShows(at)) await advanceShow(db, show, settings, at);
 }
 
 async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date): Promise<void> {

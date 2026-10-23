@@ -1,5 +1,5 @@
 import type { DB } from "../../../db/connection.js";
-import { and, desc, eq, isNull, lt, lte, or } from "../../../db/file-query.js";
+import { and, desc, eq, isNotNull, isNull, lt, lte, or } from "../../../db/file-query.js";
 import { slurpLiveShows } from "../../../db/schema/slurp.js";
 import { newId } from "../../../utils/id-generator.js";
 import {
@@ -11,6 +11,7 @@ import {
   slurpLiveMenuClaimState,
   slurpLiveAudienceTipDue,
   slurpLivePruneBefore,
+  slurpLiveMayStart,
   type SlurpLiveEvent,
   type SlurpLiveLine,
   type SlurpLiveShow,
@@ -46,6 +47,9 @@ const map = (row: typeof slurpLiveShows.$inferSelect): SlurpLiveShow => ({
   lastSeenAt: row.lastSeenAt ?? null,
   missedSummary: parse(row.missedSummary ?? "null", null),
   announcedFor: row.announcedFor ?? null,
+  reminders: parse(row.reminders ?? "[]", []),
+  announcementPostId: row.announcementPostId ?? null,
+  startedNoticeAt: row.startedNoticeAt === "legacy" ? row.startedAt : (row.startedNoticeAt ?? null),
   mode: row.mode === "pictures" ? "pictures" : "text",
 });
 const decodeEvents = (value: string) => parse<SlurpLiveEvent[]>(value, []);
@@ -53,19 +57,176 @@ const capEvents = (events: SlurpLiveEvent[]) => slurpLiveCapEvents(events);
 
 export function createSlurpLiveStorage(db: DB) {
   return {
-    async list(limit = 20) {
-      return (await db.select().from(slurpLiveShows).orderBy(desc(slurpLiveShows.startedAt)).limit(limit)).map(map);
+    async list(limit = 20, at = new Date()) {
+      const shows = (await db.select().from(slurpLiveShows).orderBy(desc(slurpLiveShows.startedAt)))
+        .map(map)
+        .filter((show) => show.startedNoticeAt && show.startedAt <= at.toISOString());
+      return [
+        ...shows.filter((show) => !show.endedAt && show.endsAt > at.toISOString()),
+        ...shows.filter((show) => show.endedAt || show.endsAt <= at.toISOString()),
+      ].slice(0, limit);
+    },
+    async upcomingAnnounced(at = new Date()) {
+      return (await this.upcoming(at)).filter(
+        (show) => !show.startedNoticeAt && show.announcedFor && show.announcementPostId,
+      );
     },
     async get(id: string) {
       const rows = await db.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id));
       return rows[0] ? map(rows[0]) : null;
     },
     async active() {
-      const rows = await db.select().from(slurpLiveShows).where(isNull(slurpLiveShows.endedAt)).limit(1);
+      const rows = await db
+        .select()
+        .from(slurpLiveShows)
+        .where(and(isNull(slurpLiveShows.endedAt), isNotNull(slurpLiveShows.startedNoticeAt)))
+        .limit(1);
       return rows[0] ? map(rows[0]) : null;
     },
-    async activeShows() {
-      return (await db.select().from(slurpLiveShows).where(isNull(slurpLiveShows.endedAt))).map(map);
+    async activeShows(at = new Date()) {
+      return (
+        await db
+          .select()
+          .from(slurpLiveShows)
+          .where(
+            and(
+              isNull(slurpLiveShows.endedAt),
+              isNotNull(slurpLiveShows.startedNoticeAt),
+              lte(slurpLiveShows.startedAt, at.toISOString()),
+            ),
+          )
+      ).map(map);
+    },
+    async upcoming(at = new Date()) {
+      return (
+        await db
+          .select()
+          .from(slurpLiveShows)
+          .where(and(isNull(slurpLiveShows.endedAt), lt(at.toISOString(), slurpLiveShows.startedAt)))
+      ).map(map);
+    },
+    async planned() {
+      return (
+        await db
+          .select()
+          .from(slurpLiveShows)
+          .where(and(isNull(slurpLiveShows.endedAt), isNull(slurpLiveShows.startedNoticeAt)))
+      ).map(map);
+    },
+    async latestFor(hostId: string) {
+      const rows = await db
+        .select()
+        .from(slurpLiveShows)
+        .where(eq(slurpLiveShows.hostId, hostId))
+        .orderBy(desc(slurpLiveShows.startedAt))
+        .limit(1);
+      return rows[0] ? map(rows[0]) : null;
+    },
+    async plan(
+      hostId: string,
+      startsAt: Date,
+      endsAt: Date,
+      announcedFor: string | null,
+      goal: number,
+      menu: SlurpLiveMenuItem[],
+    ) {
+      return db.transaction(async (tx) => {
+        const rows = await tx
+          .select()
+          .from(slurpLiveShows)
+          .where(eq(slurpLiveShows.hostId, hostId))
+          .orderBy(desc(slurpLiveShows.startedAt))
+          .limit(1);
+        if (rows[0] && !rows[0].endedAt) return null;
+        const row = {
+          id: newId(),
+          hostKind: "creator",
+          hostId,
+          startedAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          endedAt: null,
+          goal: String(goal),
+          raised: "0",
+          goalHitAt: null,
+          script: "[]",
+          events: "[]",
+          audienceTipKeys: "[]",
+          lastReplyAt: null,
+          recapPostId: null,
+          menu: JSON.stringify(menu),
+          queue: "[]",
+          segment: null,
+          lastSeenAt: null,
+          missedSummary: null,
+          announcedFor,
+          reminders: "[]",
+          announcementPostId: null,
+          startedNoticeAt: null,
+          mode: "text",
+        };
+        await tx.insert(slurpLiveShows).values(row);
+        return map(row);
+      });
+    },
+    async remind(id: string, personaId: string, at = new Date()) {
+      return db.transaction(async (tx) => {
+        const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
+        if (
+          !row ||
+          row.endedAt ||
+          row.startedNoticeAt ||
+          !row.announcedFor ||
+          !row.announcementPostId ||
+          row.startedAt <= at.toISOString()
+        )
+          return false;
+        const reminders = parse<string[]>(row.reminders ?? "[]", []);
+        if (!reminders.includes(personaId))
+          await tx
+            .update(slurpLiveShows)
+            .set({ reminders: JSON.stringify([...reminders, personaId]) })
+            .where(eq(slurpLiveShows.id, id));
+        return true;
+      });
+    },
+    async setAnnouncement(id: string, postId: string) {
+      await db
+        .update(slurpLiveShows)
+        .set({ announcementPostId: postId })
+        .where(and(eq(slurpLiveShows.id, id), isNull(slurpLiveShows.announcementPostId)));
+    },
+    async startPlanned(id: string, at: Date) {
+      return db.transaction(async (tx) => {
+        const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
+        if (!row || row.endedAt || row.startedNoticeAt || row.startedAt > at.toISOString()) return null;
+        const started = await tx
+          .select()
+          .from(slurpLiveShows)
+          .where(and(isNull(slurpLiveShows.endedAt), isNotNull(slurpLiveShows.startedNoticeAt)));
+        if (!slurpLiveMayStart(started, "creator", row.hostId, at)) return null;
+        const delay = Math.max(0, at.getTime() - Date.parse(row.startedAt));
+        const patch = {
+          startedAt: at.toISOString(),
+          endsAt: new Date(Date.parse(row.endsAt) + delay).toISOString(),
+          startedNoticeAt: at.toISOString(),
+        };
+        await tx.update(slurpLiveShows).set(patch).where(eq(slurpLiveShows.id, id));
+        return map({ ...row, ...patch });
+      });
+    },
+    async deferPlanned(id: string, at: Date) {
+      return db.transaction(async (tx) => {
+        const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
+        if (!row || row.startedNoticeAt || row.endedAt || row.startedAt > at.toISOString()) return null;
+        const startsAt = new Date(at.getTime() + 15 * 60_000).toISOString();
+        const patch = {
+          startedAt: startsAt,
+          endsAt: new Date(Date.parse(startsAt) + Date.parse(row.endsAt) - Date.parse(row.startedAt)).toISOString(),
+          ...(row.announcedFor ? { announcedFor: startsAt } : {}),
+        };
+        await tx.update(slurpLiveShows).set(patch).where(eq(slurpLiveShows.id, id));
+        return map({ ...row, ...patch });
+      });
     },
     async pruneEnded(at: Date) {
       await db.delete(slurpLiveShows).where(lt(slurpLiveShows.endedAt, slurpLivePruneBefore(at)));
@@ -101,6 +262,9 @@ export function createSlurpLiveStorage(db: DB) {
         lastSeenAt: null,
         missedSummary: null,
         announcedFor: null,
+        reminders: "[]",
+        announcementPostId: null,
+        startedNoticeAt: input.startedAt.toISOString(),
         mode: input.mode ?? "text",
       };
       await db.insert(slurpLiveShows).values(row);
@@ -116,12 +280,11 @@ export function createSlurpLiveStorage(db: DB) {
       mode?: "text" | "pictures";
     }) {
       return db.transaction(async (tx) => {
-        const active = await tx.select().from(slurpLiveShows).where(isNull(slurpLiveShows.endedAt));
-        if (
-          active.some((row) => row.hostId === input.hostId) ||
-          active.filter((row) => row.hostKind === input.hostKind).length >= (input.hostKind === "creator" ? 2 : 1)
-        )
-          return null;
+        const active = await tx
+          .select()
+          .from(slurpLiveShows)
+          .where(and(isNull(slurpLiveShows.endedAt), isNotNull(slurpLiveShows.startedNoticeAt)));
+        if (!slurpLiveMayStart(active, input.hostKind, input.hostId, input.startedAt)) return null;
         const row = {
           id: newId(),
           hostKind: input.hostKind,
@@ -143,6 +306,9 @@ export function createSlurpLiveStorage(db: DB) {
           lastSeenAt: null,
           missedSummary: null,
           announcedFor: null,
+          reminders: "[]",
+          announcementPostId: null,
+          startedNoticeAt: input.startedAt.toISOString(),
           mode: input.mode ?? "text",
         };
         await tx.insert(slurpLiveShows).values(row);

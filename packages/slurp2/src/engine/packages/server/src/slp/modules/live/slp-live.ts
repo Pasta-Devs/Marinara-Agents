@@ -45,11 +45,101 @@ export type SlurpLiveShow = {
   lastSeenAt: string | null;
   missedSummary: string[] | null;
   announcedFor: string | null;
+  reminders: string[];
+  announcementPostId: string | null;
+  startedNoticeAt: string | null;
   mode: "text" | "pictures";
 };
 
 export const SLURP_LIVE_EVENT_LIMIT = 200;
 export const SLURP_LIVE_SEGMENT_MS = 4 * 60_000;
+
+export type SlurpLiveScheduleSettings = {
+  liveFrequency: "rare" | "normal" | "often";
+  liveStartHour: number;
+  liveEndHour: number;
+  liveMinMinutes: number;
+  liveMaxMinutes: number;
+};
+
+function liveHash(value: string): number {
+  let hash = 0x811c9dc5;
+  for (const char of value) hash = Math.imul(hash ^ char.charCodeAt(0), 0x01000193);
+  return hash >>> 0;
+}
+
+export function slurpLiveNextSlot(
+  creatorId: string,
+  previous: Date | null,
+  now: Date,
+  trend: number,
+  settings: SlurpLiveScheduleSettings,
+): { startsAt: Date; endsAt: Date; announcedFor: string | null } {
+  const baseHours = { rare: 120, normal: 60, often: 30 }[settings.liveFrequency];
+  const interval =
+    (baseHours * (0.8 + (liveHash(`${creatorId}:${previous?.toISOString() ?? "first"}`) % 41) / 100)) /
+    (1 + Math.min(2, Math.max(0, trend) / 100));
+  const earliest = new Date(
+    Math.max(
+      now.getTime() + 7 * 3_600_000,
+      previous
+        ? previous.getTime() + interval * 3_600_000
+        : now.getTime() + (liveHash(`${creatorId}:first`) % 24) * 3_600_000,
+    ),
+  );
+  const startsAt = new Date(earliest);
+  startsAt.setHours(settings.liveStartHour, 0, 0, 0);
+  if (startsAt.getTime() < earliest.getTime()) startsAt.setDate(startsAt.getDate() + 1);
+  const hours = settings.liveEndHour - settings.liveStartHour;
+  while (true) {
+    const offset = liveHash(`${creatorId}:${startsAt.toDateString()}`) % (hours * 60);
+    startsAt.setHours(settings.liveStartHour, offset, 0, 0);
+    if (startsAt.getTime() >= earliest.getTime()) break;
+    startsAt.setDate(startsAt.getDate() + 1);
+  }
+  const span = settings.liveMaxMinutes - settings.liveMinMinutes + 1;
+  const minutes = settings.liveMinMinutes + (liveHash(`${creatorId}:length:${startsAt.toISOString()}`) % span);
+  const announced = liveHash(`${creatorId}:announce:${startsAt.toISOString()}`) % 2 === 0;
+  return {
+    startsAt,
+    endsAt: new Date(startsAt.getTime() + minutes * 60_000),
+    announcedFor: announced ? startsAt.toISOString() : null,
+  };
+}
+
+export function slurpLiveAnnouncementDue(
+  show: Pick<SlurpLiveShow, "id" | "startedAt" | "announcedFor" | "announcementPostId">,
+  at: Date,
+): boolean {
+  if (!show.announcedFor || show.announcementPostId) return false;
+  const leadHours = 2 + (liveHash(show.id) % 5);
+  return (
+    at.getTime() >= Date.parse(show.startedAt) - leadHours * 3_600_000 && at.getTime() < Date.parse(show.startedAt)
+  );
+}
+
+export function slurpLiveAnnouncementText(startsAt: Date): string {
+  return `Live at ${startsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })} 🔴`;
+}
+
+export function slurpLiveDueNotifications(reminders: readonly string[], recipient: string | null): string[] {
+  return [...new Set(reminders)].filter((id) => id !== recipient);
+}
+
+export function slurpLiveMayStart(
+  shows: readonly Pick<SlurpLiveShow, "hostKind" | "hostId" | "startedNoticeAt" | "endedAt" | "endsAt">[],
+  hostKind: "creator" | "player",
+  hostId: string,
+  at: Date,
+): boolean {
+  const active = shows.filter(
+    (show) => show.startedNoticeAt && !show.endedAt && Date.parse(show.endsAt) > at.getTime(),
+  );
+  return (
+    !active.some((show) => show.hostId === hostId) &&
+    active.filter((show) => show.hostKind === hostKind).length < (hostKind === "creator" ? 2 : 1)
+  );
+}
 
 export function slurpLiveCanWatch(personaId: string | undefined, validPersona: boolean): boolean {
   return !!personaId && validPersona;
