@@ -741,6 +741,16 @@
               "replace": "art:this._beatArt,cancel:!1,skip:this._prologue,confirming:"
             }
           ]
+        },
+        {
+          "version": "1.15.2",
+          "notes": "Show actionable banner animation retry errors and pending feedback.",
+          "edits": [
+            {
+              "find": "ds=\"1.15.1\"",
+              "replace": "ds=\"1.15.2\""
+            }
+          ]
         }
       ]
     },

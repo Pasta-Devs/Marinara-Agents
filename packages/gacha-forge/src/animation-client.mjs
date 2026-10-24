@@ -84,10 +84,20 @@ export function wireForgeBannerAnimation(host) {
   state.banner = banner;
   if (state.media?.matches) return;
   const chips = target.parentElement?.querySelector(".chips");
+  const statusHost = target.parentElement?.querySelector(".float") || chips;
   const status = document.createElement("span");
   status.className = "chip";
   status.setAttribute("role", "status");
   status.setAttribute("data-banner-animation-status", "");
+  Object.assign(status.style, {
+    maxWidth: "min(65ch, 100%)",
+    alignSelf: "flex-start",
+    whiteSpace: "normal",
+    overflowWrap: "anywhere",
+    textTransform: "none",
+    letterSpacing: "normal",
+    cursor: "default",
+  });
   let video,
     pause,
     labelPause = () => {},
@@ -121,13 +131,14 @@ export function wireForgeBannerAnimation(host) {
   };
   const notice = (text) => {
     status.textContent = text;
-    chips?.append(status);
+    statusHost?.prepend(status);
   };
   const mount = (result) => {
     if (!current()) return;
     if (result?.ok && result.animation?.poster !== art) {
       state.requests.delete(identity);
       state.staleBanner = banner;
+      chips?.querySelector("[data-animation-retry]")?.remove();
       notice(forgeAnimationEnglish.failed);
       return;
     }
@@ -137,7 +148,8 @@ export function wireForgeBannerAnimation(host) {
         result.animation?.url || "",
       )
     ) {
-      notice(forgeAnimationEnglish.failed);
+      notice(forgeAnimationEnglish[result.reason === "seedance-reference-setup" ? "seedanceSetup" : "failed"]);
+      if (!result.retry) chips?.querySelector("[data-animation-retry]")?.remove();
       if (result.retry && !chips?.querySelector("[data-animation-retry]")) {
         const retry = document.createElement("button");
         retry.type = "button";
@@ -145,15 +157,26 @@ export function wireForgeBannerAnimation(host) {
         retry.dataset.animationRetry = "";
         retry.textContent = forgeAnimationEnglish.retry;
         retry.onclick = () => {
-          retry.remove();
+          if (retry.disabled) return;
+          retry.disabled = true;
+          retry.textContent = forgeAnimationEnglish.retrying;
+          retry.setAttribute("aria-busy", "true");
+          retry.setAttribute("aria-disabled", "true");
           state.requests.delete(identity);
-          void ensure(true);
+          void ensure(true).finally(() => {
+            if (!current()) return;
+            retry.disabled = false;
+            retry.textContent = forgeAnimationEnglish.retry;
+            retry.setAttribute("aria-busy", "false");
+            retry.setAttribute("aria-disabled", "false");
+          });
         };
         chips?.append(retry);
       }
       return;
     }
     if (video) return;
+    chips?.querySelector("[data-animation-retry]")?.remove();
     video = document.createElement("video");
     video.dataset.bannerAnimation = "";
     video.muted = true;
