@@ -3890,6 +3890,8 @@
   "ui.slurp.settings.ext.storylines.detail": "크리에이터 사이의 아크와 계획, 콜라보, 라이벌, 커플, 드라마와 폴리아모리.",
   "ui.slurp.settings.ext.supportDesk.label": "Support 데스크",
   "ui.slurp.settings.ext.supportDesk.detail": "스태프 게임: 티켓, 신뢰, 의심, 제안, 혜택, 알림, 떠나는 크리에이터.",
+  "ui.slurp.settings.ext.live.label": "라이브 쇼",
+  "ui.slurp.settings.ext.live.detail": "크리에이터는 자기 일정에 맞춰, 또는 Stir > 라이브 시작으로 방송하고, 너도 네 페이지에서 방송할 수 있어.",
   "ui.slurp.extrasOffer.from": "Slurp Support",
   "ui.slurp.extrasOffer.ask.posts": "첫 게시물이 올라갔어요, 보스. {{name}}도 켤까요?",
   "ui.slurp.extrasOffer.ask.unlock": "누군가 게시물을 결제했어요! 다음은 {{name}} 어때요?",

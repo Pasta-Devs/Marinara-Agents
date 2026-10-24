@@ -6633,6 +6633,8 @@
   "ui.slurp.settings.ext.storylines.detail": "Arcs and plans, collabs, rivalries, couples, drama and polyamory between Creators.",
   "ui.slurp.settings.ext.supportDesk.label": "Support desk",
   "ui.slurp.settings.ext.supportDesk.detail": "The staff game: tickets, trust, suspicion, offers, perks, notices and Creators who leave.",
+  "ui.slurp.settings.ext.live.label": "Live shows",
+  "ui.slurp.settings.ext.live.detail": "Creators go live on their own schedule, from Stir > Go live, and you can host from your page.",
   "ui.slurp.extrasOffer.from": "Slurp Support",
   "ui.slurp.extrasOffer.ask.posts": "Your first posts are out, boss. Want {{name}} too?",
   "ui.slurp.extrasOffer.ask.unlock": "Someone paid for a post! Want {{name}} next?",

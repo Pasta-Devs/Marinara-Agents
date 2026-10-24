@@ -148,6 +148,17 @@ async function main() {
     assert.equal(await live.privateClaim(creatorB.id, "viewer-a", "private-1", at), "duplicate");
     assert.equal(await live.privateClaim(creatorB.id, "viewer-b", "private-3", at), "busy");
     assert.equal(await live.privateClaim(creatorB.id, "viewer-a", "private-4", at), "new");
+    // Stir takes over a Creator's not-yet-started plan, and a show whose end time passed never blocks.
+    const autoPlan = await live.plan("creator-takeover", future, end, null, 10, menu);
+    assert.ok(autoPlan);
+    const takeover = await live.plan("creator-takeover", at, end, null, 10, menu, "takeover-request");
+    assert.ok(takeover, "a Stir request replaces her unstarted plan");
+    assert.equal(await live.get(autoPlan.id), null);
+    await live.update(takeover.id, { endsAt: at.toISOString(), startedNoticeAt: at.toISOString() });
+    assert.ok(
+      await live.plan("creator-takeover", future, end, null, 10, menu, "after-request"),
+      "a past show never blocks",
+    );
     const extension = await live.privateConfirm(creatorB.id, "private-4", new Date(at.getTime() + 60_000));
     assert.equal(extension?.private?.until, "2026-10-23T12:20:00.000Z");
     assert.equal(extension?.script.filter((line: any) => line.text === "she went private 🔒").length, 1);

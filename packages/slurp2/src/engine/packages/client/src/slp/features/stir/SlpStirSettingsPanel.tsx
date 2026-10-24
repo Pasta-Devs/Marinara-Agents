@@ -1,6 +1,13 @@
 import { useTranslation } from "react-i18next";
-import { AdvancedGroup, Field, NumberSetting, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
-import { BackstagePageHeader } from "../../modules/settings/SlpSettingsKit";
+import {
+  AdvancedGroup,
+  Field,
+  NumberSetting,
+  RangeSetting,
+  SettingsGroup,
+  Toggle,
+} from "../../modules/settings/SlpSettingsControls";
+import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 import { SlpExtensionSwitch } from "../../modules/settings/SlpExtensionSwitch";
@@ -27,7 +34,7 @@ export function SlpStirSettingsPanel(page: SlpBackstagePageProps) {
           "Slurp Support is Slurp's own staff. You write as Support to Creators you do not run: steer them, reward them, and play them. These settings decide how that game plays.",
         )}
       />
-      {/* Two extensions share this page: Stir (the tab's levers) and the Support desk (the staff game). */}
+      {/* Three extensions share this page: Stir (the tab's levers) and the Support desk (the staff game). */}
       <SlpExtensionSwitch
         settingKey="extStir"
         label={t("ui.slurp.settings.ext.stir.label", { defaultValue: "Stir" })}
@@ -47,6 +54,17 @@ export function SlpStirSettingsPanel(page: SlpBackstagePageProps) {
         onChange={(value) => void updateNow("extSupportDesk", value)}
       />
       {slpExtensionOn(settings, "supportDesk") && <SlpDeskSettings {...page} />}
+      <SlpExtensionSwitch
+        settingKey="extLive"
+        label={t("ui.slurp.settings.ext.live.label", { defaultValue: "Live shows" })}
+        detail={t("ui.slurp.settings.ext.live.detail", {
+          defaultValue: "Creators go live on their own schedule, from Stir > Go live, and you can host from your page.",
+        })}
+        on={slpExtensionOn(settings, "live")}
+        onChange={(value) => void updateNow("extLive", value)}
+      >
+        <SlpLiveSchedule {...page} />
+      </SlpExtensionSwitch>
     </div>
   );
 }
@@ -189,5 +207,68 @@ function SlpDeskSettings({ settings, update, updateSettings }: SlpBackstagePageP
         </Field>
       </AdvancedGroup>
     </>
+  );
+}
+
+/** When Creators go live on their own: how often, the hours, and how long a show runs. */
+function SlpLiveSchedule({ settings, updateNow }: SlpBackstagePageProps) {
+  const { t } = useTranslation();
+  const tx = (key: string, defaultValue: string, values?: Record<string, unknown>) =>
+    t(`ui.slurp.settings.overview.yours.${key}`, { defaultValue, ...values });
+  const hour = (value: number) => `${String(value).padStart(2, "0")}:00`;
+  const minutes = (count: number) => tx("liveMinutes", "{{count}} min", { count });
+  return (
+    <div className="space-y-4">
+      <ChoiceSetting
+        settingKey="liveFrequency"
+        label={tx("liveFrequency", "Live shows: how often")}
+        options={(["rare", "normal", "often"] as const).map((value) => ({
+          value,
+          label: tx(`liveFrequency${value.charAt(0).toUpperCase()}${value.slice(1)}`, value),
+        }))}
+        value={settings.liveFrequency}
+        onChange={(value) => void updateNow("liveFrequency", value)}
+      />
+      <SettingAnchor settingKey="liveStartHour">
+        <RangeSetting
+          label={tx("liveFrom", "From")}
+          value={settings.liveStartHour}
+          min={0}
+          max={settings.liveEndHour - 1}
+          format={hour}
+          onSave={(value) => void updateNow("liveStartHour", value)}
+        />
+      </SettingAnchor>
+      <SettingAnchor settingKey="liveEndHour">
+        <RangeSetting
+          label={tx("liveUntil", "Until")}
+          value={settings.liveEndHour}
+          min={settings.liveStartHour + 1}
+          max={24}
+          format={hour}
+          onSave={(value) => void updateNow("liveEndHour", value)}
+        />
+      </SettingAnchor>
+      <SettingAnchor settingKey="liveMinMinutes">
+        <RangeSetting
+          label={tx("liveMin", "Minimum")}
+          value={settings.liveMinMinutes}
+          min={10}
+          max={settings.liveMaxMinutes}
+          format={minutes}
+          onSave={(value) => void updateNow("liveMinMinutes", value)}
+        />
+      </SettingAnchor>
+      <SettingAnchor settingKey="liveMaxMinutes">
+        <RangeSetting
+          label={tx("liveMax", "Maximum")}
+          value={settings.liveMaxMinutes}
+          min={settings.liveMinMinutes}
+          max={120}
+          format={minutes}
+          onSave={(value) => void updateNow("liveMaxMinutes", value)}
+        />
+      </SettingAnchor>
+    </div>
   );
 }

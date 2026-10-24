@@ -23,11 +23,6 @@ export type SlurpResettableSection =
 
 export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonly (keyof SlurpSettings)[]> = {
   general: [
-    "liveFrequency",
-    "liveStartHour",
-    "liveEndHour",
-    "liveMinMinutes",
-    "liveMaxMinutes",
     "storyRate",
     "professorMariCreatorSource",
     "storyImagesEnabled",
@@ -153,7 +148,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "inlineAdsWorldContext",
     "inlineAdsImagesEnabled",
   ],
-  stir: ["supportDesk"],
+  stir: ["supportDesk", "liveFrequency", "liveStartHour", "liveEndHour", "liveMinMinutes", "liveMaxMinutes"],
   drama: ["polyamory", "drama"],
   autopurge: [
     "autopurgeEnabled",

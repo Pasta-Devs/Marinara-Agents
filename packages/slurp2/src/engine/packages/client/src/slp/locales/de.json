@@ -3076,6 +3076,8 @@
   "ui.slurp.settings.ext.storylines.detail": "Arcs und Pläne, Collabs, Rivalitäten, Paare, Drama und Polyamorie zwischen Creatorn.",
   "ui.slurp.settings.ext.supportDesk.label": "Support-Desk",
   "ui.slurp.settings.ext.supportDesk.detail": "Das Staff-Spiel: Tickets, Vertrauen, Misstrauen, Angebote, Perks, Hinweise und Creator, die gehen.",
+  "ui.slurp.settings.ext.live.label": "Live-Shows",
+  "ui.slurp.settings.ext.live.detail": "Creator gehen nach ihrem eigenen Plan live, über Stir > Live gehen, und du kannst auf deiner Seite selbst live gehen.",
   "ui.slurp.extrasOffer.from": "Slurp Support",
   "ui.slurp.extrasOffer.ask.posts": "Deine ersten Posts sind raus, Boss. Willst du auch {{name}}?",
   "ui.slurp.extrasOffer.ask.unlock": "Jemand hat für einen Post bezahlt! Als Nächstes {{name}}?",

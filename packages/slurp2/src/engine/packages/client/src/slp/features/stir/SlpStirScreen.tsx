@@ -654,7 +654,6 @@ export function SlpStirScreen({
       ) : (
         <>
           <StirHint />
-          <SlpStirGoLive creators={view?.creators ?? []} onOpenLive={onOpenLive} />
           <SlpStirBox names={names} personaId={personaId} />
           {query.isPending ? (
             <SlpSkeleton shape="card" count={2} label={t("ui.slurp.state.loading")} />
@@ -679,6 +678,9 @@ export function SlpStirScreen({
                 onOpenSettings={onOpenSettings}
                 onSurprise={surprise}
               />
+              {deckSettings && slpExtensionOn(deckSettings, "live") && (
+                <SlpStirGoLive creators={view.creators} onOpenLive={onOpenLive} />
+              )}
               <SlpStirRecentPlays
                 plays={view.plays}
                 collabs={view.playedCollabs}

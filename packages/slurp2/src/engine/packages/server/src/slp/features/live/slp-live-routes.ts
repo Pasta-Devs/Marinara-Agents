@@ -134,7 +134,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
       parsed.data.requestId,
       parsed.data.mode,
     );
-    if (!planned) return reply.code(409).send({ error: "This Creator already has a live show planned." });
+    if (!planned) return reply.code(409).send({ error: "This Creator is already live at that time." });
     if (planned.hostId !== creator.id) return reply.code(409).send({ error: "Request ID belongs to another Creator." });
     if (planned.startedNoticeAt) return { show: planned, started: true };
     if (parsed.data.when !== "now") {

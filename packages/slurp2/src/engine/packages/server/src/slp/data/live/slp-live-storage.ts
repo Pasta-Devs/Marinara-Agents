@@ -156,15 +156,24 @@ export function createSlurpLiveStorage(db: DB) {
           .from(slurpLiveShows)
           .where(eq(slurpLiveShows.hostId, hostId))
           .orderBy(desc(slurpLiveShows.startedAt));
+        // A not-yet-started plan gives way: an older one to the scheduler, any of them to a Stir request
+        // (Stir takes over her slot). Shows whose end time passed never block.
+        const replaced = new Set<string>();
         for (const planned of rows) {
-          if (!requestId && !planned.endedAt && !planned.startedNoticeAt && planned.startedAt < startsAt.toISOString())
+          if (planned.endedAt || planned.startedNoticeAt) continue;
+          if (requestId || planned.startedAt < startsAt.toISOString()) {
             await tx.delete(slurpLiveShows).where(eq(slurpLiveShows.id, planned.id));
+            replaced.add(planned.id);
+          }
         }
         const current = rows.filter(
           (planned) =>
-            !planned.endedAt && (requestId || !planned.startedNoticeAt || planned.startedAt >= startsAt.toISOString()),
+            !planned.endedAt &&
+            !replaced.has(planned.id) &&
+            planned.endsAt > startsAt.toISOString() &&
+            (requestId || !planned.startedNoticeAt || planned.startedAt >= startsAt.toISOString()),
         );
-        if (current.some((planned) => !planned.endedAt)) return null;
+        if (current.length) return null;
         const row = {
           id: newId(),
           hostKind: "creator",

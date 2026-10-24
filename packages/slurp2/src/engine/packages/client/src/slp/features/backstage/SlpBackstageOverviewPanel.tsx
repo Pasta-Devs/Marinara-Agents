@@ -28,7 +28,7 @@ import type { SlpBackstageSection, SlpBackstageTarget } from "../../base/navigat
 import { formatDateTime } from "../../base/ui/slp-date-time";
 import { formatBytes } from "../../modules/settings/slp-backstage-format";
 import { OverviewCard, OverviewActivity } from "../../modules/settings/SlpBackstageKit";
-import { CompactSwitch, RangeSetting } from "../../modules/settings/SlpSettingsControls";
+import { CompactSwitch } from "../../modules/settings/SlpSettingsControls";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import { markSlpSwitchedOnNoteSeen, slpSwitchedOnNoteSeen } from "../../base/state/slp-switched-on-note";
 
@@ -219,7 +219,7 @@ export function SlpBackstageOverviewPanel(page: SlpBackstagePageProps) {
       title: tx("live", "Live shows"),
       status: slpExtensionOn(settings, "live") ? tx("liveOnStatus", "Creators can host live shows") : onOff(false),
       Icon: Radio,
-      open: () => go("basic", "basic"),
+      open: () => go("stir", "stir"),
       toggle: { on: slpExtensionOn(settings, "live"), set: (on) => void update("extLive", on) },
     },
     {
@@ -481,72 +481,6 @@ export function SlpBackstageOverviewPanel(page: SlpBackstagePageProps) {
                 </button>
                 {item.toggle && <CompactSwitch label={item.title} value={item.toggle.on} onChange={item.toggle.set} />}
               </div>
-              {item.id === "live" && slpExtensionOn(settings, "live") && (
-                <div className="space-y-3 px-3 pb-4 pt-2 text-sm">
-                  <fieldset className="space-y-2">
-                    <legend className="font-semibold">{tx("liveFrequency", "Live shows: how often")}</legend>
-                    <div className="grid grid-cols-3 gap-1" role="group">
-                      {(["rare", "normal", "often"] as const).map((frequency) => (
-                        <button
-                          key={frequency}
-                          type="button"
-                          aria-pressed={settings.liveFrequency === frequency}
-                          onClick={() => void update("liveFrequency", frequency)}
-                          className={`min-h-11 rounded-lg px-2 text-xs font-semibold focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] ${settings.liveFrequency === frequency ? "bg-[var(--slurp-violet)] text-white" : "bg-[var(--slurp-canvas)]"}`}
-                        >
-                          {tx(`liveFrequency${cap(frequency)}`, cap(frequency))}
-                        </button>
-                      ))}
-                    </div>
-                  </fieldset>
-                  <fieldset className="space-y-2">
-                    <legend className="font-semibold">{tx("liveHours", "Start hours")}</legend>
-                    <SettingAnchor settingKey="liveStartHour">
-                      <RangeSetting
-                        label={tx("liveFrom", "From")}
-                        value={settings.liveStartHour}
-                        min={0}
-                        max={settings.liveEndHour - 1}
-                        format={(hour) => `${String(hour).padStart(2, "0")}:00`}
-                        onSave={(hour) => update("liveStartHour", hour)}
-                      />
-                    </SettingAnchor>
-                    <SettingAnchor settingKey="liveEndHour">
-                      <RangeSetting
-                        label={tx("liveUntil", "Until")}
-                        value={settings.liveEndHour}
-                        min={settings.liveStartHour + 1}
-                        max={24}
-                        format={(hour) => `${String(hour).padStart(2, "0")}:00`}
-                        onSave={(hour) => update("liveEndHour", hour)}
-                      />
-                    </SettingAnchor>
-                  </fieldset>
-                  <fieldset className="space-y-2">
-                    <legend className="font-semibold">{tx("liveLength", "Show length")}</legend>
-                    <SettingAnchor settingKey="liveMinMinutes">
-                      <RangeSetting
-                        label={tx("liveMin", "Minimum")}
-                        value={settings.liveMinMinutes}
-                        min={10}
-                        max={settings.liveMaxMinutes}
-                        format={(minutes) => tx("liveMinutes", "{{count}} min", { count: minutes })}
-                        onSave={(minutes) => update("liveMinMinutes", minutes)}
-                      />
-                    </SettingAnchor>
-                    <SettingAnchor settingKey="liveMaxMinutes">
-                      <RangeSetting
-                        label={tx("liveMax", "Maximum")}
-                        value={settings.liveMaxMinutes}
-                        min={settings.liveMinMinutes}
-                        max={120}
-                        format={(minutes) => tx("liveMinutes", "{{count}} min", { count: minutes })}
-                        onSave={(minutes) => update("liveMaxMinutes", minutes)}
-                      />
-                    </SettingAnchor>
-                  </fieldset>
-                </div>
-              )}
             </li>
           ))}
         </ul>
