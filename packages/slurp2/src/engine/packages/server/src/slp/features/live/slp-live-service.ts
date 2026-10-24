@@ -10,6 +10,8 @@ import {
   slurpLiveParseLines,
   slurpLivePlayerTipAmount,
   slurpLiveSegmentIndex,
+  slurpLiveSegmentToWrite,
+  slurpLiveSegmentLineAt,
   slurpLiveWatched,
   slurpLiveFanDue,
   SLURP_LIVE_REACTIONS,
@@ -153,7 +155,35 @@ export async function announceSlurpLive(db: DB, show: SlurpLiveShow): Promise<Sl
   return (await storage.get(show.id)) ?? show;
 }
 
+// ponytail: in-process guards, fine for one Engine process; move into storage leases if the Engine ever runs several.
+const liveBusy = new Map<string, number>();
+const liveKicks = new Map<string, number>();
+
+/** A viewer's poll moves the show on (at most every 3 s), so watched shows do not wait for the world tick. */
+export function kickSlurpLiveShow(db: DB, showId: string, at = new Date()): void {
+  if (at.getTime() - (liveKicks.get(showId) ?? 0) < 3_000) return;
+  liveKicks.set(showId, at.getTime());
+  void (async () => {
+    const show = await createSlurpLiveStorage(db).get(showId);
+    if (!show || show.endedAt) return void liveKicks.delete(showId);
+    await advanceShow(db, show, await createSlurpStorage(db).getSettings(), at);
+  })().catch((error: unknown) => logger.warn(error, "[slurp-live] Live kick failed"));
+}
+
 async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date): Promise<void> {
+  // A run older than the 2-minute segment lease is treated as hung, so one stuck model call cannot stall the show.
+  const token = Date.now();
+  if (token - (liveBusy.get(show.id) ?? 0) < 120_000) return;
+  liveBusy.set(show.id, token);
+  try {
+    const fresh = await createSlurpLiveStorage(db).get(show.id);
+    if (fresh && !fresh.endedAt) await advanceShowNow(db, fresh, settings, at);
+  } finally {
+    if (liveBusy.get(show.id) === token) liveBusy.delete(show.id);
+  }
+}
+
+async function advanceShowNow(db: DB, show: SlurpLiveShow, settings: any, at: Date): Promise<void> {
   const storage = createSlurpLiveStorage(db);
   const privateActive = !!show.private && Date.parse(show.private.until) > at.getTime();
   if (show.endedAt || at.getTime() >= Date.parse(show.endsAt)) {
@@ -347,7 +377,9 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
     ))
       await makeLivePictures(db, current, viewer.personaId, at);
   }
-  const index = slurpLiveSegmentIndex(show, at);
+  const index = slurpLiveSegmentToWrite(current, at);
+  // Not ahead during a private show: it may end inside the next segment, which must then be public.
+  if (index === null || (privateActive && index > slurpLiveSegmentIndex(show, at))) return;
   const lease = await storage.claimSegment(show.id, index, at);
   if (!lease) return;
   const creator = await createSlurpStorage(db).getNoodlerAccountById(show.hostId);
@@ -358,7 +390,7 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
       ? slurpLivePlayerCrowdPrompt({
           hostName: creator?.displayName ?? "Host",
           narration: current.script
-            .filter((line) => line.kind === "narration" && line.at >= index * 240_000)
+            .filter((line) => line.kind === "narration" && line.at >= minutes * 60_000 - 240_000)
             .map((line) => line.text)
             .join("\n"),
           fans: (await createSlurpPopulationStorage(db).listNamedCast(show.hostId, 6)).map(({ member }) => ({
@@ -403,9 +435,11 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
               .slice(-5)
               .map((event) => `${event.name}: ${event.amount}`),
           });
+  const callStarted = Date.now();
   const lines = creator
     ? await runLiveModel(db, settings, creator.displayName, "main", minutes, prompt, "segment")
     : [];
+  const elapsed = at.getTime() + (Date.now() - callStarted) - Date.parse(show.startedAt);
   await storage.completeSegment(
     show.id,
     index,
@@ -414,7 +448,7 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
       ...line,
       personaId: privateActive ? current.private?.personaId : undefined,
       private: privateActive,
-      at: index * 240_000 + Math.max(0, Math.min(239_999, line.at)),
+      at: slurpLiveSegmentLineAt(index, line.at, elapsed),
     })),
   );
 }

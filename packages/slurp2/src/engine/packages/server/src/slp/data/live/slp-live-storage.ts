@@ -8,7 +8,7 @@ import {
   slurpLiveClaimTipEvent,
   slurpLiveCrowdClaimAllowed,
   slurpLiveReplyClaimAllowed,
-  slurpLiveSegmentIndex,
+  slurpLiveSegmentToWrite,
   slurpLiveMenuClaimState,
   slurpLiveMenuServed,
   slurpLiveAudienceTipDue,
@@ -459,7 +459,7 @@ export function createSlurpLiveStorage(db: DB) {
     async claimSegment(id: string, index: number, at: Date) {
       return db.transaction(async (tx) => {
         const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
-        if (!row || row.endedAt || slurpLiveSegmentIndex(map(row), at) !== index) return null;
+        if (!row || row.endedAt || slurpLiveSegmentToWrite(map(row), at) !== index) return null;
         const segment = parse<SlurpLiveShow["segment"]>(row.segment ?? "null", null);
         if (
           segment &&
@@ -487,10 +487,11 @@ export function createSlurpLiveStorage(db: DB) {
           !!current &&
           current.until > new Date(Date.parse(row.startedAt) + index * 240_000).toISOString() &&
           lines.some((line) => line.personaId === current.personaId);
-        const queue = parse<SlurpLiveOrder[]>(row.queue ?? "[]", []).map((order) => ({
-          ...order,
-          served: order.served || (!isPrivate && order.status !== "pending" && order.at <= (index + 1) * 240_000),
-        }));
+        const queue = parse<SlurpLiveOrder[]>(row.queue ?? "[]", []).map((order) =>
+          order.served || isPrivate || order.status === "pending" || order.at > (index + 1) * 240_000
+            ? order
+            : { ...order, served: true, servedIn: index },
+        );
         await tx
           .update(slurpLiveShows)
           .set({
