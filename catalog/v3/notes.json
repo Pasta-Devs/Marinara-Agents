@@ -817,8 +817,8 @@
       "versions": [
         {
           "version": "0.4.1",
-          "date": "2026-10-23",
-          "notes": "- Live rooms show timed chat, missed-show summaries, viewer counts, tip goals, menu orders, and queue progress. Viewers can send chat, buy menu items, or send a custom tip; player hosts can narrate and end a show.\n- Home shows an active live room and opens it. Room polling includes the viewer persona so the server counts viewers.",
+          "date": "2026-10-24",
+          "notes": "- Live shows (`features/live`, table `slurp2_live_shows`, switch `extLive`): Creators go live on a schedule (Backstage: how often, hours, length), half announced with a post and reminders, or from Stir > Go live. Shows run 20-40 min in 4-minute segments; a model call per segment only while somebody watches, plus a \"You missed\" catch-up and quick replies.\n- Named crowd from her audience: tips and tip-menu buys inside each fan's weekly budget; the menu follows her spice level, turn-ons and hard-nos.\n- Private 10-minute blocks inside the room (PPV ×3, extendable, one viewer) and picture mode per viewer (goal, finale, picture menu items, private; max 6, only while watched).\n- The player hosts their own show: editable menu, Done queue, fan private requests by DM, recap post with real earnings. LIVE badge on avatars, Live now row on Home.",
           "highlight": false
         },
         {
