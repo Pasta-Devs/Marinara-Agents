@@ -1,5 +1,13 @@
 # Gacha Forge
 
+## Automatic continuity (1.14.0)
+
+Gacha Forge automatically keeps memories from the world's completed canonical chapters, Character Stories and character conversations. Original records stay saved. Later writing uses a compact overview plus up to three relevant detailed memories, so older events can return without placing the entire history in every prompt. Saved first-play choices remain canonical; replaying an alternative does not replace them.
+
+The overview uses at most 10% of the selected generation model's context window, measured with the Engine's token estimator. If that context window is unknown, configure it for the selected connection in **Engine Connections**. Gacha Forge reports the missing configuration instead of guessing a model limit.
+
+**Settings → Story → Continuity** shows automatic memory's status and offers a retry when an update needs attention. Memory work runs in the background; a failure keeps previous memories and original records and does not block play. Existing manual compression and editing controls remain optional tools.
+
 ## Artwork references and mobile controls (1.13.1)
 
 Character scenes, gacha banners, portraits and outfits now attach available avatar references from their selected Engine character cards or persona. A unit’s own saved artwork is the fallback when its source avatar is unavailable. Reference support and limits still depend on the configured image provider and model. Existing generated artwork remains unchanged; the references apply when generating new art.
@@ -208,7 +216,3 @@ node scripts/test-catalog-lanes.mjs
 node scripts/validate-package-locales.mjs
 node scripts/validate-catalog.mjs
 ```
-
-## Automatic continuity (in development)
-
-Tracked in [#1657](https://github.com/Pasta-Devs/Marinara-Agents/issues/1657): automatically archive completed canonical chapters and character memories, maintain a compressed overview within 10% of the generation model's context, and recall relevant detailed history without replacing the stored originals.

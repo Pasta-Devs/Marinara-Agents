@@ -2,6 +2,9 @@
 // ponytail: this bridges the external source drop; absorb these patches when its source is imported.
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
+import { runEsbuild } from "./esbuild-host-plugins.mjs";
 
 function sourceMarkers(edit) {
   const id = edit.sourceId ?? "browser";
@@ -14,6 +17,24 @@ export async function loadGachaBundlePatches(packageRoot) {
   for (const { patches } of Object.values(ledger.files)) {
     for (const { edits } of patches) {
       for (const edit of edits) {
+        if (edit.bundleFrom) {
+          // Public shared helpers are bundled at build time, never resolved by an installed package.
+          if (!/^[A-Za-z_$][\w$]*$/u.test(edit.bundleName ?? "")) throw new Error("Invalid Forge bundle name");
+          const result = await runEsbuild({
+            absWorkingDir: resolve(fileURLToPath(new URL("../", import.meta.url))),
+            entryPoints: [fileURLToPath(new URL(edit.bundleFrom, packageRoot))],
+            bundle: true,
+            write: false,
+            platform: "node",
+            format: "iife",
+            globalName: edit.bundleName,
+            target: "node24",
+            legalComments: "none",
+            minifyWhitespace: true,
+          });
+          const { start, end } = sourceMarkers(edit);
+          edit.replace = start + result.outputFiles[0].text + end + edit.find;
+        }
         if (edit.replaceFrom) {
           const paths = Array.isArray(edit.replaceFrom) ? edit.replaceFrom : [edit.replaceFrom];
           const sources = await Promise.all(paths.map((path) => readFile(new URL(path, packageRoot), "utf8")));
@@ -48,7 +69,7 @@ export async function rebuildGachaBundles(packageRoot) {
         for (const { edits } of patches.slice(0, count).toReversed()) {
           for (const edit of edits.toReversed()) {
             let applied = edit.replace;
-            if (edit.replaceFrom) {
+            if (edit.replaceFrom || edit.bundleFrom) {
               // Source edits can regenerate an already built payload without needing its old source file.
               const markers = sourceMarkers(edit);
               const start = candidate.indexOf(markers.start);

@@ -1,3 +1,9 @@
+## 1.14.0 — 2026-10-24
+
+- Automatically remember completed canonical chapters and Character Stories, alongside saved character-chat memories.
+- Maintain a compressed overview within 10% of the generation model's known context, retaining detailed originals for relevant recall.
+- Show automatic continuity status and allow retrying failed memory work without blocking gameplay.
+
 ## 1.13.1 — 2026-10-24
 
 - Character scenes, banners, portraits and outfits use available character/persona avatar references; provider support and limits still apply.
