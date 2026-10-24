@@ -295,7 +295,7 @@ assert.deepEqual(
         profileTipRoute,
       ),
     dmCompensatesEveryProvenCharge: [storage].every((copy) =>
-      /let charged = false[\s\S]*?tipCreator\([^)]*tipOperationId\)[\s\S]*?charged = true[\s\S]*?appendMessage[\s\S]*?catch \(error\) \{[\s\S]*?charged \|\| \(await slurp\.hasWalletSpendOperation\(viewerAccountId, tipOperationId\)\)[\s\S]*?compensateSlurpPayment/u.test(
+      /let charged = false[\s\S]*?tipCreator\([^)]*tipOperationId[^)]*\)[\s\S]*?charged = true[\s\S]*?appendMessage[\s\S]*?catch \(error\) \{[\s\S]*?charged \|\| \(await slurp\.hasWalletSpendOperation\(viewerAccountId, tipOperationId\)\)[\s\S]*?compensateSlurpPayment/u.test(
         copy.slice(
           copy.indexOf("async tipInThreadUnlocked"),
           copy.indexOf("async resolveRequest", copy.indexOf("async tipInThreadUnlocked")),
@@ -442,7 +442,7 @@ for (const copy of [storage]) {
   );
   assert.match(
     dmTip,
-    /createSlurpPaymentIntent\([\s\S]*?note: "direct-message tip"[\s\S]*?creditOperationId: tipOperationId[\s\S]*?tipOperationId,[\s\S]*?tipCreator\(/u,
+    /const paymentNote = "direct-message tip"[\s\S]*?createSlurpPaymentIntent\([\s\S]*?note: paymentNote[\s\S]*?creditOperationId: tipOperationId[\s\S]*?tipOperationId,[\s\S]*?tipCreator\(/u,
     "DM tips must claim their durable intent before debit",
   );
   assert.match(

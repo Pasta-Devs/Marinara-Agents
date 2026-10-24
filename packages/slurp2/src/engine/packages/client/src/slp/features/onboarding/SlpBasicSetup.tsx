@@ -71,6 +71,7 @@ const GLYPH: Record<string, string> = {
   "extras.world": "🎉",
   "extras.stir": "🥄",
   "extras.supportDesk": "🛎️",
+  "extras.live": "🔴",
 };
 /** The fans on the preview card, by crowd. */
 const FANS = { quiet: 120, realistic: 412, lively: 980, generous: 1650 } as const;

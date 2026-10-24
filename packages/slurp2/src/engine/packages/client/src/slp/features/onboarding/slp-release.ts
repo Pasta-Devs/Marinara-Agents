@@ -1,7 +1,7 @@
 import { SLURP2_LEGACY_RELEASES } from "./slp-release-archive";
 
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.4.2";
+export const SLURP2_VERSION = "0.4.3";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -14,6 +14,15 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.4.3",
+    date: "2026-10-24",
+    notes: [
+      "Live shows get their own Backstage page: the switch, how often Creators go live, the hours and the show length.",
+      "Going live from Stir takes over a Creator's planned show instead of saying she already has one.",
+      "Go live sits below your story picks in Stir, and only while Live shows are on.",
+    ],
+  },
   {
     version: "0.4.2",
     date: "2026-10-24",

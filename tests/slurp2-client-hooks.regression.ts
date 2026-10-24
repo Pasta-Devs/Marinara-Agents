@@ -507,6 +507,19 @@ const addedCalls = [
   "post /slurp2/slurp/accounts/${encodeURIComponent(accountId)}/strategy/suggest",
   "upload /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/image-upload",
   "get /slurp2/settings/carryover-reach",
+  "post /slurp2/live/${encodeURIComponent(showId)}/menu/${encodeURIComponent(input.requestId)}/done",
+  // The live-show read stops at the first backtick.
+  "get /slurp2/live/${encodeURIComponent(id!)}${personaId ? ",
+  "get /slurp2/live/player-menu/${encodeURIComponent(personaId!)}",
+  "post /slurp2/live/start",
+  "post /slurp2/live/stir",
+  "post /slurp2/live/${encodeURIComponent(showId)}/chat",
+  "post /slurp2/live/${encodeURIComponent(showId)}/end",
+  "post /slurp2/live/${encodeURIComponent(showId)}/menu",
+  "post /slurp2/live/${encodeURIComponent(showId)}/mode",
+  "post /slurp2/live/${encodeURIComponent(showId)}/narrate",
+  "post /slurp2/live/${encodeURIComponent(showId)}/private",
+  "post /slurp2/live/${encodeURIComponent(showId)}/tip",
 ];
 const removedCalls = [
   // The staging ads-pool GET went with the removed useSlurpAdPool hook (0.3.9).
@@ -567,16 +580,16 @@ assert.deepEqual(
     // 0.3.27 "Suggest page style": one mutation, its two error states, and the strategy save now
     // refreshes the list when settled (a refused apply also means the list is stale).
     // 0.3.63: +1 (useStartSlurpSexting buys a sexting session).
-    useMutation: 225,
+    useMutation: 236,
     // 0.3.28: +2 (the import and the one query of SlpMessageDeepDetails). 0.3.42: +1 (carryover reach).
     // 0.3.44: +2 (the import and the trends row query).
     // 0.3.63: +1 (its useQueryClient).
-    useQuery: 300,
+    useQuery: 308,
     useInfiniteQuery: 9,
     // 0.3.35: +2 (adding a Creator refreshes the settings, which now hold the image name choice).
     // Configurator: +1 (an extension switch drops the cached feed, trend and Stir reads).
     // Life panel: +3 useMutation, +4 useQuery, +1 invalidateQueries, +3 onError.
-    invalidateQueries: 157,
+    invalidateQueries: 160,
     setQueryData: 27,
     cancelQueries: 7,
     removeQueries: 1,
@@ -584,9 +597,10 @@ assert.deepEqual(
     onMutate: 2,
     // SlpConnectionsPanel.tsx moved into the SlurpBackstagePrompts component mapping, so its one
     // onError no longer counts as state-layer code. +1: SlpDeskQuickReplies (R2) toasts a failed save.
-    onError: 98,
+    onError: 99,
     // 0.3.63: +1 (the sexting buy refreshes the thread when settled).
-    onSettled: 41,
+    // Live shows: +11 useMutation, +8 useQuery, +3 invalidateQueries, +1 onError, +9 onSettled.
+    onSettled: 50,
   },
   "query and mutation wiring counts match the monolith plus the later Slurp2 hooks",
 );

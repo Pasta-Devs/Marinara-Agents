@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { newRequestId } from "../../base/state/slp-request-id";
 import { useTranslation } from "react-i18next";
+import { SlpCoinText } from "../../modules/coin/SlpCoin";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { useSlpLiveActions, useSlpLiveShow } from "./slp-live-hooks";
 import type { SlpLiveMenuItem, SlpLiveShow } from "./slp-live-contract";
@@ -146,7 +147,7 @@ function SlpLiveContent({
       <main className="mx-auto flex h-full max-w-lg flex-col items-center justify-center gap-4 p-6 text-center">
         <h1 className="text-xl font-bold">{t("ui.slurp.live.ended")}</h1>
         <p className="text-sm text-[var(--muted-foreground)]">
-          {t("ui.slurp.live.raised", { name: creatorName, amount: show.raised })}
+          <SlpCoinText>{t("ui.slurp.live.raised", { name: creatorName, amount: show.raised })}</SlpCoinText>
         </p>
         {show.recapPostId && (
           <button
@@ -184,7 +185,9 @@ function SlpLiveContent({
       </header>
       <section className="border-b border-[var(--border)] px-4 py-3" aria-label={t("ui.slurp.live.goalLabel")}>
         <div className="mb-2 flex justify-between text-xs">
-          <span>{t("ui.slurp.live.goal", { raised: show.raised, goal: show.goal })}</span>
+          <span>
+            <SlpCoinText>{t("ui.slurp.live.goal", { raised: show.raised, goal: show.goal })}</SlpCoinText>
+          </span>
           <span>{Math.min(100, Math.round((show.raised / Math.max(1, show.goal)) * 100))}%</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-[var(--muted)]">
@@ -218,9 +221,11 @@ function SlpLiveContent({
               }}
               className="min-h-11 rounded border border-[var(--border)] px-3"
             >
-              {privateViewer
-                ? t("ui.slurp.live.extend")
-                : t("ui.slurp.live.goPrivate", { price: show.privatePrice ?? 0 })}
+              {privateViewer ? (
+                t("ui.slurp.live.extend")
+              ) : (
+                <SlpCoinText>{t("ui.slurp.live.goPrivate", { price: show.privatePrice ?? 0 })}</SlpCoinText>
+              )}
             </button>
           )}
           {show.picturesAllowed && (

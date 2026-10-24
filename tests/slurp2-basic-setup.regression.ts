@@ -165,6 +165,7 @@ assert.deepEqual(slpBasicStamp({ answers: { extras: "" }, unlocked: false }, ctx
   extWorld: false,
   extStir: false,
   extSupportDesk: false,
+  extLive: false,
 });
 assert.deepEqual(slpBasicCleanState({ answers: { extras: "ads,stir" } }).answers, { extras: "ads,stir" });
 assert.deepEqual(slpBasicCleanState({ answers: { extras: "stir,ads" } }).answers, {}, "only the written form");

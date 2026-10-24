@@ -468,7 +468,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   extStorylines: false,
   extWorld: false,
   extStir: false,
-  extLive: true,
+  extLive: false,
   liveFrequency: "normal",
   liveStartHour: 18,
   liveEndHour: 24,

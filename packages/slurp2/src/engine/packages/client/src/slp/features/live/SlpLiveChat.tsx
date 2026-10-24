@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { SlpLiveShow } from "./slp-live-contract";
+import { SlpCoinText } from "../../modules/coin/SlpCoin";
 
 type ChatItem = {
   at: number;
@@ -137,9 +138,11 @@ export function SlpLiveChat({
             key={`${line.at}-${index}`}
             className="mx-auto w-fit rounded-full bg-[var(--slurp-warning)]/12 px-3 py-1.5 text-sm font-semibold text-[var(--slurp-warning)]"
           >
-            {line.kind === "tip"
-              ? t("ui.slurp.live.tipEvent", { name: line.name, amount: line.text })
-              : t("ui.slurp.live.menuEvent", { name: line.name, item: line.text })}
+            {line.kind === "tip" ? (
+              <SlpCoinText>{t("ui.slurp.live.tipEvent", { name: line.name, amount: line.text })}</SlpCoinText>
+            ) : (
+              t("ui.slurp.live.menuEvent", { name: line.name, item: line.text })
+            )}
           </div>
         ) : (
           <p key={`${line.at}-${index}`} className="text-sm">

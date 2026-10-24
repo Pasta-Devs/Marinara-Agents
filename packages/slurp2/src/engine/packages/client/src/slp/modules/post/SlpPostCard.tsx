@@ -1,7 +1,7 @@
 import { slpIsOwnActor } from "../../../../../shared/src/slp/slp-interactions.js";
 import { SlpStoryRingAvatar } from "../story/SlpStoryRing";
 import { SlpTimestamp } from "../../base/ui/SlpTimestamp";
-import { AtSign, ChevronDown, ChevronRight, Info, MessageCircle, RefreshCw, X } from "lucide-react";
+import { AtSign, ChevronDown, ChevronRight, Image as ImageIcon, Info, MessageCircle, RefreshCw, X } from "lucide-react";
 import { SlpHeartGlyph } from "../../base/chrome/SlpGlyphs";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { slurpPostWentViral, slurpReachWeek } from "../../../../../shared/src/slp/slp-reach.js";
@@ -21,9 +21,8 @@ import { SlpLiveAvatar } from "../creator/SlpLiveAvatar";
 import { SlpPostPurposeNote, slpShowPostInPlace } from "./SlpPostPurposeNote";
 import { SlpPostEditSheet } from "./SlpPostEditSheet";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { Image as ImageIcon } from "lucide-react";
-import { slpPostImagePrompt } from "./SlpPostHelpers";
 import {
+  slpPostImagePrompt,
   createSlpLightboxImage,
   SLP_FEED_MEDIA_FRAME_CLASS,
   SlpPostImageSlot,
@@ -42,8 +41,7 @@ import { SlpPostMediaFrame } from "./SlpPostMediaFrame";
 import { SlpPostMenu } from "./SlpPostMenu";
 import { SlpReplyRow } from "./SlpReplyRow";
 import { SlpReplyComposer } from "./SlpReplyComposer";
-// ponytail: one edit sheet app-wide (only one post is edited at a time); if its owner card unmounts
-// mid-edit the other copy does not take over. Move the sheet to the controller if that matters.
+// ponytail: one edit sheet app-wide; a card unmounting mid-edit loses it. Move it to the controller if that matters.
 let slpEditSheetOwned = false;
 
 // A fresh Map per render is a new useMemo dependency for the Markdown renderer below.

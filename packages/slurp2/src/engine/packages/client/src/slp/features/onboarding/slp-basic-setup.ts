@@ -49,6 +49,7 @@ export const SLP_BASIC_EXTRAS = [
   "world",
   "stir",
   "supportDesk",
+  "live",
 ] as const satisfies readonly SlpExtensionId[];
 export type SlpBasicExtra = (typeof SLP_BASIC_EXTRAS)[number];
 
