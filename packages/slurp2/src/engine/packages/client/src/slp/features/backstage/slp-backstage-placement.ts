@@ -57,6 +57,7 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
   liveEndHour: slurp("live", "live shows", "hours", "end"),
   liveMinMinutes: slurp("live", "live shows", "length", "minimum"),
   liveMaxMinutes: slurp("live", "live shows", "length", "maximum"),
+  liveRoom: slurp("live", "live shows", "chat room", "crowd"),
   extEngineLink: internal(slurp("engine", "engine link")),
   inlineAdsEnabled: slurp("ads", "ads", "promotions", "feed"),
   inlineAdsFrequency: slurp("ads", "ad frequency", "promotions"),

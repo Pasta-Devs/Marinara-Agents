@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 0.4.7 — 2026-10-24
+
+- Crowd lane: a watched Creator show asks the model for 8-12 chat lines when less than 10 s of crowd chat is queued, and places them 3-9 s apart (`modules/live/slp-live-rooms.ts`). They use the fast live connection; when the model is out, 5 short reactions from real fans fill about 30 s.
+- Room types (mixed, simps, hype, lurkers, whales) steer the crowd; player shows pick one at setup (`crowd` column), Creator shows use the new `liveRoom` setting.
+- `runLiveModel` moved to `features/live/slp-live-model.ts`.
+
 ## 0.4.6 — 2026-10-24
 
 - Live replies: every player chat line and tip (`fromPlayer`) gets her model reply; one reply per 8 s (`SLURP_LIVE_REPLY_GAP_MS`, was 60 s public / 20 s private), lines sent inside the gap are answered together by a retry after it. Replies are marked `host`.

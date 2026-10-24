@@ -5,6 +5,7 @@ import { api } from "../../../lib/api-client.js";
 import { SlpButton, SlpPrimaryButton } from "../../modules/chrome/SlpButton";
 import { SlpSheet } from "../../modules/chrome/SlpSheet";
 import { useStartSlpPlayerLive } from "./slp-live-hooks";
+import { SLP_LIVE_ROOMS, type SlpLiveRoom } from "./slp-live-contract";
 
 export function SlpPlayerLiveSetup({
   open,
@@ -21,11 +22,13 @@ export function SlpPlayerLiveSetup({
   const start = useStartSlpPlayerLive();
   const [duration, setDuration] = useState<20 | 30 | 40>(20);
   const [goal, setGoal] = useState("");
+  const [room, setRoom] = useState<SlpLiveRoom>("default");
   const [edits, setEdits] = useState<Record<string, { enabled: boolean; price: number | "" }>>({});
   useEffect(() => {
     if (!open) return;
     setDuration(20);
     setGoal("");
+    setRoom("default");
     setEdits({});
   }, [open, personaId]);
   const defaults = useQuery({
@@ -102,6 +105,7 @@ export function SlpPlayerLiveSetup({
                 {
                   personaId,
                   duration,
+                  crowd: room,
                   goal: goalValue,
                   menu: menu.map(({ id, enabled, price }) => ({ id, enabled, price: Number(price) })),
                 },
@@ -146,6 +150,20 @@ export function SlpPlayerLiveSetup({
                 {[20, 30, 40].map((value) => (
                   <option key={value} value={value}>
                     {t("ui.slurp.live.setup.minutes", { count: value })}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm font-semibold">
+              {t("ui.slurp.live.setup.room")}
+              <select
+                className="mt-1 min-h-11 w-full rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] px-3"
+                value={room}
+                onChange={(event) => setRoom(event.target.value as SlpLiveRoom)}
+              >
+                {SLP_LIVE_ROOMS.map((value) => (
+                  <option key={value} value={value}>
+                    {t(`ui.slurp.live.rooms.${value}`)}
                   </option>
                 ))}
               </select>

@@ -3213,5 +3213,12 @@
   "ui.slurp.live.pictureAlt": "Zdjęcie od {{name}}",
   "ui.slurp.settings.connections.live": "Transmisje na żywo",
   "ui.slurp.settings.connections.liveUse": "Jej odpowiedzi na żywo do ciebie w pokoju na żywo. Wybierz szybki, tani model. Puste używa modelu odpowiedzi i fanów.",
-  "ui.slurp.live.readingChat": "{{name}} czyta czat..."
+  "ui.slurp.live.readingChat": "{{name}} czyta czat...",
+  "ui.slurp.live.setup.room": "Pokój czatu",
+  "ui.slurp.settings.overview.yours.liveRoom": "Pokój czatu",
+  "ui.slurp.live.rooms.default": "Mieszany tłum",
+  "ui.slurp.live.rooms.simps": "Simpy",
+  "ui.slurp.live.rooms.hype": "Ekipa hype",
+  "ui.slurp.live.rooms.lurkers": "Cisi widzowie",
+  "ui.slurp.live.rooms.whales": "Grube ryby"
 }

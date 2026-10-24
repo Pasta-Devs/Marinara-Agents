@@ -195,7 +195,11 @@ assert.match(
   "no reply without a player line",
 );
 assert.match(service, /replyRetries\.add\(show\.id\)/, "lines sent inside the reply gap are answered after it");
-assert.match(service, /kind === "reply" && settings\.liveConnectionId/, "replies use the fast live connection");
+assert.match(
+  slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/live/slp-live-model.ts"),
+  /\(kind === "reply" \|\| kind === "crowd"\) && settings\.liveConnectionId/,
+  "replies and the crowd use the fast live connection",
+);
 assert.match(
   service,
   /releaseReply\(show\.id, at, show\.lastReplyAt\);\s*if \(!retried\) retryLater\(\);/,

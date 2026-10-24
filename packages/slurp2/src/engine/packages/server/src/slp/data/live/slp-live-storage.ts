@@ -46,6 +46,7 @@ const map = (row: typeof slurpLiveShows.$inferSelect): SlurpLiveShow => ({
   lastReplyAt: row.lastReplyAt ?? null,
   recapPostId: row.recapPostId ?? null,
   room: slurpLiveParseRoom(row.room),
+  crowd: row.crowd ?? null,
   menu: parse(row.menu ?? "[]", []),
   queue: parse(row.queue ?? "[]", []),
   segment: parse(row.segment ?? "null", null),
@@ -348,6 +349,7 @@ export function createSlurpLiveStorage(db: DB) {
       goal: number;
       menu?: SlurpLiveMenuItem[];
       mode?: "text" | "pictures";
+      crowd?: string | null;
     }) {
       return db.transaction(async (tx) => {
         const active = await tx
@@ -380,6 +382,7 @@ export function createSlurpLiveStorage(db: DB) {
           announcementPostId: null,
           startedNoticeAt: input.startedAt.toISOString(),
           mode: input.mode ?? "text",
+          crowd: input.crowd ?? null,
           privateState: null,
           privateClaims: "[]",
           privateRequestId: null,
@@ -593,12 +596,12 @@ export function createSlurpLiveStorage(db: DB) {
         return map({ ...row, queue: JSON.stringify(next) });
       });
     },
-    async appendEvent(id: string, event: SlurpLiveEvent) {
+    async appendEvent(id: string, event: SlurpLiveEvent | SlurpLiveEvent[]) {
       return db.transaction(async (tx) => {
         const rows = await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id));
         const row = rows[0];
         if (!row || row.endedAt) return null;
-        const events = capEvents([...decodeEvents(row.events), event]);
+        const events = capEvents([...decodeEvents(row.events), ...[event].flat()]);
         await tx
           .update(slurpLiveShows)
           .set({ events: JSON.stringify(events) })

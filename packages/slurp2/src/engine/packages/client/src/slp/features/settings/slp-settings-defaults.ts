@@ -150,7 +150,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "inlineAdsImagesEnabled",
   ],
   stir: ["supportDesk"],
-  live: ["liveFrequency", "liveStartHour", "liveEndHour", "liveMinMinutes", "liveMaxMinutes"],
+  live: ["liveFrequency", "liveStartHour", "liveEndHour", "liveMinMinutes", "liveMaxMinutes", "liveRoom"],
   drama: ["polyamory", "drama"],
   autopurge: [
     "autopurgeEnabled",

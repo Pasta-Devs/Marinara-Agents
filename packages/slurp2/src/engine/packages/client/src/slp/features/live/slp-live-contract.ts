@@ -56,3 +56,7 @@ export type SlpLiveShow = {
   viewers?: number;
 };
 export type SlpLiveShowResponse = SlpLiveShow;
+
+/** Live chat room types; the server keeps the prompt text for each (slp-live-rooms.ts). */
+export const SLP_LIVE_ROOMS = ["default", "simps", "hype", "lurkers", "whales"] as const;
+export type SlpLiveRoom = (typeof SLP_LIVE_ROOMS)[number];
