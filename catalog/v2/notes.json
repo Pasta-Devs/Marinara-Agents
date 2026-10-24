@@ -816,6 +816,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.2",
+          "date": "2026-10-24",
+          "notes": "- A repeated live tip resumes its payment through the show-scoped DM tip id instead of reporting it as done, so a crash between claim and charge no longer drops the coins.\n- A Creator show waits up to 2 minutes for a private payment in flight before it ends and posts its recap.\n- Tip events are kept past the 200-event cap, so tip dedupe and the recap's top tipper cover the whole show.",
+          "highlight": false
+        },
+        {
           "version": "0.4.1",
           "date": "2026-10-24",
           "notes": "- Live shows (`features/live`, table `slurp2_live_shows`, switch `extLive`): Creators go live on a schedule (Backstage: how often, hours, length), half announced with a post and reminders, or from Stir > Go live. Shows run 20-40 min in 4-minute segments; a model call per segment only while somebody watches, plus a \"You missed\" catch-up and quick replies.\n- Named crowd from her audience: tips and tip-menu buys inside each fan's weekly budget; the menu follows her spice level, turn-ons and hard-nos.\n- Private 10-minute blocks inside the room (PPV ×3, extendable, one viewer) and picture mode per viewer (goal, finale, picture menu items, private; max 6, only while watched).\n- The player hosts their own show: editable menu, Done queue, fan private requests by DM, recap post with real earnings. LIVE badge on avatars, Live now row on Home.",
@@ -927,12 +933,6 @@
           "version": "0.3.37",
           "date": "2026-10-13",
           "notes": "- With a Claude (Subscription) connection, Slurp no longer makes a hidden second request to name each session, and a request now stops with an error if Claude Code turns on claude.ai connectors. With a Marinara Engine release after 2.5.0, Claude Code also no longer adds your account email, the date or this computer's details to the prompt. Engine 2.5.0's Claude Code still adds them, and the server log warns about it until you update Marinara. (#1313)\n- Changed: avatar references are allowed for SpicyAPI edit models (model IDs ending in /edit) and still left out for its text-to-image models. Slurp's bundled image code cannot call SpicyAPI yet, so SpicyAPI pictures do not work in Slurp until it can. (#1337)",
-          "highlight": false
-        },
-        {
-          "version": "0.3.36",
-          "date": "2026-10-13",
-          "notes": "- Fixed: a Creator's bio and stage voice now steer what she posts about. The post planner reads them beside the character card (hidden identities stay hidden), so a hobby named only in the bio, such as cosplay, becomes post subjects. The post prompt also says that interests named in the bio and stage voice count. (#1358)\n- Changed: the no-repeat rule no longer blocks a theme that the bio, stage voice, or card names as what the Creator does. A new setting, framing, and look each time is still required, and the same outfit or wording is still a repeat. (#1358)",
           "highlight": false
         }
       ]
