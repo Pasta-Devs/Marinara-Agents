@@ -12,6 +12,7 @@ export default defineConfig({
   testMatch: [
     "package-gacha-forge.e2e.ts",
     "package-gacha-forge-home.e2e.ts",
+    "package-gacha-forge-editors.e2e.ts",
     "package-gacha-forge-units.e2e.ts",
     "package-gacha-forge-choices.e2e.ts",
     "package-gacha-forge-welcome-gift.e2e.ts",

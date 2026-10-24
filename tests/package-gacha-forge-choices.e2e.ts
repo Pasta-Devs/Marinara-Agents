@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
@@ -390,6 +391,128 @@ for (const autoplay of [true, false]) {
       expect(completeRequests).toBe(0);
     },
   );
+}
+
+for (const autoplay of [false, true]) {
+  test(`Normal-motion dialogue keeps terminal punctuation before choices (${autoplay ? "autoplay" : "manual"})`, async ({
+    page,
+  }, testInfo) => {
+    const question = "Will you keep an old man company for an hour?";
+    const overridePath = process.env.GACHA_FORGE_PUNCTUATION_CLIENT;
+    const clientBytes = overridePath ? readFileSync(overridePath) : null;
+    let overrides = 0;
+    if (clientBytes)
+      await page.route(/\/api\/capability-packages\/gacha-forge\/client(?:\?.*)?$/u, (route) => {
+        overrides += 1;
+        return route.fulfill({ body: clientBytes, contentType: "text/javascript; charset=utf-8" });
+      });
+    await page.route("**/api/gacha-forge/beat", (route) =>
+      route.fulfill({
+        json: {
+          ...scene,
+          segments: Array.from({ length: 60 }, (_, index) => ({
+            speaker: index === 52 ? "Pulcinella" : "",
+            text: index === 52 ? question : index === 51 ? "The garden falls quiet." : `Earlier beat ${index + 1}.`,
+          })),
+          resumeAt: 51,
+          choices: [
+            {
+              id: "punctuation-choice",
+              kind: "small",
+              at: 52,
+              options: [
+                { ...smallOptions[0], text: "Tease him about the hour" },
+                { ...smallOptions[1], text: "Ask whether he slept" },
+                { ...smallOptions[2], text: "Try the boots on" },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    const forge = await openForge(page, testInfo);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    const now = new Date("2026-10-24T12:00:00Z");
+    await page.clock.install({ time: now });
+    await page.clock.pauseAt(new Date(now.getTime() + 60_000));
+    await seedScene(forge, false, "aurora");
+    await expect(forge.locator(".gf-arena")).toHaveAttribute("data-style", "aurora");
+    await forge.locator("[data-vn-resume]").click();
+    await page.clock.runFor(1000);
+    const text = forge.locator("[data-text]");
+    const choices = forge.locator("[data-forge-choices]");
+    await expect(text).toHaveText("The garden falls quiet.");
+    await expect(forge.locator("[data-count]")).toHaveText("52 / 60");
+    if (autoplay) {
+      await forge.locator("[data-auto]").click();
+      await page.clock.runFor(3000);
+    } else await forge.locator("[data-box]").click();
+    await page.clock.runFor(18 * (question.length - 1));
+    await expect(text).toHaveText(question.slice(0, -1));
+    await expect(choices).toHaveCount(0);
+    // Backlog reads the canonical line even while the visible line is animating.
+    await forge.locator("[data-log]").click();
+    await expect(forge.locator(".vn-log-line").last()).toHaveText(question);
+    const viewport = page.viewportSize()!;
+    await page.setViewportSize({ width: viewport.width - 10, height: viewport.height });
+    await forge.evaluate((node) => (node as any)._renderBrowser());
+    await page.clock.runFor(18);
+    await forge.locator("[data-log-close]").click();
+    await page.setViewportSize(viewport);
+    await expect(forge.locator(".gf-arena")).toHaveAttribute("data-style", "aurora");
+    await expect(choices).toHaveAttribute("data-choice-id", "punctuation-choice");
+    const geometry = await text.evaluate((element) => {
+      const node = element.firstChild!;
+      const range = document.createRange();
+      range.setStart(node, node.textContent!.length - 1);
+      range.setEnd(node, node.textContent!.length);
+      const end = range.getBoundingClientRect();
+      const box = element.closest("[data-box]")!.getBoundingClientRect();
+      const stage = element.closest(".gf-stage")!.getBoundingClientRect();
+      return {
+        text: element.textContent,
+        terminal: range.toString(),
+        glyph: { x: end.x, y: end.y, width: end.width, height: end.height },
+        fitsBox: end.left >= box.left && end.right <= box.right && end.top >= box.top && end.bottom <= box.bottom,
+        fitsStage:
+          end.left >= stage.left && end.right <= stage.right && end.top >= stage.top && end.bottom <= stage.bottom,
+        reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
+      };
+    });
+    await testInfo.attach("terminal-punctuation-geometry", {
+      body: JSON.stringify(geometry, null, 2),
+      contentType: "application/json",
+    });
+    await testInfo.attach("archived-client-scope", {
+      body: JSON.stringify({
+        overridePath: overridePath ?? null,
+        overrides,
+        sha256: clientBytes ? createHash("sha256").update(clientBytes).digest("hex") : null,
+      }),
+      contentType: "application/json",
+    });
+    if (clientBytes) expect(overrides).toBe(1);
+    await expect(forge.locator("[data-count]")).toHaveText("53 / 60");
+    await expect(text).toHaveText(question);
+    expect(geometry.terminal).toBe("?");
+    expect(geometry.reducedMotion).toBe(false);
+    expect(geometry.glyph.width).toBeGreaterThan(0);
+    expect(geometry.fitsBox).toBe(true);
+    expect(geometry.fitsStage).toBe(true);
+    await forge.locator("[data-log]").click();
+    await expect(forge.locator(".vn-log-line").last()).toHaveText(question);
+    await forge.locator("[data-log-close]").click();
+    await expect(text).toHaveText(question);
+    await page.clock.runFor(10_000);
+    await expect(text).toHaveText(question);
+    await expect(choices).toHaveAttribute("data-choice-id", "punctuation-choice");
+    await page.screenshot({
+      animations: "disabled",
+      path: testInfo.outputPath(
+        `normal-motion-punctuation-${autoplay ? "auto" : "manual"}-${testInfo.project.name}.png`,
+      ),
+    });
+  });
 }
 
 test("Continuity choices default on and persist alongside pre-forging", async ({ page }, testInfo) => {

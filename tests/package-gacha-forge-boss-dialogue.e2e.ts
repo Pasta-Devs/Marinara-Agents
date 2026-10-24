@@ -323,3 +323,65 @@ test("boss dialogue is plain text, and unavailable assigned speech does not lock
   await forge.locator("[data-forge-dialogue-next]").click();
   await expect.poll(() => forge.evaluate((node) => (node as any).__completed.length)).toBe(1);
 });
+
+test("blocking combat dialogue supports keyboard continuation and restores visible controls after a rerender", async ({
+  page,
+}, testInfo) => {
+  const { forge } = await openBattle(page, testInfo);
+  await forge.evaluate((node) => {
+    const game = node as any;
+    game._combat.dialogueCues.splice(1, 0, {
+      ...game._combat.dialogueCues[0],
+      content: "A second line in the same blocking queue.",
+    });
+  });
+  await forge.locator("[data-start]").click();
+  const focusedNext = () =>
+    forge.evaluate(
+      (node) => node.shadowRoot!.activeElement === node.shadowRoot!.querySelector("[data-forge-dialogue-next]"),
+    );
+  await expect(forge.locator("[data-forge-combat-dialogue]")).toContainText(intro);
+  expect(await focusedNext()).toBe(true);
+  await page.keyboard.press("Shift+Tab");
+  await expect(forge.locator("[data-forge-combat-dialogue] p")).toBeFocused();
+  // macOS WebKit's native preference skips buttons on Tab; Option+Tab includes them.
+  // An unchanged native paragraph/button/input probe pins that host keyboard behavior.
+  await page.keyboard.press(testInfo.project.name === "mobile-webkit" ? "Alt+Tab" : "Tab");
+  expect(await focusedNext()).toBe(true);
+  await page.keyboard.press("Enter");
+  await expect(forge.locator("[data-forge-combat-dialogue]")).toContainText(
+    "A second line in the same blocking queue.",
+  );
+  expect(await focusedNext()).toBe(true);
+  await forge.evaluate((node) => {
+    const game = node as any;
+    game._renderKey = "";
+    game._renderBrowser();
+  });
+  await expect(forge.locator("[data-forge-combat-dialogue]")).toContainText(
+    "A second line in the same blocking queue.",
+  );
+  expect(await focusedNext()).toBe(true);
+  await page.keyboard.press("Enter");
+  await expect(forge.locator("[data-forge-combat-dialogue]")).toBeHidden();
+  await expect(forge.locator("[data-auto]")).toBeFocused();
+});
+
+test("Auto restores keyboard focus after its last outcome line without stealing enemy inspection focus", async ({
+  page,
+}, testInfo) => {
+  const { forge } = await openBattle(page, testInfo, { auto: true, defeat: true, pauseSeconds: 1 });
+  await forge.locator("[data-start]").click();
+  await expect(forge.locator("[data-forge-dialogue-next]")).toBeFocused();
+  await forge.locator("[data-forge-dialogue-next]").click();
+  await expect(forge.locator("[data-forge-combat-dialogue]")).toContainText("You cannot pass this gate.");
+  await forge.locator('.cbt.enemy[data-id="enemy-0"]').click();
+  const close = forge.locator("button[data-foe-close]");
+  await close.focus();
+  await page.waitForTimeout(1200);
+  await expect(close).toBeFocused();
+  expect(await forge.evaluate((node) => (node as any).__completed)).toEqual([]);
+  await close.click();
+  await expect.poll(() => forge.evaluate((node) => (node as any).__completed.length)).toBe(1);
+  await expect(forge.locator("[data-auto]")).toBeFocused();
+});

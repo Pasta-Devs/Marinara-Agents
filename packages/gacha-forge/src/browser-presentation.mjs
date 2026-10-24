@@ -63,10 +63,37 @@ const forgeBrowserLayout = `
   background: var(--ink); color: var(--text); border: 1px solid var(--steel-dark);
   clip-path: none; border-radius: 0;
 }
+/* Scene artwork starts below the story controls, including both crossfade layers. */
+.gf-stage > .gf-view .vn-scene { top: var(--forge-scene-top, 0px); }
+.gf-stage > .gf-view .vn-bg { background-position: center top; }
+.gf-stage > .gf-view .vn-scene::before { display: none; }
 /* A phone keyboard can leave less room than the picker header and composer.
    Query the package's actual height, which already follows the Engine viewport.
    Keep this stable when Send takes focus; Safari may blur the textarea before its tap. */
 @container gfarena (max-height: 280px) {
+  .gf-stage[data-forge-editing] > .gf-bar,
+  .gf-stage:has(.ob-xv) > .gf-bar,
+  .gf-arena:has(.gf-stage[data-forge-editing], .ob-xv) > .gf-rot { display: none; }
+  .gf-stage[data-forge-editing] .screen .body { padding: 4px; gap: 8px; }
+  .gf-stage[data-forge-editing] .st-plate { padding: 4px; }
+  .gf-stage[data-forge-editing] textarea.ob-control:focus {
+    min-height: 44px; height: min(105px, var(--forge-editor-height)); max-height: var(--forge-editor-height);
+  }
+  /* Put Close beside the text, rather than spending the keyboard's last line on a title row. */
+  .ob-xv { padding: 4px; }
+  .ob-xm:has(> .ob-xta) {
+    height: 100%; padding: 4px; gap: 4px; display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px; grid-template-rows: minmax(0, 1fr);
+  }
+  /* Safari restores host chrome on blur: keep Close on the unchanged bottom edge until click. */
+  .ob-xm:has(> .ob-xta) .ob-xh { grid-column: 2; grid-row: 1; flex-direction: column; justify-content: flex-end; gap: 4px; }
+  .ob-xm:has(> .ob-xta) .ob-xh h2 {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .ob-xm:has(> .ob-xta) .ob-count { order: 1; margin: 0; font-size: 10px; }
+  .ob-xm:has(> .ob-xta) .ob-xclose { width: 44px; height: 44px; margin: 0; }
+  .ob-xm > .ob-xta { grid-column: 1; grid-row: 1; height: 100%; padding: 4px; }
+
   .gf-stage:has(.hm-pk.chat .ch-box) > .gf-bar,
   .gf-arena:has(.hm-pk.chat .ch-box) > .gf-rot { display: none; }
   .hm-pk.chat:has(.ch-box) { width: 100%; height: 100%; clip-path: none; border-radius: 0; }
@@ -158,4 +185,58 @@ export function wireForgeBrowserFullscreen(host) {
     };
   }
   syncForgeBrowserPresentation(host);
+  wireForgeViewportPresentation(host);
+}
+
+function wireForgeViewportPresentation(host) {
+  host._stopForgeBrowserPresentation?.();
+  const root = host._root;
+  const arena = root.querySelector(".gf-arena");
+  const stage = root.querySelector(".gf-stage");
+  const view = root.querySelector(".gf-stage > .gf-view");
+  const header = view?.querySelector(".vn-top");
+  if (!arena || !stage) return;
+  let frame = 0;
+  const update = () => {
+    frame = 0;
+    if (header) view.style.setProperty("--forge-scene-top", `${header.offsetHeight}px`);
+    const field = root.activeElement;
+    const editing = field?.matches(
+      'textarea, input:not([type="range"], [type="checkbox"], [type="radio"], [type="file"], [type="color"], [type="button"], [type="submit"]), [contenteditable="true"]',
+    );
+    stage.toggleAttribute("data-forge-editing", !!editing);
+    stage.style.setProperty("--forge-editor-height", `${Math.max(44, stage.clientHeight - 16)}px`);
+    if (!editing) return;
+    // Scroll only package-owned panels. The Engine cannot see the field through this shadow root.
+    // ponytail: reveal the field; native textarea scrolling keeps its caret inside the resized field.
+    // A future rich-text editor would need its own selection/caret measurement.
+    for (let area = field.parentElement; area && area !== root; area = area.parentElement) {
+      if (area.scrollHeight <= area.clientHeight || !/auto|scroll/.test(getComputedStyle(area).overflowY)) continue;
+      const panel = area.getBoundingClientRect();
+      const visible = stage.getBoundingClientRect();
+      const top = Math.max(panel.top + area.clientTop, visible.top) + 4;
+      const bottom = Math.min(panel.top + area.clientTop + area.clientHeight, visible.bottom) - 4;
+      const box = field.getBoundingClientRect();
+      if (box.top < top) area.scrollTop += box.top - top;
+      else if (box.bottom > bottom) area.scrollTop += box.bottom - bottom;
+    }
+  };
+  const schedule = () => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(update);
+  };
+  const resize = new ResizeObserver(schedule);
+  resize.observe(arena);
+  resize.observe(stage);
+  if (header) resize.observe(header);
+  root.addEventListener("focusin", schedule);
+  root.addEventListener("focusout", schedule);
+  host._stopForgeBrowserPresentation = () => {
+    cancelAnimationFrame(frame);
+    resize.disconnect();
+    root.removeEventListener("focusin", schedule);
+    root.removeEventListener("focusout", schedule);
+    host._stopForgeBrowserPresentation = null;
+  };
+  update();
 }

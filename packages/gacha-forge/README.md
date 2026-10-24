@@ -1,6 +1,14 @@
 # Gacha Forge
 
-Avatar reference routing, choice punctuation and mobile editor fixes are being investigated in #1648. The published package behavior below remains the current release.
+## Artwork references and mobile controls (1.13.1)
+
+Character scenes, gacha banners, portraits and outfits now attach available avatar references from their selected Engine character cards or persona. A unit’s own saved artwork is the fallback when its source avatar is unavailable. Reference support and limits still depend on the configured image provider and model. Existing generated artwork remains unchanged; the references apply when generating new art.
+
+Story artwork begins below the chapter controls and retains the top of the image. On short mobile screens, ordinary and expanded text editors adapt to the space left by the keyboard. Expanded editors keep Close available beside the text.
+
+The dot beside Home → Units indicates the existing next-step recommendation. Units now explains whether to level a character, equip a signature weapon or ascend, with the relevant Stats or Gear path. The recommendation refreshes after successful progression actions.
+
+Combat dialogue moves keyboard focus to Continue when it blocks the fight and returns focus to the combat controls afterward.
 
 ## Story bosses and combat dialogue (1.13.0)
 
