@@ -1,7 +1,11 @@
 // Exercise audio behavior with deterministic host boundaries; no provider is contacted.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { normalizeForgeAudio, normalizeForgeMusicMood } from "../packages/gacha-forge/src/audio-settings.mjs";
+import {
+  normalizeForgeAudio,
+  normalizeForgeMusicMood,
+  forgeSoundtrackContextKey,
+} from "../packages/gacha-forge/src/audio-settings.mjs";
 import { forgeAudioEnglish, forgeAudioFields } from "../packages/gacha-forge/src/audio-en.mjs";
 import {
   ForgeAudioController,
@@ -14,6 +18,7 @@ import {
 import { createForgeVoiceLine, forgeVoiceCharacter } from "../packages/gacha-forge/src/audio-story.mjs";
 
 const before = {
+  forgeSoundtrackContextKey: globalThis.forgeSoundtrackContextKey,
   normalizeForgeAudio: globalThis.normalizeForgeAudio,
   normalizeForgeMusicMood: globalThis.normalizeForgeMusicMood,
   forgeAudioEnglish: globalThis.forgeAudioEnglish,
@@ -22,6 +27,7 @@ const before = {
   fetch: globalThis.fetch,
   Option: globalThis.Option,
 };
+globalThis.forgeSoundtrackContextKey = forgeSoundtrackContextKey;
 globalThis.normalizeForgeAudio = normalizeForgeAudio;
 globalThis.normalizeForgeMusicMood = normalizeForgeMusicMood;
 globalThis.forgeAudioEnglish = forgeAudioEnglish;
@@ -276,6 +282,41 @@ try {
     controller.notice = (...message) => events.push(["notice", ...message]);
     return { host, controller, events, voices };
   };
+
+  await test("banner themes use the supported host stock cue while retaining distinct generated identities", async () => {
+    const { controller } = fixture();
+    const stock = [],
+      briefs = [],
+      compositions = [];
+    // Capability API 1.381's AudioMusicCue contract, also exercised against the real selector in browser proof.
+    const hostCues = new Set(["home", "combat", "boss", "happy", "tense", "sad", "bond"]);
+    controller.audio.selectDefaultMusic = (cue) => {
+      assert(hostCues.has(cue), `Unsupported host stock cue: ${cue}`);
+      stock.push(cue);
+      return `stock:${cue}`;
+    };
+    globalThis.Ze = async (path, options) => {
+      if (path.startsWith("/api/audio/config")) return generationConfig(path);
+      const body = JSON.parse(options.body);
+      if (path === "/api/gacha-forge/audio/prompt") {
+        briefs.push(body.cue);
+        return musicBriefResponse();
+      }
+      compositions.push(body.context.key);
+      return { ok: true, json: async () => ({ tag: `music:${body.context.key}`, path: `${body.context.key}.mp3` }) };
+    };
+    try {
+      controller.configure({ generate: true, audioConnectionId: "banner-source" });
+      for (const cue of ["banner-char-featured-f1", "banner-char-featured-f2"]) await controller.cue(cue);
+      assert.deepEqual(stock, ["home", "home"]);
+      assert.deepEqual(briefs, ["banner-char-featured-f1", "banner-char-featured-f2"]);
+      assert.equal(new Set(compositions).size, 2);
+      assert(compositions[0].endsWith("banner-char-featured-f1"));
+      assert(compositions[1].endsWith("banner-char-featured-f2"));
+    } finally {
+      controller.dispose();
+    }
+  });
 
   const client = await readFile(new URL("../packages/gacha-forge/client.js", import.meta.url), "utf8");
   const stateMethod = client.match(/_state\(\)\{return[^{}]+\}/u)?.[0];

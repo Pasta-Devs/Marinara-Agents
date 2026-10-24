@@ -11,7 +11,9 @@
       "patches": [
         {
           "version": "1.8.13",
-          "commits": ["a222c867e9737e9dbbc1208a44e6cd1e5ba57435"],
+          "commits": [
+            "a222c867e9737e9dbbc1208a44e6cd1e5ba57435"
+          ],
           "edits": [
             {
               "find": "String(t??\"\").trim().toLowerCase().replace(/[^a-z0-9]+/g,\"-\").replace(/(^-|-$)/g,\"\").slice(0,60",
@@ -49,7 +51,10 @@
         },
         {
           "version": "1.8.14",
-          "commits": ["881c9000c53b85bc5bf719e870b778e8ded00ea6", "9b7d0fb106e72a255db21e4e62f1c4d1524eb2fe"],
+          "commits": [
+            "881c9000c53b85bc5bf719e870b778e8ded00ea6",
+            "9b7d0fb106e72a255db21e4e62f1c4d1524eb2fe"
+          ],
           "edits": [
             {
               "find": "2\";f",
@@ -83,7 +88,9 @@
         },
         {
           "version": "1.8.15",
-          "commits": ["52d72aaf9a1cb440a158714f4928493950c18f22"],
+          "commits": [
+            "52d72aaf9a1cb440a158714f4928493950c18f22"
+          ],
           "edits": [
             {
               "find": "4\";",
@@ -177,7 +184,10 @@
             },
             {
               "find": "var ac=`",
-              "replaceFrom": ["src/player-choices-en.mjs", "src/player-choices-client.mjs"],
+              "replaceFrom": [
+                "src/player-choices-en.mjs",
+                "src/player-choices-client.mjs"
+              ],
               "sourceId": "choices-client"
             },
             {
@@ -601,7 +611,10 @@
             },
             {
               "find": "var ac=`",
-              "replaceFrom": ["src/story-memory-en.mjs", "src/story-memory-client.mjs"],
+              "replaceFrom": [
+                "src/story-memory-en.mjs",
+                "src/story-memory-client.mjs"
+              ],
               "sourceId": "story-memory-client"
             },
             {
@@ -637,6 +650,60 @@
               "replace": "this._continuity&&this._fillContinuity(true),this._boot==="
             }
           ]
+        },
+        {
+          "version": "1.15.0",
+          "notes": "Generated Home soundtrack selection and per-banner themes awarded atomically with a five-star pull. Maintained audio source is replayed from the existing source markers. Optional saved banner animations through Engine video connections; portraits remain still.",
+          "edits": [
+            {
+              "find": "ds=\"1.14.0\"",
+              "replace": "ds=\"1.15.0\""
+            },
+            {
+              "find": "var oy=[{version:null,new:[\"Automatic canonical world memory",
+              "replace": "var oy=[{version:null,new:[\"Choose generated music for the Home menu in Visual Settings.\",\"Every banner has its own generated soundtrack, collected with any 5-star pull.\"]},{version:\"1.14.0\",new:[\"Automatic canonical world memory"
+            },
+            {
+              "find": "this._summonResults=r.results",
+              "replace": "this._forgeAudio?.refreshLibrary(),this._summonResults=r.results"
+            },
+            {
+              "find": "var pb=48",
+              "replaceFrom": [
+                "src/animation-en.mjs",
+                "src/animation-client.mjs"
+              ],
+              "sourceId": "banner-animation-client"
+            },
+            {
+              "find": "it=[...forgeAudioFields(),",
+              "replace": "it=[...forgeAnimationFields(),...forgeAudioFields(),"
+            },
+            {
+              "find": "Eb=[{id:\"audio\",",
+              "replace": "Eb=[{id:\"animations\",label:forgeAnimationEnglish.sources},{id:\"audio\","
+            },
+            {
+              "find": "function rp(t,e,a){loadForgeAudioConnections(t,a);",
+              "replace": "function rp(t,e,a){loadForgeAnimationConnections(t,a);loadForgeAudioConnections(t,a);"
+            },
+            {
+              "find": "loadForgeAudioConnections(t,i?.values||h);",
+              "replace": "loadForgeAnimationConnections(t,i?.values||h);loadForgeAudioConnections(t,i?.values||h);"
+            },
+            {
+              "find": "wireForgeAudio(this),wireForgeHome(this,bt,ao),",
+              "replace": "wireForgeAudio(this),wireForgeBannerAnimation(this),wireForgeHome(this,bt,ao),"
+            },
+            {
+              "find": "disposeForgeAudio(this),this._stopForgeBrowserPresentation",
+              "replace": "disposeForgeAudio(this),disposeForgeBannerAnimation(this),this._stopForgeBrowserPresentation"
+            },
+            {
+              "find": "var oy=[{version:null,new:[\"Choose generated music for the Home menu in Visual Settings.\",\"Every banner has its own generated soundtrack, collected with any 5-star pull.\"]",
+              "replace": "var oy=[{version:null,new:[\"Choose generated music for the Home menu in Visual Settings.\",\"Every banner has its own generated soundtrack, collected with any 5-star pull.\",forgeAnimationEnglish.release]"
+            }
+          ]
         }
       ]
     },
@@ -650,7 +717,9 @@
       "patches": [
         {
           "version": "1.8.13",
-          "commits": ["a222c867e9737e9dbbc1208a44e6cd1e5ba57435"],
+          "commits": [
+            "a222c867e9737e9dbbc1208a44e6cd1e5ba57435"
+          ],
           "edits": [
             {
               "find": "String(e??\"\").trim().toLowerCase().replace(/[^a-z0-9]+/g,\"-\").replace(/(^-|-$)/g,\"\").slice(0,60)",
@@ -1112,6 +1181,53 @@
             {
               "find": "cv({unit:g.unit,scenario:l(g.run.scenario),channel:go(F||\"\"),channelBlurb:Hp(F||\"\"),protagonist:g.run.protagonist,bond:g.level,story:Q,history:$,memories:await Ei(o,{only:[ne]}),photos:_,asked:x||M&&!!b&&b.ask===\"photo\"})",
               "replace": "forgeComposeMemoryPrompt(cv,[{unit:g.unit,scenario:l(g.run.scenario),channel:go(F||\"\"),channelBlurb:Hp(F||\"\"),protagonist:g.run.protagonist,bond:g.level,story:Q,history:$,memories:await Ei(o,{only:[ne]}),photos:_,asked:x||M&&!!b&&b.ask===\"photo\"}])"
+            }
+          ]
+        },
+        {
+          "version": "1.15.0",
+          "notes": "Generated Home soundtrack selection and per-banner themes awarded atomically with a five-star pull. Maintained audio source is replayed from the existing source markers. Banner-only video generation, package-owned immutable MP4 cache and guarded Range serving. Abort package-owned animation work on deactivation.",
+          "edits": [
+            {
+              "find": "s.post(\"/audio/prompt\",async p=>forgeMusicPrompts(p?.body||{})),",
+              "replace": "s.post(\"/audio/library\",async p=>{const body=p?.body||{},runId=l(body.runId);if(!runId)return{ok:false,error:\"bad-request\"};const{data:index}=await be();if(!Ae(index,runId))return{ok:false,error:\"not-found\"};let{data:session}=await pe(runId);if(body.track){let valid=false;session=await xn(runId,data=>{valid=recordForgeSoundtrack(data,runId,body.track)});if(!valid)return{ok:false,error:\"bad-request\"};if(!session)return{ok:false,error:\"write-conflict\"}}return{ok:true,tracks:availableForgeSoundtracks(session)}}),s.post(\"/audio/prompt\",async p=>forgeMusicPrompts(p?.body||{})),"
+            },
+            {
+              "find": "let ee=g===\"wpn\"?{five:ay",
+              "replace": "const forgeBannerMusic=forgeBannerSoundtrack(i,M,S);if(forgeBannerMusic)await xn(o,data=>rememberForgeBannerSoundtrack(data,forgeBannerMusic));let ee=g===\"wpn\"?{five:ay"
+            },
+            {
+              "find": "title:ne,mode:M?M.mode:\"permanent\",featured:F",
+              "replace": "title:ne,music:forgeBannerMusic,mode:M?M.mode:\"permanent\",featured:F"
+            },
+            {
+              "find": "if(Xt(O,o,\"summon\",g,Date.now()),",
+              "replace": "if(S.audio?.generate===true&&Z>0)rememberForgeBannerSoundtrack(O,forgeBannerSoundtrack(i,x,m===\"wpn\"?_:M),true);if(Xt(O,o,\"summon\",g,Date.now()),"
+            },
+            {
+              "find": "var rb=[",
+              "replaceFrom": "src/animation-server.mjs",
+              "sourceId": "banner-animation-server"
+            },
+            {
+              "find": "await t.registerPrivilegedRoutes(async s=>{",
+              "replace": "const forgeBannerAnimations=createForgeBannerAnimations({dataDir:e.dataDir,runtime:r,readBanner:async(runId,bannerId)=>{const rule=Uf(bannerId);if(!rule||!rule.live)return null;const{data:index}=await be(),run=Ae(index,runId);if(!run)return null;const{data:session}=await pe(runId),account=await Zt(runId);if(z(run,session,account,\"summon\")||(rule.pool===\"featured\"&&z(run,session,account,\"featured\")))return null;const identity=le(runId,rule.pool===\"featured\"?`${rule.cat}:${ht(session,Date.now()).key}`:Bt),doc=await a.getById(n.id,identity),art=doc?.data?.art?.[bannerId],ref=doc?.data?.artRef?.[bannerId],match=typeof ref===\"string\"?/^global-gallery:([A-Za-z0-9_-]{1,100})$/u.exec(ref):null;return{connectionId:run.animationConnectionId||\"\",identity,art,galleryImageId:match?.[1]||\"\"}}});await t.registerPrivilegedRoutes(async s=>{s.post(\"/banner-animation\",async p=>forgeBannerAnimations.generate(p?.body||{}));s.get(\"/banner-animation/file/:world/:filename\",(p,reply)=>forgeBannerAnimations.serve(p,reply));"
+            },
+            {
+              "find": "prologue:!0,audio:normalizeForgeAudio(u.audio)};",
+              "replace": "prologue:!0,audio:normalizeForgeAudio(u.audio),animationConnectionId:l(u.animationConnectionId).slice(0,200)};"
+            },
+            {
+              "find": "if(Object.prototype.hasOwnProperty.call(i,\"audio\"))",
+              "replace": "if(Object.prototype.hasOwnProperty.call(i,\"animationConnectionId\"))w.animationConnectionId=l(i.animationConnectionId).slice(0,200);if(Object.prototype.hasOwnProperty.call(i,\"audio\"))"
+            },
+            {
+              "find": "forgeStoryMemory.invalidate(o);",
+              "replace": "forgeStoryMemory.invalidate(o);await forgeBannerAnimations.removeWorld(o).catch(error=>r.logger.warn(error,\"[gacha-forge] Could not remove deleted world banner animations\"));"
+            },
+            {
+              "find": "},{prefix:P0})}export{",
+              "replace": "},{prefix:P0});return()=>forgeBannerAnimations.dispose()}export{"
             }
           ]
         }

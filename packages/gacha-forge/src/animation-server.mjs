@@ -1,0 +1,227 @@
+import { createHash as forgeAnimationHash, randomUUID as forgeAnimationUuid } from "node:crypto";
+import { constants as forgeAnimationFlags } from "node:fs";
+import {
+  mkdir as forgeAnimationMkdir,
+  lstat as forgeAnimationLstat,
+  open as forgeAnimationOpen,
+  readFile as forgeAnimationRead,
+  writeFile as forgeAnimationWrite,
+  rename as forgeAnimationRename,
+  unlink as forgeAnimationUnlink,
+  rm as forgeAnimationRm,
+  realpath as forgeAnimationRealpath,
+} from "node:fs/promises";
+import { join as forgeAnimationJoin } from "node:path";
+
+const forgeAnimationDigest = (value) => forgeAnimationHash("sha256").update(value).digest("hex");
+const forgeAnimationBanners = new Set(["char-standard", "wpn-standard", "char-featured", "wpn-featured"]);
+const forgeAnimationPrompt =
+  "Animate this gacha banner illustration as a seamless short loop. Preserve the exact composition, faces, outfits and artwork style. Fixed camera, subtle breathing, gently moving hair and fabric, small ambient particles or light. Return smoothly to the starting pose and lighting in the last frame. No cuts, zooms, new subjects, text or logos.";
+
+export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
+  const jobs = new Map();
+  const deleted = new Set();
+  const urlFor = (runId, key) => `/api/gacha-forge/banner-animation/file/${forgeAnimationDigest(runId)}/${key}.mp4`;
+  const exists = async (path) => {
+    const stat = await forgeAnimationLstat(path).catch(() => null);
+    return !!stat?.isFile() && !stat.isSymbolicLink() && stat.size > 0;
+  };
+  const directory = async (world, create = false) => {
+    // DATA_DIR may deliberately be a symlink. Package-owned descendants may never be one.
+    let path = await forgeAnimationRealpath(dataDir);
+    for (const segment of ["capability-package-data", "gacha-forge", "banner-animations", world]) {
+      path = forgeAnimationJoin(path, segment);
+      if (create)
+        await forgeAnimationMkdir(path).catch((error) => {
+          if (error.code !== "EEXIST") throw error;
+        });
+      const stat = await forgeAnimationLstat(path);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("Invalid animation directory");
+    }
+    return path;
+  };
+  const remove = async (runId) => {
+    if (!dataDir) return;
+    const folder = await directory(forgeAnimationDigest(runId)).catch((error) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (folder) await forgeAnimationRm(folder, { recursive: true, force: true });
+  };
+
+  return {
+    async generate(body = {}) {
+      if (
+        !body ||
+        typeof body !== "object" ||
+        Array.isArray(body) ||
+        Object.keys(body).some((key) => !["runId", "banner", "retry", "debugMode"].includes(key))
+      )
+        return { ok: false, error: "bad-request" };
+      const runId = typeof body.runId === "string" ? body.runId.trim() : "";
+      if (!runId || runId.length > 200 || !forgeAnimationBanners.has(body.banner))
+        return { ok: false, error: "bad-request" };
+      const banner = await readBanner(runId, body.banner);
+      if (deleted.has(runId)) return { ok: false, error: "not-found" };
+      if (!banner?.connectionId) return { ok: false, error: "animations-off" };
+      if (!banner.galleryImageId || !banner.art) return { ok: false, error: "banner-image-missing" };
+      const animate = runtime?.integrations?.videos?.animateGalleryImage;
+      if (typeof animate !== "function" || !dataDir) return { ok: false, error: "animation-unavailable" };
+      const key = forgeAnimationDigest(
+        JSON.stringify([
+          runId,
+          body.banner,
+          banner.identity,
+          banner.connectionId,
+          banner.galleryImageId,
+          forgeAnimationPrompt,
+        ]),
+      );
+      let folder;
+      try {
+        folder = await directory(forgeAnimationDigest(runId), true);
+      } catch (error) {
+        runtime.logger?.warn(error, "[gacha-forge] Banner animation storage unavailable");
+        return { ok: false, error: "animation-failed", retry: true };
+      }
+      const file = forgeAnimationJoin(folder, `${key}.mp4`);
+      const status = forgeAnimationJoin(folder, `${key}.json`);
+      const result = (cached) => ({
+        ok: true,
+        animation: { key, url: urlFor(runId, key), poster: banner.art },
+        cached,
+      });
+      if (await exists(file)) return result(true);
+      if (jobs.has(key)) return jobs.get(key).promise;
+      const job = { controller: new AbortController(), runId };
+      job.promise = (async () => {
+        if (deleted.has(runId)) return { ok: false, error: "not-found" };
+        if (await exists(file)) return result(true);
+        const prior = await forgeAnimationRead(status, {
+          encoding: "utf8",
+          flag: forgeAnimationFlags.O_RDONLY | forgeAnimationFlags.O_NOFOLLOW,
+        }).catch(() => null);
+        if (prior && body.retry !== true) return { ok: false, error: "animation-failed", retry: true };
+        // A persisted attempt also survives a restart during a paid request. Only an explicit retry starts another.
+        if (body.retry === true)
+          await forgeAnimationUnlink(status).catch((error) => {
+            if (error.code !== "ENOENT") throw error;
+          });
+        await forgeAnimationWrite(status, JSON.stringify({ state: "pending" }), { flag: "wx", mode: 0o600 });
+        try {
+          const video = await animate({
+            connectionId: banner.connectionId,
+            galleryImageId: banner.galleryImageId,
+            prompt: forgeAnimationPrompt,
+            durationSeconds: 5,
+            aspectRatio: "16:9",
+            loop: true,
+            debugMode: body.debugMode === true,
+            signal: job.controller.signal,
+          });
+          const bytes = typeof video?.base64 === "string" ? Buffer.from(video.base64, "base64") : null;
+          if (
+            video?.mimeType !== "video/mp4" ||
+            !bytes ||
+            bytes.length < 12 ||
+            bytes.length > 128 * 1024 * 1024 ||
+            bytes.toString("ascii", 4, 8) !== "ftyp"
+          )
+            throw new Error("Invalid banner animation video");
+          if (deleted.has(runId) || job.controller.signal.aborted) return { ok: false, error: "not-found" };
+          const temporary = forgeAnimationJoin(folder, `.${key}.${forgeAnimationUuid()}.tmp`);
+          try {
+            await forgeAnimationWrite(temporary, bytes, { flag: "wx", mode: 0o600 });
+            await forgeAnimationRename(temporary, file);
+          } finally {
+            await forgeAnimationUnlink(temporary).catch(() => {});
+          }
+          await forgeAnimationUnlink(status).catch(() => {});
+          return result(false);
+        } catch (error) {
+          runtime.logger?.warn(error, "[gacha-forge] Banner animation failed");
+          return { ok: false, error: "animation-failed", retry: true };
+        }
+      })()
+        .catch((error) => {
+          runtime.logger?.warn(error, "[gacha-forge] Banner animation storage failed");
+          return { ok: false, error: "animation-failed", retry: true };
+        })
+        .finally(async () => {
+          jobs.delete(key);
+          if (deleted.has(runId))
+            await remove(runId).catch((error) =>
+              runtime.logger?.warn(error, "[gacha-forge] Could not clean deleted animation world"),
+            );
+        });
+      jobs.set(key, job);
+      return job.promise;
+    },
+
+    async serve(request, reply) {
+      if (!dataDir) return reply.code(404).send();
+      const world = request.params?.world,
+        filename = request.params?.filename;
+      if (!/^[a-f0-9]{64}$/u.test(world || "") || !/^[a-f0-9]{64}\.mp4$/u.test(filename || ""))
+        return reply.code(404).send();
+      const folder = await directory(world).catch(() => null);
+      if (!folder) return reply.code(404).send();
+      const file = await forgeAnimationOpen(
+        forgeAnimationJoin(folder, filename),
+        forgeAnimationFlags.O_RDONLY | forgeAnimationFlags.O_NOFOLLOW,
+      ).catch(() => null);
+      if (!file) return reply.code(404).send();
+      const stat = await file.stat();
+      if (!stat.isFile() || stat.size < 12) {
+        await file.close();
+        return reply.code(404).send();
+      }
+      reply
+        .header("Content-Type", "video/mp4")
+        .header("X-Content-Type-Options", "nosniff")
+        .header("Accept-Ranges", "bytes")
+        .header("Cache-Control", "private, max-age=31536000, immutable");
+      let start = 0,
+        end = stat.size - 1;
+      const range = request.headers?.range;
+      if (range) {
+        const parts = /^bytes=(\d*)-(\d*)$/u.exec(range);
+        if (!parts || (!parts[1] && !parts[2])) {
+          await file.close();
+          return reply.code(416).header("Content-Range", `bytes */${stat.size}`).send();
+        }
+        if (parts[1]) {
+          start = Number(parts[1]);
+          end = parts[2] ? Math.min(Number(parts[2]), end) : end;
+        } else start = Math.max(0, stat.size - Number(parts[2]));
+        if (
+          !Number.isSafeInteger(start) ||
+          !Number.isSafeInteger(end) ||
+          start > end ||
+          start >= stat.size ||
+          (!parts[1] && Number(parts[2]) === 0)
+        ) {
+          await file.close();
+          return reply.code(416).header("Content-Range", `bytes */${stat.size}`).send();
+        }
+        reply.code(206).header("Content-Range", `bytes ${start}-${end}/${stat.size}`);
+      }
+      reply.header("Content-Length", end - start + 1);
+      if (request.method === "HEAD") {
+        await file.close();
+        return reply.send();
+      }
+      return reply.send(file.createReadStream({ start, end, autoClose: true }));
+    },
+
+    async removeWorld(runId) {
+      deleted.add(runId);
+      for (const job of jobs.values()) if (job.runId === runId) job.controller.abort();
+      await remove(runId);
+    },
+
+    dispose() {
+      for (const job of jobs.values()) job.controller.abort();
+    },
+  };
+}

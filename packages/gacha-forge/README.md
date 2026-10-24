@@ -1,3 +1,17 @@
+## Soundtrack collection (1.15.0)
+
+Settings → Look → Visual includes **Home page menu music**, listing this world's available generated songs. **Automatic soundtrack** restores the usual Home music. Collected songs remain playable with generation off; mute and volume still apply. If a saved song is missing, the existing soundtrack plays.
+
+With music generation on, opening a summon banner generates its own theme through the selected audio connection. Pulling any 5-star from that banner adds the theme to your Home choices, including an off-banner result or a duplicate. Each featured rotation has its own theme; an unsuccessful pull never unlocks one. No past pulls are guessed from the owned roster.
+
+## Banner animations (1.15.0)
+
+Settings → World → Sources includes an optional **Animations** connection, listing Engine video connections. Selecting one animates generated banner illustrations as those banners are opened. A banner image and connection reuse their saved clip, including after reload. A featured rotation or redrawn image gets its own clip. Portraits remain still.
+
+Clips play muted on a loop, with Pause and Play controls. Reduced-motion preferences keep the illustration and skip automatic generation; hidden banners pause playback. Loading, provider failures and unsupported playback keep the illustration visible. A failed or interrupted generation requires **Retry animation**, which may use provider credits again.
+
+The Engine handles video provider settings, credentials, queues and fallback connections. Matching first and last frames are requested where the provider supports them; duration and loop quality depend on the model. This feature requires Engine Capability API 1.384 or newer.
+
 # Gacha Forge
 
 ## Automatic continuity (1.14.0)
