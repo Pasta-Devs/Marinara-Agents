@@ -479,7 +479,7 @@ async function fillSlurpLiveCrowd(db: DB, show: SlurpLiveShow, settings: any, at
       .map((line) => line.text)
       .join("\n"),
     chat: show.events
-      .filter((event) => !event.private && event.at <= elapsed)
+      .filter((event) => !event.private && !event.join && event.at <= elapsed)
       .slice(-6)
       .map((event) =>
         event.kind === "tip" ? `${event.name} tipped ${event.amount ?? 0} coins` : `${event.name}: ${event.text}`,
@@ -518,7 +518,11 @@ function playerLinesSince(show: SlurpLiveShow, since: number, privateViewer: str
         (privateViewer ? event.personaId === privateViewer : !event.private && !event.personaId),
     )
     .map((event) =>
-      event.kind === "tip" ? `${event.name} tipped ${event.amount ?? 0} coins` : `${event.name}: ${event.text}`,
+      event.join
+        ? `${event.name} just joined the show (${event.text === "regular" ? "a regular, back again" : "first time here"})`
+        : event.kind === "tip"
+          ? `${event.name} tipped ${event.amount ?? 0} coins`
+          : `${event.name}: ${event.text}`,
     );
 }
 

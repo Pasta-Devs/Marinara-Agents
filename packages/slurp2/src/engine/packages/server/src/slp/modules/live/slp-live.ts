@@ -41,6 +41,8 @@ export type SlurpLiveEvent = {
   private?: boolean;
   /** Sent by the player (chat or tip); her live reply answers these. */
   fromPlayer?: boolean;
+  /** The player opened the show; hidden in chat, she greets them. `text` is "regular" or "new". */
+  join?: boolean;
   /** Her own live reply to the player. */
   host?: boolean;
 };
@@ -137,9 +139,12 @@ export function slurpLivePictureTriggers(show: SlurpLiveShow, personaId: string,
   if (show.private?.personaId === personaId && Date.parse(show.private.until) > at.getTime())
     triggers.push(`private:${show.private.block}`);
   const used = show.pictures.filter((picture) => picture.personaId === personaId);
-  return triggers
-    .filter((trigger) => !used.some((picture) => picture.trigger === trigger))
-    .slice(0, Math.max(0, 6 - used.length));
+  return (
+    triggers
+      .filter((trigger) => !used.some((picture) => picture.trigger === trigger))
+      // A goal picture still hidden (goal not hit) does not take one of the 6 slots.
+      .slice(0, Math.max(0, 6 - used.filter((picture) => picture.trigger !== "goal" || show.goalHitAt).length))
+  );
 }
 
 export function slurpLiveForViewer(show: SlurpLiveShow, personaId: string | null, at: Date): SlurpLiveShow {

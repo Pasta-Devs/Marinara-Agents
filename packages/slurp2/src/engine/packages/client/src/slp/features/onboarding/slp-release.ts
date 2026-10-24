@@ -20,7 +20,7 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
     notes: [
       "Live shows have a second tip goal, and the goal picture appears the moment the goal is hit.",
       "Sometimes a whale walks in and drops a huge tip, and the room goes wild.",
-      "Join a show late and the chat tells you what you missed: the goal, the top tippers and her last lines.",
+      "She greets you by name when you join, regulars get a welcome back, and late joiners see what they missed.",
     ],
   },
   {

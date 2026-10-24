@@ -67,7 +67,7 @@ export function SlpLiveChat({
   const [newCount, setNewCount] = useState(0);
   const [summaryOpen, setSummaryOpen] = useState(true);
   // Only a viewer who opens the show after its first 2 minutes gets the catch-up.
-  const [joinedLate] = useState(() => elapsed > 120_000);
+  const [joinedLate] = useState(() => !show.endedAt && elapsed > 120_000);
   const catchUp = joinedLate ? catchUpLines(show, elapsed, t) : [];
   const lines: ChatItem[] = [
     ...show.script
@@ -80,7 +80,7 @@ export function SlpLiveChat({
         mediaId: line.mediaId,
       })),
     ...show.events
-      .filter((event) => event.at <= elapsed)
+      .filter((event) => event.at <= elapsed && !event.join)
       .map((event): ChatItem => ({
         at: event.at,
         kind: event.kind === "tip" ? "tip" : "crowd",

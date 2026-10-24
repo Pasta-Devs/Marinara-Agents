@@ -46,6 +46,21 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     if (show.startedNoticeAt && slurpLiveCanWatch(personaId, !!viewer)) {
       await storage.seen(id, new Date(), viewer?.id);
       kickSlurpLiveShow(app.db, id);
+      // She greets a player who opens a Creator's show: a regular gets "welcome back".
+      const joinKey = `live:${id}:join:${viewer?.id}`;
+      if (viewer && show.hostKind === "creator" && !show.events.some((event) => event.requestId === joinKey)) {
+        const regular = await storage.isRegular(show.hostId, viewer.id, id);
+        await storage.appendEvent(id, {
+          at: Math.max(0, Date.now() - Date.parse(show.startedAt)),
+          kind: "chat",
+          name: viewer.displayName,
+          text: regular ? "regular" : "new",
+          requestId: joinKey,
+          fromPlayer: true,
+          join: true,
+        });
+        void replyToSlurpLiveChat(app.db, id).catch(() => undefined);
+      }
       const current = show;
       const elapsed = Math.max(0, Date.now() - Date.parse(current.startedAt));
       const duration = Date.parse(current.endsAt) - Date.parse(current.startedAt);

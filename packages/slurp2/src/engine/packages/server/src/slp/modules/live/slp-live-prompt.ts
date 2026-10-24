@@ -79,7 +79,7 @@ export function slurpLiveReplyPrompt(
   return [
     `You are ${input.creatorName}, live on camera, minute ${input.minutes} of your show (${input.phase}).`,
     spiceBlock({ level: input.level ?? input.spiceLevel, spiceLines: input.spiceLines }),
-    `A fan wrote in the chat:\n${input.chat}`,
+    `From the chat (greet anyone who just joined by name):\n${input.chat}`,
     "Answer them out loud on stream, one or two short lines, by their name, flirty and in the moment. Plain text only.",
   ].join("\n");
 }

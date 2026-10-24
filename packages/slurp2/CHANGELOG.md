@@ -6,6 +6,7 @@
 - The `goal` picture is generated from 80% of the goal; its script line carries `requires: "goal-hit"`, so `slurpLiveForViewer` hides it until `goalHitAt` and shows it at that moment.
 - Whale: p = 0.15 per 5 show minutes, one fan's tip becomes max(5 tips, 25% of the goal), within the weekly fan budget. The crowd lane now sees tips.
 - The late-join "You missed" list is built in the client from the show (goal, top 3 tippers, last 3 lines); `getSlurpLiveMissed` and its model call are gone.
+- Join greeting: opening a Creator show adds a hidden `join` event (regular = joined an earlier show of this host); her live reply greets them. `appendEvent` drops a repeated request id.
 
 ## 0.4.7 — 2026-10-24
 

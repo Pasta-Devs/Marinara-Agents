@@ -13,6 +13,7 @@ export type SlpLiveEvent = {
   text: string;
   personaId?: string;
   fromPlayer?: boolean;
+  join?: boolean;
   host?: boolean;
 };
 export type SlpLiveMenuItem = { id: string; label: string; price: number; picture: boolean };
