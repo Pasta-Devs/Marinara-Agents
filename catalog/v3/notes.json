@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.10.2",
+          "date": "2026-10-23",
+          "notes": "- New dialogue choices show intent labels instead of revealing the exact spoken line. Selected actions appear as narration; explicitly spoken choices remain protagonist dialogue.\n- Existing untyped saved choices remain playable as narration. First-play canon, replay alternatives and permanent big decisions are preserved.",
+          "highlight": false
+        },
+        {
           "version": "1.10.1",
           "date": "2026-10-23",
           "notes": "- Fixed: the Welcome Gift rewards no longer overlap Claim on short mobile screens. The event scrolls when needed, and Claim has a larger touch target.",
@@ -284,6 +290,18 @@
     "hierarchical-maps": {
       "versions": [
         {
+          "version": "1.7.1",
+          "date": "2026-10-23",
+          "notes": "- Require the Engine version that supplies agent reference lorebooks, so an older Engine with a different capability update cannot accept an incompatible World Maps package. Update both the Engine and World Maps together.",
+          "highlight": false
+        },
+        {
+          "version": "1.7.0",
+          "date": "2026-10-23",
+          "notes": "- World Maps can use the reference lorebook selected for it in Chat Settings. Matching entries help chat-specific map creation, replacement, expansion and prompt previews without changing the map builder's other lore sources or global templates. Update both the Engine and World Maps to use this setting.",
+          "highlight": true
+        },
+        {
           "version": "1.6.0",
           "date": "2026-10-23",
           "notes": "- When the Game Master moves the party to a place more than one step away on the map, such as a boat to the next town, the map now follows by the shortest route instead of staying put. Before, only a move to a place one step away (a place inside, the place around it, or a linked place) moved the map.",
@@ -339,6 +357,12 @@
     },
     "long-term-memory": {
       "versions": [
+        {
+          "version": "1.4.87",
+          "date": "2026-10-23",
+          "notes": "- The setup guide now stays on the Memory Vault and shrinks to a one-line bar elsewhere, steps out of the way when one of its buttons takes you to another screen, and lets you choose Not now, Don't show again or Done. Later steps follow the source type you picked.\n- The lexical-recall warning now has its own Reindex button you can reach by keyboard, and a failed status load offers Retry instead of a dead end.",
+          "highlight": false
+        },
         {
           "version": "1.4.86",
           "date": "2026-10-23",
@@ -451,12 +475,6 @@
           "version": "1.4.68",
           "date": "2026-10-21",
           "notes": "- Extraction no longer drops a memory that cites the chat summary or import it came from, for example as its evidence.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.67",
-          "date": "2026-10-21",
-          "notes": "- Applying several Review suggestions in a row, and extraction that applies memories, no longer rebuild the recall index after each one. One rebuild runs in the background a second after the last change (at most 10 seconds after the first). While it embeds, other saves and debug log entries no longer wait, unless new changes interrupt it three times in a row; it then finishes under the vault lock, as before. Recall still sees every applied memory, because it waits for that rebuild first. After you switch the embedding source, recall answers straight away from keyword matching while the vault is embedded again in the background, then uses the new embeddings; before, the first recall waited for the whole vault to be embedded again. Review no longer says the index rebuild failed after you accept a suggestion. The index status shows stale or building until it is next loaded, then failed (or stale if the embedding source could not be loaded), and the next change or recall rebuilds it.",
           "highlight": false
         }
       ]

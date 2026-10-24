@@ -214,17 +214,18 @@ function forgeChoiceMessages(messages, { enabled, terminal }) {
 
 PLAYER CHOICES (extend the JSON shape above with an optional "choices" array):
 - Offer choices where the scene earns them, not a choice on every line. Use at most three choice points in this beat.
-- Each choice has exactly 2, 3 or 4 distinct options. Each option's text is a short dialogue line the PROTAGONIST says or an action the PROTAGONIST does, never a menu instruction or a narrator's forecast.
-- Shape: "choices":[{"kind":"small","at":0,"options":[{"text":"...","segments":[{"speaker":"","text":"...","place":"..."}]},{"text":"...","segments":[...]}]}].
+- Each choice has exactly 2, 3 or 4 distinct options. Each option's text is a short intent label or paraphrase, such as "Apologize", "Say that you trust them" or "Pull your hoodie up". For dialogue, NEVER use the exact spoken line as the button label. Do not forecast a result.
+- Shape: "choices":[{"kind":"small","at":0,"options":[{"text":"Apologize","selection":{"kind":"dialogue","text":"I am sorry I kept you waiting."},"segments":[{"speaker":"","text":"...","place":"..."}]},{"text":"Pull your hoodie up","selection":{"kind":"action","text":"You pull your hoodie up against the cold."},"segments":[...]}]}].
+- Every option has one "selection": {"kind":"dialogue"|"action","text":"..."}. It is the beat performed AFTER the player chooses. Use "dialogue" only for the protagonist's actual spoken words. Use "action" for physical actions, decisions or nonverbal responses; write these as narration in the story's normal voice, NEVER as spoken dialogue. Do not assign a character speaker to an action.
 - "at" is the ZERO-BASED index of the MAINLINE segment after which the options appear. Never put two choices at the same index.
 - A SMALL choice has kind "small". Generate ALL its alternative paths together in this one response: 1 to 8 short segments in EVERY option, in the same segment format as the mainline. Do not merely describe what you would write later.
 - After the chosen option and its branch, the story returns to the next mainline segment. Every branch MUST arrive at that same continuation naturally; its local dialogue or route may differ, but it may not change the chapter's required plot, future fights, or settled fate.
-- The option's text itself is the protagonist's selected line/action; do not repeat it verbatim as the first branch segment. Do not place unselected alternatives in mainline prose. Do not nest choices inside branches.
+- The selection text is the protagonist's performed line/action, separate from the button label. Do not repeat it as the first branch segment. Do not place unselected alternatives in mainline prose. Do not nest choices inside branches.
 - All branch places must also be listed in "places"; use no more than four places across the mainline and ALL alternatives combined.
-- Mainline and branches together must remain concise. Choice option text is at most 280 characters.
+- Mainline and branches together must remain concise. Both the intent label and selection text are at most 280 characters each.
 ${
   terminal
-    ? '- This is the LAST story beat of the chapter. You MAY end it with ONE BIG choice instead of a settled ending when there is a meaningful lasting decision. A big choice has kind "big", must be attached to the VERY LAST mainline segment, and offers 2–4 protagonist dialogue/actions with EMPTY "segments" arrays. STOP before the decision or any result of it. Generate NOTHING after this choice: not an outcome, an epilogue, or a guessed selection. The next chapter will be generated only after the player commits. A big choice is optional, never compulsory.'
+    ? '- This is the LAST story beat of the chapter. You MAY end it with ONE BIG choice instead of a settled ending when there is a meaningful lasting decision. A big choice has kind "big", must be attached to the VERY LAST mainline segment, and offers 2–4 protagonist dialogue/action intents with their performed "selection" and EMPTY "segments" arrays. The selection contains only the chosen words/action, NEVER its consequences or another character response. STOP before the decision or any result of it. Generate NOTHING after this choice: not an outcome, an epilogue, or a guessed selection. The next chapter will be generated only after the player commits. A big choice is optional, never compulsory.'
     : "- This is NOT the last story beat. NEVER produce a big choice or a lasting decision that requires the player to determine the following plot. Only small, reconverging choices are allowed here."
 }
 - Omit "choices" or use [] when this beat has no appropriate choice. IDs are assigned by the game; do not invent them.`;
@@ -251,11 +252,20 @@ function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled, termin
       big = true;
     }
     const labels = new Set();
+    const selections = new Set();
     const normalizedOptions = [];
     for (const [optionIndex, option] of choice.options.entries()) {
       const text = typeof option?.text === "string" ? option.text.trim() : "";
       if (!text || text.length > 280 || labels.has(text)) return null;
       labels.add(text);
+      const selection = option.selection;
+      const selectedText = typeof selection?.text === "string" ? selection.text.trim() : "";
+      if (!selection || !["dialogue", "action"].includes(selection.kind) || !selectedText || selectedText.length > 280)
+        return null;
+      if (selection.kind === "dialogue" && selectedText === text) return null;
+      const selectionKey = `${selection.kind}:${selectedText}`;
+      if (selections.has(selectionKey)) return null;
+      selections.add(selectionKey);
       if (!Array.isArray(option.segments)) return null;
       if (choice.kind === "big" && option.segments.length) return null;
       if (choice.kind === "small" && (!option.segments.length || option.segments.length > 8)) return null;
@@ -269,7 +279,12 @@ function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled, termin
           : { segments: [], places: [] };
       if (!branch || branch.segments.length !== option.segments.length) return null;
       for (const place of branch.places) places.set(place.name, place);
-      normalizedOptions.push({ id: `option-${optionIndex + 1}`, text, segments: branch.segments });
+      normalizedOptions.push({
+        id: `option-${optionIndex + 1}`,
+        text,
+        selection: { kind: selection.kind, text: selectedText },
+        segments: branch.segments,
+      });
     }
     choices.push({ id: `choice-${index + 1}`, kind: choice.kind, at: choice.at, options: normalizedOptions });
   }
@@ -302,6 +317,13 @@ function forgeCanonicalSegments(data) {
         text: `[Canonical player choice${data.choiceProtagonist ? ` by ${data.choiceProtagonist}` : ""}: ${selected.text}]`,
         ...(segment.place ? { place: segment.place } : {}),
       });
+      if (selected.selection) {
+        result.push({
+          speaker: selected.selection.kind === "dialogue" ? data.choiceProtagonist || "" : "",
+          text: selected.selection.text,
+          ...(segment.place ? { place: segment.place } : {}),
+        });
+      }
       result.push(...selected.segments);
     }
   }
@@ -443,7 +465,7 @@ function forgeCreateChoiceRuntime({
           created: numeric ? "" : String(plan?.createdAt || ""),
           bondOrder: numeric ? -1 : (bondOrder.get(data.chapter) ?? Number.MAX_SAFE_INTEGER),
           id: row.id,
-          text: `${identity}, story beat ${Number(data.storyIndex) + 1}: ${selected.text}`,
+          text: `${identity}, story beat ${Number(data.storyIndex) + 1}: ${selected.text}${selected.selection ? ` (${selected.selection.kind}: ${selected.selection.text})` : ""}`,
         });
       }
     }

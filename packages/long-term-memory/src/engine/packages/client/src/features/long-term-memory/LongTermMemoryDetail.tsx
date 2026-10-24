@@ -763,7 +763,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     review: pendingDrafts.data?.count,
                   }}
                 />
-                {health !== "healthy" && !needsHealthAttention ? (
+                {health !== "healthy" && !needsHealthAttention && !status.isError ? (
                   <div
                     aria-busy={status.isFetching}
                     data-ltm-surface="vault-health-pill"
@@ -771,11 +771,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   >
                     <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${healthTone}`} />
                     <span aria-live="polite" aria-atomic="true">
-                      {status.isError
-                        ? localizeUi("ui.longTermMemory.longtermmemorydetail.statusUnavailable")
-                        : status.data
-                          ? healthLabel
-                          : localizeUi("ui.longTermMemory.longtermmemorydetail.loadingStatus")}
+                      {status.data ? healthLabel : localizeUi("ui.longTermMemory.longtermmemorydetail.loadingStatus")}
                     </span>
                     {needsHealthAttention ? null : (
                       <InfoPopover
@@ -824,6 +820,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     label={localizeUi("ui.longTermMemory.longtermmemorydetail.howToRepairVaultHealth")}
                     content={healthInfo}
                   />
+                  {repairButton()}
                 </StatusSurface>
               ) : null}
               {repairStatus}
@@ -839,13 +836,24 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
               >
                 {activationError ? <StatusSurface tone="danger">{activationError}</StatusSurface> : null}
                 {status.isError ? (
-                  <StatusSurface tone="danger">
+                  <StatusSurface tone="danger" data-ltm-status-error className="justify-between">
                     {localizeUi("ui.longTermMemory.longtermmemorydetail.longTermMemoryStatusCouldNotLoad")}
+                    <Button onClick={() => void status.refetch()}>
+                      <RefreshCw
+                        aria-hidden="true"
+                        size="0.75rem"
+                        className={status.isFetching ? "animate-spin" : ""}
+                      />
+                      {localizeUi("ui.longTermMemory.activityview.retry")}
+                    </Button>
                   </StatusSurface>
                 ) : null}
                 <Onboarding
                   props={props}
+                  // A failed read leaves the vault count unknown, not zero: the guide waits for a read that succeeds
+                  // (Retry is on the error above) so it never opens or saves a step over a populated vault.
                   ready={status.isSuccess}
+                  onVault={destination === "vault"}
                   savedMemoryCount={savedMemoryCount}
                   pendingDraftCount={pendingDrafts.data?.count}
                   chatLabel={chatLabel}

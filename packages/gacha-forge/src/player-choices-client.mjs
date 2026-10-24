@@ -122,8 +122,13 @@ export function prepareForgeChoices(host, response) {
           continue;
         }
         timeline.push({
-          speaker: host._run?.protagonist?.name || forgeChoiceEnglish["story.choices.protagonist"],
-          text: option.text,
+          // Legacy options did not distinguish actions from dialogue. Keep their saved
+          // text readable as narration rather than inventing spoken words.
+          speaker:
+            option.selection?.kind === "dialogue"
+              ? host._run?.protagonist?.name || forgeChoiceEnglish["story.choices.protagonist"]
+              : "",
+          text: option.selection?.text || option.text,
           ...(segment.place ? { place: segment.place } : {}),
         });
         mainIndexes.push(index);

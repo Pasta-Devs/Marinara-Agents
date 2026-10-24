@@ -43,9 +43,15 @@ selection and closes transient menus. Save and discard decisions restore focus
 to the control that initiated navigation.
 
 On first successful status load, onboarding opens for an empty vault. Its step
-is stored in local storage; Close records `complete`, and the Help button
-replays the guide. Opening related chat settings or prompt editors suspends
-onboarding at the current step rather than completing it.
+is stored in local storage. The full guide shows on the Memory Vault only; on
+every other destination it is a one-line bar (`Setup guide · step N of 7`) with
+Resume, which returns to the Vault at the saved step, and Dismiss. Not now and
+Dismiss keep the saved step, so the guide returns at that step on the next
+visit; Don't show again and the last step's Done record `complete`. The Help
+button replays the guide from step 1 and goes to the Vault first. A step button
+that opens another screen, a related chat setting or a prompt editor suspends
+onboarding at the current step into the bar rather than completing it; steps
+that open Sources use the source type chosen in step 4.
 
 ## Responsive Contract
 
@@ -137,6 +143,8 @@ Keep these states distinct in UI changes:
 - blocked mutation versus failed mutation
 - unsaved changes versus saved navigation
 - index building, degraded, stale, corrupt, and failed health
+- status load failed (Retry beside the error, no health pill; the setup guide waits for a read that succeeds, because the vault count is unknown)
+- lexical-recall-only warning (its own Reindex recall button, reachable by keyboard)
 - source task running, cancelled, completed, and completed with failures
 
 Every failure state needs its existing retry or recovery path where one exists.

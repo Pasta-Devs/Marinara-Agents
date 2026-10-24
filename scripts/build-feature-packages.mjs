@@ -79,9 +79,8 @@ const MAX_ENGINE_EXCLUSIVE = "4.0.0";
 // installs these versions and keeps the one it has (Pasta-Devs/Marinara-Agents#1487).
 const [hostApiMajor, hostApiMinor] = HOST_CAPABILITY_API.split(".").map(Number);
 const PACKAGE_CAPABILITY_API = Object.freeze({ major: hostApiMajor, minor: hostApiMinor });
-// The one Engine commit every feature package is built against (MARINARA_ENGINE_ROOT): the first Engine staging commit
-// with the host namespace and the api.runtime members (Pasta-Devs/Marinara-Engine#7869 and #7868). The
-// engine-boundary.json files of World Maps, Long-Term Memory and Memory Nag record the same commit.
+// Default Engine baseline for the host namespace and api.runtime members (Engine#7869 and #7868).
+// A feature's engine-boundary.json may require a newer public contract and source baseline.
 const PACKAGE_BUILT_AGAINST = Object.freeze({
   engineVersion: "2.5.0",
   engineCommit: "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed",
@@ -517,7 +516,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.4.86",
+    version: "1.4.87",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -597,8 +596,8 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.6.0",
-    minEngineVersion: "2.4.2",
+    version: "1.7.1",
+    minEngineVersion: "2.5.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
     description:

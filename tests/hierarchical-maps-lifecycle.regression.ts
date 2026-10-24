@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -612,6 +613,43 @@ async function main() {
     null;
 
   try {
+    const { supportedCapabilityApi, getCapabilityApiCompatibilityIssue } = await importEngine<{
+      supportedCapabilityApi: { major: number; minor: number };
+      getCapabilityApiCompatibilityIssue(manifest: Manifest): string | null;
+    }>("packages/shared/src/index.ts");
+    const latestManifest = artifactFixture(currentMapsVersion).manifest;
+    assert.deepEqual(latestManifest.capabilityApi, { major: 1, minor: 380 });
+    assert.ok(supportedCapabilityApi.minor >= 380, "The fixture host must support the agent-reference resolver");
+    // The public host version is frozen. Bundle the real gate in isolation with only that fixture version changed.
+    const schemaPath = join(engineRoot, "packages/shared/src/schemas/capability-package.schema.ts");
+    const schemaSource = readFileSync(schemaPath, "utf8");
+    const versionDeclaration = `export const supportedCapabilityApi = Object.freeze({ major: 1, minor: ${supportedCapabilityApi.minor} } as const);`;
+    assert.ok(schemaSource.includes(versionDeclaration));
+    const compatibilityFixturePath = join(dataDir, "compatibility-api379.mjs");
+    const esbuild = createRequire(join(engineRoot, "package.json"))("esbuild");
+    await esbuild.build({
+      stdin: {
+        contents: schemaSource.replace(versionDeclaration, versionDeclaration.replace(/minor: \d+/u, "minor: 379")),
+        resolveDir: dirname(schemaPath),
+        loader: "ts",
+      },
+      bundle: true,
+      platform: "node",
+      format: "esm",
+      outfile: compatibilityFixturePath,
+      logLevel: "silent",
+    });
+    const oldHost = (await import(pathToFileURL(compatibilityFixturePath).href)) as {
+      supportedCapabilityApi: { major: number; minor: number };
+      getCapabilityApiCompatibilityIssue(manifest: Manifest): string | null;
+    };
+    assert.deepEqual(oldHost.supportedCapabilityApi, { major: 1, minor: 379 });
+    assert.equal(oldHost.getCapabilityApiCompatibilityIssue(artifactFixture("1.7.0").manifest), null);
+    assert.equal(
+      oldHost.getCapabilityApiCompatibilityIssue(latestManifest),
+      "Package requires capability API 1.380; this Engine supports 1.379",
+    );
+    assert.equal(getCapabilityApiCompatibilityIssue(latestManifest), null);
     const { capabilityPackageManager, findCompatibleCapabilityPackageUpdates } = await importEngine<{
       capabilityPackageManager: {
         install(

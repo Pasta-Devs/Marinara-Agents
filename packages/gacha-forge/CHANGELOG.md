@@ -1,3 +1,8 @@
+## 1.10.2 — 2026-10-23
+
+- New dialogue choices show intent labels instead of revealing the exact spoken line. Selected actions appear as narration; explicitly spoken choices remain protagonist dialogue.
+- Existing untyped saved choices remain playable as narration. First-play canon, replay alternatives and permanent big decisions are preserved.
+
 ## 1.10.1 — 2026-10-23
 
 - Fixed: the Welcome Gift rewards no longer overlap Claim on short mobile screens. The event scrolls when needed, and Claim has a larger touch target.

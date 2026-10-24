@@ -16,22 +16,26 @@ const run = {
 const smallOptions = [
   {
     id: "option-1",
-    text: "I will follow Arden through the garden and ask what happened here.",
+    text: "Pull your hoodie up.",
+    selection: { kind: "action", text: "You pull your hoodie up against the cold." },
     segments: [{ speaker: "Arden", text: "ARDEN_SELECTED_BRANCH" }],
   },
   {
     id: "option-2",
-    text: "I will stay with Brin by the gate and listen to their side of the story.",
+    text: "Apologize to Brin for the delay.",
+    selection: { kind: "dialogue", text: "I am sorry I kept you waiting, Brin." },
     segments: [{ speaker: "Brin", text: "BRIN_ALTERNATE_BRANCH" }],
   },
   {
     id: "option-3",
-    text: "I will inspect the footprints before speaking with either of them.",
+    text: "Inspect the footprints.",
+    selection: { kind: "action", text: "You kneel to inspect the footprints." },
     segments: [{ speaker: "", text: "FOOTPRINT_ALTERNATE_BRANCH" }],
   },
   {
     id: "option-4",
-    text: "I will call both of them over and ask for a moment of peace.",
+    text: "Ask for a moment of peace.",
+    selection: { kind: "dialogue", text: "Please, can we have a moment of peace?" },
     segments: [{ speaker: "", text: "PEACE_ALTERNATE_BRANCH" }],
   },
 ];
@@ -49,8 +53,16 @@ const scene = {
       kind: "big",
       at: 2,
       options: [
-        { id: "option-1", text: "Save the northern village." },
-        { id: "option-2", text: "Save the southern village." },
+        {
+          id: "option-1",
+          text: "Save the northern village.",
+          selection: { kind: "action", text: "You choose to save the northern village." },
+        },
+        {
+          id: "option-2",
+          text: "Save the southern village.",
+          selection: { kind: "action", text: "You choose to save the southern village." },
+        },
       ],
     },
   ],
@@ -223,13 +235,21 @@ test("Choices pause playback, preserve resume canon and allow only small replay 
     animations: "disabled",
     path: testInfo.outputPath(`choices-four-${testInfo.project.name}.png`),
   });
+  await expect(choices.getByRole("button", { name: smallOptions[1].text, exact: true })).toBeVisible();
+  await expect(choices).not.toContainText(smallOptions[1].selection.text);
   const first = forge.locator('[data-forge-choice-option="option-1"]');
   await first.click();
   await expect(forge.locator("[data-forge-choice-error]")).toContainText("could not be saved");
   await expect(first).toBeEnabled();
   await first.focus();
   await page.keyboard.press("Space");
-  await expect(forge.locator("[data-text]")).toHaveText(smallOptions[0].text);
+  await expect(forge.locator("[data-text]")).toHaveText(smallOptions[0].selection.text);
+  await expect(forge.locator("[data-box]")).toHaveAttribute("data-narration", "");
+  await expect(forge.locator("[data-who]")).not.toHaveText("Mari");
+  await page.screenshot({
+    animations: "disabled",
+    path: testInfo.outputPath(`choices-action-${testInfo.project.name}.png`),
+  });
   expect(canon["choice-1"]).toBe("option-1");
   await forge.locator("[data-box]").click();
   await expect(forge.locator("[data-text]")).toHaveText("ARDEN_SELECTED_BRANCH");
@@ -252,14 +272,21 @@ test("Choices pause playback, preserve resume canon and allow only small replay 
     path: testInfo.outputPath(`choices-big-${testInfo.project.name}.png`),
   });
   await forge.locator('[data-forge-choice-option="option-2"]').click();
-  await expect(forge.locator("[data-text]")).toHaveText("Save the southern village.");
+  await expect(forge.locator("[data-text]")).toHaveText("You choose to save the southern village.");
+  await expect(forge.locator("[data-box]")).toHaveAttribute("data-narration", "");
   await expect(forge.locator("[data-continue]")).toBeVisible();
   expect(canon["choice-2"]).toBe("option-2");
 
   await seedScene(forge, true);
   await expect(choices).toHaveAttribute("data-choice-id", "choice-1");
   await forge.locator('[data-forge-choice-option="option-2"]').click();
-  await expect(forge.locator("[data-text]")).toHaveText(smallOptions[1].text);
+  await expect(forge.locator("[data-text]")).toHaveText(smallOptions[1].selection.text);
+  await expect(forge.locator("[data-box]")).not.toHaveAttribute("data-narration", "");
+  await expect(forge.locator("[data-who]")).toHaveText("Mari");
+  await page.screenshot({
+    animations: "disabled",
+    path: testInfo.outputPath(`choices-dialogue-${testInfo.project.name}.png`),
+  });
   await forge.locator("[data-box]").click();
   await expect(forge.locator("[data-text]")).toHaveText("BRIN_ALTERNATE_BRANCH");
   await forge.locator("[data-skip]").click();

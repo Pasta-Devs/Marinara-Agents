@@ -264,6 +264,19 @@
               "replace": "oy=[{version:null,fixed:[\"Welcome Gift rewards no longer overlap Claim on short mobile screens; scroll when needed and use its full touch target.\"]},{version:\"1.10.0\",new:"
             }
           ]
+        },
+        {
+          "version": "1.10.2",
+          "edits": [
+            {
+              "find": "ds=\"1.10.1\"",
+              "replace": "ds=\"1.10.2\""
+            },
+            {
+              "find": "oy=[{version:null,fixed:",
+              "replace": "oy=[{version:null,fixed:[\"New dialogue choices show intent labels; selected actions appear as narration, and spoken choices keep their dialogue.\"]},{version:\"1.10.1\",fixed:"
+            }
+          ]
         }
       ]
     },

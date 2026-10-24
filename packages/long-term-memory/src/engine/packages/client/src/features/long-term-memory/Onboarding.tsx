@@ -15,7 +15,7 @@ const persistOnboardingStep = (step: number) => {
 // Mari_*.png files these replaced are gone from the Engine, which left the guide with broken images.
 const onboardingSteps = [
   {
-    labelKey: "ui.longTermMemory.longtermmemorydetail.save",
+    labelKey: "ui.longTermMemory.longtermmemorydetail.fromSourceToSavedMemory",
     titleKey: "ui.longTermMemory.longtermmemorydetail.fromSourceToSavedMemory",
     mobileSprite: "basic/pose-wave.webp",
     desktopSprite: "basic/pose-wave.webp",
@@ -63,10 +63,10 @@ const onboardingSteps = [
     alt: "",
   },
   {
-    labelKey: "ui.longTermMemory.longtermmemorydetail.underTheHood",
-    titleKey: "ui.longTermMemory.longtermmemorydetail.underTheHoodTitle",
-    mobileSprite: "basic/pose-thinking.webp",
-    desktopSprite: "basic/pose-thinking.webp",
+    labelKey: "ui.longTermMemory.longtermmemorydetail.ready",
+    titleKey: "ui.longTermMemory.longtermmemorydetail.youReSetUp",
+    mobileSprite: "basic/pose-wave.webp",
+    desktopSprite: "basic/pose-wave.webp",
     mobileFlip: false,
     alt: "",
   },
@@ -76,6 +76,8 @@ type OnboardingProps = {
   props: CapabilityProps;
   /** True once the status query has loaded; the guide opens on first run after that. */
   ready: boolean;
+  /** The full guide shows on the Memory Vault only; every other destination gets a one-line bar. */
+  onVault: boolean;
   savedMemoryCount: number;
   pendingDraftCount: number | undefined;
   chatLabel: string;
@@ -89,13 +91,18 @@ type OnboardingProps = {
   onOpenVault: () => Promise<boolean>;
   /** Hands the parent the function that reopens the guide at its first step. */
   onOpen: (open: () => void) => void;
-  /** Called after Close hides the guide, so the parent can return focus to the control that reopens it. */
+  /** Called after Not now, Don't show again, Done or Dismiss hides the guide, so the parent can return focus to the control that reopens it. */
   onClose: () => void;
 };
+
+// "full" is the guide on the Vault, "bar" the one-line stand-in a suspended guide leaves behind. Off the Vault a
+// "full" guide also renders as the bar, so it comes back in place when the user returns to the Vault.
+type GuideMode = "closed" | "full" | "bar";
 
 export function Onboarding({
   props,
   ready,
+  onVault,
   savedMemoryCount,
   pendingDraftCount,
   chatLabel,
@@ -110,30 +117,53 @@ export function Onboarding({
   onClose,
 }: OnboardingProps) {
   const { t: localizeUi } = useLtmTranslation();
-  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [mode, setMode] = useState<GuideMode>("closed");
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [onboardingSource, setOnboardingSource] = useState<SourceTab>("chats");
+  const showFull = mode === "full" && onVault;
+  const showBar = mode !== "closed" && !showFull;
   // A step change replaces the action buttons, so focus moves to the step title when the user
   // opens the guide or changes step; the guide's automatic first-run open leaves focus alone.
   const titleRef = useRef<HTMLHeadingElement>(null);
   const focusTitleRef = useRef(false);
+  // A step button that leaves for another screen unmounts under the user's focus; the bar takes it.
+  const barRef = useRef<HTMLElement>(null);
+  const focusBarRef = useRef(false);
+  const autoOpenedRef = useRef(false);
 
-  useEffect(() => {
-    onOpen(() => {
+  // The full guide lives on the Vault, so reopening or resuming it from another screen goes there first.
+  const showGuide = (restart: boolean) => {
+    const show = () => {
       focusTitleRef.current = true;
-      setOnboardingStep(0);
-      setOnboardingOpen(true);
-    });
-  }, [onOpen]);
+      if (restart) setOnboardingStep(0);
+      setMode("full");
+    };
+    if (onVault) show();
+    else void onOpenVault().then((arrived) => arrived && show());
+  };
+
+  // Re-registered every render: the reopen closure reads the current destination.
+  useEffect(() => {
+    onOpen(() => showGuide(true));
+  });
 
   useEffect(() => {
-    if (!onboardingOpen || !focusTitleRef.current) return;
+    if (!showFull || !focusTitleRef.current) return;
     focusTitleRef.current = false;
     titleRef.current?.focus();
-  }, [onboardingOpen, onboardingStep]);
+  }, [showFull, onboardingStep]);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!showBar || !focusBarRef.current) return;
+    focusBarRef.current = false;
+    barRef.current?.focus();
+  }, [showBar, mode]);
+
+  // Only the first loaded status decides whether the guide opens by itself; a later reload of the vault
+  // counts must not reopen a guide the user put away with Not now.
+  useEffect(() => {
+    if (!ready || autoOpenedRef.current) return;
+    autoOpenedRef.current = true;
     let stored = "";
     try {
       stored = localStorage.getItem(onboardingStorageKey) ?? "";
@@ -143,34 +173,51 @@ export function Onboarding({
     const savedStep = match ? Number(match[1]) : null;
     if (savedStep !== null && Number.isInteger(savedStep) && savedStep >= 0 && savedStep < onboardingSteps.length) {
       setOnboardingStep(savedStep);
-      setOnboardingOpen(true);
+      setMode("full");
       return;
     }
     if (savedMemoryCount !== 0) return;
-    setOnboardingOpen(true);
+    setMode("full");
   }, [ready, savedMemoryCount]);
 
+  // Done and Don't show again: the guide is finished for good.
   const completeOnboarding = () => {
-    setOnboardingOpen(false);
+    setMode("closed");
     try {
       localStorage.setItem(onboardingStorageKey, "complete");
     } catch {}
+    onClose();
+  };
+  // Not now and the bar's Dismiss: the saved step stays, so the guide returns at that step on the next visit.
+  const putAwayOnboarding = () => {
+    persistOnboardingStep(onboardingStep);
+    setMode("closed");
+    onClose();
   };
   const suspendOnboarding = () => {
     persistOnboardingStep(onboardingStep);
-    setOnboardingOpen(false);
+    setMode("bar");
+  };
+  // A step button that opens another screen steps the guide aside once the screen has opened; a refused
+  // navigation (unsaved work kept) leaves the guide where it was.
+  const leaveForScreen = async (navigate: () => Promise<boolean>) => {
+    if (!(await navigate())) return;
+    focusBarRef.current = true;
+    suspendOnboarding();
   };
 
   useEffect(() => {
-    if (!onboardingOpen) return;
+    if (mode === "closed") return;
     persistOnboardingStep(onboardingStep);
-  }, [onboardingOpen, onboardingStep]);
+  }, [mode, onboardingStep]);
 
   const openPromptPresetSections = () => {
+    focusBarRef.current = true;
     suspendOnboarding();
     props.onOpenActivePromptPresetEditor?.();
   };
   const openChatSummarySettings = () => {
+    focusBarRef.current = true;
     suspendOnboarding();
     props.onOpenChatSummarySettings?.();
   };
@@ -186,7 +233,27 @@ export function Onboarding({
     if (await onActivate()) advanceOnboarding();
   };
 
-  if (!onboardingOpen) return null;
+  if (showBar) {
+    return (
+      <section
+        ref={barRef}
+        tabIndex={-1}
+        aria-label={localizeUi("ui.longTermMemory.longtermmemorydetail.professorMariSSetupGuide")}
+        data-ltm-surface="onboarding-bar"
+        className="mari-editor-panel mari-editor-panel--soft flex flex-wrap items-center gap-2 px-3 py-2"
+      >
+        <p className="min-w-0 flex-1 text-xs font-semibold">
+          {localizeUi("ui.longTermMemory.longtermmemorydetail.setupGuideBar", {
+            current: onboardingStep + 1,
+            total: onboardingSteps.length,
+          })}
+        </p>
+        <Button onClick={() => showGuide(false)}>{localizeUi("ui.longTermMemory.longtermmemorydetail.resume")}</Button>
+        <Button onClick={putAwayOnboarding}>{localizeUi("ui.longTermMemory.longtermmemorydetail.dismiss")}</Button>
+      </section>
+    );
+  }
+  if (!showFull) return null;
   return (
     <section
       aria-labelledby="ltm-onboarding-title"
@@ -242,13 +309,14 @@ export function Onboarding({
                 }
                 [data-ltm-onboarding-footer] {
                   display: flex;
+                  flex-wrap: wrap;
                   justify-content: flex-start;
                   border-top: 1px solid var(--border);
                   padding: 0.75rem 1rem;
                 }
                 [data-ltm-onboarding-footer] > p {
                   min-width: 0;
-                  flex: 1;
+                  flex: 1 1 12rem;
                 }
                 [data-ltm-onboarding-close] {
                   min-height: 2.75rem;
@@ -483,6 +551,7 @@ export function Onboarding({
                 )
               ) : onboardingStep === 6 ? (
                 <>
+                  <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.youReSetUpIntro")}</p>
                   <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodIntro")}</p>
                   <details className="rounded-md border border-[var(--border)] px-3 py-2">
                     <summary className="cursor-pointer font-semibold text-[var(--foreground)]">
@@ -671,22 +740,12 @@ export function Onboarding({
                         {localizeUi("ui.longTermMemory.longtermmemorydetail.openChatSummarySettings")}
                       </Button>
                     ) : null}
-                    <Button
-                      primary
-                      onClick={async () => {
-                        await onOpenSources("chats");
-                      }}
-                    >
+                    <Button primary onClick={() => void leaveForScreen(() => onOpenSources("chats"))}>
                       {localizeUi("ui.longTermMemory.longtermmemorydetail.openChatSources")}
                     </Button>
                   </>
                 ) : (
-                  <Button
-                    primary
-                    onClick={async () => {
-                      await onOpenSources(onboardingSource);
-                    }}
-                  >
+                  <Button primary onClick={() => void leaveForScreen(() => onOpenSources(onboardingSource))}>
                     {localizeUi(
                       onboardingSource === "characters"
                         ? "ui.longTermMemory.longtermmemorydetail.importACharacter"
@@ -702,10 +761,9 @@ export function Onboarding({
                 </Button>
                 <Button
                   primary
-                  onClick={async () => {
-                    if (pendingDraftCount) await onOpenReview();
-                    else await onOpenSources("characters");
-                  }}
+                  onClick={() =>
+                    void leaveForScreen(() => (pendingDraftCount ? onOpenReview() : onOpenSources(onboardingSource)))
+                  }
                 >
                   {localizeUi(
                     pendingDraftCount
@@ -717,13 +775,12 @@ export function Onboarding({
             ) : onboardingStep === 5 ? (
               <>
                 <Button primary onClick={advanceOnboarding}>
-                  {localizeUi("ui.longTermMemory.longtermmemorydetail.nextUnderTheHood")}
+                  {localizeUi("ui.longTermMemory.longtermmemorydetail.finishSetup")}
                 </Button>
                 <Button
-                  onClick={async () => {
-                    if (savedMemoryCount) await onOpenVault();
-                    else await onOpenSources("characters");
-                  }}
+                  onClick={() =>
+                    void leaveForScreen(() => (savedMemoryCount ? onOpenVault() : onOpenSources(onboardingSource)))
+                  }
                 >
                   {localizeUi(
                     savedMemoryCount
@@ -733,18 +790,8 @@ export function Onboarding({
                 </Button>
               </>
             ) : (
-              <Button
-                primary
-                onClick={async () => {
-                  if (savedMemoryCount) await onOpenVault();
-                  else await onOpenSources("characters");
-                }}
-              >
-                {localizeUi(
-                  savedMemoryCount
-                    ? "ui.longTermMemory.longtermmemorydetail.goToSavedMemories"
-                    : "ui.longTermMemory.longtermmemorydetail.chooseASource",
-                )}
+              <Button primary onClick={completeOnboarding}>
+                {localizeUi("ui.longTermMemory.longtermmemorydetail.done")}
               </Button>
             )}
           </div>
@@ -767,15 +814,16 @@ export function Onboarding({
         </div>
       </div>
       <div data-ltm-onboarding-footer className="items-center gap-3">
-        <Button
-          data-ltm-onboarding-close
-          onClick={() => {
-            completeOnboarding();
-            onClose();
-          }}
-        >
-          {localizeUi("ui.longTermMemory.longtermmemorydetail.close")}
-        </Button>
+        {onboardingStep < onboardingSteps.length - 1 ? (
+          <>
+            <Button data-ltm-onboarding-close onClick={putAwayOnboarding}>
+              {localizeUi("ui.longTermMemory.longtermmemorydetail.notNow")}
+            </Button>
+            <Button data-ltm-onboarding-close onClick={completeOnboarding}>
+              {localizeUi("ui.longTermMemory.longtermmemorydetail.dontShowAgain")}
+            </Button>
+          </>
+        ) : null}
         <p className="text-xs text-[var(--muted-foreground)]">
           {localizeUi("ui.longTermMemory.longtermmemorydetail.youCanReplayThisGuideWithTheHelpButton")}
         </p>

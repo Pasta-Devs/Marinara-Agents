@@ -2,6 +2,7 @@
 // boundary alone is faked: deterministic model responses, isolated documents with revision checks,
 // and read-only Engine metadata. No provider or user save is contacted.
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
 const serverUrl = new URL("../packages/gacha-forge/server.mjs", import.meta.url);
 const packageId = "gacha-forge";
@@ -30,8 +31,18 @@ const smallChoice = (id = "choice-1", at = 0) => ({
   kind: "small",
   at,
   options: [
-    { id: "option-1", text: "I will walk with Arden.", segments: [{ speaker: "Arden", text: "CANON_ARDEN_ONLY" }] },
-    { id: "option-2", text: "I will walk with Brin.", segments: [{ speaker: "Brin", text: "ALTERNATE_BRIN_ONLY" }] },
+    {
+      id: "option-1",
+      text: "Walk with Arden.",
+      selection: { kind: "action", text: "You walk with Arden." },
+      segments: [{ speaker: "Arden", text: "CANON_ARDEN_ONLY" }],
+    },
+    {
+      id: "option-2",
+      text: "Walk with Brin.",
+      selection: { kind: "action", text: "You walk with Brin." },
+      segments: [{ speaker: "Brin", text: "ALTERNATE_BRIN_ONLY" }],
+    },
   ],
 });
 const bigChoice = (id = "choice-1", at = 0) => ({
@@ -39,8 +50,18 @@ const bigChoice = (id = "choice-1", at = 0) => ({
   kind: "big",
   at,
   options: [
-    { id: "option-1", text: "Save the northern village.", segments: [] },
-    { id: "option-2", text: "Save the southern village.", segments: [] },
+    {
+      id: "option-1",
+      text: "Save the northern village.",
+      selection: { kind: "action", text: "You choose to save the northern village." },
+      segments: [],
+    },
+    {
+      id: "option-2",
+      text: "Save the southern village.",
+      selection: { kind: "action", text: "You choose to save the southern village." },
+      segments: [],
+    },
   ],
 });
 const smallBeat = () => ({
@@ -250,7 +271,131 @@ const expectError = (result, error) => {
 };
 const promptText = (messages) => messages.map((message) => message.content).join("\n");
 
+// Execute the maintained source section of the actual shipped client, not a replacement player.
+const clientPayload = await readFile(new URL("../packages/gacha-forge/client.js", import.meta.url), "utf8");
+const clientSource = clientPayload
+  .split("/* forge-choices-client-source:start */\n")[1]
+  ?.split("/* forge-choices-client-source:end */")[0];
+assert.ok(clientSource, "The built client must contain the maintained choice player");
+const preparePlayback = new Function(`${clientSource}; return prepareForgeChoices;`)();
+function playback(response, replay = false) {
+  const host = {
+    _run: { runId, protagonist: { name: "Mari" } },
+    _activeStoryNode: { chapter: 1, storyIndex: 0, replay },
+  };
+  preparePlayback(host, response);
+  return host._choicePlayback.timeline;
+}
+
 try {
+  await test("generated intent labels stay separate from selected narration and spoken dialogue", async () => {
+    const host = await harness();
+    const graph = smallBeat();
+    graph.choices[0].options[0] = {
+      text: "Pull your hoodie up.",
+      selection: { kind: "action", text: "You pull your hoodie up against the cold." },
+      segments: [narrator("Arden waits while you adjust it.")],
+    };
+    graph.choices[0].options[1] = {
+      text: "Apologize for the delay.",
+      selection: { kind: "dialogue", text: "I am sorry I kept you waiting." },
+      segments: [{ speaker: "Arden", text: "You are here now." }],
+    };
+    host.responses.push(graph);
+    const generated = await host.post("/beat", { runId, chapter: 1, storyIndex: 0 });
+    assert.equal(generated.ok, true, JSON.stringify(generated));
+    assert.deepEqual(generated.choices[0].options[0].selection, graph.choices[0].options[0].selection);
+    assert.deepEqual(generated.choices[0].options[1].selection, graph.choices[0].options[1].selection);
+    assert.match(promptText(host.modelCalls[0]), /paraphrase|intent/u);
+    assert.match(promptText(host.modelCalls[0]), /narration/u);
+    assert.equal((await host.post("/choice", choiceRequest())).ok, true);
+    const canon = { ...generated, choiceCanon: host.data(beatId(1, 0)).choiceCanon };
+    assert.equal(playback(canon)[1].speaker, "");
+    assert.equal(playback(canon)[1].text, graph.choices[0].options[0].selection.text);
+    assert.equal(playback(canon)[2].text, "Arden waits while you adjust it.");
+    assert.equal(playback(canon)[3].text, "COMMON_REJOIN");
+    host.setProgress(1, 1);
+    const replay = await host.post("/choice", choiceRequest("option-2", { replay: true }));
+    assert.equal(replay.ok, true);
+    assert.equal(replay.canonical, false);
+    // The replay response chooses a temporary branch; its canon map stays unchanged.
+    assert.equal(playback({ ...generated, choiceCanon: { "choice-1": replay.optionId } })[1].speaker, "Mari");
+    assert.equal(
+      playback({ ...generated, choiceCanon: { "choice-1": replay.optionId } })[1].text,
+      graph.choices[0].options[1].selection.text,
+    );
+    assert.deepEqual(host.data(beatId(1, 0)).choiceCanon, { "choice-1": "option-1" });
+    host.responses[0] = line("The next scene.");
+    const next = await host.post("/beat", { runId, chapter: 1, storyIndex: 1 });
+    assert.equal(next.ok, true, JSON.stringify(next));
+    const context = host.modelCalls
+      .at(-1)
+      .filter((message) => message.role !== "system")
+      .map((message) => message.content)
+      .join("\n");
+    assert.match(context, /You pull your hoodie up against the cold/u);
+    assert.doesNotMatch(context, /I am sorry I kept you waiting/u);
+  });
+
+  await test("terminal selected actions and spoken words keep their type and immutable canon", async () => {
+    for (const kind of ["action", "dialogue"]) {
+      const host = await harness({ chapters: [plan(1, 1), plan(2)] });
+      const choice = bigChoice();
+      choice.options[0] = {
+        text: kind === "dialogue" ? "Promise to help Arden." : "Offer Arden your hand.",
+        selection: { kind, text: kind === "dialogue" ? "I promise I will help you." : "You offer Arden your hand." },
+        segments: [],
+      };
+      host.responses.push({ ...line("Arden waits for your decision."), choices: [choice] });
+      const generated = await host.post("/beat", { runId, chapter: 1, storyIndex: 0 });
+      assert.equal(generated.ok, true, JSON.stringify(generated));
+      assert.equal((await host.post("/choice", choiceRequest())).ok, true);
+      const response = { ...generated, choiceCanon: host.data(beatId(1, 0)).choiceCanon };
+      const selectedBeat = playback(response)[1];
+      assert.equal(selectedBeat.speaker, kind === "dialogue" ? "Mari" : "");
+      assert.equal(selectedBeat.text, choice.options[0].selection.text);
+      assert.equal(playback(response).length, 2, "A big choice has no pre-generated consequence");
+      expectError(await host.post("/choice", choiceRequest("option-2", { replay: true })), "choice-locked");
+      host.setProgress(1, 1);
+      host.responses[0] = line("The next chapter.");
+      assert.equal((await host.post("/beat", { runId, chapter: 2, storyIndex: 0 })).ok, true);
+      const context = host.modelCalls
+        .at(-1)
+        .filter((message) => message.role !== "system")
+        .map((message) => message.content)
+        .join("\n");
+      assert.ok(
+        context.includes(choice.options[0].selection.text),
+        "Future chapters must retain the exact performed decision",
+      );
+      assert.ok(!context.includes(choice.options[1].selection.text), "Unselected decisions must not enter continuity");
+    }
+  });
+
+  await test("different labels cannot disguise identical performed small or big options", async () => {
+    for (const kind of ["small", "big"]) {
+      const host = await harness({ chapters: [plan(1, 1)] });
+      const choice = kind === "small" ? smallChoice() : bigChoice();
+      choice.options[1].selection = clone(choice.options[0].selection);
+      host.responses.push({ ...line("Choose a path."), choices: [choice] });
+      expectError(await host.post("/beat", { runId, chapter: 1, storyIndex: 0 }), "invalid-shape");
+      assert.equal(host.data(beatId(1, 0)), undefined);
+    }
+  });
+
+  await test("untyped saved choices remain playable without inventing a dialogue speaker", async () => {
+    const host = await harness();
+    const saved = smallBeat();
+    delete saved.choices[0].options[0].selection;
+    saved.choices[0].options[0].text = "Pull a hoodie up.";
+    host.seed(beatId(1, 0), "beat", { chapter: 1, storyIndex: 0, ...saved, choiceCanon: { "choice-1": "option-1" } });
+    const response = await host.post("/beat", { runId, chapter: 1, storyIndex: 0 });
+    assert.equal(response.ok, true);
+    assert.equal(playback(response)[1].speaker, "");
+    assert.equal(playback(response)[1].text, "Pull a hoodie up.");
+    assert.equal(host.modelCalls.length, 0);
+  });
+
   await test("legacy linear saves still resume and choices default on for new narration", async () => {
     const host = await harness({ reading: { chapter: 1, storyIndex: 0, at: 4 } });
     host.seed(beatId(1, 0), "beat", { chapter: 1, storyIndex: 0, ...line("Legacy narration") });
@@ -348,9 +493,9 @@ try {
     assert.equal(next.ok, true, JSON.stringify(next));
     const context = promptText(host.modelCalls.at(-1));
     assert.match(context, /CANON_ARDEN_ONLY/u);
-    assert.match(context, /I will walk with Arden\./u);
+    assert.match(context, /Walk with Arden\./u);
     assert.match(context, /COMMON_REJOIN/u);
-    assert.doesNotMatch(context, /ALTERNATE_BRIN_ONLY|I will walk with Brin\./u);
+    assert.doesNotMatch(context, /ALTERNATE_BRIN_ONLY|Walk with Brin\./u);
     assert.equal(host.modelCalls.length, 2, "Replaying a pre-generated branch makes no model call");
   });
 
@@ -633,7 +778,8 @@ try {
     const host = await harness();
     const graph = smallBeat();
     graph.choices[0].options = Array.from({ length: 4 }, (_, index) => ({
-      text: `I will follow route ${index + 1}.`,
+      text: `Follow route ${index + 1}.`,
+      selection: { kind: "action", text: `You follow route ${index + 1}.` },
       segments: Array.from({ length: 8 }, (_, beat) => narrator(`Route ${index + 1}, line ${beat + 1}`)),
     }));
     host.responses.push(graph);
@@ -774,6 +920,36 @@ try {
   });
 
   const invalidChoices = [
+    [
+      "missing selected beat",
+      (choice) => {
+        delete choice.options[0].selection;
+      },
+    ],
+    [
+      "unknown selection kind",
+      (choice) => {
+        choice.options[0].selection.kind = "thought";
+      },
+    ],
+    [
+      "empty selected beat",
+      (choice) => {
+        choice.options[0].selection.text = "  ";
+      },
+    ],
+    [
+      "oversized selected beat",
+      (choice) => {
+        choice.options[0].selection.text = "x".repeat(281);
+      },
+    ],
+    [
+      "verbatim dialogue label",
+      (choice) => {
+        choice.options[0].selection = { kind: "dialogue", text: choice.options[0].text };
+      },
+    ],
     [
       "fewer than two options",
       (choice) => {

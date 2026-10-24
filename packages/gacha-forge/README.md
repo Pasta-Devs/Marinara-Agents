@@ -15,7 +15,9 @@ Chapter scenes in 1.9.1 use a small fullscreen icon in the top-right header fade
 
 ### Player choices (1.10.0)
 
-Settings → Story → Continuity includes **Allow choices**, enabled by default. Newly written chapters and Character Stories can offer two to four dialogue lines or actions for your protagonist above the dialogue box, using the current game theme.
+In 1.10.2, newly generated dialogue options paraphrase intent, such as “Apologize” or “Say that you trust them”. The selected spoken line then appears as protagonist dialogue; a selected physical action appears as narration. Existing saved choices keep their labels and decisions, with untyped selections displayed as narration rather than guessing that they were spoken.
+
+Settings → Story → Continuity includes **Allow choices**, enabled by default. Newly written chapters and Character Stories can offer two to four dialogue or action intents for your protagonist above the dialogue box, using the current game theme.
 
 Small choices include every alternative branch in the same narration response. The selected branch plays for a few lines and rejoins the shared story. First-play selections are saved as canon; replay can show the other small branches without changing that history. Reloading or resuming restores the canonical selections.
 
