@@ -59,6 +59,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState("");
   const [repairPending, setRepairPending] = useState(false);
+  // Pending controls stay focusable (aria-disabled, not `disabled`); these refs make their handlers ignore input meanwhile.
+  const activationBusyRef = useRef(false);
+  const repairBusyRef = useRef(false);
   const [repairResult, setRepairResult] = useState<{ text: string; tone: "neutral" | "success" | "danger" } | null>(
     null,
   );
@@ -139,7 +142,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       props,
       localizeUi("ui.longTermMemory.longtermmemorydetail.discardUnsavedChanges"),
       localizeUi("ui.longTermMemory.longtermmemorydetail.unsavedChangesLostBeforeOpening", { destination: next }),
-      localizeUi("ui.longTermMemory.longtermmemorydetail.discardChanges"),
+      localizeUi("ui.longTermMemory.memoryvault.discardAndContinue"),
       true,
     );
   };
@@ -242,7 +245,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     setDestination("settings");
   };
   const toggleActivation = async () => {
-    if (!props.onEnabledForChatChange) return;
+    if (!props.onEnabledForChatChange || activationBusyRef.current) return;
+    activationBusyRef.current = true;
     setActivationPending(true);
     setActivationError("");
     try {
@@ -252,6 +256,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         errorMessage(error, localizeUi("ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat")),
       );
     } finally {
+      activationBusyRef.current = false;
       setActivationPending(false);
     }
   };
@@ -293,6 +298,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     // Leaving the screen clears the running surface, and the run's outcome is then not shown on another screen.
     const finish = (result: { text: string; tone: "success" | "danger" }) =>
       setRepairResult((current) => (current === running ? result : current));
+    if (repairBusyRef.current) return;
+    repairBusyRef.current = true;
     setRepairPending(true);
     setRepairResult(running);
     try {
@@ -305,11 +312,15 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         tone: "danger",
       });
     } finally {
+      repairBusyRef.current = false;
       setRepairPending(false);
     }
   };
   const repairButton = () => (
-    <Button disabled={repairPending} onClick={() => void repairRecall()}>
+    <Button
+      {...(repairPending ? ({ "aria-disabled": true, className: "opacity-50" } as const) : {})}
+      onClick={() => void repairRecall()}
+    >
       <RefreshCw aria-hidden="true" size="0.75rem" className={repairPending ? "animate-spin" : ""} />
       {localizeUi("ui.longTermMemory.longtermmemorydetail.reindexRecall")}
     </Button>
@@ -367,7 +378,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const connectedChat = Boolean(props.chatId);
   const activeChat = connectedChat && props.enabledForChat === true;
   const enableForOnboarding = async () => {
-    if (!props.onEnabledForChatChange || activationPending) return false;
+    if (!props.onEnabledForChatChange || activationBusyRef.current) return false;
+    activationBusyRef.current = true;
     setActivationPending(true);
     setActivationError("");
     try {
@@ -379,6 +391,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       );
       return false;
     } finally {
+      activationBusyRef.current = false;
       setActivationPending(false);
     }
   };
@@ -491,7 +504,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           outline: none;
           box-shadow: 0 0 0 0.125rem var(--marinara-editor-focus-ring);
         }
-        [data-ltm-control="activation"]:disabled {
+        [data-ltm-control="activation"]:disabled,
+        [data-ltm-control="activation"][aria-disabled="true"] {
           cursor: not-allowed;
           opacity: 0.5;
         }
@@ -569,7 +583,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
               {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationTitle")}
             </h2>
             <p id="ltm-destination-unsaved-description" className="text-sm text-[var(--muted-foreground)]">
-              {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationDescription", { action: navigationPrompt })}
+              {localizeUi("ui.longTermMemory.longtermmemorydetail.unsavedNavigationDescription", {
+                action: navigationPrompt,
+              })}
             </p>
             {navigationSaveFailed ? (
               <StatusSurface tone="danger" data-ltm-destination-save-failed>
@@ -639,8 +655,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 },
               )}
               data-ltm-control="activation"
-              className="inline-flex h-11 shrink-0 items-center justify-center rounded-md disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={activationPending || !props.onEnabledForChatChange}
+              className="inline-flex h-11 shrink-0 items-center justify-center rounded-md"
+              disabled={!props.onEnabledForChatChange}
+              aria-disabled={activationPending || undefined}
               onClick={() => void toggleActivation()}
             >
               <span data-ltm-activation-label>

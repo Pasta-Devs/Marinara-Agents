@@ -9,6 +9,7 @@ import { errorMessage, invalidateLtmQueries, queryKeys, request } from "../api";
 import { Button, inputClass, StatusSurface } from "../shared-controls";
 import { useLtmTranslation } from "../localization";
 
+type Candidate = LtmSubjectIdentityReview["candidates"][number];
 type IdentityChoice = { name: string; action: "" } | LtmSubjectIdentityDecision;
 
 type Props = {
@@ -90,6 +91,30 @@ export default function SubjectIdentityReview({
 
   useEffect(() => () => onDirtyChange(suggestionId, false), [onDirtyChange, suggestionId]);
 
+  // A candidate reads as its name plus its kind. Two candidates with the same name and kind also show their id.
+  const candidateLabel = (candidate: Candidate, siblings: Candidate[]) => {
+    const { name, subject } = candidate;
+    const kind = localizeUi(
+      subject.ref?.kind === "character"
+        ? "ui.longTermMemory.reviewqueue.identityKindCharacter"
+        : subject.ref?.kind === "persona"
+          ? "ui.longTermMemory.reviewqueue.identityKindPersona"
+          : subject.ref?.kind === "local_character"
+            ? "ui.longTermMemory.reviewqueue.identityKindLocalCharacter"
+            : "ui.longTermMemory.reviewqueue.identityKindOther",
+    );
+    const sameLook = siblings.filter(
+      (other) => other.name === name && (other.subject.ref?.kind ?? "") === (subject.ref?.kind ?? ""),
+    );
+    return sameLook.length > 1
+      ? localizeUi("ui.longTermMemory.reviewqueue.identityOptionWithId", {
+          name,
+          kind,
+          id: subject.ref?.id ?? subject.key,
+        })
+      : localizeUi("ui.longTermMemory.reviewqueue.identityOption", { name, kind });
+  };
+
   const setChoice = (index: number, value: string) => {
     const participant = review[index]!;
     const nextChoice: IdentityChoice = !value
@@ -132,9 +157,14 @@ export default function SubjectIdentityReview({
               onChange={(event) => setChoice(index, event.currentTarget.value)}
             >
               <option value="">{localizeUi("ui.longTermMemory.reviewqueue.chooseIdentity")}</option>
-              {participant.candidates.map(({ name, subject }) => (
-                <option key={subject.key} value={subject.key} disabled={usedSubjectKeys.has(subject.key)}>
-                  {`${name} (${subject.ref?.kind ?? "identity"}: ${subject.ref?.id ?? subject.key}) · ${subject.key}`}
+              {participant.candidates.map((candidate) => (
+                <option
+                  key={candidate.subject.key}
+                  value={candidate.subject.key}
+                  title={candidate.subject.key}
+                  disabled={usedSubjectKeys.has(candidate.subject.key)}
+                >
+                  {candidateLabel(candidate, participant.candidates)}
                 </option>
               ))}
               {participant.allowDifferent ? (

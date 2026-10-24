@@ -7,7 +7,7 @@ import { dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { runRegressionToCompletion } from "./regression-helpers.ts";
 
-export type RouteScenario = "all" | "notes" | "imports" | "drafts" | "scope-identity" | "backup";
+export type RouteScenario = "all" | "imports" | "scope-identity" | "backup";
 
 // Every route the package registers, so a change to the route files cannot add, drop or rename one unnoticed.
 const EXPECTED_ROUTES = [
@@ -551,7 +551,7 @@ async function main(routeScenario: RouteScenario) {
         },
       },
     };
-    if (routeScenario !== "all" && routeScenario !== "notes") {
+    if (routeScenario !== "all") {
       const seededRouteNote = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes",
@@ -609,7 +609,7 @@ async function main(routeScenario: RouteScenario) {
         );
       }
     }
-    if (routeScenario === "all" || routeScenario === "notes") {
+    if (routeScenario === "all") {
       assert.equal(
         (
           await app.inject({
@@ -5287,7 +5287,7 @@ async function main(routeScenario: RouteScenario) {
         true,
       );
     }
-    if (routeScenario === "all" || routeScenario === "drafts") {
+    if (routeScenario === "all") {
       const source = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/notes",

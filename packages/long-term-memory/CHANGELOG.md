@@ -1,5 +1,29 @@
 # Long-Term Memory changelog
 
+## 1.4.91 — 2026-10-24
+
+- Review rows now say what each button does: "Check" then "Apply" (with a Ready or Blocked chip on narrow panels), and engine terms like preflight and source_deleted read as plain sentences.
+- Reviewing who a memory is about now says "Skip this memory" and lists each person by name and a distinguishing detail instead of a raw key.
+- Freshness labels, draft counts and the Change and Source lines in the Review Queue are now easier to read in both themes.
+- The Review Queue drops a redundant frame and duplicate progress line, and shows the run summary inside the workbench on narrow panels.
+
+## 1.4.90 — 2026-10-24
+
+- The Undo banner after archiving keeps saying how many memories it will restore, even when you save another memory while it is showing.
+
+## 1.4.89 — 2026-10-24
+
+- The Memory Vault shows your memories sooner: rarer filters sit under Refine and open by themselves while in use, and changing several memories happens in one Edit selected sheet, with Archive and Delete kept apart.
+- Changing availability for several memories now says how many will change, stay the same or be blocked, explains why Apply is off, and repeats Apply under the list.
+- Saving a memory now confirms beside the Save button, and a save that waits on a recall rebuild says so as a warning instead of an error.
+- The memory you have open is now marked with an edge bar and announced to screen readers, not only by a tint.
+- The memory info panel now has one name everywhere you open it.
+
+## 1.4.88 — 2026-10-24
+
+- Switching Long-Term Memory on or off, changing a chat's recall settings and running Reindex no longer drop keyboard focus while they work.
+- The unsaved-changes prompt now says where you are going, and the Chat Settings panel is shorter, names the right button and no longer shows made-up defaults while loading.
+
 ## 1.4.87 — 2026-10-23
 
 - The setup guide now stays on the Memory Vault and shrinks to a one-line bar elsewhere, steps out of the way when one of its buttons takes you to another screen, and lets you choose Not now, Don't show again or Done. Later steps follow the source type you picked.

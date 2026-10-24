@@ -176,6 +176,8 @@ function targetDisplayLabel(target: Target | null | undefined) {
 
 type ArchiveUndoState = {
   notes: Array<{ id: string; status: LtmStatus }>;
+  // What Undo reverses; the banner shows it beside Undo, apart from the notice slot other actions write to.
+  caption: string;
 };
 
 function bulkAvailabilityScope(targets: readonly string[]): Partial<LtmScope> | undefined {
@@ -460,6 +462,12 @@ export default function MemoryVault({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [draft, setDraft] = useState<LtmNote | null>(null);
   const [availabilityOpen, setAvailabilityOpen] = useState<"single" | "bulk" | null>(null);
+  // Refine holds the rarer filters. A second place or a mode filter opens it, and closing it stays the user's choice.
+  const refineActive = Boolean(secondaryTarget) || filterModes.length < modes.length;
+  const [refineOpen, setRefineOpen] = useState(refineActive);
+  useEffect(() => {
+    if (refineActive) setRefineOpen(true);
+  }, [refineActive]);
   const draftRef = useRef(draft);
   draftRef.current = draft;
   function setMobilePaneAndFocus(pane: LtmWorkspacePane) {
@@ -477,12 +485,20 @@ export default function MemoryVault({
   const [isNew, setIsNew] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  // One feedback slot: a success notice, or a warning when a change was kept but something behind it is still pending.
+  // `setNotice` always resets the tone, so a later message never inherits a warning.
+  const [noticeState, setNoticeState] = useState({ message: "", warning: false });
+  const notice = noticeState.message;
+  const setNotice = useCallback((message: string) => setNoticeState({ message, warning: false }), []);
+  const setWarning = useCallback((message: string) => setNoticeState({ message, warning: true }), []);
   const [archiveUndo, setArchiveUndo] = useState<ArchiveUndoState | null>(null);
   // Batch, row and Undo actions use `aria-disabled` so the control keeps focus while it runs, and
   // `batchPendingRef` blocks a second run before React re-renders. When one finishes, focus moves to
   // the result banner, which holds Undo, unless the user moved it elsewhere meanwhile.
   const batchPendingRef = useRef(false);
+  // Save keeps focus while it runs (`aria-disabled`). A second save, from the button, the shortcut or the unsaved-changes
+  // dialog, gets this run's result instead of starting another or reading "still running" as "failed".
+  const savePromiseRef = useRef<Promise<boolean> | null>(null);
   const feedbackTriggerRef = useRef<Element | null>(null);
   const [feedbackFocusRequest, setFeedbackFocusRequest] = useState(0);
   const focusFeedback = () => setFeedbackFocusRequest((count) => count + 1);
@@ -493,8 +509,7 @@ export default function MemoryVault({
     vaultRef.current?.querySelector<HTMLElement>("[data-ltm-vault-feedback] [data-ltm-status]")?.focus();
   }, [feedbackFocusRequest]);
   const [recoverySuggestionId, setRecoverySuggestionId] = useState<string | null>(null);
-  const [bulkStatus, setBulkStatus] = useState<LtmStatus>("active");
-  const [bulkModes, setBulkModes] = useState<LtmMode[]>(["roleplay"]);
+  const [bulkEditStatus, setBulkEditStatus] = useState<LtmStatus | "">("");
   const [bulkAvailabilityModes, setBulkAvailabilityModes] = useState<LtmMode[]>([]);
   const [bulkAvailabilityTargets, setBulkAvailabilityTargets] = useState<string[]>([]);
   const [bulkAvailabilityAction, setBulkAvailabilityAction] = useState<"add" | "remove">("add");
@@ -654,6 +669,7 @@ export default function MemoryVault({
     setDraft(null);
     setAvailabilityOpen(null);
     setSaved("");
+    setSaveState("idle");
     setIsNew(false);
     setBusy("");
     setError("");
@@ -850,6 +866,13 @@ export default function MemoryVault({
         : new Set([...current].filter((id) => !visibleIds.includes(id)));
     });
   const dirty = Boolean(draft) && fingerprint(draft) !== saved;
+  // "Saved" only while nothing changed since; an edit hides it even where `saveState` was not reset.
+  const saveStatus =
+    saveState === "saving"
+      ? localizeUi("ui.longTermMemory.memoryvault.saving")
+      : saveState === "saved" && !dirty
+        ? localizeUi("ui.longTermMemory.memoryvault.saved")
+        : "";
   const sourceDerivedQuery = useQuery({
     ...derivedNotesQueryOptions(draft?.id ?? ""),
     enabled: draft?.type === "source" && !isNew,
@@ -1090,6 +1113,16 @@ export default function MemoryVault({
         })
       : "",
   ].filter(Boolean);
+  const refineSummary = [
+    secondaryTarget
+      ? localizeUi("ui.longTermMemory.memoryvault.refineActivePlace", { value1: targetDisplayLabel(secondaryTarget) })
+      : "",
+    filterModes.length < modes.length
+      ? `${localizeUi("ui.longTermMemory.memoryvault.availableModes")}: ${filterModes.map(modeLabel).join(", ")}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const scopeEntryLabel = secondaryTarget
     ? localizeUi("ui.longTermMemory.memoryvault.combinedScope", {
         first: targetDisplayLabel(target) || localizeUi("ui.longTermMemory.memoryvault.allMemories"),
@@ -1381,6 +1414,7 @@ export default function MemoryVault({
     setDraft(next);
     setAvailabilityOpen(null);
     setSaved(fingerprint(next));
+    setSaveState("idle");
     setIsNew(false);
     setRecoverySuggestionId(null);
     setLinkTarget("");
@@ -1535,11 +1569,12 @@ export default function MemoryVault({
         await invalidate();
         throw new Error();
       }
-      setArchiveUndo((current) => (current === recovery ? null : current));
       // Reload the open memory too if the undo restored it, so it neither shows nor saves back the archived status.
+      // The banner stays up through the reload (its caption holds it open) so the restored notice lands in the same region.
       await refreshAfterBatch(
         results.flatMap((result) => (result.status === "fulfilled" ? result.value.affectedNoteIds : [])),
       );
+      setArchiveUndo((current) => (current === recovery ? null : current));
       if (session !== editorSession.current) return;
       setNotice(
         localizeUi(
@@ -1592,7 +1627,15 @@ export default function MemoryVault({
     setNotice(localizeUi("ui.longTermMemory.memoryvault.availabilitySaved"));
     await invalidate();
   }
-  async function save(): Promise<boolean> {
+  function save(): Promise<boolean> {
+    if (savePromiseRef.current) return savePromiseRef.current;
+    const running = runSave().finally(() => {
+      savePromiseRef.current = null;
+    });
+    savePromiseRef.current = running;
+    return running;
+  }
+  async function runSave(): Promise<boolean> {
     if (!draft) return false;
     const errors: Array<{ message: string; focus: "title" | "details" | "subjects" | "links" | "availability" }> = [];
     if (!draft.title?.trim())
@@ -1641,6 +1684,9 @@ export default function MemoryVault({
     setBusy("save");
     setSaveState("saving");
     setError("");
+    // Clear the standing notice so this save's "Memory saved" is a change the banner announces; the same text twice is not.
+    // An archive Undo keeps its own caption, so clearing the notice leaves it standing.
+    setNotice("");
     let succeeded = false;
     try {
       const response = isNew
@@ -1687,7 +1733,7 @@ export default function MemoryVault({
         setIsNew(false);
         setDraft((current) => (fingerprint(current) === submittedFingerprint ? next : current));
         setSaveState("idle");
-        setError(
+        setWarning(
           localizeUi("ui.longTermMemory.memoryvault.savedButRecallIsStale", { error: response.rebuild.error ?? "" }),
         );
         await invalidateLtmQueries(client, [
@@ -1864,7 +1910,7 @@ export default function MemoryVault({
         setDraft((current) => (fingerprint(current) === submittedFingerprint ? result.note : current));
         setRenamingSectionKey(null);
         setRenamedSectionKey("");
-        setError(
+        setWarning(
           localizeUi("ui.longTermMemory.memoryvault.savedButRecallIsStale", { error: result.rebuild.error ?? "" }),
         );
         await invalidate();
@@ -1896,7 +1942,7 @@ export default function MemoryVault({
   }
   async function runBatchForIds(
     ids: string[],
-    action: "status" | "modes" | "availability" | "remove-availability" | "archive" | "delete",
+    action: "edit" | "archive" | "delete",
     options?: { preserveSelection?: boolean },
   ) {
     if (!ids.length || batchPendingRef.current) return;
@@ -1910,7 +1956,7 @@ export default function MemoryVault({
   }
   async function applyBatchForIds(
     ids: string[],
-    action: "status" | "modes" | "availability" | "remove-availability" | "archive" | "delete",
+    action: "edit" | "archive" | "delete",
     options?: { preserveSelection?: boolean },
   ) {
     const session = editorSession.current;
@@ -2004,25 +2050,23 @@ export default function MemoryVault({
     );
     setBusy(action);
     try {
+      const adding = bulkAvailabilityAction === "add";
       const availabilityScope = bulkAvailabilityScope(
-        action === "remove-availability"
-          ? withWholeChatBranches(bulkAvailabilityTargets, availabilityTargets.chats)
-          : bulkAvailabilityTargets,
+        adding ? bulkAvailabilityTargets : withWholeChatBranches(bulkAvailabilityTargets, availabilityTargets.chats),
       );
       const result = await request<LtmBulkNoteResult>("/notes/batch", "POST", {
         noteIds: ids,
         ...(action === "archive" ? { archive: "notes_only" } : {}),
-        ...(action === "status" ? { status: bulkStatus } : {}),
-        ...(action === "modes" ? { modes: bulkModes } : {}),
-        ...(action === "availability" || action === "remove-availability"
+        ...(action === "edit"
           ? {
+              ...(bulkEditStatus ? { status: bulkEditStatus } : {}),
               ...(availabilityScope
-                ? action === "availability"
+                ? adding
                   ? { addScope: availabilityScope }
                   : { removeScope: availabilityScope }
                 : {}),
               ...(bulkAvailabilityModes.length
-                ? action === "availability"
+                ? adding
                   ? { enableModes: bulkAvailabilityModes }
                   : { disableModes: bulkAvailabilityModes }
                 : {}),
@@ -2077,13 +2121,14 @@ export default function MemoryVault({
           count: result.updatedNoteIds.length,
         },
       );
-      if (archiveCompleted && archiveUndoNotes.length === ids.length) setArchiveUndo({ notes: archiveUndoNotes });
+      const undoOffered = archiveCompleted && archiveUndoNotes.length === ids.length;
+      if (undoOffered) setArchiveUndo({ notes: archiveUndoNotes, caption: message });
       setOpenActionNoteId(null);
       if (unresolved.size) {
         setNotice("");
         setError(message);
       } else {
-        setNotice(message);
+        setNotice(undoOffered ? "" : message);
         setError("");
       }
       focusFeedback();
@@ -2097,7 +2142,7 @@ export default function MemoryVault({
       setBusy((current) => (current === action ? "" : current));
     }
   }
-  async function batch(action: "status" | "modes" | "availability" | "remove-availability" | "archive" | "delete") {
+  async function batch(action: "edit" | "archive" | "delete") {
     await runBatchForIds([...checked], action);
   }
   const busyActionProps = busy ? ({ "aria-disabled": true, className: "opacity-50" } as const) : {};
@@ -2323,8 +2368,13 @@ export default function MemoryVault({
             </StatusSurface>
           ) : null}
           {notice || archiveUndo ? (
-            <StatusSurface tone="success" tabIndex={-1}>
-              <span className="min-w-0 flex-1">{notice}</span>
+            <StatusSurface tone={noticeState.warning ? "warning" : "success"} tabIndex={-1}>
+              {archiveUndo ? (
+                <span data-ltm-archive-undo-caption className="min-w-0 flex-1">
+                  {archiveUndo.caption}
+                </span>
+              ) : null}
+              {notice ? <span className="min-w-0 flex-1">{notice}</span> : null}
               {archiveUndo ? (
                 <Button
                   className={busy ? "opacity-50" : ""}
@@ -2374,21 +2424,6 @@ export default function MemoryVault({
                     }}
                   />
                 </div>
-                <div data-ltm-memory-scope-secondary className="col-span-2 grid min-w-0 max-w-full gap-1">
-                  <span className="text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
-                    {localizeUi("ui.longTermMemory.memoryvault.combineWithPlace")}
-                  </span>
-                  <SourceScopeCombobox
-                    targets={secondaryPlaceOptions}
-                    value={secondaryTarget?.id ?? "all"}
-                    ariaLabel={localizeUi("ui.longTermMemory.memoryvault.combineWithPlace")}
-                    testId="vault-secondary"
-                    memoryGroups={placeMemoryGroups}
-                    onChange={(id) =>
-                      selectSecondaryTarget(secondaryPlaceOptions.find((option) => option.id === id)?.target ?? null)
-                    }
-                  />
-                </div>
                 <label className="relative col-span-2 block">
                   <Search
                     aria-hidden="true"
@@ -2418,24 +2453,6 @@ export default function MemoryVault({
                     </button>
                   ) : null}
                 </label>
-                <fieldset className="col-span-2 space-y-1" data-ltm-mode-filter>
-                  <legend className="text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
-                    {localizeUi("ui.longTermMemory.memoryvault.availableModes")}
-                  </legend>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1">
-                    {modes.map((mode) => (
-                      <label key={mode} className="flex min-h-11 items-center gap-2 text-xs">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4"
-                          checked={filterModes.includes(mode)}
-                          onChange={() => toggleFilterMode(mode)}
-                        />
-                        {modeLabel(mode)}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
                 <label className="min-w-0 space-y-1 text-xs font-medium">
                   <span className="block text-[var(--marinara-editor-muted)]">
                     {localizeUi("ui.longTermMemory.memoryvault.showMemories")}
@@ -2472,6 +2489,70 @@ export default function MemoryVault({
                       ))}
                   </select>
                 </label>
+                <details
+                  data-ltm-refine
+                  open={refineOpen}
+                  onToggle={(event) => setRefineOpen(event.currentTarget.open)}
+                  className="group col-span-2"
+                >
+                  <summary
+                    data-ltm-tab-focus
+                    className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-xs font-semibold [&::-webkit-details-marker]:hidden"
+                  >
+                    <ChevronRight
+                      aria-hidden="true"
+                      size="0.875rem"
+                      className="shrink-0 transition-transform group-open:rotate-90"
+                    />
+                    <span>{localizeUi("ui.longTermMemory.memoryvault.refine")}</span>
+                    {refineSummary ? (
+                      <span
+                        data-ltm-refine-active
+                        title={refineSummary}
+                        className="min-w-0 truncate font-normal text-[var(--muted-foreground)] group-open:hidden"
+                      >
+                        {refineSummary}
+                      </span>
+                    ) : null}
+                  </summary>
+                  <div className="grid gap-2 pb-1">
+                    <div data-ltm-memory-scope-secondary className="grid min-w-0 max-w-full gap-1">
+                      <span className="text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
+                        {localizeUi("ui.longTermMemory.memoryvault.combineWithPlace")}
+                      </span>
+                      <SourceScopeCombobox
+                        targets={secondaryPlaceOptions}
+                        value={secondaryTarget?.id ?? "all"}
+                        ariaLabel={localizeUi("ui.longTermMemory.memoryvault.combineWithPlace")}
+                        testId="vault-secondary"
+                        memoryGroups={placeMemoryGroups}
+                        onChange={(id) =>
+                          selectSecondaryTarget(
+                            secondaryPlaceOptions.find((option) => option.id === id)?.target ?? null,
+                          )
+                        }
+                      />
+                    </div>
+                    <fieldset className="space-y-1" data-ltm-mode-filter>
+                      <legend className="text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
+                        {localizeUi("ui.longTermMemory.memoryvault.availableModes")}
+                      </legend>
+                      <div className="flex flex-wrap gap-x-3 gap-y-1">
+                        {modes.map((mode) => (
+                          <label key={mode} className="flex min-h-11 items-center gap-2 text-xs">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4"
+                              checked={filterModes.includes(mode)}
+                              onChange={() => toggleFilterMode(mode)}
+                            />
+                            {modeLabel(mode)}
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                  </div>
+                </details>
                 <div className="col-span-2 flex flex-wrap items-center gap-3 border-t border-[var(--border)] pt-2">
                   <Button
                     onClick={() => {
@@ -2524,68 +2605,28 @@ export default function MemoryVault({
                   aria-labelledby="ltm-selection-count"
                   className="mari-editor-panel flex flex-wrap items-center gap-2 p-3"
                 >
-                  <>
-                    <select
-                      className={inputClass}
-                      value={bulkStatus}
-                      onChange={(event) => setBulkStatus(event.target.value as LtmStatus)}
-                      aria-label={localizeUi("ui.longTermMemory.memoryvault.setStatus")}
-                    >
-                      {statuses.map((status) => (
-                        <option key={status} value={status}>
-                          {statusLabel(status)}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       {...busyActionProps}
                       onClick={() => {
-                        if (!busy) void batch("status");
-                      }}
-                    >
-                      {localizeUi("ui.longTermMemory.memoryvault.setStatus")}
-                    </Button>
-                    <fieldset className="flex flex-wrap items-center gap-2">
-                      <legend className="sr-only">
-                        {localizeUi("ui.longTermMemory.memoryvault.setRetrievalModes")}
-                      </legend>
-                      {modes.map((mode) => (
-                        <label key={mode} className="flex min-h-11 items-center gap-1 text-xs">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4"
-                            checked={bulkModes.includes(mode)}
-                            onChange={() =>
-                              setBulkModes((current) =>
-                                current.includes(mode) ? current.filter((item) => item !== mode) : [...current, mode],
-                              )
-                            }
-                          />
-                          {modeLabel(mode)}
-                        </label>
-                      ))}
-                    </fieldset>
-                    <Button
-                      {...busyActionProps}
-                      disabled={!bulkModes.length}
-                      onClick={() => {
-                        if (!busy) void batch("modes");
-                      }}
-                    >
-                      {localizeUi("ui.longTermMemory.memoryvault.setModes")}
-                    </Button>
-                    <Button
-                      disabled={Boolean(busy)}
-                      onClick={() => {
+                        if (busy) return;
                         setBulkAvailabilityAction("add");
                         setBulkAvailabilityTargets([]);
+                        setBulkAvailabilityModes([]);
+                        setBulkEditStatus("");
                         setAvailabilityOpen("bulk");
                         setMobilePaneAndFocus("workbench");
                       }}
-                      data-ltm-bulk-availability
+                      data-ltm-bulk-edit
                     >
-                      {localizeUi("ui.longTermMemory.memoryvault.changeAvailability")}
+                      {localizeUi("ui.longTermMemory.memoryvault.editSelected")}
                     </Button>
+                  </div>
+                  <div
+                    role="group"
+                    aria-label={localizeUi("ui.longTermMemory.memoryvault.bulkRemoveGroup")}
+                    className="ml-auto flex flex-wrap items-center gap-2 border-l border-[var(--border)] pl-2"
+                  >
                     <Button
                       {...busyActionProps}
                       onClick={() => {
@@ -2605,7 +2646,7 @@ export default function MemoryVault({
                       <Trash2 aria-hidden="true" size="1rem" className="shrink-0" />
                       {localizeUi("ui.longTermMemory.extractionprompttemplates.delete")}
                     </Button>
-                  </>
+                  </div>
                 </section>
               ) : null}
               <section
@@ -2759,14 +2800,21 @@ export default function MemoryVault({
                 selectedTargets={bulkAvailabilityTargets}
                 modes={bulkAvailabilityModes}
                 availabilityTargets={availabilityTargets}
+                locale={locale}
+                pending={Boolean(busy)}
                 localizeUi={localizeUi}
                 modeLabel={modeLabel}
                 onActionChange={setBulkAvailabilityAction}
                 onModesChange={setBulkAvailabilityModes}
                 onTargetsChange={setBulkAvailabilityTargets}
+                status={bulkEditStatus}
+                statuses={statuses}
+                statusLabel={statusLabel}
+                onStatusChange={setBulkEditStatus}
                 onApply={() => {
+                  if (busy || batchPendingRef.current) return;
                   setAvailabilityOpen(null);
-                  void batch(bulkAvailabilityAction === "add" ? "availability" : "remove-availability");
+                  void batch("edit");
                 }}
                 onCancel={() => setAvailabilityOpen(null)}
               />
@@ -2897,13 +2945,8 @@ export default function MemoryVault({
                           ) : null}
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button
-                          aria-label={
-                            detailsOpen
-                              ? localizeUi("ui.longTermMemory.memoryvault.hideMemoryInfo")
-                              : localizeUi("ui.longTermMemory.memoryvault.showMemoryInfo")
-                          }
                           onClick={() => {
                             const next = !detailsOpen;
                             setDetailsOpen(next);
@@ -2913,15 +2956,32 @@ export default function MemoryVault({
                           data-ltm-details-toggle
                           className={`inline-flex min-h-11 items-center gap-2 ${detailsOpen ? "bg-[var(--accent)]" : ""}`}
                         >
-                          {localizeUi("ui.longTermMemory.memoryvault.memoryOptions")}
+                          {localizeUi("ui.longTermMemory.memoryvault.memoryDetails")}
                         </Button>
-                        <Button primary disabled={!dirty || busy === "save"} onClick={() => void save()}>
-                          {saveState === "saving"
-                            ? localizeUi("ui.longTermMemory.memoryvault.saving")
-                            : saveState === "saved"
-                              ? localizeUi("ui.longTermMemory.memoryvault.saved")
-                              : localizeUi("ui.longTermMemory.memoryvault.save")}
-                        </Button>
+                        {/* Save keeps its label and primary tone and stays focusable while off (UI.md: `aria-disabled`,
+                            guarded handler); the polite status beside it carries Saving, and shows Saved for the eye while
+                            the vault banner's "Memory saved" notice announces it, so one save speaks once. The region is
+                            always mounted so the change is announced, and only takes room (`ml-2`) while it has text. */}
+                        <span className="inline-flex items-center">
+                          <Button
+                            primary
+                            data-ltm-save
+                            aria-disabled={!dirty || busy === "save" ? true : undefined}
+                            className={!dirty || busy === "save" ? "opacity-50" : ""}
+                            onClick={() => {
+                              if (dirty) void save();
+                            }}
+                          >
+                            {localizeUi("ui.longTermMemory.memoryvault.save")}
+                          </Button>
+                          <span
+                            role="status"
+                            data-ltm-save-status
+                            className={`text-xs text-[var(--muted-foreground)] ${saveStatus ? "ml-2" : ""}`}
+                          >
+                            {saveState === "saved" ? <span aria-hidden="true">{saveStatus}</span> : saveStatus}
+                          </span>
+                        </span>
                         <Button onClick={() => void closeDraft()}>
                           {localizeUi("ui.longTermMemory.memoryvault.close")}
                         </Button>
@@ -3224,7 +3284,7 @@ export default function MemoryVault({
                                     size="0.875rem"
                                     className="shrink-0 transition-transform group-open:rotate-90"
                                   />
-                                  {localizeUi("ui.longTermMemory.memoryvault.memoryOptions")}
+                                  {localizeUi("ui.longTermMemory.memoryvault.keywordsAndLinks")}
                                 </summary>
                                 <section
                                   data-ltm-keyword-editor

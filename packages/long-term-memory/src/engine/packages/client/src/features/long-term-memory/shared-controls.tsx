@@ -255,22 +255,29 @@ export function NumberField({
   step = 1,
   onChange,
   disabled = false,
+  busy = false,
   help,
   compact = false,
+  placeholder,
 }: {
   label: string;
-  value: number;
+  /** `null` is a value not yet known: the field stays empty (showing `placeholder`) instead of an invented number. */
+  value: number | null;
   min: number;
   max: number;
   step?: number;
   onChange: (value: number) => void;
   disabled?: boolean;
+  /** A save is in flight: stay focusable (aria-disabled, read-only) instead of dropping focus like `disabled`. */
+  busy?: boolean;
   help?: ReactNode;
   compact?: boolean;
+  placeholder?: string;
 }) {
   const id = useId();
-  const [text, setText] = useState(String(value));
-  const committedText = useRef(String(value));
+  const valueText = value === null ? "" : String(value);
+  const [text, setText] = useState(valueText);
+  const committedText = useRef(valueText);
   const commit = () => {
     if (!text.trim()) {
       setText(committedText.current);
@@ -278,7 +285,7 @@ export function NumberField({
     }
     const next = Number(text);
     if (!Number.isFinite(next)) {
-      setText(String(value));
+      setText(valueText);
       return;
     }
     const clamped = Math.max(min, Math.min(max, next));
@@ -288,9 +295,9 @@ export function NumberField({
     onChange(clamped);
   };
   useEffect(() => {
-    setText(String(value));
-    committedText.current = String(value);
-  }, [value]);
+    setText(valueText);
+    committedText.current = valueText;
+  }, [valueText]);
   return (
     <div className={`space-y-1 font-medium ${compact ? "text-[0.625rem]" : "text-xs"}`}>
       <span className="flex items-center gap-1 text-[var(--foreground)]">
@@ -301,14 +308,17 @@ export function NumberField({
         id={id}
         aria-labelledby={`${id}-label`}
         data-ltm-control="number"
-        className={compact ? compactInputClass : inputClass}
+        className={`${compact ? compactInputClass : inputClass}${busy ? " opacity-50" : ""}`}
         style={compact ? compactInputStyle : undefined}
         type="number"
         value={text}
         min={min}
         max={max}
         step={step}
+        placeholder={placeholder}
         disabled={disabled}
+        aria-disabled={busy || undefined}
+        readOnly={busy}
         onChange={(event) => setText(event.target.value)}
         onBlur={commit}
         onKeyDown={(event) => {
@@ -317,7 +327,7 @@ export function NumberField({
             commit();
             event.currentTarget.blur();
           } else if (event.key === "Escape") {
-            setText(String(value));
+            setText(valueText);
           }
         }}
       />

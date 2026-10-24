@@ -1,3 +1,82 @@
+## 1.15.2 — 2026-10-24 [highlight]
+
+- Show actionable Seedance setup guidance when a banner cannot be animated, and keep Retry visibly busy while generation is pending. Saved clips and the original banner illustration remain available.
+
+## 1.15.1 — 2026-10-24 [highlight]
+
+- Cancel chapter and story generation from the loading screen and return to Gacha Home without deleting the world or saved progress. Active story requests and chapter preforging stop, and late responses cannot reopen the cancelled screen.
+
+## 1.15.0 — 2026-10-24
+
+- Choose a generated song for the Home menu in Settings → Look → Visual. Saved songs remain playable when generation is off.
+- Generate a distinct soundtrack for each summon banner and collect it for Home music when pulling any 5-star from that banner.
+- Keep banner rotations separate and reuse generated songs after reload.
+- Select an optional Animations video connection in Sources to generate saved looping banner clips. Portraits remain still.
+- Reuse clips after reload, keep the illustration on failures or reduced motion, and offer pause, play and explicit generation retry controls.
+
+## 1.14.0 — 2026-10-24
+
+- Automatically remember completed canonical chapters and Character Stories, alongside saved character-chat memories.
+- Maintain a compressed overview within 10% of the generation model's known context, retaining detailed originals for relevant recall.
+- Recall up to three additional chapters plus separate character memories; retain the entire previous chapter and the current chapter so far.
+- Show automatic continuity status and allow retrying failed memory work without blocking gameplay.
+
+## 1.13.1 — 2026-10-24
+
+- Character scenes, banners, portraits and outfits use available character/persona avatar references; provider support and limits still apply.
+- Story artwork starts below its header and preserves the top of the image.
+- Mobile ordinary and expanded editors adapt to the height left by the keyboard; expanded settings drafts survive refreshes.
+- Units explains the Home progression dot and refreshes its recommendation after level, equip and ascension actions.
+- Blocking combat dialogue supports keyboard focus and returns to combat controls afterward.
+
+## 1.13.0 — 2026-10-24
+
+- Added Soldier, Elite and Boss enemy tiers in combat and enemy details.
+- New story chapters build toward a boss confrontation using existing boss mechanics.
+- Significant fights prepare contextual enemy dialogue, with local one-shot triggers and manual or Auto progression.
+- Combat dialogue respects assigned character voices, mute and dialogue volume. Existing saved chapters and Tower encounters remain playable.
+
+## 1.12.2 — 2026-10-24
+
+- Home shows a compact affinity matchup diagram beneath the communication button.
+- Home backgrounds retain the top of the selected artwork below the game header.
+- Combat shows one mute control without overlapping the other toolbar buttons.
+- Autoplay resumes after a small story choice when it was enabled before the choice.
+- Character communication keeps the composer visible when a mobile keyboard reduces the available height.
+
+## 1.12.1 — 2026-10-24
+
+- Chapters and Character Stories generate and play their own music cues instead of reusing the Home track. Loading scenes keep the current track until their cue is ready.
+- Small choices no longer block later shared narration or background pre-forging. Their alternatives remain generated together; playback, canon, replay and big-choice locks are preserved.
+- Completion and compression still wait for pending selections to preserve canonical story history.
+- Short audio notices no longer intercept taps on the game stage. Long reasons remain scrollable and stay visible while focused with a keyboard.
+- Notice scrolling adapts when the panel becomes visible or changes size; replacing a long reason with short text restores dismissal.
+- Recorded the actual merged Engine music-test baseline.
+
+## 1.12.0 — 2026-10-24
+
+### New
+- World-specific soundtrack briefs generated through the narration connection, cached for each music context and translated into original musical qualities.
+
+### Fixed
+- Audio failures show their HTTP status and, on newer Engine hosts, the provider's safe rejection reason while stock audio continues.
+- Unit and relic achievements count every gained level; capped duplicates do not count as gained facets, and Tower-shop facet gains count.
+- Existing worlds recover proven achievement progress without changing claimed rewards or pass progress.
+
+## 1.11.1 — 2026-10-23
+- Fixed generated music and effects for worlds using migrated legacy audio connections.
+- Recorded the merged Engine audio connection baseline.
+
+## 1.11.0 — 2026-10-23
+
+### New
+- Optional dialogue using explicitly assigned Engine character voices, with the current speech connection.
+- Stock Game music and effects, plus opt-in generated audio reused per world and cue.
+- A shared mute control, three precise channel volume sliders and configurable autoplay pacing.
+
+### Fixed
+- Home and story portrait frames include their bottom edge.
+
 ## 1.10.2 — 2026-10-23
 
 - New dialogue choices show intent labels instead of revealing the exact spoken line. Selected actions appear as narration; explicitly spoken choices remain protagonist dialogue.

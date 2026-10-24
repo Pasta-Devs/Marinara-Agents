@@ -27,6 +27,15 @@ test("Forge fills every screen, toggles inside the Engine and keeps world drafts
   await page.route("**/api/gacha-forge/state", (route) =>
     route.fulfill({ json: { runs: [], guidesSeen: ["welcome"] } }),
   );
+  // Keep the setup draft in the same isolated fixture as the mocked world state.
+  let setupSnapshot: unknown = null;
+  await page.route("**/api/gacha-forge/setup/draft", (route) => {
+    if (route.request().method() === "POST") {
+      setupSnapshot = route.request().postDataJSON().snapshot;
+      return route.fulfill({ json: { ok: true } });
+    }
+    return route.fulfill({ json: { ok: true, draft: setupSnapshot } });
+  });
   await page.goto("/");
   await page.getByRole("tab", { name: "Open Gacha Forge" }).click();
   const forge = page.locator("marinara-capability-gacha-forge");
@@ -159,6 +168,7 @@ test("Forge fills every screen, toggles inside the Engine and keeps world drafts
       expect(Math.abs(gap), "world form fills its frame instead of stopping at 900px").toBeLessThanOrEqual(1);
     }
     expect(await forge.evaluate((node) => (node as any)._state()), `${view} actually rendered`).toBe(view);
+    await expect(forge.locator(".gf-mute:visible"), `${view} has one visible audio control`).toHaveCount(1);
     const button = toggle();
     await expect(button, `${view} fullscreen control`).toBeVisible();
     await button.click();
@@ -232,9 +242,10 @@ test("Forge fills every screen, toggles inside the Engine and keeps world drafts
   expect(presentation.border).toBe("0px");
   await forge.locator(".vn-top .vn-exit").focus();
   // macOS WebKit uses Option-Tab for controls when full keyboard navigation is off.
-  await page.keyboard.press(
-    testInfo.project.name === "mobile-webkit" && process.platform === "darwin" ? "Alt+Tab" : "Tab",
-  );
+  const nextControl = testInfo.project.name === "mobile-webkit" && process.platform === "darwin" ? "Alt+Tab" : "Tab";
+  await page.keyboard.press(nextControl);
+  await expect(forge.locator(".vn-top > .gf-mute-chapter")).toBeFocused();
+  await page.keyboard.press(nextControl);
   await expect(chapterToggle).toBeFocused();
   await expect(chapterToggle).toHaveCSS("outline-style", "solid");
   await page.keyboard.press("Enter");

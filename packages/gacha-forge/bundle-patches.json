@@ -11,9 +11,7 @@
       "patches": [
         {
           "version": "1.8.13",
-          "commits": [
-            "a222c867e9737e9dbbc1208a44e6cd1e5ba57435"
-          ],
+          "commits": ["a222c867e9737e9dbbc1208a44e6cd1e5ba57435"],
           "edits": [
             {
               "find": "String(t??\"\").trim().toLowerCase().replace(/[^a-z0-9]+/g,\"-\").replace(/(^-|-$)/g,\"\").slice(0,60",
@@ -51,10 +49,7 @@
         },
         {
           "version": "1.8.14",
-          "commits": [
-            "881c9000c53b85bc5bf719e870b778e8ded00ea6",
-            "9b7d0fb106e72a255db21e4e62f1c4d1524eb2fe"
-          ],
+          "commits": ["881c9000c53b85bc5bf719e870b778e8ded00ea6", "9b7d0fb106e72a255db21e4e62f1c4d1524eb2fe"],
           "edits": [
             {
               "find": "2\";f",
@@ -88,9 +83,7 @@
         },
         {
           "version": "1.8.15",
-          "commits": [
-            "52d72aaf9a1cb440a158714f4928493950c18f22"
-          ],
+          "commits": ["52d72aaf9a1cb440a158714f4928493950c18f22"],
           "edits": [
             {
               "find": "4\";",
@@ -184,10 +177,7 @@
             },
             {
               "find": "var ac=`",
-              "replaceFrom": [
-                "src/player-choices-en.mjs",
-                "src/player-choices-client.mjs"
-              ],
+              "replaceFrom": ["src/player-choices-en.mjs", "src/player-choices-client.mjs"],
               "sourceId": "choices-client"
             },
             {
@@ -277,6 +267,490 @@
               "replace": "oy=[{version:null,fixed:[\"New dialogue choices show intent labels; selected actions appear as narration, and spoken choices keep their dialogue.\"]},{version:\"1.10.1\",fixed:"
             }
           ]
+        },
+        {
+          "version": "1.11.0",
+          "notes": "Optional assigned voices, shared host stock/generated audio, world settings and voice-aware playback.",
+          "edits": [
+            {
+              "find": "var pb=48",
+              "replaceFrom": [
+                "src/audio-settings.mjs",
+                "src/audio-en.mjs",
+                "src/audio-client.mjs",
+                "src/audio-story.mjs"
+              ],
+              "sourceId": "audio",
+              "notes": "Saved world settings, host audio playback, explicit character voices and voice-aware VN timing."
+            },
+            {
+              "find": "ds=\"1.10.2\"",
+              "replace": "ds=\"1.11.0\""
+            },
+            {
+              "find": "oy=[{version:null,fixed:",
+              "replace": "oy=[{version:null,new:[\"Assigned character voices, stock music and sound effects, with optional generated audio.\",\"Per-world mute, three audio levels and voice-aware autoplay pacing.\"],fixed:[\"Home and story portrait frames include their bottom edge.\"]},{version:\"1.10.2\",fixed:"
+            },
+            {
+              "find": "it=[{id:\"name\"",
+              "replace": "it=[...forgeAudioFields(),{id:\"name\""
+            },
+            {
+              "find": "Eb=[{id:\"cast\"",
+              "replace": "Eb=[{id:\"audio\",label:forgeAudioEnglish[\"audio.group.sources\"]},{id:\"audioMix\",label:forgeAudioEnglish[\"audio.group.mix\"]},{id:\"playback\",label:forgeAudioEnglish[\"audio.group.playback\"]},{id:\"cast\""
+            },
+            {
+              "find": " max=\"'+(Number(t.max)||10)+'\" step=\"1\" value=\"",
+              "replace": " max=\"'+(Number(t.max)||10)+'\" step=\"'+(Number(t.stepBy)||1)+'\" value=\""
+            },
+            {
+              "find": "function rp(t,e,a){let r=",
+              "replace": "function rp(t,e,a){loadForgeAudioConnections(t,a);let r="
+            },
+            {
+              "find": "var Wb=new Set([\"image_generation\",\"video_generation\"])",
+              "replace": "var Wb=new Set([\"image_generation\",\"video_generation\",\"audio_generation\",\"audio\",\"decision\"])"
+            },
+            {
+              "find": "var xy=new Set([\"image_generation\",\"video_generation\"])",
+              "replace": "var xy=new Set([\"image_generation\",\"video_generation\",\"audio_generation\",\"audio\",\"decision\"])"
+            },
+            {
+              "find": "wireForgeBrowserFullscreen(this),this._wireLandscape()",
+              "replace": "wireForgeBrowserFullscreen(this),wireForgeAudio(this),this._wireLandscape()"
+            },
+            {
+              "find": "this._stopForge(),this._stopBeat(),this._stopVigorClock",
+              "replace": "this._stopForge(),this._stopBeat(),disposeForgeAudio(this),this._stopVigorClock"
+            },
+            {
+              "find": "async _setSources(e){",
+              "replace": "_setSources(e){return saveForgeAudioSources(this,e)}async _setSourcesNow(e){"
+            },
+            {
+              "find": "let r=await this._postJson(\"/run/sources\",{runId:this._run.runId,sources:e});if(!r||!r.ok)",
+              "replace": "syncForgeAudio(this);let r=await this._postJson(\"/run/sources\",{runId:this._run.runId,sources:e});if(this._run?.runId!==a.runId)return;if(!r||!r.ok)"
+            },
+            {
+              "find": "prepareForgeChoices(this,r),",
+              "replace": "prepareForgeChoices(this,r),this._forgeMusicMood=normalizeForgeMusicMood(r.musicMood),"
+            },
+            {
+              "find": "forgeChoicePlayback(this,{startAt:",
+              "replace": "forgeStoryAudioOptions(this,forgeChoicePlayback(this,{startAt:"
+            },
+            {
+              "find": "onExit:()=>this._exitStoryBeat()})));",
+              "replace": "onExit:()=>this._exitStoryBeat()}))));"
+            },
+            {
+              "find": "function $e(W){B(),l&&(l.textContent=W.text),qe(),T&&_<a.length-1&&!(e.choicePlayback&&e.choicePlayback.blocked(_))&&(C=setTimeout(je,1500))}",
+              "replace": "let forgeVoice=createForgeVoiceLine(e.audio,forgeSchedule);function forgeSchedule(){P();T&&!I&&forgeVoice.ready()&&_<a.length-1&&!(e.choicePlayback&&e.choicePlayback.blocked(_))&&(C=setTimeout(je,(e.audio?.settings?.autoplayPauseSeconds??3)*1000))}function $e(W){B(),l&&(l.textContent=W.text),qe(),forgeVoice.reveal()}"
+            },
+            {
+              "find": "function Ee(W,ce){if(B(),P(),",
+              "replace": "function Ee(W,ce,forgeSilent=!1){forgeVoice.start(W,forgeVoiceCharacter(q,W.speaker,Xl),forgeSilent);if(B(),P(),"
+            },
+            {
+              "find": "T&&!I&&_<a.length-1?C=setTimeout(je,1200):P()",
+              "replace": "T&&!I&&_<a.length-1?forgeSchedule():P()"
+            },
+            {
+              "find": "_=e.choicePlayback?e.choicePlayback.skipTo(_,a.length-1):a.length-1,Ee(a[_],!1)",
+              "replace": "_=e.choicePlayback?e.choicePlayback.skipTo(_,a.length-1):a.length-1,Ee(a[_],!1,!0)"
+            },
+            {
+              "find": "e.choicePlayback&&e.choicePlayback.attach(null),B(),P(),$&&(clearTimeout($),$=null)",
+              "replace": "e.choicePlayback&&e.choicePlayback.attach(null),forgeVoice.dispose(),B(),P(),$&&(clearTimeout($),$=null)"
+            },
+            {
+              "find": "prefs:h=null,onPrefs:d=null,foeSheet:m=null}={})",
+              "replace": "prefs:h=null,onPrefs:d=null,foeSheet:m=null,audio:forgeAudio=null}={})"
+            },
+            {
+              "find": "function St(y,O){switch(y.op)",
+              "replace": "function St(y,O){O&&forgeCombatSound(forgeAudio,y);switch(y.op)"
+            },
+            {
+              "find": "onPrefs:S=>this._saveCombatPrefs(S),onStart:",
+              "replace": "onPrefs:S=>this._saveCombatPrefs(S),audio:this._forgeAudio,onStart:"
+            },
+            {
+              "find": "if(i){for(let F of it){if(F.type===\"custom\"||F.type===\"toggle\")continue;",
+              "replace": "loadForgeAudioConnections(t,i?.values||h);if(i){for(let F of it){if(F.type===\"custom\"||F.type===\"toggle\")continue;"
+            }
+          ]
+        },
+        {
+          "version": "1.11.1",
+          "notes": "Preserve trusted legacy audio IDs and record the actual merged Engine audio baseline.",
+          "edits": [
+            {
+              "find": "ds=\"1.11.0\"",
+              "replace": "ds=\"1.11.1\""
+            },
+            {
+              "find": "oy=[{version:null,new:[\"Assigned character voices, stock music and sound effects, with optional generated audio.\",\"Per-world mute, three audio levels and voice-aware autoplay pacing.\"],fixed:[\"Home and story portrait frames include their bottom edge.\"]}",
+              "replace": "oy=[{version:null,fixed:[\"Saved legacy audio connections keep generating after migration.\"]},{version:\"1.11.0\",new:[\"Assigned character voices, stock music and sound effects, with optional generated audio.\",\"Per-world mute, three audio levels and voice-aware autoplay pacing.\"],fixed:[\"Home and story portrait frames include their bottom edge.\"]}"
+            }
+          ]
+        },
+        {
+          "version": "1.12.0",
+          "notes": "World-specific music briefs, actionable audio failures and repaired achievement quantities.",
+          "edits": [
+            {
+              "find": "ds=\"1.11.1\"",
+              "replace": "ds=\"1.12.0\""
+            },
+            {
+              "find": "oy=[{version:null,fixed:[\"Saved legacy audio connections keep generating after migration.\"]}",
+              "replace": "oy=[{version:null,new:[\"World-specific original soundtrack briefs through the narration connection.\"],fixed:[\"Audio failures show HTTP status and safe provider reasons on newer hosts.\",\"Achievements count gained levels and facets, with conservative existing-save repair.\"]},{version:\"1.11.1\",fixed:[\"Saved legacy audio connections keep generating after migration.\"]}"
+            }
+          ]
+        },
+        {
+          "version": "1.12.1",
+          "notes": "Route ready story music by the actual view and mood, keep small choices from blocking common narration, and preserve accessible audio notices.",
+          "edits": [
+            {
+              "find": "ds=\"1.12.0\"",
+              "replace": "ds=\"1.12.1\""
+            },
+            {
+              "find": "oy=[{version:null,new:[\"World-specific original soundtrack briefs through the narration connection.\"]",
+              "replace": "oy=[{version:null,fixed:[\"Story music follows the active scene and mood.\",\"Small choices no longer block shared story pre-generation.\",\"Audio notices preserve stage taps and keep long reasons readable.\"]},{version:\"1.12.0\",new:[\"World-specific original soundtrack briefs through the narration connection.\"]"
+            }
+          ]
+        },
+        {
+          "version": "1.12.2",
+          "notes": "Preserve choice autoplay, add a Home affinity diagram from the combat rules, and retain the top of selected Home backgrounds.",
+          "edits": [
+            {
+              "find": "ce&&(P(),T=!1,v&&v.removeAttribute(\"data-on\")),v&&(v.disabled=ce),f&&(f.disabled=ce)",
+              "replace": "ce&&P(),v&&(v.disabled=ce),f&&(f.disabled=ce)"
+            },
+            {
+              "find": "ds=\"1.12.1\"",
+              "replace": "ds=\"1.12.2\""
+            },
+            {
+              "find": "oy=[{version:null,fixed:[",
+              "replace": "oy=[{version:null,fixed:[\"Combat keeps one mute control.\",\"Autoplay resumes after selecting a small choice.\",\"Character communication adapts to a mobile keyboard.\",\"Home artwork preserves the top of the selected background.\"],new:[\"Home shows an affinity matchup diagram.\"]},{version:\"1.12.1\",fixed:["
+            },
+            {
+              "find": "var ac=",
+              "replaceFrom": "src/home-presentation.mjs",
+              "sourceId": "home-presentation"
+            },
+            {
+              "find": "wireForgeBrowserFullscreen(this),wireForgeAudio(this),this._wireLandscape()",
+              "replace": "wireForgeBrowserFullscreen(this),wireForgeAudio(this),wireForgeHome(this,bt,ao),this._wireLandscape()"
+            }
+          ]
+        },
+        {
+          "version": "1.13.0",
+          "notes": "Enemy tiers and one-shot prebuilt combat dialogue; render-only round metadata preserves the battle result and action log.",
+          "edits": [
+            {
+              "find": "ds=\"1.12.2\"",
+              "replace": "ds=\"1.13.0\""
+            },
+            {
+              "find": "oy=[{version:null,fixed:[",
+              "replace": "oy=[{version:null,new:[\"Soldier, Elite and Boss enemy tiers.\",\"Story chapter boss fights with contextual combat dialogue.\"]},{version:\"1.12.2\",fixed:["
+            },
+            {
+              "find": "function Ww(t){",
+              "replaceFrom": "src/enemy-encounters-client.mjs",
+              "sourceId": "enemy-encounters-client"
+            },
+            {
+              "find": "return'<div class=\"root\">'+Oo",
+              "replace": "return'<div class=\"root\"><style>'+forgeEnemyEncounterStyles+\"</style>\"+Oo"
+            },
+            {
+              "find": "(Array.isArray(t.mech)&&t.mech.length?'<span class=\"cb-crown-badge\" title=\"Boss\">'+Wu+\"</span>\":\"\")",
+              "replace": "(e?forgeEnemyTierBadge(t):\"\")"
+            },
+            {
+              "find": "find(m=>Array.isArray(m.mech)&&m.mech.length)",
+              "replace": "find(m=>forgeEnemyTier(m)===\"boss\")"
+            },
+            {
+              "find": "(h?\"Boss\":\"Enemy\")",
+              "replace": "forgeEnemyTierLabel(i)"
+            },
+            {
+              "find": "<div class=\"head-id\"><div class=\"eyebrow\">Combat</div><h2>",
+              "replace": "<div class=\"head-id\"><div class=\"eyebrow\">Combat'+(e?forgeEnemyTierBadge({tier:forgeEncounterTier(e)}):\"\")+'</div><h2>"
+            },
+            {
+              "find": "m=null,audio:forgeAudio=null",
+              "replace": "m=null,audio:forgeAudio=null,host:forgeHost=null"
+            },
+            {
+              "find": "audio:this._forgeAudio,onStart",
+              "replace": "audio:this._forgeAudio,host:this,onStart"
+            },
+            {
+              "find": "function St(y,O){O&&forgeCombatSound(forgeAudio,y);",
+              "replace": "function St(y,O){O&&(forgeCombatSound(forgeAudio,y),forgeDialogue.event(y));"
+            },
+            {
+              "find": "function R(){let y=H()[r.stepI++];",
+              "replace": "function R(){let y=H()[r.stepI++];forgeDialogue.frame(y);"
+            },
+            {
+              "find": "function ie(){if(clearTimeout(V),",
+              "replace": "function ie(){if(forgeDialogue.busy||Xe)return;if(clearTimeout(V),"
+            },
+            {
+              "find": "function ft(y){r.pending&&",
+              "replace": "function ft(y){if(forgeDialogue.busy||Xe)return;r.pending&&"
+            },
+            {
+              "find": "function ne(){if(r.done)return F(r.done.result);if(r.pending){",
+              "replace": "function ne(){if(r.done)return F(r.done.result);if(r.pending){forgeDialogue.frame({round:r.pending.round});if(forgeDialogue.busy)return;"
+            },
+            {
+              "find": "let Ra=!1;function F(y){Ra||(Ra=!0,i&&i(y===\"lose\"?\"lose\":\"win\",r.done&&r.done.log||[]))}",
+              "replace": "let Ra=!1;function F(y){Ra||(Ra=!0,forgeDialogue.finish(y,()=>i&&i(y===\"lose\"?\"lose\":\"win\",r.done&&r.done.log||[])))}"
+            },
+            {
+              "find": "let Xe=!1;return w.pause=()=>{Xe=V!==null||r.stepI<H().length||!!r.auto&&!r.done,clearTimeout(V),V=null},w.resume=()=>{Xe&&(Xe=!1,ie())},s?Y():ie(),()=>{clearTimeout(V)}}",
+              "replace": "let Xe=!1,forgeDialogue=createForgeCombatDialogue(t,{payload:a,run:r,host:forgeHost,audio:forgeAudio,isPaused:()=>Xe,resume:()=>{!Xe&&V===null&&ie()}});return w.pause=()=>{Xe=V!==null||r.stepI<H().length||!!r.auto&&!r.done||forgeDialogue.busy,clearTimeout(V),V=null,forgeDialogue.syncAuto()},w.resume=()=>{Xe&&(Xe=!1,forgeDialogue.syncAuto(),ie())},s?Y():ie(),()=>{clearTimeout(V),forgeDialogue.dispose()}}"
+            },
+            {
+              "find": "let B=[];function P(p,A){T();let E={d:p,events:A.filter(Boolean).concat(B)}",
+              "replace": "let B=[],forgeRound=1;function P(p,A){T();let E={d:p,round:forgeRound,events:A.filter(Boolean).concat(B)}"
+            },
+            {
+              "find": "dr+=1;let p=v(n)",
+              "replace": "dr+=1;forgeRound=dr;let p=v(n)"
+            },
+            {
+              "find": "h&&typeof h.auto==\"boolean\"&&!r.done&&(r.auto=h.auto)",
+              "replace": "h&&typeof h.auto==\"boolean\"&&!s&&(r.auto=h.auto)"
+            }
+          ]
+        },
+        {
+          "version": "1.13.1",
+          "notes": "Preserve scene framing and mobile editing; explain and refresh the existing Units recommendation. Maintained encounter source restores keyboard focus.",
+          "edits": [
+            {
+              "find": "ds=\"1.13.0\"",
+              "replace": "ds=\"1.13.1\""
+            },
+            {
+              "find": "var oy=[{version:null,new:[\"Soldier, Elite and Boss enemy tiers.\",\"Story chapter boss fights with contextual combat dialogue.\"]}",
+              "replace": "var oy=[{version:null,fixed:[\"Character artwork uses available avatar references, including banners.\",\"Story images preserve their top below the chapter controls.\",\"Mobile editors adapt to the keyboard.\",\"Units explains its progression recommendation.\",\"Combat dialogue supports keyboard focus.\"]},{version:\"1.13.0\",new:[\"Soldier, Elite and Boss enemy tiers.\",\"Story chapter boss fights with contextual combat dialogue.\"]}"
+            },
+            {
+              "find": "disposeForgeAudio(this),this._stopVigorClock",
+              "replace": "disposeForgeAudio(this),this._stopForgeBrowserPresentation?.(),this._stopVigorClock"
+            },
+            {
+              "find": "this._renderBrowser():this._root.innerHTML=\"\"",
+              "replace": "this._renderBrowser():(this._stopForgeBrowserPresentation?.(),this._root.innerHTML=\"\")"
+            },
+            {
+              "find": "function ih({",
+              "replaceFrom": "src/unit-notifications.mjs",
+              "sourceId": "unit-notifications"
+            },
+            {
+              "find": "wireForgeHome(this,bt,ao),",
+              "replace": "wireForgeHome(this,bt,ao),wireForgeUnitNotifications(this,od(this._nextStepCtx)),"
+            },
+            {
+              "find": "this._adoptFromResponse(n),",
+              "replace": "this._adoptFromResponse(n),refreshForgeUnitStep(this,e,a,n),"
+            },
+            {
+              "find": "_refreshStepData(){this._stepRefreshing||(this._stepRefreshing=!0,Ze(`${Ia}/state`).then(e=>e&&typeof e.json==\"function\"?e.json():null).then(e=>{!e||!e.activeRun||(this._adoptGlobals(e),this._adoptUnlocks(e.activeRun))}).catch(()=>{}).then(()=>{this._stepRefreshing=!1,this._renderBrowser()}))}",
+              "replace": "_refreshStepData(){\nconst forgeRunId=this._run?.runId;\nif(!forgeRunId||!this.isConnected||this._stepRefreshing)return;\nthis._stepRefreshing=true;\nZe(`${Ia}/state`).then(e=>e&&typeof e.json===\"function\"?e.json():null).then(e=>{\nif(forgeUnitStepIsCurrent(this,forgeRunId,e)){this._adoptGlobals(e);this._adoptUnlocks(e.activeRun);}\n}).catch(()=>{}).then(()=>{\nthis._stepRefreshing=false;\nconst forgeRefreshAgain=this._forgeUnitStepRefresh;\nthis._forgeUnitStepRefresh=null;\nif(this.isConnected&&this._run?.runId===forgeRunId){wireForgeUnitNotifications(this,od(this._nextStepCtx));this._renderBrowser();}\nif(this.isConnected&&forgeRefreshAgain&&this._run?.runId===forgeRefreshAgain)this._refreshStepData();\n});\n}"
+            },
+            {
+              "find": "g&&c.querySelector(\".ob-xh\").insertBefore(g,c.querySelector(\".ob-xclose\"));let w=()=>{",
+              "replace": "g&&c.querySelector(\".ob-xh\").insertBefore(g,c.querySelector(\".ob-xclose\"));m&&bindForgeExpandedEditor(t,c,r,m,(field,trigger)=>{s=field;e=trigger});let w=()=>{"
+            },
+            {
+              "find": "_renderBrowser(){this._syncTypeScale();let e=this._state();",
+              "replace": "_renderBrowser(){this._syncTypeScale();let e=this._state();const forgeExpandedEditor=captureForgeExpandedEditor(this,e);"
+            },
+            {
+              "find": "this._wireFullscreen(),this._wireRunsButton()",
+              "replace": "this._wireFullscreen(),restoreForgeExpandedEditor(this,forgeExpandedEditor),this._wireRunsButton()"
+            }
+          ]
+        },
+        {
+          "version": "1.14.0",
+          "edits": [
+            {
+              "find": "ds=\"1.13.1\"",
+              "replace": "ds=\"1.14.0\""
+            },
+            {
+              "find": "var oy=[{version:null,fixed:[\"Character artwork uses available avatar references, including banners.\",\"Story images preserve their top below the chapter controls.\",\"Mobile editors adapt to the keyboard.\",\"Units explains its progression recommendation.\",\"Combat dialogue supports keyboard focus.\"]",
+              "replace": "var oy=[{version:null,new:[\"Automatic canonical world memory after chapters, Character Stories and closed chats.\",\"A compact overview and contextual recall keep future chapters grounded in your choices.\"],fixed:[\"Continuity shows memory preparation and retry status.\"]},{version:\"1.13.1\",fixed:[\"Character artwork uses available avatar references, including banners.\",\"Story images preserve their top below the chapter controls.\",\"Mobile editors adapt to the keyboard.\",\"Units explains its progression recommendation.\",\"Combat dialogue supports keyboard focus.\"]"
+            },
+            {
+              "find": "var ac=`",
+              "replaceFrom": ["src/story-memory-en.mjs", "src/story-memory-client.mjs"],
+              "sourceId": "story-memory-client"
+            },
+            {
+              "find": "<div class=\"st-list\" data-continuity-list>",
+              "replace": "<div data-forge-story-memory></div><div class=\"st-list\" data-continuity-list>"
+            },
+            {
+              "find": "_loadContinuity(){this._run&&(this._continuityState=\"loading\",this._fillContinuity(),this._postJson(\"/continuity\",{runId:this._run.runId}).then(e=>{e&&e.ok&&Array.isArray(e.chapters)?(this._continuity=e.chapters,this._continuityState=\"ready\",e.warnTokens&&(this._warnTokens=Number(e.warnTokens)||this._warnTokens,_a(this._root,this._contextTokens,this._warnTokens))):this._continuityState=\"error\",this._fillContinuity()}))}",
+              "replace": "_loadContinuity(){let forgeMemoryRunId=this._run?.runId;forgeMemoryRunId&&(this._continuityState=\"loading\",this._fillContinuity(),this._postJson(\"/continuity\",{runId:forgeMemoryRunId}).then(e=>{if(this._run?.runId!==forgeMemoryRunId)return;adoptForgeStoryMemoryStatus(this,e,forgeMemoryRunId);e&&e.ok&&Array.isArray(e.chapters)?(this._continuity=e.chapters,this._continuityState=\"ready\",e.warnTokens&&(this._warnTokens=Number(e.warnTokens)||this._warnTokens,_a(this._root,this._contextTokens,this._warnTokens))):this._continuityState=\"error\",this._fillContinuity()}))}"
+            },
+            {
+              "find": "_fillContinuity(){let e=this._root.querySelector(\"[data-continuity-list]\");",
+              "replace": "_fillContinuity(forgeMemoryWired=false){forgeMemoryWired||wireForgeStoryMemoryStatus(this);let e=this._root.querySelector(\"[data-continuity-list]\");"
+            },
+            {
+              "find": "this._wireFullscreen(),restoreForgeExpandedEditor(this,forgeExpandedEditor),this._wireRunsButton()",
+              "replace": "this._wireFullscreen(),restoreForgeExpandedEditor(this,forgeExpandedEditor),wireForgeStoryMemoryStatus(this,Ze,forgeMemoryStatus),this._wireRunsButton()"
+            },
+            {
+              "find": "disposeForgeAudio(this),this._stopForgeBrowserPresentation?.(),",
+              "replace": "disposeForgeAudio(this),this._stopForgeBrowserPresentation?.(),this._stopForgeStoryMemoryStatus?.(),"
+            },
+            {
+              "find": "this._renderBrowser():(this._stopForgeBrowserPresentation?.(),this._root.innerHTML=\"\")",
+              "replace": "this._renderBrowser():(this._stopForgeBrowserPresentation?.(),this._stopForgeStoryMemoryStatus?.(),this._root.innerHTML=\"\")"
+            },
+            {
+              "find": "const forgeExpandedEditor=captureForgeExpandedEditor(this,e);",
+              "replace": "const forgeExpandedEditor=captureForgeExpandedEditor(this,e),forgeMemoryStatus=captureForgeStoryMemoryStatus(this,e);"
+            },
+            {
+              "find": "this._continuity&&this._fillContinuity(),this._boot===",
+              "replace": "this._continuity&&this._fillContinuity(true),this._boot==="
+            }
+          ]
+        },
+        {
+          "version": "1.15.0",
+          "notes": "Generated Home soundtrack selection and per-banner themes awarded atomically with a five-star pull. Maintained audio source is replayed from the existing source markers. Optional saved banner animations through Engine video connections; portraits remain still.",
+          "edits": [
+            {
+              "find": "ds=\"1.14.0\"",
+              "replace": "ds=\"1.15.0\""
+            },
+            {
+              "find": "var oy=[{version:null,new:[\"Automatic canonical world memory",
+              "replace": "var oy=[{version:null,new:[\"Choose generated music for the Home menu in Visual Settings.\",\"Every banner has its own generated soundtrack, collected with any 5-star pull.\"]},{version:\"1.14.0\",new:[\"Automatic canonical world memory"
+            },
+            {
+              "find": "this._summonResults=r.results",
+              "replace": "this._forgeAudio?.refreshLibrary(),this._summonResults=r.results"
+            },
+            {
+              "find": "var pb=48",
+              "replaceFrom": [
+                "src/animation-en.mjs",
+                "src/animation-client.mjs"
+              ],
+              "sourceId": "banner-animation-client"
+            },
+            {
+              "find": "it=[...forgeAudioFields(),",
+              "replace": "it=[...forgeAnimationFields(),...forgeAudioFields(),"
+            },
+            {
+              "find": "Eb=[{id:\"audio\",",
+              "replace": "Eb=[{id:\"animations\",label:forgeAnimationEnglish.sources},{id:\"audio\","
+            },
+            {
+              "find": "function rp(t,e,a){loadForgeAudioConnections(t,a);",
+              "replace": "function rp(t,e,a){loadForgeAnimationConnections(t,a);loadForgeAudioConnections(t,a);"
+            },
+            {
+              "find": "loadForgeAudioConnections(t,i?.values||h);",
+              "replace": "loadForgeAnimationConnections(t,i?.values||h);loadForgeAudioConnections(t,i?.values||h);"
+            },
+            {
+              "find": "wireForgeAudio(this),wireForgeHome(this,bt,ao),",
+              "replace": "wireForgeAudio(this),wireForgeBannerAnimation(this),wireForgeHome(this,bt,ao),"
+            },
+            {
+              "find": "disposeForgeAudio(this),this._stopForgeBrowserPresentation",
+              "replace": "disposeForgeAudio(this),disposeForgeBannerAnimation(this),this._stopForgeBrowserPresentation"
+            },
+            {
+              "find": "var oy=[{version:null,new:[\"Choose generated music for the Home menu in Visual Settings.\",\"Every banner has its own generated soundtrack, collected with any 5-star pull.\"]",
+              "replace": "var oy=[{version:null,new:[\"Choose generated music for the Home menu in Visual Settings.\",\"Every banner has its own generated soundtrack, collected with any 5-star pull.\",forgeAnimationEnglish.release]"
+            }
+          ]
+        },
+        {
+          "version": "1.15.1",
+          "notes": "Cancel chapter and story generation to Home, abort scoped work and ignore late responses while preserving saved progress.",
+          "edits": [
+            {
+              "find": "var pb=48",
+              "replaceFrom": [
+                "src/story-cancel-en.mjs",
+                "src/story-cancel-client.mjs"
+              ],
+              "sourceId": "story-cancel-client"
+            },
+            {
+              "find": "ds=\"1.15.0\"",
+              "replace": "ds=\"1.15.1\""
+            },
+            {
+              "find": "wireForgeBannerAnimation(this),wireForgeHome",
+              "replace": "wireForgeBannerAnimation(this),wireForgeStoryCancel(this),wireForgeHome"
+            },
+            {
+              "find": "_postJson(e,a,r){let s=Bm(e),o=s?this._busyStart(s):0;return Ze(`${Ia}${e}`,{method:\"POST\",headers:{\"Content-Type\":\"application/json\"},body:JSON.stringify(a),...r?{keepalive:!0}:{}}).then(n=>n&&typeof n.json==\"function\"?n.json():null).catch(()=>null).then(n=>(this._adoptFromResponse(n),refreshForgeUnitStep(this,e,a,n),o&&this._busyEnd(o),o&&this._run&&Array.isArray(this._run.generating)&&this._run.generating.length&&this._refreshState(),n))}",
+              "replace": "_postJson(e,a,r){let forgeStory=forgeStoryRequest(this,e);let s=Bm(e),o=s?this._busyStart(s):0;return Ze(`${Ia}${e}`,{signal:forgeStory.signal,method:\"POST\",headers:{\"Content-Type\":\"application/json\"},body:JSON.stringify(a),...r?{keepalive:!0}:{}}).then(n=>n&&typeof n.json==\"function\"?n.json():null).catch(()=>null).then(n=>{o&&this._busyEnd(o);if(!forgeStory.current())return null;return(this._adoptFromResponse(n),refreshForgeUnitStep(this,e,a,n),o&&this._run&&Array.isArray(this._run.generating)&&this._run.generating.length&&this._refreshState(),n)})}"
+            },
+            {
+              "find": "_loadChapterPlan(){if(this._planEscaped=!1,this._planState=\"loading\",this._renderBrowser(),!this._run){this._planState=\"error\",this._renderBrowser();return}let e=null,a=this._run.runId,r=this._planChapter,s=this._bondUnit||\"\",o=this._bondPart,n=()=>this._run&&this._run.runId===a&&this._planChapter===r&&(this._bondUnit||\"\")===s&&this._bondPart===o;this._postJson(this._bondUnit?\"/bond-chapter/plan\":\"/chapter-plan\",this._bondUnit?{runId:this._run.runId,unitId:this._bondUnit,part:this._bondPart}:{runId:this._run.runId,chapter:this._planChapter}).then(i=>{if(!n()){this._planState===\"loading\"&&(this._planState=\"idle\",this._renderBrowser());return}if(i&&i.ok&&i.plan){if(e=i.plan,this._bondUnit){i.name&&(this._bondUnitName={id:this._bondUnit,name:String(i.name)});let l=Math.max(0,Math.round(Number(i.beats)||0));this._chapterProgress={normal:l,hard:l,veryhard:l}}else{let l=i.progress&&i.progress[String(this._planChapter)]||{};this._chapterProgress={normal:l.normal||0,hard:l.hard||0,veryhard:l.veryhard||0}}this._difficulty=Ir(this._difficulty,this._chapterProgress,qa(e)),this._chapterCp=i.cp||null}else i&&i.error===\"bond-chapter-open\"&&i.heldById&&!this._bondUnit?(this._enterBond(i.heldById,i.heldPart),this._plan=null,i.heldBy&&(this._bondUnitName={id:this._bondUnit,name:String(i.heldBy)}),this._planState=\"idle\",this._renderBrowser()):(this._planState=\"error\",this._forgeFailure={error:String(i&&i.error||\"generation-failed\"),detail:String(i&&i.detail||\"\")})}).then(()=>{if(!(!n()||this._planState===\"error\"||!e))return this._prewarmCombats(e)}).then(()=>{if(n()){if(this._planState!==\"error\"&&e){this._plan=e,this._rememberPlan(),this._planState=\"idle\",this._loadLocations();let i=this._activeStoryNode;if(i&&i.restored&&i.chapter===this._planChapter){let l=Jt(e,i.difficulty).find(c=>c.type===\"story\"&&c.storyIndex===i.storyIndex);l&&Object.assign(i,l),i.restored=!1}this._openPrologueIfOwed(e),this._openPostponedScene(e)}this._run&&this._renderBrowser()}}).then(()=>{if(this._planState!==\"error\"&&this._plan)return this._preforgeCheck()})}",
+              "replace": "_loadChapterPlan(){if(this._planEscaped=!1,this._planState=\"loading\",this._renderBrowser(),!this._run){this._planState=\"error\",this._renderBrowser();return}let forgeStoryRevision=this._forgeStoryRevision||0,e=null,a=this._run.runId,r=this._planChapter,s=this._bondUnit||\"\",o=this._bondPart,n=()=>!this._planEscaped&&(this._forgeStoryRevision||0)===forgeStoryRevision&&this._run&&this._run.runId===a&&this._planChapter===r&&(this._bondUnit||\"\")===s&&this._bondPart===o;this._postJson(this._bondUnit?\"/bond-chapter/plan\":\"/chapter-plan\",this._bondUnit?{runId:this._run.runId,unitId:this._bondUnit,part:this._bondPart}:{runId:this._run.runId,chapter:this._planChapter}).then(i=>{if(!n())return;if(i&&i.ok&&i.plan){if(e=i.plan,this._bondUnit){i.name&&(this._bondUnitName={id:this._bondUnit,name:String(i.name)});let l=Math.max(0,Math.round(Number(i.beats)||0));this._chapterProgress={normal:l,hard:l,veryhard:l}}else{let l=i.progress&&i.progress[String(this._planChapter)]||{};this._chapterProgress={normal:l.normal||0,hard:l.hard||0,veryhard:l.veryhard||0}}this._difficulty=Ir(this._difficulty,this._chapterProgress,qa(e)),this._chapterCp=i.cp||null}else i&&i.error===\"bond-chapter-open\"&&i.heldById&&!this._bondUnit?(this._enterBond(i.heldById,i.heldPart),this._plan=null,i.heldBy&&(this._bondUnitName={id:this._bondUnit,name:String(i.heldBy)}),this._planState=\"idle\",this._renderBrowser()):(this._planState=\"error\",this._forgeFailure={error:String(i&&i.error||\"generation-failed\"),detail:String(i&&i.detail||\"\")})}).then(()=>{if(!(!n()||this._planState===\"error\"||!e))return this._prewarmCombats(e)}).then(()=>{if(n()){if(this._planState!==\"error\"&&e){this._plan=e,this._rememberPlan(),this._planState=\"idle\",this._loadLocations();let i=this._activeStoryNode;if(i&&i.restored&&i.chapter===this._planChapter){let l=Jt(e,i.difficulty).find(c=>c.type===\"story\"&&c.storyIndex===i.storyIndex);l&&Object.assign(i,l),i.restored=!1}this._openPrologueIfOwed(e),this._openPostponedScene(e)}this._run&&this._renderBrowser()}}).then(()=>{if(n()&&this._planState!==\"error\"&&this._plan)return this._preforgeCheck()})}"
+            },
+            {
+              "find": "_prewarmCombats(e){let a=qa(e);if(!a||!this._run)return Promise.resolve();let r=this._planChapter,s=Promise.resolve();for(let o=0;o<a;o+=1){let n=o;s=s.then(()=>this._postJson(\"/combat-guide\",{runId:this._run.runId,chapter:r,combatIndex:n}))}return s}",
+              "replace": "_prewarmCombats(e){let forgeStoryRevision=this._forgeStoryRevision||0,forgeStoryRunId=this._run?.runId;let a=qa(e);if(!a||!this._run)return Promise.resolve();let r=this._planChapter,s=Promise.resolve();for(let o=0;o<a;o+=1){let n=o;s=s.then(()=>{if((this._forgeStoryRevision||0)!==forgeStoryRevision||this._run?.runId!==forgeStoryRunId)return;return this._postJson(\"/combat-guide\",{runId:this._run.runId,chapter:r,combatIndex:n})})}return s}"
+            },
+            {
+              "find": "async _paintBeatPlaces(e){let a=Array.isArray(e)?e.filter(Boolean):[];if(!a.length)return null;let r=this._run?this._run.runId:\"\",s={},o=r?a.filter(i=>!i.url).length:0,n=0;for(let i of a){if(i.url){s[i.name]=i.url;continue}if(!r)continue;this._beatArt={done:n,total:o,name:i.name},this._renderBrowser();let l=await this._imageSlot(()=>this._postJson(\"/background\",{runId:r,slug:i.slug,name:i.name,tags:i.tags})).catch(c=>({ok:!1,error:String(c&&c.message||c)}));n+=1,l&&l.ok&&l.url?s[i.name]=l.url:console.warn(\"[gacha-forge] beat background failed\",i.name,l&&(l.detail||l.error))}return this._beatArt=null,await this._loadLocations(),s}",
+              "replace": "async _paintBeatPlaces(e){let forgeStoryRevision=this._forgeStoryRevision||0;let a=Array.isArray(e)?e.filter(Boolean):[];if(!a.length)return null;let r=this._run?this._run.runId:\"\",s={},o=r?a.filter(i=>!i.url).length:0,n=0;for(let i of a){if((this._forgeStoryRevision||0)!==forgeStoryRevision)return null;if(i.url){s[i.name]=i.url;continue}if(!r)continue;this._beatArt={done:n,total:o,name:i.name},this._renderBrowser();let l=await this._imageSlot(()=>{if((this._forgeStoryRevision||0)!==forgeStoryRevision||this._run?.runId!==r)return null;return this._postJson(\"/background\",{runId:r,slug:i.slug,name:i.name,tags:i.tags})}).catch(c=>({ok:!1,error:String(c&&c.message||c)}));if((this._forgeStoryRevision||0)!==forgeStoryRevision)return null;n+=1,l&&l.ok&&l.url?s[i.name]=l.url:console.warn(\"[gacha-forge] beat background failed\",i.name,l&&(l.detail||l.error))}if((this._forgeStoryRevision||0)!==forgeStoryRevision)return null;return this._beatArt=null,await this._loadLocations(),s}"
+            },
+            {
+              "find": "async _paintBeatCg(e,a,r){if(!e||typeof e!=\"object\")return null;let s=this._run?this._run.runId:\"\";if(!s)return null;let o={from:Number(e.from)||0,to:Number(e.to)||0,title:String(e.title||\"\"),url:String(e.url||\"\")};if(o.url)return o;this._beatArt={done:0,total:1,name:o.title||\"Key image\"},this._renderBrowser();let n=await this._imageSlot(()=>this._postJson(\"/cg-art\",{runId:s,chapter:r??a.chapter,storyIndex:a.storyIndex})).catch(i=>({ok:!1,error:String(i&&i.message||i)}));return this._beatArt=null,n&&n.ok&&n.url?(o.url=String(n.url),o):(console.warn(\"[gacha-forge] key image failed\",o.title,n&&(n.detail||n.error)),null)}",
+              "replace": "async _paintBeatCg(e,a,r){let forgeStoryRevision=this._forgeStoryRevision||0;if(!e||typeof e!=\"object\")return null;let s=this._run?this._run.runId:\"\";if(!s)return null;let o={from:Number(e.from)||0,to:Number(e.to)||0,title:String(e.title||\"\"),url:String(e.url||\"\")};if(o.url)return o;this._beatArt={done:0,total:1,name:o.title||\"Key image\"},this._renderBrowser();let n=await this._imageSlot(()=>{if((this._forgeStoryRevision||0)!==forgeStoryRevision||this._run?.runId!==s)return null;return this._postJson(\"/cg-art\",{runId:s,chapter:r??a.chapter,storyIndex:a.storyIndex})}).catch(i=>({ok:!1,error:String(i&&i.message||i)}));if((this._forgeStoryRevision||0)!==forgeStoryRevision)return null;return this._beatArt=null,n&&n.ok&&n.url?(o.url=String(n.url),o):(console.warn(\"[gacha-forge] key image failed\",o.title,n&&(n.detail||n.error)),null)}"
+            },
+            {
+              "find": "error:this._planState===\"error\",cancel:this._prologue,skip:this._prologue",
+              "replace": "error:this._planState===\"error\",cancel:!1,skip:this._prologue"
+            },
+            {
+              "find": "art:this._beatArt,cancel:this._prologue,skip:this._prologue,confirming:",
+              "replace": "art:this._beatArt,cancel:!1,skip:this._prologue,confirming:"
+            }
+          ]
+        },
+        {
+          "version": "1.15.2",
+          "notes": "Show actionable banner animation retry errors and pending feedback.",
+          "edits": [
+            {
+              "find": "ds=\"1.15.1\"",
+              "replace": "ds=\"1.15.2\""
+            }
+          ]
         }
       ]
     },
@@ -290,9 +764,7 @@
       "patches": [
         {
           "version": "1.8.13",
-          "commits": [
-            "a222c867e9737e9dbbc1208a44e6cd1e5ba57435"
-          ],
+          "commits": ["a222c867e9737e9dbbc1208a44e6cd1e5ba57435"],
           "edits": [
             {
               "find": "String(e??\"\").trim().toLowerCase().replace(/[^a-z0-9]+/g,\"-\").replace(/(^-|-$)/g,\"\").slice(0,60)",
@@ -420,6 +892,458 @@
             {
               "find": "if(!M)return{ok:!1,error:\"plan-missing\"};for(let ne=1;!g&&ne<m;ne+=1)",
               "replace": "if(!M)return{ok:!1,error:\"plan-missing\"};let forgeBlock=await forgeChoices.guard(o,{chapter:m});if(forgeBlock)return forgeBlock;for(let ne=1;!g&&ne<m;ne+=1)"
+            }
+          ]
+        },
+        {
+          "version": "1.11.0",
+          "notes": "Optional assigned voices, shared host stock/generated audio, world settings and voice-aware playback.",
+          "edits": [
+            {
+              "find": "var rb=[",
+              "replaceFrom": "src/audio-settings.mjs",
+              "sourceId": "audio-settings"
+            },
+            {
+              "find": "prologue:!0};",
+              "replace": "prologue:!0,audio:normalizeForgeAudio(u.audio)};"
+            },
+            {
+              "find": "if(Object.prototype.hasOwnProperty.call(i,\"connectionId\"))",
+              "replace": "if(Object.prototype.hasOwnProperty.call(i,\"audio\"))w.audio=normalizeForgeAudio({...w.audio,...i.audio});if(Object.prototype.hasOwnProperty.call(i,\"connectionId\"))"
+            },
+            {
+              "find": "v.push({name:N.name,art:sn(N)||null,prota:!1})",
+              "replace": "v.push({name:N.name,art:sn(N)||null,prota:!1,characterId:l(N.cardId)||null})"
+            },
+            {
+              "find": "let D={segments:I,places:",
+              "replace": "let D={musicMood:normalizeForgeMusicMood(e.musicMood),segments:I,places:"
+            },
+            {
+              "find": "\"You are the narrator of a gacha visual-novel story mode.\",",
+              "replace": "\"You are the narrator of a gacha visual-novel story mode.\",'Add a top-level \"musicMood\": \"happy\", \"tense\", or \"sad\" describing the emotional tone of this beat for its soundtrack.',"
+            },
+            {
+              "find": "data:{chapter:u,storyIndex:o,segments:Fe,places:Ne,choices:",
+              "replace": "data:{chapter:u,storyIndex:o,musicMood:ge.value.musicMood,segments:Fe,places:Ne,choices:"
+            }
+          ]
+        },
+        {
+          "version": "1.12.0",
+          "notes": "Count actual unit/relic levels and gained facets; restore proven lifetime lower bounds without changing claimed rewards or pass missions.  Forward the music debug override through the existing provider-completion API.",
+          "edits": [
+            {
+              "find": "var rb=[",
+              "replaceFrom": "src/achievement-progress.mjs",
+              "sourceId": "achievement-progress"
+            },
+            {
+              "find": "dA(Je,E,Date.now())&&await Pe(E,rt,Je);",
+              "replace": "let forgeProgressRepaired=repairForgeAchievementProgress(Je,E,(v.find(forgeInventory=>forgeInventory.id===xh(E))?.data?.items)||{});(dA(Je,E,Date.now())||forgeProgressRepaired)&&await Pe(E,rt,Je);"
+            },
+            {
+              "find": "Xt(S,o,\"level-up\",1,Date.now())",
+              "replace": "Xt(S,o,\"level-up\",j,Date.now())"
+            },
+            {
+              "find": "Xt(x,o,\"relic-feed\",1,Date.now())",
+              "replace": "Xt(x,o,\"relic-feed\",Math.max(0,Q.level-(Number(S.level)||0)),Date.now())"
+            },
+            {
+              "find": "Ht&&(ue+=1)",
+              "replace": "Ht&&Ht.gained&&(ue+=1)"
+            },
+            {
+              "find": "U.facet=Q.facet,O.push({qty:1,material:l(F.name),kind:\"unit\",unitId:g,isNew:!1,facet:Q})",
+              "replace": "U.facet=Q.facet,Q.gained&&Xt(S,o,\"facet\",1,Date.now()),O.push({qty:1,material:l(F.name),kind:\"unit\",unitId:g,isNew:!1,facet:Q})"
+            },
+            {
+              "find": "var rb=[",
+              "replaceFrom": "src/audio-prompts.mjs",
+              "sourceId": "audio-prompts",
+              "notes": "World-specific soundtrack briefs through the existing narration connection, with session caching and generation logging."
+            },
+            {
+              "find": "a=r.persistence.documents,f=(s,c)",
+              "replace": "a=r.persistence.documents,forgeMusicPrompts=createForgeMusicPromptService({readWorld:async runId=>{let{data}=await be();return Ae(data,runId)},readSession:async runId=>(await pe(runId)).data,updateSession:xn,generate:({runId,run,messages})=>_t({runtime:r,runId,run,job:\"narration\",messages,options:{temperature:.7,maxTokens:It(1024)},parse:Vt(r,normalizeForgeMusicPrompt),label:\"music-prompt\"}),log:(messages,debugMode)=>r.logger[debugMode===!0||/^(1|true)$/i.test(process.env.DEBUG_AGENTS||\"\")?\"info\":\"debug\"](\"[debug/gacha-forge/music-prompt] Messages sent to the provider: %s\",JSON.stringify(messages))}),f=(s,c)"
+            },
+            {
+              "find": "s.post(\"/run/sources\",async p=>{",
+              "replace": "s.post(\"/audio/prompt\",async p=>forgeMusicPrompts(p?.body||{})),s.post(\"/run/sources\",async p=>{"
+            },
+            {
+              "find": "generate:({runId,run,messages})=>_t({runtime:r,runId,run,job:\"narration\",messages,options:{temperature:.7,maxTokens:It(1024)},",
+              "replace": "generate:({runId,run,messages,debugMode})=>_t({runtime:r,runId,run,job:\"narration\",messages,options:{temperature:.7,maxTokens:It(1024),debugMode:debugMode===!0||/^(1|true)$/i.test(process.env.DEBUG_AGENTS||\"\")},"
+            }
+          ]
+        },
+        {
+          "version": "1.12.1",
+          "notes": "Preserve uncommitted small-choice canon when compressing while allowing shared narration to pre-generate.",
+          "edits": [
+            {
+              "find": "let forgeBlock=await forgeChoices.guard(o,{chapter:m});if(forgeBlock)return forgeBlock;for(let ne=1;!g&&ne<m;ne+=1)",
+              "replace": "let forgeBlock=await forgeChoices.guard(o,{chapter:m,includeSmall:true});if(forgeBlock)return forgeBlock;for(let ne=1;!g&&ne<m;ne+=1)"
+            }
+          ]
+        },
+        {
+          "version": "1.13.0",
+          "notes": "Retain planned enemy tiers and existing boss mechanics through story generation, cache validated one-shot enemy dialogue and preserve legacy encounters.",
+          "edits": [
+            {
+              "find": "var rb=[",
+              "replaceFrom": "src/enemy-encounters-server.mjs",
+              "sourceId": "enemy-encounters-server"
+            },
+            {
+              "find": "function gS(",
+              "replace": "function gS(...forgeArgs){return forgeEncounterPlanMessages(forgeLegacyEncounterPlanMessages(...forgeArgs))}function forgeLegacyEncounterPlanMessages("
+            },
+            {
+              "find": "function yS(e,t){",
+              "replace": "function yS(e,t){return forgeNormalizeEncounterPlan(e,t,forgeLegacyEncounterPlan)}function forgeLegacyEncounterPlan(e,t){"
+            },
+            {
+              "find": "function vS(",
+              "replace": "function vS(...forgeArgs){return forgeEncounterCombatMessages(forgeLegacyEncounterCombatMessages(...forgeArgs),forgeArgs[2])}function forgeLegacyEncounterCombatMessages("
+            },
+            {
+              "find": "function mw(e){",
+              "replace": "function mw(e){return forgeNormalizeEncounterEnemy(e,forgeLegacyEncounterEnemy)}function forgeLegacyEncounterEnemy(e){"
+            },
+            {
+              "find": "function ES(e,t=jc){",
+              "replace": "function ES(e,t=jc,forgeNode=null){return forgeNormalizeEncounterGuide(e,t,forgeLegacyEncounterGuide,forgeNode)}function forgeLegacyEncounterGuide(e,t=jc){"
+            },
+            {
+              "find": "ES(De,U0(d))",
+              "replace": "ES(De,U0(d),P)"
+            },
+            {
+              "find": "let b=H0(o),S=o<=Xc?0:yu(o,g)",
+              "replace": "let forgeEncounterCast=await dh(p,u),b=H0(o),S=o<=Xc?0:yu(o,g)"
+            },
+            {
+              "find": "power:1,skill:x.skill,passive:x.passive||null",
+              "replace": "power:1,skill:x.skill,passive:x.passive||null,...forgeEnemyCombatMetadata(x,forgeEncounterCast)"
+            },
+            {
+              "find": "enemies:ne,background:Y,opening:U.guide.opening",
+              "replace": "enemies:ne,...forgeEncounterPresentation(U.guide,ne),background:Y,opening:U.guide.opening"
+            },
+            {
+              "find": "stats:we.stats,skill:we.skill,...we.passive?",
+              "replace": "stats:we.stats,skill:we.skill,tier:forgeEnemyTier(we),...we.passive?"
+            }
+          ]
+        },
+        {
+          "version": "1.13.1",
+          "notes": "Resolve actual selected character/persona avatars as image references for scenes, banners, portraits and outfits without inventing identities.",
+          "edits": [
+            {
+              "find": "function Rg(",
+              "replaceFrom": "src/image-avatar-references.mjs",
+              "sourceId": "image-avatar-references"
+            },
+            {
+              "find": "function Rg({baseUrl:e,fetch:t,logger:n}={})",
+              "replace": "function Rg(...forgeArgs){return forgeWrapImageReferenceClient(forgeLegacyImageClient(...forgeArgs),forgeArgs[0]?.logger)}function forgeLegacyImageClient({baseUrl:e,fetch:t,logger:n}={})"
+            },
+            {
+              "find": "async generateBannerArt({connectionId:h,name:A,units:T,scene:R,styleProfileId:C,framing:I,size:D})",
+              "replace": "async generateBannerArt({connectionId:h,name:A,units:T,scene:R,styleProfileId:C,framing:I,size:D,referenceImages:forgeRefs})"
+            },
+            {
+              "find": "connectionId:h,name:te,appearance:se.prompt,purpose:\"avatar\"",
+              "replace": "connectionId:h,name:te,referenceImages:forgeRefs,appearance:se.prompt,purpose:\"avatar\""
+            },
+            {
+              "find": "async generatePortrait({connectionId:h,name:A,unit:T,styleProfileId:R,size:C})",
+              "replace": "async generatePortrait({connectionId:h,name:A,unit:T,styleProfileId:R,size:C,referenceImages:forgeRefs})"
+            },
+            {
+              "find": "connectionId:h,name:G,appearance:ie,purpose:\"avatar\"",
+              "replace": "connectionId:h,name:G,referenceImages:forgeRefs,appearance:ie,purpose:\"avatar\""
+            },
+            {
+              "find": "async generateOutfit({connectionId:h,name:A,unit:T,outfit:R,styleProfileId:C,size:I})",
+              "replace": "async generateOutfit({connectionId:h,name:A,unit:T,outfit:R,styleProfileId:C,size:I,referenceImages:forgeRefs})"
+            },
+            {
+              "find": "connectionId:h,name:W,appearance:se,purpose:\"avatar\"",
+              "replace": "connectionId:h,name:W,referenceImages:forgeRefs,appearance:se,purpose:\"avatar\""
+            },
+            {
+              "find": "let Q=U.name,ne=S(Q),Y=$.find(ee=>S(ee.data.name)===ne)||null;if(Y||(Y=$.find(ee=>S(ee.data.name).includes(ne)||ne.includes(S(ee.data.name)))||null),Y?",
+              "replace": "let Q=U.name,Y=forgeMatchImageActor($,Q);if(Y?"
+            },
+            {
+              "find": "F&&(S(F.name)===ne||S(F.name).includes(ne)||ne.includes(S(F.name)))?_.push({name:F.name,imageTags:[],appearance:l(F.appearance)",
+              "replace": "forgeIsImageProtagonist(F,$,Q)?_.push({name:F.name,personaId:F.personaId,avatarPath:F.avatarPath,imageTags:[],appearance:l(F.appearance)"
+            },
+            {
+              "find": "let m={name:i.anonymous?\"\":i.name,appearance:i.look,imageTags:i.lookTags||[],sceneTags:i.sceneTags||[],affinity:i.affinity};await dt(g,",
+              "replace": "let m={name:i.anonymous?\"\":i.name,appearance:i.look,imageTags:i.lookTags||[],sceneTags:i.sceneTags||[],affinity:i.affinity};if(!i.anonymous){let forgeCast=(await a.list(n.id,kt)).filter(forgeDoc=>forgeDoc?.id?.startsWith(`${u}:unit:`)&&forgeDoc.data?.kind===\"character\"),forgeActor=forgeMatchImageActor(forgeCast,i.name);forgeActor&&(m={...forgeActor.data,...m})}await dt(g,"
+            }
+          ]
+        },
+        {
+          "version": "1.14.0",
+          "edits": [
+            {
+              "find": "async function lT(e)",
+              "bundleFrom": "src/story-memory-shared.mjs",
+              "sourceId": "story-memory-shared",
+              "bundleName": "forgeMemoryShared"
+            },
+            {
+              "find": "async function lT(e)",
+              "replaceFrom": "src/story-memory.mjs",
+              "sourceId": "story-memory"
+            },
+            {
+              "find": "async function lT(e)",
+              "replaceFrom": "src/story-memory-integration.mjs",
+              "sourceId": "story-memory-integration"
+            },
+            {
+              "find": "async function lT(e)",
+              "replaceFrom": "src/story-memory-fit.mjs",
+              "sourceId": "story-memory-fit"
+            },
+            {
+              "find": "const forgeChoices=forgeCreateChoiceRuntime(",
+              "replace": "const forgeStoryMemory=createForgeStoryMemoryIntegration({\ncreateMemory:createForgeStoryMemory,documents:a,packageId:n.id,\nreadRun:async runId=>Ae((await be()).data,runId),readSession:async runId=>(await pe(runId)).data,\nreadPlan:async(runId,chapter)=>(await a.getById(n.id,f(runId,chapter)))?.data,\nlistPlans:async runId=>(await a.list(n.id,ia)).filter(doc=>doc?.id?.startsWith(`${runId}:chapter:`)),\nlistChats:async runId=>(await a.list(n.id,bu)).filter(doc=>doc?.id?.startsWith(`${runId}:chat:`)),\nallNodes:tr,storyNodes:wy,readSegments:nr,renderSegments:jo,bondHistory:Ka,bondChapterId:T,bondLength:zt,\nreadConnections:async()=>{let response=await fetch(Po(qo())+\"/api/connections\",{headers:{accept:\"application/json\"},signal:AbortSignal.timeout(fw)});if(!response.ok)return[];let rows=await response.json();return Array.isArray(rows)?rows:Array.isArray(rows?.items)?rows.items:[]},\nresolveModelMetadata:id=>r.languageModels.resolveForRequest({connectionId:id}),findKnownModel:forgeMemoryShared.findKnownModel,estimateTokens:forgeMemoryShared.estimateTextTokens,background:An,prepareMessages:(messages,runId)=>iS(messages,runId),renderContext:(result,options)=>forgeMemoryContext(result,{...options,renderMemory:forgeStoryMemoryText}),logger:r.logger,\ngenerate:async({runId,kind,messages,tokenBudget,debugMode,signal})=>{\n let run=Ae((await be()).data,runId);if(!run||signal?.aborted)return{ok:false,error:\"memory-cancelled\"};\n let fit=await forgeStoryMemory.summaryBudget({runId,messages,tokenBudget});\n if(!fit)return{ok:false,error:\"memory-source-context\"};\n let maxTokens=Math.min(It(tokenBudget||2000),fit.maxTokens);messages=fit.messages;\n let debug=debugMode===true||/^(1|true)$/i.test(process.env.DEBUG_AGENTS||\"\");\n r.logger[debug?\"info\":\"debug\"](\"[debug/gacha-forge/story-memory] Messages sent to the provider: %s\",JSON.stringify(messages));\n return _t({runtime:r,runId,run,job:\"compress\",messages,background:true,requestBudget:fit.requestBudget,\n options:{temperature:0.3,maxTokens,debugMode:debug,signal},\n parse:(answer,response)=>response?.finishReason===\"length\"?{error:\"truncated\"}:Vt(r,value=>typeof value?.summary===\"string\"&&value.summary.trim()?value.summary:null)(answer),label:`story-memory-${kind}`});\n}\n});\nasync function forgeMemoryPlanQuery(runId,chapter,run){\n let previous=chapter>1?(await a.getById(n.id,f(runId,chapter-1)))?.data:null,session=(await pe(runId)).data;\n let eligible=previous&&tr(previous).length>0&&Number(session?.progress?.[String(chapter-1)]?.normal)>=tr(previous).length;\n return [run.scenario,Uo(run,\"chapter\"),Uo(run,\"arc\"),...(eligible?[previous.title,previous.hook,previous.arcNote]:[])].filter(Boolean).join(\" \");\n}\nasync function forgeMemoryHistory(runId,chapter,storyIndex,options){\n let prefix=[];\n if(options.current){\n  let position=await forgeStoryMemory.frontier(runId),plan=(await a.getById(n.id,f(runId,position.chapter)))?.data;\n  let count=tr(plan).slice(0,position.nodeIndex).filter(node=>node.type===\"story\").length;\n  for(let index=0;index<count;index++){let segments=await nr(runId,position.chapter,index);if(segments)prefix.push(jo(segments))}\n }else for(let index=0;index<storyIndex;index++){let segments=await nr(runId,chapter,index);if(segments)prefix.push(jo(segments))}\n return forgeStoryMemory.context({runId,chapter,storyIndex,...options,prefix:prefix.length?\"# Current chapter so far\\n\"+prefix.join(\"\\n\\n\"):\"\",fate:await forgeChoices.continuity(runId,chapter,storyIndex),fallback:()=>_r(runId,chapter,storyIndex)});\n}\nconst forgeChoices=forgeCreateChoiceRuntime("
+            },
+            {
+              "find": "let ke=f(Ce);",
+              "replace": "let ke=f(Ce,le);"
+            },
+            {
+              "find": "async function _r(s,c,d){",
+              "replace": "async function _r(s,c,d,forgeMemoryOptions){if(forgeMemoryOptions)return forgeMemoryHistory(s,c,d,forgeMemoryOptions);let forgeMemoryBefore=Number.isInteger(c)?c:((Ka((await pe(s)).data).find(row=>T(row.unitId,row.part)===c)?.after)||0)+1;"
+            },
+            {
+              "find": "let ae=await rr(s,H);if(ae){",
+              "replace": "let ae=await rr(s,H);if(ae&&ae.to<B){"
+            },
+            {
+              "find": "let re=await _r(s,d,ae),",
+              "replace": "let re=await _r(s,d,ae,{query:[E.premise,P.title,P.setup].filter(Boolean).join(\" \"),job:\"structured\"}),"
+            },
+            {
+              "find": "await _r(o,i,0),Uo(m,\"arc\")",
+              "replace": "await _r(o,i,0,{query:await forgeMemoryPlanQuery(o,i,m),job:\"structured\"}),Uo(m,\"arc\")"
+            },
+            {
+              "find": "storySoFar:await _r(o,Q,0),",
+              "replace": "storySoFar:await _r(o,Q,0,{query:[w.scenario,S.name,Uo(w,\"bond\")].filter(Boolean).join(\" \"),job:\"structured\"}),"
+            },
+            {
+              "find": "Q=await _r(p,u,o),ne=await dh(p,g);",
+              "replace": "Q=await _r(p,u,o,{query:U,job:\"narration\"}),ne=await dh(p,g);"
+            },
+            {
+              "find": "U=await _r(o,await Nr(o)+1,0),",
+              "replace": "U=await _r(o,await Nr(o)+1,0,{query:[g.unit.name,de].filter(Boolean).join(\" \"),job:\"chat\",current:true}),"
+            },
+            {
+              "find": "return await Pe(o,w,b)?(ot(o,F),{ok:!0,progress:b.progress,",
+              "replace": "return await Pe(o,w,b)?(ot(o,F),g===\"normal\"&&L&&tr(M&&M.data).length>0&&m+1>=tr(M&&M.data).length&&forgeStoryMemory.schedule(o),{ok:!0,progress:b.progress,"
+            },
+            {
+              "find": "let{data:L}=await pe(o),O=bl(L,i,m),$=xa((L&&L.roster||{})[i]?.bondFights,(L&&L.bondChapters||{})[i],m);return{ok:!0,unitId:i,",
+              "replace": "let{data:L}=await pe(o),O=bl(L,i,m),$=xa((L&&L.roster||{})[i]?.bondFights,(L&&L.bondChapters||{})[i],m);M&&O>=zt&&forgeStoryMemory.schedule(o);return{ok:!0,unitId:i,"
+            },
+            {
+              "find": "let L={at:Date.now(),count:b.length,chapter:S,memory:x.value.memory,quote:x.value.quote};",
+              "replace": "let L={at:Date.now(),count:b.length,chapter:S,memory:x.value.memory,quote:x.value.quote,memoryName:l(g.unit.name),memoryPosition:await forgeStoryMemory.frontier(o)};"
+            },
+            {
+              "find": "})?{ok:!0,closed:L}:{ok:!1,error:\"write-conflict\",retry:!0}}),s.post(\"/home-decor\"",
+              "replace": "})?(forgeStoryMemory.schedule(o),{ok:!0,closed:L}):{ok:!1,error:\"write-conflict\",retry:!0}}),s.post(\"/home-decor\""
+            },
+            {
+              "find": "!await qt(i,g))return{ok:!1,error:\"write-conflict\"};let w=new Set;",
+              "replace": "!await qt(i,g))return{ok:!1,error:\"write-conflict\"};forgeStoryMemory.invalidate(o);let w=new Set;"
+            },
+            {
+              "find": "return{ok:!0,chapters:m,warnTokens:b}}),s.post(\"/warn-threshold\"",
+              "replace": "return{ok:!0,chapters:m,warnTokens:b,memory:await forgeStoryMemory.status(o)}}),s.post(\"/story-memory/status\",async p=>{let runId=l(p?.body?.runId);if(!runId)return{ok:false,error:\"bad-request\"};if(!Ae((await be()).data,runId))return{ok:false,error:\"not-found\"};return{ok:true,memory:await forgeStoryMemory.status(runId)}}),s.post(\"/story-memory/retry\",async p=>{let runId=l(p?.body?.runId);if(!runId)return{ok:false,error:\"bad-request\"};if(!Ae((await be()).data,runId))return{ok:false,error:\"not-found\"};forgeStoryMemory.schedule(runId,{debugMode:p?.body?.debugMode===true});return{ok:true,memory:{...await forgeStoryMemory.status(runId),phase:\"pending\",retryable:false}}}),s.post(\"/warn-threshold\""
+            },
+            {
+              "find": "parse:h,label:A,background:T=!1}){let R=cS(n,r),",
+              "replace": "parse:h,label:A,background:T=!1,requestBudget:forgeRequestBudget}){let R=cS(n,r),"
+            },
+            {
+              "find": "connectionId:R,messages:a,options:f,parse:h,label:A,background:T});",
+              "replace": "connectionId:R,messages:a,options:f,parse:h,label:A,background:T,requestBudget:forgeRequestBudget});"
+            },
+            {
+              "find": "connectionId:C,messages:a,options:f,parse:h,label:A,background:T}))",
+              "replace": "connectionId:C,messages:a,options:f,parse:h,label:A,background:T,requestBudget:forgeRequestBudget}))"
+            },
+            {
+              "find": "async function dS({runtime:e,runId:t,connectionId:n,messages:r,options:a,parse:f,label:h})",
+              "replace": "async function dS({runtime:e,runId:t,connectionId:n,messages:r,options:a,parse:f,label:h,requestBudget:forgeRequestBudget})"
+            },
+            {
+              "find": "Le=XA(st,lw.get(A.connectionId),lS(C),G-Vo);A.cap=Le||null,",
+              "replace": "Le=XA(st,lw.get(A.connectionId),lS(C),G-Vo);if(forgeRequestBudget){let forgeRemaining=forgeRequestBudget(C);if(!(forgeRemaining>0))return{ok:false,error:\"memory-source-context\"};Le=Math.min(Le||forgeRemaining,forgeRemaining)}let forgeFitted=fitForgeMemoryPrompt(C,{maxContext:lw.get(A.connectionId),maxTokens:Le,estimateMessages:messages=>messages.reduce((sum,message)=>sum+forgeMemoryShared.estimateTextTokens(typeof message?.content===\"string\"?message.content:JSON.stringify(message?.content||\"\"))+4,0)});if(!forgeFitted.fits)return{ok:false,error:forgeFitted.reason||\"memory-context-too-large\"};C=forgeFitted.messages;Le=forgeFitted.maxTokens;A.cap=Le||null,"
+            },
+            {
+              "find": "async function ha(s){let c=`${s}:summary:`,d=new Set;for(let v of await a.list(n.id,hu))if(!(!v||typeof v.id!=\"string\"||!v.id.startsWith(c)))",
+              "replace": "async function ha(s,forgeBefore){let c=`${s}:summary:`,d=new Set;for(let v of await a.list(n.id,hu))if(!(!v||typeof v.id!=\"string\"||!v.id.startsWith(c))&&!(forgeBefore&&(Number(v.data?.to)||Number(v.id.slice(c.length)))>=forgeBefore))"
+            },
+            {
+              "find": "E=await ha(s),N=Number.isInteger(c)?null:await Gr(s,c),",
+              "replace": "E=await ha(s,forgeMemoryBefore),N=Number.isInteger(c)?null:await Gr(s,c),"
+            },
+            {
+              "find": "B=Number.isInteger(c)?c:await Nr(s)+1;await P(0);",
+              "replace": "B=forgeMemoryBefore;await P(0);"
+            },
+            {
+              "find": "gS(m.scenario,i,O,m.protagonist,$,(await Un(m,m.scenario+`\n`+($.pool||\"\")+($.index||\"\"),{logger:r.logger})).world,m.language,Uo(m,\"chapter\"),await _r(o,i,0,{query:await forgeMemoryPlanQuery(o,i,m),job:\"structured\"}),Uo(m,\"arc\"),Uo(m,\"arc\")?await ts(o,i):\"\",fu(await Ei(o,{limit:6})))",
+              "replace": "forgeComposeMemoryPrompt(gS,[m.scenario,i,O,m.protagonist,$,(await Un(m,m.scenario+`\n`+($.pool||\"\")+($.index||\"\"),{logger:r.logger})).world,m.language,Uo(m,\"chapter\"),await _r(o,i,0,{query:await forgeMemoryPlanQuery(o,i,m),job:\"structured\"}),Uo(m,\"arc\"),Uo(m,\"arc\")?await ts(o,i):\"\",fu(await Ei(o,{limit:6}))])"
+            },
+            {
+              "find": "mS({scenario:w.scenario,unit:S,protagonist:w.protagonist,lore:(await Un(w,w.scenario+`\n`+l(S.name),{logger:r.logger})).world,language:w.language,guidelines:Uo(w,\"bond\"),storySoFar:await _r(o,Q,0,{query:[w.scenario,S.name,Uo(w,\"bond\")].filter(Boolean).join(\" \"),job:\"structured\"}),part:g,parts:va.length,bonds:fu(await Ei(o,{only:[l(S.name)],limit:6})),channel:go(ss(w,b)||\"\")})",
+              "replace": "forgeComposeMemoryPrompt(mS,[{scenario:w.scenario,unit:S,protagonist:w.protagonist,lore:(await Un(w,w.scenario+`\n`+l(S.name),{logger:r.logger})).world,language:w.language,guidelines:Uo(w,\"bond\"),storySoFar:await _r(o,Q,0,{query:[w.scenario,S.name,Uo(w,\"bond\")].filter(Boolean).join(\" \"),job:\"structured\"}),part:g,parts:va.length,bonds:fu(await Ei(o,{only:[l(S.name)],limit:6})),channel:go(ss(w,b)||\"\")}])"
+            },
+            {
+              "find": "vS(c.scenario,E.premise,P,re,c.protagonist,d,await Zw(s,d,v),c.language,ye)",
+              "replace": "forgeComposeMemoryPrompt(vS,[c.scenario,E.premise,P,re,c.protagonist,d,await Zw(s,d,v),c.language,ye])"
+            },
+            {
+              "find": "bS(g.scenario,w.premise,M,Q,$,F,g.protagonist,ee,g.language,Uo(g,\"beat\"),ue?(await Un(g,[g.scenario,U,await ki(p,u,o,su)].filter(Boolean).join(`\n`),{logger:r.logger})).world:\"\",Z,de,de?await Xa(g):!0,Uo(g,\"image\"),fu(await Ei(p,{only:ee.names,limit:4})))",
+              "replace": "forgeComposeMemoryPrompt(bS,[g.scenario,w.premise,M,Q,$,F,g.protagonist,ee,g.language,Uo(g,\"beat\"),ue?(await Un(g,[g.scenario,U,await ki(p,u,o,su)].filter(Boolean).join(`\n`),{logger:r.logger})).world:\"\",Z,de,de?await Xa(g):!0,Uo(g,\"image\"),fu(await Ei(p,{only:ee.names,limit:4}))])"
+            },
+            {
+              "find": "cv({unit:g.unit,scenario:l(g.run.scenario),channel:go(F||\"\"),channelBlurb:Hp(F||\"\"),protagonist:g.run.protagonist,bond:g.level,story:Q,history:$,memories:await Ei(o,{only:[ne]}),photos:_,asked:x||M&&!!b&&b.ask===\"photo\"})",
+              "replace": "forgeComposeMemoryPrompt(cv,[{unit:g.unit,scenario:l(g.run.scenario),channel:go(F||\"\"),channelBlurb:Hp(F||\"\"),protagonist:g.run.protagonist,bond:g.level,story:Q,history:$,memories:await Ei(o,{only:[ne]}),photos:_,asked:x||M&&!!b&&b.ask===\"photo\"}])"
+            }
+          ]
+        },
+        {
+          "version": "1.15.0",
+          "notes": "Generated Home soundtrack selection and per-banner themes awarded atomically with a five-star pull. Maintained audio source is replayed from the existing source markers. Banner-only video generation, package-owned immutable MP4 cache and guarded Range serving. Abort package-owned animation work on deactivation.",
+          "edits": [
+            {
+              "find": "s.post(\"/audio/prompt\",async p=>forgeMusicPrompts(p?.body||{})),",
+              "replace": "s.post(\"/audio/library\",async p=>{const body=p?.body||{},runId=l(body.runId);if(!runId)return{ok:false,error:\"bad-request\"};const{data:index}=await be();if(!Ae(index,runId))return{ok:false,error:\"not-found\"};let{data:session}=await pe(runId);if(body.track){let valid=false;session=await xn(runId,data=>{valid=recordForgeSoundtrack(data,runId,body.track)});if(!valid)return{ok:false,error:\"bad-request\"};if(!session)return{ok:false,error:\"write-conflict\"}}return{ok:true,tracks:availableForgeSoundtracks(session)}}),s.post(\"/audio/prompt\",async p=>forgeMusicPrompts(p?.body||{})),"
+            },
+            {
+              "find": "let ee=g===\"wpn\"?{five:ay",
+              "replace": "const forgeBannerMusic=forgeBannerSoundtrack(i,M,S);if(forgeBannerMusic)await xn(o,data=>rememberForgeBannerSoundtrack(data,forgeBannerMusic));let ee=g===\"wpn\"?{five:ay"
+            },
+            {
+              "find": "title:ne,mode:M?M.mode:\"permanent\",featured:F",
+              "replace": "title:ne,music:forgeBannerMusic,mode:M?M.mode:\"permanent\",featured:F"
+            },
+            {
+              "find": "if(Xt(O,o,\"summon\",g,Date.now()),",
+              "replace": "if(S.audio?.generate===true&&Z>0)rememberForgeBannerSoundtrack(O,forgeBannerSoundtrack(i,x,m===\"wpn\"?_:M),true);if(Xt(O,o,\"summon\",g,Date.now()),"
+            },
+            {
+              "find": "var rb=[",
+              "replaceFrom": "src/animation-server.mjs",
+              "sourceId": "banner-animation-server"
+            },
+            {
+              "find": "await t.registerPrivilegedRoutes(async s=>{",
+              "replace": "const forgeBannerAnimations=createForgeBannerAnimations({dataDir:e.dataDir,runtime:r,readBanner:async(runId,bannerId)=>{const rule=Uf(bannerId);if(!rule||!rule.live)return null;const{data:index}=await be(),run=Ae(index,runId);if(!run)return null;const{data:session}=await pe(runId),account=await Zt(runId);if(z(run,session,account,\"summon\")||(rule.pool===\"featured\"&&z(run,session,account,\"featured\")))return null;const identity=le(runId,rule.pool===\"featured\"?`${rule.cat}:${ht(session,Date.now()).key}`:Bt),doc=await a.getById(n.id,identity),art=doc?.data?.art?.[bannerId],ref=doc?.data?.artRef?.[bannerId],match=typeof ref===\"string\"?/^global-gallery:([A-Za-z0-9_-]{1,100})$/u.exec(ref):null;return{connectionId:run.animationConnectionId||\"\",identity,art,galleryImageId:match?.[1]||\"\"}}});await t.registerPrivilegedRoutes(async s=>{s.post(\"/banner-animation\",async p=>forgeBannerAnimations.generate(p?.body||{}));s.get(\"/banner-animation/file/:world/:filename\",(p,reply)=>forgeBannerAnimations.serve(p,reply));"
+            },
+            {
+              "find": "prologue:!0,audio:normalizeForgeAudio(u.audio)};",
+              "replace": "prologue:!0,audio:normalizeForgeAudio(u.audio),animationConnectionId:l(u.animationConnectionId).slice(0,200)};"
+            },
+            {
+              "find": "if(Object.prototype.hasOwnProperty.call(i,\"audio\"))",
+              "replace": "if(Object.prototype.hasOwnProperty.call(i,\"animationConnectionId\"))w.animationConnectionId=l(i.animationConnectionId).slice(0,200);if(Object.prototype.hasOwnProperty.call(i,\"audio\"))"
+            },
+            {
+              "find": "forgeStoryMemory.invalidate(o);",
+              "replace": "forgeStoryMemory.invalidate(o);await forgeBannerAnimations.removeWorld(o).catch(error=>r.logger.warn(error,\"[gacha-forge] Could not remove deleted world banner animations\"));"
+            },
+            {
+              "find": "},{prefix:P0})}export{",
+              "replace": "},{prefix:P0});return()=>forgeBannerAnimations.dispose()}export{"
+            }
+          ]
+        },
+        {
+          "version": "1.15.1",
+          "notes": "Cancel chapter and story generation to Home, abort scoped work and ignore late responses while preserving saved progress.",
+          "edits": [
+            {
+              "find": "async function _t(",
+              "replaceFrom": "src/story-cancel-server.mjs",
+              "sourceId": "story-cancel-server"
+            },
+            {
+              "find": "a=r.persistence.documents,forgeMusicPrompts=",
+              "replace": "a=forgeStoryDocuments(r.persistence.documents),forgeStoryCancellation=createForgeStoryCancellation(),forgeMusicPrompts="
+            },
+            {
+              "find": "await t.registerPrivilegedRoutes(async s=>{",
+              "replace": "await t.registerPrivilegedRoutes(async s=>{s.post(\"/story/cancel\",async p=>{const body=p?.body||{},runId=l(body.runId);if(!runId)return{ok:false,error:\"bad-request\"};forgeStoryCancellation.cancel(runId);const target=await Nn(body);if(target)await on(target.runId,target.chapter,{cancelled:true});return{ok:true}});"
+            },
+            {
+              "find": "return()=>forgeBannerAnimations.dispose()",
+              "replace": "return()=>{forgeStoryCancellation.dispose();forgeBannerAnimations.dispose()}"
+            },
+            {
+              "find": "async function dS({runtime:e,runId:t,connectionId:n,messages:r,options:a,parse:f,label:h,requestBudget:forgeRequestBudget}){let A={connectionId:n,model:\"\"},T=async(se,le,ce,Ce,Ee)=>{Tu&&await Tu(t,h,se,le,ce,Ce,Ee,A)},R=await iS(r,t),C=R,I=\"generation-failed\",D=\"\",G=Number(a.maxTokens)||0,W=G,te=nS,ie=!1;for(let se=1;se<=te;se+=1){let le,ce=Date.now();try{let $e=await e.languageModels.resolveForRequest({connectionId:n});A={connectionId:l($e&&$e.connectionId)||n,model:l($e&&$e.model)};let ot=await eS(A.connectionId,e.logger),it=G&&Eu?await Eu(t,A.connectionId):0,st=it>Vo?Math.max(W,G-Vo+it):W,Le=XA(st,lw.get(A.connectionId),lS(C),G-Vo);if(forgeRequestBudget){let forgeRemaining=forgeRequestBudget(C);if(!(forgeRemaining>0))return{ok:false,error:\"memory-source-context\"};Le=Math.min(Le||forgeRemaining,forgeRemaining)}let forgeFitted=fitForgeMemoryPrompt(C,{maxContext:lw.get(A.connectionId),maxTokens:Le,estimateMessages:messages=>messages.reduce((sum,message)=>sum+forgeMemoryShared.estimateTextTokens(typeof message?.content===\"string\"?message.content:JSON.stringify(message?.content||\"\"))+4,0)});if(!forgeFitted.fits)return{ok:false,error:forgeFitted.reason||\"memory-context-too-large\"};C=forgeFitted.messages;Le=forgeFitted.maxTokens;A.cap=Le||null,le=await $e.chatComplete(C,{...a,...ot,...Le?{maxTokens:Le}:{},temperature:se===1?a.temperature:Math.min(a.temperature??1,rS)})}catch($e){return e.logger.warn(`${h} generation failed`,String($e)),A.ms=Date.now()-ce,await T(se,null,\"failed\",\"\",String($e)),{ok:!1,error:\"generation-failed\"}}A.ms=Date.now()-ce;let Ce=le&&typeof le.content==\"string\"?le.content:\"\",Ee=tS(le,Ce,A.cap||W);if(Ee&&(W=Math.min(Math.max(W,G)*au,G*au*au),ie||(ie=!0,te+=1)),!Ce.trim()){await T(se,le,\"empty\"),I=\"empty-response\",C=Ee?[...R,{role:\"user\",content:dw}]:R;continue}let ke=f(Ce,le);if(ke&&ke.value!=null)return await T(se,le,\"ok\"),{ok:!0,value:ke.value};I=le.finishReason===\"length\"?\"truncated\":ke&&ke.error||\"unparseable\",D=l(ke&&ke.why),await T(se,le,I,Ce,ke&&ke.why),C=[...R,...aS(Ce,I,ke&&ke.why,Ee)],se<te&&e.logger.warn(`${h} retrying after ${I}`)}return{ok:!1,error:I,detail:D}}",
+              "replace": "async function dS({runtime:e,runId:t,connectionId:n,messages:r,options:a,parse:f,label:h,requestBudget:forgeRequestBudget}){forgeStoryAssertActive();let A={connectionId:n,model:\"\"},T=async(se,le,ce,Ce,Ee)=>{Tu&&await Tu(t,h,se,le,ce,Ce,Ee,A)},R=await iS(r,t),C=R,I=\"generation-failed\",D=\"\",G=Number(a.maxTokens)||0,W=G,te=nS,ie=!1;for(let se=1;se<=te;se+=1){let le,ce=Date.now();try{forgeStoryAssertActive();let $e=await e.languageModels.resolveForRequest({connectionId:n});A={connectionId:l($e&&$e.connectionId)||n,model:l($e&&$e.model)};let ot=await eS(A.connectionId,e.logger),it=G&&Eu?await Eu(t,A.connectionId):0,st=it>Vo?Math.max(W,G-Vo+it):W,Le=XA(st,lw.get(A.connectionId),lS(C),G-Vo);if(forgeRequestBudget){let forgeRemaining=forgeRequestBudget(C);if(!(forgeRemaining>0))return{ok:false,error:\"memory-source-context\"};Le=Math.min(Le||forgeRemaining,forgeRemaining)}let forgeFitted=fitForgeMemoryPrompt(C,{maxContext:lw.get(A.connectionId),maxTokens:Le,estimateMessages:messages=>messages.reduce((sum,message)=>sum+forgeMemoryShared.estimateTextTokens(typeof message?.content===\"string\"?message.content:JSON.stringify(message?.content||\"\"))+4,0)});if(!forgeFitted.fits)return{ok:false,error:forgeFitted.reason||\"memory-context-too-large\"};C=forgeFitted.messages;Le=forgeFitted.maxTokens;A.cap=Le||null,le=await $e.chatComplete(C,{...a,...ot,signal:forgeStoryGenerationSignal(),...Le?{maxTokens:Le}:{},temperature:se===1?a.temperature:Math.min(a.temperature??1,rS)});forgeStoryAssertActive()}catch($e){forgeStoryAssertActive();return e.logger.warn(`${h} generation failed`,String($e)),A.ms=Date.now()-ce,await T(se,null,\"failed\",\"\",String($e)),{ok:!1,error:\"generation-failed\"}}A.ms=Date.now()-ce;let Ce=le&&typeof le.content==\"string\"?le.content:\"\",Ee=tS(le,Ce,A.cap||W);if(Ee&&(W=Math.min(Math.max(W,G)*au,G*au*au),ie||(ie=!0,te+=1)),!Ce.trim()){await T(se,le,\"empty\"),I=\"empty-response\",C=Ee?[...R,{role:\"user\",content:dw}]:R;continue}let ke=f(Ce,le);if(ke&&ke.value!=null)return await T(se,le,\"ok\"),{ok:!0,value:ke.value};I=le.finishReason===\"length\"?\"truncated\":ke&&ke.error||\"unparseable\",D=l(ke&&ke.why),await T(se,le,I,Ce,ke&&ke.why),C=[...R,...aS(Ce,I,ke&&ke.why,Ee)],se<te&&e.logger.warn(`${h} retrying after ${I}`)}return{ok:!1,error:I,detail:D}}"
+            },
+            {
+              "find": "async function _t({runtime:e,runId:t,run:n,job:r=\"structured\",messages:a,options:f,parse:h,label:A,background:T=!1,requestBudget:forgeRequestBudget}){let R=cS(n,r),C=l(n&&n.connectionId),I=await yy({runtime:e,runId:t,connectionId:R,messages:a,options:f,parse:h,label:A,background:T,requestBudget:forgeRequestBudget});return I.ok||R===C?I:(e.logger.warn(\"[gacha-forge] %s failed on the %s connection (%s) \\u2014 retrying on the world's own\",A,Kc[r].label,I.error),yy({runtime:e,runId:t,connectionId:C,messages:a,options:f,parse:h,label:A,background:T,requestBudget:forgeRequestBudget}))}",
+              "replace": "async function _t({runtime:e,runId:t,run:n,job:r=\"structured\",messages:a,options:f,parse:h,label:A,background:T=!1,requestBudget:forgeRequestBudget}){forgeStoryAssertActive();let R=cS(n,r),C=l(n&&n.connectionId),I=await yy({runtime:e,runId:t,connectionId:R,messages:a,options:f,parse:h,label:A,background:T,requestBudget:forgeRequestBudget});forgeStoryAssertActive();return I.ok||R===C?I:(e.logger.warn(\"[gacha-forge] %s failed on the %s connection (%s) \\u2014 retrying on the world's own\",A,Kc[r].label,I.error),yy({runtime:e,runId:t,connectionId:C,messages:a,options:f,parse:h,label:A,background:T,requestBudget:forgeRequestBudget}))}"
+            },
+            {
+              "find": "function wt(p,u){let o=St(p,u);Gt(o)||An(()=>ze(o,async()=>{for(let i=0;i<64;i+=1){let{data:g}=await be(),m=Ae(g,p);if(!m)return;let w=await Yt(p,m,u);if(w.mode===\"off\"||w.cancelled||w.next<0||w.waitingChoice)return;let b=w.next,S=await Cr(p,u,b);if(!S||S.ok===!1)return;if(w.art)try{await B(p,m,u,b)}catch(_){r.logger.warn(\"[gacha-forge] pre-forge key image failed for %s %s/%s: %s\",p,u,b,l(_&&_.message))}if((await Yt(p,m,u)).next===b)return}})).catch(i=>r.logger.warn(\"[gacha-forge] pre-forge chain stopped for %s: %s\",p,l(i&&i.message)))}",
+              "replace": "function wt(p,u){forgeStoryAssertActive();void forgeStoryCancellation.run(p,async()=>{let o=St(p,u);Gt(o)||An(()=>ze(o,async()=>{for(let i=0;i<64;i+=1){let{data:g}=await be(),m=Ae(g,p);if(!m)return;let w=await Yt(p,m,u);if(w.mode===\"off\"||w.cancelled||w.next<0||w.waitingChoice)return;let b=w.next,S=await Cr(p,u,b);if(!S||S.ok===!1)return;if(w.art)try{await B(p,m,u,b)}catch(_){r.logger.warn(\"[gacha-forge] pre-forge key image failed for %s %s/%s: %s\",p,u,b,l(_&&_.message))}if((await Yt(p,m,u)).next===b)return}})).catch(i=>r.logger.warn(\"[gacha-forge] pre-forge chain stopped for %s: %s\",p,l(i&&i.message)))}).catch(()=>{});}"
+            },
+            {
+              "find": "async p=>{let u=p&&p.body||{},o=l(u.runId),i=typeof u.chapter==\"string\"&&Ta(u.chapter)?u.chapter:\"\",g=i||Number(u.chapter),m=Number(u.storyIndex);if(!o||!(i||Number.isInteger(g))||!Number.isInteger(m))return{ok:!1,error:\"bad-request\"};let{data:w}=await be(),b=Ae(w,o);return b?i&&!await Gr(o,i)?{ok:!1,error:\"bad-request\"}:u.background===!0?An(()=>B(o,b,g,m)):B(o,b,g,m):{ok:!1,error:\"bad-request\"}}",
+              "replace": "async p=>forgeStoryCancellation.run(l(p&&p.body&&p.body.runId),async()=>{let u=p&&p.body||{},o=l(u.runId),i=typeof u.chapter==\"string\"&&Ta(u.chapter)?u.chapter:\"\",g=i||Number(u.chapter),m=Number(u.storyIndex);if(!o||!(i||Number.isInteger(g))||!Number.isInteger(m))return{ok:!1,error:\"bad-request\"};let{data:w}=await be(),b=Ae(w,o);return b?i&&!await Gr(o,i)?{ok:!1,error:\"bad-request\"}:u.background===!0?An(()=>B(o,b,g,m)):B(o,b,g,m):{ok:!1,error:\"bad-request\"}})"
+            },
+            {
+              "find": "async p=>{let u=p&&p.body||{},o=l(u.runId),i=bgSlug(u.slug,u.name);if(!o||!i)return{ok:!1,error:\"bad-request\"};let{data:g}=await be(),m=Ae(g,o);if(!m)return{ok:!1,error:\"bad-request\"};if(!nt(m).backgrounds)return{ok:!1,error:\"backgrounds-off\"};let{places:w}=await k(o);if(w[i]&&l(w[i].url))return{ok:!0,slug:i,url:w[i].url,cached:!0};let b=(await E(o)).get(i)||null;return q(m,o,i,l(u.name)||b&&b.name||i,l(u.tags)||b&&b.tags||\"\")}",
+              "replace": "async p=>forgeStoryCancellation.run(l(p&&p.body&&p.body.runId),async()=>{let u=p&&p.body||{},o=l(u.runId),i=bgSlug(u.slug,u.name);if(!o||!i)return{ok:!1,error:\"bad-request\"};let{data:g}=await be(),m=Ae(g,o);if(!m)return{ok:!1,error:\"bad-request\"};if(!nt(m).backgrounds)return{ok:!1,error:\"backgrounds-off\"};let{places:w}=await k(o);if(w[i]&&l(w[i].url))return{ok:!0,slug:i,url:w[i].url,cached:!0};let b=(await E(o)).get(i)||null;return q(m,o,i,l(u.name)||b&&b.name||i,l(u.tags)||b&&b.tags||\"\")})"
+            },
+            {
+              "find": "async p=>forgeChoices.readOrGenerate(l(p&&p.body&&p.body.runId),async forgeCachedOnly=>{let u=p&&p.body||{},o=l(u.runId),i=Number(u.chapter);if(!o||!Number.isInteger(i)||i<1)return{ok:!1,error:\"bad-request\"};let{data:g}=await be(),m=Ae(g,o);if(!m||!m.scenario)return{ok:!1,error:\"bad-request\"};let forgeBlock=await forgeChoices.planGuard(o,i);if(forgeBlock)return forgeBlock;let{data:w}=await pe(o),b=w&&w.progress||{},S=await wl(o,w,i);if(S)return{ok:!1,error:\"bond-chapter-open\",heldBy:S.name,heldById:S.id,heldPart:S.part};let M=await a.getById(n.id,f(o,i));if(!M&&forgeCachedOnly)return null;return M?{ok:!0,plan:M.data,cached:!0,progress:b,cp:Bf(i)}:ze(f(o,i),async()=>{let _=await a.getById(n.id,f(o,i));if(_)return{ok:!0,plan:_.data,cached:!0,progress:b,cp:Bf(i)};let x=null;if(i>1){let ne=await a.getById(n.id,f(o,i-1));ne&&ne.data&&(x=Ur(ne.data).length)}let L=()=>Dc+Math.floor(Math.random()*(mu-Dc+1)),O=L();if(x!=null&&mu>Dc)for(;O===x;)O=L();let $=await uh(o,!0),F=await _t({runtime:r,runId:o,run:m,messages:forgeChoicePlanMessages(forgeComposeMemoryPrompt(gS,[m.scenario,i,O,m.protagonist,$,(await Un(m,m.scenario+`\n`+($.pool||\"\")+($.index||\"\"),{logger:r.logger})).world,m.language,Uo(m,\"chapter\"),await _r(o,i,0,{query:await forgeMemoryPlanQuery(o,i,m),job:\"structured\"}),Uo(m,\"arc\"),Uo(m,\"arc\")?await ts(o,i):\"\",fu(await Ei(o,{limit:6}))]),forgeChoicesEnabled(m)),options:{temperature:.8,maxTokens:It(2500)},parse:Vt(r,ne=>yS(ne,i)),label:\"chapter-plan\"});if(!F.ok)return{ok:!1,error:F.error,detail:F.detail};let U=F.value,Q=new Date().toISOString();return await a.create({id:f(o,i),packageId:n.id,kind:ia,name:`Chapter ${i}`,description:U.title,data:U,createdAt:Q,updatedAt:Q}),{ok:!0,plan:U,progress:b,cp:Bf(i)}})})",
+              "replace": "async p=>forgeStoryCancellation.run(l(p&&p.body&&p.body.runId),async()=>(forgeChoices.readOrGenerate(l(p&&p.body&&p.body.runId),async forgeCachedOnly=>{let u=p&&p.body||{},o=l(u.runId),i=Number(u.chapter);if(!o||!Number.isInteger(i)||i<1)return{ok:!1,error:\"bad-request\"};let{data:g}=await be(),m=Ae(g,o);if(!m||!m.scenario)return{ok:!1,error:\"bad-request\"};let forgeBlock=await forgeChoices.planGuard(o,i);if(forgeBlock)return forgeBlock;let{data:w}=await pe(o),b=w&&w.progress||{},S=await wl(o,w,i);if(S)return{ok:!1,error:\"bond-chapter-open\",heldBy:S.name,heldById:S.id,heldPart:S.part};let M=await a.getById(n.id,f(o,i));if(!M&&forgeCachedOnly)return null;return M?{ok:!0,plan:M.data,cached:!0,progress:b,cp:Bf(i)}:ze(f(o,i),async()=>{let _=await a.getById(n.id,f(o,i));if(_)return{ok:!0,plan:_.data,cached:!0,progress:b,cp:Bf(i)};let x=null;if(i>1){let ne=await a.getById(n.id,f(o,i-1));ne&&ne.data&&(x=Ur(ne.data).length)}let L=()=>Dc+Math.floor(Math.random()*(mu-Dc+1)),O=L();if(x!=null&&mu>Dc)for(;O===x;)O=L();let $=await uh(o,!0),F=await _t({runtime:r,runId:o,run:m,messages:forgeChoicePlanMessages(forgeComposeMemoryPrompt(gS,[m.scenario,i,O,m.protagonist,$,(await Un(m,m.scenario+`\n`+($.pool||\"\")+($.index||\"\"),{logger:r.logger})).world,m.language,Uo(m,\"chapter\"),await _r(o,i,0,{query:await forgeMemoryPlanQuery(o,i,m),job:\"structured\"}),Uo(m,\"arc\"),Uo(m,\"arc\")?await ts(o,i):\"\",fu(await Ei(o,{limit:6}))]),forgeChoicesEnabled(m)),options:{temperature:.8,maxTokens:It(2500)},parse:Vt(r,ne=>yS(ne,i)),label:\"chapter-plan\"});if(!F.ok)return{ok:!1,error:F.error,detail:F.detail};let U=F.value,Q=new Date().toISOString();return await a.create({id:f(o,i),packageId:n.id,kind:ia,name:`Chapter ${i}`,description:U.title,data:U,createdAt:Q,updatedAt:Q}),{ok:!0,plan:U,progress:b,cp:Bf(i)}})})))"
+            },
+            {
+              "find": "async p=>{let u=await Nn(p&&p.body);if(!u)return{ok:!1,error:\"bad-request\"};let o=await Yt(u.runId,u.run,u.chapter);return o.running?{ok:!0,allowed:!0,preforge:o}:o.canAuto?await on(u.runId,u.chapter,{autos:o.autos+1})?(wt(u.runId,u.chapter),{ok:!0,allowed:!0,preforge:await Yt(u.runId,u.run,u.chapter)}):{ok:!0,allowed:!1,preforge:o}:{ok:!0,allowed:!1,preforge:o}}",
+              "replace": "async p=>forgeStoryCancellation.run(l(p&&p.body&&p.body.runId),async()=>{let u=await Nn(p&&p.body);if(!u)return{ok:!1,error:\"bad-request\"};let o=await Yt(u.runId,u.run,u.chapter);return o.running?{ok:!0,allowed:!0,preforge:o}:o.canAuto?await on(u.runId,u.chapter,{autos:o.autos+1})?(wt(u.runId,u.chapter),{ok:!0,allowed:!0,preforge:await Yt(u.runId,u.run,u.chapter)}):{ok:!0,allowed:!1,preforge:o}:{ok:!0,allowed:!1,preforge:o}})"
+            },
+            {
+              "find": "async p=>{let u=await Nn(p&&p.body);if(!u)return{ok:!1,error:\"bad-request\"};if(!await on(u.runId,u.chapter,{cancelled:!1}))return{ok:!1,error:\"write-conflict\"};let i=await Yt(u.runId,u.run,u.chapter),g=i.next>=0&&i.mode!==\"off\"&&!i.waitingChoice;return g&&wt(u.runId,u.chapter),{ok:!0,allowed:g,preforge:g?await Yt(u.runId,u.run,u.chapter):i}}",
+              "replace": "async p=>forgeStoryCancellation.run(l(p&&p.body&&p.body.runId),async()=>{let u=await Nn(p&&p.body);if(!u)return{ok:!1,error:\"bad-request\"};if(!await on(u.runId,u.chapter,{cancelled:!1}))return{ok:!1,error:\"write-conflict\"};let i=await Yt(u.runId,u.run,u.chapter),g=i.next>=0&&i.mode!==\"off\"&&!i.waitingChoice;return g&&wt(u.runId,u.chapter),{ok:!0,allowed:g,preforge:g?await Yt(u.runId,u.run,u.chapter):i}})"
+            },
+            {
+              "find": "async p=>forgeChoices.readOrGenerate(l(p&&p.body&&p.body.runId),async forgeCachedOnly=>{let u=p&&p.body||{},o=l(u.runId),i=l(u.unitId),g=R(u.part);if(!g)return{ok:!1,error:\"bad-request\"};let m=await Li(o,i);if(!m.ok)return m;let{run:w,session:b,unit:S}=m;if(!w.scenario)return{ok:!1,error:\"bad-request\"};let M=b&&b.roster||{},_=b&&b.bondChapters||{},x=xa((M[i]||{}).bondFights,_[i],g);if(!x)return{ok:!1,error:\"locked\"};let L=dd(M,_);if(L&&L!==i&&x!==mo)return{ok:!1,error:\"another-open\"};let O=T(i,g),$=async U=>{if(!wo(_[i],g)){let Q=Number.isInteger(U.data&&U.data.after)?U.data.after:await Nr(o);return await no(o,i,Q,g)?{ok:!0,plan:U.data,unitId:i,part:g,name:l(S&&S.name),cached:!0,beats:0}:{ok:!1,error:\"save-failed\"}}return{ok:!0,plan:U.data,unitId:i,part:g,name:l(S&&S.name),cached:!0,beats:bl(b,i,g)}},F=await a.getById(n.id,f(o,O));if(!F&&forgeCachedOnly)return null;return F?$(F):ze(f(o,O),async()=>{let U=await a.getById(n.id,f(o,O));if(U)return $(U);let forgeBlock=await forgeChoices.guard(o);if(forgeBlock)return forgeBlock;let Q=await Nr(o)+1,ne=await _t({runtime:r,runId:o,run:w,messages:forgeChoicePlanMessages(forgeComposeMemoryPrompt(mS,[{scenario:w.scenario,unit:S,protagonist:w.protagonist,lore:(await Un(w,w.scenario+`\n`+l(S.name),{logger:r.logger})).world,language:w.language,guidelines:Uo(w,\"bond\"),storySoFar:await _r(o,Q,0,{query:[w.scenario,S.name,Uo(w,\"bond\")].filter(Boolean).join(\" \"),job:\"structured\"}),part:g,parts:va.length,bonds:fu(await Ei(o,{only:[l(S.name)],limit:6})),channel:go(ss(w,b)||\"\")}]),forgeChoicesEnabled(w)),options:{temperature:.8,maxTokens:It(2e3)},parse:Vt(r,J=>pS(J)),label:\"bond-chapter-plan\"});if(!ne.ok)return{ok:!1,error:ne.error,detail:ne.detail};let Y=ne.value,ee=new Date().toISOString();return await a.create({id:f(o,O),packageId:n.id,kind:ia,name:l(Y.title),description:l(Y.premise),data:{...Y,bondUnitId:i,bondPart:g,after:Q-1},createdAt:ee,updatedAt:ee}),await no(o,i,Q-1,g)?{ok:!0,plan:{...Y,bondUnitId:i,bondPart:g},unitId:i,part:g,name:l(S&&S.name),cached:!1,beats:0}:{ok:!1,error:\"save-failed\"}})})",
+              "replace": "async p=>forgeStoryCancellation.run(l(p&&p.body&&p.body.runId),async()=>(forgeChoices.readOrGenerate(l(p&&p.body&&p.body.runId),async forgeCachedOnly=>{let u=p&&p.body||{},o=l(u.runId),i=l(u.unitId),g=R(u.part);if(!g)return{ok:!1,error:\"bad-request\"};let m=await Li(o,i);if(!m.ok)return m;let{run:w,session:b,unit:S}=m;if(!w.scenario)return{ok:!1,error:\"bad-request\"};let M=b&&b.roster||{},_=b&&b.bondChapters||{},x=xa((M[i]||{}).bondFights,_[i],g);if(!x)return{ok:!1,error:\"locked\"};let L=dd(M,_);if(L&&L!==i&&x!==mo)return{ok:!1,error:\"another-open\"};let O=T(i,g),$=async U=>{if(!wo(_[i],g)){let Q=Number.isInteger(U.data&&U.data.after)?U.data.after:await Nr(o);return await no(o,i,Q,g)?{ok:!0,plan:U.data,unitId:i,part:g,name:l(S&&S.name),cached:!0,beats:0}:{ok:!1,error:\"save-failed\"}}return{ok:!0,plan:U.data,unitId:i,part:g,name:l(S&&S.name),cached:!0,beats:bl(b,i,g)}},F=await a.getById(n.id,f(o,O));if(!F&&forgeCachedOnly)return null;return F?$(F):ze(f(o,O),async()=>{let U=await a.getById(n.id,f(o,O));if(U)return $(U);let forgeBlock=await forgeChoices.guard(o);if(forgeBlock)return forgeBlock;let Q=await Nr(o)+1,ne=await _t({runtime:r,runId:o,run:w,messages:forgeChoicePlanMessages(forgeComposeMemoryPrompt(mS,[{scenario:w.scenario,unit:S,protagonist:w.protagonist,lore:(await Un(w,w.scenario+`\n`+l(S.name),{logger:r.logger})).world,language:w.language,guidelines:Uo(w,\"bond\"),storySoFar:await _r(o,Q,0,{query:[w.scenario,S.name,Uo(w,\"bond\")].filter(Boolean).join(\" \"),job:\"structured\"}),part:g,parts:va.length,bonds:fu(await Ei(o,{only:[l(S.name)],limit:6})),channel:go(ss(w,b)||\"\")}]),forgeChoicesEnabled(w)),options:{temperature:.8,maxTokens:It(2e3)},parse:Vt(r,J=>pS(J)),label:\"bond-chapter-plan\"});if(!ne.ok)return{ok:!1,error:ne.error,detail:ne.detail};let Y=ne.value,ee=new Date().toISOString();return await a.create({id:f(o,O),packageId:n.id,kind:ia,name:l(Y.title),description:l(Y.premise),data:{...Y,bondUnitId:i,bondPart:g,after:Q-1},createdAt:ee,updatedAt:ee}),await no(o,i,Q-1,g)?{ok:!0,plan:{...Y,bondUnitId:i,bondPart:g},unitId:i,part:g,name:l(S&&S.name),cached:!1,beats:0}:{ok:!1,error:\"save-failed\"}})})))"
+            },
+            {
+              "find": "async p=>{let u=p&&p.body||{},o=l(u.runId),i=l(u.unitId),g=Number(u.storyIndex),m=R(u.part);if(!o||!i.startsWith(`${o}:unit:`)||!m)return{ok:!1,error:\"bad-request\"};if(!Number.isInteger(g)||g<0||g>=zt)return{ok:!1,error:\"bad-request\"};let{data:w}=await pe(o),b=w&&w.roster||{},S=w&&w.bondChapters||{};if(!wo(S[i],m))return{ok:!1,error:\"not-forged\"};if(xa((b[i]||{}).bondFights,S[i],m)===\"\")return{ok:!1,error:\"locked\"};let M=()=>Cr(o,T(i,m),g),_=u.background===!0?await An(M):await M();return _&&_.ok===!1?_:{..._,unitId:i,part:m,beats:bl(w,i,m),of:zt}}",
+              "replace": "async p=>forgeStoryCancellation.run(l(p&&p.body&&p.body.runId),async()=>{let u=p&&p.body||{},o=l(u.runId),i=l(u.unitId),g=Number(u.storyIndex),m=R(u.part);if(!o||!i.startsWith(`${o}:unit:`)||!m)return{ok:!1,error:\"bad-request\"};if(!Number.isInteger(g)||g<0||g>=zt)return{ok:!1,error:\"bad-request\"};let{data:w}=await pe(o),b=w&&w.roster||{},S=w&&w.bondChapters||{};if(!wo(S[i],m))return{ok:!1,error:\"not-forged\"};if(xa((b[i]||{}).bondFights,S[i],m)===\"\")return{ok:!1,error:\"locked\"};let M=()=>Cr(o,T(i,m),g),_=u.background===!0?await An(M):await M();return _&&_.ok===!1?_:{..._,unitId:i,part:m,beats:bl(w,i,m),of:zt}})"
+            },
+            {
+              "find": "async p=>{let u=p&&p.body||{},o=l(u.runId),i=Number(u.chapter),g=Number(u.storyIndex);return!o||!Number.isInteger(i)||i<1||!Number.isInteger(g)||g<0?{ok:!1,error:\"bad-request\"}:u.background===!0?An(()=>Cr(o,i,g)):Cr(o,i,g)}",
+              "replace": "async p=>forgeStoryCancellation.run(l(p&&p.body&&p.body.runId),async()=>{let u=p&&p.body||{},o=l(u.runId),i=Number(u.chapter),g=Number(u.storyIndex);return!o||!Number.isInteger(i)||i<1||!Number.isInteger(g)||g<0?{ok:!1,error:\"bad-request\"}:u.background===!0?An(()=>Cr(o,i,g)):Cr(o,i,g)})"
+            },
+            {
+              "find": "async p=>{let u=p&&p.body||{},o=l(u.runId),i=Number(u.chapter),g=Number(u.combatIndex);if(!o||!Number.isInteger(i)||i<1||!Number.isInteger(g)||g<0)return{ok:!1,error:\"bad-request\"};let{data:m}=await be(),w=Ae(m,o),b=await Ph(o,w,i,g);if(b&&b.ok&&w&&b.guide){let S=b.guide;rt(w,o,S.formation||[],{place:l(S.place)?{name:S.place,tags:S.placeTags}:null}).catch(()=>{})}return b}",
+              "replace": "async p=>forgeStoryCancellation.run(l(p&&p.body&&p.body.runId),async()=>{let u=p&&p.body||{},o=l(u.runId),i=Number(u.chapter),g=Number(u.combatIndex);if(!o||!Number.isInteger(i)||i<1||!Number.isInteger(g)||g<0)return{ok:!1,error:\"bad-request\"};let{data:m}=await be(),w=Ae(m,o),b=await Ph(o,w,i,g);if(b&&b.ok&&w&&b.guide){let S=b.guide;rt(w,o,S.formation||[],{place:l(S.place)?{name:S.place,tags:S.placeTags}:null}).catch(()=>{})}return b})"
             }
           ]
         }

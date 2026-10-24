@@ -1,4 +1,4 @@
-import { canonicalizePair, characterCardName, relationshipDescriptionIssue } from "./state.mjs";
+import { canonicalizePair, characterCardName, leadingNamePattern, namePattern, relationshipDescriptionIssue, touchesName } from "./state.mjs";
 import { PERSONA_TRACKING_INSTRUCTIONS, applyPersonaDelta, describeModelValue, personaPreparedContext } from "./persona-tracking.mjs";
 
 export const MAX_RELATIONSHIP_LABEL_LENGTH = 80;
@@ -185,16 +185,14 @@ function resolveModelPair(relationship, identity) {
   return trackingPair(left.characterId, right.characterId);
 }
 
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-}
+const identityNames = (identity) => [...identity.byId.values()].map((character) => character.name);
 
 function mentionedCharacterIds(text, identity) {
   const ids = new Set();
+  const names = identityNames(identity);
   for (const character of identity.byId.values()) {
     if ((identity.nameCounts.get(character.name.toLocaleLowerCase()) ?? 0) !== 1) continue;
-    const pattern = new RegExp(`(^|[^\\p{L}\\p{N}_])${escapeRegex(character.name)}(?=$|[^\\p{L}\\p{N}_])`, "iu");
-    if (pattern.test(text)) ids.add(character.characterId);
+    if (namePattern(character.name, "iu", names).test(text)) ids.add(character.characterId);
   }
   return ids;
 }
@@ -211,18 +209,19 @@ function descriptionIssue(description, pair, identity) {
   );
 }
 
-function mentionsNaturalName(text, name) {
-  const pattern = new RegExp(`(^|[^\\p{L}\\p{N}_])${escapeRegex(name)}(?=$|[^\\p{L}\\p{N}_])`, "iu");
-  return pattern.test(text);
+function mentionsNaturalName(text, name, identity) {
+  return namePattern(name, "iu", identityNames(identity)).test(text);
 }
 
-function normalizePerspective(value, label, ownerName) {
+// clause restores the owner's name; text the model wrote touching it stays touching (김민수는 …, アリスは …).
+function normalizePerspective(value, label, ownerName, identity) {
   const text = requireBriefText(value, label, MAX_MODEL_PERSPECTIVE_LENGTH);
-  const ownerPrefix = new RegExp(`^${escapeRegex(ownerName)}(?=$|[^\\p{L}\\p{N}_])\\s*`, "iu");
-  const fragment = text.replace(ownerPrefix, "").replace(/[.!?]+$/u, "").trim();
+  const rest = text.replace(leadingNamePattern(ownerName, identityNames(identity)), "");
+  const fragment = rest.replace(/[.!?。！？]+$/u, "").trim();
   if (!fragment) fail(`${label} must contain a meaningful phrase.`);
-  if (fragment.includes(";")) fail(`${label} must be one perspective fragment without a semicolon.`);
-  return fragment;
+  if (/[;；]/u.test(fragment)) fail(`${label} must be one perspective fragment without a semicolon.`);
+  const attached = rest !== text && touchesName(rest);
+  return { fragment, clause: `${ownerName}${attached ? "" : " "}${fragment}` };
 }
 
 function structuredModelDescription(relationship, pair, identity) {
@@ -237,30 +236,25 @@ function structuredModelDescription(relationship, pair, identity) {
     return "";
   }
 
-  const perspectiveA = normalizePerspective(relationship.characterAPerspective, "Character A perspective", sourceA.name);
-  const perspectiveB = normalizePerspective(relationship.characterBPerspective, "Character B perspective", sourceB.name);
-  if (!mentionsNaturalName(perspectiveA, sourceB.name)) {
+  const perspectiveA = normalizePerspective(relationship.characterAPerspective, "Character A perspective", sourceA.name, identity);
+  const perspectiveB = normalizePerspective(relationship.characterBPerspective, "Character B perspective", sourceB.name, identity);
+  if (!mentionsNaturalName(perspectiveA.fragment, sourceB.name, identity)) {
     fail("Character A perspective must name character B.");
   }
-  if (!mentionsNaturalName(perspectiveB, sourceA.name)) {
+  if (!mentionsNaturalName(perspectiveB.fragment, sourceA.name, identity)) {
     fail("Character B perspective must name character A.");
   }
 
-  const perspectiveById = new Map([
-    [sourceA.characterId, perspectiveA],
-    [sourceB.characterId, perspectiveB],
+  const clauseById = new Map([
+    [sourceA.characterId, perspectiveA.clause],
+    [sourceB.characterId, perspectiveB.clause],
   ]);
-  const left = identity.byId.get(pair.characterAId);
-  const right = identity.byId.get(pair.characterBId);
-  const description = `${left.name} ${perspectiveById.get(left.characterId)}; ${right.name} ${perspectiveById.get(right.characterId)}.`;
+  const description = `${clauseById.get(pair.characterAId)}; ${clauseById.get(pair.characterBId)}.`;
   return requireBriefText(description, "Combined relationship description", MAX_RELATIONSHIP_DESCRIPTION_LENGTH);
 }
 
 function containsCharacterAlias(text, identity) {
-  return [...identity.byAlias.keys()].some((alias) => {
-    const pattern = new RegExp(`(^|[^\\p{L}\\p{N}_])${escapeRegex(alias)}(?=$|[^\\p{L}\\p{N}_])`, "iu");
-    return pattern.test(text);
-  });
+  return [...identity.byAlias.keys()].some((alias) => namePattern(alias).test(text));
 }
 
 function naturalizeModelProse(value, identity) {
