@@ -48,11 +48,13 @@ function SlurpInboxHub({
   initialActivity,
   onOpenMessages,
   onOpenProfile,
+  onOpenLive,
 }: {
   personaId: string | null;
   initialActivity: boolean;
   onOpenMessages: (threadId?: string | null) => void;
   onOpenProfile: (accountId: string) => void;
+  onOpenLive: (showId: string) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const threadsQuery = useSlurpThreads(personaId);
@@ -295,6 +297,7 @@ function SlurpInboxView({
   onBack,
   leaveOnExit = false,
   onOpenProfile,
+  onOpenLive,
   onOpenDesk,
 }: {
   /** The Stir tab's Support desk (docs/SUPPORT-DESK.md). */
@@ -309,6 +312,7 @@ function SlurpInboxView({
   /** Closing the chat leaves Messages entirely, back to wherever it was opened from. */
   leaveOnExit?: boolean;
   onOpenProfile: (accountId: string) => void;
+  onOpenLive: (showId: string) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const [workspaceOpen, setWorkspaceOpen] = useState(Boolean(composeWithCreatorAccountId));
@@ -354,6 +358,7 @@ function SlurpInboxView({
             initialThreadId={selectedThreadId}
             ownedCreatorAccountIds={ownedCreatorAccountIds}
             onOpenProfile={onOpenProfile}
+            onOpenLive={onOpenLive}
             onConversationOpenChange={setThreadOpen}
             onExit={closeWorkspace}
             exitTitle={localizeUi("ui.slurp.inbox.messagesTitle", { defaultValue: "Messages" })}
@@ -366,6 +371,7 @@ function SlurpInboxView({
             initialActivity={initialActivity}
             onOpenMessages={openMessages}
             onOpenProfile={onOpenProfile}
+            onOpenLive={onOpenLive}
           />
         )}
       </div>
@@ -388,6 +394,7 @@ function SlurpNotificationsView({
   onBack,
   onOpenMessages,
   onOpenProfile,
+  onOpenLive,
   embedded = false,
   search = "",
   hiddenSubjectIds = new Set<string>(),
@@ -396,6 +403,7 @@ function SlurpNotificationsView({
   onBack: () => void;
   onOpenMessages: (threadId: string | null) => void;
   onOpenProfile: (accountId: string) => void;
+  onOpenLive?: (showId: string) => void;
   embedded?: boolean;
   search?: string;
   hiddenSubjectIds?: ReadonlySet<string>;
@@ -585,7 +593,12 @@ function SlurpNotificationsView({
                 {group.events.map((event) => {
                   const appearance = eventAppearance(event.kind);
                   const EventIcon = appearance.icon;
-                  const destination = event.creatorAccountId ? () => onOpenProfile(event.creatorAccountId!) : null;
+                  const destination =
+                    event.kind === "live" && event.subjectId && onOpenLive
+                      ? () => onOpenLive(event.subjectId!)
+                      : event.creatorAccountId
+                        ? () => onOpenProfile(event.creatorAccountId!)
+                        : null;
                   const row = (
                     <>
                       {event.actorAvatarUrl ? (
@@ -643,11 +656,14 @@ function SlurpNotificationsView({
       const actionable = group.event.kind === "commission_requested";
       const fanNote = group.event.kind === "fan_note";
       const creatorId = group.event.creatorAccountId;
-      const destination = actionable
-        ? () => onOpenMessages(group.event.subjectId)
-        : creatorId && !fanNote
-          ? () => onOpenProfile(creatorId)
-          : null;
+      const destination =
+        group.event.kind === "live" && group.event.subjectId && onOpenLive
+          ? () => onOpenLive(group.event.subjectId!)
+          : actionable
+            ? () => onOpenMessages(group.event.subjectId)
+            : creatorId && !fanNote
+              ? () => onOpenProfile(creatorId)
+              : null;
       const appearance = eventAppearance(group.event.kind);
       const EventIcon = appearance.icon;
       const content = (

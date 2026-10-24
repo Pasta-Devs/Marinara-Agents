@@ -28,6 +28,7 @@ export type SlurpNavigationState =
   /** Before W, the Creator home. Old links open the Stir tab (the Dashboard is on the own profile now). */
   | { mode: "creator"; view: "studio" }
   | { mode: "creator"; view: "notifications" }
+  | { mode: "creator"; view: "live"; showId: string; returnTo?: SlurpNavigationState }
   | {
       mode: "creator";
       view: "profile";

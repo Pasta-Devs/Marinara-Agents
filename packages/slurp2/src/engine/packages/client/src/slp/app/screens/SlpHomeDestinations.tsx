@@ -12,6 +12,7 @@ import { ProfileInitial, SLP_PAGE_SCROLL_CLASS } from "../../base/chrome/SlpChro
 import { cn } from "../../../lib/utils";
 import { isSlurpDiscoveryProfileIncomplete } from "../../features/discovery/slp-discovery";
 import type { SlurpHomeHostView } from "./SlpHomeCreatorFlow";
+import { SlpLiveScreen } from "../../features/live/SlpLiveScreen";
 
 /** The navigation destinations that are pages of their own: wallet, notifications, Stir, messages, profiles. */
 export function renderSlurpHomeDestinations({
@@ -37,6 +38,27 @@ export function renderSlurpHomeDestinations({
     sourcePickerLoading,
     viewerPersonaId,
   } = model;
+  if (navigation.mode === "creator" && navigation.view === "live") {
+    const host = accountsQuery.data?.find(
+      (account) =>
+        account.id ===
+        (navigation.returnTo?.mode === "creator" && navigation.returnTo.view === "profile"
+          ? navigation.returnTo.accountId
+          : null),
+    );
+    return (
+      <SlpShell {...shellProps}>
+        <SlpLiveScreen
+          showId={navigation.showId}
+          personaId={viewerPersonaId}
+          creatorName={host?.displayName ?? localizeUi("ui.slurp.live.creator")}
+          avatarUrl={host?.avatarUrl}
+          onBack={() => (navigation.returnTo ? onNavigate(navigation.returnTo) : exitToCreatorHub())}
+          onOpenRecap={() => onNavigate({ mode: "creator", view: "hub" })}
+        />
+      </SlpShell>
+    );
+  }
   // These pages all read one persona's data; with none there is nothing to load, so they said
   // "Still connecting…" forever or offered a Try again that could not work (R1-139).
   if (
@@ -76,6 +98,7 @@ export function renderSlurpHomeDestinations({
           initialActivity
           onBack={exitToCreatorHub}
           onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
+          onOpenLive={(showId) => onNavigate({ mode: "creator", view: "live", showId, returnTo: navigation })}
         />
       </SlpShell>
     );
@@ -103,6 +126,7 @@ export function renderSlurpHomeDestinations({
           onBack={navigation.returnTo ? () => onNavigate(navigation.returnTo!) : exitToCreatorHub}
           leaveOnExit={Boolean(navigation.returnTo)}
           onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
+          onOpenLive={(showId) => onNavigate({ mode: "creator", view: "live", showId, returnTo: navigation })}
           onOpenDesk={() => onNavigate({ mode: "creator", view: "stir" })}
         />
       </SlpShell>
@@ -263,6 +287,7 @@ export function renderSlurpHomeDestinations({
 /** The Stir tab inside the shell: "See all" opens the shell's Pulse sheet; a recent play opens what it touched. */
 function SlpStirTab({
   personaId,
+  onOpenLive,
   onOpenDashboard,
   onOpenTarget,
   onOpenSupport,
@@ -270,6 +295,7 @@ function SlpStirTab({
   sheet,
 }: {
   personaId: string | null;
+  onOpenLive?: (showId: string) => void;
   sheet?: ComponentProps<typeof SlpStirScreen>["sheet"];
   onOpenSettings?: () => void;
   onOpenDashboard?: () => void;
@@ -279,6 +305,7 @@ function SlpStirTab({
   return (
     <SlpStirScreen
       personaId={personaId}
+      onOpenLive={onOpenLive}
       onOpenSupport={onOpenSupport}
       onOpenSettings={onOpenSettings}
       onOpenPulse={openSlpPulse}
@@ -296,6 +323,8 @@ function slpStirLinks(
 ) {
   return {
     personaId: viewerPersonaId,
+    onOpenLive: (showId: string) =>
+      onNavigate({ mode: "creator", view: "live", showId, returnTo: { mode: "creator", view: "stir" } }),
     onOpenSettings: () =>
       onNavigate({ mode: "creator-settings", section: "content", target: "drama", settingKey: "drama" }),
     onOpenTarget,

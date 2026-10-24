@@ -1,0 +1,56 @@
+export type SlpLiveLine = {
+  at: number;
+  kind: "narration" | "crowd" | "reaction" | "picture";
+  name?: string;
+  text: string;
+  mediaId?: string;
+};
+export type SlpLiveEvent = {
+  at: number;
+  kind: "tip" | "chat";
+  name: string;
+  amount?: number;
+  text: string;
+  personaId?: string;
+};
+export type SlpLiveMenuItem = { id: string; label: string; price: number; picture: boolean };
+export type SlpLiveOrder = {
+  itemId: string;
+  label: string;
+  name: string;
+  personaId?: string;
+  at: number;
+  served: boolean;
+  requestId: string;
+  status?: "pending" | "paid";
+};
+export type SlpLiveShow = {
+  id: string;
+  hostKind: "creator" | "player";
+  hostId: string;
+  startedAt: string;
+  endsAt: string;
+  endedAt: string | null;
+  goal: number;
+  raised: number;
+  goalHitAt: string | null;
+  script: SlpLiveLine[];
+  events: SlpLiveEvent[];
+  lastReplyAt: string | null;
+  recapPostId: string | null;
+  menu: SlpLiveMenuItem[];
+  queue: SlpLiveOrder[];
+  segment: { index: number; lease: string | null; claimedAt: string | null } | null;
+  lastSeenAt: string | null;
+  missedSummary: string[] | null;
+  announcedFor: string | null;
+  mode: "text" | "pictures";
+  pictureViewerId?: string | null;
+  pictureViewers?: { personaId: string; mode: "text" | "pictures"; seenAt: string | null }[];
+  pictureModeBusy?: boolean;
+  private?: { personaId: string; until: string; block: number } | null;
+  privatePrice?: number;
+  picturesAllowed?: boolean;
+  viewers?: number;
+};
+export type SlpLiveShowResponse = SlpLiveShow;

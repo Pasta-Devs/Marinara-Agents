@@ -2,3 +2,4 @@ export { allocateAmbientProfileHandles } from "./slp-ambient-profile-generation-
 export { drainSlurpAudienceReplies } from "./slp-audience-reply-operation.js";
 export { getCreatorFanActivityStatus } from "./slp-fan-activity-operation.js";
 export { runCreatorFanActivity } from "./slp-fan-activity-operation.js";
+export { resolveCreatorFanConnection } from "./slp-fan-activity-service.js";

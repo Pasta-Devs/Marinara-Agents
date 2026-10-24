@@ -4,7 +4,8 @@ import { useSlpMinuteClock } from "../../base/ui/slp-minute-clock";
 import { SlurpCoinAmount } from "../../modules/coin/SlpCoin";
 import { SlpButton } from "../../modules/chrome/SlpButton";
 import { useStartSlurpSexting } from "./slp-message-action-hooks";
-import { newRequestId, type SlurpThreadViewModel } from "./slp-thread-actions";
+import { newRequestId } from "../../base/state/slp-request-id";
+import { type SlurpThreadViewModel } from "./slp-thread-actions";
 
 /** After a session, how long the thread still asks for a tip. */
 const TIP_PROMPT_MINUTES = 30;

@@ -23,6 +23,11 @@ export type SlurpResettableSection =
 
 export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonly (keyof SlurpSettings)[]> = {
   general: [
+    "liveFrequency",
+    "liveStartHour",
+    "liveEndHour",
+    "liveMinMinutes",
+    "liveMaxMinutes",
     "storyRate",
     "professorMariCreatorSource",
     "storyImagesEnabled",
@@ -171,6 +176,7 @@ export const SLURP_SETTINGS_NOT_RESET: readonly (keyof SlurpSettings)[] = [
   "extStorylines",
   "extWorld",
   "extStir",
+  "extLive",
   "extSupportDesk",
   "extEngineLink",
   // Living world's own sub-switch, the same kind of choice.

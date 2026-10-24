@@ -18,6 +18,12 @@ export type SlurpSettings = {
   extStorylines: boolean;
   extWorld: boolean;
   extStir: boolean;
+  extLive: boolean;
+  liveFrequency: "rare" | "normal" | "often";
+  liveStartHour: number;
+  liveEndHour: number;
+  liveMinMinutes: number;
+  liveMaxMinutes: number;
   extSupportDesk: boolean;
   extEngineLink: boolean;
   inlineAdsEnabled: boolean;

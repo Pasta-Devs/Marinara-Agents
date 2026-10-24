@@ -73,6 +73,7 @@ import { toast } from "sonner";
 import { slurp2SplashPending } from "../features/onboarding/SlpSplash";
 import type { SlurpHomeProps } from "./slp-home.types";
 import { slpExtensionOn, slpTrendsOn } from "../../../../shared/src/slp/slp-extensions.js";
+import { useSlpCurrentLiveShow } from "../features/live/slp-live-hooks";
 export function useSlurpHomeBaseState({ navigation, onNavigate: navigateRaw, onLeave }: SlurpHomeProps) {
   const onNavigate = useSlpBackstageLeaveGuard(navigation, navigateRaw);
   const { t: localizeUi } = useUiTranslation();
@@ -529,6 +530,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate: navigateRaw, onL
   });
   /** The post whose share picker is open, or null. */
   const [sharingPost, setSharingPost] = useState<SlpPostCardModel | null>(null);
+  const liveShow = useSlpCurrentLiveShow(true);
   const postCardCtx = {
     ...postCardController.ctx,
     trendsShown: Boolean(slurpSettingsQuery.data && slpTrendsOn(slurpSettingsQuery.data)),
@@ -549,6 +551,9 @@ export function useSlurpHomeBaseState({ navigation, onNavigate: navigateRaw, onL
     // Sharing used to post straight to the creator who wrote the post — the one chat the reader
     // never means — so it opens the chat picker instead.
     sharePost: viewerPersonaId ? (post: SlpPostCardModel) => setSharingPost(post) : undefined,
+    liveHostId: liveShow.data?.hostId ?? null,
+    openLive: (showId: string) =>
+      onNavigate({ mode: "creator", view: "live", showId, returnTo: { mode: "creator", view: "hub" } }),
   };
   const selectedProfile =
     navigation.mode === "creator" && navigation.view === "profile"

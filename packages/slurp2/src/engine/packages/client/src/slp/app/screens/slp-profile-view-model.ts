@@ -18,6 +18,7 @@ import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { slpPrefersReducedMotion } from "../../base/chrome/slp-motion";
 import { slurpCreatorStatus } from "../../modules/creator/slp-creator-status";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { useSlpCurrentLiveShow } from "../../features/live/slp-live-hooks";
 import { profileAccent } from "../../features/creators/SlpStageProfileForm";
 import {
   isSlurpStory,
@@ -32,6 +33,7 @@ import type { SlpCreatorProfileTab, SlurpProfileImagePost } from "./SlpScreenPro
 
 export interface StageProfileViewProps {
   profile: SlurpManagedStageProfile;
+  onOpenLive?: (showId: string) => void;
   /** Open the own page's Dashboard on arrival (W). */
   openDashboard?: boolean;
   profileDraft: SlurpStageProfileInput | null;
@@ -98,6 +100,7 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
     connectionCounts,
     composerOpenSignal,
   } = props;
+  const liveQuery = useSlpCurrentLiveShow(true);
   const { t: localizeUi, i18n } = useUiTranslation();
   const bannerSrc = useSlurpMediaSrc(profile.bannerUrl, { width: 1280 });
   const [automationOpen, setAutomationOpen] = useState(false);
@@ -300,6 +303,8 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
         ? localizeUi("ui.slurp.profile.emptyStories")
         : localizeUi("ui.noodle.stageprofileview.noNoodlerPostsYet");
   return {
+    liveShowId: liveQuery.data?.hostId === profile.id ? liveQuery.data.id : null,
+    onOpenLive: props.onOpenLive,
     ...props,
     localizeUi,
     i18n,

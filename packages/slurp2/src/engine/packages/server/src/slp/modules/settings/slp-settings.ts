@@ -75,6 +75,7 @@ import {
   SLURP_TEASER_RATE,
 } from "../feed/slp-post-variation.js";
 import { logger } from "../../../lib/logger.js";
+import { normalizeSlurpLiveSettings } from "./slp-live-settings.js";
 import {
   SLURP_DEFAULT_CREATOR_MESSAGING,
   SLURP_DEFAULT_REPLY_DELAYS,
@@ -122,6 +123,12 @@ export const slurpSettingsSchema = z.object({
   extStorylines: z.boolean(),
   extWorld: z.boolean(),
   extStir: z.boolean(),
+  extLive: z.boolean(),
+  liveFrequency: z.enum(["rare", "normal", "often"]),
+  liveStartHour: z.number().int().min(0).max(23),
+  liveEndHour: z.number().int().min(1).max(24),
+  liveMinMinutes: z.number().int().min(10).max(120),
+  liveMaxMinutes: z.number().int().min(10).max(120),
   extSupportDesk: z.boolean(),
   extEngineLink: z.boolean(),
   inlineAdsEnabled: z.boolean(),
@@ -461,6 +468,12 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   extStorylines: false,
   extWorld: false,
   extStir: false,
+  extLive: true,
+  liveFrequency: "normal",
+  liveStartHour: 18,
+  liveEndHour: 24,
+  liveMinMinutes: 20,
+  liveMaxMinutes: 40,
   extSupportDesk: false,
   extEngineLink: false,
   inlineAdsEnabled: true,
@@ -648,14 +661,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   viewerPersonaId: null,
 };
 
-/**
- * A persona's own Slurp identity, provisioned so its likes and replies have an author.
- *
- * It is not a Creator: it has no stage profile, no disclosure mode, and nobody authored it. Listing
- * it as one put every persona that ever tapped a heart into the Creator profiles list as "Setup
- * Needed", and into every other viewer's Discover as a browsable Creator. A Creator stage profile
- * is always written with `invited: false`; only these actor accounts are an invited persona.
- */
+/** Invited persona accounts are viewer actors, not browsable Creators. */
 export function isSlurpViewerActorAccount(account: Pick<SlurpAccount, "invited" | "kind">): boolean {
   return account.invited === true && account.kind === "persona";
 }
@@ -666,11 +672,7 @@ export function isSlurpViewerActorAccount(account: Pick<SlurpAccount, "invited" 
 let cachedSettingsRaw: string | null = null;
 let cachedSettings: SlurpSettings | null = null;
 
-/**
- * Keys retired in fix phase 1b (R1-136): nothing read them. Stored copies are safe: the normalizer
- * takes only known keys, the PATCH schema strips unknown ones, and the next save drops them. Listed
- * so a test can prove old data still loads.
- */
+// Retired keys are ignored by the normalizer and stripped on save.
 export const SLURP_RETIRED_SETTINGS_KEYS = [
   "imageGenerationConnectionId",
   "invitedCharacterGroupIds",
@@ -792,5 +794,5 @@ function normalizeSlurpSettingsUncached(raw: unknown): SlurpSettings {
     if (parsed.success) settings[key] = parsed.data;
     else logger.warn("Slurp setting %s was invalid; using its default", key);
   }
-  return slurpSettingsSchema.parse(settings);
+  return normalizeSlurpLiveSettings(slurpSettingsSchema.parse(settings), DEFAULT_SLURP_SETTINGS);
 }

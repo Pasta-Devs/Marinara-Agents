@@ -17,6 +17,7 @@ import { playSlpPop } from "../sparkle/SlpSparkle";
 import { slpTagClass } from "../chrome/SlpButton";
 import { SlpPostPartnership, SlpReachBadge } from "./SlpPostPartnership";
 import { SlpPostTrendChip } from "./SlpPostTrendChip";
+import { SlpLiveAvatar } from "../creator/SlpLiveAvatar";
 import { SlpPostPurposeNote, slpShowPostInPlace } from "./SlpPostPurposeNote";
 import { SlpPostEditSheet } from "./SlpPostEditSheet";
 import { useTranslation as useUiTranslation } from "react-i18next";
@@ -405,7 +406,9 @@ export function SlpPostCard({
             }
           >
             <SlpStoryRingAvatar creatorId={post.authorAccountId} name={author.displayName}>
-              <Avatar account={author} />
+              <SlpLiveAvatar live={ctx.liveHostId === post.authorAccountId}>
+                <Avatar account={author} />
+              </SlpLiveAvatar>
             </SlpStoryRingAvatar>
           </button>
         ) : (

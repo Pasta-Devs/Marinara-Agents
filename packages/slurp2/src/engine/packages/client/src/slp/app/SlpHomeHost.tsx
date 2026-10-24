@@ -35,6 +35,7 @@ import { slurpLiveStories } from "./screens/slp-hub-view";
 import { slpShowPostWhenRendered } from "../modules/post/SlpPostPurposeNote";
 import type { SlpPulseTarget } from "../base/state/slp-task-store";
 import { slpExtensionOn, slpInlineAdsOn } from "../../../../shared/src/slp/slp-extensions.js";
+import { SlpPlayerLiveSetup } from "../features/live/SlpPlayerLiveSetup";
 
 /** Slurp's own tree and its portalled sheets. */
 const SLP_SCOPE_SELECTOR = 'marinara-capability-slurp2, [data-marinara-capability-scope="slurp2"]';
@@ -57,6 +58,7 @@ function useSlpStirDeckNavigate({ navigation, onNavigate }: Pick<SlurpHomeProps,
 }
 
 export function SlurpHome({ navigation, onNavigate: navigateRaw, onLeave }: SlurpHomeProps) {
+  const [playerLiveSetupOpen, setPlayerLiveSetupOpen] = useState(false);
   const onNavigate = useSlpStirDeckNavigate({ navigation, onNavigate: navigateRaw });
   const model = useSlurpHomeState({ navigation, onNavigate, onLeave });
   const {
@@ -474,8 +476,29 @@ export function SlurpHome({ navigation, onNavigate: navigateRaw, onLeave }: Slur
     );
   }
 
-  const creatorFlow = renderSlurpHomeCreatorFlow({ model, shellProps, reviewModal });
-  if (creatorFlow) return creatorFlow;
+  const creatorFlow = renderSlurpHomeCreatorFlow({
+    model,
+    shellProps,
+    reviewModal,
+    playerLiveSetupOpen,
+    setPlayerLiveSetupOpen,
+  });
+  if (creatorFlow) {
+    return (
+      <>
+        {creatorFlow}
+        <SlpPlayerLiveSetup
+          open={playerLiveSetupOpen}
+          personaId={viewerPersonaId}
+          onClose={() => setPlayerLiveSetupOpen(false)}
+          onStarted={(showId) => {
+            setPlayerLiveSetupOpen(false);
+            onNavigate({ mode: "creator", view: "live", showId, returnTo: navigation });
+          }}
+        />
+      </>
+    );
+  }
 
   if (navigation.mode === "creator" && navigation.view === "profile") {
     return (

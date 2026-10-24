@@ -10,6 +10,7 @@ import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import type { SlpPulseTarget } from "../../base/state/slp-task-store";
 import { SlpButton, SlpChip, SlpSegment } from "../../modules/chrome/SlpButton";
 import { SlpSheet } from "../../modules/chrome/SlpSheet";
+import { SlpStirGoLive } from "./SlpStirGoLive";
 import { SlpUsesAiMark } from "../../modules/chrome/SlpAiMark";
 import { SlpEmptyState, SlpErrorState, SlpSkeleton } from "../../modules/chrome/SlpStateKit";
 import { SLP_CARD_STACK_CLASS } from "../../modules/post/SlpPostHelpers";
@@ -529,6 +530,7 @@ let lastStirMode: "stir" | "desk" = "stir";
 
 export function SlpStirScreen({
   personaId,
+  onOpenLive,
   onOpenPulse,
   onOpenDashboard,
   onOpenTarget,
@@ -537,6 +539,7 @@ export function SlpStirScreen({
   sheet,
 }: {
   personaId: string | null;
+  onOpenLive?: (showId: string) => void;
   /** The tab as a sheet over the page it was opened from; its own sheets stack on top of it. */
   sheet?: { open: boolean; onClose: () => void };
   /** Settings › Stir › Drama, where the packs are switched on (0.3.11). */
@@ -651,6 +654,7 @@ export function SlpStirScreen({
       ) : (
         <>
           <StirHint />
+          <SlpStirGoLive creators={view?.creators ?? []} onOpenLive={onOpenLive} />
           <SlpStirBox names={names} personaId={personaId} />
           {query.isPending ? (
             <SlpSkeleton shape="card" count={2} label={t("ui.slurp.state.loading")} />

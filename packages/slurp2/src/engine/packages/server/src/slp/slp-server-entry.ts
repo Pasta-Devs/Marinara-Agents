@@ -55,6 +55,7 @@ import { startSlurpAutopurgeScheduler } from "./features/maintenance/slp-autopur
 import { buildSlurpChatContext, type SlurpChatContextRequest } from "./features/creators/slp-chat-context.js";
 import type { CapabilityIntegrationHost } from "@marinara-engine/shared";
 import { setSlurpGenerationIntegrations } from "./base/host/slp-generation-integrations.js";
+import { slpLiveRoutes } from "./features/live/slp-live-routes.js";
 
 const lifecycle = createSlurpActivationLifecycle();
 
@@ -78,6 +79,7 @@ export async function mountSlpRoutes(app: FastifyInstance) {
   await slpStoryRoutes(app, deps);
   await slpStoryStateRoutes(app, deps);
   await slpDramaRoutes(app, deps);
+  await slpLiveRoutes(app, deps);
   await slpDiscoveryRoutes(app, deps);
   await slpCreatorsRoutes(app, deps);
   await slpSteeringRoutes(app, deps);

@@ -924,6 +924,42 @@ export const slurpDemandTrends = fileTable("slurp2_creator_demand_trends", {
   expiresAt: text("expires_at").notNull(),
 });
 
+export const slurpLiveShows = fileTable("slurp2_live_shows", {
+  id: text("id").primaryKey(),
+  hostKind: text("host_kind").notNull(),
+  hostId: text("host_id").notNull(),
+  startedAt: text("started_at").notNull(),
+  endsAt: text("ends_at").notNull(),
+  endedAt: text("ended_at"),
+  goal: text("goal").notNull(),
+  raised: text("raised").notNull().default("0"),
+  goalHitAt: text("goal_hit_at"),
+  script: text("script").notNull().default("[]"),
+  events: text("events").notNull().default("[]"),
+  audienceTipKeys: text("audience_tip_keys"),
+  menu: text("menu"),
+  queue: text("queue"),
+  segment: text("segment"),
+  lastSeenAt: text("last_seen_at"),
+  missedSummary: text("missed_summary"),
+  announcedFor: text("announced_for"),
+  reminders: text("reminders").notNull().default("[]"),
+  announcementPostId: text("announcement_post_id"),
+  // Rows written before scheduling were already started; new plans explicitly store null.
+  startedNoticeAt: text("started_notice_at").default("legacy"),
+  mode: text("mode"),
+  privateState: text("private_state"),
+  privateClaims: text("private_claims").notNull().default("[]"),
+  privateRequestId: text("private_request_id"),
+  pictureStates: text("picture_states").notNull().default("[]"),
+  pictureViewers: text("picture_viewers").notNull().default("[]"),
+  pictureViewerId: text("picture_viewer_id"),
+  pictureSeenAt: text("picture_seen_at"),
+  stirRequestId: text("stir_request_id"),
+  lastReplyAt: text("last_reply_at"),
+  recapPostId: text("recap_post_id"),
+});
+
 /** One cross-process lease for the free world tick. */
 export const slurpWorldClaims = fileTable("slurp2_world_claims", {
   id: text("id").primaryKey(),

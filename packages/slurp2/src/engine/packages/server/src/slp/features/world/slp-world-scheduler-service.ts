@@ -16,6 +16,7 @@ import {
   textSlurpPartners,
 } from "../messages/slp-messages-contract.js";
 import { slurpPaused } from "../../base/model/slp-pause.js";
+import { advanceSlurpLive } from "../live/slp-live-contract.js";
 
 /**
  * The background half of the world clock.
@@ -78,6 +79,7 @@ export function startSlurpWorldScheduler(app: FastifyInstance, registerStop?: (s
       );
       // Drama rides the same clock too (docs/DRAMA.md): nothing runs until the player switches it on.
       await advanceSlurpDrama(app.db).catch((error: unknown) => logger.warn(error, "[slurp-drama] Drama tick failed"));
+      await advanceSlurpLive(app.db).catch((error: unknown) => logger.warn(error, "[slurp-live] Live tick failed"));
       // A post that took off may become a trend (docs/TRENDS.md); it never fails the tick.
       await advanceSlurpTrends(app.db, new Date()).catch((error: unknown) =>
         logger.warn(error, "[slurp-trends] Trends tick failed"),

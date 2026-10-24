@@ -5,7 +5,7 @@ import { StageProfileSourcePicker, DisclosureStep } from "./SlpScreenCreateProfi
 import { toast } from "sonner";
 import { StageProfileForm } from "../../features/creators/SlpStageProfileForm";
 import { openSlpCreatorSettings } from "../../features/creators/settings/slp-creator-settings-store";
-import { ChevronRight, LayoutGrid, Pencil, Plus } from "lucide-react";
+import { ChevronRight, LayoutGrid, Pencil, Plus, Radio } from "lucide-react";
 import { SlpSparkleGlyph } from "../../base/chrome/SlpGlyphs";
 import { cn } from "../../../lib/utils";
 import { SLP_EYEBROW_CLASS, SLP_PAGE_SCROLL_CLASS, SLP_RAIL_GROUP_CLASS } from "../../base/chrome/SlpChrome";
@@ -21,6 +21,8 @@ export type SlurpHomeHostView = {
   reviewModal: ReactNode;
   feedRightRail?: ReactNode;
   showDiscovery?: boolean;
+  playerLiveSetupOpen: boolean;
+  setPlayerLiveSetupOpen: (open: boolean) => void;
 };
 
 /** Creator setup and the selected stage profile: every branch that edits a Creator. */
@@ -30,6 +32,8 @@ export function renderSlurpHomeCreatorFlow({
   reviewModal,
   feedRightRail,
   showDiscovery,
+  playerLiveSetupOpen,
+  setPlayerLiveSetupOpen,
 }: SlurpHomeHostView) {
   void [shellProps, reviewModal, feedRightRail, showDiscovery];
   const {
@@ -329,6 +333,13 @@ export function renderSlurpHomeCreatorFlow({
           <section className="overflow-hidden rounded-2xl bg-[var(--slurp-surface)] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]">
             {[
               {
+                label: localizeUi("ui.slurp.live.goLive", { defaultValue: "Go live" }),
+                icon: Radio,
+                action: () => {
+                  setPlayerLiveSetupOpen(true);
+                },
+              },
+              {
                 label: localizeUi("ui.slurp.profile.editProfile", { defaultValue: "Edit profile" }),
                 icon: Pencil,
                 action: () => openSlpCreatorSettings(selectedProfile.id, { tab: "identity" }),
@@ -403,6 +414,7 @@ export function renderSlurpHomeCreatorFlow({
           <StageProfileView
             key={`${selectedProfile.id}:${shellPersonaAccount?.id ?? "no-viewer"}`}
             profile={selectedProfile}
+            onOpenLive={(showId) => onNavigate({ mode: "creator", view: "live", showId, returnTo: navigation })}
             openDashboard={
               navigation.mode === "creator" && navigation.view === "profile" && navigation.dashboard === true
             }
