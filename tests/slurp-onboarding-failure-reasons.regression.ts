@@ -66,7 +66,7 @@ const coveredFiles = new Set(Object.keys(parsers).flatMap((file) => SLURP2_SOURC
 const liveService = "packages/slurp2/src/engine/packages/server/src/slp/features/live/slp-live-service.ts";
 assert.match(read(liveService), /requireModelAnswer\(response\.content/u, "The live model answer must be guarded");
 coveredFiles.add("packages/server/src/slp/features/live/slp-live-service.ts");
-const slpServer ="packages/slurp2/src/engine/packages/server/src/slp";
+const slpServer = "packages/slurp2/src/engine/packages/server/src/slp";
 for (const file of readdirSync(join(root, slpServer), { recursive: true, encoding: "utf8" })) {
   if (!file.endsWith(".ts") || !/parseGameJsonish\(/u.test(read(`${slpServer}/${file}`))) continue;
   assert.ok(

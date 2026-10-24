@@ -600,7 +600,7 @@ assert.deepEqual(
     onError: 99,
     // 0.3.63: +1 (the sexting buy refreshes the thread when settled).
     // Live shows: +11 useMutation, +8 useQuery, +3 invalidateQueries, +1 onError, +9 onSettled.
-  onSettled: 50,
+    onSettled: 50,
   },
   "query and mutation wiring counts match the monolith plus the later Slurp2 hooks",
 );

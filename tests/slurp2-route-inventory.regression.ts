@@ -6,6 +6,22 @@ import { join } from "node:path";
 // parser. The route list below is the post-rename inventory. BASELINE is derived from it through
 // the explicit mapping table, so a method change or a missing route cannot pass by rebaselining.
 const EXPECTED = [
+  // Live shows.
+  "GET /live",
+  "GET /live/:id",
+  "GET /live/:id/picture/:mediaId",
+  "GET /live/player-menu/:personaId",
+  "POST /live/:id/chat",
+  "POST /live/:id/end",
+  "POST /live/:id/menu",
+  "POST /live/:id/menu/:requestId/done",
+  "POST /live/:id/mode",
+  "POST /live/:id/narrate",
+  "POST /live/:id/private",
+  "POST /live/:id/remind",
+  "POST /live/:id/tip",
+  "POST /live/start",
+  "POST /live/stir",
   // 0.3.18: edit, delete and write again a DM; copy and sum up a thread (docs/FEEDBACK-2026-10.md R9, R10).
   "GET /messages/threads/:threadId/export",
   "POST /messages/sexting",
@@ -339,6 +355,22 @@ const RETAINED_OLD_PATHS = new Set([
   "GET /noodler/posts/:id/media/:position",
 ]);
 const ADDED_ROUTES = new Set([
+  // Live shows (docs/SPICY.md).
+  "GET /live",
+  "GET /live/:id",
+  "GET /live/:id/picture/:mediaId",
+  "GET /live/player-menu/:personaId",
+  "POST /live/:id/chat",
+  "POST /live/:id/end",
+  "POST /live/:id/menu",
+  "POST /live/:id/menu/:requestId/done",
+  "POST /live/:id/mode",
+  "POST /live/:id/narrate",
+  "POST /live/:id/private",
+  "POST /live/:id/remind",
+  "POST /live/:id/tip",
+  "POST /live/start",
+  "POST /live/stir",
   // Paid sexting sessions (docs/SPICY.md, item 2).
   "POST /messages/sexting",
   // Roleplay scenes from a DM thread (docs/SCENES.md).
@@ -530,6 +562,7 @@ const EXPECTED_HANDLER_COUNTS = {
   "features/discovery": 5,
   "features/economy": 14,
   "features/feed": 39,
+  "features/live": 15,
   "features/maintenance": 15,
   "features/media": 8,
   // 0.3.63: +1 (the sexting session).
@@ -546,7 +579,8 @@ const EXPECTED_HANDLER_COUNTS = {
 // 0.3.8: +1 GET, +5 POST (Drama: bonds, drama view, choice, start, end). 0.3.11: +1 POST (fan notes).
 // DM edit tools and thread export: +1 GET, +4 POST. 0.3.28: +1 GET (Deep details for a chat reply). 0.3.42: +1 GET (carryover reach). Story state (Life panel): +1 GET, +1 POST.
 // 0.3.63: +1 POST (sexting session).
-const EXPECTED_METHOD_COUNTS = { DELETE: 20, GET: 91, PATCH: 20, POST: 166, PUT: 7 } as const;
+// Live shows: +4 GET, +11 POST.
+const EXPECTED_METHOD_COUNTS = { DELETE: 20, GET: 95, PATCH: 20, POST: 177, PUT: 7 } as const;
 
 const root = join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/slp");
 const registration = /\bapp\.(get|post|put|patch|delete|addContentTypeParser)(?:<[^()]*?>)?\(\s*["'`]([^"'`]+)["'`]/gu;
@@ -605,7 +639,7 @@ assert.deepEqual(methodCounts, EXPECTED_METHOD_COUNTS, "HTTP method multiset cha
 // 0.3.41: +1 (Engine avatar copies).
 // DM edit tools, thread export: +5. Story state (Life panel): +2. Remove an imported pack: +1.
 // 0.3.63: +1 (the sexting session).
-assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 304);
+assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 319);
 assert.deepEqual(handlerCounts, EXPECTED_HANDLER_COUNTS, "handler count changed in a feature");
 assert.ok(foundRoutes.includes("POST /slurp/posts/:id/media"), "the renamed POST media route must remain registered");
 assert.ok(
