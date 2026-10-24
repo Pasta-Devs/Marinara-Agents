@@ -1634,3 +1634,170 @@ test("Autoplay waits three seconds after revealed text and voice end, and Skip c
   await expect(forge.locator("[data-skip]")).toBeDisabled();
   expect(speech).toHaveLength(2);
 });
+
+test("Story Cancel exits delayed chapter generation without losing progress", async ({ page }, testInfo) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const { forge, saved } = await openForge(page, testInfo);
+  const progress = { "1": { normal: 3, hard: 1, veryhard: 0 } };
+  saved.progress = progress;
+  const cancelled: Record<string, unknown>[] = [];
+  let releasePlan!: () => void,
+    releaseCancel!: () => void,
+    finishedPlan!: () => void,
+    requests = 0;
+  const heldPlan = new Promise<void>((resolve) => (releasePlan = resolve));
+  const heldCancel = new Promise<void>((resolve) => (releaseCancel = resolve));
+  const planFinished = new Promise<void>((resolve) => (finishedPlan = resolve));
+  await page.route("**/api/gacha-forge/story/cancel", async (route) => {
+    cancelled.push(route.request().postDataJSON());
+    await heldCancel;
+    await route.fulfill({ json: { ok: true } });
+  });
+  await page.route("**/api/gacha-forge/chapter-plan", async (route) => {
+    const first = ++requests === 1;
+    if (first) await heldPlan;
+    try {
+      await route.fulfill({
+        json: {
+          ok: true,
+          plan: { title: "Recovered chapter", nodes: [{ index: 1, type: "story", title: "Garden", storyIndex: 0 }] },
+          progress: { "2": { normal: 0, hard: 0, veryhard: 0 } },
+        },
+      });
+    } finally {
+      if (first) finishedPlan();
+    }
+  });
+  await page.route("**/api/gacha-forge/preforge/start", (route) =>
+    route.fulfill({ json: { ok: true, allowed: false, preforge: { mode: "off" } } }),
+  );
+  const start = () =>
+    forge.evaluate((node, keptProgress) => {
+      const game = node as any;
+      game._clearBeat();
+      game._run.progress = keptProgress;
+      game._run.prologuePending = false;
+      game._prologue = false;
+      game._storyUnwritten = false;
+      game._plan = null;
+      game._openChapter(2);
+    }, progress);
+  try {
+    await start();
+    await expect.poll(() => requests).toBe(1);
+    const cancel = forge.locator(".gf-stage > .gf-view [data-forge-story-cancel]");
+    await expect(cancel).toBeVisible();
+    await forge.screenshot({ path: testInfo.outputPath("chapter-loading-cancel.png") });
+    await cancel.click();
+    await expect(forge.getByRole("button", { name: "Game settings", exact: true })).toBeVisible();
+    await expect.poll(() => cancelled.length).toBe(1);
+    expect(cancelled[0]).toEqual({ runId: saved.runId, chapter: 2 });
+    expect(
+      await forge.evaluate((node) => ({ view: (node as any)._hudView, progress: (node as any)._run.progress })),
+    ).toEqual({
+      view: "home",
+      progress,
+    });
+    releasePlan();
+    releaseCancel();
+    await planFinished;
+    await expect(cancel).toHaveCount(0);
+    expect(await forge.evaluate((node) => (node as any)._state())).toBe("hud");
+    expect(requests).toBe(1);
+    await start();
+    await expect.poll(() => requests).toBe(2);
+    await expect.poll(() => forge.evaluate((node) => (node as any)._plan?.title)).toBe("Recovered chapter");
+    expect(await forge.evaluate((node) => (node as any)._run.progress)).toEqual(progress);
+    expect(errors).toEqual([]);
+  } finally {
+    releasePlan();
+    releaseCancel();
+  }
+});
+
+test("Story Cancel exits delayed and stale beat loading and permits a fresh story", async ({ page }, testInfo) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const { forge, saved } = await openForge(page, testInfo);
+  const progress = { "1": { normal: 3 } };
+  saved.progress = progress;
+  let releaseBeat!: () => void,
+    finishedBeat!: () => void,
+    requests = 0;
+  const heldBeat = new Promise<void>((resolve) => (releaseBeat = resolve));
+  const beatFinished = new Promise<void>((resolve) => (finishedBeat = resolve));
+  const cancellations: Record<string, unknown>[] = [];
+  await page.route("**/api/gacha-forge/story/cancel", (route) => {
+    cancellations.push(route.request().postDataJSON());
+    return route.fulfill({ json: { ok: true } });
+  });
+  await page.route("**/api/gacha-forge/beat", async (route) => {
+    const first = ++requests === 1;
+    if (first) await heldBeat;
+    try {
+      await route.fulfill({ json: scene });
+    } finally {
+      if (first) finishedBeat();
+    }
+  });
+  const start = () =>
+    forge.evaluate((node, keptProgress) => {
+      const game = node as any;
+      game._clearBeat();
+      game._run.progress = keptProgress;
+      game._prologue = false;
+      game._hudView = "chapter";
+      game._planChapter = 1;
+      game._plan = { title: "Saved chapter", nodes: [{ index: 1, type: "story", title: "Garden", storyIndex: 0 }] };
+      game._activeStoryNode = {
+        chapter: 1,
+        nodeIndex: 0,
+        storyIndex: 0,
+        title: "Garden",
+        difficulty: "normal",
+        replay: false,
+      };
+      game._beatState = "loading";
+      game._beatRequested = false;
+      game._renderBrowser();
+    }, progress);
+  try {
+    await start();
+    await expect.poll(() => requests).toBe(1);
+    const cancel = forge.locator(".gf-stage > .gf-view [data-forge-story-cancel]");
+    await expect(cancel).toBeVisible();
+    await forge.screenshot({ path: testInfo.outputPath("beat-loading-cancel.png") });
+    await cancel.click();
+    await expect(forge.getByRole("button", { name: "Game settings", exact: true })).toBeVisible();
+    await expect.poll(() => cancellations.length).toBe(1);
+    expect(
+      await forge.evaluate((node) => ({ plan: (node as any)._plan.title, progress: (node as any)._run.progress })),
+    ).toEqual({
+      plan: "Saved chapter",
+      progress,
+    });
+    releaseBeat();
+    await beatFinished;
+    await expect(forge.locator("[data-vn]")).toHaveCount(0);
+    expect(await forge.evaluate((node) => (node as any)._state())).toBe("hud");
+    await start();
+    await expect.poll(() => requests).toBe(2);
+    await expect(forge.locator("[data-vn]")).toBeVisible();
+    expect(await forge.evaluate((node) => (node as any)._run.progress)).toEqual(progress);
+    await forge.evaluate((node) => {
+      const game = node as any;
+      game._clearBeat();
+      game._beatState = "loading";
+      game._beatRequested = true;
+      game._renderBrowser();
+    });
+    await expect(cancel).toBeVisible();
+    await cancel.click();
+    await expect(forge.getByRole("button", { name: "Game settings", exact: true })).toBeVisible();
+    expect(requests).toBe(2);
+    expect(errors).toEqual([]);
+  } finally {
+    releaseBeat();
+  }
+});

@@ -1,3 +1,7 @@
+## 1.15.1 — 2026-10-24 [highlight]
+
+- Cancel chapter and story generation from the loading screen and return to Gacha Home without deleting the world or saved progress. Active story requests and chapter preforging stop, and late responses cannot reopen the cancelled screen.
+
 ## 1.15.0 — 2026-10-24
 
 - Choose a generated song for the Home menu in Settings → Look → Visual. Saved songs remain playable when generation is off.
