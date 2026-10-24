@@ -3611,8 +3611,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "6c03a2a4d3075ee1fbff422d50e8f82cfd866f13549cc9efd71b8cd7e881f183",
-            "bytes": 2875333
+            "sha256": "f2f13c6b456a61c690a086a6590a68e994251de4e5a101e66e128f4b03712d24",
+            "bytes": 2875351
           },
           {
             "path": "slurp2-logo.png",
@@ -3636,18 +3636,18 @@
           },
           {
             "path": "src/engine/packages/client/src/slp/locales/de.json",
-            "sha256": "33c4741898cc25e33fe1e470144b700fda15c033eec9ec6df2710ea8e29785a3",
+            "sha256": "70d009489567ade653b07561682b3691cb8a27ad798213701af76a51d16585c5",
             "bytes": 237649
           },
           {
             "path": "src/engine/packages/client/src/slp/locales/ko.json",
-            "sha256": "5ca7a23a61b7d2a9dc5048569bd4e88a62de64b3b35955c245ad2c2da6aa32ea",
-            "bytes": 334917
+            "sha256": "9e24668a641e6a2ecf3aa57e7370f2875de2926c9a3c58e287bca71107786a20",
+            "bytes": 334911
           },
           {
             "path": "src/engine/packages/client/src/slp/locales/pl.json",
-            "sha256": "7405788515678f4b2cfbe97a19031bbe5302e244fa92cd13a306769eb8d21bba",
-            "bytes": 239483
+            "sha256": "a636feb79a3e7c0c73fae2760663de76313189e887bf135bceb6d96473a27070",
+            "bytes": 239485
           }
         ],
         "permissions": [
@@ -3666,8 +3666,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.8.zip",
-        "sha256": "b1d88d660c3c22218f18d4e81d3e64c00acf80e04ebd3e9d424627e116ddbd91",
-        "bytes": 5995453
+        "sha256": "ef62177bdf1f27734727b5e121facd9d73aee560bde364b0b271679ccdb11033",
+        "bytes": 5995467
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },
