@@ -186,7 +186,11 @@ assert.match(
   "a new private show rewrites a public segment written ahead",
 );
 assert.match(storage, /slurpLiveSegmentToWrite\(map\(row\), at\) !== index/);
-assert.equal(routes.match(/fromPlayer: true/g)?.length, 2, "player chat and tips are marked for her reply");
+assert.equal(
+  routes.match(/fromPlayer: true/g)?.length,
+  3,
+  "player chat, tips and the join greeting are marked for her reply",
+);
 assert.match(routes, /if \(!duplicate\) void replyToSlurpLiveChat\(app\.db, show\.id\)/, "a tip gets a live reply");
 assert.match(
   service,

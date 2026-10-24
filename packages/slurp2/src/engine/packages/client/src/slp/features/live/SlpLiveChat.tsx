@@ -143,7 +143,9 @@ export function SlpLiveChat({
           {summaryOpen && (
             <ul className="list-inside list-disc text-sm text-[var(--muted-foreground)]">
               {catchUp.map((item, index) => (
-                <li key={`${item}-${index}`}>{item}</li>
+                <li key={`${item}-${index}`}>
+                  <SlpCoinText>{item}</SlpCoinText>
+                </li>
               ))}
             </ul>
           )}
