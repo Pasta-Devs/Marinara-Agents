@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 0.4.9 — 2026-10-24
+
+- Merged staging: the story viewer takes taps again (#1653).
+
 ## 0.4.8 — 2026-10-24
 
 - Goal Striptease: after the tip goal the goal bar and segment prompt run on to a second goal at 2x (`modules/live/slp-live-format.ts`); the finale prompt makes a last call about 90 s before the end.
