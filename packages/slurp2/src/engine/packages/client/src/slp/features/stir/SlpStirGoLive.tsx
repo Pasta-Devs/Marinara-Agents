@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { newRequestId } from "../../base/state/slp-request-id";
 import { useTranslation } from "react-i18next";
 import { focusRing } from "../../base/chrome/slp-focus";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
@@ -25,7 +26,7 @@ export function SlpStirGoLive({
   const [mode, setMode] = useState<"text" | "pictures">("text");
   const [error, setError] = useState("");
   const [scheduled, setScheduled] = useState(false);
-  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const [requestId, setRequestId] = useState(() => newRequestId());
   const submit = () => {
     const later = when === "later" ? new Date(at) : null;
     if (later && (!Number.isFinite(later.getTime()) || later.getTime() <= Date.now())) {
@@ -43,7 +44,7 @@ export function SlpStirGoLive({
       },
       {
         onSuccess: ({ show, started }) => {
-          setRequestId(crypto.randomUUID());
+          setRequestId(newRequestId());
           setOpen(false);
           if (started) onOpenLive?.(show.id);
           else setScheduled(true);

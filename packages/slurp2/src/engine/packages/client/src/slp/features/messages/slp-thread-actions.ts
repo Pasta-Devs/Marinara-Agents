@@ -1,14 +1,11 @@
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import { slpCoinPlainText } from "../../modules/coin/SlpCoin";
 import { useLayoutEffect, useRef } from "react";
+import { newRequestId } from "../../base/state/slp-request-id";
 import { toast } from "sonner";
 import { isCommissionRequest } from "./commissions/SlpCommissions";
 import { playSlpSpendMoment } from "../../modules/sparkle/SlpSparkle";
 import { useSlurpThreadViewState, type SlurpThreadViewProps, type SlurpThreadViewState } from "./slp-thread-view-model";
-
-/** `crypto.randomUUID` exists only in a secure context; a plain-HTTP LAN Engine does not have one. */
-export const newRequestId = () =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 
 /**
  * What a conversation does: hold the typing indicator, send a message, send a tip, scroll home.

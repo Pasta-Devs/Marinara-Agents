@@ -55,6 +55,8 @@ assert.ok(offsets.some((offset) => offset > 960_000));
 assert.ok(offsets.every((offset) => offset >= 0 && offset < 1_200_000));
 assert.equal(slurpLiveMenuItems(2, ["topic"], 30).length, 7);
 assert.ok(slurpLiveMenuItems(2, ["topic"], 30).length > 0, "player menu uses the configured spice level");
+const hardNoLabels = slurpLiveMenuItems(3, [], 30, ["nude", "toy"]).map((item) => item.label);
+assert.ok(!hardNoLabels.some((label) => /nude|top|toy/i.test(label)), "hard-nos block related rungs both ways");
 assert.equal(slurpLiveMenuPriceInBounds(1), true);
 assert.equal(slurpLiveMenuPriceInBounds(9999), true);
 assert.equal(slurpLiveMenuPriceInBounds(10000), false);

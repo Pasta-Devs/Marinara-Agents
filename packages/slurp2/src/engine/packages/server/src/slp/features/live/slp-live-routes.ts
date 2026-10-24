@@ -20,9 +20,8 @@ import {
   slurpLiveMenuPriceInBounds,
 } from "../../modules/live/slp-live.js";
 import { resolveCreatorMediaAbsolutePath, sendSlurpImageFile } from "../../base/media/slp-media.js";
-import { resolveSlurpCreatorSpice } from "../../data/creators/slp-spice-storage.js";
 import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
-import { announceSlurpLive } from "./slp-live-service.js";
+import { announceSlurpLive, liveSpice } from "./slp-live-service.js";
 
 const body = z.object({ personaId: z.string().trim().min(1) }).passthrough();
 
@@ -118,7 +117,13 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     if (startsAt < now || startsAt.getTime() > now.getTime() + 48 * 60 * 60_000)
       return reply.code(400).send({ error: "Choose a time within the next 48 hours." });
     const endsAt = new Date(startsAt.getTime() + parsed.data.minutes * 60_000);
-    const menu = slurpLiveMenuItems(0, [], Math.max(10, Number(creator.settings?.messaging?.ppvPrice ?? 25)));
+    const spice = await liveSpice(app.db, creator);
+    const menu = slurpLiveMenuItems(
+      spice.level,
+      spice.turnOns,
+      Math.max(10, Number(creator.settings?.messaging?.ppvPrice ?? 25)),
+      spice.hardNoes,
+    );
     const planned = await storage.plan(
       creator.id,
       startsAt,
@@ -165,8 +170,8 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     if (parsed.data.menu?.some((item) => !slurpLiveMenuPriceInBounds(item.price)))
       return reply.code(400).send({ error: "Menu prices must be whole numbers from 1 to 9999." });
     const ppvPrice = await noodle.getCreatorSubscriptionPrice(player.id);
-    const spice = await resolveSlurpCreatorSpice(app.db, player);
-    const defaults = slurpLiveMenuItems(Number(spice.level) || 0, spice.turnOns, ppvPrice, spice.hardNoes);
+    const spice = await liveSpice(app.db, player);
+    const defaults = slurpLiveMenuItems(spice.level, spice.turnOns, ppvPrice, spice.hardNoes);
     const menu = parsed.data.menu
       ? defaults.flatMap((item) => {
           const edit = parsed.data.menu?.find((entry) => entry.id === item.id);
@@ -196,10 +201,10 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     const player = viewer && (await noodle.getSlurpAccountForEntity("persona", viewer.entityId, "viewer"));
     if (!viewer || !player) return reply.code(404).send({ error: "Player account not found." });
     const ppvPrice = await noodle.getCreatorSubscriptionPrice(player.id);
-    const spice = await resolveSlurpCreatorSpice(app.db, player);
+    const spice = await liveSpice(app.db, player);
     return {
       goal: Math.min(9999, Math.max(1, ppvPrice * 4)),
-      menu: slurpLiveMenuItems(Number(spice.level) || 0, spice.turnOns, ppvPrice, spice.hardNoes),
+      menu: slurpLiveMenuItems(spice.level, spice.turnOns, ppvPrice, spice.hardNoes),
     };
   });
   app.post("/live/:id/narrate", async (request, reply) => {
@@ -260,7 +265,8 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
         show.hostId,
         parsed.data.amount,
         "Live show tip",
-        claimId,
+        // Scoped to this show and action, so a client id reused elsewhere never counts as paid here.
+        `live:${show.id}:tip:${claimId}`,
       );
     } catch (error) {
       await storage.releaseTip(show.id, claimId);
@@ -340,7 +346,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
         show.hostId,
         item.price,
         `Live menu: ${item.label}`,
-        claimId,
+        `live:${show.id}:menu:${claimId}`,
         "Live show menu",
       );
     } catch (error) {
@@ -406,7 +412,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
       show.hostId,
       price,
       "Private show",
-      parsed.data.requestId,
+      `live:${show.id}:private:${parsed.data.requestId}`,
     );
     if (result.status !== "sent") {
       if (result.status === "insufficient_funds") await storage.privateRelease(show.id, parsed.data.requestId);

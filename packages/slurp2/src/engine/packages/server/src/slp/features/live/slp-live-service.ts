@@ -639,7 +639,7 @@ export function parseSlurpLiveScript(value: string) {
   }
 }
 
-async function liveSpice(db: DB, creator: { id: string; settings?: { strategy?: unknown } | null }) {
+export async function liveSpice(db: DB, creator: { id: string; settings?: { strategy?: unknown } | null }) {
   const spice = await resolveSlurpCreatorSpice(db, {
     id: creator.id,
     settings: { strategy: creator.settings?.strategy },

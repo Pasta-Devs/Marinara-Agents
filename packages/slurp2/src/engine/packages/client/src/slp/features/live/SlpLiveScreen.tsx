@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { newRequestId } from "../../base/state/slp-request-id";
 import { useTranslation } from "react-i18next";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { useSlpLiveActions, useSlpLiveShow } from "./slp-live-hooks";
@@ -104,12 +105,13 @@ function SlpLiveContent({
   };
   const tipLive = (amount: number) => {
     if (!personaId) return;
-    const requestId = tipRequestIds[amount] ?? crypto.randomUUID();
+    const requestId = tipRequestIds[amount] ?? newRequestId();
     setTipRequestIds((current) => ({ ...current, [amount]: requestId }));
     tip.mutate(
       { personaId, amount, requestId },
       {
-        onSettled: () =>
+        // Keep the id after an error, so a retry after a lost response cannot charge twice.
+        onSuccess: () =>
           setTipRequestIds((current) => {
             const next = { ...current };
             delete next[amount];
@@ -120,18 +122,19 @@ function SlpLiveContent({
   };
   const buy = (item: SlpLiveMenuItem) => {
     if (!personaId) return;
-    const requestId = menuRequestIds[item.id] ?? crypto.randomUUID();
+    const requestId = menuRequestIds[item.id] ?? newRequestId();
     setMenuRequestIds((current) => ({ ...current, [item.id]: requestId }));
     menu.mutate(
       { personaId, itemId: item.id, requestId },
       {
-        onSuccess: () => setMenuOpen(false),
-        onSettled: () =>
+        onSuccess: () => {
+          setMenuOpen(false);
           setMenuRequestIds((current) => {
             const next = { ...current };
             delete next[item.id];
             return next;
-          }),
+          });
+        },
       },
     );
   };
@@ -209,9 +212,9 @@ function SlpLiveContent({
               type="button"
               disabled={privateShow.isPending}
               onClick={() => {
-                const requestId = privateRequestId ?? crypto.randomUUID();
+                const requestId = privateRequestId ?? newRequestId();
                 setPrivateRequestId(requestId);
-                privateShow.mutate({ personaId, requestId }, { onSettled: () => setPrivateRequestId(null) });
+                privateShow.mutate({ personaId, requestId }, { onSuccess: () => setPrivateRequestId(null) });
               }}
               className="min-h-11 rounded border border-[var(--border)] px-3"
             >

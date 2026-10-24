@@ -16,16 +16,22 @@ const MENU_RUNGS: readonly MenuRung[] = [
   { label: "Show off the outfit up close", weight: 0.8, minLevel: 1, picture: true, words: ["outfit"] },
   { label: "Whisper something naughty", weight: 0.9, minLevel: 1 },
   { label: "Lingerie reveal 🖤", weight: 1.2, minLevel: 2, picture: true, words: ["lingerie", "underwear"] },
-  { label: "Lose the top", weight: 1.5, minLevel: 2, picture: true, words: ["nudity", "topless"] },
+  { label: "Lose the top", weight: 1.5, minLevel: 2, picture: true, words: ["nudity", "nude", "naked", "topless"] },
   { label: "Oil show ✨", weight: 1.8, minLevel: 2, picture: true, words: ["oil"] },
   { label: "Feet tease 👣", weight: 1.3, minLevel: 2, picture: true, words: ["feet", "toes"] },
-  { label: "Fully nude for one song", weight: 2.2, minLevel: 3, picture: true, words: ["nudity"] },
+  { label: "Fully nude for one song", weight: 2.2, minLevel: 3, picture: true, words: ["nudity", "nude", "naked"] },
   { label: "Toy show 🔥", weight: 2.8, minLevel: 3, picture: true, words: ["toys", "toy"] },
   { label: "Make me cum (finale)", weight: 3.5, minLevel: 3, picture: true, words: ["orgasm"] },
 ];
 
 const blocked = (rung: MenuRung, hardNoes: readonly string[]) =>
-  (rung.words ?? []).some((word) => hardNoes.some((no) => no.toLowerCase().includes(word)));
+  (rung.words ?? []).some((word) =>
+    hardNoes.some((no) => {
+      const hardNo = no.toLowerCase().trim();
+      // Both ways: "toy" blocks "toys", and "no nudity please" blocks "nudity".
+      return hardNo.length > 2 && (hardNo.includes(word) || word.includes(hardNo));
+    }),
+  );
 
 /**
  * 5 to 8 items for her level (fewer in a clean room), the ones that match her turn-ons first, priced from her PPV price.
