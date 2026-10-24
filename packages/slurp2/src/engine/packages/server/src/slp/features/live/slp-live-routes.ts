@@ -252,12 +252,9 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
       text: "",
       requestId: claimId,
     };
-    if (!(await storage.claimTip(show.id, event)))
-      return {
-        show: await showForViewer(show.id, viewer.id),
-        duplicate: true,
-        wallet: await createSlurpStorage(app.db).getWallet(viewer.id),
-      };
+    // A retry of a known tip still goes through the payment: the DM tip id makes it charge at most once,
+    // and it charges now if the first attempt crashed before paying.
+    const duplicate = !(await storage.claimTip(show.id, event));
     let result;
     try {
       result = await createSlurpMessagesStorage(app.db).tipInThread(
@@ -278,6 +275,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     }
     return {
       show: await showForViewer(show.id, viewer.id),
+      ...(duplicate ? { duplicate: true } : {}),
       wallet: await createSlurpStorage(app.db).getWallet(viewer.id),
     };
   });
