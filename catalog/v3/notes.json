@@ -816,6 +816,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.6",
+          "date": "2026-10-24",
+          "notes": "- Live replies: every player chat line and tip (`fromPlayer`) gets her model reply; one reply per 8 s (`SLURP_LIVE_REPLY_GAP_MS`, was 60 s public / 20 s private), lines sent inside the gap are answered together by a retry after it. Replies are marked `host`.\n- New `liveConnectionId` setting (Settings > Connections > Live shows) for the reply call, 300 max tokens; empty uses the Replies and fans model.\n- The live room polls every 1 s while a reply is pending and shows \"reading chat...\".",
+          "highlight": false
+        },
+        {
           "version": "0.4.5",
           "date": "2026-10-24",
           "notes": "- Live shows keep a room ledger (`room` column, `modules/live/slp-live-room.ts`): done on camera, goal promises, refusals, running jokes. Each segment prompt reads it and the segment answer's `did` / `promise` / `joke` fields extend it in `completeSegment`; promises clear once the goal segment keeps them.\n- Lines written ahead may carry `requires: \"goal-open\"`; `slurpLiveForViewer` drops them once the goal is hit before their time.",
@@ -927,12 +933,6 @@
           "version": "0.3.41",
           "date": "2026-10-14",
           "notes": "- Faster: Slurp shows character and persona avatars as small copies instead of the full card picture. On opening Slurp the feed downloaded about 16 MB of avatar pictures (1–2.5 MB each, shown 44 px wide), and Discover about 14 MB more; those downloads also held up the feed's other requests. The small copies are made once and kept in Slurp's own media folder.\n- Faster: the \"Report\" sheet of a post or a reply is built only when you open it. Before, every post card and reply built a closed copy, which made the feed and Creator pages slower to open.\n- Faster: the ambient background colour measures the pictures on screen only after the screen has drawn, so opening a screen no longer forces extra layout work.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.40",
-          "date": "2026-10-14",
-          "notes": "- Changed: Slurp follows a Creator's gender instead of calling everyone \"she\". Drama packs use the gender of whoever plays each role (\"{her:he}\" tokens), and pack names and descriptions no longer assume a woman. Post, DM and scene prompts tell the model the Creator's pronouns. A Creator without a gender is \"they\".\n- Added: a \"Clothing style\" choice in the Creator's stage profile: Auto, Feminine, Masculine or Neutral. Auto follows gender. It decides what a \"lingerie\" spice post is: lingerie for feminine, an underwear shoot with briefs for masculine, either for neutral. Male Creators no longer get bra-and-panties shoots unless their style is Feminine. The post prompt also names the style.\n- Added: a picture of a Creator whose appearance text does not say their sex starts with \"Male.\" or \"Female.\" from their gender, so the image model stops defaulting to a woman.\n- Changed: the stage profile field hints read \"he\", \"she\" or \"they\" from the gender you picked.",
           "highlight": false
         }
       ]
