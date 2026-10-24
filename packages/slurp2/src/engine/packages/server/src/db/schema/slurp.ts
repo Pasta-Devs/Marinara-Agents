@@ -958,6 +958,8 @@ export const slurpLiveShows = fileTable("slurp2_live_shows", {
   stirRequestId: text("stir_request_id"),
   lastReplyAt: text("last_reply_at"),
   recapPostId: text("recap_post_id"),
+  /** JSON SlurpLiveRoom: what she did, promised, refused and joked about this show. Null on older rows. */
+  room: text("room"),
 });
 
 /** One cross-process lease for the free world tick. */

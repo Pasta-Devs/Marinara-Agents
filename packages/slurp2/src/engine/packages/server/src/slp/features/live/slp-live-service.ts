@@ -42,6 +42,7 @@ import {
   slurpLiveSegmentPrompt,
 } from "../../modules/live/slp-live-prompt.js";
 import { slurpLivePhase } from "../../modules/live/slp-live.js";
+import { slurpLiveRoomPatch, type SlurpLiveRoom } from "../../modules/live/slp-live-room.js";
 import { createSlurpEventsStorage } from "../../data/notifications/slp-notification-storage.js";
 import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
@@ -423,6 +424,7 @@ async function advanceShowNow(db: DB, show: SlurpLiveShow, settings: any, at: Da
             ),
             totalSegments: Math.ceil((Date.parse(show.endsAt) - Date.parse(show.startedAt)) / 240_000),
             goalReached: show.raised >= show.goal,
+            room: current.room,
             queuedMenuLabels: current.queue
               .filter((order) => !order.served && order.status !== "pending")
               .map((order) => order.label),
@@ -436,8 +438,11 @@ async function advanceShowNow(db: DB, show: SlurpLiveShow, settings: any, at: Da
               .map((event) => `${event.name}: ${event.amount}`),
           });
   const callStarted = Date.now();
+  let roomPatch: Partial<SlurpLiveRoom> = {};
   const lines = creator
-    ? await runLiveModel(db, settings, creator.displayName, "main", minutes, prompt, "segment")
+    ? await runLiveModel(db, settings, creator.displayName, "main", minutes, prompt, "segment", (parsed) => {
+        roomPatch = slurpLiveRoomPatch(parsed);
+      })
     : [];
   const elapsed = at.getTime() + (Date.now() - callStarted) - Date.parse(show.startedAt);
   await storage.completeSegment(
@@ -450,6 +455,8 @@ async function advanceShowNow(db: DB, show: SlurpLiveShow, settings: any, at: Da
       private: privateActive,
       at: slurpLiveSegmentLineAt(index, line.at, elapsed),
     })),
+    roomPatch,
+    current.raised >= current.goal,
   );
 }
 
@@ -589,6 +596,7 @@ async function runLiveModel(
   minutes: number,
   prompt: string,
   kind: "segment" | "missed" | "reply",
+  onParsed?: (parsed: unknown) => void,
 ) {
   try {
     const connection = await resolveCreatorFanConnection(db, settings);
@@ -647,6 +655,7 @@ async function runLiveModel(
               : "";
         return text ? [{ at: Date.now(), kind: "reaction", text: text.slice(0, 1000) }] : [];
       }
+      onParsed?.(parsed);
       return slurpLiveParseLines(parsed);
     } finally {
       admission.release();

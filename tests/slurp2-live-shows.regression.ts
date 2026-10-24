@@ -11,7 +11,15 @@ import {
   slurpLiveSegmentLineAt,
   slurpLiveDropAhead,
   slurpLiveWatched,
+  slurpLiveForViewer,
+  slurpLiveParseLines,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/live/slp-live.ts";
+import {
+  slurpLiveMergeRoom,
+  slurpLiveParseRoom,
+  slurpLiveRoomLines,
+  slurpLiveRoomPatch,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/live/slp-live-room.ts";
 import { slurp2Source } from "./slurp2-source.ts";
 
 assert.ok(slurpLiveDurationMinutes(0) >= 20 && slurpLiveDurationMinutes(0) <= 40);
@@ -94,6 +102,44 @@ assert.deepEqual(
 );
 assert.equal(dropped?.queue[0]?.served, false, "orders of the dropped segment are served again");
 assert.equal(slurpLiveDropAhead(ahead, minute(9)), null, "a segment already on air stays");
+
+const patch = slurpLiveRoomPatch({ did: ["Robe off", 3], promise: "top off at the goal", joke: "" });
+assert.deepEqual(patch, { shown: ["Robe off"], promises: ["top off at the goal"], jokes: [""] });
+let room = slurpLiveMergeRoom(slurpLiveParseRoom(null), patch);
+assert.deepEqual(room, { shown: ["Robe off"], promises: ["top off at the goal"], refused: [], jokes: [] });
+room = slurpLiveMergeRoom(room, { shown: ["robe off", "kiss to the cam"] }, true);
+assert.deepEqual(room.shown, ["Robe off", "kiss to the cam"], "nothing is recorded twice");
+assert.deepEqual(room.promises, [], "kept promises clear at the goal");
+assert.equal(slurpLiveParseRoom("not json").shown.length, 0);
+assert.match(slurpLiveRoomLines(room, false).join("\n"), /never redo.*Robe off; kiss to the cam/);
+assert.match(
+  slurpLiveRoomLines({ ...room, promises: ["top off"] }, true).join("\n"),
+  /Keep what you promised the room now: top off/,
+);
+assert.equal(
+  slurpLiveParseLines({ lines: [{ at: 1, kind: "crowd", text: "10 to go", requires: "goal-open" }] })[0]?.requires,
+  "goal-open",
+);
+const goalShow = {
+  ...show,
+  goalHitAt: "2026-10-23T12:02:00.000Z",
+  room: slurpLiveParseRoom(null),
+  menu: [],
+  queue: [],
+  privateClaims: [],
+  pictures: [],
+  pictureViewers: [],
+  script: [
+    { at: 60_000, kind: "crowd" as const, text: "early", requires: "goal-open" as const },
+    { at: 180_000, kind: "crowd" as const, text: "stale", requires: "goal-open" as const },
+    { at: 180_000, kind: "crowd" as const, text: "kept" },
+  ],
+} as any;
+assert.deepEqual(
+  slurpLiveForViewer(goalShow, null, minute(4)).script.map((line) => line.text),
+  ["early", "kept"],
+  "goal-open lines after the goal drop out",
+);
 assert.equal(slurpLiveWatched(startedAt, new Date("2026-10-23T12:01:29.000Z")), true);
 assert.equal(slurpLiveWatched(startedAt, new Date("2026-10-23T12:01:31.000Z")), false);
 const service = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/live/slp-live-service.ts");
