@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 0.4.1 — 2026-10-24 [highlight]
+
+- Fixed Story viewer clicks passing through to the feed or Engine behind it. Close, Creator profile, menu, navigation and picture controls respond again.
+
 ## 0.4.0 — 2026-10-23
 
 One release for everything built since 0.3.53 (unreleased 0.3.54 to 0.3.65 folded in):

@@ -80,13 +80,27 @@ export function createForgeCombatDialogue(root, { payload, run, host, audio, res
   let timer = null;
   let disposed = false;
   let onFinished = null;
+  let returnFocus = null;
+  let focusPending = false;
   const autoButton = root.querySelector("[data-auto]");
   const key = (cue) => JSON.stringify([cue.speaker, cue.content, cue.type, cue.trigger, cue.round, cue.everyNRounds]);
   const clearTimer = () => {
     clearTimeout(timer);
     timer = null;
   };
+  const canFocus = (element) =>
+    element?.isConnected &&
+    !element.disabled &&
+    element.getClientRects().length > 0 &&
+    getComputedStyle(element).visibility !== "hidden";
+  const focusNewPanel = () => {
+    if (disposed || !focusPending || isPaused()) return;
+    returnFocus = root.activeElement;
+    panel.querySelector("button").focus({ preventScroll: true });
+    focusPending = false;
+  };
   const syncAuto = () => {
+    focusNewPanel();
     clearTimer();
     if (disposed || !current || !voiceReady || !run.auto || isPaused()) return;
     const seconds = Number(host?._run?.audio?.autoplayPauseSeconds ?? 3);
@@ -96,6 +110,14 @@ export function createForgeCombatDialogue(root, { payload, run, host, audio, res
     if (disposed) return;
     current = state.queue[0] || null;
     if (!current) {
+      const restore =
+        panel &&
+        (panel.contains(root.activeElement) ||
+          (!root.activeElement &&
+            (document.activeElement === root.host ||
+              document.activeElement === document.body ||
+              document.activeElement?.contains?.(root.host))));
+      focusPending = false;
       if (panel) panel.hidden = true;
       if (onFinished && !state.finished) {
         state.finished = true;
@@ -103,8 +125,18 @@ export function createForgeCombatDialogue(root, { payload, run, host, audio, res
         onFinished = null;
         finish();
       } else resume?.();
+      if (!state.queue.length && restore && (!root.activeElement || panel.contains(root.activeElement))) {
+        const target = [
+          returnFocus,
+          root.querySelector("[data-auto]"),
+          ...root.querySelectorAll(".screen button, .gf-bar button"),
+        ].find(canFocus);
+        target?.focus({ preventScroll: true });
+      }
+      if (!state.queue.length) returnFocus = null;
       return;
     }
+    const opening = !panel || panel.hidden;
     if (!panel) {
       panel = document.createElement("section");
       panel.className = "gf-combat-dialogue";
@@ -122,6 +154,8 @@ export function createForgeCombatDialogue(root, { payload, run, host, audio, res
     panel.querySelector("b").textContent = current.enemy.name || current.enemy.id;
     panel.querySelector("p").textContent = current.cue.content;
     panel.querySelector("p").scrollTop = 0;
+    if (opening) focusPending = true;
+    focusNewPanel();
     voiceReady = false;
     const line = current;
     voice = new AbortController();

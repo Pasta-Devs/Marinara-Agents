@@ -19,6 +19,8 @@ try {
   const sources = [
     ["browser-presentation", ["client.js"]],
     ["home-presentation", ["client.js"]],
+    ["unit-notifications", ["client.js"]],
+    ["image-avatar-references", ["server.mjs"]],
     ["enemy-encounters-client", ["client.js"]],
     ["enemy-encounters-server", ["server.mjs"]],
     ["player-choices-en", ["client.js"]],

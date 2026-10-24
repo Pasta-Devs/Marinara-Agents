@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.13.1",
+          "date": "2026-10-24",
+          "notes": "- Character scenes, banners, portraits and outfits use available character/persona avatar references; provider support and limits still apply.\n- Story artwork starts below its header and preserves the top of the image.\n- Mobile ordinary and expanded editors adapt to the height left by the keyboard; expanded settings drafts survive refreshes.\n- Units explains the Home progression dot and refreshes its recommendation after level, equip and ascension actions.\n- Blocking combat dialogue supports keyboard focus and returns to combat controls afterward.",
+          "highlight": false
+        },
+        {
           "version": "1.13.0",
           "date": "2026-10-24",
           "notes": "- Added Soldier, Elite and Boss enemy tiers in combat and enemy details.\n- New story chapters build toward a boss confrontation using existing boss mechanics.\n- Significant fights prepare contextual enemy dialogue, with local one-shot triggers and manual or Auto progression.\n- Combat dialogue respects assigned character voices, mute and dialogue volume. Existing saved chapters and Tower encounters remain playable.",
@@ -284,12 +290,6 @@
           "date": "2026-09-25",
           "notes": "- Fixed: world creation lists your whole character card library. It stopped at 100 cards, so a library larger than that died around the letter M and the cards past it showed in your cast as “No longer in your library”.\n- Fixed: loading a preset no longer leaves out cards it could not see — it reads the whole library before deciding what the Engine still has.",
           "highlight": false
-        },
-        {
-          "version": "1.8.6",
-          "date": "2026-09-23",
-          "notes": "- Fixed: on a phone held upright, the Landscape only notice no longer covers the rest of Marinara. Characters, lorebooks and anything else you open over the game are reachable again.",
-          "highlight": false
         }
       ]
     },
@@ -363,6 +363,12 @@
     },
     "long-term-memory": {
       "versions": [
+        {
+          "version": "1.4.91",
+          "date": "2026-10-24",
+          "notes": "- Review rows now say what each button does: \"Check\" then \"Apply\" (with a Ready or Blocked chip on narrow panels), and engine terms like preflight and source_deleted read as plain sentences.\n- Reviewing who a memory is about now says \"Skip this memory\" and lists each person by name and a distinguishing detail instead of a raw key.\n- Freshness labels, draft counts and the Change and Source lines in the Review Queue are now easier to read in both themes.\n- The Review Queue drops a redundant frame and duplicate progress line, and shows the run summary inside the workbench on narrow panels.",
+          "highlight": false
+        },
         {
           "version": "1.4.90",
           "date": "2026-10-24",
@@ -475,12 +481,6 @@
           "version": "1.4.72",
           "date": "2026-10-21",
           "notes": "- No change in what Long-Term Memory does. Internally, the shared file that defines settings, memories, drafts and backups is split into ten files by area.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.71",
-          "date": "2026-10-21",
-          "notes": "- A memory you open, or already have open, while a bulk change in the Memory Vault is running now shows the new availability once the change finishes, so saving the memory then no longer puts the old places back, and the bulk buttons no longer stay disabled. An open memory without unsaved changes also shows its new status after a bulk change and after an archive Undo, so saving it does not change the status back.",
           "highlight": false
         }
       ]
@@ -828,6 +828,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.1",
+          "date": "2026-10-24",
+          "notes": "- Fixed Story viewer clicks passing through to the feed or Engine behind it. Close, Creator profile, menu, navigation and picture controls respond again.",
+          "highlight": true
+        },
+        {
           "version": "0.4.0",
           "date": "2026-10-23",
           "notes": "One release for everything built since 0.3.53 (unreleased 0.3.54 to 0.3.65 folded in):\n\n- Storylines: arcs, dramas and situations run on one storyline engine; Story Packs import v2 files, one JSON `fit`, one Packs list with a gate and Remove, topic switches `<pack>:<topic>`.\n- Packs (off by default): Family pack and five kink packs (Lingerie, Cosplay, Feet, Dom/sub, Exhibition).\n- Intimacy ladder: rapport tiers open doors in DMs (`slurpRapportDoors`), the highest tier is kept.\n- Paid sexting sessions (`SlpSextingBar`); Stir as a slide-up sheet (`SlpStirDeck`); Stories in Slurp's own layer.\n- Fixes: DM prompts know the player's latest public posts, @tagged Creators join the picture cast, tag-list looks go over whole, picture prompt rewrite floor 8192, wardrobe tag commas, neutral wording; Images > Advanced \"Keep original picture files\".",
@@ -939,12 +945,6 @@
           "version": "0.3.36",
           "date": "2026-10-13",
           "notes": "- Fixed: a Creator's bio and stage voice now steer what she posts about. The post planner reads them beside the character card (hidden identities stay hidden), so a hobby named only in the bio, such as cosplay, becomes post subjects. The post prompt also says that interests named in the bio and stage voice count. (#1358)\n- Changed: the no-repeat rule no longer blocks a theme that the bio, stage voice, or card names as what the Creator does. A new setting, framing, and look each time is still required, and the same outfit or wording is still a repeat. (#1358)",
-          "highlight": false
-        },
-        {
-          "version": "0.3.35",
-          "date": "2026-10-13",
-          "notes": "- Added: \"The image model knows this character\" can be chosen while adding a Creator, in Quick setup, in the customise path, in the role-play sign-up and in the manual Create flow. It starts on, like before, and is saved with the new Creator. You can still change it later in the Creator's settings. (#1353)",
           "highlight": false
         }
       ]

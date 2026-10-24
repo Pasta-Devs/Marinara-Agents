@@ -169,3 +169,115 @@ test("Home shows the real element matchups between Letters and the portrait with
     }
   }
 });
+
+test("Units explains the Home dot and clears the recommendation after progression", async ({ page }, testInfo) => {
+  await page.setViewportSize(
+    testInfo.project.name.includes("mobile") ? { width: 874, height: 402 } : { width: 1440, height: 900 },
+  );
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const activeRun = { ...structuredClone(run), hudStyle: "aurora" };
+  const completed = {
+    leveled: 1,
+    looseSignature: 0,
+    unformed: 0,
+    farmed: 1,
+    ascended: 1,
+    insightXp: 0,
+    levelXpFirst: 200,
+    done: [],
+  };
+  let nextStepCtx = { ...completed, leveled: 0, insightXp: 200 };
+  let stateReads = 0;
+  await page.route("**/api/app-settings/ui", (route) =>
+    route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
+  );
+  await page.addInitScript((version) => {
+    localStorage.removeItem("marinara-active-chat-id");
+    localStorage.setItem("marinara:whats-new:seen-version", version);
+    localStorage.setItem(
+      "marinara-engine-ui",
+      JSON.stringify({
+        state: { hasCompletedOnboarding: true, sidebarOpen: false, rightPanelOpen: false, appAccentPulseMode: false },
+        version: 65,
+      }),
+    );
+  }, appVersion);
+  await page.route("**/api/gacha-forge/state", (route) => {
+    stateReads += 1;
+    return route.fulfill({
+      json: {
+        runs: [activeRun],
+        activeRunId: activeRun.runId,
+        activeRun: { ...activeRun, nextStepCtx },
+        nextStepCtx,
+        guidesSeen: ["welcome", "home", "chat", "roster"],
+      },
+    });
+  });
+  await page.route("**/api/gacha-forge/roster", (route) => route.fulfill({ json: { ok: true, cards: [] } }));
+  await page.route("**/api/gacha-forge/continuity", (route) => route.fulfill({ json: { ok: true, chapters: [] } }));
+  await page.route("**/api/gacha-forge/preforge", (route) =>
+    route.fulfill({ json: { ok: true, preforge: { mode: "off", locked: false, canAuto: false } } }),
+  );
+  await page.route("**/api/gacha-forge/level-up", (route) => {
+    nextStepCtx = { ...completed };
+    return route.fulfill({ json: { ok: true } });
+  });
+  await page.goto("/");
+  await page.getByRole("tab", { name: "Open Gacha Forge" }).click();
+  const forge = page.locator("marinara-capability-gacha-forge");
+  await expect.poll(() => forge.evaluate((node) => (node as any)._boot)).toBe("ready");
+  await forge.evaluate((node) => {
+    const game = node as any;
+    game._clearBeat();
+    game._bannerReady = true;
+    game._artReady = true;
+    game._planEscaped = true;
+    game._hudView = "home";
+    game._renderBrowser();
+  });
+  const homeUnits = forge.locator('.hm-screen [data-go="roster"]');
+  await expect(homeUnits).toHaveAttribute("title", /Next-step recommendation: Level up/u);
+  await expect(homeUnits.locator(".hm-dot")).toHaveCount(1);
+  await homeUnits.click();
+  const note = forge.locator("[data-forge-unit-next]");
+  await expect(note).toBeVisible();
+  await expect(note).toContainText("Level up");
+  await expect(note).toContainText("Stats → Level up");
+  // Measure the resting layout after the existing 2.5% screen-entry slide.
+  await forge.locator(".gf-stage > .gf-view").evaluate(async (view) => {
+    await Promise.all(
+      view
+        .getAnimations({ subtree: true })
+        .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+        .map((animation) => animation.finished.catch(() => {})),
+    );
+  });
+  const layout = await note.evaluate((note) => {
+    const stage = note.getRootNode() as ShadowRoot;
+    const a = note.getBoundingClientRect();
+    const b = stage.querySelector(".gf-stage")!.getBoundingClientRect();
+    return {
+      note: a.toJSON(),
+      stage: b.toJSON(),
+      fits: a.top >= b.top && a.bottom <= b.bottom && a.left >= b.left && a.right <= b.right,
+    };
+  });
+  await testInfo.attach("units-next-step-layout.json", {
+    body: JSON.stringify(layout),
+    contentType: "application/json",
+  });
+  expect(layout.fits, JSON.stringify(layout)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath(`units-next-step-${testInfo.project.name}.png`) });
+  const before = stateReads;
+  // Exercise the actual request/adoption path; its successful response triggers the state refresh.
+  await forge.evaluate((node) => {
+    const game = node as any;
+    return game._postJson("/level-up", { runId: game._run.runId, unitId: "fixture-unit", levels: 1 });
+  });
+  await expect.poll(() => stateReads).toBeGreaterThan(before);
+  await expect(note).toHaveCount(0);
+  await forge.locator("[data-roster-back]").click();
+  await expect(homeUnits.locator(".hm-dot")).toHaveCount(0);
+  await expect(homeUnits).not.toHaveAttribute("title", /Next-step recommendation/u);
+});

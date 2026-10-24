@@ -27,6 +27,15 @@ test("Forge fills every screen, toggles inside the Engine and keeps world drafts
   await page.route("**/api/gacha-forge/state", (route) =>
     route.fulfill({ json: { runs: [], guidesSeen: ["welcome"] } }),
   );
+  // Keep the setup draft in the same isolated fixture as the mocked world state.
+  let setupSnapshot: unknown = null;
+  await page.route("**/api/gacha-forge/setup/draft", (route) => {
+    if (route.request().method() === "POST") {
+      setupSnapshot = route.request().postDataJSON().snapshot;
+      return route.fulfill({ json: { ok: true } });
+    }
+    return route.fulfill({ json: { ok: true, draft: setupSnapshot } });
+  });
   await page.goto("/");
   await page.getByRole("tab", { name: "Open Gacha Forge" }).click();
   const forge = page.locator("marinara-capability-gacha-forge");

@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.91 — 2026-10-24
 
 - Review rows now say what each button does: "Check" then "Apply" (with a Ready or Blocked chip on narrow panels), and engine terms like preflight and source_deleted read as plain sentences.
 - Reviewing who a memory is about now says "Skip this memory" and lists each person by name and a distinguishing detail instead of a raw key.

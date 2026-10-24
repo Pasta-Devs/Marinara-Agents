@@ -1042,7 +1042,8 @@ test("Audio selectors accept real stored flags and preserve unavailable choices 
           game._run = null;
           game._activeRunId = null;
           game._boot = "ready";
-          game._creatingNew = false;
+          // Match Worlds → New: /state still advertises the existing saved world.
+          game._creatingNew = true;
           game._setupDraftAsked = true;
           game._setupDraftSettled = true;
           game._setupDraft = {
@@ -1061,6 +1062,9 @@ test("Audio selectors accept real stored flags and preserve unavailable choices 
         },
         { textId: ids[0], selected },
       );
+      await forge.evaluate((node) => (node as any)._refreshState());
+      await expect.poll(() => forge.evaluate((node) => (node as any)._refreshing)).toBe(false);
+      await expect(forge.locator("[data-next]")).toBeVisible();
       await expect(picker).toHaveValue(selected);
       await expect(picker.locator(`option[value="${selected}"]`)).toBeDisabled();
       // A real eligible row also remains available in the setup list.

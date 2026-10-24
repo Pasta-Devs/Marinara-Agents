@@ -721,7 +721,7 @@ function SlpStoryLayer({ title, onClose, children }: { title: string; onClose: (
   }, []);
   return createPortal(
     <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/90 sm:p-4"
+      className="pointer-events-auto fixed inset-0 z-[10000] flex items-center justify-center bg-black/90 sm:p-4"
       style={getSlpAccentStyle(SLP_PINK)}
       onClick={(event) => {
         if (event.target === event.currentTarget) onCloseRef.current();

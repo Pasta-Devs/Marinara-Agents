@@ -546,6 +546,57 @@
               "replace": "h&&typeof h.auto==\"boolean\"&&!s&&(r.auto=h.auto)"
             }
           ]
+        },
+        {
+          "version": "1.13.1",
+          "notes": "Preserve scene framing and mobile editing; explain and refresh the existing Units recommendation. Maintained encounter source restores keyboard focus.",
+          "edits": [
+            {
+              "find": "ds=\"1.13.0\"",
+              "replace": "ds=\"1.13.1\""
+            },
+            {
+              "find": "var oy=[{version:null,new:[\"Soldier, Elite and Boss enemy tiers.\",\"Story chapter boss fights with contextual combat dialogue.\"]}",
+              "replace": "var oy=[{version:null,fixed:[\"Character artwork uses available avatar references, including banners.\",\"Story images preserve their top below the chapter controls.\",\"Mobile editors adapt to the keyboard.\",\"Units explains its progression recommendation.\",\"Combat dialogue supports keyboard focus.\"]},{version:\"1.13.0\",new:[\"Soldier, Elite and Boss enemy tiers.\",\"Story chapter boss fights with contextual combat dialogue.\"]}"
+            },
+            {
+              "find": "disposeForgeAudio(this),this._stopVigorClock",
+              "replace": "disposeForgeAudio(this),this._stopForgeBrowserPresentation?.(),this._stopVigorClock"
+            },
+            {
+              "find": "this._renderBrowser():this._root.innerHTML=\"\"",
+              "replace": "this._renderBrowser():(this._stopForgeBrowserPresentation?.(),this._root.innerHTML=\"\")"
+            },
+            {
+              "find": "function ih({",
+              "replaceFrom": "src/unit-notifications.mjs",
+              "sourceId": "unit-notifications"
+            },
+            {
+              "find": "wireForgeHome(this,bt,ao),",
+              "replace": "wireForgeHome(this,bt,ao),wireForgeUnitNotifications(this,od(this._nextStepCtx)),"
+            },
+            {
+              "find": "this._adoptFromResponse(n),",
+              "replace": "this._adoptFromResponse(n),refreshForgeUnitStep(this,e,a,n),"
+            },
+            {
+              "find": "_refreshStepData(){this._stepRefreshing||(this._stepRefreshing=!0,Ze(`${Ia}/state`).then(e=>e&&typeof e.json==\"function\"?e.json():null).then(e=>{!e||!e.activeRun||(this._adoptGlobals(e),this._adoptUnlocks(e.activeRun))}).catch(()=>{}).then(()=>{this._stepRefreshing=!1,this._renderBrowser()}))}",
+              "replace": "_refreshStepData(){\nconst forgeRunId=this._run?.runId;\nif(!forgeRunId||!this.isConnected||this._stepRefreshing)return;\nthis._stepRefreshing=true;\nZe(`${Ia}/state`).then(e=>e&&typeof e.json===\"function\"?e.json():null).then(e=>{\nif(forgeUnitStepIsCurrent(this,forgeRunId,e)){this._adoptGlobals(e);this._adoptUnlocks(e.activeRun);}\n}).catch(()=>{}).then(()=>{\nthis._stepRefreshing=false;\nconst forgeRefreshAgain=this._forgeUnitStepRefresh;\nthis._forgeUnitStepRefresh=null;\nif(this.isConnected&&this._run?.runId===forgeRunId){wireForgeUnitNotifications(this,od(this._nextStepCtx));this._renderBrowser();}\nif(this.isConnected&&forgeRefreshAgain&&this._run?.runId===forgeRefreshAgain)this._refreshStepData();\n});\n}"
+            },
+            {
+              "find": "g&&c.querySelector(\".ob-xh\").insertBefore(g,c.querySelector(\".ob-xclose\"));let w=()=>{",
+              "replace": "g&&c.querySelector(\".ob-xh\").insertBefore(g,c.querySelector(\".ob-xclose\"));m&&bindForgeExpandedEditor(t,c,r,m,(field,trigger)=>{s=field;e=trigger});let w=()=>{"
+            },
+            {
+              "find": "_renderBrowser(){this._syncTypeScale();let e=this._state();",
+              "replace": "_renderBrowser(){this._syncTypeScale();let e=this._state();const forgeExpandedEditor=captureForgeExpandedEditor(this,e);"
+            },
+            {
+              "find": "this._wireFullscreen(),this._wireRunsButton()",
+              "replace": "this._wireFullscreen(),restoreForgeExpandedEditor(this,forgeExpandedEditor),this._wireRunsButton()"
+            }
+          ]
         }
       ]
     },
@@ -834,6 +885,57 @@
             {
               "find": "stats:we.stats,skill:we.skill,...we.passive?",
               "replace": "stats:we.stats,skill:we.skill,tier:forgeEnemyTier(we),...we.passive?"
+            }
+          ]
+        },
+        {
+          "version": "1.13.1",
+          "notes": "Resolve actual selected character/persona avatars as image references for scenes, banners, portraits and outfits without inventing identities.",
+          "edits": [
+            {
+              "find": "function Rg(",
+              "replaceFrom": "src/image-avatar-references.mjs",
+              "sourceId": "image-avatar-references"
+            },
+            {
+              "find": "function Rg({baseUrl:e,fetch:t,logger:n}={})",
+              "replace": "function Rg(...forgeArgs){return forgeWrapImageReferenceClient(forgeLegacyImageClient(...forgeArgs),forgeArgs[0]?.logger)}function forgeLegacyImageClient({baseUrl:e,fetch:t,logger:n}={})"
+            },
+            {
+              "find": "async generateBannerArt({connectionId:h,name:A,units:T,scene:R,styleProfileId:C,framing:I,size:D})",
+              "replace": "async generateBannerArt({connectionId:h,name:A,units:T,scene:R,styleProfileId:C,framing:I,size:D,referenceImages:forgeRefs})"
+            },
+            {
+              "find": "connectionId:h,name:te,appearance:se.prompt,purpose:\"avatar\"",
+              "replace": "connectionId:h,name:te,referenceImages:forgeRefs,appearance:se.prompt,purpose:\"avatar\""
+            },
+            {
+              "find": "async generatePortrait({connectionId:h,name:A,unit:T,styleProfileId:R,size:C})",
+              "replace": "async generatePortrait({connectionId:h,name:A,unit:T,styleProfileId:R,size:C,referenceImages:forgeRefs})"
+            },
+            {
+              "find": "connectionId:h,name:G,appearance:ie,purpose:\"avatar\"",
+              "replace": "connectionId:h,name:G,referenceImages:forgeRefs,appearance:ie,purpose:\"avatar\""
+            },
+            {
+              "find": "async generateOutfit({connectionId:h,name:A,unit:T,outfit:R,styleProfileId:C,size:I})",
+              "replace": "async generateOutfit({connectionId:h,name:A,unit:T,outfit:R,styleProfileId:C,size:I,referenceImages:forgeRefs})"
+            },
+            {
+              "find": "connectionId:h,name:W,appearance:se,purpose:\"avatar\"",
+              "replace": "connectionId:h,name:W,referenceImages:forgeRefs,appearance:se,purpose:\"avatar\""
+            },
+            {
+              "find": "let Q=U.name,ne=S(Q),Y=$.find(ee=>S(ee.data.name)===ne)||null;if(Y||(Y=$.find(ee=>S(ee.data.name).includes(ne)||ne.includes(S(ee.data.name)))||null),Y?",
+              "replace": "let Q=U.name,Y=forgeMatchImageActor($,Q);if(Y?"
+            },
+            {
+              "find": "F&&(S(F.name)===ne||S(F.name).includes(ne)||ne.includes(S(F.name)))?_.push({name:F.name,imageTags:[],appearance:l(F.appearance)",
+              "replace": "forgeIsImageProtagonist(F,$,Q)?_.push({name:F.name,personaId:F.personaId,avatarPath:F.avatarPath,imageTags:[],appearance:l(F.appearance)"
+            },
+            {
+              "find": "let m={name:i.anonymous?\"\":i.name,appearance:i.look,imageTags:i.lookTags||[],sceneTags:i.sceneTags||[],affinity:i.affinity};await dt(g,",
+              "replace": "let m={name:i.anonymous?\"\":i.name,appearance:i.look,imageTags:i.lookTags||[],sceneTags:i.sceneTags||[],affinity:i.affinity};if(!i.anonymous){let forgeCast=(await a.list(n.id,kt)).filter(forgeDoc=>forgeDoc?.id?.startsWith(`${u}:unit:`)&&forgeDoc.data?.kind===\"character\"),forgeActor=forgeMatchImageActor(forgeCast,i.name);forgeActor&&(m={...forgeActor.data,...m})}await dt(g,"
             }
           ]
         }

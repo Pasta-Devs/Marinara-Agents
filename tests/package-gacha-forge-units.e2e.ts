@@ -48,6 +48,15 @@ test("Units keep portraits loaded and center controls, with an affinity card bad
   await page.route("**/api/gacha-forge/state", (route) =>
     route.fulfill({ json: { runs: [], guidesSeen: ["welcome"] } }),
   );
+  // Keep the setup draft in the same isolated fixture as the mocked world state.
+  let setupSnapshot: unknown = null;
+  await page.route("**/api/gacha-forge/setup/draft", (route) => {
+    if (route.request().method() === "POST") {
+      setupSnapshot = route.request().postDataJSON().snapshot;
+      return route.fulfill({ json: { ok: true } });
+    }
+    return route.fulfill({ json: { ok: true, draft: setupSnapshot } });
+  });
   await page.route("**/api/gacha-forge/unit", (route) =>
     route.fulfill({ json: { ok: true, unit, level: 1, bond: 0, favorite: false, gear: { slots: [], totals: {} } } }),
   );
