@@ -1406,7 +1406,7 @@ async function main() {
               status: blockedMutationIds.includes(mutationId) ? "blocked" : "ready",
               autoIncluded: false,
               blockers: blockedMutationIds.includes(mutationId)
-                ? [{ code: "fixture_blocked", message: "Fixture preflight blocked this mutation." }]
+                ? [{ code: "preflight_blocked", message: "Fixture preflight blocked this mutation." }]
                 : [],
               conflicts: conflictMutationIds.includes(mutationId)
                 ? [
@@ -5448,6 +5448,13 @@ async function main() {
         true,
       );
       assert.equal(await page.getByRole("button", { name: /^Apply checked \(1\)/ }).count(), 1);
+      // The engine's own reason stays after the sentence for a catch-all code.
+      assert.equal(
+        await page
+          .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-review-preflight] p`)
+          .evaluateAll((lines) => lines.map((line) => line.textContent ?? "").join("|")),
+        "Can't apply this proposal|The check blocked this change. Fixture preflight blocked this mutation.",
+      );
       // #1654: below 40rem the icon stays and a visible chip carries the state the text button shows when wider.
       const blockedChip = page.locator(
         `[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-review-state-chip="blocked"]`,
@@ -5497,6 +5504,20 @@ async function main() {
       await page.getByRole("button", { name: /^Apply checked \(2\)/ }).click();
       await page.getByRole("button", { name: "Applying..." }).waitFor();
       assert.equal(await page.getByRole("button", { name: "Checking..." }).count(), 0);
+      // The rows being applied say so too; none of them claims to be checking.
+      const heldRowLabels = await page
+        .locator("[data-ltm-review-action]")
+        .evaluateAll((actions) => actions.map((action) => action.getAttribute("aria-label") ?? ""));
+      assert.equal(
+        heldRowLabels.filter((label) => label.startsWith("Checking change for")).length,
+        0,
+        String(heldRowLabels),
+      );
+      assert.equal(
+        heldRowLabels.filter((label) => label.startsWith("Applying change for")).length,
+        2,
+        String(heldRowLabels),
+      );
       holdReviewAccept = null;
       releaseReviewAccept();
       await page.getByRole("button", { name: "Retry failed review actions" }).waitFor();

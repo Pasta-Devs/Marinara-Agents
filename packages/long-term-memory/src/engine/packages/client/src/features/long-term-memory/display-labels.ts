@@ -163,7 +163,13 @@ export function localizedLabel(value: string, localizeUi: LabelLocalizer, keys: 
   return key ? localizeUi(key) : humanizeLabel(value);
 }
 
-/** A review-queue block or preflight code as one plain sentence; the engine's own message stays the fallback. */
+/** Codes the engine raises for many different causes: the sentence alone would hide which one. */
+const catchAllReviewCodes: ReadonlySet<string> = new Set(["preflight_blocked", "projection_failed"]);
+
+/**
+ * A review-queue block or preflight code as one plain sentence; the engine's own message stays the fallback.
+ * A catch-all code keeps its message after the sentence, so the cause is read rather than hovered.
+ */
 export function reviewCodeText(
   code: string,
   message: string,
@@ -171,7 +177,9 @@ export function reviewCodeText(
   humanizeText: (text: string) => string = (text) => text,
 ) {
   const key: string | undefined = labelKeys.reviewCode[code as keyof typeof labelKeys.reviewCode];
-  return key ? localizeUi(key) : `${humanizeLabel(code)}: ${humanizeText(message)}`;
+  if (!key) return `${humanizeLabel(code)}: ${humanizeText(message)}`;
+  const detail = catchAllReviewCodes.has(code) ? humanizeText(message).trim() : "";
+  return detail ? `${localizeUi(key)} ${detail}` : localizeUi(key);
 }
 
 export type ScopeKind = keyof typeof labelKeys.scopeKind;

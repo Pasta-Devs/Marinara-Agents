@@ -402,10 +402,13 @@ export default function ReviewQueue({
   const effectiveSourceId =
     selectedSourceId && sourceIds.includes(selectedSourceId) ? selectedSourceId : (sourceIds[0] ?? null);
   const selectedSourceMissing = reviewContextReady && Boolean(effectiveSourceId && !noteById.has(effectiveSourceId));
+  // "Deleted source" is a claim about the notes, so it waits for a loaded context that lacks the id.
   const sourceDisplayTitle = (id: string) =>
     noteById.has(id)
       ? noteDisplayTitle(noteById.get(id), missingContextTitle)
-      : localizeUi("ui.longTermMemory.reviewqueue.missingSourceTitle");
+      : reviewContextReady
+        ? localizeUi("ui.longTermMemory.reviewqueue.missingSourceTitle")
+        : missingContextTitle;
   const sourceTitleHint = (id: string) => (noteById.has(id) ? undefined : id);
   const selectedReviewSource = review.data?.sources.find((source) => source.sourceNoteId === effectiveSourceId);
   const selectedDraft =
@@ -436,6 +439,7 @@ export default function ReviewQueue({
   const [preflightByDraftId, setPreflightByDraftId] = useState<Map<string, LtmDraftPreflightResponse>>(new Map());
   const [preflightKey, setPreflightKey] = useState<string | null>(null);
   const [acceptPhase, setAcceptPhase] = useState<"check" | "apply">("check");
+  const [runMutationIds, setRunMutationIds] = useState<ReadonlySet<string>>(new Set());
   const [deleteSuggestionError, setDeleteSuggestionError] = useState("");
   const [identityDirtyIds, setIdentityDirtyIds] = useState<Set<string>>(new Set());
   const identitySaveRequestsRef = useRef(new Map<string, () => Promise<boolean>>());
@@ -1146,6 +1150,7 @@ export default function ReviewQueue({
     if (action === "accept" && preflightKey !== requestKey) {
       setRunning("accept");
       setAcceptPhase("check");
+      setRunMutationIds(actedIds);
       setResult(null);
       const preflights = new Map<string, LtmDraftPreflightResponse>();
       const nextRows = new Map<string, PreflightRow>();
@@ -1218,6 +1223,7 @@ export default function ReviewQueue({
     }
     setRunning(action);
     setAcceptPhase("apply");
+    setRunMutationIds(actedIds);
     setResult(null);
     const completedIds = new Set<string>();
     const remainingIds = new Set<string>();
@@ -1676,22 +1682,23 @@ export default function ReviewQueue({
           : localizeUi("ui.longTermMemory.reviewqueue.proposedSummary", {
               value: proposedText || mutation.summary,
             });
-    const rowActionLabel =
-      running === "accept"
-        ? localizeUi(
-            preflightReady
-              ? "ui.longTermMemory.reviewqueue.applyingChange"
-              : "ui.longTermMemory.reviewqueue.checkingChange",
-            { title: targetTitle },
-          )
-        : preflightBlocked
-          ? localizeUi("ui.longTermMemory.reviewqueue.applyBlockedForTitle", { title: targetTitle })
-          : preflightReady
-            ? localizeUi("ui.longTermMemory.reviewqueue.applyChangeForTitle", { title: targetTitle })
-            : localizeUi("ui.longTermMemory.reviewqueue.reviewChangeForTitle", { title: targetTitle });
+    // Only the rows the run covers change their verb, and the run's phase names it.
+    const rowRunning = running === "accept" && runMutationIds.has(row.mutation.id);
+    const rowActionLabel = rowRunning
+      ? localizeUi(
+          acceptPhase === "apply"
+            ? "ui.longTermMemory.reviewqueue.applyingChange"
+            : "ui.longTermMemory.reviewqueue.checkingChange",
+          { title: targetTitle },
+        )
+      : preflightBlocked
+        ? localizeUi("ui.longTermMemory.reviewqueue.applyBlockedForTitle", { title: targetTitle })
+        : preflightReady
+          ? localizeUi("ui.longTermMemory.reviewqueue.applyChangeForTitle", { title: targetTitle })
+          : localizeUi("ui.longTermMemory.reviewqueue.reviewChangeForTitle", { title: targetTitle });
     const rowActionText = localizeUi(
-      running === "accept"
-        ? preflightReady
+      rowRunning
+        ? acceptPhase === "apply"
           ? "ui.longTermMemory.reviewqueue.rowApplying"
           : "ui.longTermMemory.reviewqueue.rowChecking"
         : preflightBlocked
@@ -1941,7 +1948,7 @@ export default function ReviewQueue({
                 className="mari-editor-panel mari-editor-panel--soft space-y-1 border-[var(--destructive)]/35 p-3 text-xs text-[var(--destructive)]"
               >
                 {row.diagnostics.map((diagnostic, index) => (
-                  <p key={`${diagnostic.code}-${index}`} title={diagnostic.message}>
+                  <p key={`${diagnostic.code}-${index}`} title={humanizeText(diagnostic.message)}>
                     {reviewCodeText(diagnostic.code, diagnostic.message, localizeUi, humanizeText)}
                   </p>
                 ))}
@@ -2116,11 +2123,13 @@ export default function ReviewQueue({
       data-ltm-review-result
       tabIndex={-1}
       tone={
-        result.phase === "preflight" && result.ready > 0
-          ? "warning"
-          : result.failed || result.blockedMutationIds.length || result.indexRebuildFailures.length
-            ? "danger"
-            : "success"
+        result.failed || result.indexRebuildFailures.length
+          ? "danger"
+          : result.phase === "preflight" && result.ready > 0
+            ? "warning"
+            : result.blockedMutationIds.length
+              ? "danger"
+              : "success"
       }
     >
       {batchResultSentences(result, localizeUi, locale).join(" ")}
@@ -2418,7 +2427,7 @@ export default function ReviewQueue({
                   </h2>
                   {selectedDraft ? (
                     <p
-                      className="mt-1 text-xs text-[var(--muted-foreground)]"
+                      className="mt-1 text-xs text-[var(--foreground)]"
                       title={sourceTitleHint(effectiveSourceId ?? "")}
                     >
                       {localizeUi("ui.longTermMemory.reviewqueue.sourceNote", {
@@ -2426,13 +2435,13 @@ export default function ReviewQueue({
                       })}
                     </p>
                   ) : null}
-                  <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                  <p className="mt-1 text-xs text-[var(--foreground)]">
                     {selectedDraft
                       ? `${selectedDraft.draft.mutations.length} ${localizeUi("ui.longTermMemory.reviewqueue.mutations")}`
                       : localizeUi("ui.longTermMemory.reviewqueue.noProposedMemoriesAwaitReviewForSource")}
                   </p>
                   {selectedReviewSource ? (
-                    <p className="text-xs text-[var(--muted-foreground)]">
+                    <p className="text-xs text-[var(--foreground)]">
                       {localizeUi("ui.longTermMemory.reviewqueue.modes")}{" "}
                       {selectedReviewSource.modes
                         .map((mode) => localizedLabel(mode, localizeUi, labelKeys.mode))
