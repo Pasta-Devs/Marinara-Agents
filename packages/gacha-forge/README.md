@@ -1,5 +1,7 @@
 # Gacha Forge
 
+Avatar reference routing, choice punctuation and mobile editor fixes are being investigated in #1648. The published package behavior below remains the current release.
+
 ## Story bosses and combat dialogue (1.13.0)
 
 Enemies now have a Soldier, Elite or Boss tier, separate from their combat role and affinity. Enemy cards and details identify that tier. Newly planned chapters reserve their final fight for a boss confrontation before the closing story scene. Story bosses use the existing boss health bar and mechanics, including warned strikes and phase changes.
