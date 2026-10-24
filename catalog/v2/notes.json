@@ -816,6 +816,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.8",
+          "date": "2026-10-24",
+          "notes": "- Goal Striptease: after the tip goal the goal bar and segment prompt run on to a second goal at 2x (`modules/live/slp-live-format.ts`); the finale prompt makes a last call about 90 s before the end.\n- The `goal` picture is generated from 80% of the goal; its script line carries `requires: \"goal-hit\"`, so `slurpLiveForViewer` hides it until `goalHitAt` and shows it at that moment.\n- Whale: p = 0.15 per 5 show minutes, one fan's tip becomes max(5 tips, 25% of the goal), within the weekly fan budget. The crowd lane now sees tips.\n- The late-join \"You missed\" list is built in the client from the show (goal, top 3 tippers, last 3 lines); `getSlurpLiveMissed` and its model call are gone.\n- Join greeting: opening a Creator show adds a hidden `join` event (regular = joined an earlier show of this host); her live reply greets them. `appendEvent` drops a repeated request id.",
+          "highlight": false
+        },
+        {
           "version": "0.4.7",
           "date": "2026-10-24",
           "notes": "- Crowd lane: a watched Creator show asks the model for 8-12 chat lines when less than 10 s of crowd chat is queued, and places them 3-9 s apart (`modules/live/slp-live-rooms.ts`). They use the fast live connection; when the model is out, 5 short reactions from real fans fill about 30 s.\n- Room types (mixed, simps, hype, lurkers, whales) steer the crowd; player shows pick one at setup (`crowd` column), Creator shows use the new `liveRoom` setting.\n- `runLiveModel` moved to `features/live/slp-live-model.ts`.",
@@ -927,12 +933,6 @@
           "version": "0.3.43",
           "date": "2026-10-15",
           "notes": "- Fixed: long DMs end at a sentence or word (up to 2400 characters), and commission quotes use the Creator's own prices.\n- Fixed: Cancel ends a subscription to a removed Creator at once.\n- Fixed: fans react to what a picture shows, not its art style.\n- Fixed: post drift. Tips no longer teach a guessed taste, and a spicy kind or taste that other Creators posted that day steps aside, so the whole feed is not in the shower at once. Spice level is unchanged.\n- Changed: family is never paired up on its own. Cards that say they are lovers, or the player in Stir, still can.\n- Fixed: clearer \"monogamous\" message in Stir, with the Relationships switch on the Creator sheet.\n- Fixed: work mode no longer blurs the coin and G's face; Couples pages are not a missing source; the sign-up scene names an unreachable connection.\n- Fixed: a scheduled post goes up once, and a shared-page post waits its turn.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.42",
-          "date": "2026-10-15",
-          "notes": "- Added: chats with \"Carryover to chats\" on also learn the character's Slurp storyline, love life, how well they know you, and the Slurp memories a chat with you may read.\n- Added: Carryover settings show in how many chats with your Creators \"Include Slurp activity\" is on.\n- Fixed: a scene started from a DM runs on the connection Slurp planned it with, not the Engine's plain default.\n- Fixed: an unreadable scene plan is asked for once more before \"The scene plan got lost\" shows.\n- Fixed: \"Start the scene\" shows an error when the Engine's scene host is missing.\n- Fixed: lorebook entries set to \"At Depth\" reach Slurp DMs and posts.\n- Added: Deep details has a \"Lore\" section with the entries a reply used or had no room for.",
           "highlight": false
         }
       ]
