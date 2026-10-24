@@ -198,8 +198,38 @@ try {
     wireForgeStoryMemoryStatus(f.host, () => new Promise(() => {}));
     [...timers.values()][0]();
     assert.equal(writes, 1, "A background read must not replace the live region");
+    assert.equal(f.mount.status.textContent, forgeStoryMemoryEnglish["story.memory.pending"]);
     assert.match(f.mount.innerHTML, /Updating story memory/);
     assert.doesNotMatch(f.mount.innerHTML, /Checking story memory/);
+    f.host._stopForgeStoryMemoryStatus();
+  });
+  await test("Check again shows checking after a failed known-phase read without replacing nodes or retrying work", async () => {
+    const f = fixture("pending");
+    const requests = [];
+    let finish;
+    wireForgeStoryMemoryStatus(f.host, (url) => {
+      requests.push(url);
+      return requests.length === 1 ? Promise.resolve({ ok: false }) : new Promise((resolve) => (finish = resolve));
+    });
+    const status = f.mount.status;
+    const button = f.mount.button;
+    [...timers.values()][0]();
+    await settle();
+    assert.equal(status.textContent, forgeStoryMemoryEnglish["story.memory.unavailable"]);
+    button.focus();
+    f.click();
+    assert.equal(status.textContent, forgeStoryMemoryEnglish["story.memory.checking"]);
+    assert.equal(button.disabled, true);
+    assert.equal(f.host._root.activeElement, status);
+    assert.equal(f.mount.status, status);
+    assert.equal(f.mount.button, button);
+    assert.equal(requests.length, 2);
+    assert.ok(requests.every((url) => url.endsWith("/status")));
+    finish(response("ready"));
+    await settle();
+    assert.equal(status.textContent, forgeStoryMemoryEnglish["story.memory.ready"]);
+    assert.equal(button.hidden, true);
+    assert.equal(f.host._root.activeElement, status);
     f.host._stopForgeStoryMemoryStatus();
   });
   await test("retry keeps stable status/action nodes and deliberate focus through a rewire and completion", async () => {

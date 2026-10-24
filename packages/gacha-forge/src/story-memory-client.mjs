@@ -14,7 +14,7 @@ function forgeStoryMemoryView(memory, { busy = false, retrying = false, unavaila
   const phase = forgeStoryMemoryPhases.has(memory?.phase) ? memory.phase : null;
   const key = retrying
     ? "retrying"
-    : busy && !phase
+    : busy && (!phase || unavailable)
       ? "checking"
       : unavailable
         ? "unavailable"
