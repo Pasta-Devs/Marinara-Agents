@@ -1,5 +1,15 @@
 # Gacha Forge
 
+## Automatic continuity (1.14.0)
+
+Gacha Forge automatically keeps memories from the world's completed canonical chapters, Character Stories and character conversations. Original records stay saved. Later writing receives the constant overview, up to three relevant detailed chapter summaries, separate relevant character memories, the entire previous chapter, and the current chapter so far, in that order. The full previous chapter does not consume a recall slot. Saved first-play choices remain canonical; replaying an alternative does not replace them.
+
+The overview uses at most 10% of the selected generation model's context window, measured with the Engine's token estimator. If that context window is unknown, configure it for the selected connection in **Engine Connections**. Gacha Forge reports the missing configuration instead of guessing a model limit.
+
+All saved character memories contribute to the overview. Relevant Character Story and conversation details are recalled separately from the three chapters. When space is tight, whole optional recall blocks are removed in relevance order; the complete previous chapter and current played content remain intact. If required history alone exceeds the model's context, generation reports the overflow instead of silently shortening it.
+
+**Settings → Story → Continuity** shows automatic memory's status and offers a retry when an update needs attention. Memory work runs in the background; a failure keeps previous memories and original records and does not block play. Existing manual compression and editing controls remain optional tools.
+
 ## Artwork references and mobile controls (1.13.1)
 
 Character scenes, gacha banners, portraits and outfits now attach available avatar references from their selected Engine character cards or persona. A unit’s own saved artwork is the fallback when its source avatar is unavailable. Reference support and limits still depend on the configured image provider and model. Existing generated artwork remains unchanged; the references apply when generating new art.
