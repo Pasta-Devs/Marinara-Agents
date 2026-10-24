@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { pathToFileURL } from "node:url";
-import { estimateTextTokens } from "../sources/engine/packages/shared/dist/utils/token-estimator.js";
+import { estimateTextTokens } from "../packages/gacha-forge/src/shared-token-estimator.mjs";
 
 const packageId = "gacha-forge";
 const runId = "story-memory-package-proof";

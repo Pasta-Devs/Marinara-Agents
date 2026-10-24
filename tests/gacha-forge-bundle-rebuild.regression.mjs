@@ -11,7 +11,7 @@ try {
   const sourceRoot = new URL("../packages/gacha-forge/", import.meta.url);
   await mkdir(root, { recursive: true });
   const shared = pathToFileURL(join(directory, "sources/engine/packages/shared/dist") + "/");
-  for (const file of ["constants/model-lists.js", "utils/token-estimator.js"]) {
+  for (const file of ["constants/model-lists.js"]) {
     const target = new URL(file, shared);
     await mkdir(new URL("./", target), { recursive: true });
     await cp(new URL(`../sources/engine/packages/shared/dist/${file}`, import.meta.url), target);
@@ -37,6 +37,7 @@ try {
     ["story-memory-integration", ["server.mjs"]],
     ["story-memory-fit", ["server.mjs"]],
     ["story-memory-shared", ["server.mjs"]],
+    ["shared-token-estimator", ["server.mjs"]],
     ["story-memory-client", ["client.js"]],
     ["story-memory-en", ["client.js"]],
     ["enemy-encounters-client", ["client.js"]],
@@ -55,13 +56,24 @@ try {
     // Bundled helpers discard comments; a pure export proves their input is rebuilt as well.
     const marker =
       name === "story-memory-shared" ? "export const forgeRebuildProof = true;" : "// source rebuild proof";
-    await writeFile(source, before + `\n${marker}\n`);
+    const changed =
+      name === "shared-token-estimator"
+        ? before.replace("hundredthTokens / 100", "hundredthTokens / 101.125")
+        : before + `\n${marker}\n`;
+    assert.notEqual(changed, before, `${name} fixture changes its source`);
+    await writeFile(source, changed);
     await rebuildGachaBundles(root);
     const regenerated = new Map();
     for (const bundle of bundles) {
       const value = await readFile(new URL(bundle, root), "utf8");
       assert.ok(
-        value.includes(name === "story-memory-shared" ? "forgeRebuildProof" : "// source rebuild proof"),
+        value.includes(
+          name === "story-memory-shared"
+            ? "forgeRebuildProof"
+            : name === "shared-token-estimator"
+              ? "101.125"
+              : "// source rebuild proof",
+        ),
         `${name} changes regenerate ${bundle}`,
       );
       regenerated.set(bundle, value);
