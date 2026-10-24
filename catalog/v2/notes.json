@@ -816,6 +816,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.3",
+          "date": "2026-10-24",
+          "notes": "- Live shows get their own Backstage extension section and page (`live`, `SlpLiveSettingsPanel`): the `extLive` switch with how often, hours and length; the Overview row opens it, Settings search and \"Reset page\" place the live keys there, and Basic setup offers Live as an extra.\n- `extLive` is off by default for new installs, like the other extensions; existing players keep it through the legacy mapping.\n- A Stir go-live replaces the Creator's not-yet-started plan, and shows whose end time passed never block a new plan.\n- Stir's Go live card moves below the story picks and shows only while Live is on.",
+          "highlight": false
+        },
+        {
           "version": "0.4.2",
           "date": "2026-10-24",
           "notes": "- A repeated live tip resumes its payment through the show-scoped DM tip id instead of reporting it as done, so a crash between claim and charge no longer drops the coins.\n- A Creator show waits up to 2 minutes for a private payment in flight before it ends and posts its recap.\n- Tip events are kept past the 200-event cap, so tip dedupe and the recap's top tipper cover the whole show.",
@@ -927,12 +933,6 @@
           "version": "0.3.38",
           "date": "2026-10-13",
           "notes": "- Added: in a Creator's settings, \"Appearance for pictures\" has a new button, \"Use the card's image tags\". It shows only while the linked character or persona has the Image Appearance Override switched on and filled in, and it saves those tags as the Creator's own appearance. It asks first when that replaces an appearance you wrote. \"Use linked appearance\" (or \"Clear override\") removes it again. (#1366)",
-          "highlight": false
-        },
-        {
-          "version": "0.3.37",
-          "date": "2026-10-13",
-          "notes": "- With a Claude (Subscription) connection, Slurp no longer makes a hidden second request to name each session, and a request now stops with an error if Claude Code turns on claude.ai connectors. With a Marinara Engine release after 2.5.0, Claude Code also no longer adds your account email, the date or this computer's details to the prompt. Engine 2.5.0's Claude Code still adds them, and the server log warns about it until you update Marinara. (#1313)\n- Changed: avatar references are allowed for SpicyAPI edit models (model IDs ending in /edit) and still left out for its text-to-image models. Slurp's bundled image code cannot call SpicyAPI yet, so SpicyAPI pictures do not work in Slurp until it can. (#1337)",
           "highlight": false
         }
       ]
