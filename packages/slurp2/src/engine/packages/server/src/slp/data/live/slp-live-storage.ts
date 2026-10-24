@@ -755,10 +755,10 @@ export function createSlurpLiveStorage(db: DB) {
         return true;
       });
     },
-    async releaseReply(id: string, at: Date) {
+    async releaseReply(id: string, at: Date, previous: string | null = null) {
       await db
         .update(slurpLiveShows)
-        .set({ lastReplyAt: null })
+        .set({ lastReplyAt: previous })
         .where(and(eq(slurpLiveShows.id, id), eq(slurpLiveShows.lastReplyAt, at.toISOString())));
       return this.get(id);
     },

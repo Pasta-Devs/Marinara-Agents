@@ -196,5 +196,12 @@ assert.match(
 );
 assert.match(service, /replyRetries\.add\(show\.id\)/, "lines sent inside the reply gap are answered after it");
 assert.match(service, /kind === "reply" && settings\.liveConnectionId/, "replies use the fast live connection");
+assert.match(
+  service,
+  /releaseReply\(show\.id, at, show\.lastReplyAt\);\s*if \(!retried\) retryLater\(\);/,
+  "a failed reply gives the lines back and retries once",
+);
+assert.match(storage, /set\(\{ lastReplyAt: previous \}\)/, "a released reply never re-answers old lines");
+assert.match(service, /at: at\.getTime\(\) - Date\.parse\(show\.startedAt\)/, "her reply is stamped at claim time");
 
 console.log("slurp2 live shows money and claims: ok");

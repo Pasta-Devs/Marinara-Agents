@@ -8,7 +8,7 @@ const key = (id: string | null, personaId?: string | null) =>
 export function slpLiveReplyPending(show: SlpLiveShow | null | undefined): boolean {
   if (!show || show.endedAt) return false;
   const last = show.events.findLast((event) => event.fromPlayer);
-  if (!last || show.events.some((event) => event.host && event.at > last.at)) return false;
+  if (!last || show.events.some((event) => event.host && event.at >= last.at)) return false;
   return Date.now() - Date.parse(show.startedAt) - last.at < 20_000;
 }
 
