@@ -170,5 +170,8 @@ assert.match(storage, /\.delete\(slurpLiveShows\)\.where\(lt\(slurpLiveShows\.en
 assert.match(storage, /audienceTipKeys: JSON\.stringify\(\[\.\.\.keys, audienceKey\]\)/);
 assert.match(service, /await storage\.pruneEnded\(at\)/);
 assert.match(routes, /slurpLiveCanWatch\(personaId/);
+assert.match(routes, /kickSlurpLiveShow\(app\.db, id\)/, "a watcher's poll moves the show on");
+assert.match(service, /if \(liveBusy\.has\(show\.id\)\) return;/, "one show never advances twice at once");
+assert.match(storage, /slurpLiveSegmentToWrite\(map\(row\), at\) !== index/);
 
 console.log("slurp2 live shows money and claims: ok");

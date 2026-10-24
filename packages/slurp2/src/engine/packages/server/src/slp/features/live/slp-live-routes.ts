@@ -21,7 +21,7 @@ import {
 } from "../../modules/live/slp-live.js";
 import { resolveCreatorMediaAbsolutePath, sendSlurpImageFile } from "../../base/media/slp-media.js";
 import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
-import { announceSlurpLive, liveSpice } from "./slp-live-service.js";
+import { announceSlurpLive, kickSlurpLiveShow, liveSpice } from "./slp-live-service.js";
 
 const body = z.object({ personaId: z.string().trim().min(1) }).passthrough();
 
@@ -49,6 +49,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     const viewer = personaId ? await resolveViewerPersona(personaId) : null;
     if (show.startedNoticeAt && slurpLiveCanWatch(personaId, !!viewer)) {
       await storage.seen(id, new Date(), viewer?.id);
+      kickSlurpLiveShow(app.db, id);
       const current = (await getSlurpLiveMissed(app.db, id)) ?? show;
       const elapsed = Math.max(0, Date.now() - Date.parse(current.startedAt));
       const duration = Date.parse(current.endsAt) - Date.parse(current.startedAt);

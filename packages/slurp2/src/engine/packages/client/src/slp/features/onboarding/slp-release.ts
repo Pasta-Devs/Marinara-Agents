@@ -1,7 +1,7 @@
 import { SLURP2_LEGACY_RELEASES } from "./slp-release-archive";
 
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.4.3";
+export const SLURP2_VERSION = "0.4.4";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -14,6 +14,14 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.4.4",
+    date: "2026-10-24",
+    notes: [
+      "Live chat keeps moving while you watch: the next part of the show is ready before the current one ends.",
+      "Opening a live room catches the show up at once instead of waiting for the next world tick.",
+    ],
+  },
   {
     version: "0.4.3",
     date: "2026-10-24",

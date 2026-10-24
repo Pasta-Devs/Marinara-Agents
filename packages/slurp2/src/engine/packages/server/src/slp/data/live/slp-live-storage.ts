@@ -8,7 +8,7 @@ import {
   slurpLiveClaimTipEvent,
   slurpLiveCrowdClaimAllowed,
   slurpLiveReplyClaimAllowed,
-  slurpLiveSegmentIndex,
+  slurpLiveSegmentToWrite,
   slurpLiveMenuClaimState,
   slurpLiveMenuServed,
   slurpLiveAudienceTipDue,
@@ -459,7 +459,7 @@ export function createSlurpLiveStorage(db: DB) {
     async claimSegment(id: string, index: number, at: Date) {
       return db.transaction(async (tx) => {
         const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
-        if (!row || row.endedAt || slurpLiveSegmentIndex(map(row), at) !== index) return null;
+        if (!row || row.endedAt || slurpLiveSegmentToWrite(map(row), at) !== index) return null;
         const segment = parse<SlurpLiveShow["segment"]>(row.segment ?? "null", null);
         if (
           segment &&

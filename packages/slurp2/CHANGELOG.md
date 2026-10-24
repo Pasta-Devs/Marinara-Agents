@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 0.4.4 — 2026-10-24
+
+- Live shows write ahead: from halfway through a 4-minute segment the next one is written, so chat never runs dry (`slurpLiveSegmentToWrite`).
+- A segment written late spreads its lines over the time left instead of dumping them at once (`slurpLiveSegmentLineAt`).
+- A watcher's 3 s poll kicks the show (`kickSlurpLiveShow`, at most every 3 s); one show never advances twice at once.
+
 ## 0.4.3 — 2026-10-24
 
 - Live shows get their own Backstage extension section and page (`live`, `SlpLiveSettingsPanel`): the `extLive` switch with how often, hours and length; the Overview row opens it, Settings search and "Reset page" place the live keys there, and Basic setup offers Live as an extra.
