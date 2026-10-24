@@ -10,8 +10,9 @@ import { forgeStoryCancelEnglish } from "../packages/gacha-forge/src/story-cance
 
 const source = await readFile(new URL("../packages/gacha-forge/client.js", import.meta.url), "utf8");
 const method = (name, globals = {}) => {
-  const start = source.search(new RegExp(`${name}\\([^)]*\\)\\{`, "u"));
+  let start = source.search(new RegExp(`${name}\\([^)]*\\)\\{`, "u"));
   assert(start >= 0, `${name} is present in the shipped client`);
+  if (source.slice(start - 6, start) === "async ") start -= 6;
   const rest = source.slice(start);
   const end = rest.search(/\}(?:async )?_[A-Za-z0-9]+\([^)]*\)\{/u);
   assert(end >= 0);
@@ -99,6 +100,40 @@ const tick = () => new Promise((resolve) => setImmediate(resolve));
   await tick();
   assert.equal(host._plan.title, "Fresh");
   assert.equal(preforge, 1, "only the fresh successful request can start preforge");
+}
+
+// Queued artwork has no fetch/controller yet. Cancelling must also fence its eventual dispatch.
+{
+  const lateArtworkPosts = [];
+  for (const [name, args] of [
+    ["_paintBeatPlaces", [[{ name: "Lighthouse", slug: "lighthouse", tags: "coast" }]]],
+    ["_paintBeatCg", [{ from: 0, to: 1, title: "The key" }, { chapter: 1, storyIndex: 0 }, 1]],
+  ]) {
+    const slot = deferred();
+    let queued;
+    const host = {
+      _run: { runId: "queued-art-world" },
+      _planChapter: 1,
+      _renderBrowser() {},
+      _clearBeat() {},
+      _loadLocations: async () => {},
+      _imageSlot(operation) {
+        queued = operation;
+        return slot.promise;
+      },
+      _postJson: async (path) => {
+        if (path === "/background" || path === "/cg-art") lateArtworkPosts.push([name, path]);
+        return { ok: true, url: "fixture-art" };
+      },
+    };
+    const pending = method(name).apply(host, args);
+    assert.equal(typeof queued, "function", "the artwork request is waiting for an image slot");
+    cancelForgeStoryGeneration(host);
+    slot.resolve(await queued());
+    await pending;
+    assert.equal(host._hudView, "home");
+  }
+  assert.deepEqual(lateArtworkPosts, [], "queued artwork cannot start a paid request after cancellation");
 }
 
 const originalDocument = globalThis.document,
