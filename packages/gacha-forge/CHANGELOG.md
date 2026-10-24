@@ -1,3 +1,7 @@
+## 1.15.2 — 2026-10-24 [highlight]
+
+- Show actionable Seedance setup guidance when a banner cannot be animated, and keep Retry visibly busy while generation is pending. Saved clips and the original banner illustration remain available.
+
 ## 1.15.1 — 2026-10-24 [highlight]
 
 - Cancel chapter and story generation from the loading screen and return to Gacha Home without deleting the world or saved progress. Active story requests and chapter preforging stop, and late responses cannot reopen the cancelled screen.
