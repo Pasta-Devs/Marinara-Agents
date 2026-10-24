@@ -59,7 +59,7 @@ import {
 import { humanizeLabel, labelKeys, localizedLabel } from "../display-labels";
 import { nextTabIndex } from "../tab-keys";
 import type { LongTermMemoryDestinationProps } from "../types";
-import { useLtmTranslation, type LtmTranslationFunction } from "../localization";
+import { selectLtmPluralForm, useLtmTranslation, type LtmTranslationFunction } from "../localization";
 import { LtmWorkspace } from "../LtmWorkspace";
 import type { LtmWorkspacePane } from "../LtmWorkspace";
 import {
@@ -278,7 +278,14 @@ export default function SourcesWorkspace({
   selectedSource,
   onSourceChange,
 }: LongTermMemoryDestinationProps) {
-  const { t: localizeUi } = useLtmTranslation();
+  const { t: localizeUi, locale } = useLtmTranslation();
+  const entryCountLabel = (count: number) =>
+    localizeUi(
+      selectLtmPluralForm(locale, count) === "one"
+        ? "ui.longTermMemory.sourcesworkspace.lorebookEntryCountOne"
+        : "ui.longTermMemory.sourcesworkspace.lorebookEntryCountOther",
+      { count },
+    );
   const confirmAction = props.confirmAction;
   const sourceScopeLabelId = useId();
   const importResultLabelId = useId();
@@ -1944,8 +1951,7 @@ export default function SourcesWorkspace({
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-semibold">{book.name}</span>
                             <span className="block text-xs text-[var(--muted-foreground)]">
-                              {book.category} · {book.totals.entries}{" "}
-                              {localizeUi("ui.longTermMemory.sourcesworkspace.entries")} {book.totals.imported}{" "}
+                              {book.category} · {entryCountLabel(book.totals.entries)} {book.totals.imported}{" "}
                               {localizeUi("ui.longTermMemory.sourcesworkspace.imported")}
                             </span>
                           </span>
@@ -1967,7 +1973,7 @@ export default function SourcesWorkspace({
               ),
             }}
             workbench={{
-              label: localizeUi("ui.longTermMemory.sourcesworkspace.entries"),
+              label: localizeUi("ui.longTermMemory.sourcesworkspace.entriesTab"),
               content: (
                 <section
                   data-ltm-lorebook-workbench={selectedLorebook?.id ?? "empty"}
@@ -1996,8 +2002,7 @@ export default function SourcesWorkspace({
                           <div className="min-w-0">
                             <h2 className="text-base font-semibold">{selectedLorebook.name}</h2>
                             <p className="text-xs text-[var(--muted-foreground)]">
-                              {selectedLorebook.category} · {selectedLorebook.totals.entries}{" "}
-                              {localizeUi("ui.longTermMemory.sourcesworkspace.entries")}{" "}
+                              {selectedLorebook.category} · {entryCountLabel(selectedLorebook.totals.entries)}{" "}
                               {selectedLorebook.totals.candidates}{" "}
                               {localizeUi("ui.longTermMemory.sourcesworkspace.sourceParts")}
                             </p>

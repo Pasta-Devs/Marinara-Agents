@@ -7560,6 +7560,14 @@ async function main() {
         await page.locator('[data-ltm-lorebook-entry="entry_mobile_harbor"]').innerText(),
         /blue lantern marks the safe channel/u,
       );
+      // #1659: counts read as whole sentences; one entry is "1 entry", and no fragment like "entries ·" is left.
+      const lorebookDetailText = await page
+        .locator('[data-ltm-lorebook-workbench="lorebook_mobile_fixture"] header')
+        .first()
+        .innerText();
+      assert.match(lorebookDetailText, /\b1 entry\b/u);
+      assert.doesNotMatch(lorebookDetailText, /1 entries|entries ·/u);
+      assert.match(await page.locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]').innerText(), /\b1 entry\b/u);
       await page.locator("[data-ltm-lorebook-browser]").getByRole("button", { name: "Select", exact: true }).click();
       await page.locator('[data-ltm-lorebook-entry-select="entry_mobile_harbor"]').check();
       // #1588: the label around an entry checkbox is a 44px target.
@@ -8005,6 +8013,10 @@ async function main() {
         },
       );
       await mobilePage.locator('[data-ltm-lorebook-entry="entry_mobile_harbor"]').waitFor();
+      assert.equal(
+        (await mobilePage.locator('[data-ltm-workspace-pane-tab="workbench"]').innerText()).trim(),
+        "Entries",
+      );
       assert.equal(
         await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
         true,

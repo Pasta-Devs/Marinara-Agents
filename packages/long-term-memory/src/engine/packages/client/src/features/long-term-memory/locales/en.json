@@ -697,7 +697,6 @@
   "ui.longTermMemory.sourcesworkspace.selected": "Selected",
   "ui.longTermMemory.sourcesworkspace.conversation": "Conversation",
   "ui.longTermMemory.sourcesworkspace.currentChat": "Current chat",
-  "ui.longTermMemory.sourcesworkspace.entries": "entries ·",
   "ui.longTermMemory.sourcesworkspace.filterSourcesByMode": "Filter sources by mode",
   "ui.longTermMemory.sourcesworkspace.game": "Game",
   "ui.longTermMemory.sourcesworkspace.imported": "imported",
@@ -1394,5 +1393,8 @@
   "ui.longTermMemory.sourcesworkspace.loadingMoreSources": "Loading more sources…",
   "ui.longTermMemory.sourcesworkspace.reimportFromSource": "Re-import from source",
   "ui.longTermMemory.sourcesworkspace.reimportFromSourceDescription": "Overwrites the imported text and metadata with the current source. Extraction is not run.",
-  "ui.longTermMemory.sourcesworkspace.reloadList": "Reload list"
+  "ui.longTermMemory.sourcesworkspace.reloadList": "Reload list",
+  "ui.longTermMemory.sourcesworkspace.entriesTab": "Entries",
+  "ui.longTermMemory.sourcesworkspace.lorebookEntryCountOne": "{{count}} entry",
+  "ui.longTermMemory.sourcesworkspace.lorebookEntryCountOther": "{{count}} entries"
 }

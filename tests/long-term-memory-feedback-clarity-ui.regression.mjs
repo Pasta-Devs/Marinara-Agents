@@ -995,6 +995,14 @@ assert.equal((workspace.match(/data-ltm-source-action="refresh-preview"/gu) ?? [
 assert.match(workspace, /<p id=\{reimportDescriptionId\}/u);
 assert.equal((workspace.match(/sourcesworkspace\.reloadList"/gu) ?? []).length, 2);
 assert.match(workspace, /`\$\{reimportDescriptionId\} \$\{importReasonId\}`/u);
+// #1659: lorebook counts are whole sentences with their own plural forms, and the pane tab is a plain word.
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.entries"], undefined);
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.entriesTab"], "Entries");
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.lorebookEntryCountOne"], "{{count}} entry");
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.lorebookEntryCountOther"], "{{count}} entries");
+assert.doesNotMatch(workspace, /sourcesworkspace\.entries"/u);
+assert.equal((workspace.match(/entryCountLabel\(/gu) ?? []).length, 2);
+assert.match(workspace, /label: localizeUi\("ui\.longTermMemory\.sourcesworkspace\.entriesTab"\)/u);
 
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, defaults, and scope loading ok\n",
