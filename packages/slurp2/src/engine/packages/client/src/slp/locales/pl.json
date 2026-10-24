@@ -3210,5 +3210,8 @@
   "ui.slurp.live.viewMode": "Tryb wyświetlania",
   "ui.slurp.live.text": "Tekst",
   "ui.slurp.live.pictures": "Zdjęcia",
-  "ui.slurp.live.pictureAlt": "Zdjęcie od {{name}}"
+  "ui.slurp.live.pictureAlt": "Zdjęcie od {{name}}",
+  "ui.slurp.settings.connections.live": "Transmisje na żywo",
+  "ui.slurp.settings.connections.liveUse": "Jej odpowiedzi na żywo do ciebie w pokoju na żywo. Wybierz szybki, tani model. Puste używa modelu odpowiedzi i fanów.",
+  "ui.slurp.live.readingChat": "{{name}} czyta czat..."
 }

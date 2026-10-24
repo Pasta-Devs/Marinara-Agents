@@ -9,6 +9,7 @@ import {
   slurpLiveClaimTipEvent,
   slurpLiveCrowdClaimAllowed,
   slurpLiveReplyClaimAllowed,
+  SLURP_LIVE_REPLY_GAP_MS,
   slurpLiveSegmentToWrite,
   slurpLiveMenuClaimState,
   slurpLiveMenuServed,
@@ -671,10 +672,8 @@ export function createSlurpLiveStorage(db: DB) {
         const rows = await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id));
         const row = rows[0];
         if (!row || row.endedAt) return false;
-        const current = parse<SlurpLiveShow["private"]>(row.privateState ?? "null", null);
-        const privateShow = !!current && current.until > at.toISOString();
-        const cutoff = new Date(at.getTime() - (privateShow ? 20_000 : 60_000)).toISOString();
-        if (!slurpLiveReplyClaimAllowed(row.lastReplyAt ?? null, at, privateShow)) return false;
+        const cutoff = new Date(at.getTime() - SLURP_LIVE_REPLY_GAP_MS).toISOString();
+        if (!slurpLiveReplyClaimAllowed(row.lastReplyAt ?? null, at)) return false;
         await tx
           .update(slurpLiveShows)
           .set({ lastReplyAt: at.toISOString() })
@@ -756,10 +755,10 @@ export function createSlurpLiveStorage(db: DB) {
         return true;
       });
     },
-    async releaseReply(id: string, at: Date) {
+    async releaseReply(id: string, at: Date, previous: string | null = null) {
       await db
         .update(slurpLiveShows)
-        .set({ lastReplyAt: null })
+        .set({ lastReplyAt: previous })
         .where(and(eq(slurpLiveShows.id, id), eq(slurpLiveShows.lastReplyAt, at.toISOString())));
       return this.get(id);
     },

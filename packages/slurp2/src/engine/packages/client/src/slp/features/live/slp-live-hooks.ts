@@ -4,6 +4,14 @@ import type { SlpLiveShow, SlpLiveShowResponse } from "./slp-live-contract.js";
 
 const key = (id: string | null, personaId?: string | null) =>
   ["slurp2", "live", id ?? "none", ...(personaId ? [personaId] : [])] as const;
+/** The player wrote or tipped in the last 20 s and she has not answered yet. */
+export function slpLiveReplyPending(show: SlpLiveShow | null | undefined): boolean {
+  if (!show || show.endedAt) return false;
+  const last = show.events.findLast((event) => event.fromPlayer);
+  if (!last || show.events.some((event) => event.host && event.at >= last.at)) return false;
+  return Date.now() - Date.parse(show.startedAt) - last.at < 20_000;
+}
+
 export function useSlpLiveShow(id: string | null, personaId: string | null) {
   return useQuery({
     queryKey: key(id, personaId),
@@ -12,7 +20,8 @@ export function useSlpLiveShow(id: string | null, personaId: string | null) {
         `/slurp2/live/${encodeURIComponent(id!)}${personaId ? `?personaId=${encodeURIComponent(personaId)}` : ""}`,
       ),
     enabled: Boolean(id),
-    refetchInterval: (query) => (id && !query.state.data?.endedAt ? 3_000 : false),
+    refetchInterval: (query) =>
+      id && !query.state.data?.endedAt ? (slpLiveReplyPending(query.state.data) ? 1_000 : 3_000) : false,
     refetchIntervalInBackground: false,
   });
 }

@@ -30,8 +30,8 @@ assert.equal(first.raised, 25);
 assert.equal(slurpLiveClaimTipEvent(first.events, first.raised, 100, tip), null, "same request id claims once");
 
 assert.equal(slurpLiveReplyClaimAllowed(null, at), true);
-assert.equal(slurpLiveReplyClaimAllowed(at.toISOString(), new Date(at.getTime() + 59_999)), false);
-assert.equal(slurpLiveReplyClaimAllowed(at.toISOString(), new Date(at.getTime() + 60_000)), true);
+assert.equal(slurpLiveReplyClaimAllowed(at.toISOString(), new Date(at.getTime() + 7_999)), false);
+assert.equal(slurpLiveReplyClaimAllowed(at.toISOString(), new Date(at.getTime() + 8_000)), true);
 
 const capped = slurpLiveCapEvents(
   Array.from({ length: SLURP_LIVE_EVENT_LIMIT + 1 }, (_, index) => ({
@@ -187,5 +187,21 @@ assert.match(
   "a new private show rewrites a public segment written ahead",
 );
 assert.match(storage, /slurpLiveSegmentToWrite\(map\(row\), at\) !== index/);
+assert.equal(routes.match(/fromPlayer: true/g)?.length, 2, "player chat and tips are marked for her reply");
+assert.match(routes, /if \(!duplicate\) void replyToSlurpLiveChat\(app\.db, show\.id\)/, "a tip gets a live reply");
+assert.match(
+  service,
+  /if \(!playerLinesSince\(show, since, privateAt\)\.length\) return;/,
+  "no reply without a player line",
+);
+assert.match(service, /replyRetries\.add\(show\.id\)/, "lines sent inside the reply gap are answered after it");
+assert.match(service, /kind === "reply" && settings\.liveConnectionId/, "replies use the fast live connection");
+assert.match(
+  service,
+  /releaseReply\(show\.id, at, show\.lastReplyAt\);\s*if \(!retried\) retryLater\(\);/,
+  "a failed reply gives the lines back and retries once",
+);
+assert.match(storage, /set\(\{ lastReplyAt: previous \}\)/, "a released reply never re-answers old lines");
+assert.match(service, /at: at\.getTime\(\) - Date\.parse\(show\.startedAt\)/, "her reply is stamped at claim time");
 
 console.log("slurp2 live shows money and claims: ok");

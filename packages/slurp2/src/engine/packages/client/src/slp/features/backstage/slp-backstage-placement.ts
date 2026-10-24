@@ -122,6 +122,7 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
   imageContextConnectionId: slurp("images", "vision connection", "image description"),
   imageCaptionPrompt: slurp("images", "caption instructions", "captioning prompt", "image description"),
   pageConnectionId: place("connections", "all-slurp", "creator pages connection", "page builder"),
+  liveConnectionId: place("connections", "all-slurp", "live shows connection", "fast model"),
   imageStyleProfileId: slurp("images", "image style", "style profile"),
   imageGenerationPrompt: prompts("image instructions", "image prompt"),
   imagePromptInterpretation: prompts("image prompt interpretation", "image prompt style", "Danbooru"),

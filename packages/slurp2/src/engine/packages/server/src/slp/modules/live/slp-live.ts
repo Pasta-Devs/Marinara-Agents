@@ -39,6 +39,10 @@ export type SlurpLiveEvent = {
   requestId?: string;
   personaId?: string;
   private?: boolean;
+  /** Sent by the player (chat or tip); her live reply answers these. */
+  fromPlayer?: boolean;
+  /** Her own live reply to the player. */
+  host?: boolean;
 };
 export type SlurpLivePrivate = { personaId: string; until: string; block: number };
 export type SlurpLivePrivateClaim = {
@@ -396,8 +400,11 @@ export function slurpLiveClaimTipEvent(
   };
 }
 
-export function slurpLiveReplyClaimAllowed(lastReplyAt: string | null, at: Date, privateShow = false): boolean {
-  return !lastReplyAt || Date.parse(lastReplyAt) <= at.getTime() - (privateShow ? 20_000 : 60_000);
+/** Her live replies come at most this often; lines sent in between are answered together. */
+export const SLURP_LIVE_REPLY_GAP_MS = 8_000;
+
+export function slurpLiveReplyClaimAllowed(lastReplyAt: string | null, at: Date): boolean {
+  return !lastReplyAt || Date.parse(lastReplyAt) <= at.getTime() - SLURP_LIVE_REPLY_GAP_MS;
 }
 
 export function slurpLiveCrowdClaimAllowed(lastCrowdAt: string | null, at: Date): boolean {

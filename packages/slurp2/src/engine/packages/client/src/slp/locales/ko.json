@@ -3988,5 +3988,8 @@
   "ui.slurp.live.viewMode": "보기 모드",
   "ui.slurp.live.text": "텍스트",
   "ui.slurp.live.pictures": "사진",
-  "ui.slurp.live.pictureAlt": "{{name}}의 사진"
+  "ui.slurp.live.pictureAlt": "{{name}}의 사진",
+  "ui.slurp.settings.connections.live": "라이브 쇼",
+  "ui.slurp.settings.connections.liveUse": "라이브 방에서 당신에게 보내는 실시간 답장. 빠르고 저렴한 모델을 고르세요. 비워 두면 답장 및 팬 모델을 씁니다.",
+  "ui.slurp.live.readingChat": "{{name}}님이 채팅을 읽는 중..."
 }

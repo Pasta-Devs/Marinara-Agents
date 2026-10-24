@@ -12,6 +12,7 @@ import {
   slurpLiveSegmentIndex,
   slurpLiveSegmentToWrite,
   slurpLiveSegmentLineAt,
+  SLURP_LIVE_REPLY_GAP_MS,
   slurpLiveWatched,
   slurpLiveFanDue,
   SLURP_LIVE_REACTIONS,
@@ -490,21 +491,57 @@ export async function getSlurpLiveMissed(db: DB, showId: string, at = new Date()
   return storage.get(showId);
 }
 
-export async function replyToSlurpLiveChat(db: DB, showId: string, at = new Date()): Promise<void> {
+const replyRetries = new Set<string>();
+
+/** The player's unanswered chat lines and tips since her last reply, as prompt lines. */
+function playerLinesSince(show: SlurpLiveShow, since: number, privateViewer: string | null): string[] {
+  return show.events
+    .filter(
+      (event) =>
+        event.fromPlayer &&
+        event.at > since &&
+        (privateViewer ? event.personaId === privateViewer : !event.private && !event.personaId),
+    )
+    .map((event) =>
+      event.kind === "tip" ? `${event.name} tipped ${event.amount ?? 0} coins` : `${event.name}: ${event.text}`,
+    );
+}
+
+/** Her live answer to the player's chat and tips: one model call at most every few seconds, later lines wait for the next one. */
+export async function replyToSlurpLiveChat(db: DB, showId: string, at = new Date(), retried = false): Promise<void> {
   const storage = createSlurpLiveStorage(db);
   const show = await storage.get(showId);
   if (!show || show.endedAt) return;
   const previousReplyAt = show.lastReplyAt;
-  if (!(await storage.claimReply(show.id, at))) return;
+  const since = previousReplyAt ? Date.parse(previousReplyAt) - Date.parse(show.startedAt) : -1;
+  const privateAt = show.private && Date.parse(show.private.until) > at.getTime() ? show.private.personaId : null;
+  if (!playerLinesSince(show, since, privateAt).length) return;
+  // ponytail: in-process retry timer; lost on restart, the next player line asks again.
+  const retryLater = () => {
+    if (replyRetries.has(show.id)) return;
+    replyRetries.add(show.id);
+    setTimeout(() => {
+      replyRetries.delete(show.id);
+      void replyToSlurpLiveChat(db, show.id, new Date(), true).catch((error: unknown) =>
+        logger.warn(error, "[slurp-live] Reply retry failed"),
+      );
+    }, SLURP_LIVE_REPLY_GAP_MS + 500);
+  };
+  if (!(await storage.claimReply(show.id, at))) return retryLater();
+  // A failed model call gives the lines back and tries once more; a second failure waits for the next line.
+  const release = async () => {
+    await storage.releaseReply(show.id, at, show.lastReplyAt);
+    if (!retried) retryLater();
+  };
   try {
     const current = await storage.get(showId);
     if (!current || current.endedAt) {
-      await storage.releaseReply(show.id, at);
+      await release();
       return;
     }
     const creator = await createSlurpStorage(db).getNoodlerAccountById(show.hostId);
     if (!creator) {
-      await storage.releaseReply(show.id, at);
+      await release();
       return;
     }
     const settings = await createSlurpStorage(db).getSettings();
@@ -512,17 +549,7 @@ export async function replyToSlurpLiveChat(db: DB, showId: string, at = new Date
     const privateViewer =
       current.private && Date.parse(current.private.until) > at.getTime() ? current.private.personaId : null;
     const minutes = Math.max(0, Math.round((at.getTime() - Date.parse(show.startedAt)) / 60_000));
-    const since = previousReplyAt ? Date.parse(previousReplyAt) - Date.parse(show.startedAt) : -1;
-    const lines = current.events
-      .filter(
-        (event) =>
-          event.kind === "chat" &&
-          event.name !== creator.displayName &&
-          event.at > since &&
-          (privateViewer ? event.personaId === privateViewer : !event.private && !event.personaId),
-      )
-      .map((event) => `${event.name}: ${event.text}`)
-      .join("\n");
+    const lines = playerLinesSince(current, since, privateViewer).join("\n");
     const prompt = privateViewer
       ? slurpLivePrivatePrompt({
           hostName: creator.displayName,
@@ -553,16 +580,18 @@ export async function replyToSlurpLiveChat(db: DB, showId: string, at = new Date
     const text = answer[0]?.text;
     if (text)
       await storage.appendEvent(show.id, {
+        // Claim time, so lines sent while she types still wait for an answer.
         at: at.getTime() - Date.parse(show.startedAt),
         kind: "chat",
         name: creator.displayName,
         text,
         personaId: privateViewer ?? undefined,
         private: !!privateViewer,
+        host: true,
       });
-    else await storage.releaseReply(show.id, at);
+    else await release();
   } catch (error) {
-    await storage.releaseReply(show.id, at);
+    await release();
     logger.warn(error, "[slurp-live] Reply failed");
   }
 }
@@ -599,7 +628,13 @@ async function runLiveModel(
   onParsed?: (parsed: unknown) => void,
 ) {
   try {
-    const connection = await resolveCreatorFanConnection(db, settings);
+    // Her live replies use the fast live connection when one is set; a deleted one falls back like the others.
+    const connection = await resolveCreatorFanConnection(
+      db,
+      kind === "reply" && settings.liveConnectionId
+        ? { ...settings, modelBudget: { ...settings.modelBudget, connectionId: settings.liveConnectionId } }
+        : settings,
+    );
     if (!connection || !(await claimSlurpModelBudget(db, settings.modelBudget, "thread"))) return [];
     const admission = tryBackgroundConnection(connection.id);
     if (!admission.acquired) return [];
@@ -631,7 +666,7 @@ async function runLiveModel(
           maxTokens: clampGenerationMaxOutputTokens({
             provider: connection.provider,
             model: connection.model,
-            maxTokens: 2048,
+            maxTokens: kind === "reply" ? 300 : 2048,
             maxTokensOverride: connection.maxTokensOverride,
           }),
           stream: false,

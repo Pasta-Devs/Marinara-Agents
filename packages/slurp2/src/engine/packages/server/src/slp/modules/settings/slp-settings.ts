@@ -223,13 +223,12 @@ export const slurpSettingsSchema = z.object({
   imageCaptionPrompt: z.string().max(4000),
   /** Builds Creator Pages (a long structured answer); null = the AI writing connection. */
   pageConnectionId: z.string().nullable().default(null),
+  /** Fast LLM connection for her live replies; null = the AI writing connection. */
+  liveConnectionId: z.string().nullable().default(null),
   /** The LLM connection that enhances picture prompts; null = Slurp's text connection. */
   imagePromptConnectionId: z.string().nullable(),
-  /**
-   * Engine image style profile for Slurp pictures. Null uses the connection's profile, then the
-   * Engine default. When set, the connection's own prompt prefixes are left out: a chosen style
-   * replaces them rather than stacking on top of them.
-   */
+  /** Engine image style profile for Slurp pictures. Null uses the connection's profile, then the Engine default.
+   * When set, the connection's own prompt prefixes are left out: a chosen style replaces them, not stacks. */
   imageStyleProfileId: z.string().nullable(),
   imageGenerationPrompt: z.string(),
   imagePromptInterpretation: z.string().max(20_000),
@@ -542,6 +541,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   imageContextConnectionId: null,
   imageCaptionPrompt: "",
   pageConnectionId: null,
+  liveConnectionId: null,
   imagePromptConnectionId: null,
   imageStyleProfileId: null,
   imageGenerationPrompt: SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT,
