@@ -182,7 +182,7 @@ function SlpLiveContent({
     >
       {t("ui.slurp.live.endShow")}
     </button>
-  ) : show.picturesAllowed ? (
+  ) : show.picturesAllowed && personaId ? (
     <div
       role="group"
       aria-label={t("ui.slurp.live.viewMode")}
@@ -192,10 +192,10 @@ function SlpLiveContent({
         <button
           key={option}
           type="button"
-          disabled={mode.isPending || (option === "pictures" && !!show.pictureModeBusy)}
+          disabled={!personaId || mode.isPending || (option === "pictures" && !!show.pictureModeBusy)}
           aria-pressed={show.mode === option && (option === "text" || show.pictureViewerId === personaId)}
           onClick={() => mode.mutate({ personaId, mode: option })}
-          className="min-h-10 rounded-full px-3 text-xs font-semibold text-white/80 aria-pressed:bg-white aria-pressed:text-black disabled:opacity-50"
+          className="min-h-11 rounded-full px-3 text-xs font-semibold text-white/80 aria-pressed:bg-white aria-pressed:text-black disabled:opacity-50"
         >
           {t(`ui.slurp.live.${option}`)}
         </button>
@@ -218,7 +218,7 @@ function SlpLiveContent({
         t={t}
       />
       <div className="flex min-h-0 flex-1 flex-col lg:w-[400px] lg:flex-none lg:overflow-hidden lg:rounded-3xl lg:bg-[var(--card)] lg:ring-1 lg:ring-[var(--border)]">
-        {privateActive && (
+        {!host && personaId && privateActive && (
           <div
             role="status"
             className="border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--slurp-violet)_14%,transparent)] px-4 py-2 text-sm font-semibold text-[var(--slurp-violet)]"

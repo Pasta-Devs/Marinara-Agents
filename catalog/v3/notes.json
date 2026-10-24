@@ -828,6 +828,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.10",
+          "date": "2026-10-24",
+          "notes": "- Live page redesign: new `SlpLiveStage` (newest live picture or a glowing avatar on a blurred backdrop, LIVE dot, viewers, time left, caption of her latest line, crown for the top tipper, gradient goal bar). Tip and goal banners pop on stage; big tips (a quarter of the goal) shine.\n- Chat: her lines are bubbles with her avatar, tips and menu orders are pills, your own lines are marked.\n- Tip dock: one row of tip chips, custom tip, menu and private; chat input below. Wide screens put the stage left and chat right.\n- Stir Go live and the Live now row are bright LIVE cards; shared styles in `modules/live/slp-live-styles.ts`.",
+          "highlight": false
+        },
+        {
           "version": "0.4.9",
           "date": "2026-10-24",
           "notes": "- Merged staging: the story viewer takes taps again (#1653).",
@@ -939,12 +945,6 @@
           "version": "0.3.45",
           "date": "2026-10-15",
           "notes": "- Fixed: picture prompts carried the style profile's tags twice. The prompt writer now gets the bare draft; the style is compiled onto its result once.\n- Fixed: the gallery fallback picked the first gallery image every time. It now picks the image this Creator showed least recently.\n- Added: \"Draw missing avatars and banners\" in Settings › Images. Off stops background drawing; Open Creators still copy their card's pictures. On for existing installs; first-run setup sets it from its images choice.\n- Added: \"Caption instructions\" in Settings › Images. Blank uses a Slurp default that describes people, clothes, pose, place and text, and leaves out the art style.\n- Added: \"Always in their pictures\" per Creator. The text opens the Creator's part of every picture prompt, after the style tags, in place of the card name.\n- Fixed: the post writer no longer dresses Creators in worn-out, faded or shabby clothes unless the card or caption asks for it.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.44",
-          "date": "2026-10-15",
-          "notes": "- Added: trends. A post that takes off (shown likes; your likes, unlocks and tips count most), your own page's hits, a platform trend, or Stir \"Start a trend\" (ready-made trends, a starter, what to lean into) starts one. Stir \"Steer a trend\" changes what it leans into. The right Creators join, each at their own spice level and limits, quote the origin post, peak, then cool; some roast it, some never join. The starter gains followers.\n- Added: Discover \"Trending on Slurp\" row, a trend chip on posts, and trend search.\n- Changed: the invented \"silly trend\" daily-life moment is gone; trend posts skip the feed spice damping.",
           "highlight": false
         }
       ]
