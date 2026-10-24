@@ -159,7 +159,13 @@ export function createSlurpLivePrivateStorage(db: DB) {
             claims.map((item) => (item.requestId === requestId ? { ...item, status: "paid" } : item)),
           ),
           script: JSON.stringify(withNotice),
-          ...(dropped ? { segment: JSON.stringify(dropped.segment), queue: JSON.stringify(dropped.queue) } : {}),
+          ...(dropped
+            ? {
+                segment: JSON.stringify(dropped.segment),
+                queue: JSON.stringify(dropped.queue),
+                room: JSON.stringify(dropped.room),
+              }
+            : {}),
         };
         await tx.update(slurpLiveShows).set(patch).where(eq(slurpLiveShows.id, id));
         return map({ ...row, ...patch });

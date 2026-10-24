@@ -1,5 +1,5 @@
 import { slurpFanTypeWeeklyBudget, type SlurpFanType } from "../../../../../shared/src/slp/slp-fan-types.js";
-import type { SlurpLiveRoom } from "./slp-live-room.js";
+import { slurpLiveRoomRewind, type SlurpLiveRoom } from "./slp-live-room.js";
 
 export type SlurpLivePhase = "warmup" | "main" | "finish";
 export type SlurpLiveLineKind = "narration" | "crowd" | "reaction" | "picture";
@@ -314,15 +314,16 @@ export function slurpLiveSegmentToWrite(
 
 /** A private show that starts after the next segment was written: drop that public segment so it is written again as private. */
 export function slurpLiveDropAhead(
-  show: Pick<SlurpLiveShow, "startedAt" | "segment" | "script" | "queue">,
+  show: Pick<SlurpLiveShow, "startedAt" | "segment" | "script" | "queue" | "room">,
   at: Date,
-): Pick<SlurpLiveShow, "segment" | "script" | "queue"> | null {
+): Pick<SlurpLiveShow, "segment" | "script" | "queue" | "room"> | null {
   const current = slurpLiveSegmentIndex(show, at);
   const segment = show.segment;
   if (!segment || segment.index <= current || segment.lease) return null;
   const start = segment.index * SLURP_LIVE_SEGMENT_MS;
   return {
     segment: { index: current, lease: null, claimedAt: null },
+    room: slurpLiveRoomRewind(show.room, segment.index),
     script: show.script.filter((line) => line.personaId || line.at < start),
     queue: show.queue.map((order) =>
       order.servedIn === segment.index ? { ...order, served: false, servedIn: undefined } : order,

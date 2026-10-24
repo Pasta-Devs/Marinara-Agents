@@ -496,6 +496,7 @@ export function createSlurpLiveStorage(db: DB) {
           !!current &&
           current.until > new Date(Date.parse(row.startedAt) + index * 240_000).toISOString() &&
           lines.some((line) => line.personaId === current.personaId);
+        const roomBefore = slurpLiveParseRoom(row.room);
         const queue = parse<SlurpLiveOrder[]>(row.queue ?? "[]", []).map((order) =>
           order.served || isPrivate || order.status === "pending" || order.at > (index + 1) * 240_000
             ? order
@@ -507,7 +508,10 @@ export function createSlurpLiveStorage(db: DB) {
             script: JSON.stringify([...parse<SlurpLiveLine[]>(row.script, []), ...lines]),
             queue: JSON.stringify(queue),
             segment: JSON.stringify({ index, lease: null, claimedAt: null }),
-            room: JSON.stringify(slurpLiveMergeRoom(slurpLiveParseRoom(row.room), room, keptPromises)),
+            room: JSON.stringify({
+              ...slurpLiveMergeRoom(roomBefore, room, keptPromises),
+              before: { ...slurpLiveMergeRoom(roomBefore, {}), index },
+            }),
           })
           .where(eq(slurpLiveShows.id, id));
         return true;

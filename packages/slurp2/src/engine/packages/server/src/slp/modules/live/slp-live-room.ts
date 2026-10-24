@@ -1,24 +1,37 @@
 /** The show's memory: what she already did on camera, what she promised, refused and keeps joking about. */
-export type SlurpLiveRoom = { shown: string[]; promises: string[]; refused: string[]; jokes: string[] };
+export type SlurpLiveRoomLists = { shown: string[]; promises: string[]; refused: string[]; jokes: string[] };
+/** `before` is the ledger as it was before the last segment was written, so a dropped segment can be undone. */
+export type SlurpLiveRoom = SlurpLiveRoomLists & { before?: SlurpLiveRoomLists & { index: number } };
 
-const LIMITS: Record<keyof SlurpLiveRoom, number> = { shown: 12, promises: 3, refused: 8, jokes: 4 };
+const LIMITS: Record<keyof SlurpLiveRoomLists, number> = { shown: 12, promises: 3, refused: 8, jokes: 4 };
 
 export function slurpLiveParseRoom(value: string | null | undefined): SlurpLiveRoom {
-  let parsed: Partial<Record<keyof SlurpLiveRoom, unknown>> = {};
+  let parsed: Partial<Record<keyof SlurpLiveRoomLists | "before", unknown>> = {};
   try {
     parsed = value ? JSON.parse(value) : {};
   } catch {
     parsed = {};
   }
-  const list = (key: keyof SlurpLiveRoom) =>
+  const list = (key: keyof SlurpLiveRoomLists) =>
     Array.isArray(parsed[key])
       ? (parsed[key] as unknown[]).filter((item): item is string => typeof item === "string")
       : [];
-  return { shown: list("shown"), promises: list("promises"), refused: list("refused"), jokes: list("jokes") };
+  const lists = { shown: list("shown"), promises: list("promises"), refused: list("refused"), jokes: list("jokes") };
+  const before = parsed.before as { index?: unknown } | undefined;
+  return before && typeof before.index === "number"
+    ? { ...lists, before: { ...slurpLiveParseRoom(JSON.stringify(before)), index: before.index } }
+    : lists;
+}
+
+/** Undo the ledger changes of a dropped segment; refusals made since then stay. */
+export function slurpLiveRoomRewind(room: SlurpLiveRoom, index: number): SlurpLiveRoom {
+  if (room.before?.index !== index) return room;
+  const { index: _index, ...lists } = room.before;
+  return { ...lists, refused: room.refused };
 }
 
 /** Reads the model's `did`, `promise` and `joke` fields from a segment answer. */
-export function slurpLiveRoomPatch(parsed: unknown): Partial<SlurpLiveRoom> {
+export function slurpLiveRoomPatch(parsed: unknown): Partial<SlurpLiveRoomLists> {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
   const item = parsed as Record<string, unknown>;
   const strings = (value: unknown) =>
@@ -29,10 +42,10 @@ export function slurpLiveRoomPatch(parsed: unknown): Partial<SlurpLiveRoom> {
 /** Adds new entries once (case-insensitive), newest kept; `keptPromises` clears promises paid off at the goal. */
 export function slurpLiveMergeRoom(
   room: SlurpLiveRoom,
-  patch: Partial<SlurpLiveRoom>,
+  patch: Partial<SlurpLiveRoomLists>,
   keptPromises = false,
-): SlurpLiveRoom {
-  const merge = (key: keyof SlurpLiveRoom, base: string[]) => {
+): SlurpLiveRoomLists {
+  const merge = (key: keyof SlurpLiveRoomLists, base: string[]) => {
     const seen = new Set(base.map((entry) => entry.toLowerCase()));
     const added = (patch[key] ?? [])
       .map((entry) => entry.trim().slice(0, 80))

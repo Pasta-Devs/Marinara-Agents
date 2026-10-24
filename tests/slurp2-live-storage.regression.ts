@@ -150,6 +150,7 @@ async function main() {
       promises: [],
       refused: [],
       jokes: ["the cat"],
+      before: { index: 0, shown: [], promises: [], refused: [], jokes: [] },
     });
     assert.equal((await live.byStirRequestId("now-request"))?.startedNoticeAt, at.toISOString());
     assert.equal(await live.privateClaim(creatorB.id, "viewer-a", "private-1", at), "new");

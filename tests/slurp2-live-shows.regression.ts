@@ -93,6 +93,13 @@ const ahead = {
     { at: 500_000, kind: "reaction" as const, text: "dm", personaId: "p" },
   ],
   queue: [{ itemId: "i", label: "Kiss", name: "Fan", at: 400_000, served: true, servedIn: 2, requestId: "r" }],
+  room: {
+    shown: ["top off"],
+    promises: [],
+    refused: ["feet"],
+    jokes: [],
+    before: { index: 2, shown: [], promises: ["top off at the goal"], refused: [], jokes: [] },
+  },
 } as any;
 const dropped = slurpLiveDropAhead(ahead, minute(6));
 assert.deepEqual(dropped?.segment, { index: 1, lease: null, claimedAt: null });
@@ -101,6 +108,11 @@ assert.deepEqual(
   ["now", "dm"],
 );
 assert.equal(dropped?.queue[0]?.served, false, "orders of the dropped segment are served again");
+assert.deepEqual(
+  dropped?.room,
+  { shown: [], promises: ["top off at the goal"], refused: ["feet"], jokes: [] },
+  "the ledger forgets a dropped segment but keeps refusals",
+);
 assert.equal(slurpLiveDropAhead(ahead, minute(9)), null, "a segment already on air stays");
 
 const patch = slurpLiveRoomPatch({ did: ["Robe off", 3], promise: "top off at the goal", joke: "" });
