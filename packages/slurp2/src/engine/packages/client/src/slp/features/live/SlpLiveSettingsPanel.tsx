@@ -5,6 +5,7 @@ import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 import { SlpExtensionSwitch } from "../../modules/settings/SlpExtensionSwitch";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
+import { SLP_LIVE_ROOMS } from "./slp-live-contract";
 
 /** Settings › Live shows: the switch, then when Creators go live on their own and for how long. */
 export function SlpLiveSettingsPanel({ settings, updateNow }: SlpBackstagePageProps) {
@@ -79,6 +80,13 @@ export function SlpLiveSettingsPanel({ settings, updateNow }: SlpBackstagePagePr
             onSave={(value) => void updateNow("liveMaxMinutes", value)}
           />
         </SettingAnchor>
+        <ChoiceSetting
+          settingKey="liveRoom"
+          label={tx("liveRoom", "Chat room")}
+          options={SLP_LIVE_ROOMS.map((value) => ({ value, label: t(`ui.slurp.live.rooms.${value}`) }))}
+          value={settings.liveRoom}
+          onChange={(value) => void updateNow("liveRoom", value)}
+        />
       </SlpExtensionSwitch>
     </div>
   );

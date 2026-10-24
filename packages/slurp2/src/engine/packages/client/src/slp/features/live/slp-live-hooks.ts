@@ -99,6 +99,7 @@ export function useStartSlpPlayerLive() {
       duration: 20 | 30 | 40;
       goal?: number;
       menu?: { id: string; enabled: boolean; price: number }[];
+      crowd?: string;
     }) => api.post<{ show: SlpLiveShow }>("/slurp2/live/start", input),
     onSettled: () => qc.invalidateQueries({ queryKey: ["slurp2", "live"] }),
   });

@@ -77,6 +77,7 @@ export type SlurpLiveShow = {
   lastReplyAt: string | null;
   recapPostId: string | null;
   room: SlurpLiveRoom;
+  crowd: string | null;
   menu: SlurpLiveMenuItem[];
   queue: SlurpLiveOrder[];
   segment: SlurpLiveSegment | null;

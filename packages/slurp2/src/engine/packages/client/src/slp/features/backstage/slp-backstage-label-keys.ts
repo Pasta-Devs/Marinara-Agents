@@ -16,6 +16,7 @@ export const SLP_BACKSTAGE_LABEL_KEYS: Partial<Record<keyof SlurpSettings, strin
   liveEndHour: "ui.slurp.settings.overview.yours.liveUntil",
   liveMinMinutes: "ui.slurp.settings.overview.yours.liveMin",
   liveMaxMinutes: "ui.slurp.settings.overview.yours.liveMax",
+  liveRoom: "ui.slurp.settings.overview.yours.liveRoom",
   extSupportDesk: "ui.slurp.settings.overview.yours.desk",
   inlineAdsEnabled: "ui.slurp.settings.inlinePromotions",
   inlineAdsFrequency: "ui.slurp.settings.ads.frequency",

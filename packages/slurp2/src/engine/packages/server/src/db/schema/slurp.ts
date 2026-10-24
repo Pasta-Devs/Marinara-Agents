@@ -960,6 +960,8 @@ export const slurpLiveShows = fileTable("slurp2_live_shows", {
   recapPostId: text("recap_post_id"),
   /** JSON SlurpLiveRoom: what she did, promised, refused and joked about this show. Null on older rows. */
   room: text("room"),
+  /** Room type id from slp-live-rooms.ts; null uses the liveRoom setting. */
+  crowd: text("crowd"),
 });
 
 /** One cross-process lease for the free world tick. */

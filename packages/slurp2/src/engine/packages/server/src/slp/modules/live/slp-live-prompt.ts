@@ -95,13 +95,41 @@ export function slurpLiveReplyPrompt(
   ].join("\n");
 }
 
+/** The crowd lane: the next minute of chat, reacting to what just happened on camera. */
+export function slurpLiveCrowdPrompt(
+  input: {
+    hostName: string;
+    minutes: number;
+    room: string;
+    narration: string;
+    chat: string;
+    fans: readonly string[];
+  } & LiveSpice,
+): string {
+  return [
+    `This is the live chat of ${input.hostName}'s cam show on their fan page, minute ${input.minutes}. The room: ${input.room}.`,
+    spiceBlock(input),
+    `What just happened on camera:\n${input.narration || "(warming up)"}`,
+    input.chat ? `Recent chat:\n${input.chat}` : "",
+    input.fans.length
+      ? `Fans in the room (use some of these names, invent other short handles): ${input.fans.join(", ")}.`
+      : "",
+    "Write 8-12 chat lines from different viewers reacting to exactly this moment, each in their own voice. Never speak for the host. Short lines, emojis welcome.",
+    'Answer with JSON only: {"lines":[{"at":0,"kind":"crowd","name":"<a short fan handle>","text":"<one line>"}]}',
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 /** The crowd's reaction while the player hosts their own show. */
 export function slurpLivePlayerCrowdPrompt(input: {
   narration: string;
   fans: Array<{ name: string; voice: string }>;
   hostName?: string;
+  room?: string;
 }): string {
   return [
+    ...(input.room ? [`The room: ${input.room}.`] : []),
     `${input.hostName ?? "A creator"} is live on their fan page and just said or did this on camera:\n${input.narration || "(warming up)"}`,
     `Fans in the chat: ${input.fans.map((fan) => `${fan.name} (${fan.voice})`).join(", ") || "a few regulars"}.`,
     "Write the chat's reaction: 6-10 crowd lines from these fans, each in their own voice, hyped and thirsty, reacting to exactly what happened, asking for more and pointing at the tip menu.",

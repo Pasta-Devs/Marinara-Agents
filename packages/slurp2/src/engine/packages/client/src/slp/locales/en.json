@@ -6729,5 +6729,12 @@
   "ui.slurp.live.pictureAlt": "Picture from {{name}}",
   "ui.slurp.settings.connections.live": "Live shows",
   "ui.slurp.settings.connections.liveUse": "Her live replies to you in a live room. Pick a fast, cheap model. Empty uses the Replies and fans model.",
-  "ui.slurp.live.readingChat": "{{name}} is reading chat..."
+  "ui.slurp.live.readingChat": "{{name}} is reading chat...",
+  "ui.slurp.live.setup.room": "Chat room",
+  "ui.slurp.settings.overview.yours.liveRoom": "Chat room",
+  "ui.slurp.live.rooms.default": "Mixed crowd",
+  "ui.slurp.live.rooms.simps": "Simps",
+  "ui.slurp.live.rooms.hype": "Hype squad",
+  "ui.slurp.live.rooms.lurkers": "Lurkers",
+  "ui.slurp.live.rooms.whales": "Whales"
 }

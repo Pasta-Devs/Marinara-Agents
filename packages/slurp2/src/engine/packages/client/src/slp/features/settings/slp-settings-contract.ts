@@ -24,6 +24,7 @@ export type SlurpSettings = {
   liveEndHour: number;
   liveMinMinutes: number;
   liveMaxMinutes: number;
+  liveRoom: "default" | "simps" | "hype" | "lurkers" | "whales";
   extSupportDesk: boolean;
   extEngineLink: boolean;
   inlineAdsEnabled: boolean;

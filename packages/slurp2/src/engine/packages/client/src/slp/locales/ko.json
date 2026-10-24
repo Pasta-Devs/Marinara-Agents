@@ -3991,5 +3991,12 @@
   "ui.slurp.live.pictureAlt": "{{name}}의 사진",
   "ui.slurp.settings.connections.live": "라이브 쇼",
   "ui.slurp.settings.connections.liveUse": "라이브 방에서 당신에게 보내는 실시간 답장. 빠르고 저렴한 모델을 고르세요. 비워 두면 답장 및 팬 모델을 씁니다.",
-  "ui.slurp.live.readingChat": "{{name}}님이 채팅을 읽는 중..."
+  "ui.slurp.live.readingChat": "{{name}}님이 채팅을 읽는 중...",
+  "ui.slurp.live.setup.room": "채팅방",
+  "ui.slurp.settings.overview.yours.liveRoom": "채팅방",
+  "ui.slurp.live.rooms.default": "다양한 시청자",
+  "ui.slurp.live.rooms.simps": "심프",
+  "ui.slurp.live.rooms.hype": "응원단",
+  "ui.slurp.live.rooms.lurkers": "눈팅족",
+  "ui.slurp.live.rooms.whales": "큰손"
 }

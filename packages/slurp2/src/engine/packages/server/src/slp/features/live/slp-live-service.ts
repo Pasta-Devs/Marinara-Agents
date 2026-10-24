@@ -25,18 +25,9 @@ import {
   slurpLivePictureTriggers,
   type SlurpLiveShow,
 } from "../../modules/live/slp-live.js";
+import { runLiveModel } from "./slp-live-model.js";
 import { logger } from "../../../lib/logger.js";
-import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
-import { createLLMProvider } from "../../../services/llm/provider-registry.js";
-import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
-import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
-import { resolveStoredChatOptions } from "../../../services/generation/generation-parameters.js";
-import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
-import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
-import { claimSlurpModelBudget } from "../../base/model/slp-model-worker.js";
-import { tryBackgroundConnection } from "../../../services/generation/connection-admission.js";
-import { resolveCreatorFanConnection } from "../audience/slp-audience-contract.js";
 import {
   slurpLiveMissedPrompt,
   slurpLiveReplyPrompt,
@@ -53,7 +44,14 @@ import {
   slurpFanTypeWeeklyBudget,
 } from "../../../../../shared/src/slp/slp-fan-types.js";
 import { slurpMembersActiveAt } from "../../../../../shared/src/slp/slp-population.js";
-import { slurpLivePlayerCrowdPrompt } from "../../modules/live/slp-live-prompt.js";
+import { slurpLiveCrowdPrompt, slurpLivePlayerCrowdPrompt } from "../../modules/live/slp-live-prompt.js";
+import {
+  SLURP_LIVE_ROOMS,
+  slurpLiveCrowdCursor,
+  slurpLiveCrowdDue,
+  slurpLiveEnqueueCrowd,
+  slurpLiveRoomType,
+} from "../../modules/live/slp-live-rooms.js";
 import { slurpLiveMenuItems } from "../../modules/live/slp-live-menu.js";
 import { slurpLivePlayerMenuDue } from "../../modules/live/slp-live.js";
 import { resolveSlurpCreatorSpice } from "../../data/creators/slp-spice-storage.js";
@@ -273,16 +271,6 @@ async function advanceShowNow(db: DB, show: SlurpLiveShow, settings: any, at: Da
     }
     const elapsed = at.getTime() - Date.parse(show.startedAt);
     const slot = Math.floor(elapsed / 60_000);
-    const fan = currentFans[slot % Math.max(1, currentFans.length)];
-    if (fan && !show.events.some((event) => event.requestId === `live:${show.id}:reaction:${slot}`)) {
-      await storage.appendEvent(show.id, {
-        at: elapsed,
-        kind: "chat",
-        name: fan.displayName,
-        text: SLURP_LIVE_REACTIONS[slot % SLURP_LIVE_REACTIONS.length]!,
-        requestId: `live:${show.id}:reaction:${slot}`,
-      });
-    }
     const current = await storage.get(show.id);
     if (current) {
       const orderFan = currentFans[(slot + 3) % Math.max(1, currentFans.length)];
@@ -373,6 +361,7 @@ async function advanceShowNow(db: DB, show: SlurpLiveShow, settings: any, at: Da
   }
   const current = await storage.get(show.id);
   if (!current || !slurpLiveWatched(current.lastSeenAt, at)) return;
+  if (!privateActive && show.hostKind === "creator") await fillSlurpLiveCrowd(db, current, settings, at);
   if (show.hostKind === "creator") {
     for (const viewer of current.pictureViewers.filter(
       (item) => item.mode === "pictures" && slurpLiveWatched(item.seenAt, at),
@@ -391,6 +380,7 @@ async function advanceShowNow(db: DB, show: SlurpLiveShow, settings: any, at: Da
     show.hostKind === "player"
       ? slurpLivePlayerCrowdPrompt({
           hostName: creator?.displayName ?? "Host",
+          room: SLURP_LIVE_ROOMS[slurpLiveRoomType(current.crowd ?? settings.liveRoom)],
           narration: current.script
             .filter((line) => line.kind === "narration" && line.at >= minutes * 60_000 - 240_000)
             .map((line) => line.text)
@@ -489,6 +479,54 @@ export async function getSlurpLiveMissed(db: DB, showId: string, at = new Date()
     result.slice(0, 3).map((line) => line.text),
   );
   return storage.get(showId);
+}
+
+/** The crowd lane: one model call writes the next minute of chat, revealed line by line. */
+async function fillSlurpLiveCrowd(db: DB, show: SlurpLiveShow, settings: any, at: Date): Promise<void> {
+  const start = Date.parse(show.startedAt);
+  const elapsed = at.getTime() - start;
+  if (!slurpLiveCrowdDue(show.events, show.id, elapsed)) return;
+  const creator = await createSlurpStorage(db).getNoodlerAccountById(show.hostId);
+  if (!creator) return;
+  const cast = await createSlurpPopulationStorage(db).listNamedCast(show.hostId, 8);
+  const fans = cast.map(({ member }) => member.displayName);
+  const spice = await liveSpice(db, creator);
+  const minutes = Math.round(elapsed / 60_000);
+  const prompt = slurpLiveCrowdPrompt({
+    hostName: creator.displayName,
+    minutes,
+    level: spice.level,
+    spiceLines: spice.spiceLines,
+    fans,
+    room: SLURP_LIVE_ROOMS[slurpLiveRoomType(show.crowd ?? settings.liveRoom)],
+    narration: show.script
+      .filter((line) => line.kind === "narration" && line.at <= elapsed && line.at > elapsed - 90_000)
+      .map((line) => line.text)
+      .join("\n"),
+    chat: show.events
+      .filter((event) => event.kind === "chat" && !event.private && event.at <= elapsed)
+      .slice(-6)
+      .map((event) => `${event.name}: ${event.text}`)
+      .join("\n"),
+  });
+  const lines = await runLiveModel(
+    db,
+    settings,
+    creator.displayName,
+    slurpLivePhase(show, at),
+    minutes,
+    prompt,
+    "crowd",
+  );
+  // Skeleton fallback when the model is out or busy: about 30 seconds of short reactions from real fans.
+  const batch = lines.length
+    ? lines
+    : Array.from({ length: 5 }, (_, index) => ({
+        name: fans[index % Math.max(1, fans.length)],
+        text: SLURP_LIVE_REACTIONS[(minutes + index) % SLURP_LIVE_REACTIONS.length]!,
+      }));
+  const cursor = slurpLiveCrowdCursor(show.events, show.id, Date.now() - start);
+  await createSlurpLiveStorage(db).appendEvent(show.id, slurpLiveEnqueueCrowd(show.id, batch, cursor));
 }
 
 const replyRetries = new Set<string>();
@@ -615,90 +653,6 @@ export async function endSlurpPlayerLiveShow(db: DB, showId: string, at = new Da
     metadata: { liveShowId: claimed.id },
   });
   return storage.setRecap(claimed.id, post?.id ?? null);
-}
-
-async function runLiveModel(
-  db: DB,
-  settings: any,
-  creatorName: string,
-  phase: string,
-  minutes: number,
-  prompt: string,
-  kind: "segment" | "missed" | "reply",
-  onParsed?: (parsed: unknown) => void,
-) {
-  try {
-    // Her live replies use the fast live connection when one is set; a deleted one falls back like the others.
-    const connection = await resolveCreatorFanConnection(
-      db,
-      kind === "reply" && settings.liveConnectionId
-        ? { ...settings, modelBudget: { ...settings.modelBudget, connectionId: settings.liveConnectionId } }
-        : settings,
-    );
-    if (!connection || !(await claimSlurpModelBudget(db, settings.modelBudget, "thread"))) return [];
-    const admission = tryBackgroundConnection(connection.id);
-    if (!admission.acquired) return [];
-    try {
-      const provider = slpWithProviderRetry(
-        createLLMProvider(
-          connection.provider,
-          resolveBaseUrl(connection),
-          connection.apiKey,
-          connection.maxContext,
-          connection.openrouterProvider,
-          connection.maxTokensOverride,
-          connection.claudeFastMode === "true",
-          connection.treatAsLocalEndpoint === "true",
-          connection.defaultParameters,
-        ),
-      );
-      const response = await provider.chatComplete(
-        [
-          { role: "system", content: `Live ${kind} for ${creatorName}, ${phase}, ${minutes} minutes.` },
-          { role: "user", content: prompt },
-        ],
-        {
-          model: connection.model,
-          ...slpSamplingOptions(
-            resolveStoredChatOptions(connection.defaultParameters, connection.provider, connection.model),
-            { temperature: 0.8, topP: 0.95 },
-          ),
-          maxTokens: clampGenerationMaxOutputTokens({
-            provider: connection.provider,
-            model: connection.model,
-            maxTokens: kind === "reply" ? 300 : 2048,
-            maxTokensOverride: connection.maxTokensOverride,
-          }),
-          stream: false,
-        },
-      );
-      const raw = requireModelAnswer(response.content ?? "", `live ${kind}`);
-      const parsed = kind === "reply" ? raw : parseGameJsonish(raw);
-      if (kind === "missed") {
-        const rows = Array.isArray(parsed) ? parsed : typeof parsed === "string" ? parsed.split("\n") : [];
-        return rows
-          .filter((line): line is string => typeof line === "string" && !!line.trim())
-          .slice(0, 3)
-          .map((text, index) => ({ at: index, kind: "reaction" as const, text: text.slice(0, 300) }));
-      }
-      if (kind === "reply") {
-        const text =
-          typeof parsed === "string"
-            ? parsed
-            : typeof parsed === "object" && parsed !== null && "lines" in parsed
-              ? (slurpLiveParseLines(parsed)[0]?.text ?? "")
-              : "";
-        return text ? [{ at: Date.now(), kind: "reaction", text: text.slice(0, 1000) }] : [];
-      }
-      onParsed?.(parsed);
-      return slurpLiveParseLines(parsed);
-    } finally {
-      admission.release();
-    }
-  } catch (error) {
-    logger.warn(error, "[slurp-live] Model output rejected");
-    return [];
-  }
 }
 
 async function notifyLive(db: DB, creator: { id: string; sourceEntityId?: string | null }, phase: string, id: string) {

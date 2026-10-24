@@ -12,6 +12,7 @@ import {
 } from "./slp-live-contract.js";
 import { slurpLiveMenuItems } from "../../modules/live/slp-live-menu.js";
 import { newId } from "../../../utils/id-generator.js";
+import { SLURP_LIVE_ROOM_TYPES, type SlurpLiveRoomType } from "../../modules/live/slp-live-rooms.js";
 import {
   slurpLiveCanWatch,
   slurpLiveForViewer,
@@ -161,6 +162,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
           .array(z.object({ id: z.string().min(1), enabled: z.boolean(), price: z.number() }))
           .max(8)
           .optional(),
+        crowd: z.enum(SLURP_LIVE_ROOM_TYPES as [SlurpLiveRoomType, ...SlurpLiveRoomType[]]).optional(),
       })
       .safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -187,6 +189,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
       endsAt: new Date(Date.now() + parsed.data.duration * 60_000),
       goal,
       menu,
+      crowd: parsed.data.crowd ?? null,
     });
     if (!show) {
       const active = await storage.active();
