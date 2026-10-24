@@ -1223,6 +1223,10 @@ async function main() {
                             name: "Ari",
                             subject: { key: "persona:persona-a", ref: { kind: "persona", id: "persona-a" } },
                           },
+                          {
+                            name: "Ari",
+                            subject: { key: "character:character-c", ref: { kind: "character", id: "character-c" } },
+                          },
                         ],
                         allowDifferent: false,
                       },
@@ -5750,10 +5754,19 @@ async function main() {
           .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).textContent)),
         [
           "Choose identity",
-          "Ari (character: character-a) · character:character-a",
-          "Ari (persona: persona-a) · persona:persona-a",
-          "Skip this participant",
+          "Ari (Character, character-a)",
+          "Ari (Persona)",
+          "Ari (Character, character-c)",
+          "Skip this memory",
         ],
+      );
+      assert.deepEqual(
+        await identitySelects
+          .nth(0)
+          .locator("option")
+          .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).title)),
+        ["", "character:character-a", "persona:persona-a", "character:character-c", ""],
+        "identity options keep the raw subject key in the title",
       );
       assert.ok(
         await identitySelects.evaluateAll((selects) =>
