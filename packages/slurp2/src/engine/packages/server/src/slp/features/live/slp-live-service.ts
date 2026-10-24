@@ -17,7 +17,6 @@ import {
   slurpLiveFanDue,
   SLURP_LIVE_REACTIONS,
   slurpLiveRecap,
-  slurpLiveTipTopper,
   slurpLivePlayerRecapText,
   slurpLivePrivatePrice,
   slurpLivePrivateOffersDue,
@@ -28,11 +27,7 @@ import {
 import { runLiveModel } from "./slp-live-model.js";
 import { logger } from "../../../lib/logger.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
-import {
-  slurpLiveMissedPrompt,
-  slurpLiveReplyPrompt,
-  slurpLiveSegmentPrompt,
-} from "../../modules/live/slp-live-prompt.js";
+import { slurpLiveReplyPrompt, slurpLiveSegmentPrompt } from "../../modules/live/slp-live-prompt.js";
 import { slurpLivePhase } from "../../modules/live/slp-live.js";
 import { slurpLiveRoomPatch, type SlurpLiveRoom } from "../../modules/live/slp-live-room.js";
 import { createSlurpEventsStorage } from "../../data/notifications/slp-notification-storage.js";
@@ -45,6 +40,7 @@ import {
 } from "../../../../../shared/src/slp/slp-fan-types.js";
 import { slurpMembersActiveAt } from "../../../../../shared/src/slp/slp-population.js";
 import { slurpLiveCrowdPrompt, slurpLivePlayerCrowdPrompt } from "../../modules/live/slp-live-prompt.js";
+import { slurpLiveIsWhale, slurpLiveWhaleAmount } from "../../modules/live/slp-live-format.js";
 import {
   SLURP_LIVE_ROOMS,
   slurpLiveCrowdCursor,
@@ -236,7 +232,11 @@ async function advanceShowNow(db: DB, show: SlurpLiveShow, settings: any, at: Da
         !slurpLiveAudienceTipDue(show.audienceTipKeys, `live:${show.id}:fan-tip:${fan.id}`)
       )
         continue;
-      const amount = slurpLivePlayerTipAmount(type, fan.id);
+      const base = slurpLivePlayerTipAmount(type, fan.id);
+      const duration = Date.parse(show.endsAt) - Date.parse(show.startedAt);
+      const amount = slurpLiveIsWhale(show.id, fan.id, duration, eligible.length)
+        ? slurpLiveWhaleAmount(base, show.goal)
+        : base;
       if (
         !(await population.reserveWeeklySpend(fan.id, show.hostId, amount, slurpFanTypeWeeklyBudget(type, fan.id), at))
       )
@@ -415,6 +415,8 @@ async function advanceShowNow(db: DB, show: SlurpLiveShow, settings: any, at: Da
             ),
             totalSegments: Math.ceil((Date.parse(show.endsAt) - Date.parse(show.startedAt)) / 240_000),
             goalReached: show.raised >= show.goal,
+            secondGoal: show.goal * 2,
+            secondReached: show.raised >= show.goal * 2,
             room: current.room,
             queuedMenuLabels: current.queue
               .filter((order) => !order.served && order.status !== "pending")
@@ -451,36 +453,6 @@ async function advanceShowNow(db: DB, show: SlurpLiveShow, settings: any, at: Da
   );
 }
 
-export async function getSlurpLiveMissed(db: DB, showId: string, at = new Date()) {
-  const storage = createSlurpLiveStorage(db);
-  const show = await storage.get(showId);
-  if (!show || show.endedAt || show.missedSummary !== null || !(await storage.claimMissed(showId)))
-    return storage.get(showId);
-  const settings = await createSlurpStorage(db).getSettings();
-  const creator = await createSlurpStorage(db).getNoodlerAccountById(show.hostId);
-  const result = await runLiveModel(
-    db,
-    settings,
-    creator?.displayName ?? "Host",
-    "main",
-    0,
-    slurpLiveMissedPrompt({
-      hostName: creator?.displayName ?? "Host",
-      elapsedMinutes: Math.round((at.getTime() - Date.parse(show.startedAt)) / 60_000),
-      raised: show.raised,
-      goal: show.goal,
-      servedMenuLabels: show.queue.filter((order) => order.served).map((order) => order.label),
-      topTipper: slurpLiveTipTopper(show.events)?.name ?? null,
-    }),
-    "missed",
-  );
-  await storage.setMissed(
-    showId,
-    result.slice(0, 3).map((line) => line.text),
-  );
-  return storage.get(showId);
-}
-
 /** The crowd lane: one model call writes the next minute of chat, revealed line by line. */
 async function fillSlurpLiveCrowd(db: DB, show: SlurpLiveShow, settings: any, at: Date): Promise<void> {
   const start = Date.parse(show.startedAt);
@@ -507,9 +479,11 @@ async function fillSlurpLiveCrowd(db: DB, show: SlurpLiveShow, settings: any, at
       .map((line) => line.text)
       .join("\n"),
     chat: show.events
-      .filter((event) => event.kind === "chat" && !event.private && event.at <= elapsed)
+      .filter((event) => !event.private && !event.join && event.at <= elapsed)
       .slice(-6)
-      .map((event) => `${event.name}: ${event.text}`)
+      .map((event) =>
+        event.kind === "tip" ? `${event.name} tipped ${event.amount ?? 0} coins` : `${event.name}: ${event.text}`,
+      )
       .join("\n"),
   });
   const lines = await runLiveModel(
@@ -544,7 +518,11 @@ function playerLinesSince(show: SlurpLiveShow, since: number, privateViewer: str
         (privateViewer ? event.personaId === privateViewer : !event.private && !event.personaId),
     )
     .map((event) =>
-      event.kind === "tip" ? `${event.name} tipped ${event.amount ?? 0} coins` : `${event.name}: ${event.text}`,
+      event.join
+        ? `${event.name} just joined the show (${event.text === "regular" ? "a regular, back again" : "first time here"})`
+        : event.kind === "tip"
+          ? `${event.name} tipped ${event.amount ?? 0} coins`
+          : `${event.name}: ${event.text}`,
     );
 }
 

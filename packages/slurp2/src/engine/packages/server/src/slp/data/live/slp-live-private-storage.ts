@@ -221,7 +221,14 @@ export function createSlurpLivePrivateStorage(db: DB) {
           ),
           script: JSON.stringify([
             ...parse<SlurpLiveLine[]>(row.script, []),
-            { at: at.getTime() - Date.parse(row.startedAt), kind: "picture", text: "", mediaId, personaId },
+            {
+              at: at.getTime() - Date.parse(row.startedAt),
+              kind: "picture",
+              text: "",
+              mediaId,
+              personaId,
+              ...(trigger === "goal" ? { requires: "goal-hit" as const } : {}),
+            },
           ]),
         };
         await tx.update(slurpLiveShows).set(patch).where(eq(slurpLiveShows.id, id));

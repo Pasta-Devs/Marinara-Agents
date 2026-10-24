@@ -168,7 +168,7 @@ const liveBackstage = slurp2Source(
   "packages/slurp2/src/engine/packages/client/src/slp/features/backstage/SlpBackstageOverviewPanel.tsx",
 );
 assert.match(service, /slurpLiveSegmentPrompt/);
-assert.match(service, /slurpLiveMissedPrompt/);
+assert.doesNotMatch(service, /slurpLiveMissedPrompt/, "the late-join catch-up costs no model call");
 assert.match(service, /if \(!current \|\| !slurpLiveWatched\(current.lastSeenAt, at\)\) return/);
 assert.doesNotMatch(service, /slurpLiveScriptPrompt|slurpLiveFinishPrompt/);
 assert.match(service, /createSlurpEventsStorage/);
@@ -182,7 +182,7 @@ assert.match(storage, /isNull\(slurpLiveShows\.startedNoticeAt\)/);
 assert.match(storage, /startedRow\.startedNoticeAt !== at\.toISOString\(\)/);
 assert.match(routes, /tipInThread\([\s\S]*?"Live show tip"/);
 assert.match(routes, /replyToSlurpLiveChat/);
-assert.match(routes, /getSlurpLiveMissed/);
+assert.doesNotMatch(routes, /getSlurpLiveMissed/);
 assert.match(routes, /"\/live\/stir"/);
 assert.match(routes, /storage\.byStirRequestId\(parsed\.data\.requestId\)/);
 assert.match(routes, /announceSlurpLive\(app\.db, planned\)/);
@@ -204,7 +204,11 @@ assert.match(liveScreen, /SlpLiveMenuSheet/);
 assert.match(liveScreen, /newRequestId\(\)/);
 assert.match(liveScreen, /customTip/);
 assert.match(liveScreen, /show\.viewers/);
-assert.match(liveChat, /show\.missedSummary/);
+assert.match(
+  liveChat,
+  /joinedLate \? catchUpLines\(show, elapsed, t\) : \[\]/,
+  "a late viewer gets a catch-up built in code",
+);
 assert.match(liveChat, /atBottom/);
 assert.match(liveChat, /newMessages/);
 assert.match(liveChat, /previousLines\.current = currentKeys/);

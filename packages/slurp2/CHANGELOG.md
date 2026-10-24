@@ -1,5 +1,13 @@
 # Slurp release notes
 
+## 0.4.8 — 2026-10-24
+
+- Goal Striptease: after the tip goal the goal bar and segment prompt run on to a second goal at 2x (`modules/live/slp-live-format.ts`); the finale prompt makes a last call about 90 s before the end.
+- The `goal` picture is generated from 80% of the goal; its script line carries `requires: "goal-hit"`, so `slurpLiveForViewer` hides it until `goalHitAt` and shows it at that moment.
+- Whale: p = 0.15 per 5 show minutes, one fan's tip becomes max(5 tips, 25% of the goal), within the weekly fan budget. The crowd lane now sees tips.
+- The late-join "You missed" list is built in the client from the show (goal, top 3 tippers, last 3 lines); `getSlurpLiveMissed` and its model call are gone.
+- Join greeting: opening a Creator show adds a hidden `join` event (regular = joined an earlier show of this host); her live reply greets them. `appendEvent` drops a repeated request id.
+
 ## 0.4.7 — 2026-10-24
 
 - Crowd lane: a watched Creator show asks the model for 8-12 chat lines when less than 10 s of crowd chat is queued, and places them 3-9 s apart (`modules/live/slp-live-rooms.ts`). They use the fast live connection; when the model is out, 5 short reactions from real fans fill about 30 s.

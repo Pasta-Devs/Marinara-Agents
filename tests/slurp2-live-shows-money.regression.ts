@@ -162,7 +162,6 @@ assert.match(storage, /claimSegment/);
 assert.match(storage, /segment\.index > index/);
 assert.match(storage, /slurpLiveMenuClaimState\(queue/);
 assert.match(storage, /slurpLiveMayStart\(active, input\.hostKind, input\.hostId/);
-assert.match(storage, /row\.missedSummary !== null/);
 assert.match(storage, /claimReply/);
 assert.match(storage, /slurpLiveCapEvents/);
 assert.match(storage, /isNull\(slurpLiveShows\.endedAt\)/);
@@ -187,7 +186,11 @@ assert.match(
   "a new private show rewrites a public segment written ahead",
 );
 assert.match(storage, /slurpLiveSegmentToWrite\(map\(row\), at\) !== index/);
-assert.equal(routes.match(/fromPlayer: true/g)?.length, 2, "player chat and tips are marked for her reply");
+assert.equal(
+  routes.match(/fromPlayer: true/g)?.length,
+  3,
+  "player chat, tips and the join greeting are marked for her reply",
+);
 assert.match(routes, /if \(!duplicate\) void replyToSlurpLiveChat\(app\.db, show\.id\)/, "a tip gets a live reply");
 assert.match(
   service,

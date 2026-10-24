@@ -1,5 +1,5 @@
 import type { DB } from "../../../db/connection.js";
-import { and, desc, eq, isNotNull, isNull, lt, lte, or } from "../../../db/file-query.js";
+import { and, desc, eq, isNotNull, isNull, like, lt, lte, or } from "../../../db/file-query.js";
 import { slurpLiveShows } from "../../../db/schema/slurp.js";
 import { newId } from "../../../utils/id-generator.js";
 import { createSlurpLivePrivateStorage } from "./slp-live-private-storage.js";
@@ -445,23 +445,6 @@ export function createSlurpLiveStorage(db: DB) {
       return this.get(id);
     },
     ...createSlurpLivePrivateStorage(db),
-    async claimMissed(id: string) {
-      return db.transaction(async (tx) => {
-        const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
-        if (!row || row.endedAt || row.missedSummary !== null) return false;
-        await tx
-          .update(slurpLiveShows)
-          .set({ missedSummary: "[]" })
-          .where(and(eq(slurpLiveShows.id, id), isNull(slurpLiveShows.missedSummary)));
-        return (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0]?.missedSummary === "[]";
-      });
-    },
-    async setMissed(id: string, lines: string[]) {
-      await db
-        .update(slurpLiveShows)
-        .set({ missedSummary: JSON.stringify(lines) })
-        .where(eq(slurpLiveShows.id, id));
-    },
     async claimSegment(id: string, index: number, at: Date) {
       return db.transaction(async (tx) => {
         const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
@@ -596,12 +579,26 @@ export function createSlurpLiveStorage(db: DB) {
         return map({ ...row, queue: JSON.stringify(next) });
       });
     },
+    /** A regular opened an earlier show of this host. */
+    async isRegular(hostId: string, personaId: string, showId: string) {
+      const rows = await db
+        .select()
+        .from(slurpLiveShows)
+        .where(and(eq(slurpLiveShows.hostId, hostId), like(slurpLiveShows.events, `%:join:${personaId}"%`)))
+        .limit(2);
+      return rows.some((row) => row.id !== showId);
+    },
     async appendEvent(id: string, event: SlurpLiveEvent | SlurpLiveEvent[]) {
       return db.transaction(async (tx) => {
         const rows = await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id));
         const row = rows[0];
         if (!row || row.endedAt) return null;
-        const events = capEvents([...decodeEvents(row.events), ...[event].flat()]);
+        const existing = decodeEvents(row.events);
+        // A request id lands once, so two polls cannot add the same line twice.
+        const known = new Set(existing.map((item) => item.requestId).filter(Boolean));
+        const fresh = [event].flat().filter((item) => !item.requestId || !known.has(item.requestId));
+        if (!fresh.length) return map(row);
+        const events = capEvents([...existing, ...fresh]);
         await tx
           .update(slurpLiveShows)
           .set({ events: JSON.stringify(events) })
@@ -664,7 +661,6 @@ export function createSlurpLiveStorage(db: DB) {
               ? { audienceTipKeys: JSON.stringify(keys.filter((key) => key !== requestId)) }
               : {}),
             raised: String(raised),
-            ...(raised < Number(row.goal) ? { goalHitAt: null } : {}),
           })
           .where(eq(slurpLiveShows.id, id));
         return true;
