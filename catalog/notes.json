@@ -828,10 +828,58 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.9",
+          "date": "2026-10-24",
+          "notes": "- Merged staging: the story viewer takes taps again (#1653).",
+          "highlight": false
+        },
+        {
+          "version": "0.4.8",
+          "date": "2026-10-24",
+          "notes": "- Goal Striptease: after the tip goal the goal bar and segment prompt run on to a second goal at 2x (`modules/live/slp-live-format.ts`); the finale prompt makes a last call about 90 s before the end.\n- The `goal` picture is generated from 80% of the goal; its script line carries `requires: \"goal-hit\"`, so `slurpLiveForViewer` hides it until `goalHitAt` and shows it at that moment.\n- Whale: p = 0.15 per 5 show minutes, one fan's tip becomes max(5 tips, 25% of the goal), within the weekly fan budget. The crowd lane now sees tips.\n- The late-join \"You missed\" list is built in the client from the show (goal, top 3 tippers, last 3 lines); `getSlurpLiveMissed` and its model call are gone.\n- Join greeting: opening a Creator show adds a hidden `join` event (regular = joined an earlier show of this host); her live reply greets them. `appendEvent` drops a repeated request id.",
+          "highlight": false
+        },
+        {
+          "version": "0.4.7",
+          "date": "2026-10-24",
+          "notes": "- Crowd lane: a watched Creator show asks the model for 8-12 chat lines when less than 10 s of crowd chat is queued, and places them 3-9 s apart (`modules/live/slp-live-rooms.ts`). They use the fast live connection; when the model is out, 5 short reactions from real fans fill about 30 s.\n- Room types (mixed, simps, hype, lurkers, whales) steer the crowd; player shows pick one at setup (`crowd` column), Creator shows use the new `liveRoom` setting.\n- `runLiveModel` moved to `features/live/slp-live-model.ts`.",
+          "highlight": false
+        },
+        {
+          "version": "0.4.6",
+          "date": "2026-10-24",
+          "notes": "- Live replies: every player chat line and tip (`fromPlayer`) gets her model reply; one reply per 8 s (`SLURP_LIVE_REPLY_GAP_MS`, was 60 s public / 20 s private), lines sent inside the gap are answered together by a retry after it. Replies are marked `host`.\n- New `liveConnectionId` setting (Settings > Connections > Live shows) for the reply call, 300 max tokens; empty uses the Replies and fans model.\n- The live room polls every 1 s while a reply is pending and shows \"reading chat...\".",
+          "highlight": false
+        },
+        {
+          "version": "0.4.5",
+          "date": "2026-10-24",
+          "notes": "- Live shows keep a room ledger (`room` column, `modules/live/slp-live-room.ts`): done on camera, goal promises, refusals, running jokes. Each segment prompt reads it and the segment answer's `did` / `promise` / `joke` fields extend it in `completeSegment`; promises clear once the goal segment keeps them.\n- Lines written ahead may carry `requires: \"goal-open\"`; `slurpLiveForViewer` drops them once the goal is hit before their time.",
+          "highlight": false
+        },
+        {
+          "version": "0.4.4",
+          "date": "2026-10-24",
+          "notes": "- Live shows write ahead: from halfway through a 4-minute segment the next one is written, so chat never runs dry (`slurpLiveSegmentToWrite`).\n- A segment written late spreads its lines over the time left instead of dumping them at once (`slurpLiveSegmentLineAt`).\n- A watcher's 3 s poll kicks the show (`kickSlurpLiveShow`, at most every 3 s); one show never advances twice at once (a run hung over 2 minutes is dropped).\n- A private show that starts after the next segment was written rewrites it as private; no segment is written ahead during a private show; a menu picture waits until its segment plays.",
+          "highlight": false
+        },
+        {
+          "version": "0.4.3",
+          "date": "2026-10-24",
+          "notes": "- Live shows get their own Backstage extension section and page (`live`, `SlpLiveSettingsPanel`): the `extLive` switch with how often, hours and length; the Overview row opens it, Settings search and \"Reset page\" place the live keys there, and Basic setup offers Live as an extra.\n- `extLive` is off by default for new installs, like the other extensions; existing players keep it through the legacy mapping.\n- A Stir go-live replaces the Creator's not-yet-started plan, and shows whose end time passed never block a new plan.\n- Stir's Go live card moves below the story picks and shows only while Live is on.",
+          "highlight": false
+        },
+        {
+          "version": "0.4.2",
+          "date": "2026-10-24",
+          "notes": "- A repeated live tip resumes its payment through the show-scoped DM tip id instead of reporting it as done, so a crash between claim and charge no longer drops the coins.\n- A Creator show waits up to 2 minutes for a private payment in flight before it ends and posts its recap.\n- Tip events are kept past the 200-event cap, so tip dedupe and the recap's top tipper cover the whole show.",
+          "highlight": false
+        },
+        {
           "version": "0.4.1",
           "date": "2026-10-24",
-          "notes": "- Fixed Story viewer clicks passing through to the feed or Engine behind it. Close, Creator profile, menu, navigation and picture controls respond again.",
-          "highlight": true
+          "notes": "- Live shows (`features/live`, table `slurp2_live_shows`, switch `extLive`): Creators go live on a schedule (Backstage: how often, hours, length), half announced with a post and reminders, or from Stir > Go live. Shows run 20-40 min in 4-minute segments; a model call per segment only while somebody watches, plus a \"You missed\" catch-up and quick replies.\n- Named crowd from her audience: tips and tip-menu buys inside each fan's weekly budget; the menu follows her spice level, turn-ons and hard-nos.\n- Private 10-minute blocks inside the room (PPV ×3, extendable, one viewer) and picture mode per viewer (goal, finale, picture menu items, private; max 6, only while watched).\n- The player hosts their own show: editable menu, Done queue, fan private requests by DM, recap post with real earnings. LIVE badge on avatars, Live now row on Home.",
+          "highlight": false
         },
         {
           "version": "0.4.0",
@@ -897,54 +945,6 @@
           "version": "0.3.44",
           "date": "2026-10-15",
           "notes": "- Added: trends. A post that takes off (shown likes; your likes, unlocks and tips count most), your own page's hits, a platform trend, or Stir \"Start a trend\" (ready-made trends, a starter, what to lean into) starts one. Stir \"Steer a trend\" changes what it leans into. The right Creators join, each at their own spice level and limits, quote the origin post, peak, then cool; some roast it, some never join. The starter gains followers.\n- Added: Discover \"Trending on Slurp\" row, a trend chip on posts, and trend search.\n- Changed: the invented \"silly trend\" daily-life moment is gone; trend posts skip the feed spice damping.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.43",
-          "date": "2026-10-15",
-          "notes": "- Fixed: long DMs end at a sentence or word (up to 2400 characters), and commission quotes use the Creator's own prices.\n- Fixed: Cancel ends a subscription to a removed Creator at once.\n- Fixed: fans react to what a picture shows, not its art style.\n- Fixed: post drift. Tips no longer teach a guessed taste, and a spicy kind or taste that other Creators posted that day steps aside, so the whole feed is not in the shower at once. Spice level is unchanged.\n- Changed: family is never paired up on its own. Cards that say they are lovers, or the player in Stir, still can.\n- Fixed: clearer \"monogamous\" message in Stir, with the Relationships switch on the Creator sheet.\n- Fixed: work mode no longer blurs the coin and G's face; Couples pages are not a missing source; the sign-up scene names an unreachable connection.\n- Fixed: a scheduled post goes up once, and a shared-page post waits its turn.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.42",
-          "date": "2026-10-15",
-          "notes": "- Added: chats with \"Carryover to chats\" on also learn the character's Slurp storyline, love life, how well they know you, and the Slurp memories a chat with you may read.\n- Added: Carryover settings show in how many chats with your Creators \"Include Slurp activity\" is on.\n- Fixed: a scene started from a DM runs on the connection Slurp planned it with, not the Engine's plain default.\n- Fixed: an unreadable scene plan is asked for once more before \"The scene plan got lost\" shows.\n- Fixed: \"Start the scene\" shows an error when the Engine's scene host is missing.\n- Fixed: lorebook entries set to \"At Depth\" reach Slurp DMs and posts.\n- Added: Deep details has a \"Lore\" section with the entries a reply used or had no room for.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.41",
-          "date": "2026-10-14",
-          "notes": "- Faster: Slurp shows character and persona avatars as small copies instead of the full card picture. On opening Slurp the feed downloaded about 16 MB of avatar pictures (1–2.5 MB each, shown 44 px wide), and Discover about 14 MB more; those downloads also held up the feed's other requests. The small copies are made once and kept in Slurp's own media folder.\n- Faster: the \"Report\" sheet of a post or a reply is built only when you open it. Before, every post card and reply built a closed copy, which made the feed and Creator pages slower to open.\n- Faster: the ambient background colour measures the pictures on screen only after the screen has drawn, so opening a screen no longer forces extra layout work.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.40",
-          "date": "2026-10-14",
-          "notes": "- Changed: Slurp follows a Creator's gender instead of calling everyone \"she\". Drama packs use the gender of whoever plays each role (\"{her:he}\" tokens), and pack names and descriptions no longer assume a woman. Post, DM and scene prompts tell the model the Creator's pronouns. A Creator without a gender is \"they\".\n- Added: a \"Clothing style\" choice in the Creator's stage profile: Auto, Feminine, Masculine or Neutral. Auto follows gender. It decides what a \"lingerie\" spice post is: lingerie for feminine, an underwear shoot with briefs for masculine, either for neutral. Male Creators no longer get bra-and-panties shoots unless their style is Feminine. The post prompt also names the style.\n- Added: a picture of a Creator whose appearance text does not say their sex starts with \"Male.\" or \"Female.\" from their gender, so the image model stops defaulting to a woman.\n- Changed: the stage profile field hints read \"he\", \"she\" or \"they\" from the gender you picked.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.39",
-          "date": "2026-10-14",
-          "notes": "- Fixed: on Android, choosing a picture for a post (in the composer, or \"replace\" while editing a post) no longer opens the system photo picker, which lists only a few albums such as Camera, Screenshots and Downloads. Android now offers its full file browser, so every folder is reachable. A file that is not a picture still gets \"Choose an image file.\". Other platforms keep the picture-only file dialog. (#1378)",
-          "highlight": false
-        },
-        {
-          "version": "0.3.38",
-          "date": "2026-10-13",
-          "notes": "- Added: in a Creator's settings, \"Appearance for pictures\" has a new button, \"Use the card's image tags\". It shows only while the linked character or persona has the Image Appearance Override switched on and filled in, and it saves those tags as the Creator's own appearance. It asks first when that replaces an appearance you wrote. \"Use linked appearance\" (or \"Clear override\") removes it again. (#1366)",
-          "highlight": false
-        },
-        {
-          "version": "0.3.37",
-          "date": "2026-10-13",
-          "notes": "- With a Claude (Subscription) connection, Slurp no longer makes a hidden second request to name each session, and a request now stops with an error if Claude Code turns on claude.ai connectors. With a Marinara Engine release after 2.5.0, Claude Code also no longer adds your account email, the date or this computer's details to the prompt. Engine 2.5.0's Claude Code still adds them, and the server log warns about it until you update Marinara. (#1313)\n- Changed: avatar references are allowed for SpicyAPI edit models (model IDs ending in /edit) and still left out for its text-to-image models. Slurp's bundled image code cannot call SpicyAPI yet, so SpicyAPI pictures do not work in Slurp until it can. (#1337)",
-          "highlight": false
-        },
-        {
-          "version": "0.3.36",
-          "date": "2026-10-13",
-          "notes": "- Fixed: a Creator's bio and stage voice now steer what she posts about. The post planner reads them beside the character card (hidden identities stay hidden), so a hobby named only in the bio, such as cosplay, becomes post subjects. The post prompt also says that interests named in the bio and stage voice count. (#1358)\n- Changed: the no-repeat rule no longer blocks a theme that the bio, stage voice, or card names as what the Creator does. A new setting, framing, and look each time is still required, and the same outfit or wording is still a repeat. (#1358)",
           "highlight": false
         }
       ]
