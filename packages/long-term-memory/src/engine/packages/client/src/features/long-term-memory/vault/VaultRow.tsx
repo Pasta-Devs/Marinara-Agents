@@ -49,8 +49,15 @@ export const VaultRow = memo(function VaultRow({
       data-ltm-note-type={note.type}
       data-ltm-note-source={note.type === "source" || undefined}
       data-ltm-note-actions-open={actionsOpen || undefined}
-      className={`group border-b border-[var(--border)]/70 p-2 ${selected ? "bg-[var(--accent)]/50" : ""}`}
+      className={`group relative border-b border-[var(--border)]/70 p-2 ${selected ? "bg-[var(--primary)]/10" : ""}`}
     >
+      {selected ? (
+        <span
+          aria-hidden="true"
+          data-ltm-note-open-bar
+          className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-[var(--primary)]"
+        />
+      ) : null}
       <div className="flex min-w-0 gap-2">
         {selectMode && note.type !== "source" ? (
           <label className="flex min-h-11 min-w-11 items-center justify-center">
@@ -67,6 +74,7 @@ export const VaultRow = memo(function VaultRow({
         ) : null}
         <button
           type="button"
+          aria-current={selected ? "true" : undefined}
           onClick={() => actions.current?.openNote(note)}
           className="min-h-14 min-w-0 flex-1 overflow-hidden rounded-md px-2 text-left hover:bg-[var(--accent)]"
         >

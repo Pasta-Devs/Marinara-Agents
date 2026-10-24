@@ -13,6 +13,7 @@ import {
   RelationshipStateError,
   agentMessageText,
   characterCardName,
+  leadingNamePattern,
 } from "./state.mjs";
 import {
   PERSONA_TRACKING_INSTRUCTIONS,
@@ -43,7 +44,6 @@ const REVIEW_TEXT_KEYS = Object.freeze({
 const COLOR_CATEGORIES = new Set(["positive", "neutral", "negative", "complicated"]);
 const UNREADABLE_CHANGE_NOTE = "The model wrote this change in a form the tracker can't read. Fill it in or remove it.";
 const isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
-const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 const reviewText = (value) => typeof value === "string" ? value.replace(/\s+/gu, " ").trim() : "";
 const reviewColor = (value) => COLOR_CATEGORIES.has(value) ? value : "";
 const newReviewId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -176,10 +176,6 @@ function sameCharacters(left, right) {
     character.name === right[index].name);
 }
 
-function startsWithName(text, name) {
-  return new RegExp(`^${escapeRegex(name)}(?=$|[^\\p{L}\\p{N}_])`, "iu").test(text);
-}
-
 // Models sometimes write a name, card ID, or full reference where an alias belongs; offer the matching character.
 function reviewAlias(value, characters) {
   const text = reviewText(value);
@@ -196,7 +192,10 @@ function isPersonaReference(value, review) {
     !review.allowedCharacters.some((character) => character.name.toLocaleLowerCase() === text);
 }
 
-const withLeadingName = (text, name) => !text || startsWithName(text, name) ? text : `${name} ${text}`;
+function withLeadingName(text, name, review) {
+  const names = [...review.allowedCharacters.map((character) => character.name), review.persona?.name ?? ""];
+  return !text || leadingNamePattern(name, names).test(text) ? text : `${name} ${text}`;
+}
 
 // Names a character the model invented (an NPC without a card); aliases like c9 mean nothing to users.
 function missingCharacterIssue(values, review, fallback) {
@@ -221,7 +220,7 @@ function cardReviewChange(entry, review) {
         alias,
         state,
         label: defined ? reviewText(rawLabel) : "",
-        perception: defined ? withLeadingName(reviewText(personaFirst ? rawPerspectiveB : rawPerspectiveA), character.name) : "",
+        perception: defined ? withLeadingName(reviewText(personaFirst ? rawPerspectiveB : rawPerspectiveA), character.name, review) : "",
         colorCategory: defined ? reviewColor(rawColor) : null,
         note: `The model listed this as a relationship between ${character.name} and ${review.persona.name}, so it is shown as ${character.name}'s view of ${review.persona.name}. Check the wording before saving.`,
       };
@@ -251,7 +250,7 @@ function personaReviewChange(entry, review) {
     alias,
     state: defined ? "defined" : "undefined",
     label: defined ? reviewText(rawLabel) : "",
-    perception: defined ? (character ? withLeadingName(perception, character.name) : perception) : "",
+    perception: defined ? (character ? withLeadingName(perception, character.name, review) : perception) : "",
     colorCategory: defined ? reviewColor(rawColor) : null,
     ...(Array.isArray(entry) ? {} : { note: UNREADABLE_CHANGE_NOTE }),
   };
@@ -335,7 +334,8 @@ function personaChangeCheck(change, checks) {
     return { issue: null, unchanged: updates.length === 0 };
   } catch (error) {
     if (error?.name !== "PersonaTrackingError") throw error;
-    if (/must begin with the character's name/u.test(error.message)) return { issue: `Start with “${name}” and mention ${persona} by name.` };
+    if (/must begin with the character's name/u.test(error.message)) return { issue: `Start with “${name}”.` };
+    if (/must name the active persona/u.test(error.message)) return { issue: `Mention ${persona} by name.` };
     if (/internal state or agency/u.test(error.message)) {
       return { issue: `Describe only how ${name} sees ${persona}, not what ${persona} thinks, feels, or does.` };
     }

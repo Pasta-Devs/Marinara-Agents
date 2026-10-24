@@ -40,8 +40,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  admission:
+    name: Admit ready pull request
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      admitted: ${{ steps.ready.outputs.admitted }}
+    steps:
+      - name: Check current pull request readiness
+        id: ready
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUM: ${{ inputs.pr_number }}
+          DOTTORE_BASE_REFS: ${{ vars.DOTTORE_BASE_REFS || 'refactor,main,staging' }}
+        run: |
+          echo 'admitted=false' >> "$GITHUB_OUTPUT"
+          if ! [[ "$PR_NUM" =~ ^[1-9][0-9]*$ ]]; then
+            echo '::error::A positive pull request number is required.'
+            exit 1
+          fi
+          PR_META="$(gh pr view "$PR_NUM" --repo "$GH_REPO" --json state,isDraft,baseRefName)"
+          if ! jq -e 'type == "object" and (.state == "OPEN" or .state == "CLOSED" or .state == "MERGED") and (.isDraft | type == "boolean") and (.baseRefName | type == "string" and length > 0)' <<< "$PR_META" >/dev/null; then
+            echo '::error::Unable to verify current pull request readiness.'
+            exit 1
+          fi
+          if ! jq -e '.state == "OPEN" and .isDraft == false' <<< "$PR_META" >/dev/null; then
+            echo 'Draft or closed specimen withheld from examination.'
+            exit 0
+          fi
+          TARGET_REF="$(jq -r '.baseRefName' <<< "$PR_META")"
+          if ! jq -en --arg refs "$DOTTORE_BASE_REFS" --arg ref "$TARGET_REF" '$refs | split(",") | index($ref) != null' >/dev/null; then
+            echo 'Pull request base is not reviewed by Dottore.'
+            exit 0
+          fi
+          echo 'admitted=true' >> "$GITHUB_OUTPUT"
+
   review:
-    uses: Pasta-Devs/Marinara-Engine/.github/workflows/dottore-review.yml@6dd282ba47a3b99dbc3f5015e532073dcb7c9004
+    needs: admission
+    if: needs.admission.outputs.admitted == 'true'
+    uses: Pasta-Devs/Marinara-Engine/.github/workflows/dottore-review.yml@3b95352a348587f683ed5f4576159eb432aa24c4
     with:
       pr_number: ${{ inputs.pr_number }}
       comment_body: ${{ inputs.comment_body }}

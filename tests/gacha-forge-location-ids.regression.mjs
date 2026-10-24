@@ -310,7 +310,7 @@ css(/oy=\[\{version:null,/u, "the in-game changelog's newest entry is labelled w
 assert.ok(!client.includes(`{version:"${bundleVersion}"`), "no older in-game entry claims the current version");
 // The entry before it keeps its notes under a release the changelog lists below this one.
 const pinned = client.match(
-  /oy=\[\{version:null,(?:new|changed|fixed):\[(?:"(?:[^"\\]|\\.)*",?)+\]\},\{version:"(\d+\.\d+\.\d+)",/u,
+  /oy=\[\{version:null,(?:new|changed|fixed):\[(?:(?:"(?:[^"\\]|\\.)*"|forgeAnimationEnglish\.release),?)+\](?:,(?:new|changed|fixed):\[(?:(?:"(?:[^"\\]|\\.)*"|forgeAnimationEnglish\.release),?)+\])*\},\{version:"(\d+\.\d+\.\d+)",/u,
 )?.[1];
 const released = [...changelog.matchAll(/^## (\d+\.\d+\.\d+) /gmu)].map((match) => match[1]);
 assert.ok(released.indexOf(pinned) > 0, "the previous in-game entry is pinned to an earlier release");

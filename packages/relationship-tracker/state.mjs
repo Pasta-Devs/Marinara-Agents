@@ -42,13 +42,64 @@ const clone = (value) => structuredClone(value);
 const compactText = (value) => typeof value === "string" ? value.replace(/\s+/gu, " ").trim() : "";
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 
-function namePattern(name, flags = "iu") {
-  return new RegExp(`(^|[^\\p{L}\\p{N}_])${escapeRegex(name)}(?=$|[^\\p{L}\\p{N}_])`, flags);
+// Name matching. Korean attaches particles to names (김민수는, Alice를), and Japanese and Chinese use no spaces
+// (アリスはボブを, 张三很信任李四), so those scripts may touch a name. Everything else still needs a space or
+// punctuation, so English is unaffected. Single characters and syllables appear inside ordinary words, so a
+// one-character Chinese or Japanese name keeps that strict rule (明 in 明天), and a one-syllable Korean name may be
+// followed only by a particle (준은, 준을, but not 준비). A name inside another card's longer name never counts.
+const UNSPACED = "\\p{scx=Han}\\p{scx=Hiragana}\\p{scx=Katakana}";
+const UNSPACED_CHARACTER = new RegExp(`[${UNSPACED}]`, "u");
+const TOUCHING_TEXT = new RegExp(`^[\\p{Script=Hangul}${UNSPACED}]`, "u");
+const WORD_CHARACTER = /^[\p{L}\p{N}_]$/u;
+const NAME_END = "$|[^\\p{L}\\p{N}_]";
+// A vocative 야/아 must end the word, so 이야기 doesn't count as 이.
+const KOREAN_PARTICLE = `[은는이가을를의에도와과로께랑만씨님였예]|으로|한테|하고|처럼|보다|까지|부터|마저|조차|밖에|라고|라는|[야아](?=${NAME_END})`;
+
+const isStrictName = (name) => [...name].length < 2 && UNSPACED_CHARACTER.test(name);
+const isOneSyllableKorean = (name) => [...name].length < 2 && /\p{Script=Hangul}/u.test(name);
+
+// True when text after a name continues with no space between, as in 김민수는 or アリスは.
+export const touchesName = (text) => TOUCHING_TEXT.test(text);
+
+// Skips a name where it is glued inside another card's longer name (김민 in 김민수, リス in アリス).
+// A name separated by a space inside a longer one (Ann in Mary Ann) still counts, as it always has.
+function longerNameGuard(name, otherNames) {
+  const folded = name.toLocaleLowerCase();
+  const alternatives = [];
+  for (const other of otherNames) {
+    if (typeof other !== "string" || other.length <= name.length) continue;
+    for (let offset = 0; offset + name.length <= other.length; offset += 1) {
+      if (other.slice(offset, offset + name.length).toLocaleLowerCase() !== folded) continue;
+      const before = other.slice(0, offset);
+      const after = other.slice(offset + name.length);
+      if (!WORD_CHARACTER.test([...before].at(-1) ?? "") && !WORD_CHARACTER.test([...after][0] ?? "")) continue;
+      alternatives.push(`${before ? `(?<=${escapeRegex(before)})` : ""}${escapeRegex(name)}${escapeRegex(after)}`);
+    }
+  }
+  return alternatives.length ? `(?!${alternatives.join("|")})` : "";
 }
 
-function countExactName(text, name) {
+function nameSource(name, otherNames) {
+  const end = isStrictName(name)
+    ? `(?=${NAME_END})`
+    : isOneSyllableKorean(name)
+      ? `(?=${NAME_END}|[${UNSPACED}]|${KOREAN_PARTICLE})`
+      : `(?=${NAME_END}|[\\p{Script=Hangul}${UNSPACED}])`;
+  return `${longerNameGuard(name, otherNames)}${escapeRegex(name)}${end}`;
+}
+
+export function namePattern(name, flags = "iu", otherNames = []) {
+  const start = isStrictName(name) ? "(^|[^\\p{L}\\p{N}_])" : `(^|[^\\p{L}\\p{N}_]|(?<=[${UNSPACED}]))`;
+  return new RegExp(`${start}${nameSource(name, otherNames)}`, flags);
+}
+
+export function leadingNamePattern(name, otherNames = []) {
+  return new RegExp(`^${nameSource(name, otherNames)}`, "iu");
+}
+
+function countExactName(text, name, otherNames) {
   let count = 0;
-  const matcher = namePattern(name, "giu");
+  const matcher = namePattern(name, "giu", otherNames);
   while (matcher.exec(text)) count += 1;
   return count;
 }
@@ -61,24 +112,25 @@ export function relationshipDescriptionIssue(description, pair, characterNames) 
   const left = compactText(characterNames.get(pair?.characterAId));
   const right = compactText(characterNames.get(pair?.characterBId));
   if (!left || !right) return "requires natural names for both referenced characters";
+  const names = [...characterNames.values()].map(compactText);
   if (left.toLocaleLowerCase() === right.toLocaleLowerCase()) {
-    if (countExactName(text, left) < 2) return `must name both referenced characters as ${left}`;
-  } else if (countExactName(text, left) < 1 || countExactName(text, right) < 1) {
+    if (countExactName(text, left, names) < 2) return `must name both referenced characters as ${left}`;
+  } else if (countExactName(text, left, names) < 1 || countExactName(text, right, names) < 1) {
     return `must explicitly name both ${left} and ${right}`;
   }
   const clauses = text.replace(/[.!?…]$/u, "").split(";").map(compactText);
   if (clauses.length !== 2 || clauses.some((clause) => !clause)) {
     return "must contain exactly two semicolon-separated perspective clauses";
   }
-  const startsWithName = (clause, name) => new RegExp(`^${escapeRegex(name)}(?=$|[^\\p{L}\\p{N}_])`, "iu").test(clause);
+  const startsWithName = (clause, name) => leadingNamePattern(name, names).test(clause);
   if (!startsWithName(clauses[0], left) || !startsWithName(clauses[1], right)) {
     return `must start its first clause with ${left} and its second clause with ${right}`;
   }
   if (left.toLocaleLowerCase() === right.toLocaleLowerCase()) {
-    if (clauses.some((clause) => countExactName(clause, left) < 2)) {
+    if (clauses.some((clause) => countExactName(clause, left, names) < 2)) {
       return `must name the other ${left} in each participant clause`;
     }
-  } else if (countExactName(clauses[0], right) < 1 || countExactName(clauses[1], left) < 1) {
+  } else if (countExactName(clauses[0], right, names) < 1 || countExactName(clauses[1], left, names) < 1) {
     return "must name the other participant in each perspective clause";
   }
   return null;

@@ -29,7 +29,7 @@ PLAYER CHOICES (extend the JSON shape above with an optional "choices" array):
 - Every option has one "selection": {"kind":"dialogue"|"action","text":"..."}. It is the beat performed AFTER the player chooses. Use "dialogue" only for the protagonist's actual spoken words. Use "action" for physical actions, decisions or nonverbal responses; write these as narration in the story's normal voice, NEVER as spoken dialogue. Do not assign a character speaker to an action.
 - "at" is the ZERO-BASED index of the MAINLINE segment after which the options appear. Never put two choices at the same index.
 - A SMALL choice has kind "small". Generate ALL its alternative paths together in this one response: 1 to 8 short segments in EVERY option, in the same segment format as the mainline. Do not merely describe what you would write later.
-- After the chosen option and its branch, the story returns to the next mainline segment. Every branch MUST arrive at that same continuation naturally; its local dialogue or route may differ, but it may not change the chapter's required plot, future fights, or settled fate.
+- After the chosen option and its branch, the story returns to the next mainline segment. Every branch MUST arrive at that same continuation naturally; its local dialogue or route may differ, but it may not change the chapter's required plot, future fights, or settled fate. Later beats may be written before the player chooses, so they must never require a particular small option.
 - The selection text is the protagonist's performed line/action, separate from the button label. Do not repeat it as the first branch segment. Do not place unselected alternatives in mainline prose. Do not nest choices inside branches.
 - All branch places must also be listed in "places"; use no more than four places across the mainline and ALL alternatives combined.
 - Mainline and branches together must remain concise. Both the intent label and selection text are at most 280 characters each.
@@ -104,24 +104,30 @@ export function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled,
 }
 
 export function forgeChoiceResponse(data) {
-  return { choices: data?.choices || [], choiceCanon: { ...data?.choiceCanon } };
+  return {
+    musicMood: ["happy", "tense", "sad"].includes(data?.musicMood) ? data.musicMood : "happy",
+    choices: data?.choices || [],
+    choiceCanon: { ...data?.choiceCanon },
+  };
 }
 
-export function forgePendingChoice(data) {
+export function forgePendingChoice(data, kind) {
   return (data?.choices || []).find(
-    (choice) => !choice.options.some((option) => option.id === data.choiceCanon?.[choice.id]),
+    (choice) =>
+      (!kind || choice.kind === kind) && !choice.options.some((option) => option.id === data.choiceCanon?.[choice.id]),
   );
 }
 
 export function forgeCanonicalSegments(data) {
   if (!Array.isArray(data?.segments)) return null;
-  if (forgePendingChoice(data)) return null;
+  if (forgePendingChoice(data, "big")) return null;
   const result = [];
   for (const [index, segment] of data.segments.entries()) {
     result.push(segment);
     for (const choice of data.choices || []) {
       if (choice.at !== index) continue;
-      const selected = choice.options.find((option) => option.id === data.choiceCanon[choice.id]);
+      const selected = choice.options.find((option) => option.id === data.choiceCanon?.[choice.id]);
+      if (!selected) continue;
       result.push({
         speaker: "",
         text: `[Canonical player choice${data.choiceProtagonist ? ` by ${data.choiceProtagonist}` : ""}: ${selected.text}]`,
@@ -189,7 +195,7 @@ export function forgeCreateChoiceRuntime({
     return nodeIndex >= 0 && Number(session?.progress?.[String(chapter)]?.normal || 0) === nodeIndex;
   }
 
-  async function pending(runId, { beforeChapter, chapter, throughStoryIndex } = {}) {
+  async function pending(runId, { beforeChapter, chapter, throughStoryIndex, includeSmall = false } = {}) {
     const prefix = `${runId}:beat:`;
     const rows = await documents.list(packageId, "beat");
     for (const row of rows) {
@@ -206,7 +212,7 @@ export function forgeCreateChoiceRuntime({
       }
       if (chapter != null && String(data.chapter) !== String(chapter)) continue;
       if (throughStoryIndex != null && Number(data.storyIndex) > throughStoryIndex) continue;
-      const choice = forgePendingChoice(data);
+      const choice = forgePendingChoice(data, includeSmall ? undefined : "big");
       if (choice) return { chapter: data.chapter, storyIndex: data.storyIndex, choiceId: choice.id };
     }
     return null;
@@ -306,7 +312,7 @@ export function forgeCreateChoiceRuntime({
       const beat = await documents.getById(packageId, beatId(runId, chapter, through));
       if (!Array.isArray(beat?.data?.segments)) return { ok: false, error: "beat-missing" };
     }
-    return guard(runId, { chapter, throughStoryIndex: through });
+    return guard(runId, { chapter, throughStoryIndex: through, includeSmall: true });
   }
 
   async function select(body) {

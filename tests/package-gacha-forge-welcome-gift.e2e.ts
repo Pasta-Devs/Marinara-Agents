@@ -24,6 +24,15 @@ test("Welcome Gift rewards leave Claim reachable on short touch screens", async 
   await page.route("**/api/gacha-forge/state", (route) =>
     route.fulfill({ json: { runs: [], guidesSeen: ["welcome"] } }),
   );
+  // Keep the setup draft in the same isolated fixture as the mocked world state.
+  let setupSnapshot: unknown = null;
+  await page.route("**/api/gacha-forge/setup/draft", (route) => {
+    if (route.request().method() === "POST") {
+      setupSnapshot = route.request().postDataJSON().snapshot;
+      return route.fulfill({ json: { ok: true } });
+    }
+    return route.fulfill({ json: { ok: true, draft: setupSnapshot } });
+  });
   let claims = 0;
   await page.route("**/api/gacha-forge/newworld/claim", (route) => {
     expect(route.request().postDataJSON()).toEqual({ runId: "welcome-layout" });
@@ -139,10 +148,13 @@ test("Welcome Gift rewards leave Claim reachable on short touch screens", async 
     game._settingsCategory = "changelog";
     game._renderBrowser();
   });
-  await expect(
-    forge.getByText(
-      "Welcome Gift rewards no longer overlap Claim on short mobile screens; scroll when needed and use its full touch target.",
-      { exact: true },
-    ),
-  ).toBeVisible();
+  const welcomeNote = forge.getByText(
+    "Welcome Gift rewards no longer overlap Claim on short mobile screens; scroll when needed and use its full touch target.",
+    { exact: true },
+  );
+  const previousVersions = forge.getByRole("button", { name: "Show previous version changelog", exact: true });
+  while ((await welcomeNote.count()) === 0 && (await previousVersions.isVisible())) {
+    await previousVersions.click();
+  }
+  await expect(welcomeNote).toBeVisible();
 });

@@ -68,18 +68,17 @@ jobs:
       - name: Build Engine shared package
         run: pnpm --dir engine --filter @marinara-engine/shared build
 
-      # These run through the Engine checkout's tsx, like the browser regression. lifecycle only chains browser and
-      # installation, and routes-notes is a prefix of routes, so neither is listed. routes-imports, -drafts, -scope-identity
-      # and -backup start from their own seed or have scenario-only assertions, so they run beside routes.
-      - name: Run Long-Term Memory regressions
+      # These need the Engine checkout (its fastify, shared sources, server or styles), so they run through its tsx like
+      # the browser regression. routes-imports, -scope-identity and -backup start from their own seed and have
+      # scenario-only assertions, so they run beside the direct routes scenario. Engine-free suites run in ltm-node.
+      - name: Run Engine-backed Long-Term Memory regressions
         env:
           MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
         run: |
-          for test in candidate-reconciliation conversation-summary-import debug-log delta-review extraction-graph \
-            engine-fields extraction-reliability index-keys local-characters reconciliation-recall branch-recall rebuild-job storage routes routes-imports routes-drafts routes-scope-identity routes-backup runtime installation host-styles; do
+          for test in storage branch-recall engine-fields routes routes-imports routes-scope-identity routes-backup \
+            installation host-styles; do
             pnpm --dir engine --filter @marinara-engine/server exec tsx "$GITHUB_WORKSPACE/tests/long-term-memory-$test.regression.ts"
           done
-          node tests/long-term-memory-loading.regression.mjs
 
       # The strict run checks the package against the Engine's own dependency types, so it needs this Engine checkout;
       # Pull Request Checks has none and runs only the name check. tsc comes from the Agents lockfile, installed last so
@@ -91,3 +90,32 @@ jobs:
         env:
           MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
         run: node scripts/typecheck-packages.mjs long-term-memory
+
+  ltm-node:
+    name: Long-Term Memory package regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Marinara Agents
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked Agents dependencies
+        run: npm ci
+
+      # These import only package source and Agents dependencies, so they need no Engine checkout. index-keys runs in
+      # Pull Request Checks through npm run test:security.
+      - name: Run Engine-free Long-Term Memory regressions
+        run: |
+          for test in candidate-reconciliation conversation-summary-import debug-log delta-review extraction-graph \
+            extraction-reliability local-characters rebuild-job runtime; do
+            npx tsx "tests/long-term-memory-$test.regression.ts"
+          done

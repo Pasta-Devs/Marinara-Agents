@@ -10,7 +10,7 @@
   },
   "id": "relationship-tracker",
   "name": "Relationship Tracker",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Tracks how the characters and your persona feel about each other. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.4.4",
@@ -43,18 +43,18 @@
     },
     {
       "path": "state.mjs",
-      "sha256": "1e9dd277e7f6a2028f787023ff15fa571a2eee83270e76b5614a5829440f6965",
-      "bytes": 27619
+      "sha256": "93f1ce48d4da35c94dc3050e89a7b4a03cda830c48a6496cbc52a5c6707fa019",
+      "bytes": 30791
     },
     {
       "path": "prompt.mjs",
-      "sha256": "41650a28aa09310fd423811d2052c99a34a5ed0d72a4ba170b9bbd863433dab1",
-      "bytes": 6984
+      "sha256": "de37a1f17d45eff3dc6fd7e141ef0bba625c6818edc48713faf86b4ee1826334",
+      "bytes": 6890
     },
     {
       "path": "tracking.mjs",
-      "sha256": "0e551eaa2a3586f026eda414fc410ed14077fdfda72b6f5c0b6285e2d15454d4",
-      "bytes": 38520
+      "sha256": "b1dff8fce82558d8c539d24e441c72d269533826fba2e509cc71b0a3cf6f7feb",
+      "bytes": 38527
     },
     {
       "path": "activity.mjs",
@@ -63,8 +63,8 @@
     },
     {
       "path": "history.mjs",
-      "sha256": "703668068763f9be3a6405f8829957ab98e6ffb3e32d8f9496f64868a4273c3e",
-      "bytes": 37720
+      "sha256": "2cac8e5d3111b2f5970ec1e4a86b33b41e31c8ca5ee28205b27602f52a4afb02",
+      "bytes": 37777
     },
     {
       "path": "persona-state.mjs",
@@ -73,8 +73,8 @@
     },
     {
       "path": "persona-tracking.mjs",
-      "sha256": "24e682ad16bfa400760912728964308ab12e62b32622c5c159727f7e4bbe44b1",
-      "bytes": 7022
+      "sha256": "72f35a31a065d8b772f83a9d1aafeb6a4c180e9d03430a36b54ae377ec90a4d9",
+      "bytes": 7045
     },
     {
       "path": "client.js",

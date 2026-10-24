@@ -38,8 +38,10 @@ dirty surface -> save / discard / stay decision -> destination changes or remain
 ```
 
 Opening a memory, review item, source target, activity view, or the Agents
-panel uses the same guard. A successful navigation clears the relevant stale
-selection and closes transient menus. Save and discard decisions restore focus
+panel uses the same guard. The in-page dialog names the destination ("Save your
+changes before opening X, or discard them."); the `confirm()` fallback uses the
+same nouns and the "Discard and continue" verb. A successful navigation clears
+the relevant stale selection and closes transient menus. Save and discard decisions restore focus
 to the control that initiated navigation.
 
 On first successful status load, onboarding opens for an empty vault. Its step
@@ -70,11 +72,16 @@ Disabled panes are excluded from the tab sequence. The destination rail becomes
 the mobile bottom navigation; reduced-motion behavior is defined in `DESIGN.md`.
 
 Layout inside a destination also follows container width, so a narrow panel on
-a wide window gets the phone layout. Below `48rem` of workspace, row actions
-collapse into a menu, the Review batch bar and the Sources lorebook bar stick
-to the top while rows scroll, and the flat source bar sticks to the bottom;
-from `48rem` they sit in the flow. Review
-widens its fields and padding from `40rem`. The Sources scope row stacks until
+a wide window gets the phone layout. Below `48rem` of workspace, Vault and Sources
+row actions collapse into a menu, the Review batch bar and the Sources lorebook
+bar stick to the top while rows scroll, and the flat source bar sticks to the
+bottom; from `48rem` they sit in the flow. Review rows never use a menu: their
+commit control shows the text "Check", then "Apply" once the check passes,
+from `40rem`, and below it keeps the icon with a Ready or Blocked chip under
+it. Review also widens its fields and padding from `40rem`. Review draws one progress line, in the
+navigator below `48rem` and in the workbench from it, and puts the run summary at the top of the
+workbench while rows are listed (above the pane tabs once the queue is empty), as a warning while a
+change is ready to apply. The Sources scope row stacks until
 its destination container reaches `40rem`. Vault note title and status share a
 row from a `28rem` workbench, and the Vault list scrolls on its own from `48rem`.
 
@@ -88,7 +95,28 @@ does not change the selected scope. Each type group renders at most 100 rows;
 Show more adds the next 100 and moves focus to the first row it added. Group
 counts, the shown total, search, and Select visible still cover every memory,
 and a new search, filter, sort, or place starts again at 100 rows. The
-workbench distinguishes read-only
+navigator leads with the place, search, Show and Sort controls; a second place
+and the available-modes filter sit under a Refine disclosure that is closed by
+default, opens by itself while either is set, and names what is active when
+closed. With memories checked, the bulk rail is Edit selected…, then Archive and
+Delete set apart; Edit selected… opens one sheet for status, modes and
+availability that previews the outcome per memory and applies as one request.
+Under "What Apply will do" a polite summary counts ready, unchanged and blocked
+memories; Apply changes the ready ones and skips the rest, which stay selected.
+Apply appears in the header and under the list, stays focusable when off
+(`aria-disabled`, guarded handler) and names the reason beside it.
+Save in the memory header works the same way: it keeps its label and primary
+tone, stays focusable while off or running, and a polite status beside it says
+Saving or Saved until the next edit. A save whose recall index rebuild is
+deferred is a warning ("Saved. Recall will catch up…"), not a danger error,
+because the memory is saved.
+The open memory's row carries the primary wash, a left-edge bar and
+`aria-current="true"` on its button, so it is marked beyond colour.
+The memory's side panel is called Memory info wherever it opens: the toggle in the
+memory header (`aria-pressed`, no `aria-label`, so its accessible name is its visible
+label) and the narrow-layout pane tab. Its first section is named for what it holds,
+Keywords and links.
+The workbench distinguishes read-only
 source notes from editable memories and keeps validation, evidence, freshness,
 confidence, subjects, links, keywords, and availability visible as applicable.
 Archive supports undo. Destructive actions and navigation away from edits use
@@ -118,7 +146,11 @@ running task can be cancelled and its latest result can be revisited.
 
 Global settings and per-chat settings are distinct. Chat Settings shows whether
 values inherit global defaults, disables edits when the host owns settings, and
-shows last-injection loading, error, retry, and result states. Memory Settings
+shows last-injection loading, error, retry, and result states. It keeps one short
+explanation above the controls; the Recall style info popover lists every style
+and marks the current one. While the global defaults have not arrived, an
+inherited value shows "Loading default…" (or "Default unavailable" after a
+failed load) instead of an invented number, and the controls stay usable. Memory Settings
 has Recall, Extraction, Maintenance, and Debug tabs; Maintenance holds index and
 identity repair, backup, reset, and delete all data, and Debug is the activity
 view. Repair actions
@@ -146,6 +178,12 @@ Keep these states distinct in UI changes:
 - status load failed (Retry beside the error, no health pill; the setup guide waits for a read that succeeds, because the vault count is unknown)
 - lexical-recall-only warning (its own Reindex recall button, reachable by keyboard)
 - source task running, cancelled, completed, and completed with failures
+
+A control that starts work stays focusable while the work runs: use `aria-disabled`,
+`opacity-50` and a ref guard that makes its handler return early (see
+`navigationBusyProps`, the activation switch, Reindex and Chat Settings). Native
+`disabled` is for permanent unavailability, such as a host that owns the setting,
+because it drops keyboard focus.
 
 Every failure state needs its existing retry or recovery path where one exists.
 Status and alert semantics, focus behavior, touch targets, labels, and reduced

@@ -1,13 +1,14 @@
-import { ChevronRight } from "lucide-react";
-import type { LtmMode, LtmNote } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { useId } from "react";
+import { Check, ChevronRight } from "lucide-react";
+import type { LtmMode, LtmNote, LtmStatus } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   getLtmScopeChatIds,
   getLtmScopeGroupIds,
   getLtmScopePersonaIds,
 } from "../../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { uniqueStrings } from "../../../../../shared/src/features/agents/long-term-memory/utils.js";
-import { Button, StatusSurface } from "../shared-controls";
-import { type LtmTranslationFunction } from "../localization";
+import { Button, inputClass, StatusSurface } from "../shared-controls";
+import { selectLtmPluralForm, type LtmTranslationFunction } from "../localization";
 import { AvailabilityTabRail, type AvailabilityPlaceKind } from "../AvailabilityTabRail";
 import type { PickerTarget } from "./TargetPicker";
 import { availabilityEntries, modes, splitBulkAvailabilityTarget, withWholeChatBranches } from "./vault-shared";
@@ -19,15 +20,23 @@ function bulkAvailabilityTargetMatchesEntry(target: string, entry: Pick<PickerTa
   return id === entry.id && kind === entry.kind;
 }
 
+// Backs the Vault's "Edit selected…" sheet: status, retrieval modes and availability for the checked memories,
+// previewed per memory before one combined batch request.
 export function BulkAvailabilityWorkbench({
   notes,
   action,
   selectedTargets,
   modes: selectedModes,
+  status,
+  statuses,
   availabilityTargets,
+  locale,
+  pending,
   localizeUi,
   modeLabel,
+  statusLabel,
   onActionChange,
+  onStatusChange,
   onModesChange,
   onTargetsChange,
   onApply,
@@ -37,15 +46,23 @@ export function BulkAvailabilityWorkbench({
   action: "add" | "remove";
   selectedTargets: string[];
   modes: LtmMode[];
+  status: LtmStatus | "";
+  statuses: readonly LtmStatus[];
   availabilityTargets: AvailabilityTargets;
+  locale: string;
+  // Another batch is still running: Apply stays focusable but does nothing.
+  pending: boolean;
   localizeUi: LtmTranslationFunction;
   modeLabel: (mode: string) => string;
+  statusLabel: (status: LtmStatus) => string;
   onActionChange: (action: "add" | "remove") => void;
+  onStatusChange: (status: LtmStatus | "") => void;
   onModesChange: (modes: LtmMode[]) => void;
   onTargetsChange: (targets: string[]) => void;
   onApply: () => void;
   onCancel: () => void;
 }) {
+  const reasonId = useId();
   const selectedIds = new Set(
     selectedTargets.map((target) => {
       const [kind, id] = splitBulkAvailabilityTarget(target);
@@ -145,38 +162,104 @@ export function BulkAvailabilityWorkbench({
       (entry) => !removedTargets.some((target) => bulkAvailabilityTargetMatchesEntry(target, entry)),
     );
     const matchingModes = selectedModes.filter((mode) => note.modes.includes(mode));
+    const statusChanges = Boolean(status) && note.status !== status;
     const changes =
-      action === "add"
+      statusChanges ||
+      (action === "add"
         ? Boolean(addsPlace || selectedModes.some((mode) => !note.modes.includes(mode)))
-        : Boolean(hasPlace || matchingModes.length);
-    const removesLastPlace = action === "remove" && hasPlace && remainingPlaces.length === 0;
+        : Boolean(hasPlace || matchingModes.length));
+    // The server skips the whole note, status and modes included, when removing places would leave it available
+    // everywhere, so a note that is already global is blocked too, not ready.
+    const removesLastPlace =
+      action === "remove" && removedTargets.length > 0 && remainingPlaces.length === 0 && changes;
     const removesLastMode = action === "remove" && matchingModes.length === note.modes.length;
     return {
       note,
       state: removesLastPlace || removesLastMode ? "invalid" : changes ? "ready" : "unchanged",
+      // A global note holds no place to lose: name that cause, not a last place it never had.
+      alreadyEverywhere: removesLastPlace && !removesLastMode && places.length === 0,
     };
   });
-  const ready = outcomes.some((outcome) => outcome.state === "ready");
+  const countOf = (state: "ready" | "unchanged" | "invalid") =>
+    outcomes.filter((outcome) => outcome.state === state).length;
+  const readyCount = countOf("ready");
+  const unchangedCount = countOf("unchanged");
+  const blockedCount = countOf("invalid");
+  const canApply = readyCount > 0 && !pending;
+  // Apply keeps focus while it is off (UI.md: aria-disabled plus a guard) and says why. `batch()` applies the ready
+  // memories and skips the rest, which stay selected.
+  const applyReasonKey = pending
+    ? "ui.longTermMemory.memoryvault.applyReasonBusy"
+    : readyCount > 0
+      ? ""
+      : !status && !selectedModes.length && !selectedTargets.length
+        ? "ui.longTermMemory.memoryvault.applyReasonNothingChosen"
+        : "ui.longTermMemory.memoryvault.applyReasonNothingToChange";
+  const applyIfReady = () => {
+    if (canApply) onApply();
+  };
+  const renderApply = (placement: string) => {
+    const id = `${reasonId}-${placement}`;
+    return (
+      <>
+        {applyReasonKey ? (
+          <p
+            id={id}
+            className={`text-xs text-[var(--muted-foreground)] ${placement === "top" ? "order-first basis-full text-right" : "max-w-xs"}`}
+          >
+            {localizeUi(applyReasonKey)}
+          </p>
+        ) : null}
+        <Button
+          primary
+          aria-disabled={canApply ? undefined : true}
+          aria-describedby={applyReasonKey ? id : undefined}
+          className={canApply ? "" : "opacity-50"}
+          onClick={applyIfReady}
+          data-ltm-bulk-apply={placement}
+        >
+          {localizeUi("ui.longTermMemory.memoryvault.apply")}
+        </Button>
+      </>
+    );
+  };
+  const pressedClass = "border-[var(--marinara-editor-border-strong)] bg-[var(--accent)] font-semibold";
+  const pressedMark = <Check aria-hidden="true" size="0.875rem" className="mr-1.5 inline-block shrink-0" />;
   return (
     <section className="mari-editor-panel min-w-0 space-y-4 p-4" data-ltm-bulk-availability-workbench>
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-3">
         <div>
-          <h2 className="text-base font-semibold">
-            {localizeUi("ui.longTermMemory.memoryvault.bulkMemoryAvailability")}
-          </h2>
+          <h2 className="text-base font-semibold">{localizeUi("ui.longTermMemory.memoryvault.editSelectedTitle")}</h2>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-            {localizeUi("ui.longTermMemory.memoryvault.bulkAvailabilitySelected", {
-              count: notes.length,
-            })}
+            {localizeUi(
+              selectLtmPluralForm(locale, notes.length) === "one"
+                ? "ui.longTermMemory.memoryvault.bulkAvailabilitySelectedOne"
+                : "ui.longTermMemory.memoryvault.bulkAvailabilitySelectedOther",
+              { count: notes.length },
+            )}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button onClick={onCancel}>{localizeUi("ui.longTermMemory.memoryvault.cancel")}</Button>
-          <Button primary disabled={!ready} onClick={onApply}>
-            {localizeUi("ui.longTermMemory.memoryvault.apply")}
-          </Button>
+          {renderApply("top")}
         </div>
       </header>
+      <label className="block space-y-1 border-b border-[var(--border)] pb-4 text-sm font-semibold">
+        <span className="block">{localizeUi("ui.longTermMemory.memoryvault.status")}</span>
+        <select
+          className={`${inputClass} font-normal`}
+          value={status}
+          onChange={(event) => onStatusChange(event.target.value as LtmStatus | "")}
+          data-ltm-bulk-edit-status
+        >
+          <option value="">{localizeUi("ui.longTermMemory.memoryvault.statusNoChange")}</option>
+          {statuses.map((value) => (
+            <option key={value} value={value}>
+              {statusLabel(value)}
+            </option>
+          ))}
+        </select>
+      </label>
       <fieldset className="space-y-2 border-b border-[var(--border)] pb-4">
         <legend className="text-sm font-semibold">
           {localizeUi("ui.longTermMemory.memoryvault.availabilityChange")}
@@ -190,15 +273,17 @@ export function BulkAvailabilityWorkbench({
           <Button
             aria-pressed={action === "add"}
             onClick={() => changeAction("add")}
-            className={action === "add" ? "bg-[var(--accent)]" : ""}
+            className={action === "add" ? pressedClass : ""}
           >
+            {action === "add" ? pressedMark : null}
             {localizeUi("ui.longTermMemory.memoryvault.addAvailability")}
           </Button>
           <Button
             aria-pressed={action === "remove"}
             onClick={() => changeAction("remove")}
-            className={action === "remove" ? "bg-[var(--accent)]" : ""}
+            className={action === "remove" ? pressedClass : ""}
           >
+            {action === "remove" ? pressedMark : null}
             {localizeUi("ui.longTermMemory.memoryvault.removeAvailability")}
           </Button>
         </div>
@@ -287,24 +372,48 @@ export function BulkAvailabilityWorkbench({
           </div>
         </details>
       </section>
-      <div className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
-        {outcomes.map(({ note, state }) => (
-          <div key={note.id} className="flex min-h-11 items-center justify-between gap-3 py-2 text-sm">
-            <span className="min-w-0 truncate">{note.title}</span>
-            <span
-              className={
-                state === "invalid" ? "text-xs text-[var(--destructive)]" : "text-xs text-[var(--muted-foreground)]"
-              }
-            >
-              {state === "ready"
-                ? localizeUi("ui.longTermMemory.memoryvault.ready")
-                : state === "unchanged"
-                  ? localizeUi("ui.longTermMemory.memoryvault.unchanged")
-                  : localizeUi("ui.longTermMemory.memoryvault.wouldRemoveFinalAvailability")}
-            </span>
-          </div>
-        ))}
-      </div>
+      <section className="space-y-2" aria-labelledby={`${reasonId}-outcomes`} data-ltm-bulk-outcomes>
+        <h3 id={`${reasonId}-outcomes`} className="text-sm font-semibold">
+          {localizeUi("ui.longTermMemory.memoryvault.bulkOutcomesTitle")}
+        </h3>
+        <p role="status" className="text-sm" data-ltm-bulk-outcome-summary>
+          {localizeUi("ui.longTermMemory.memoryvault.bulkOutcomeSummary", {
+            ready: readyCount,
+            unchanged: unchangedCount,
+            blocked: blockedCount,
+          })}
+        </p>
+        {readyCount > 0 && unchangedCount + blockedCount > 0 ? (
+          <p className="text-xs text-[var(--muted-foreground)]">
+            {localizeUi("ui.longTermMemory.memoryvault.bulkOutcomeSkipped")}
+          </p>
+        ) : null}
+        <div className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
+          {outcomes.map(({ note, state, alreadyEverywhere }) => (
+            <div key={note.id} className="flex min-h-11 items-center justify-between gap-3 py-2 text-sm">
+              <span className="min-w-0 truncate" title={note.title}>
+                {note.title}
+              </span>
+              <span
+                className={
+                  state === "invalid" ? "text-xs text-[var(--destructive)]" : "text-xs text-[var(--muted-foreground)]"
+                }
+              >
+                {state === "ready"
+                  ? localizeUi("ui.longTermMemory.memoryvault.ready")
+                  : state === "unchanged"
+                    ? localizeUi("ui.longTermMemory.memoryvault.unchanged")
+                    : localizeUi(
+                        alreadyEverywhere
+                          ? "ui.longTermMemory.memoryvault.alreadyAvailableEverywhere"
+                          : "ui.longTermMemory.memoryvault.wouldRemoveFinalAvailability",
+                      )}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-3">{renderApply("bottom")}</div>
+      </section>
     </section>
   );
 }

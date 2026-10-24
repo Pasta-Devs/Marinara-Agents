@@ -78,7 +78,15 @@ jobs:
           node tests/quartermaster-modal-lifecycle.regression.mjs
           node tests/gacha-forge-location-ids.regression.mjs
           node tests/gacha-forge-player-choices.regression.mjs
+          node tests/gacha-forge-audio.regression.mjs
+          node tests/gacha-forge-music-prompts.regression.mjs
+          node tests/gacha-forge-achievements.regression.mjs
           node tests/gacha-forge-bundle-rebuild.regression.mjs
+          node tests/gacha-forge-story-memory.regression.mjs
+          node tests/gacha-forge-story-memory-integration.regression.mjs
+          node tests/gacha-forge-story-memory-fit.regression.mjs
+          node tests/gacha-forge-story-memory-client.regression.mjs
+          node tests/gacha-forge-story-memory-package.regression.mjs
 
           # Prints how much of the reference extension's interface the Beholder package actually
           # renders. It is here so the number is read from a run rather than asserted from

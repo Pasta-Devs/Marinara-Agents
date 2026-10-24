@@ -6,6 +6,8 @@ const descriptionKeys = {
   custom: "ui.longTermMemory.chatsettings.recallStyleCustomDescription",
 } as const;
 
+export const recallStyles = Object.keys(descriptionKeys) as Array<keyof typeof descriptionKeys>;
+
 export function recallStyleDescriptionKey(style: string) {
   return descriptionKeys[style as keyof typeof descriptionKeys] ?? descriptionKeys.balanced;
 }
