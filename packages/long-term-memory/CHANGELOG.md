@@ -1,5 +1,12 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Review rows now say what each button does: "Check" then "Apply" (with a Ready or Blocked chip on narrow panels), and engine terms like preflight and source_deleted read as plain sentences.
+- Reviewing who a memory is about now says "Skip this memory" and lists each person by name and a distinguishing detail instead of a raw key.
+- Freshness labels, draft counts and the Change and Source lines in the Review Queue are now easier to read in both themes.
+- The Review Queue drops a redundant frame and duplicate progress line, and shows the run summary inside the workbench on narrow panels.
+
 ## 1.4.90 — 2026-10-24
 
 - The Undo banner after archiving keeps saying how many memories it will restore, even when you save another memory while it is showing.
