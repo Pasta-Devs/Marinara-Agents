@@ -4038,7 +4038,6 @@ const forgeAudioEnglish = {
   "audio.settings.homeMusicDefault": "Automatic soundtrack",
   "audio.settings.homeMusicHint":
     "Choose a generated song. A banner's soundtrack joins your collection when you pull any 5-star from it.",
-  "audio.soundtracksFailed": "Could not load generated songs. Your saved selection is unchanged.",
   "audio.soundtrackUnavailable": "Saved song unavailable",
   "audio.song.home": "Home",
   "audio.song.combat": "Battle",
@@ -4530,13 +4529,13 @@ class ForgeAudioController {
     this.musicAttemptAt = Date.now();
     const manifest = await this.manifest;
     if (this.disposed || revision !== this.musicRevision) return;
-    if (cue === "home" && this.settings.homeMusic) {
+    const fallbackCue = cue.startsWith("banner-") ? "home" : cue;
+    let selected;
+    if (fallbackCue === "home" && this.settings.homeMusic) {
       await this.libraryRequest;
       if (this.disposed || revision !== this.musicRevision) return;
-      const selected = this.library.find(
-        (track) => track.tag === this.settings.homeMusic && manifest?.assets?.[track.tag],
-      );
-      if (selected) {
+      selected = this.library.find((track) => track.tag === this.settings.homeMusic && manifest?.assets?.[track.tag]);
+      if (selected && cue === "home") {
         this.currentCue = cue;
         if (selected.tag !== this.currentTag) this.player.playMusic(selected.tag, manifest.assets);
         this.currentTag = selected.tag;
@@ -4551,14 +4550,12 @@ class ForgeAudioController {
     ) {
       this.currentCue = cue;
       const tag =
-        manifest &&
-        this.audio.selectDefaultMusic(cue.startsWith("banner-") ? "home" : cue, manifest, {
-          currentTag: this.currentTag,
-        });
+        selected?.tag ??
+        (manifest && this.audio.selectDefaultMusic(fallbackCue, manifest, { currentTag: this.currentTag }));
       if (tag) {
+        if (tag !== this.currentTag) this.player.playMusic(tag, manifest.assets);
         this.currentTag = tag;
         this.currentGenerated = false;
-        this.player.playMusic(tag, manifest.assets);
       }
     }
     if (!enabled || (cue === "home" && this.settings.homeMusic)) return;
@@ -4999,12 +4996,14 @@ function wireForgeBannerAnimation(host) {
       ? host._root.querySelector('[data-screen="banner"] .show > .art.wide')
       : null;
   const identity = JSON.stringify([runId, connectionId, bannerId, rotation, art]);
-  if (state.target === target && state.identity === identity) return;
+  if (state.target === target && state.identity === identity && state.banner === banner) return;
   state.cleanup?.();
   state.target = target;
   if (!target || !run?.animationConnectionId || !banner?.art) return;
   if (state.identity !== identity) state.paused = false;
+  if (state.identity !== identity || state.banner !== banner) state.staleBanner = null;
   state.identity = identity;
+  state.banner = banner;
   if (state.media?.matches) return;
   const chips = target.parentElement?.querySelector(".chips");
   const status = document.createElement("span");
@@ -5031,8 +5030,8 @@ function wireForgeBannerAnimation(host) {
     const playing = active && !state.paused;
     if (video) {
       if (playing)
-        video.play().catch(() => {
-          if (!current()) return;
+        video.play().catch((error) => {
+          if (!current() || error?.name === "AbortError") return;
           state.paused = true;
           video.style.opacity = "0";
           notice(forgeAnimationEnglish.playbackFailed);
@@ -5047,7 +5046,13 @@ function wireForgeBannerAnimation(host) {
     chips?.append(status);
   };
   const mount = (result) => {
-    if (!current() || (result?.ok && result.animation?.poster !== art)) return;
+    if (!current()) return;
+    if (result?.ok && result.animation?.poster !== art) {
+      state.requests.delete(identity);
+      state.staleBanner = banner;
+      notice(forgeAnimationEnglish.failed);
+      return;
+    }
     if (
       !result.ok ||
       !/^\/api\/gacha-forge\/banner-animation\/file\/[a-f0-9]{64}\/[a-f0-9]{64}\.mp4$/u.test(
@@ -5125,6 +5130,10 @@ function wireForgeBannerAnimation(host) {
   };
   const ensure = async (retry = false) => {
     if (!current() || !visible || document.visibilityState === "hidden" || state.media?.matches) return;
+    if (state.staleBanner === banner) {
+      notice(forgeAnimationEnglish.failed);
+      return;
+    }
     let request = state.requests.get(identity);
     if (!request) {
       notice(forgeAnimationEnglish.generating);

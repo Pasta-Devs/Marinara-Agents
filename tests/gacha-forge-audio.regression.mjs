@@ -318,6 +318,91 @@ try {
     }
   });
 
+  await test("banner fallback preserves selected Home music without restarts or stock flashes", async () => {
+    const selectedTag = `music:contexts:gacha-forge:${forgeMusicContextKey("audio-world", "source", "home")}:selected`;
+    const banner = "banner-char-featured-f1";
+    for (const mode of ["off", "failed", "generated", "missing"]) {
+      const { controller, events } = fixture();
+      const selected = { tag: selectedTag, path: "music/selected.mp3" };
+      controller.library = [selected];
+      controller.manifest = Promise.resolve({ assets: mode === "missing" ? {} : { [selectedTag]: selected } });
+      controller.configure({ generate: ["failed", "generated"].includes(mode), homeMusic: selectedTag });
+      const composition = deferred();
+      let generations = 0;
+      globalThis.Ze = async (path) => {
+        if (path.startsWith("/api/audio/config")) return generationConfig(path);
+        if (path === "/api/gacha-forge/audio/prompt") return musicBriefResponse();
+        generations++;
+        return composition.promise;
+      };
+      const played = () => events.filter(([event]) => event === "playMusic").map(([, tag]) => tag);
+      const fallback = mode === "missing" ? "stock:home" : selectedTag;
+      try {
+        await controller.cue("home");
+        const pending = controller.cue(banner);
+        await tick();
+        assert.deepEqual(played(), [fallback], `${mode}: entering a banner keeps the Home fallback without a restart`);
+        if (mode === "failed") composition.resolve({ ok: false, status: 503 });
+        if (mode === "generated")
+          composition.resolve({ ok: true, json: async () => ({ tag: "music:banner", path: "music/banner.mp3" }) });
+        await pending;
+        if (mode === "generated") {
+          assert.deepEqual(
+            played(),
+            [selectedTag, "music:banner"],
+            "a successful generated theme replaces the fallback",
+          );
+          const now = Date.now;
+          try {
+            Date.now = () => now() + 60_001;
+            await controller.cue(banner);
+          } finally {
+            Date.now = now;
+          }
+          assert.deepEqual(
+            played(),
+            [selectedTag, "music:banner"],
+            "a later render keeps the cached banner theme playing",
+          );
+        }
+        await controller.cue("home");
+        assert.deepEqual(
+          played(),
+          mode === "generated" ? [selectedTag, "music:banner", selectedTag] : [fallback],
+          `${mode}: Home returns to its saved track only when a banner theme replaced it`,
+        );
+        assert.equal(generations, ["failed", "generated"].includes(mode) ? 1 : 0);
+        assert.equal(controller.settings.homeMusic, selectedTag, "missing files preserve the saved selection");
+      } finally {
+        controller.dispose();
+      }
+    }
+  });
+
+  await test("late selected-song reads cannot replace music after leaving a banner", async () => {
+    const { controller, events } = fixture();
+    const selected = { tag: "music:contexts:gacha-forge:saved:selected", path: "music/selected.mp3" };
+    const library = deferred();
+    controller.library = [selected];
+    controller.libraryRequest = library.promise;
+    controller.manifest = Promise.resolve({ assets: { [selected.tag]: selected } });
+    controller.configure({ homeMusic: selected.tag });
+    try {
+      const pending = controller.cue("banner-char-featured-f1");
+      await tick();
+      await controller.cue("combat");
+      library.resolve();
+      await pending;
+      assert.deepEqual(
+        events.filter(([event]) => event === "playMusic").map(([, tag]) => tag),
+        ["stock:combat"],
+        "the stale banner fallback must not interrupt the current scene",
+      );
+    } finally {
+      controller.dispose();
+    }
+  });
+
   const client = await readFile(new URL("../packages/gacha-forge/client.js", import.meta.url), "utf8");
   const stateMethod = client.match(/_state\(\)\{return[^{}]+\}/u)?.[0];
   assert(stateMethod, "extract the shipped string-valued state method, not an invented beat HUD view");

@@ -874,7 +874,7 @@ test("Home menu music selects collected songs with generation off and survives r
   await page.route("**/api/gacha-forge/audio/library", (route) =>
     route.fulfill({ json: { ok: true, tracks: [song] } }),
   );
-  const { forge, saved, generated } = await openForge(page, testInfo);
+  const { forge, saved, generated, state } = await animationProof(page, testInfo, { reduce: true });
   await page.route("**/api/game-assets/manifest", (route) =>
     route.fulfill({ json: { assets: { [tag]: { ...song, category: "music" } }, byCategory: {}, count: 1 } }),
   );
@@ -906,6 +906,22 @@ test("Home menu music selects collected songs with generation off and survives r
     await page.screenshot({ path: testInfo.outputPath(`home-music-${theme}.png`) });
     await forge.locator("[data-settings-back]").click();
   }
+  await forge.evaluate((node) => {
+    const game = node as any;
+    game._forgeMusicNavigationProof = [];
+    const player = game._forgeAudio.player;
+    const play = player.playMusic.bind(player);
+    player.playMusic = (...args: any[]) => {
+      game._forgeMusicNavigationProof.push(args[0]);
+      return play(...args);
+    };
+  });
+  await openAnimatedBanner(forge);
+  await expect.poll(() => forge.evaluate((node) => (node as any)._forgeAudio.currentTag)).toBe(tag);
+  await forge.locator("[data-summon-back]").click();
+  await expect(forge.getByRole("button", { name: "Game settings", exact: true })).toBeVisible();
+  expect(await forge.evaluate((node) => (node as any)._forgeMusicNavigationProof)).toEqual([]);
+  expect(state.posts).toHaveLength(0);
   await page.reload();
   await page.getByRole("tab", { name: "Open Gacha Forge" }).click();
   await showHome(forge);

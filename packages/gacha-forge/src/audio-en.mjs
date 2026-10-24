@@ -19,7 +19,6 @@ export const forgeAudioEnglish = {
   "audio.settings.homeMusicDefault": "Automatic soundtrack",
   "audio.settings.homeMusicHint":
     "Choose a generated song. A banner's soundtrack joins your collection when you pull any 5-star from it.",
-  "audio.soundtracksFailed": "Could not load generated songs. Your saved selection is unchanged.",
   "audio.soundtrackUnavailable": "Saved song unavailable",
   "audio.song.home": "Home",
   "audio.song.combat": "Battle",

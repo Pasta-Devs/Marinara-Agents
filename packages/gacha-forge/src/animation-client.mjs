@@ -74,12 +74,14 @@ export function wireForgeBannerAnimation(host) {
       ? host._root.querySelector('[data-screen="banner"] .show > .art.wide')
       : null;
   const identity = JSON.stringify([runId, connectionId, bannerId, rotation, art]);
-  if (state.target === target && state.identity === identity) return;
+  if (state.target === target && state.identity === identity && state.banner === banner) return;
   state.cleanup?.();
   state.target = target;
   if (!target || !run?.animationConnectionId || !banner?.art) return;
   if (state.identity !== identity) state.paused = false;
+  if (state.identity !== identity || state.banner !== banner) state.staleBanner = null;
   state.identity = identity;
+  state.banner = banner;
   if (state.media?.matches) return;
   const chips = target.parentElement?.querySelector(".chips");
   const status = document.createElement("span");
@@ -106,8 +108,8 @@ export function wireForgeBannerAnimation(host) {
     const playing = active && !state.paused;
     if (video) {
       if (playing)
-        video.play().catch(() => {
-          if (!current()) return;
+        video.play().catch((error) => {
+          if (!current() || error?.name === "AbortError") return;
           state.paused = true;
           video.style.opacity = "0";
           notice(forgeAnimationEnglish.playbackFailed);
@@ -122,7 +124,13 @@ export function wireForgeBannerAnimation(host) {
     chips?.append(status);
   };
   const mount = (result) => {
-    if (!current() || (result?.ok && result.animation?.poster !== art)) return;
+    if (!current()) return;
+    if (result?.ok && result.animation?.poster !== art) {
+      state.requests.delete(identity);
+      state.staleBanner = banner;
+      notice(forgeAnimationEnglish.failed);
+      return;
+    }
     if (
       !result.ok ||
       !/^\/api\/gacha-forge\/banner-animation\/file\/[a-f0-9]{64}\/[a-f0-9]{64}\.mp4$/u.test(
@@ -200,6 +208,10 @@ export function wireForgeBannerAnimation(host) {
   };
   const ensure = async (retry = false) => {
     if (!current() || !visible || document.visibilityState === "hidden" || state.media?.matches) return;
+    if (state.staleBanner === banner) {
+      notice(forgeAnimationEnglish.failed);
+      return;
+    }
     let request = state.requests.get(identity);
     if (!request) {
       notice(forgeAnimationEnglish.generating);

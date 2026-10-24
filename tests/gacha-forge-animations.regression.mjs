@@ -18,11 +18,12 @@ const bytes = await readFile(new URL("./fixtures/gacha-banner-loop.mp4", import.
 const video = { base64: bytes.toString("base64"), mimeType: "video/mp4", ext: "mp4" };
 const digest = (text) => createHash("sha256").update(text).digest("hex");
 const deferred = () => {
-  let resolve;
-  const promise = new Promise((done) => {
+  let resolve, reject;
+  const promise = new Promise((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 };
 const wait = () => new Promise((resolve) => setImmediate(resolve));
 const log = Object.fromEntries(["debug", "info", "warn", "error"].map((level) => [level, () => {}]));
@@ -136,8 +137,6 @@ try {
     },
   });
   const racingBody = { runId: "racing-world", banner: "char-standard" };
-  const racingFirst = racing.generate(racingBody);
-  await racingReady.promise;
   const originalLstat = fsPromises.lstat;
   let heldMiss = false;
   fsPromises.lstat = async (path, ...options) => {
@@ -154,13 +153,15 @@ try {
   };
   syncBuiltinESMExports();
   try {
-    const racingSecond = racing.generate(racingBody);
+    const racingFirst = racing.generate(racingBody);
     await missCaptured.promise;
-    racingProvider.resolve(video);
-    await racingFirst;
+    const racingSecond = racing.generate(racingBody);
     resumeMiss.resolve();
-    assert.equal((await racingSecond).cached, true);
-    assert.equal(racingCalls, 1, "a stale outer cache miss cannot repurchase a clip after the previous job settles");
+    await racingReady.promise;
+    racingProvider.resolve(video);
+    assert.deepEqual(await racingSecond, await racingFirst);
+    assert.equal((await racing.generate(racingBody)).cached, true);
+    assert.equal(racingCalls, 1, "concurrent cache preparation and completed-job reuse cannot repurchase a clip");
   } finally {
     fsPromises.lstat = originalLstat;
     syncBuiltinESMExports();
@@ -247,6 +248,204 @@ try {
     lstat(join(dataDir, "capability-package-data", "gacha-forge", "banner-animations", digest("deleted-world"))),
     { code: "ENOENT" },
   );
+
+  // A restored document may legitimately reuse its old world ID without restarting the package.
+  for (const oldFinishesFirst of [true, false]) {
+    const runId = `restored-${oldFinishesFirst}`,
+      oldReady = deferred(),
+      restoredReady = deferred(),
+      oldVideo = deferred(),
+      restoredVideo = deferred(),
+      requests = [];
+    let authoritativeBanner = meta;
+    const restored = createForgeBannerAnimations({
+      dataDir,
+      readBanner: async () => authoritativeBanner,
+      runtime: {
+        logger: log,
+        integrations: {
+          videos: {
+            animateGalleryImage: async (request) => {
+              requests.push(request);
+              assert.ok(requests.length <= 2, "each world lifetime can submit only one clip");
+              (requests.length === 1 ? oldReady : restoredReady).resolve();
+              return requests.length === 1 ? oldVideo.promise : restoredVideo.promise;
+            },
+          },
+        },
+      },
+    });
+    const request = { runId, banner: "char-standard" },
+      oldJob = restored.generate(request);
+    await oldReady.promise;
+    authoritativeBanner = null;
+    await restored.removeWorld(runId);
+    assert.equal(requests[0].signal.aborted, true);
+    authoritativeBanner = { ...meta };
+    const freshJob = restored.generate(request);
+    await Promise.race([
+      restoredReady.promise,
+      freshJob.then((result) => assert.equal(result.ok, true, "restored documents must not remain tombstoned")),
+    ]);
+    const concurrent = restored.generate(request);
+    if (oldFinishesFirst) {
+      oldVideo.resolve(video);
+      assert.equal((await oldJob).error, "not-found");
+    }
+    const afterOldFinally = restored.generate(request);
+    await wait();
+    assert.equal(requests.length, 2, "an old finally cannot evict the restored in-flight job");
+    restoredVideo.resolve(video);
+    const result = await freshJob;
+    assert.equal(result.ok, true);
+    assert.deepEqual(await concurrent, result);
+    assert.deepEqual(await afterOldFinally, result);
+    if (!oldFinishesFirst) {
+      oldVideo.resolve(video);
+      assert.equal((await oldJob).error, "not-found");
+    }
+    assert.equal((await restored.generate(request)).cached, true, "late cleanup cannot erase restored files");
+    const [world, filename] = result.animation.url.split("/").slice(-2);
+    assert.deepEqual(await collect(await restored.serve({ params: { world, filename }, headers: {} }, reply())), bytes);
+    restored.dispose();
+  }
+
+  const readHeld = deferred(),
+    releaseRead = deferred();
+  let reads = 0,
+    readProviderCalls = 0;
+  const reading = createForgeBannerAnimations({
+    dataDir,
+    readBanner: async () => {
+      if (++reads === 1) {
+        readHeld.resolve();
+        return releaseRead.promise;
+      }
+      return meta;
+    },
+    runtime: {
+      logger: log,
+      integrations: {
+        videos: {
+          animateGalleryImage: async () => {
+            readProviderCalls++;
+            return video;
+          },
+        },
+      },
+    },
+  });
+  const readBody = { runId: "deleted-during-read", banner: "char-standard" },
+    oldRead = reading.generate(readBody);
+  await readHeld.promise;
+  await reading.removeWorld(readBody.runId);
+  releaseRead.resolve(meta);
+  assert.equal((await oldRead).error, "not-found", "a read started before deletion cannot become a restored job");
+  assert.equal(readProviderCalls, 0);
+  assert.equal((await reading.generate(readBody)).ok, true);
+  assert.equal(readProviderCalls, 1);
+
+  const prepareHeld = deferred(),
+    releasePrepare = deferred(),
+    originalWrite = fsPromises.writeFile,
+    prepareBody = { runId: "deleted-during-preparation", banner: "char-standard" };
+  let prepareCalls = 0,
+    heldPreparation = false;
+  const preparing = createForgeBannerAnimations({
+    dataDir,
+    readBanner: async () => meta,
+    runtime: {
+      logger: log,
+      integrations: {
+        videos: {
+          animateGalleryImage: async () => {
+            prepareCalls++;
+            return video;
+          },
+        },
+      },
+    },
+  });
+  fsPromises.writeFile = async (path, ...options) => {
+    if (!heldPreparation && String(path).includes(digest(prepareBody.runId)) && String(path).endsWith(".json")) {
+      heldPreparation = true;
+      prepareHeld.resolve();
+      await releasePrepare.promise;
+    }
+    return originalWrite(path, ...options);
+  };
+  syncBuiltinESMExports();
+  try {
+    const oldPreparation = preparing.generate(prepareBody);
+    await prepareHeld.promise;
+    const deletion = preparing.removeWorld(prepareBody.runId);
+    releasePrepare.resolve();
+    await deletion;
+    assert.equal((await oldPreparation).error, "not-found");
+    assert.equal(prepareCalls, 0, "a superseded preparation must never dispatch a provider request");
+    await assert.rejects(
+      lstat(join(dataDir, "capability-package-data", "gacha-forge", "banner-animations", digest(prepareBody.runId))),
+      { code: "ENOENT" },
+    );
+    assert.equal((await preparing.generate(prepareBody)).ok, true);
+    assert.equal(prepareCalls, 1);
+  } finally {
+    fsPromises.writeFile = originalWrite;
+    syncBuiltinESMExports();
+  }
+
+  const cleanupHeld = deferred(),
+    releaseCleanup = deferred(),
+    originalRm = fsPromises.rm,
+    cleanupBody = { runId: "restored-during-cleanup", banner: "char-standard" },
+    cleanupFolder = join(
+      dataDir,
+      "capability-package-data",
+      "gacha-forge",
+      "banner-animations",
+      digest(cleanupBody.runId),
+    );
+  let cleanupCalls = 0;
+  const cleaning = createForgeBannerAnimations({
+    dataDir,
+    readBanner: async () => meta,
+    runtime: {
+      logger: log,
+      integrations: {
+        videos: {
+          animateGalleryImage: async () => {
+            cleanupCalls++;
+            return video;
+          },
+        },
+      },
+    },
+  });
+  assert.equal((await cleaning.generate(cleanupBody)).ok, true);
+  const canonicalCleanupFolder = await fsPromises.realpath(cleanupFolder);
+  fsPromises.rm = async (path, ...options) => {
+    if (String(path) === canonicalCleanupFolder) {
+      cleanupHeld.resolve();
+      await releaseCleanup.promise;
+    }
+    return originalRm(path, ...options);
+  };
+  syncBuiltinESMExports();
+  try {
+    const deletion = cleaning.removeWorld(cleanupBody.runId);
+    await cleanupHeld.promise;
+    const restoredDuringCleanup = cleaning.generate(cleanupBody);
+    await wait();
+    assert.equal(cleanupCalls, 1, "restored preparation waits for filesystem cleanup, not a paid provider");
+    releaseCleanup.resolve();
+    await deletion;
+    assert.equal((await restoredDuringCleanup).ok, true);
+    assert.equal(cleanupCalls, 2);
+    assert.equal((await cleaning.generate(cleanupBody)).cached, true);
+  } finally {
+    fsPromises.rm = originalRm;
+    syncBuiltinESMExports();
+  }
 
   // Every internal ancestor is refused before creating anything through it, reading cached media or deleting.
   for (let depth = 0; depth < 4; depth++) {
@@ -419,6 +618,12 @@ try {
       this.paused = true;
     }
     play() {
+      if (Element.pendingNextPlay) {
+        const pending = Element.pendingNextPlay;
+        Element.pendingNextPlay = null;
+        this.paused = false;
+        return pending.promise;
+      }
       if (Element.rejectNextPlay) {
         Element.rejectNextPlay = false;
         return Promise.reject(new Error("NotAllowedError"));
@@ -437,11 +642,12 @@ try {
     };
     globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
     globalThis.IntersectionObserver = undefined;
-    const chips = new Element("chips"),
-      target = new Element("art");
-    target.parentElement = { querySelector: () => chips };
-    const requests = [],
-      host = {
+    const client = () => {
+      const chips = new Element("chips"),
+        target = new Element("art"),
+        requests = [];
+      target.parentElement = { querySelector: () => chips };
+      const host = {
         _run: { runId: "ui-world", animationConnectionId: "video" },
         _hudView: "summon",
         _summonPhase: "banner",
@@ -454,6 +660,9 @@ try {
           return request.promise;
         },
       };
+      return { chips, target, requests, host };
+    };
+    const { chips, target, requests, host } = client();
     const response = {
       ok: true,
       animation: {
@@ -510,6 +719,114 @@ try {
     await wait();
     assert.equal(target.children.length, 0, "late completion cannot attach to another world");
     disposeForgeBannerAnimation(host);
+
+    const stale = client();
+    wireForgeBannerAnimation(stale.host);
+    const staleIdentity = stale.host._forgeBannerAnimation.identity;
+    stale.requests[0].resolve({ ...response, animation: { ...response.animation, poster: "outdated-art" } });
+    await wait();
+    assert.equal(stale.target.children.length, 0, "a mismatched poster never mounts a video");
+    assert.equal(
+      stale.host._forgeBannerAnimation.requests.has(staleIdentity),
+      false,
+      "a mismatched poster evicts the stale resolved request",
+    );
+    assert.ok(stale.chips.children.some((node) => node.textContent === forgeAnimationEnglish.failed));
+    assert.equal(
+      stale.chips.children.some((node) => node.textContent === forgeAnimationEnglish.generating),
+      false,
+      "a mismatched poster settles the generating indicator into the still-image notice",
+    );
+    document.visibilityState = "hidden";
+    stale.host._forgeBannerAnimation.onVisibility();
+    document.visibilityState = "visible";
+    stale.host._forgeBannerAnimation.onVisibility();
+    wireForgeBannerAnimation(stale.host);
+    const remounted = new Element("art");
+    remounted.parentElement = stale.target.parentElement;
+    stale.host._root.querySelector = () => remounted;
+    wireForgeBannerAnimation(stale.host);
+    await wait();
+    assert.equal(stale.requests.length, 1, "visibility and DOM remounts cannot repurchase a stale poster clip");
+    assert.ok(stale.chips.children.some((node) => node.textContent === forgeAnimationEnglish.failed));
+    stale.host._summonBanner = { banner: structuredClone(stale.host._summonBanner.banner) };
+    wireForgeBannerAnimation(stale.host);
+    assert.equal(stale.requests.length, 2, "fresh banner metadata can retry the same textual identity");
+    stale.requests[1].resolve(response);
+    await wait();
+    assert.equal(remounted.children[0]?.tagName, "video", "fresh banner metadata recovers normally");
+    disposeForgeBannerAnimation(stale.host);
+
+    for (const interruption of ["hidden", "offscreen", "manual"]) {
+      let intersect;
+      globalThis.IntersectionObserver =
+        interruption === "offscreen"
+          ? class {
+              constructor(callback) {
+                intersect = (isIntersecting) => callback([{ isIntersecting }]);
+              }
+              observe() {
+                intersect(true);
+              }
+              disconnect() {}
+            }
+          : undefined;
+      const interrupted = client(),
+        pendingPlay = deferred();
+      wireForgeBannerAnimation(interrupted.host);
+      Element.pendingNextPlay = pendingPlay;
+      interrupted.requests[0].resolve(response);
+      await wait();
+      const clip = interrupted.target.children[0];
+      if (interruption === "hidden") {
+        document.visibilityState = "hidden";
+        interrupted.host._forgeBannerAnimation.onVisibility();
+      } else if (interruption === "offscreen") intersect(false);
+      else interrupted.chips.querySelector("pause").onclick();
+      assert.equal(clip.paused, true, `${interruption}: the controller interrupts its pending play request`);
+      const paused = interrupted.host._forgeBannerAnimation.paused,
+        opacity = clip.style.opacity,
+        notices = interrupted.chips.children.map((node) => node.textContent);
+      pendingPlay.reject(new DOMException("The play request was interrupted by pause().", "AbortError"));
+      await wait();
+      assert.equal(
+        interrupted.host._forgeBannerAnimation.paused,
+        paused,
+        `${interruption}: expected play interruption must not latch a manual pause`,
+      );
+      assert.equal(clip.style.opacity, opacity, `${interruption}: expected interruption preserves opacity`);
+      assert.deepEqual(
+        interrupted.chips.children.map((node) => node.textContent),
+        notices,
+        `${interruption}: expected interruption does not report a playback failure`,
+      );
+      if (interruption === "hidden") {
+        document.visibilityState = "visible";
+        interrupted.host._forgeBannerAnimation.onVisibility();
+      } else if (interruption === "offscreen") intersect(true);
+      else interrupted.chips.querySelector("pause").onclick();
+      await wait();
+      clip.events.playing();
+      assert.equal(clip.paused, false, `${interruption}: returning to an active banner resumes playback`);
+      assert.notEqual(interrupted.host._forgeBannerAnimation.paused, true);
+      assert.equal(clip.style.opacity, "1");
+      assert.equal(interrupted.requests.length, 1, `${interruption}: resuming never regenerates the clip`);
+      disposeForgeBannerAnimation(interrupted.host);
+    }
+    globalThis.IntersectionObserver = undefined;
+    const denied = client(),
+      deniedPlay = deferred();
+    wireForgeBannerAnimation(denied.host);
+    Element.pendingNextPlay = deniedPlay;
+    denied.requests[0].resolve(response);
+    await wait();
+    deniedPlay.reject(new DOMException("A user gesture is required.", "NotAllowedError"));
+    await wait();
+    assert.equal(denied.host._forgeBannerAnimation.paused, true, "genuine autoplay denial still offers Play");
+    assert.equal(denied.chips.querySelector("pause").textContent, forgeAnimationEnglish.play);
+    denied.chips.querySelector("pause").onclick();
+    assert.equal(denied.requests.length, 1, "a user gesture after denial reuses the same generated clip");
+    disposeForgeBannerAnimation(denied.host);
   } finally {
     for (const [key, value] of Object.entries(originals))
       if (value === undefined) delete globalThis[key];

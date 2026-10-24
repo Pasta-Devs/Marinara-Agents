@@ -6,7 +6,7 @@
   },
   "builtAgainst": {
     "engineVersion": "2.5.1",
-    "engineCommit": "682be4511e45a674d9f321e713a014f4807167de"
+    "engineCommit": "afe9ddbd424dae2e0dae9188936689f0f0a5a80a"
   },
   "id": "gacha-forge",
   "name": "Gacha Forge",
@@ -299,8 +299,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "d4ecfb669f73a550e6513bdf3bb585a7273eadcbd6bb93baff9e02ea8d97ceb6",
-      "bytes": 1553842
+      "sha256": "44ab090c12cff2fc5e10cc164a9a28ac4eeaec5769405ed5923a7936784020e0",
+      "bytes": 1554254
     },
     {
       "path": "farm-asc.webp",
@@ -774,8 +774,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "a0b34125784852dae1acd549457b2e71a3d7bb7007b9d1c786be530a4ef95f37",
-      "bytes": 643190
+      "sha256": "56a2665fc1f9bceee6abb5961f8bc04a7eaa0a710b96b1601b05deb48b73b0b7",
+      "bytes": 643912
     },
     {
       "path": "skill-aoe_damage-dark.webp",

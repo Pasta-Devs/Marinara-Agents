@@ -381,13 +381,13 @@ export class ForgeAudioController {
     this.musicAttemptAt = Date.now();
     const manifest = await this.manifest;
     if (this.disposed || revision !== this.musicRevision) return;
-    if (cue === "home" && this.settings.homeMusic) {
+    const fallbackCue = cue.startsWith("banner-") ? "home" : cue;
+    let selected;
+    if (fallbackCue === "home" && this.settings.homeMusic) {
       await this.libraryRequest;
       if (this.disposed || revision !== this.musicRevision) return;
-      const selected = this.library.find(
-        (track) => track.tag === this.settings.homeMusic && manifest?.assets?.[track.tag],
-      );
-      if (selected) {
+      selected = this.library.find((track) => track.tag === this.settings.homeMusic && manifest?.assets?.[track.tag]);
+      if (selected && cue === "home") {
         this.currentCue = cue;
         if (selected.tag !== this.currentTag) this.player.playMusic(selected.tag, manifest.assets);
         this.currentTag = selected.tag;
@@ -402,14 +402,12 @@ export class ForgeAudioController {
     ) {
       this.currentCue = cue;
       const tag =
-        manifest &&
-        this.audio.selectDefaultMusic(cue.startsWith("banner-") ? "home" : cue, manifest, {
-          currentTag: this.currentTag,
-        });
+        selected?.tag ??
+        (manifest && this.audio.selectDefaultMusic(fallbackCue, manifest, { currentTag: this.currentTag }));
       if (tag) {
+        if (tag !== this.currentTag) this.player.playMusic(tag, manifest.assets);
         this.currentTag = tag;
         this.currentGenerated = false;
-        this.player.playMusic(tag, manifest.assets);
       }
     }
     if (!enabled || (cue === "home" && this.settings.homeMusic)) return;

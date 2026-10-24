@@ -20,7 +20,18 @@ const forgeAnimationPrompt =
 
 export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
   const jobs = new Map();
-  const deleted = new Set();
+  const epochs = new Map(),
+    mutations = new Map();
+  const epochFor = (runId) => epochs.get(runId) || 0;
+  const mutate = async (runId, operation) => {
+    const queued = (mutations.get(runId) || Promise.resolve()).catch(() => {}).then(operation);
+    mutations.set(runId, queued);
+    try {
+      return await queued;
+    } finally {
+      if (mutations.get(runId) === queued) mutations.delete(runId);
+    }
+  };
   const urlFor = (runId, key) => `/api/gacha-forge/banner-animation/file/${forgeAnimationDigest(runId)}/${key}.mp4`;
   const exists = async (path) => {
     const stat = await forgeAnimationLstat(path).catch(() => null);
@@ -61,8 +72,10 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
       const runId = typeof body.runId === "string" ? body.runId.trim() : "";
       if (!runId || runId.length > 200 || !forgeAnimationBanners.has(body.banner))
         return { ok: false, error: "bad-request" };
+      const epoch = epochFor(runId),
+        superseded = () => epoch !== epochFor(runId);
       const banner = await readBanner(runId, body.banner);
-      if (deleted.has(runId)) return { ok: false, error: "not-found" };
+      if (superseded()) return { ok: false, error: "not-found" };
       if (!banner?.connectionId) return { ok: false, error: "animations-off" };
       if (!banner.galleryImageId || !banner.art) return { ok: false, error: "banner-image-missing" };
       const animate = runtime?.integrations?.videos?.animateGalleryImage;
@@ -77,37 +90,36 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
           forgeAnimationPrompt,
         ]),
       );
-      let folder;
-      try {
-        folder = await directory(forgeAnimationDigest(runId), true);
-      } catch (error) {
-        runtime.logger?.warn(error, "[gacha-forge] Banner animation storage unavailable");
-        return { ok: false, error: "animation-failed", retry: true };
-      }
-      const file = forgeAnimationJoin(folder, `${key}.mp4`);
-      const status = forgeAnimationJoin(folder, `${key}.json`);
+      let folder, file, status;
       const result = (cached) => ({
         ok: true,
         animation: { key, url: urlFor(runId, key), poster: banner.art },
         cached,
       });
-      if (await exists(file)) return result(true);
       if (jobs.has(key)) return jobs.get(key).promise;
       const job = { controller: new AbortController(), runId };
       job.promise = (async () => {
-        if (deleted.has(runId)) return { ok: false, error: "not-found" };
-        if (await exists(file)) return result(true);
-        const prior = await forgeAnimationRead(status, {
-          encoding: "utf8",
-          flag: forgeAnimationFlags.O_RDONLY | forgeAnimationFlags.O_NOFOLLOW,
-        }).catch(() => null);
-        if (prior && body.retry !== true) return { ok: false, error: "animation-failed", retry: true };
-        // A persisted attempt also survives a restart during a paid request. Only an explicit retry starts another.
-        if (body.retry === true)
-          await forgeAnimationUnlink(status).catch((error) => {
-            if (error.code !== "ENOENT") throw error;
-          });
-        await forgeAnimationWrite(status, JSON.stringify({ state: "pending" }), { flag: "wx", mode: 0o600 });
+        const prepared = await mutate(runId, async () => {
+          if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
+          folder = await directory(forgeAnimationDigest(runId), true);
+          file = forgeAnimationJoin(folder, `${key}.mp4`);
+          status = forgeAnimationJoin(folder, `${key}.json`);
+          if (await exists(file)) return result(true);
+          const prior = await forgeAnimationRead(status, {
+            encoding: "utf8",
+            flag: forgeAnimationFlags.O_RDONLY | forgeAnimationFlags.O_NOFOLLOW,
+          }).catch(() => null);
+          if (prior && body.retry !== true) return { ok: false, error: "animation-failed", retry: true };
+          // A persisted attempt also survives a restart during a paid request. Only an explicit retry starts another.
+          if (body.retry === true)
+            await forgeAnimationUnlink(status).catch((error) => {
+              if (error.code !== "ENOENT") throw error;
+            });
+          await forgeAnimationWrite(status, JSON.stringify({ state: "pending" }), { flag: "wx", mode: 0o600 });
+          return null;
+        });
+        if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
+        if (prepared) return prepared;
         try {
           const video = await animate({
             connectionId: banner.connectionId,
@@ -119,6 +131,7 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
             debugMode: body.debugMode === true,
             signal: job.controller.signal,
           });
+          if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
           const bytes = typeof video?.base64 === "string" ? Buffer.from(video.base64, "base64") : null;
           if (
             video?.mimeType !== "video/mp4" ||
@@ -128,17 +141,20 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
             bytes.toString("ascii", 4, 8) !== "ftyp"
           )
             throw new Error("Invalid banner animation video");
-          if (deleted.has(runId) || job.controller.signal.aborted) return { ok: false, error: "not-found" };
-          const temporary = forgeAnimationJoin(folder, `.${key}.${forgeAnimationUuid()}.tmp`);
-          try {
-            await forgeAnimationWrite(temporary, bytes, { flag: "wx", mode: 0o600 });
-            await forgeAnimationRename(temporary, file);
-          } finally {
-            await forgeAnimationUnlink(temporary).catch(() => {});
-          }
-          await forgeAnimationUnlink(status).catch(() => {});
-          return result(false);
+          return await mutate(runId, async () => {
+            if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
+            const temporary = forgeAnimationJoin(folder, `.${key}.${forgeAnimationUuid()}.tmp`);
+            try {
+              await forgeAnimationWrite(temporary, bytes, { flag: "wx", mode: 0o600 });
+              await forgeAnimationRename(temporary, file);
+            } finally {
+              await forgeAnimationUnlink(temporary).catch(() => {});
+            }
+            await forgeAnimationUnlink(status).catch(() => {});
+            return result(false);
+          });
         } catch (error) {
+          if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
           runtime.logger?.warn(error, "[gacha-forge] Banner animation failed");
           return { ok: false, error: "animation-failed", retry: true };
         }
@@ -147,12 +163,8 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
           runtime.logger?.warn(error, "[gacha-forge] Banner animation storage failed");
           return { ok: false, error: "animation-failed", retry: true };
         })
-        .finally(async () => {
-          jobs.delete(key);
-          if (deleted.has(runId))
-            await remove(runId).catch((error) =>
-              runtime.logger?.warn(error, "[gacha-forge] Could not clean deleted animation world"),
-            );
+        .finally(() => {
+          if (jobs.get(key) === job) jobs.delete(key);
         });
       jobs.set(key, job);
       return job.promise;
@@ -215,9 +227,13 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
     },
 
     async removeWorld(runId) {
-      deleted.add(runId);
-      for (const job of jobs.values()) if (job.runId === runId) job.controller.abort();
-      await remove(runId);
+      epochs.set(runId, epochFor(runId) + 1);
+      for (const [key, job] of jobs)
+        if (job.runId === runId) {
+          job.controller.abort();
+          jobs.delete(key);
+        }
+      await mutate(runId, () => remove(runId));
     },
 
     dispose() {
