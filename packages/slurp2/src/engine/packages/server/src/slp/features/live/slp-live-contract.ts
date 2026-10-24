@@ -1,6 +1,5 @@
 export {
   advanceSlurpLive,
-  getSlurpLiveMissed,
   endSlurpPlayerLiveShow,
   narrateSlurpPlayerLiveShow,
   replyToSlurpLiveChat,

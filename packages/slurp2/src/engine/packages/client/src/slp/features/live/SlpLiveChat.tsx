@@ -21,6 +21,32 @@ function nameColor(name: string) {
   return nameColors[hash % nameColors.length];
 }
 
+/** What a late viewer missed, built from the show itself: the goal, the top tippers and her last lines. */
+function catchUpLines(
+  show: SlpLiveShow,
+  elapsed: number,
+  t: (key: string, values?: Record<string, unknown>) => string,
+): string[] {
+  const totals = new Map<string, number>();
+  for (const event of show.events) {
+    if (event.kind === "tip" && event.at <= elapsed)
+      totals.set(event.name, (totals.get(event.name) ?? 0) + (event.amount ?? 0));
+  }
+  const top = [...totals]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([name, amount]) => `${name} (${amount})`);
+  const said = show.script
+    .filter((line) => line.kind === "narration" && line.at <= elapsed)
+    .slice(-3)
+    .map((line) => line.text);
+  return [
+    t("ui.slurp.live.catchUp.raised", { raised: show.raised, goal: show.goal }),
+    ...(top.length ? [t("ui.slurp.live.catchUp.top", { names: top.join(", ") })] : []),
+    ...said,
+  ];
+}
+
 export function SlpLiveChat({
   show,
   creatorName,
@@ -40,6 +66,9 @@ export function SlpLiveChat({
   const previousShow = useRef(show.id);
   const [newCount, setNewCount] = useState(0);
   const [summaryOpen, setSummaryOpen] = useState(true);
+  // Only a viewer who opens the show after its first 2 minutes gets the catch-up.
+  const [joinedLate] = useState(() => elapsed > 120_000);
+  const catchUp = joinedLate ? catchUpLines(show, elapsed, t) : [];
   const lines: ChatItem[] = [
     ...show.script
       .filter((line) => line.at <= elapsed)
@@ -101,7 +130,7 @@ export function SlpLiveChat({
       className="relative min-h-0 flex-1 space-y-2 overflow-y-auto p-3"
       aria-live="polite"
     >
-      {show.missedSummary && show.missedSummary.length > 0 && (
+      {catchUp.length > 0 && (
         <div className="rounded-lg border border-[var(--border)] p-3">
           <button
             type="button"
@@ -113,7 +142,7 @@ export function SlpLiveChat({
           </button>
           {summaryOpen && (
             <ul className="list-inside list-disc text-sm text-[var(--muted-foreground)]">
-              {show.missedSummary.map((item, index) => (
+              {catchUp.map((item, index) => (
                 <li key={`${item}-${index}`}>{item}</li>
               ))}
             </ul>

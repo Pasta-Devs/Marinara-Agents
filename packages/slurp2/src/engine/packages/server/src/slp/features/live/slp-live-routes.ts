@@ -4,12 +4,7 @@ import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { createSlurpLiveStorage } from "../../data/live/slp-live-storage.js";
 import { createSlurpStorage, createSlurpMessagesStorage } from "../../data/slp-storage.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
-import {
-  endSlurpPlayerLiveShow,
-  getSlurpLiveMissed,
-  narrateSlurpPlayerLiveShow,
-  replyToSlurpLiveChat,
-} from "./slp-live-contract.js";
+import { endSlurpPlayerLiveShow, narrateSlurpPlayerLiveShow, replyToSlurpLiveChat } from "./slp-live-contract.js";
 import { slurpLiveMenuItems } from "../../modules/live/slp-live-menu.js";
 import { newId } from "../../../utils/id-generator.js";
 import { SLURP_LIVE_ROOM_TYPES, type SlurpLiveRoomType } from "../../modules/live/slp-live-rooms.js";
@@ -51,7 +46,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
     if (show.startedNoticeAt && slurpLiveCanWatch(personaId, !!viewer)) {
       await storage.seen(id, new Date(), viewer?.id);
       kickSlurpLiveShow(app.db, id);
-      const current = (await getSlurpLiveMissed(app.db, id)) ?? show;
+      const current = show;
       const elapsed = Math.max(0, Date.now() - Date.parse(current.startedAt));
       const duration = Date.parse(current.endsAt) - Date.parse(current.startedAt);
       const audience = (await createSlurpStorage(app.db).getSettings()).fanTypes?.length ?? 10;

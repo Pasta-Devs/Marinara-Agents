@@ -445,23 +445,6 @@ export function createSlurpLiveStorage(db: DB) {
       return this.get(id);
     },
     ...createSlurpLivePrivateStorage(db),
-    async claimMissed(id: string) {
-      return db.transaction(async (tx) => {
-        const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
-        if (!row || row.endedAt || row.missedSummary !== null) return false;
-        await tx
-          .update(slurpLiveShows)
-          .set({ missedSummary: "[]" })
-          .where(and(eq(slurpLiveShows.id, id), isNull(slurpLiveShows.missedSummary)));
-        return (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0]?.missedSummary === "[]";
-      });
-    },
-    async setMissed(id: string, lines: string[]) {
-      await db
-        .update(slurpLiveShows)
-        .set({ missedSummary: JSON.stringify(lines) })
-        .where(eq(slurpLiveShows.id, id));
-    },
     async claimSegment(id: string, index: number, at: Date) {
       return db.transaction(async (tx) => {
         const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];

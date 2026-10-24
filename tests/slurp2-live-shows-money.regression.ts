@@ -162,7 +162,6 @@ assert.match(storage, /claimSegment/);
 assert.match(storage, /segment\.index > index/);
 assert.match(storage, /slurpLiveMenuClaimState\(queue/);
 assert.match(storage, /slurpLiveMayStart\(active, input\.hostKind, input\.hostId/);
-assert.match(storage, /row\.missedSummary !== null/);
 assert.match(storage, /claimReply/);
 assert.match(storage, /slurpLiveCapEvents/);
 assert.match(storage, /isNull\(slurpLiveShows\.endedAt\)/);

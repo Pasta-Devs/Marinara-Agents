@@ -21,7 +21,7 @@ export async function runLiveModel(
   phase: string,
   minutes: number,
   prompt: string,
-  kind: "segment" | "missed" | "reply" | "crowd",
+  kind: "segment" | "reply" | "crowd",
   onParsed?: (parsed: unknown) => void,
 ) {
   try {
@@ -71,13 +71,6 @@ export async function runLiveModel(
       );
       const raw = requireModelAnswer(response.content ?? "", `live ${kind}`);
       const parsed = kind === "reply" ? raw : parseGameJsonish(raw);
-      if (kind === "missed") {
-        const rows = Array.isArray(parsed) ? parsed : typeof parsed === "string" ? parsed.split("\n") : [];
-        return rows
-          .filter((line): line is string => typeof line === "string" && !!line.trim())
-          .slice(0, 3)
-          .map((text, index) => ({ at: index, kind: "reaction" as const, text: text.slice(0, 300) }));
-      }
       if (kind === "reply") {
         const text =
           typeof parsed === "string"

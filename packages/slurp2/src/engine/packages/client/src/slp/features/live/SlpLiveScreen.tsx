@@ -93,6 +93,8 @@ function SlpLiveContent({
         .slice(0, 3),
     [show.menu],
   );
+  // Goal Striptease: after the first goal the bar runs on to a second goal at twice the first.
+  const goalTarget = show.raised >= show.goal ? show.goal * 2 : show.goal;
   const prices = tipPrices.length ? tipPrices : [Math.max(1, Math.round(show.goal * 0.05))];
   const sendChat = (event: FormEvent) => {
     event.preventDefault();
@@ -186,14 +188,19 @@ function SlpLiveContent({
       <section className="border-b border-[var(--border)] px-4 py-3" aria-label={t("ui.slurp.live.goalLabel")}>
         <div className="mb-2 flex justify-between text-xs">
           <span>
-            <SlpCoinText>{t("ui.slurp.live.goal", { raised: show.raised, goal: show.goal })}</SlpCoinText>
+            <SlpCoinText>
+              {t(goalTarget > show.goal ? "ui.slurp.live.secondGoal" : "ui.slurp.live.goal", {
+                raised: show.raised,
+                goal: goalTarget,
+              })}
+            </SlpCoinText>
           </span>
-          <span>{Math.min(100, Math.round((show.raised / Math.max(1, show.goal)) * 100))}%</span>
+          <span>{Math.min(100, Math.round((show.raised / Math.max(1, goalTarget)) * 100))}%</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-[var(--muted)]">
           <div
             className="h-full bg-[var(--noodle-accent)]"
-            style={{ width: `${Math.min(100, (show.raised / Math.max(1, show.goal)) * 100)}%` }}
+            style={{ width: `${Math.min(100, (show.raised / Math.max(1, goalTarget)) * 100)}%` }}
           />
         </div>
       </section>

@@ -28,7 +28,7 @@ export type SlurpLiveLine = {
   private?: boolean;
   mediaId?: string;
   /** Written ahead on a condition: `goal-open` lines drop out once the tip goal is hit. */
-  requires?: "goal-open";
+  requires?: "goal-open" | "goal-hit";
 };
 export type SlurpLiveEvent = {
   at: number;
@@ -117,7 +117,8 @@ export function slurpLivePictureTriggers(show: SlurpLiveShow, personaId: string,
     viewer ?? (show.pictureViewerId === personaId ? { mode: show.mode, seenAt: show.pictureSeenAt } : null);
   if (pictureViewer?.mode !== "pictures" || !slurpLiveWatched(pictureViewer.seenAt, at)) return [];
   const triggers: string[] = [];
-  if (show.goalHitAt && Date.parse(show.goalHitAt) <= at.getTime()) triggers.push("goal");
+  // The goal picture is made from 80% on, so it is ready when the goal is hit; it stays hidden until then.
+  if (show.goalHitAt || show.raised >= show.goal * 0.8) triggers.push("goal");
   const lastSegment = Math.ceil((Date.parse(show.endsAt) - Date.parse(show.startedAt)) / SLURP_LIVE_SEGMENT_MS) - 1;
   if (
     show.segment?.index === lastSegment &&
@@ -167,12 +168,17 @@ export function slurpLiveForViewer(show: SlurpLiveShow, personaId: string | null
     pictureViewerId: pictureViewer?.mode === "pictures" ? personaId : null,
     pictureSeenAt: pictureViewer?.seenAt ?? null,
     pictureModeBusy,
-    script: show.script.filter(
-      (line) =>
-        (!line.personaId || line.personaId === personaId) &&
-        (!isPrivate || privateViewer || !line.personaId) &&
-        !(line.requires === "goal-open" && goalHit !== null && line.at >= goalHit),
-    ),
+    script: show.script
+      .filter(
+        (line) =>
+          (!line.personaId || line.personaId === personaId) &&
+          (!isPrivate || privateViewer || !line.personaId) &&
+          !(line.requires === "goal-open" && goalHit !== null && line.at >= goalHit) &&
+          !(line.requires === "goal-hit" && goalHit === null),
+      )
+      .map((line) =>
+        line.requires === "goal-hit" && goalHit !== null ? { ...line, at: Math.max(line.at, goalHit) } : line,
+      ),
     events: show.events.filter((event) => !event.personaId || event.personaId === personaId),
     queue: show.queue.filter((order) => !order.personaId || order.personaId === personaId),
   };

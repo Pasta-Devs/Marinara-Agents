@@ -33,6 +33,9 @@ export function slurpLiveSegmentPrompt(
     fans?: readonly string[];
     totalSegments?: number;
     goalReached?: boolean;
+    /** The second goal (twice the first) and whether the room reached it too. */
+    secondGoal?: number;
+    secondReached?: boolean;
     room?: SlurpLiveRoom;
   } & LiveSpice,
 ): string {
@@ -44,10 +47,12 @@ export function slurpLiveSegmentPrompt(
     input.segmentIndex === 0
       ? "Open the show: say hi to the room, tease what is coming, point at the tip menu."
       : last
-        ? "This is the finale: give the room the big payoff it paid for, then thank the top tippers and say goodbye."
-        : input.goalReached
-          ? "The tip goal is reached: turn the heat up a step for the rest of the show."
-          : "Keep the room going: build toward the tip goal, react to the chat, nudge the menu.",
+        ? "This is the finale: about 90 seconds before the end make a last call for tips, then give the room the big payoff it paid for, thank the top tippers and say goodbye."
+        : input.secondReached
+          ? "Both tip goals are reached: give the room everything you promised for the rest of the show."
+          : input.goalReached
+            ? `The tip goal is reached: turn the heat up a step and tease the second goal${input.secondGoal ? ` of ${input.secondGoal} coins` : ""}.`
+            : "Keep the room going: build toward the tip goal, react to the chat, nudge the menu.",
     input.queuedMenuLabels.length
       ? `Menu items bought and waiting, do each one on camera in this segment, in order, describing it as you do it: ${input.queuedMenuLabels.join("; ")}.`
       : "",
@@ -65,22 +70,6 @@ export function slurpLiveSegmentPrompt(
   ]
     .filter(Boolean)
     .join("\n");
-}
-
-/** "What you missed": a newcomer's catch-up on the show so far. */
-export function slurpLiveMissedPrompt(input: {
-  elapsedMinutes: number;
-  raised: number;
-  goal: number;
-  servedMenuLabels: string[];
-  topTipper: string | null;
-  hostName?: string;
-}): string {
-  return [
-    `A fan just joined ${input.hostName ?? "her"} live show, ${input.elapsedMinutes} minutes in. Tell them what they missed, like a friend in the chat would.`,
-    `Facts: ${input.raised} of ${input.goal} coins raised${input.topTipper ? `, top tipper ${input.topTipper}` : ""}${input.servedMenuLabels.length ? `, menu items done: ${input.servedMenuLabels.join("; ")}` : ", no menu items yet"}.`,
-    "Use only these facts. Answer with a JSON array of 2-3 short strings, casual, emojis welcome.",
-  ].join("\n");
 }
 
 /** Her quick reply to the player's chat lines between segments. */
