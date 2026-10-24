@@ -583,6 +583,18 @@
             {
               "find": "_refreshStepData(){this._stepRefreshing||(this._stepRefreshing=!0,Ze(`${Ia}/state`).then(e=>e&&typeof e.json==\"function\"?e.json():null).then(e=>{!e||!e.activeRun||(this._adoptGlobals(e),this._adoptUnlocks(e.activeRun))}).catch(()=>{}).then(()=>{this._stepRefreshing=!1,this._renderBrowser()}))}",
               "replace": "_refreshStepData(){\nconst forgeRunId=this._run?.runId;\nif(!forgeRunId||!this.isConnected||this._stepRefreshing)return;\nthis._stepRefreshing=true;\nZe(`${Ia}/state`).then(e=>e&&typeof e.json===\"function\"?e.json():null).then(e=>{\nif(forgeUnitStepIsCurrent(this,forgeRunId,e)){this._adoptGlobals(e);this._adoptUnlocks(e.activeRun);}\n}).catch(()=>{}).then(()=>{\nthis._stepRefreshing=false;\nconst forgeRefreshAgain=this._forgeUnitStepRefresh;\nthis._forgeUnitStepRefresh=null;\nif(this.isConnected&&this._run?.runId===forgeRunId){wireForgeUnitNotifications(this,od(this._nextStepCtx));this._renderBrowser();}\nif(this.isConnected&&forgeRefreshAgain&&this._run?.runId===forgeRefreshAgain)this._refreshStepData();\n});\n}"
+            },
+            {
+              "find": "g&&c.querySelector(\".ob-xh\").insertBefore(g,c.querySelector(\".ob-xclose\"));let w=()=>{",
+              "replace": "g&&c.querySelector(\".ob-xh\").insertBefore(g,c.querySelector(\".ob-xclose\"));m&&bindForgeExpandedEditor(t,c,r,m,(field,trigger)=>{s=field;e=trigger});let w=()=>{"
+            },
+            {
+              "find": "_renderBrowser(){this._syncTypeScale();let e=this._state();",
+              "replace": "_renderBrowser(){this._syncTypeScale();let e=this._state();const forgeExpandedEditor=captureForgeExpandedEditor(this,e);"
+            },
+            {
+              "find": "this._wireFullscreen(),this._wireRunsButton()",
+              "replace": "this._wireFullscreen(),restoreForgeExpandedEditor(this,forgeExpandedEditor),this._wireRunsButton()"
             }
           ]
         }

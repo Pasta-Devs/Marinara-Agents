@@ -1,6 +1,11 @@
 // Package-owned scroll/observer boundaries. Real geometry and caret input are covered by browser QA.
 import assert from "node:assert/strict";
-import { wireForgeBrowserFullscreen } from "../packages/gacha-forge/src/browser-presentation.mjs";
+import {
+  bindForgeExpandedEditor,
+  captureForgeExpandedEditor,
+  restoreForgeExpandedEditor,
+  wireForgeBrowserFullscreen,
+} from "../packages/gacha-forge/src/browser-presentation.mjs";
 
 const original = Object.fromEntries(
   ["ResizeObserver", "requestAnimationFrame", "cancelAnimationFrame", "getComputedStyle"].map((key) => [
@@ -85,7 +90,102 @@ function test(name, callback) {
   callback();
   console.info(`ok ${++count} - ${name}`);
 }
+function editorFixture() {
+  const root = new EventTarget();
+  const host = { _root: root, _run: { runId: "world-one" }, _lastScreen: "settings", _settingsCategory: "advanced" };
+  root.host = host;
+  const field = {
+    value: "Unsaved words.",
+    selectionStart: 2,
+    selectionEnd: 7,
+    selectionDirection: "backward",
+    scrollTop: 30,
+    setSelectionRange(start, end, direction) {
+      Object.assign(this, { selectionStart: start, selectionEnd: end, selectionDirection: direction });
+    },
+    focus() {
+      root.activeElement = this;
+    },
+  };
+  const close = {
+    focus() {
+      root.activeElement = this;
+    },
+  };
+  const popup = { contains: (node) => node === field || node === close };
+  const source = new EventTarget();
+  source.tagName = "TEXTAREA";
+  source.value = "Persisted words.";
+  const trigger = { getAttribute: () => "guidelines-image" };
+  let rebound;
+  let attached;
+  root.querySelector = (selector) =>
+    selector === ".ob-xv"
+      ? popup
+      : {
+          appendChild: (node) => {
+            attached = node;
+          },
+        };
+  root.querySelectorAll = () => [trigger];
+  root.getElementById = () => source;
+  root.activeElement = field;
+  bindForgeExpandedEditor(root, popup, "guidelines-image", field, (nextSource, nextTrigger) => {
+    rebound = { source: nextSource, trigger: nextTrigger };
+  });
+  return { host, root, field, close, popup, source, trigger, rebound: () => rebound, attached: () => attached };
+}
 try {
+  test("a text popup retains its native draft, caret and scroll while rebinding the newly rendered field", () => {
+    const f = editorFixture();
+    const saved = captureForgeExpandedEditor(f.host, "settings");
+    let inputs = 0;
+    f.source.addEventListener("input", () => inputs++);
+    f.root.activeElement = null;
+    restoreForgeExpandedEditor(f.host, saved);
+    assert.equal(f.attached(), f.popup);
+    assert.deepEqual(f.rebound(), { source: f.source, trigger: f.trigger });
+    assert.equal(f.source.value, "Unsaved words.");
+    assert.equal(inputs, 1);
+    assert.equal(f.root.activeElement, f.field);
+    assert.deepEqual(
+      [f.field.selectionStart, f.field.selectionEnd, f.field.selectionDirection, f.field.scrollTop],
+      [2, 7, "backward", 30],
+    );
+  });
+  test("popup retention is fenced to its original world, screen and category and excludes list popups", () => {
+    for (const change of [
+      (f) => {
+        f.host._run = { runId: "world-two" };
+      },
+      (f) => {
+        f.host._settingsCategory = "visual";
+      },
+      (f) => {
+        delete f.popup._forgeEditor;
+      },
+    ]) {
+      const f = editorFixture();
+      change(f);
+      assert.equal(captureForgeExpandedEditor(f.host, "settings"), null);
+    }
+    assert.equal(captureForgeExpandedEditor(editorFixture().host, "hud"), null);
+    const setup = editorFixture();
+    delete setup.popup._forgeEditor;
+    setup.host._lastScreen = "setup";
+    bindForgeExpandedEditor(setup.root, setup.popup, "guidelines-image", setup.field, () => {});
+    assert.equal(captureForgeExpandedEditor(setup.host, "setup"), null);
+  });
+  test("retention keeps Close focus and does not steal focus back from an Engine control", () => {
+    const f = editorFixture();
+    f.root.activeElement = f.close;
+    restoreForgeExpandedEditor(f.host, captureForgeExpandedEditor(f.host, "settings"));
+    assert.equal(f.root.activeElement, f.close);
+    const outside = {};
+    f.root.activeElement = outside;
+    restoreForgeExpandedEditor(f.host, captureForgeExpandedEditor(f.host, "settings"));
+    assert.equal(f.root.activeElement, outside);
+  });
   test("a focused shadow-root field is revealed inside its own scroll panel without changing its draft or caret", () => {
     const f = fixture();
     wireForgeBrowserFullscreen(f.host);

@@ -2,7 +2,7 @@
 
 - Character scenes, banners, portraits and outfits use available character/persona avatar references; provider support and limits still apply.
 - Story artwork starts below its header and preserves the top of the image.
-- Mobile ordinary and expanded editors adapt to the height left by the keyboard.
+- Mobile ordinary and expanded editors adapt to the height left by the keyboard; expanded settings drafts survive refreshes.
 - Units explains the Home progression dot and refreshes its recommendation after level, equip and ascension actions.
 - Blocking combat dialogue supports keyboard focus and returns to combat controls afterward.
 

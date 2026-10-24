@@ -106,6 +106,15 @@ async function openForge(page: Page, testInfo: TestInfo, activeRun?: typeof run)
   await page.route("**/api/gacha-forge/preforge", (route) =>
     route.fulfill({ json: { ok: true, preforge: { mode: "off", locked: false, canAuto: false } } }),
   );
+  // Keep the setup draft in the same isolated fixture as the mocked world state.
+  let setupSnapshot: unknown = null;
+  await page.route("**/api/gacha-forge/setup/draft", (route) => {
+    if (route.request().method() === "POST") {
+      setupSnapshot = route.request().postDataJSON().snapshot;
+      return route.fulfill({ json: { ok: true } });
+    }
+    return route.fulfill({ json: { ok: true, draft: setupSnapshot } });
+  });
   await page.goto("/");
   await page.getByRole("tab", { name: "Open Gacha Forge" }).click();
   const forge = page.locator("marinara-capability-gacha-forge");

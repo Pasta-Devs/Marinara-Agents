@@ -150,11 +150,41 @@ test("Advanced fields and expanded editors keep typing and pointer Close reachab
     );
     await expanded.press("x");
     const draft = await expanded.inputValue();
+    const retainedEditor = await expanded.elementHandle();
+    await expanded.evaluate((field: HTMLTextAreaElement) => {
+      field.setSelectionRange(2, 7, "backward");
+      field.scrollTop = 30;
+    });
+    // A real settings response followed by host-props delivery must not discard an uncommitted popup.
+    const latestBeat = await forge.evaluate(async (node) => {
+      const game = node as any;
+      const beat = game._run.guidelines.beat + "\nA newer directive saved while this editor was open.";
+      await game._setSources({ guidelines: { ...game._run.guidelines, beat } });
+      game.capabilityProps = { ...game.capabilityProps };
+      return beat;
+    });
+    await expect(expanded).toHaveValue(draft);
+    expect(await expanded.evaluate((field, original) => field === original, retainedEditor)).toBe(true);
+    expect(
+      await expanded.evaluate((field: HTMLTextAreaElement) => ({
+        focused:
+          field.getRootNode() instanceof ShadowRoot && (field.getRootNode() as ShadowRoot).activeElement === field,
+        start: field.selectionStart,
+        end: field.selectionEnd,
+        direction: field.selectionDirection,
+      })),
+    ).toEqual({ focused: true, start: 2, end: 7, direction: "backward" });
     await expect
       .poll(() =>
         close.evaluate((button, bottom) => {
-          const box = button.getBoundingClientRect();
-          return box.height >= 44 && box.width >= 44 && box.top >= 0 && box.bottom <= bottom + 1;
+          const box = button.getBoundingClientRect(),
+            stage = button.closest(".gf-stage")!.getBoundingClientRect();
+          return (
+            box.height >= 44 &&
+            box.width >= 44 &&
+            box.top >= stage.top - 1 &&
+            box.bottom <= Math.min(stage.bottom, bottom) + 1
+          );
         }, height),
       )
       .toBe(true);
@@ -163,6 +193,8 @@ test("Advanced fields and expanded editors keep typing and pointer Close reachab
     await close.click();
     await expect(forge.locator(".ob-xv")).toHaveCount(0);
     await expect.poll(() => saved.guidelines.image).toBe(draft);
+    expect(saved.guidelines.beat).toBe(latestBeat);
+    await retainedEditor?.dispose();
   }
 });
 

@@ -4,7 +4,7 @@
 
 Character scenes, gacha banners, portraits and outfits now attach available avatar references from their selected Engine character cards or persona. A unit’s own saved artwork is the fallback when its source avatar is unavailable. Reference support and limits still depend on the configured image provider and model. Existing generated artwork remains unchanged; the references apply when generating new art.
 
-Story artwork begins below the chapter controls and retains the top of the image. On short mobile screens, ordinary and expanded text editors adapt to the space left by the keyboard. Expanded editors keep Close available beside the text.
+Story artwork begins below the chapter controls and retains the top of the image. On short mobile screens, ordinary and expanded text editors adapt to the space left by the keyboard. Expanded editors keep Close available beside the text and preserve their draft when the settings refresh.
 
 The dot beside Home → Units indicates the existing next-step recommendation. Units now explains whether to level a character, equip a signature weapon or ascend, with the relevant Stats or Gear path. The recommendation refreshes after successful progression actions.
 

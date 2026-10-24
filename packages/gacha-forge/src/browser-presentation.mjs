@@ -80,7 +80,7 @@ const forgeBrowserLayout = `
     min-height: 44px; height: min(105px, var(--forge-editor-height)); max-height: var(--forge-editor-height);
   }
   /* Put Close beside the text, rather than spending the keyboard's last line on a title row. */
-  .ob-xv { padding: 4px; }
+  .ob-xv { padding: 0 4px; }
   .ob-xm:has(> .ob-xta) {
     height: 100%; padding: 4px; gap: 4px; display: grid;
     grid-template-columns: minmax(0, 1fr) 44px; grid-template-rows: minmax(0, 1fr);
@@ -90,7 +90,7 @@ const forgeBrowserLayout = `
   .ob-xm:has(> .ob-xta) .ob-xh h2 {
     position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
-  .ob-xm:has(> .ob-xta) .ob-count { order: 1; margin: 0; font-size: 10px; }
+  .ob-xm:has(> .ob-xta) .ob-count { order: -1; margin: 0; font-size: 10px; }
   .ob-xm:has(> .ob-xta) .ob-xclose { width: 44px; height: 44px; margin: 0; }
   .ob-xm > .ob-xta { grid-column: 1; grid-row: 1; height: 100%; padding: 4px; }
 
@@ -111,6 +111,9 @@ const forgeBrowserLayout = `
   .hm-pk.chat:has(.ch-box) .ch-btn:not(.go) { display: none; }
   .hm-pk.chat:has(.ch-box) .ch-btn.go { min-height: 44px; margin: 0; white-space: nowrap; }
 }
+@container gfarena (max-height: 80px) {
+  .ob-xm:has(> .ob-xta) .ob-count { display: none; }
+}
 `;
 const forgeFullscreenIcons = {
   enter:
@@ -118,6 +121,61 @@ const forgeFullscreenIcons = {
   exit: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 14h6v6m0-6-7 7M20 10h-6V4m0 6 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 const forgeFullscreenButtons = ".gf-fs, .gf-fs-exit, .gf-fs-bar";
+
+export function bindForgeExpandedEditor(root, popup, targetId, field, rebind) {
+  const host = root.host;
+  if (host._lastScreen !== "settings") return;
+  // List/book popups move their source DOM and have a different lifetime; retain only text editors.
+  popup._forgeEditor = {
+    runId: host._run?.runId,
+    screen: host._lastScreen,
+    category: host._settingsCategory,
+    targetId,
+    field,
+    rebind,
+  };
+}
+
+export function captureForgeExpandedEditor(host, screen) {
+  const popup = host._root.querySelector(".ob-xv");
+  const editor = popup?._forgeEditor;
+  if (
+    !editor ||
+    editor.screen !== "settings" ||
+    editor.runId !== host._run?.runId ||
+    editor.screen !== screen ||
+    editor.category !== host._settingsCategory
+  )
+    return null;
+  const field = editor.field;
+  return {
+    popup,
+    active: popup.contains(host._root.activeElement) ? host._root.activeElement : null,
+    start: field.selectionStart,
+    end: field.selectionEnd,
+    direction: field.selectionDirection,
+    scrollTop: field.scrollTop,
+  };
+}
+
+export function restoreForgeExpandedEditor(host, saved) {
+  if (!saved) return;
+  const root = host._root;
+  const editor = saved.popup._forgeEditor;
+  const stage = root.querySelector(".gf-stage");
+  const source = root.getElementById(editor.targetId);
+  const trigger = [...root.querySelectorAll("[data-expand]")].find(
+    (button) => button.getAttribute("data-expand") === editor.targetId,
+  );
+  if (!stage || source?.tagName !== "TEXTAREA" || !trigger) return;
+  editor.rebind(source, trigger);
+  source.value = editor.field.value;
+  source.dispatchEvent(new Event("input", { bubbles: true }));
+  stage.appendChild(saved.popup);
+  saved.active?.focus({ preventScroll: true });
+  editor.field.setSelectionRange(saved.start, saved.end, saved.direction);
+  editor.field.scrollTop = saved.scrollTop;
+}
 
 export function forgeUnitTypeBadge(unit, icons) {
   const key = String(unit.affinity ?? "")
