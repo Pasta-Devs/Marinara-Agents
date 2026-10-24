@@ -4,6 +4,7 @@ import { createForgeStoryMemoryIntegration } from "../packages/gacha-forge/src/s
 
 function fixture(options = {}) {
   const runId = "memory-frontier";
+  const phase = options.phase || "ready";
   const plans = new Map();
   const session = { progress: {}, bondChapters: {} };
   const chats = [];
@@ -24,7 +25,10 @@ function fixture(options = {}) {
         async recall(options) {
           requests.push(options);
           const sources = await adapters.readSources(runId, options.target);
-          return { status: { phase: "ready" }, text: sources.map((source) => source.content).join("\n") };
+          return {
+            status: { phase },
+            text: sources.map((source) => source.content).join("\n"),
+          };
         },
         async status() {
           return { phase: "ready" };
@@ -45,7 +49,7 @@ function fixture(options = {}) {
     listChats: async () => chats,
     allNodes: (value) => value?.nodes || [],
     storyNodes: (value) => (value?.nodes || []).filter((node) => node.type === "story"),
-    readSegments: async (_, chapter, index) => [{ text: `Canonical ${chapter}:${index}` }],
+    readSegments: options.readSegments || (async (_, chapter, index) => [{ text: `Canonical ${chapter}:${index}` }]),
     renderSegments: (segments) => segments.map((segment) => segment.text).join("\n"),
     bondHistory: (value) => Object.entries(value.bondChapters).map(([unitId, data]) => ({ unitId, part: 1, ...data })),
     bondChapterId: (unitId) => `bond-${unitId}`,
@@ -60,6 +64,7 @@ function fixture(options = {}) {
     findKnownModel: () => undefined,
     estimateTokens: (value) => Math.ceil(value.length / 4),
     background: (callback) => callback(),
+    renderContext: options.renderContext,
     logger: { warn() {} },
   });
   const context = (chapter, storyIndex = 0) =>
@@ -210,4 +215,118 @@ test("missing HTTP and public context capacities remain unknown", async () => {
     resolveModelMetadata: async () => ({ model: "unknown", maxContext: null }),
   });
   assert.equal((await f.memory.resolveContext(f.runId)).maxContext, null);
+});
+
+test("the full previous canonical chapter precedes current beats and does not spend a recall slot", async () => {
+  let rendered;
+  const f = fixture({ renderContext: (result, options) => (rendered = { result, ...options }) });
+  f.plan(1, ["story", "story", "story"]);
+  f.plan(2);
+  f.session.progress = { 1: { normal: 3 } };
+  const current = "# Current chapter so far\nCURRENT_CANONICAL_BEAT";
+  await f.memory.context({
+    runId: f.runId,
+    chapter: 2,
+    storyIndex: 1,
+    query: "unrelated to previous chapter",
+    prefix: current,
+    fallback: () => "COMPRESSED_HISTORY",
+  });
+  assert.deepEqual(f.requests.at(-1).excludeChapterIds, ["1"]);
+  assert.equal(
+    rendered.prefix,
+    `# Previous chapter in full: Chapter 1\nCanonical 1:0\n\nCanonical 1:1\n\nCanonical 1:2\n\n${current}`,
+  );
+});
+
+test("replay gets its own previous chapter in full and cannot include later completed or prefabricated chapters", async () => {
+  let rendered;
+  const f = fixture({ renderContext: (result, options) => (rendered = { result, ...options }) });
+  for (let chapter = 1; chapter <= 4; chapter += 1) f.plan(chapter);
+  f.session.progress = { 1: { normal: 3 }, 2: { normal: 3 }, 3: { normal: 3 } };
+  await f.context(2);
+  assert.deepEqual(f.requests.at(-1).excludeChapterIds, ["1"]);
+  assert.match(rendered.prefix, /Canonical 1:0\n\nCanonical 1:1$/);
+  assert.doesNotMatch(rendered.prefix, /Canonical [234]:/);
+  await f.context(4);
+  assert.deepEqual(f.requests.at(-1).excludeChapterIds, ["3"]);
+  assert.match(rendered.prefix, /Canonical 3:0\n\nCanonical 3:1$/);
+  assert.doesNotMatch(rendered.prefix, /Canonical 4:/);
+});
+
+test("a memory recovery fallback still retains the entire previous chapter over a manual summary", async () => {
+  let rendered;
+  const f = fixture({ phase: "error", renderContext: (result, options) => (rendered = { result, ...options }) });
+  f.plan(1);
+  f.session.progress = { 1: { normal: 3 } };
+  await f.memory.context({
+    runId: f.runId,
+    chapter: 2,
+    storyIndex: 0,
+    prefix: "CURRENT_CANONICAL_BEAT",
+    fallback: () => "MANUAL_SUMMARY_OF_PREVIOUS_CHAPTER\n\nCURRENT_CANONICAL_BEAT",
+  });
+  assert.equal(rendered.result.maxContext, 10000);
+  assert.deepEqual(rendered.result.details, []);
+  assert.match(rendered.prefix, /MANUAL_SUMMARY_OF_PREVIOUS_CHAPTER/);
+  assert.match(rendered.prefix, /# Previous chapter in full: Chapter 1\nCanonical 1:0\n\nCanonical 1:1/);
+  assert.equal(rendered.prefix.match(/CURRENT_CANONICAL_BEAT/gu)?.length, 1);
+});
+
+test("legacy recovery never doubles an already complete previous chapter, current scene or locked decisions", async () => {
+  let rendered;
+  const f = fixture({ phase: "error", renderContext: (result, options) => (rendered = { result, ...options }) });
+  f.plan(1);
+  f.session.progress = { 1: { normal: 3 } };
+  const history = "# Chapter 1\nCanonical 1:0\n\nCanonical 1:1\n\nCURRENT_CANONICAL_BEAT\nLOCKED_DECISION";
+  await f.memory.context({
+    runId: f.runId,
+    chapter: 2,
+    storyIndex: 1,
+    prefix: "CURRENT_CANONICAL_BEAT",
+    fate: "LOCKED_DECISION",
+    fallback: () => history,
+  });
+  assert.equal(rendered.prefix, history, "History that already fits must stay byte-for-byte intact");
+  assert.equal(rendered.fate, "", "Locked decisions are already in legacy history");
+});
+
+test("unknown context keeps the full previous chapter in the plain legacy fallback without inventing a limit", async () => {
+  const f = fixture({
+    phase: "context-unknown",
+    readConnections: async () => [],
+    renderContext: () => {
+      throw new Error("Unknown capacity must not mark plain legacy history as budget-enforced memory");
+    },
+  });
+  f.plan(1);
+  f.session.progress = { 1: { normal: 3 } };
+  const history = await f.context(2);
+  assert.equal(typeof history, "string");
+  assert.ok(history.startsWith("legacy fallback\n\n"));
+  assert.match(history, /# Previous chapter in full: Chapter 1\nCanonical 1:0\n\nCanonical 1:1$/);
+  assert.equal(await f.memory.resolveContext(f.runId).then((context) => context.maxContext), null);
+});
+
+test("live-chat recovery deduplicates played text across different legacy headings and supplies it when absent", async () => {
+  let rendered;
+  const f = fixture({ phase: "error", renderContext: (result, options) => (rendered = { result, ...options }) });
+  f.plan(1);
+  f.session.progress = { 1: { normal: 3 } };
+  const body = "CURRENT_PLAYED_START\n\nCURRENT_PLAYED_END";
+  const previous = "# Chapter 1\nCanonical 1:0\n\nCanonical 1:1";
+  const context = (history) =>
+    f.memory.context({
+      runId: f.runId,
+      chapter: 2,
+      storyIndex: 0,
+      current: true,
+      prefix: `# Current chapter so far\n${body}`,
+      fallback: () => history,
+    });
+  const history = `${previous}\n\n# Chapter 2\n${body}`;
+  await context(history);
+  assert.equal(rendered.prefix, history, "Different legacy headings must not duplicate the played chapter body");
+  await context(previous);
+  assert.equal(rendered.prefix, `${previous}\n\n# Current chapter so far\n${body}`);
 });

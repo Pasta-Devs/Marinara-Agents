@@ -261,7 +261,7 @@ test("historical generation never sees later memory or replaces the newer overvi
   );
 });
 
-test("up to3 relevant sources share the limit across chapters, CharacterStories and chats, with lexical/semantic fallback", async () => {
+test("up to3 main chapters are recalled separately from all relevant character memories, with lexical/semantic fallback", async () => {
   const f = fixture([
     source("1", "Harborfall keeper is recovering."),
     source("1", "Harborfall captain gave Mira a sapphire.", {
@@ -272,6 +272,15 @@ test("up to3 relevant sources share the limit across chapters, CharacterStories 
     source("1", "Harborfall captain promised a voyage.", { kind: "chat", title: "Captain conversation", order: 3 }),
     source("4", "Harborfall stores need salt."),
     source("5", "Distant volcano erupted."),
+    source("6", "Harborfall lighthouse needs repairs."),
+    source("7", "Harborfall breakwater survived the storm."),
+    source("2", "Harborfall captain entrusted Mira with the rescue plan.", {
+      kind: "character-story",
+      title: "Captain trust",
+      order: 8,
+    }),
+    source("7", "Harborfall captain promised to return.", { kind: "chat", title: "Captain promise", order: 9 }),
+    source("3", "Unrelated moonbase volcano survey.", { kind: "chat", title: "Moonbase conversation", order: 10 }),
   ]);
   const service = f.create({
     resolveEmbeddings: async () => {
@@ -279,10 +288,46 @@ test("up to3 relevant sources share the limit across chapters, CharacterStories 
     },
   });
   const result = await service.recall({ runId: "world", query: "Harborfall captain" });
-  assert.equal(result.details.length, 3);
+  assert.equal(result.details.filter((record) => record.kind === "chapter").length, 3);
+  assert.deepEqual(
+    result.details.filter((record) => record.kind === "chapter").map((record) => record.id),
+    ["7", "6", "4"],
+  );
+  assert.equal(result.details.filter((record) => record.kind === "character-story").length, 2);
+  assert.equal(result.details.filter((record) => record.kind === "chat").length, 2);
+  assert.equal(result.details.length, 7, "Character memories do not spend the three-chapter allowance");
+  assert.equal(f.memory().records.length, 10, "All canonical sources remain archived for the overview");
   assert.ok(result.details.some((record) => record.kind === "character-story"));
   assert.ok(result.details.some((record) => record.kind === "chat"));
   assert.ok(result.details.every((record) => !record.content.includes("volcano")));
+  assert.notEqual(result.details[0].kind, "chapter", "Selection retains global relevance for whole-block fitting");
+  const headings = [...forgeStoryMemoryText(result).matchAll(/^# Recalled (chapter|character-story|chat):/gm)].map(
+    (match) => match[1],
+  );
+  assert.deepEqual(headings.slice(0, 3), ["chapter", "chapter", "chapter"]);
+  assert.ok(
+    headings.slice(3).every((kind) => kind !== "chapter"),
+    "Prompt layers put chapter recall before separate character memories",
+  );
+  const savedOverview = f.memory().overview;
+  const callsBefore = f.calls.length;
+  const excluded = await service.recall({ runId: "world", query: "Harborfall captain", excludeChapterIds: ["7"] });
+  assert.deepEqual(
+    excluded.details.filter((record) => record.kind === "chapter").map((record) => record.id),
+    ["6", "4", "1"],
+  );
+  assert.ok(
+    excluded.details.some((record) => record.kind === "chat" && record.id === "7"),
+    "Only main-chapter candidates are excluded",
+  );
+  assert.equal(excluded.details.length, 7);
+  assert.deepEqual(
+    f.memory().overview,
+    savedOverview,
+    "Excluding a required full chapter does not change canonical overview coverage",
+  );
+  assert.equal(f.memory().records.length, 10);
+  assert.equal(f.calls.length, callsBefore, "Changing optional recall does not regenerate stored history");
   assert.equal(rankForgeStoryMemories(f.memory().records, "unknown spaceship").length, 0);
   const record = {
     key: "semantic",
@@ -299,7 +344,20 @@ test("up to3 relevant sources share the limit across chapters, CharacterStories 
     rankForgeStoryMemories([record], "animal saved", { vector: [Number.NaN, 0], spaceId: "fixture" }),
     [],
   );
-  assert.equal(rankForgeStoryMemories(f.memory().records, "Harborfall", { maxRecalls: 99 }).length, 3);
+  assert.equal(
+    rankForgeStoryMemories(f.memory().records, "Harborfall", { maxRecalls: 99 }).filter(
+      (record) => record.kind === "chapter",
+    ).length,
+    3,
+  );
+  assert.equal(rankForgeStoryMemories(f.memory().records, "Harborfall", { maxRecalls: 99 }).length, 7);
+  assert.equal(rankForgeStoryMemories(f.memory().records, "Harborfall", { maxRecalls: 1 }).length, 5);
+  assert.equal(rankForgeStoryMemories(f.memory().records, "Harborfall", { maxRecalls: 0 }).length, 4);
+  assert.ok(
+    rankForgeStoryMemories(f.memory().records, "Harborfall", { scope: "chapters" }).every(
+      (record) => record.kind === "chapter",
+    ),
+  );
 });
 
 test("embeddings use document/query intent and only current-space vectors are used", async () => {

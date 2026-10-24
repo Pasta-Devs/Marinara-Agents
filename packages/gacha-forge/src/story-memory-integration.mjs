@@ -374,29 +374,59 @@ export function createForgeStoryMemoryIntegration({
       fallback,
       current = false,
     }) => {
+      let previous = "",
+        previousContent = "";
+      const legacy = async () => {
+        const history = await fallback();
+        if (!previous) return history;
+        // Manual summaries may include the previous chapter. Keep its complete
+        // canonical text even when automatic memory needs recovery. Legacy
+        // history already includes the current scene and locked decisions.
+        const currentBody = prefix.replace(/^# Current chapter so far\n/u, "");
+        const required = [
+          history,
+          history.includes(previousContent) ? "" : previous,
+          current && currentBody && !history.includes(currentBody) ? prefix : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+        const context = await resolveContext(runId, { job, connectionId });
+        if (!context.maxContext) return required;
+        return renderContext(
+          { overview: "", details: [], maxContext: context.maxContext },
+          { prefix: required, fate: "" },
+        );
+      };
       try {
         // Lazy backfill also recovers interrupted background work after a restart.
         const useCurrent = current || (await currentTarget(runId, chapter, storyIndex));
+        const target = useCurrent ? undefined : { chapter, storyIndex };
+        const lastChapter = (await sourceRows(runId, target)).findLast((source) => source.kind === "chapter");
+        if (lastChapter) {
+          previousContent = lastChapter.content;
+          previous = `# Previous chapter in full: ${lastChapter.title}\n${previousContent}`;
+        }
         if (!useCurrent) await memory.maintain({ runId, job, connectionId, debugMode });
         const result = await memory.recall({
           runId,
-          target: useCurrent ? undefined : { chapter, storyIndex },
+          target,
+          excludeChapterIds: lastChapter ? [lastChapter.id] : [],
           query,
           job,
           connectionId,
           debugMode,
         });
-        if (result.status?.phase !== "ready") return fallback();
+        if (result.status?.phase !== "ready") return legacy();
         const partial = useCurrent
           ? await partialBondHistory(runId, current || Number.isInteger(chapter) ? null : chapter)
           : "";
-        return renderContext(result, { prefix: [prefix, partial].filter(Boolean).join("\n\n"), fate });
+        return renderContext(result, { prefix: [previous, prefix, partial].filter(Boolean).join("\n\n"), fate });
       } catch (error) {
         logger?.warn?.(
           "[gacha-forge] story memory unavailable; using canonical history: %s",
           error?.message || "failed",
         );
-        return fallback();
+        return legacy();
       }
     },
   };

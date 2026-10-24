@@ -98,20 +98,34 @@ function cosine(left, right) {
 export function forgeStoryMemoryText({ overview = "", details = [] } = {}) {
   return [
     overview ? `${overviewHeading}${overview}` : "",
-    ...details.map((record) => `# Recalled ${record.kind}: ${record.title}\n${record.content}`),
+    ...[
+      ...details.filter((record) => record.kind === "chapter"),
+      ...details.filter((record) => record.kind !== "chapter"),
+    ].map((record) => `# Recalled ${record.kind}: ${record.title}\n${record.content}`),
   ]
     .filter(Boolean)
     .join("\n\n");
 }
 
-export function rankForgeStoryMemories(records, query, { vector, spaceId, maxRecalls = 3, scope = "all" } = {}) {
+export function rankForgeStoryMemories(
+  records,
+  query,
+  { vector, spaceId, maxRecalls = 3, scope = "all", excludeChapterIds = [] } = {},
+) {
   const queryTerms = terms(query);
   if (!queryTerms.size) return [];
-  const candidates = records.filter((record) => scope !== "chapters" || record.kind === "chapter");
+  const excluded = new Set(
+    Array.isArray(excludeChapterIds) ? excludeChapterIds.filter((id) => typeof id === "string") : [],
+  );
+  const candidates = records.filter(
+    (record) =>
+      (scope !== "chapters" || record.kind === "chapter") && !(record.kind === "chapter" && excluded.has(record.id)),
+  );
   const documents = candidates.map((record) => terms(`${record.title}\n${record.content}`));
   const frequencies = new Map();
   for (const words of documents) for (const word of words) frequencies.set(word, (frequencies.get(word) || 0) + 1);
   const count = Math.min(3, Math.max(0, Number.isSafeInteger(maxRecalls) ? maxRecalls : 3));
+  let chapters = 0;
   return candidates
     .map((record, index) => {
       const words = documents[index];
@@ -135,7 +149,14 @@ export function rankForgeStoryMemories(records, query, { vector, spaceId, maxRec
         right.record.order - left.record.order ||
         left.record.key.localeCompare(right.record.key),
     )
-    .slice(0, count)
+    .filter(({ record }) => {
+      // The three-recall quota belongs to main chapters. Relevant character
+      // stories/chats are separate; final prompt fitting retains whole blocks.
+      if (record.kind !== "chapter") return true;
+      if (chapters >= count) return false;
+      chapters += 1;
+      return true;
+    })
     .map(({ record }) => record);
 }
 

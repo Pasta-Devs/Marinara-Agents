@@ -1025,20 +1025,34 @@ function cosine(left, right) {
 function forgeStoryMemoryText({ overview = "", details = [] } = {}) {
   return [
     overview ? `${overviewHeading}${overview}` : "",
-    ...details.map((record) => `# Recalled ${record.kind}: ${record.title}\n${record.content}`),
+    ...[
+      ...details.filter((record) => record.kind === "chapter"),
+      ...details.filter((record) => record.kind !== "chapter"),
+    ].map((record) => `# Recalled ${record.kind}: ${record.title}\n${record.content}`),
   ]
     .filter(Boolean)
     .join("\n\n");
 }
 
-function rankForgeStoryMemories(records, query, { vector, spaceId, maxRecalls = 3, scope = "all" } = {}) {
+function rankForgeStoryMemories(
+  records,
+  query,
+  { vector, spaceId, maxRecalls = 3, scope = "all", excludeChapterIds = [] } = {},
+) {
   const queryTerms = terms(query);
   if (!queryTerms.size) return [];
-  const candidates = records.filter((record) => scope !== "chapters" || record.kind === "chapter");
+  const excluded = new Set(
+    Array.isArray(excludeChapterIds) ? excludeChapterIds.filter((id) => typeof id === "string") : [],
+  );
+  const candidates = records.filter(
+    (record) =>
+      (scope !== "chapters" || record.kind === "chapter") && !(record.kind === "chapter" && excluded.has(record.id)),
+  );
   const documents = candidates.map((record) => terms(`${record.title}\n${record.content}`));
   const frequencies = new Map();
   for (const words of documents) for (const word of words) frequencies.set(word, (frequencies.get(word) || 0) + 1);
   const count = Math.min(3, Math.max(0, Number.isSafeInteger(maxRecalls) ? maxRecalls : 3));
+  let chapters = 0;
   return candidates
     .map((record, index) => {
       const words = documents[index];
@@ -1062,7 +1076,14 @@ function rankForgeStoryMemories(records, query, { vector, spaceId, maxRecalls = 
         right.record.order - left.record.order ||
         left.record.key.localeCompare(right.record.key),
     )
-    .slice(0, count)
+    .filter(({ record }) => {
+      // The three-recall quota belongs to main chapters. Relevant character
+      // stories/chats are separate; final prompt fitting retains whole blocks.
+      if (record.kind !== "chapter") return true;
+      if (chapters >= count) return false;
+      chapters += 1;
+      return true;
+    })
     .map(({ record }) => record);
 }
 
@@ -1834,29 +1855,59 @@ function createForgeStoryMemoryIntegration({
       fallback,
       current = false,
     }) => {
+      let previous = "",
+        previousContent = "";
+      const legacy = async () => {
+        const history = await fallback();
+        if (!previous) return history;
+        // Manual summaries may include the previous chapter. Keep its complete
+        // canonical text even when automatic memory needs recovery. Legacy
+        // history already includes the current scene and locked decisions.
+        const currentBody = prefix.replace(/^# Current chapter so far\n/u, "");
+        const required = [
+          history,
+          history.includes(previousContent) ? "" : previous,
+          current && currentBody && !history.includes(currentBody) ? prefix : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+        const context = await resolveContext(runId, { job, connectionId });
+        if (!context.maxContext) return required;
+        return renderContext(
+          { overview: "", details: [], maxContext: context.maxContext },
+          { prefix: required, fate: "" },
+        );
+      };
       try {
         // Lazy backfill also recovers interrupted background work after a restart.
         const useCurrent = current || (await currentTarget(runId, chapter, storyIndex));
+        const target = useCurrent ? undefined : { chapter, storyIndex };
+        const lastChapter = (await sourceRows(runId, target)).findLast((source) => source.kind === "chapter");
+        if (lastChapter) {
+          previousContent = lastChapter.content;
+          previous = `# Previous chapter in full: ${lastChapter.title}\n${previousContent}`;
+        }
         if (!useCurrent) await memory.maintain({ runId, job, connectionId, debugMode });
         const result = await memory.recall({
           runId,
-          target: useCurrent ? undefined : { chapter, storyIndex },
+          target,
+          excludeChapterIds: lastChapter ? [lastChapter.id] : [],
           query,
           job,
           connectionId,
           debugMode,
         });
-        if (result.status?.phase !== "ready") return fallback();
+        if (result.status?.phase !== "ready") return legacy();
         const partial = useCurrent
           ? await partialBondHistory(runId, current || Number.isInteger(chapter) ? null : chapter)
           : "";
-        return renderContext(result, { prefix: [prefix, partial].filter(Boolean).join("\n\n"), fate });
+        return renderContext(result, { prefix: [previous, prefix, partial].filter(Boolean).join("\n\n"), fate });
       } catch (error) {
         logger?.warn?.(
           "[gacha-forge] story memory unavailable; using canonical history: %s",
           error?.message || "failed",
         );
-        return fallback();
+        return legacy();
       }
     },
   };

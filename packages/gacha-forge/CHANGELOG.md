@@ -2,6 +2,7 @@
 
 - Automatically remember completed canonical chapters and Character Stories, alongside saved character-chat memories.
 - Maintain a compressed overview within 10% of the generation model's known context, retaining detailed originals for relevant recall.
+- Recall up to three additional chapters plus separate character memories; retain the entire previous chapter and the current chapter so far.
 - Show automatic continuity status and allow retrying failed memory work without blocking gameplay.
 
 ## 1.13.1 — 2026-10-24

@@ -18,6 +18,7 @@ const modulePath = join(directory, "server.mjs");
 await writeFile(modulePath, await readFile(new URL("../packages/gacha-forge/server.mjs", import.meta.url)));
 const originalFetch = globalThis.fetch;
 let metadataAvailable = true;
+let metadataContext = 10000;
 after(async () => {
   globalThis.fetch = originalFetch;
   await rm(directory, { recursive: true, force: true });
@@ -27,7 +28,9 @@ globalThis.fetch = async (input) => {
   assert.equal(url.hostname, "127.0.0.1", "Only local connection metadata may be fetched");
   assert.equal(url.pathname, "/api/connections");
   if (!metadataAvailable) return Response.json({}, { status: 403 });
-  return Response.json([{ id: "fixture-memory", provider: "custom", model: "fixture-only", maxContext: 10000 }]);
+  return Response.json([
+    { id: "fixture-memory", provider: "custom", model: "fixture-only", maxContext: metadataContext },
+  ]);
 };
 let sequence = 0;
 
@@ -38,12 +41,16 @@ async function harness({
   failGeneration = false,
   summarizeReply,
   denyMetadata = false,
+  planChapter = 2,
+  maxContext = 10000,
 } = {}) {
   metadataAvailable = !denyMetadata;
+  metadataContext = maxContext;
   const docs = new Map(stored ? clone(stored) : []);
   const routes = new Map();
   const calls = [];
   const requests = [];
+  const replies = [];
   const warnings = [];
   const faults = { session: failSessionWrite, generation: failGeneration };
   const seed = (id, kind, data) => {
@@ -142,14 +149,14 @@ async function harness({
             return {
               connectionId,
               model: "fixture-only",
-              maxContext: 10000,
+              maxContext,
               async chatComplete(messages, options = {}) {
                 calls.push(clone(messages));
                 requests.push({ messages: clone(messages), maxTokens: options.maxTokens });
                 if (faults.generation) throw new Error("Fixture provider failure");
                 const memory = messages[0].content.includes("Summarize only the supplied canonical story history");
                 const plan = {
-                  chapter: 2,
+                  chapter: planChapter,
                   title: "The keeper's next request",
                   premise: "Return to the keeper after recovering the key.",
                   nodes: Array.from({ length: 10 }, (_, index) =>
@@ -174,7 +181,9 @@ async function harness({
                   content: JSON.stringify(
                     memory
                       ? { summary: summarizeReply?.(messages) ?? "Mari recovered the lighthouse key with the keeper." }
-                      : plan,
+                      : replies.length
+                        ? replies.shift()
+                        : plan,
                   ),
                   finishReason: "stop",
                 };
@@ -198,6 +207,7 @@ async function harness({
   return {
     calls,
     requests,
+    replies,
     warnings,
     faults,
     seed,
@@ -399,4 +409,155 @@ test("protected loopback metadata falls back to the public model facade without 
   assert.equal(status.phase, "ready", JSON.stringify(host.warnings));
   assert.equal(status.overviewBudget, 1000);
   assert.equal(status.recordCount, 1);
+});
+
+test("next-chapter and scene prompts keep three older chapters plus separate character memories and full recent canon", async () => {
+  const host = await harness({
+    planChapter: 6,
+    maxContext: 100000,
+    summarizeReply(messages) {
+      const input = JSON.parse(messages[1].content);
+      // Overview deliberately has no detail markers: only actual recalls can satisfy the assertions.
+      return input.source?.content ?? "Mari recovered the lighthouse key with the keeper.";
+    },
+  });
+  const lastChapter =
+    "LAST-CHAPTER-BEGIN: Mari recovers the lighthouse key. " +
+    "The keeper checked every silver hinge before the travellers left. ".repeat(24) +
+    "LAST-CHAPTER-TAIL: The western door remains locked.";
+  const session = host.data(sessionId);
+  for (let chapter = 1; chapter <= 5; chapter += 1) {
+    session.progress[chapter] = { normal: 1 };
+    host.seed(`${runId}:chapter:${chapter}`, "chapter-plan", {
+      chapter,
+      title: `Lighthouse key chapter ${chapter}`,
+      nodes: [{ index: 1, type: "story", title: "The lighthouse", goal: "Recover the lighthouse key." }],
+    });
+    host.seed(`${runId}:beat:${chapter}:0`, "beat", {
+      segments: [
+        {
+          speaker: "",
+          text: chapter === 5 ? lastChapter : `MAIN-DETAIL-${chapter}: Mari recovers the lighthouse key.`,
+        },
+      ],
+      ...(chapter === 5
+        ? {
+            choices: [
+              {
+                id: "choice-1",
+                kind: "small",
+                at: 0,
+                options: [
+                  {
+                    id: "option-1",
+                    text: "Help the keeper.",
+                    selection: { kind: "action", text: "CANON-LAST-CHOICE: Mari helps the keeper." },
+                    segments: [{ speaker: "", text: "CANON-LAST-BRANCH: The keeper accepts the lighthouse key." }],
+                  },
+                  {
+                    id: "option-2",
+                    text: "Leave the keeper.",
+                    selection: { kind: "action", text: "UNPLAYED-ALTERNATIVE: Mari leaves alone." },
+                    segments: [{ speaker: "", text: "UNPLAYED-ALTERNATIVE: The keeper waits." }],
+                  },
+                ],
+              },
+            ],
+            choiceCanon: { "choice-1": "option-1" },
+            choiceProtagonist: "Mari",
+          }
+        : {}),
+    });
+  }
+  const unitId = `${runId}:unit:keeper`;
+  session.roster[unitId] = { level: 20, bondFights: 100 };
+  session.bondChapters = { [unitId]: { after: 2, beats: 3, opened: 123456 } };
+  host.seed(sessionId, "session", session);
+  host.seed(unitId, "unit", {
+    unitId,
+    kind: "character",
+    name: "Keeper",
+    identitySex: "male",
+    role: "Warrior",
+    affinity: "fire",
+  });
+  host.seed(`${runId}:chapter:bond-keeper`, "chapter-plan", {
+    chapter: "bond-keeper",
+    bondUnitId: unitId,
+    title: "The lighthouse promise",
+    nodes: Array.from({ length: 3 }, (_, index) => ({ index: index + 1, type: "story", title: "Promise" })),
+  });
+  for (let index = 0; index < 3; index += 1)
+    host.seed(`${runId}:beat:bond-keeper:${index}`, "beat", {
+      segments: [
+        { speaker: "Keeper", text: `CHARACTER-STORY-MARKER: Mari recovers the lighthouse key, promise ${index}.` },
+      ],
+    });
+  host.seed(`${runId}:chat:keeper`, "chat", {
+    name: "Keeper",
+    sessions: [
+      {
+        at: 123,
+        count: 2,
+        chapter: 5,
+        memoryPosition: { chapter: 5, nodeIndex: 1 },
+        memory: "CHAT-MEMORY-MARKER: Mari recovers the lighthouse key after consulting the keeper.",
+      },
+    ],
+  });
+  const requestAfter = (start, kind = "chapter planner") => {
+    const request = host.requests
+      .slice(start)
+      .find(({ messages }) => messages[0].content.startsWith(`You are the ${kind}`));
+    assert.ok(request, "The actual shipped writer calls the fixture provider");
+    return request.messages.map((message) => message.content).join("\n");
+  };
+  const checkRecallPools = (prompt) => {
+    const sections = [
+      ...prompt.matchAll(/# Recalled (chapter|character-story|chat): ([^\n]+)\n([\s\S]*?)(?=\n# |$)/gu),
+    ];
+    const chapters = sections.filter((section) => section[1] === "chapter");
+    assert.equal(chapters.length, 3, "Three chapter recalls remain available alongside both character-memory kinds");
+    assert.ok(
+      sections.some((section) => section[1] === "character-story" && section[3].includes("CHARACTER-STORY-MARKER")),
+      "Character Story recall has its own quota",
+    );
+    assert.ok(
+      sections.some((section) => section[1] === "chat" && section[3].includes("CHAT-MEMORY-MARKER")),
+      "Conversation recall does not displace a chapter",
+    );
+    assert.ok(
+      chapters.every((section) => /^Lighthouse key chapter [1-4]$/u.test(section[2])),
+      "The full last chapter does not consume an older-chapter recall slot",
+    );
+    assert.equal(new Set(chapters.map((section) => section[2])).size, 3);
+    assert.ok(
+      prompt.includes(lastChapter),
+      "The entire last completed chapter, including its tail, reaches the provider",
+    );
+    assert.ok(prompt.includes("CANON-LAST-CHOICE") && prompt.includes("CANON-LAST-BRANCH"));
+    assert.ok(!prompt.includes("UNPLAYED-ALTERNATIVE"), "Only the saved first-choice branch enters recent canon");
+  };
+  ok(await host.post("/chapter-plan", { chapter: 6 }));
+  checkRecallPools(requestAfter(0));
+  assert.equal((await settled(host)).recordCount, 7, "All five chapters and both character sources remain archived");
+
+  session.progress[6] = { normal: 1 };
+  host.seed(sessionId, "session", session);
+  host.seed(`${runId}:chapter:6`, "chapter-plan", {
+    chapter: 6,
+    title: "The current lighthouse chapter",
+    nodes: [
+      { index: 1, type: "story", title: "Arrive", goal: "Recover the lighthouse key." },
+      { index: 2, type: "story", title: "Continue", goal: "Mari recovers the lighthouse key." },
+    ],
+  });
+  const currentPrefix = "CURRENT-CHAPTER-PREFIX: Mari raises the lighthouse key above the silver lock.";
+  host.seed(`${runId}:beat:6:0`, "beat", { segments: [{ speaker: "", text: currentPrefix }] });
+  host.replies.push({ places: [], segments: [{ speaker: "", text: "The next door opens." }] });
+  const start = host.requests.length;
+  ok(await host.post("/beat", { chapter: 6, storyIndex: 1 }));
+  const scenePrompt = requestAfter(start, "narrator");
+  checkRecallPools(scenePrompt);
+  assert.ok(scenePrompt.includes(currentPrefix), "The played current chapter stays in addition to recalled history");
 });

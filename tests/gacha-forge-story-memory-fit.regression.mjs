@@ -13,11 +13,13 @@ const details = [
   { kind: "character-story", title: "Trust", content: "SECOND_RELEVANCE: Mira gave the keeper a key." },
   { kind: "chat", title: "Bread", content: "LOW_RELEVANCE: the keeper likes rye bread." },
 ];
+const previousChapter =
+  "# Previous chapter in full\nLAST_CHAPTER_FIRST_LINE\nThe complete canonical path.\nLAST_CHAPTER_LAST_LINE";
 const makeContext = (options = {}) =>
   forgeMemoryContext(
     { overview: "Mari refused the sacrifice.", details, maxContext: 10000, ...options },
     {
-      prefix: "CURRENT_BEATS: The bridge opened.",
+      prefix: `${previousChapter}\n\nCURRENT_BEATS: The bridge opened.`,
       fate: "IRREVOCABLE: Mari chose to help Mira.",
       renderMemory: forgeStoryMemoryText,
     },
@@ -63,6 +65,7 @@ test("full-request fitting removes only the lowest-ranked complete optional deta
   assert.equal(fit.maxTokens, reserve);
   assert.equal(JSON.stringify(fit.messages), JSON.stringify(expected));
   const actual = fit.messages.map((message) => message.content).join("\n");
+  assert.ok(actual.includes(previousChapter), "The entire previous chapter stays byte-for-byte intact");
   for (const text of [
     "Mari refused the sacrifice.",
     "CURRENT_BEATS",
@@ -134,6 +137,7 @@ test("a legacy output-floor overshoot is bounded after optional details, retaini
     "the descriptor's catalog/connection ceiling also applies",
   );
   const body = fit.messages.map((message) => message.content).join("\n");
+  assert.ok(body.includes(previousChapter));
   assert.match(body, /Mari refused the sacrifice/u);
   assert.match(body, /CURRENT_BEATS/u);
   assert.match(body, /IRREVOCABLE/u);
