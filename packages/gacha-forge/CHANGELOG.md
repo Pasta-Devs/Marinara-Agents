@@ -1,3 +1,11 @@
+## 1.15.0 — 2026-10-24
+
+- Choose a generated song for the Home menu in Settings → Look → Visual. Saved songs remain playable when generation is off.
+- Generate a distinct soundtrack for each summon banner and collect it for Home music when pulling any 5-star from that banner.
+- Keep banner rotations separate and reuse generated songs after reload.
+- Select an optional Animations video connection in Sources to generate saved looping banner clips. Portraits remain still.
+- Reuse clips after reload, keep the illustration on failures or reduced motion, and offer pause, play and explicit generation retry controls.
+
 ## 1.14.0 — 2026-10-24
 
 - Automatically remember completed canonical chapters and Character Stories, alongside saved character-chat memories.
