@@ -243,7 +243,7 @@ export function createForgeStoryMemoryIntegration({
   };
   const summaryBudget = async ({ runId, messages, tokenBudget }) => {
     const context = await resolveContext(runId, { job: "compress" });
-    if (!context.maxContext) return null;
+    if (!context.maxContext) throw new Error("compress-context-unknown");
     messages = await prepareMessages(messages, runId);
     const reserve = Math.min(
       tokenBudget || 2000,

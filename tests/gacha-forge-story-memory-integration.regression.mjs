@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createForgeStoryMemoryIntegration } from "../packages/gacha-forge/src/story-memory-integration.mjs";
+import { createForgeStoryMemory } from "../packages/gacha-forge/src/story-memory.mjs";
 
 function fixture(options = {}) {
+  const realMemory = options.realMemory;
   const runId = "memory-frontier";
   const phase = options.phase || "ready";
   const plans = new Map();
@@ -18,6 +20,7 @@ function fixture(options = {}) {
   const memory = createForgeStoryMemoryIntegration({
     createMemory(options) {
       adapters = options;
+      if (realMemory) return createForgeStoryMemory(options);
       return {
         async maintain() {
           return { status: { phase: "ready" } };
@@ -36,7 +39,7 @@ function fixture(options = {}) {
         invalidate() {},
       };
     },
-    documents: {
+    documents: options.documents || {
       async getById() {
         return null;
       },
@@ -54,9 +57,11 @@ function fixture(options = {}) {
     bondHistory: (value) => Object.entries(value.bondChapters).map(([unitId, data]) => ({ unitId, part: 1, ...data })),
     bondChapterId: (unitId) => `bond-${unitId}`,
     bondLength: 3,
-    generate: async () => {
-      throw new Error("No provider calls in integration tests");
-    },
+    generate:
+      options.generate ||
+      (async () => {
+        throw new Error("No provider calls in integration tests");
+      }),
     readConnections:
       options.readConnections ||
       (async () => [{ id: "main", provider: "custom", model: "fixture", maxContext: 10000 }]),
@@ -215,6 +220,79 @@ test("missing HTTP and public context capacities remain unknown", async () => {
     resolveModelMetadata: async () => ({ model: "unknown", maxContext: null }),
   });
   assert.equal((await f.memory.resolveContext(f.runId)).maxContext, null);
+});
+
+test("a known consumer with unknown compression context requests configuration and recovers when it is set", async () => {
+  let saved;
+  let revision = 0;
+  let compressionContext = null;
+  let generations = 0;
+  let contextReads = 0;
+  let loseContextAfterPreflight = false;
+  const f = fixture({
+    realMemory: true,
+    run: { compressConnectionId: "compressor" },
+    readConnections: async () => {
+      contextReads += 1;
+      return [
+        { id: "main", provider: "custom", model: "known-consumer", maxContext: 10000 },
+        {
+          id: "compressor",
+          provider: "custom",
+          model: "unknown-compressor",
+          maxContext: loseContextAfterPreflight && contextReads > 2 ? null : compressionContext,
+        },
+      ];
+    },
+    documents: {
+      getById: async () => saved && { data: structuredClone(saved), revision },
+      create: async ({ data }) => {
+        if (saved) return false;
+        saved = structuredClone(data);
+        revision += 1;
+        return true;
+      },
+      update: async ({ expectedRevision, data }) => {
+        if (expectedRevision !== revision) return false;
+        saved = structuredClone(data);
+        revision += 1;
+        return true;
+      },
+    },
+    generate: async ({ kind, messages }) => {
+      generations += 1;
+      const input = JSON.parse(messages[1].content);
+      return { ok: true, value: kind === "detail" ? input.source.content : "The canonical chapter was completed." };
+    },
+  });
+  f.plan(1);
+  f.session.progress = { 1: { normal: 3 } };
+  assert.equal((await f.memory.resolveContext(f.runId)).maxContext, 10000);
+  const unavailable = await f.memory.maintain({ runId: f.runId });
+  assert.equal(unavailable.status.phase, "context-unknown");
+  assert.equal(unavailable.status.retryable, false);
+  assert.equal(unavailable.status.reason, "configure-compress-context");
+  assert.equal(generations, 0);
+  assert.equal((await f.memory.status(f.runId)).phase, "context-unknown");
+  assert.equal(saved.records.length, 0);
+  assert.equal(saved.work.length, 0);
+  compressionContext = 10000;
+  assert.equal((await f.memory.maintain({ runId: f.runId })).status.phase, "ready");
+  assert.equal(generations, 2);
+  assert.equal(saved.records.length, 1);
+  const good = structuredClone(saved);
+  contextReads = 0;
+  loseContextAfterPreflight = true;
+  const changed = await f.memory.maintain({ runId: f.runId });
+  assert.equal(changed.status.phase, "context-unknown", "A window removed after preflight keeps its distinct reason");
+  assert.equal(changed.status.retryable, false);
+  assert.equal(contextReads, 3, "Unknown capacity must stop at the first fit check, without searching smaller chunks");
+  assert.equal(generations, 2);
+  assert.deepEqual(saved.overview, good.overview);
+  assert.deepEqual(saved.records, good.records);
+  loseContextAfterPreflight = false;
+  assert.equal((await f.memory.maintain({ runId: f.runId })).status.phase, "ready");
+  assert.equal(generations, 2);
 });
 
 test("the full previous canonical chapter precedes current beats and does not spend a recall slot", async () => {

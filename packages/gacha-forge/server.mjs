@@ -1178,6 +1178,15 @@ function createForgeStoryMemory({
       });
       return { overview: "", details: [], status: unavailable, budget: null, maxContext };
     }
+    const summaryContext = await resolveContext(runId, { job: "compress" });
+    if (!Number.isFinite(summaryContext?.maxContext) || summaryContext.maxContext <= 0) {
+      const unavailable = await setStatus({
+        phase: "context-unknown",
+        retryable: false,
+        reason: "configure-compress-context",
+      });
+      return { overview: "", details: [], status: unavailable, budget: null, maxContext };
+    }
     const state = { maxContext, overviewBudget: budget };
     const stale = async () => ({
       status: await setStatus({ ...state, phase: "stale", retryable: true, reason: "source-changed" }),
@@ -1354,13 +1363,11 @@ function createForgeStoryMemory({
       if (!(await stillCurrent())) return stale();
       // Historical views remain ephemeral. CAS and operation ownership also keep
       // a slower worker from replacing another worker's newer completed view.
+      // Retained archives outside this projection are not newly committed work.
       if (
         !target &&
         !(await write(runId, epoch, (latest) =>
-          latest.status?.operationId !== operationId ||
-          latest.records.some(
-            (entry) => !stamps.some(([key, fingerprint]) => entry.key === key && entry.fingerprint === fingerprint),
-          )
+          latest.status?.operationId !== operationId || !same(sourceStamp(latest.records), sourceStamp(data.records))
             ? null
             : { ...latest, overview: next, work: latest.work.filter((entry) => entry.id !== folded.id) },
         ))
@@ -1394,16 +1401,24 @@ function createForgeStoryMemory({
         try {
           return await maintainImpl(options, epoch, signal, frame);
         } catch (error) {
-          log?.(error);
+          const unknownContext = error?.message === "compress-context-unknown";
+          if (!unknownContext) log?.(error);
           const failed = {
             ...(frame.budget ? { maxContext: frame.maxContext, overviewBudget: frame.budget } : {}),
-            phase: signal.aborted || error?.message === "source-changed" ? "stale" : "error",
-            retryable: true,
+            phase:
+              signal.aborted || error?.message === "source-changed"
+                ? "stale"
+                : unknownContext
+                  ? "context-unknown"
+                  : "error",
+            retryable: !unknownContext || signal.aborted,
             reason: signal.aborted
               ? "interrupted"
               : error?.message === "source-changed"
                 ? "source-changed"
-                : "generation-failed",
+                : unknownContext
+                  ? "configure-compress-context"
+                  : "generation-failed",
           };
           if (!options.target)
             await write(runId, epoch, (data) =>
@@ -1724,7 +1739,7 @@ function createForgeStoryMemoryIntegration({
   };
   const summaryBudget = async ({ runId, messages, tokenBudget }) => {
     const context = await resolveContext(runId, { job: "compress" });
-    if (!context.maxContext) return null;
+    if (!context.maxContext) throw new Error("compress-context-unknown");
     messages = await prepareMessages(messages, runId);
     const reserve = Math.min(
       tokenBudget || 2000,
@@ -2019,7 +2034,7 @@ function fitForgeMemoryPrompt(messages, { maxContext, maxTokens, estimateMessage
     );
   return {
     messages: fitted,
-    maxTokens: reserve ? Math.min(reserve, remaining) : remaining,
+    maxTokens: reserve ? Math.min(reserve, remaining) : maxTokens,
     fits: true,
     droppedDetails,
   };

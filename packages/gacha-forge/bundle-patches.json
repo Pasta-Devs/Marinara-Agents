@@ -614,11 +614,11 @@
             },
             {
               "find": "_fillContinuity(){let e=this._root.querySelector(\"[data-continuity-list]\");",
-              "replace": "_fillContinuity(){wireForgeStoryMemoryStatus(this);let e=this._root.querySelector(\"[data-continuity-list]\");"
+              "replace": "_fillContinuity(forgeMemoryWired=false){forgeMemoryWired||wireForgeStoryMemoryStatus(this);let e=this._root.querySelector(\"[data-continuity-list]\");"
             },
             {
               "find": "this._wireFullscreen(),restoreForgeExpandedEditor(this,forgeExpandedEditor),this._wireRunsButton()",
-              "replace": "this._wireFullscreen(),restoreForgeExpandedEditor(this,forgeExpandedEditor),wireForgeStoryMemoryStatus(this),this._wireRunsButton()"
+              "replace": "this._wireFullscreen(),restoreForgeExpandedEditor(this,forgeExpandedEditor),wireForgeStoryMemoryStatus(this,Ze,forgeMemoryStatus),this._wireRunsButton()"
             },
             {
               "find": "disposeForgeAudio(this),this._stopForgeBrowserPresentation?.(),",
@@ -627,6 +627,14 @@
             {
               "find": "this._renderBrowser():(this._stopForgeBrowserPresentation?.(),this._root.innerHTML=\"\")",
               "replace": "this._renderBrowser():(this._stopForgeBrowserPresentation?.(),this._stopForgeStoryMemoryStatus?.(),this._root.innerHTML=\"\")"
+            },
+            {
+              "find": "const forgeExpandedEditor=captureForgeExpandedEditor(this,e);",
+              "replace": "const forgeExpandedEditor=captureForgeExpandedEditor(this,e),forgeMemoryStatus=captureForgeStoryMemoryStatus(this,e);"
+            },
+            {
+              "find": "this._continuity&&this._fillContinuity(),this._boot===",
+              "replace": "this._continuity&&this._fillContinuity(true),this._boot==="
             }
           ]
         }

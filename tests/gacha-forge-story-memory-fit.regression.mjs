@@ -52,6 +52,20 @@ test("a fitting memory request keeps every input byte, original reply cap and or
   );
 });
 
+test("absent or non-positive reply caps remain unchanged with and without memory metadata", () => {
+  const messages = prompt();
+  const ordinary = [{ role: "user", content: "ordinary" }];
+  for (const maxTokens of [undefined, null, 0, -1, Number.NaN]) {
+    for (const input of [messages, ordinary]) {
+      const result = fitForgeMemoryPrompt(input, { maxContext: 10000, maxTokens, estimateMessages });
+      assert.equal(result.fits, true);
+      assert.equal(result.maxTokens, maxTokens, "Remaining context must never become an invented reply cap");
+      assert.equal(result.messages, input);
+      assert.equal(result.droppedDetails, 0);
+    }
+  }
+});
+
 test("full-request fitting removes only the lowest-ranked complete optional detail block", () => {
   const context = makeContext();
   const messages = prompt(context);

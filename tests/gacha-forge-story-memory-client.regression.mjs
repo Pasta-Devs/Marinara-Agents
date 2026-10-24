@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { forgeStoryMemoryEnglish } from "../packages/gacha-forge/src/story-memory-en.mjs";
 import {
   adoptForgeStoryMemoryStatus,
+  captureForgeStoryMemoryStatus,
   forgeStoryMemoryStatusHtml,
   wireForgeStoryMemoryStatus,
 } from "../packages/gacha-forge/src/story-memory-client.mjs";
@@ -20,14 +21,46 @@ const response = (phase, retryable = false) => ({
   json: async () => ({ ok: true, memory: { phase, retryable } }),
 });
 function fixture(phase) {
-  const mount = { innerHTML: "", onclick: null };
+  let html = "";
+  let status;
+  let button;
+  const mount = {
+    dataset: {},
+    onclick: null,
+    querySelector: (selector) => (selector === '[role="status"]' ? status : button),
+    contains: (node) => node === status || node === button,
+    get status() {
+      return status;
+    },
+    get button() {
+      return button;
+    },
+  };
   const host = {
     _run: { runId: "world-one" },
     _hudView: "settings",
     _settingsCategory: "continuity",
     isConnected: true,
-    _root: { querySelector: () => mount },
+    _root: { querySelector: () => mount, activeElement: null },
   };
+  const element = (textContent) => ({
+    textContent,
+    hidden: false,
+    disabled: false,
+    focus() {
+      host._root.activeElement = this;
+    },
+  });
+  Object.defineProperty(mount, "innerHTML", {
+    configurable: true,
+    get: () => html,
+    set: (value) => {
+      html = value;
+      status = element(value.match(/<p role="status"[^>]*>(.*?)<\/p>/u)?.[1] || "");
+      button = element(value.match(/<button[^>]*data-forge-memory-retry[^>]*>(.*?)<\/button>/u)?.[1] || "");
+      host._root.activeElement = null;
+    },
+  });
   if (phase)
     adoptForgeStoryMemoryStatus(
       host,
@@ -88,7 +121,7 @@ try {
     f.click();
     assert.equal(requests.length, 1);
     assert.match(requests[0].url, /\/story-memory\/retry$/);
-    assert.match(f.mount.innerHTML, /disabled/);
+    assert.equal(f.mount.button.disabled, true);
     f.host._run = { runId: "world-two" };
     f.host._stopForgeStoryMemoryStatus();
     const html = f.mount.innerHTML;
@@ -129,14 +162,14 @@ try {
         : response("context-unknown");
     });
     await settle();
-    assert.match(f.mount.innerHTML, /Could not check/);
+    assert.match(f.mount.status.textContent, /Could not check/);
     assert.doesNotMatch(f.mount.innerHTML, /<script>/);
     assert.equal(timers.size, 0);
     f.click();
     await settle();
     assert.equal(requests.length, 2);
     assert.ok(requests.every((url) => url.endsWith("/status")));
-    assert.match(f.mount.innerHTML, /Engine Connections/);
+    assert.match(f.mount.status.textContent, /Engine Connections/);
     f.host._stopForgeStoryMemoryStatus();
   });
   await test("leaving Continuity cancels pending polling and removes its click listener", () => {
@@ -150,6 +183,129 @@ try {
     wireForgeStoryMemoryStatus(f.host, () => {});
     assert.equal(timers.size, 0);
     assert.equal(f.mount.onclick, null);
+  });
+  await test("background polling retains its live-region shell and pending copy", () => {
+    const f = fixture("pending");
+    let writes = 0;
+    const html = Object.getOwnPropertyDescriptor(f.mount, "innerHTML");
+    Object.defineProperty(f.mount, "innerHTML", {
+      get: html.get,
+      set: (value) => {
+        html.set(value);
+        writes += 1;
+      },
+    });
+    wireForgeStoryMemoryStatus(f.host, () => new Promise(() => {}));
+    [...timers.values()][0]();
+    assert.equal(writes, 1, "A background read must not replace the live region");
+    assert.match(f.mount.innerHTML, /Updating story memory/);
+    assert.doesNotMatch(f.mount.innerHTML, /Checking story memory/);
+    f.host._stopForgeStoryMemoryStatus();
+  });
+  await test("retry keeps stable status/action nodes and deliberate focus through a rewire and completion", async () => {
+    const f = fixture("stale");
+    let finish;
+    const request = () => new Promise((resolve) => (finish = resolve));
+    wireForgeStoryMemoryStatus(f.host, request);
+    const status = f.mount.status;
+    const button = f.mount.button;
+    button.focus();
+    wireForgeStoryMemoryStatus(f.host, request);
+    assert.equal(f.mount.status, status);
+    assert.equal(f.mount.button, button);
+    assert.equal(f.host._root.activeElement, button);
+    f.click();
+    assert.equal(f.host._root.activeElement, status);
+    assert.equal(button.disabled, true);
+    finish(response("ready"));
+    await settle();
+    assert.equal(f.mount.status, status);
+    assert.equal(f.mount.button, button);
+    assert.equal(button.hidden, true);
+    assert.equal(f.host._root.activeElement, status);
+    assert.match(status.textContent, /up to date/);
+    f.host._stopForgeStoryMemoryStatus();
+  });
+  await test("settings rebuild restores the captured native mount only within the same world and Continuity", () => {
+    const f = fixture("stale");
+    wireForgeStoryMemoryStatus(f.host, () => {});
+    const status = f.mount.status;
+    const button = f.mount.button;
+    button.focus();
+    const captured = captureForgeStoryMemoryStatus(f.host, "settings");
+    assert.equal(captured.mount, f.mount);
+    const placeholder = {
+      replaceWith: (mount) => {
+        f.host._root.querySelector = () => mount;
+      },
+    };
+    f.host._root.querySelector = () => placeholder;
+    f.host._root.activeElement = null;
+    wireForgeStoryMemoryStatus(f.host, () => {}, captured);
+    assert.equal(f.mount.status, status);
+    assert.equal(f.mount.button, button);
+    assert.equal(f.host._root.activeElement, button);
+    f.host._settingsCategory = "visual";
+    assert.equal(captureForgeStoryMemoryStatus(f.host, "settings"), null);
+    f.host._settingsCategory = "continuity";
+    f.host._run = { runId: "world-two" };
+    assert.equal(captureForgeStoryMemoryStatus(f.host, "settings"), null);
+    f.host._run = null;
+    f.host._root.querySelector = () => null;
+    assert.equal(captureForgeStoryMemoryStatus(f.host, "settings"), null);
+    f.host._stopForgeStoryMemoryStatus();
+  });
+  await test("an interrupted retry reconciles once with a read-only status after a rewire or full rebuild", async () => {
+    for (const rebuild of [false, true]) {
+      const f = fixture("stale");
+      const requests = [];
+      let finishRetry;
+      const request = (url, options) => {
+        requests.push({ url, options });
+        if (url.endsWith("/retry")) return new Promise((resolve) => (finishRetry = resolve));
+        return Promise.resolve(response("ready"));
+      };
+      wireForgeStoryMemoryStatus(f.host, request);
+      const status = f.mount.status;
+      const button = f.mount.button;
+      button.focus();
+      f.click();
+      assert.equal(f.host._root.activeElement, status);
+      let captured;
+      if (rebuild) {
+        captured = captureForgeStoryMemoryStatus(f.host, "settings");
+        f.host._root.querySelector = () => ({
+          replaceWith: (mount) => {
+            f.host._root.querySelector = () => mount;
+          },
+        });
+        f.host._root.activeElement = null;
+      }
+      wireForgeStoryMemoryStatus(f.host, request, captured);
+      await settle();
+      assert.equal(requests[0].options.signal.aborted, true);
+      assert.equal(requests.filter(({ url }) => url.endsWith("/retry")).length, 1);
+      assert.equal(requests.filter(({ url }) => url.endsWith("/status")).length, 1);
+      assert.equal(f.mount.status, status);
+      assert.equal(f.mount.button, button);
+      assert.equal(f.host._root.activeElement, status);
+      assert.equal(f.host._storyMemoryStatus.phase, "ready");
+      finishRetry(response("error", true));
+      await settle();
+      assert.equal(f.host._storyMemoryStatus.phase, "ready", "aborted retry must not overwrite reconciliation");
+      f.host._stopForgeStoryMemoryStatus();
+    }
+    const f = fixture("stale");
+    const requests = [];
+    wireForgeStoryMemoryStatus(f.host, (url) => (requests.push(url), new Promise(() => {})));
+    f.click();
+    f.host._run = { runId: "world-two" };
+    adoptForgeStoryMemoryStatus(f.host, { memory: { phase: "context-unknown" } }, "world-two");
+    wireForgeStoryMemoryStatus(f.host, (url) => (requests.push(url), Promise.resolve(response("ready"))));
+    await settle();
+    assert.equal(requests.length, 1, "an old world's interrupted retry must not reconcile into a new world");
+    assert.equal(f.host._storyMemoryStatus.phase, "context-unknown");
+    f.host._stopForgeStoryMemoryStatus();
   });
 } finally {
   globalThis.setTimeout = original.setTimeout;

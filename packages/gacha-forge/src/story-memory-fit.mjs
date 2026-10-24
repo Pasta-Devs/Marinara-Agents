@@ -102,7 +102,7 @@ export function fitForgeMemoryPrompt(messages, { maxContext, maxTokens, estimate
     );
   return {
     messages: fitted,
-    maxTokens: reserve ? Math.min(reserve, remaining) : remaining,
+    maxTokens: reserve ? Math.min(reserve, remaining) : maxTokens,
     fits: true,
     droppedDetails,
   };

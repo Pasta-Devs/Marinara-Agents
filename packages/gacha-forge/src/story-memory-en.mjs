@@ -8,7 +8,7 @@ export const forgeStoryMemoryEnglish = Object.freeze({
   "story.memory.stale": "Story memory needs an update. Saved records are safe, and you can keep playing.",
   "story.memory.error": "Story memory could not update. Saved records are safe, and you can keep playing.",
   "story.memory.contextUnknown":
-    "Set the selected generation connection’s context window in Engine Connections so automatic memory can use the right budget. You can keep playing.",
+    "Set the missing context window for the generation or compression connection in Engine Connections so automatic memory can use the right budget. You can keep playing.",
   "story.memory.unavailable": "Could not check story memory. Try checking again; you can keep playing.",
   "story.memory.retry": "Retry memory update",
   "story.memory.retrying": "Retrying memory update…",

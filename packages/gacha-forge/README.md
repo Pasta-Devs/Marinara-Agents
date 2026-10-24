@@ -4,7 +4,7 @@
 
 Gacha Forge automatically keeps memories from the world's completed canonical chapters, Character Stories and character conversations. Original records stay saved. Later writing receives the constant overview, up to three relevant detailed chapter summaries, separate relevant character memories, the entire previous chapter, and the current chapter so far, in that order. The full previous chapter does not consume a recall slot. Saved first-play choices remain canonical; replaying an alternative does not replace them.
 
-The overview uses at most 10% of the selected generation model's context window, measured with the Engine's token estimator. If that context window is unknown, configure it for the selected connection in **Engine Connections**. Gacha Forge reports the missing configuration instead of guessing a model limit.
+The overview uses at most 10% of the selected generation model's context window, measured with the Engine's token estimator. If the generation or compression connection's context window is unknown, configure it in **Engine Connections**. Gacha Forge reports the missing configuration instead of guessing a model limit.
 
 All saved character memories contribute to the overview. Relevant Character Story and conversation details are recalled separately from the three chapters. When space is tight, whole optional recall blocks are removed in relevance order; the complete previous chapter and current played content remain intact. If required history alone exceeds the model's context, generation reports the overflow instead of silently shortening it.
 

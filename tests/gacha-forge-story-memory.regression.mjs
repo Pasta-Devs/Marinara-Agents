@@ -171,6 +171,65 @@ test("unknown context never fabricates a cap or pays for summaries; oversized ou
   assert.ok(f.io.estimateTokens(forgeStoryMemoryText({ overview: failed.overview })) <= failed.budget);
 });
 
+test("unknown compression capacity stops before chunk probes and preserves reusable memory until configured", async () => {
+  const f = fixture();
+  let compressionContext = 2000;
+  let probes = 0;
+  const service = f.create({
+    resolveContext: async (_runId, { job }) => ({ maxContext: job === "compress" ? compressionContext : 2000 }),
+    fitsSummary: async () => {
+      probes += 1;
+      return compressionContext != null;
+    },
+  });
+  assert.equal((await service.maintain({ runId: "world" })).status.phase, "ready");
+  const good = f.memory();
+  const callsBefore = f.calls.length;
+  const probesBefore = probes;
+  compressionContext = null;
+  const unavailable = await service.maintain({ runId: "world" });
+  assert.equal(unavailable.status.phase, "context-unknown");
+  assert.equal(unavailable.status.retryable, false);
+  assert.equal(unavailable.status.reason, "configure-compress-context");
+  assert.equal(f.calls.length, callsBefore);
+  assert.equal(probes, probesBefore, "Unknown capacity must not probe chunks or invalidate a reusable overview");
+  assert.deepEqual(f.memory().records, good.records);
+  assert.deepEqual(f.memory().overview, good.overview);
+  compressionContext = 2000;
+  assert.equal((await service.maintain({ runId: "world" })).status.phase, "ready");
+  assert.equal(f.calls.length, callsBefore, "Restoring context reuses the complete canonical overview");
+});
+
+test("a smaller eligible source projection rebuilds its overview without deleting archived originals", async () => {
+  const rows = [source("1", "Keeper saved at Harborfall."), source("2", "Arden returned the moonstone.")];
+  const f = fixture(rows);
+  const service = f.create({
+    summarize: async (request) => {
+      f.calls.push(request);
+      const input = JSON.parse(request.messages[1].content);
+      return request.kind === "detail"
+        ? input.source.content
+        : [input.previousOverview, ...input.records.map((record) => record.content)].filter(Boolean).join(" ");
+    },
+  });
+  assert.equal((await service.maintain({ runId: "world" })).status.phase, "ready");
+  const archives = f.memory().records;
+  f.setRows(rows.slice(0, 1));
+  const smaller = await service.recall({ runId: "world", query: "Harborfall moonstone" });
+  assert.equal(smaller.status.phase, "ready");
+  assert.match(smaller.overview, /Keeper saved/);
+  assert.doesNotMatch(smaller.overview, /Arden|moonstone/);
+  assert.deepEqual(f.memory().records, archives);
+  assert.deepEqual(f.memory().overview.sources, [[archives[0].key, archives[0].fingerprint]]);
+  assert.deepEqual(
+    smaller.details.map((record) => record.id),
+    ["1"],
+  );
+  const callsBefore = f.calls.length;
+  assert.equal((await service.maintain({ runId: "world" })).status.phase, "ready");
+  assert.equal(f.calls.length, callsBefore, "The smaller projection remains reusable across subsequent updates");
+});
+
 test("failed overview restarts from persisted detail, and interrupted status is recoverable without a UI model call", async () => {
   const f = fixture();
   const failed = f.create({

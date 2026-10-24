@@ -94,7 +94,8 @@ async function openMemory(page: Page, testInfo: TestInfo, initial: Memory) {
   });
   await page.route("**/api/gacha-forge/story-memory/retry", async (route) => {
     fixture.retry.push(route.request().postDataJSON().runId);
-    await route.fulfill({ json: { ok: true, memory: await fixture.retryReply() } });
+    const memory = await fixture.retryReply();
+    await route.fulfill({ json: { ok: true, memory } }).catch(() => {});
   });
   await page.route("**/api/gacha-forge/compress", (route) => {
     const input = route.request().postDataJSON();
@@ -152,17 +153,51 @@ test("Explicit retry settles to ready and manual compression and combining remai
   let finishRetry!: () => void;
   fixture.retryReply = async () => {
     await new Promise<void>((resolve) => (finishRetry = resolve));
-    return (fixture.memory = { phase: "pending", retryable: false });
+    return { phase: "pending", retryable: false };
   };
-  fixture.statusReply = async () => (fixture.memory = { phase: "ready", retryable: false });
+  const finishReads: (() => void)[] = [];
+  fixture.statusReply = async () => {
+    await new Promise<void>((resolve) => finishReads.push(resolve));
+    return (fixture.memory = { phase: "ready", retryable: false });
+  };
   const retry = forge.getByRole("button", { name: "Retry memory update", exact: true });
-  await retry.click();
+  const originalStatus = await status.elementHandle();
+  const originalAction = await retry.elementHandle();
+  await retry.focus();
+  await forge.evaluate((node) => {
+    const game = node as any;
+    game._fillContinuity();
+    game._settingsRev += 1;
+    game._renderBrowser();
+  });
+  await expect(retry).toBeFocused();
+  expect(await status.evaluate((node, original) => node === original, originalStatus)).toBe(true);
+  expect(await retry.evaluate((node, original) => node === original, originalAction)).toBe(true);
+  await retry.press("Enter");
   await expect.poll(() => fixture.retry).toEqual(["memory-world-one"]);
   await expect(retry).toBeDisabled();
   await expect(status).toHaveText("Retrying memory update…");
+  await expect(status).toBeFocused();
+  const reads = fixture.status.length;
+  await forge.evaluate((node) => (node as any)._fillContinuity());
+  await expect.poll(() => fixture.status.length).toBe(reads + 1);
+  await forge.evaluate((node) => {
+    const game = node as any;
+    game._settingsRev += 1;
+    game._renderBrowser();
+  });
+  await expect.poll(() => fixture.status.length).toBe(reads + 2);
+  expect(fixture.retry).toEqual(["memory-world-one"]);
+  await expect(status).toBeFocused();
+  for (const finish of finishReads) finish();
   finishRetry();
   await expect(status).toHaveText("Story memory is up to date.");
-  await expect(forge.locator("[data-forge-memory-retry]")).toHaveCount(0);
+  await expect(forge.locator("[data-forge-memory-retry]")).toBeHidden();
+  expect(await status.evaluate((node, original) => node === original, originalStatus)).toBe(true);
+  expect(
+    await forge.locator("[data-forge-memory-retry]").evaluate((node, original) => node === original, originalAction),
+  ).toBe(true);
+  await expect(status).toBeFocused();
   await forge.locator('[data-compress="1"]').click();
   await expect.poll(() => fixture.compress).toEqual([{ runId: "memory-world-one", chapter: 1 }]);
   await expect(forge.locator('[data-compress="1"]')).toHaveCount(0);
@@ -175,6 +210,8 @@ test("Explicit retry settles to ready and manual compression and combining remai
   await forge.locator("[data-fold-cancel]").click();
   await expect(status).toHaveText("Story memory is up to date.");
   await page.screenshot({ path: testInfo.outputPath(`memory-ready-${testInfo.project.name}.png`) });
+  await originalStatus?.dispose();
+  await originalAction?.dispose();
 });
 
 test("Leaving Continuity aborts pending reads and an old world's reply cannot replace current status", async ({
@@ -183,12 +220,16 @@ test("Leaving Continuity aborts pending reads and an old world's reply cannot re
   const { forge, fixture, status } = await openMemory(page, testInfo, { phase: "pending", retryable: false });
   await expect(status).toHaveText("Updating story memory. You can keep playing.");
   const initialReads = fixture.status.length;
+  const originalStatus = await status.elementHandle();
   let releaseOld!: () => void;
-  fixture.statusReply = async () => {
+  fixture.statusReply = async (runId) => {
+    if (runId !== "memory-world-one") return fixture.memory;
     await new Promise<void>((resolve) => (releaseOld = resolve));
     return { phase: "error", retryable: true };
   };
   await expect.poll(() => fixture.status.length).toBeGreaterThan(initialReads);
+  await expect(status).toHaveText("Updating story memory. You can keep playing.");
+  expect(await status.evaluate((node, original) => node === original, originalStatus)).toBe(true);
   await forge.locator('[role="tab"][data-view="visual"]').click();
   await expect(status).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => (window as any).__forgeMemoryAborts)).toContain("memory-world-one");
@@ -206,4 +247,5 @@ test("Leaving Continuity aborts pending reads and an old world's reply cannot re
   await expect(forge.getByRole("button", { name: "Check context", exact: true })).toBeVisible();
   expect(await forge.evaluate((node) => (node as any)._storyMemoryRunId)).toBe("memory-world-two");
   expect(fixture.retry).toEqual([]);
+  await originalStatus?.dispose();
 });
