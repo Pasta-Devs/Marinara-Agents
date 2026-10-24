@@ -24,6 +24,15 @@ test("Welcome Gift rewards leave Claim reachable on short touch screens", async 
   await page.route("**/api/gacha-forge/state", (route) =>
     route.fulfill({ json: { runs: [], guidesSeen: ["welcome"] } }),
   );
+  // Keep the setup draft in the same isolated fixture as the mocked world state.
+  let setupSnapshot: unknown = null;
+  await page.route("**/api/gacha-forge/setup/draft", (route) => {
+    if (route.request().method() === "POST") {
+      setupSnapshot = route.request().postDataJSON().snapshot;
+      return route.fulfill({ json: { ok: true } });
+    }
+    return route.fulfill({ json: { ok: true, draft: setupSnapshot } });
+  });
   let claims = 0;
   await page.route("**/api/gacha-forge/newworld/claim", (route) => {
     expect(route.request().postDataJSON()).toEqual({ runId: "welcome-layout" });

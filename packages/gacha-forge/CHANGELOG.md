@@ -1,3 +1,11 @@
+## 1.13.1 — 2026-10-24
+
+- Character scenes, banners, portraits and outfits use available character/persona avatar references; provider support and limits still apply.
+- Story artwork starts below its header and preserves the top of the image.
+- Mobile ordinary and expanded editors adapt to the height left by the keyboard; expanded settings drafts survive refreshes.
+- Units explains the Home progression dot and refreshes its recommendation after level, equip and ascension actions.
+- Blocking combat dialogue supports keyboard focus and returns to combat controls afterward.
+
 ## 1.13.0 — 2026-10-24
 
 - Added Soldier, Elite and Boss enemy tiers in combat and enemy details.

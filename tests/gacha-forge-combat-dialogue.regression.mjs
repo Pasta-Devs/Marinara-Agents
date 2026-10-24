@@ -16,6 +16,7 @@ const original = {
   document: globalThis.document,
   setTimeout: globalThis.setTimeout,
   clearTimeout: globalThis.clearTimeout,
+  getComputedStyle: globalThis.getComputedStyle,
 };
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -48,6 +49,7 @@ class Element extends EventTarget {
   set innerHTML(value) {
     this.markup = value;
     this.parts = { b: new Element("b"), p: new Element("p"), button: new Element("button") };
+    for (const part of Object.values(this.parts)) part.parent = this;
   }
   querySelector(selector) {
     return this.parts?.[selector] || null;
@@ -66,7 +68,29 @@ class Element extends EventTarget {
     this.children.push(child);
   }
   remove() {
+    this.removed = true;
     if (this.parent) this.parent.children = this.parent.children.filter((child) => child !== this);
+  }
+  get isConnected() {
+    return !this.removed && (!this.parent || this.parent.isConnected);
+  }
+  getClientRects() {
+    return this.hidden || !this.isConnected ? [] : [{}];
+  }
+  contains(element) {
+    return (
+      !!element &&
+      (element === this ||
+        Object.values(this.parts || {}).some((part) => part.contains(element)) ||
+        this.children.some((child) => child.contains(element)))
+    );
+  }
+  getRootNode() {
+    return this.parent?.getRootNode() || this.ownerRoot || this;
+  }
+  focus() {
+    this.focusCalls = (this.focusCalls || 0) + 1;
+    this.getRootNode().activeElement = this;
   }
   click() {
     this.dispatchEvent(new Event("click"));
@@ -105,7 +129,13 @@ function clock() {
 function harness(cues, options = {}) {
   const screen = new Element();
   const autoButton = new Element("button");
-  const root = { querySelector: (selector) => ({ ".screen": screen, "[data-auto]": autoButton })[selector] || null };
+  const root = {
+    activeElement: null,
+    querySelector: (selector) => ({ ".screen": screen, "[data-auto]": autoButton })[selector] || null,
+    querySelectorAll: () => [],
+  };
+  screen.ownerRoot = root;
+  autoButton.ownerRoot = root;
   const run = options.run || { auto: false };
   const spoken = [];
   let resumed = 0;
@@ -129,6 +159,7 @@ function harness(cues, options = {}) {
   });
   return {
     controller,
+    root,
     run,
     screen,
     autoButton,
@@ -155,6 +186,7 @@ function harness(cues, options = {}) {
 
 try {
   globalThis.document = { createElement: (tag) => new Element(tag) };
+  globalThis.getComputedStyle = () => ({ visibility: "visible" });
   await test("Soldier legacy fallback, explicit Elite/Boss and Tower mechanics agree across tier helpers", () => {
     assert.equal(forgeEnemyTier({}), "soldier");
     assert.equal(forgeEnemyTier({ tier: "invalid" }), "soldier");
@@ -173,6 +205,74 @@ try {
     assert.equal(forgeEncounterTier({ enemies: [{}, { tier: "elite" }] }), "elite");
     assert.equal(forgeEncounterTier({ enemies: [{ tier: "elite" }, { mech: ["charge"] }] }), "boss");
     assert.match(forgeEnemyTierBadge(enemy), /data-forge-tier="boss">Boss</u);
+  });
+  await test("Blocking focus enters once per queue, restores a visible prior control and falls back after removal", () => {
+    clock();
+    const h = harness([cue("intro"), cue("intro", { content: "second" })]);
+    const prior = new Element("button");
+    prior.ownerRoot = h.root;
+    prior.focus();
+    h.controller.event({ op: "start" });
+    const next = h.panel.querySelector("button");
+    assert.equal(h.root.activeElement, next);
+    assert.equal(next.focusCalls, 1);
+    h.next();
+    assert.equal(h.root.activeElement, next);
+    assert.equal(next.focusCalls, 1, "The next line must not interrupt focus or live announcements");
+    h.next();
+    assert.equal(h.root.activeElement, prior);
+    h.controller.dispose();
+    const fallback = harness([cue("intro")]);
+    fallback.root.activeElement = prior;
+    fallback.controller.event({ op: "start" });
+    prior.removed = true;
+    fallback.next();
+    assert.equal(fallback.root.activeElement, fallback.autoButton);
+    fallback.controller.dispose();
+    const external = harness([cue("intro")]);
+    external.controller.event({ op: "start" });
+    external.root.activeElement = null;
+    document.activeElement = {};
+    external.next();
+    assert.equal(
+      external.root.activeElement,
+      null,
+      "Auto must not pull focus from an Engine control outside the package",
+    );
+    external.controller.dispose();
+    const ancestor = harness([cue("intro")]);
+    ancestor.controller.event({ op: "start" });
+    ancestor.root.activeElement = null;
+    document.activeElement = { contains: () => true };
+    ancestor.next();
+    assert.equal(
+      ancestor.root.activeElement,
+      ancestor.autoButton,
+      "A package ancestor is WebKit's native fallback when inspection closes",
+    );
+    document.activeElement = undefined;
+    ancestor.controller.dispose();
+  });
+  await test("Enemy inspection defers first focus and Auto restores it after the final timer", async () => {
+    const time = clock();
+    const h = harness([cue("intro")], { run: { auto: true } });
+    const inspector = new Element("button");
+    inspector.ownerRoot = h.root;
+    inspector.focus();
+    h.pause(true);
+    h.controller.event({ op: "start" });
+    assert.equal(h.root.activeElement, inspector);
+    await tick();
+    await time.advance(3000);
+    assert.equal(h.root.activeElement, inspector);
+    h.pause(false);
+    assert.equal(h.root.activeElement, h.panel.querySelector("button"));
+    // Closing inspection can remove its focused Close button before the Auto timer settles.
+    inspector.removed = true;
+    h.root.activeElement = null;
+    await time.advance(2000);
+    assert.equal(h.root.activeElement, h.autoButton);
+    h.controller.dispose();
   });
   await test("Only real enemy IDs speak; generated content stays text and Manual never auto-advances", async () => {
     const time = clock();
@@ -460,6 +560,7 @@ try {
         HTMLElement: class {},
         console,
         document: globalThis.document,
+        getComputedStyle: globalThis.getComputedStyle,
         setTimeout,
         clearTimeout,
         AbortController,
