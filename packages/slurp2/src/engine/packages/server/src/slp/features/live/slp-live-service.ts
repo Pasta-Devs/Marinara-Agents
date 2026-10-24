@@ -160,7 +160,14 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
     if (!show.endedAt) {
       if (show.hostKind === "player") await endSlurpPlayerLiveShow(db, show.id, at);
       else {
-        if (privateActive) return;
+        // A private payment still in flight would extend the show, so wait for it (2 minutes at most).
+        const privatePending = show.privateClaims.some(
+          (claim) =>
+            claim.status === "pending" &&
+            !claim.requestId.includes(":private-offer:") &&
+            at.getTime() - Date.parse(claim.at) < 120_000,
+        );
+        if (privateActive || privatePending) return;
         const recap = await createSlurpStorage(db).createPost({
           authorAccountId: show.hostId,
           content: slurpLiveRecap(show),

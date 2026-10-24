@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 0.4.2 — 2026-10-24
+
+- A repeated live tip resumes its payment through the show-scoped DM tip id instead of reporting it as done, so a crash between claim and charge no longer drops the coins.
+- A Creator show waits up to 2 minutes for a private payment in flight before it ends and posts its recap.
+- Tip events are kept past the 200-event cap, so tip dedupe and the recap's top tipper cover the whole show.
+
 ## 0.4.1 — 2026-10-24
 
 - Live shows (`features/live`, table `slurp2_live_shows`, switch `extLive`): Creators go live on a schedule (Backstage: how often, hours, length), half announced with a post and reminders, or from Stir > Go live. Shows run 20-40 min in 4-minute segments; a model call per segment only while somebody watches, plus a "You missed" catch-up and quick replies.

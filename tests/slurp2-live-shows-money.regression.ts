@@ -43,6 +43,17 @@ const capped = slurpLiveCapEvents(
 );
 assert.equal(capped.length, SLURP_LIVE_EVENT_LIMIT);
 assert.equal(capped[0]?.text, "1");
+const cappedWithTip = slurpLiveCapEvents([
+  { at: 0, kind: "tip" as const, name: "Fan", text: "", amount: 5, requestId: "first-tip" },
+  ...Array.from({ length: SLURP_LIVE_EVENT_LIMIT + 1 }, (_, index) => ({
+    at: index + 1,
+    kind: "chat" as const,
+    name: "Fan",
+    text: String(index),
+  })),
+]);
+assert.equal(cappedWithTip[0]?.requestId, "first-tip", "old tips survive the cap for dedupe and the recap");
+assert.equal(cappedWithTip.length, SLURP_LIVE_EVENT_LIMIT + 1);
 
 assert.deepEqual(slurpLiveParseLines('```json\n{"lines":[{"at":0,"kind":"crowd","text":"hello"}]}\n```'), [
   { at: 0, kind: "crowd", text: "hello" },

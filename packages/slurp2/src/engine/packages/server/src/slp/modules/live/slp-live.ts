@@ -312,7 +312,12 @@ export function slurpLiveRecap(show: SlurpLiveShow): string {
 }
 
 export function slurpLiveCapEvents(events: readonly SlurpLiveEvent[]): SlurpLiveEvent[] {
-  return events.slice(-SLURP_LIVE_EVENT_LIMIT);
+  // Tips stay for the whole show: tip dedupe and the recap totals read them. Only chat and the rest roll off.
+  // ponytail: tips are bounded by fans per show plus player tips; cap them too if a show ever gets thousands.
+  const others = events.filter((event) => event.kind !== "tip");
+  if (others.length <= SLURP_LIVE_EVENT_LIMIT) return [...events];
+  const drop = new Set(others.slice(0, others.length - SLURP_LIVE_EVENT_LIMIT));
+  return events.filter((event) => !drop.has(event));
 }
 
 export function slurpLiveTipRequestSeen(events: readonly SlurpLiveEvent[], requestId: string): boolean {
