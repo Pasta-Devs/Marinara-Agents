@@ -61,7 +61,7 @@ export function SlpLiveStage({
           aria-hidden="true"
           src={backdrop}
           alt=""
-          className="absolute inset-0 -z-10 h-full w-full scale-110 object-cover opacity-60 blur-2xl"
+          className="slp-crop absolute inset-0 -z-10 h-full w-full scale-110 object-cover opacity-60 blur-2xl"
         />
       )}
       {picture?.mediaId && personaId ? (
