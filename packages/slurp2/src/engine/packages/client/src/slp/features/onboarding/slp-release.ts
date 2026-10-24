@@ -16,10 +16,11 @@ export interface Slurp2ReleaseEntry {
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
   {
     version: "0.4.1",
-    date: "2026-10-23",
+    date: "2026-10-24",
     notes: [
-      "Watch live shows from Home, follow the chat and tip goal, and catch up when you return.",
-      "Choose a tip or buy from the live menu while the show runs.",
+      "Creators go live 🔴: join any time, catch up on what you missed, chat, tip toward the goal and buy from her tip menu.",
+      "Take her private for 10 minutes, or switch the room to pictures for the big moments.",
+      "Go live yourself from your page, or start a Creator's show from Stir, now or announced for later.",
     ],
   },
   {
