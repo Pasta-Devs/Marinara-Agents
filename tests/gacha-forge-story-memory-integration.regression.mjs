@@ -329,4 +329,7 @@ test("live-chat recovery deduplicates played text across different legacy headin
   assert.equal(rendered.prefix, history, "Different legacy headings must not duplicate the played chapter body");
   await context(previous);
   assert.equal(rendered.prefix, `${previous}\n\n# Current chapter so far\n${body}`);
+  f.session.progress = {};
+  await context("COMPRESSED_FIRST_CHAPTER");
+  assert.equal(rendered.prefix, `COMPRESSED_FIRST_CHAPTER\n\n# Current chapter so far\n${body}`);
 });

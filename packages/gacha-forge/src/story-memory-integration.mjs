@@ -378,15 +378,16 @@ export function createForgeStoryMemoryIntegration({
         previousContent = "";
       const legacy = async () => {
         const history = await fallback();
-        if (!previous) return history;
+        const currentBody = prefix.replace(/^# Current chapter so far\n/u, "");
+        const missingCurrent = current && currentBody && !history.includes(currentBody);
+        if (!previous && !missingCurrent) return history;
         // Manual summaries may include the previous chapter. Keep its complete
         // canonical text even when automatic memory needs recovery. Legacy
         // history already includes the current scene and locked decisions.
-        const currentBody = prefix.replace(/^# Current chapter so far\n/u, "");
         const required = [
           history,
-          history.includes(previousContent) ? "" : previous,
-          current && currentBody && !history.includes(currentBody) ? prefix : "",
+          previous && !history.includes(previousContent) ? previous : "",
+          missingCurrent ? prefix : "",
         ]
           .filter(Boolean)
           .join("\n\n");
