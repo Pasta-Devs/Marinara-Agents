@@ -7331,6 +7331,56 @@ async function main() {
         assert.match(await visibleSourceCountOwners.innerText(), /Importing 1/u);
         assert.equal(await importingButton.isDisabled(), true);
         assert.equal(await idleButton.isDisabled(), true);
+        // #1659: the controls a run locks stay focusable (aria-disabled, never `disabled`) and a status line says why.
+        for (const locked of [
+          page.locator('[data-ltm-scope-picker-trigger="source"]'),
+          page.locator("[data-ltm-source-mode]"),
+        ]) {
+          assert.equal(await locked.getAttribute("aria-disabled"), "true");
+          assert.equal(await locked.evaluate((control) => control.matches(":disabled")), false);
+        }
+        // The last selected chat mode is natively disabled for its own reason, so only the others are checked.
+        const lockedModeBoxes = page.locator("#ltm-destination-scope-control [data-ltm-availability-mode-checkbox]");
+        assert.equal(
+          await lockedModeBoxes.evaluateAll((boxes) =>
+            boxes.every((box) => box.getAttribute("aria-disabled") === "true"),
+          ),
+          true,
+        );
+        const modeBefore = await page.locator("[data-ltm-source-mode]").inputValue();
+        await page.locator("[data-ltm-source-mode]").focus();
+        await page.keyboard.press(modeBefore === "roleplay" ? "ArrowUp" : "ArrowDown");
+        assert.equal(
+          await page.locator("[data-ltm-source-mode]").inputValue(),
+          modeBefore,
+          "a locked mode filter ignores a change",
+        );
+        const modeCheckedBefore = await lockedModeBoxes.evaluateAll((boxes) =>
+          boxes.map((box) => (box as HTMLInputElement).checked),
+        );
+        await lockedModeBoxes.last().click({ force: true });
+        assert.deepEqual(
+          await lockedModeBoxes.evaluateAll((boxes) => boxes.map((box) => (box as HTMLInputElement).checked)),
+          modeCheckedBefore,
+          "a locked chat mode ignores a click",
+        );
+        assert.equal(
+          await page.locator('[data-ltm-import-lock="sources"]').textContent(),
+          "Locked while an import runs",
+        );
+        assert.equal(await page.locator('[data-ltm-import-lock="destination"]:visible').count(), 1);
+        const lockedTrigger = page.locator('[data-ltm-scope-picker-trigger="source"]');
+        await lockedTrigger.focus();
+        await page.evaluate(
+          () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+        );
+        assert.equal(
+          await lockedTrigger.evaluate((trigger) => document.activeElement === trigger),
+          true,
+          "a control locked by a running import keeps focus",
+        );
+        await lockedTrigger.press("Enter");
+        assert.equal(await lockedTrigger.getAttribute("aria-expanded"), "false", "a locked picker does not open");
         assert.equal(
           await idleButton.locator("svg").getAttribute("class"),
           idleIcon,

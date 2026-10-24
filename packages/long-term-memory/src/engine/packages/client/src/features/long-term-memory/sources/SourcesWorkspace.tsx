@@ -1711,6 +1711,14 @@ export default function SourcesWorkspace({
           />
         </div>
       </div>
+      {/* Always mounted, so the lock is announced when a run starts. Dimmed controls stay focusable and say why. */}
+      <p
+        role="status"
+        className={activeSourceTask ? "text-xs text-[var(--muted-foreground)]" : "sr-only"}
+        data-ltm-import-lock="sources"
+      >
+        {activeSourceTask ? localizeUi("ui.longTermMemory.sourcesworkspace.lockedWhileImportRuns") : null}
+      </p>
       {!availabilityReady ? (
         <StatusSurface tone={settingsQuery.isError ? "danger" : "neutral"} busy={!settingsQuery.isError}>
           {settingsQuery.isError
@@ -1863,10 +1871,12 @@ export default function SourcesWorkspace({
                       <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
                         {localizeUi("ui.longTermMemory.transferworkbench.mode")}
                         <select
-                          className={`${inputClass} w-36`}
+                          className={`${inputClass} w-36${activeSourceTask ? " opacity-50" : ""}`}
                           value={modeFilter}
-                          disabled={activeSourceTask !== null}
-                          onChange={(event) => void changeModeFilter(event.target.value as LtmMode | "all")}
+                          aria-disabled={activeSourceTask ? true : undefined}
+                          onChange={(event) => {
+                            if (!activeSourceTask) void changeModeFilter(event.target.value as LtmMode | "all");
+                          }}
                           aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.filterSourcesByMode")}
                           data-ltm-source-mode
                         >
@@ -2350,10 +2360,12 @@ export default function SourcesWorkspace({
                       <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
                         {localizeUi("ui.longTermMemory.transferworkbench.mode")}
                         <select
-                          className={`${inputClass} w-36`}
+                          className={`${inputClass} w-36${activeSourceTask ? " opacity-50" : ""}`}
                           value={modeFilter}
-                          disabled={activeSourceTask !== null}
-                          onChange={(event) => void changeModeFilter(event.target.value as LtmMode | "all")}
+                          aria-disabled={activeSourceTask ? true : undefined}
+                          onChange={(event) => {
+                            if (!activeSourceTask) void changeModeFilter(event.target.value as LtmMode | "all");
+                          }}
                           aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.filterSourcesByMode")}
                           data-ltm-source-mode
                         >

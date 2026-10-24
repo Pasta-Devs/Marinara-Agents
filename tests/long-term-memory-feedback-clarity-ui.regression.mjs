@@ -1006,6 +1006,13 @@ assert.match(workspace, /label: localizeUi\("ui\.longTermMemory\.sourcesworkspac
 // #1659: the blocking reason ends with a route to the destination, and the panel's own hint stays screen-reader only.
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.chooseDestinationAction"], "Choose destination");
 assert.match(workspaceScreen, /<span role="status" className="sr-only" data-ltm-destination-hint>/u);
+// #1659: controls locked by a running import stay focusable (aria-disabled plus an early return) and a status line says why.
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.lockedWhileImportRuns"], "Locked while an import runs");
+assert.doesNotMatch(availabilityTabRail, /\bdisabled=\{disabled\}/u);
+assert.doesNotMatch(sourceScopeCombobox, /\bdisabled=\{disabled\}/u);
+assert.match(availabilityTabRail, /aria-disabled=\{disabled \|\| undefined\}/u);
+assert.match(sourceScopeCombobox, /aria-disabled=\{disabled \|\| undefined\}/u);
+assert.match(sourceScopeCombobox, /const choose = \(id: string\) => \{\s+if \(disabled\) return;/u);
 
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, defaults, and scope loading ok\n",
