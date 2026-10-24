@@ -56,8 +56,18 @@ assert.match(
 );
 assert.match(
   service,
-  /SLURP_LIVE_REACTIONS\[\(minutes \+ index\) % SLURP_LIVE_REACTIONS\.length\]/,
+  /SLURP_LIVE_REACTIONS\[\(Math\.floor\(elapsed \/ 1_000\) \+ index\) % SLURP_LIVE_REACTIONS\.length\]/,
   "pool lines are the fallback",
+);
+assert.match(
+  service,
+  /if \(show\.events\.some\(\(event\) => event\.fromPlayer && event\.at > Math\.max\(lastHost, elapsed - 20_000\)\)\) return;/,
+  "an unanswered player line keeps the fast connection free for her reply",
+);
+assert.match(
+  service,
+  /at\.getTime\(\) \+ 10_000 > Date\.parse\(show\.endsAt\)\) return;/,
+  "no crowd call at the very end",
 );
 assert.match(service, /room: SLURP_LIVE_ROOMS\[slurpLiveRoomType\(current\.crowd \?\? settings\.liveRoom\)\]/);
 const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/live/slp-live-routes.ts");

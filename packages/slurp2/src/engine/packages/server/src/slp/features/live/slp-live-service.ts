@@ -485,7 +485,10 @@ export async function getSlurpLiveMissed(db: DB, showId: string, at = new Date()
 async function fillSlurpLiveCrowd(db: DB, show: SlurpLiveShow, settings: any, at: Date): Promise<void> {
   const start = Date.parse(show.startedAt);
   const elapsed = at.getTime() - start;
-  if (!slurpLiveCrowdDue(show.events, show.id, elapsed)) return;
+  if (!slurpLiveCrowdDue(show.events, show.id, elapsed) || at.getTime() + 10_000 > Date.parse(show.endsAt)) return;
+  // Her reply goes first: the fast connection has one slot, so the crowd waits while a player line is unanswered.
+  const lastHost = Math.max(-1, ...show.events.filter((event) => event.host).map((event) => event.at));
+  if (show.events.some((event) => event.fromPlayer && event.at > Math.max(lastHost, elapsed - 20_000))) return;
   const creator = await createSlurpStorage(db).getNoodlerAccountById(show.hostId);
   if (!creator) return;
   const cast = await createSlurpPopulationStorage(db).listNamedCast(show.hostId, 8);
@@ -523,7 +526,7 @@ async function fillSlurpLiveCrowd(db: DB, show: SlurpLiveShow, settings: any, at
     ? lines
     : Array.from({ length: 5 }, (_, index) => ({
         name: fans[index % Math.max(1, fans.length)],
-        text: SLURP_LIVE_REACTIONS[(minutes + index) % SLURP_LIVE_REACTIONS.length]!,
+        text: SLURP_LIVE_REACTIONS[(Math.floor(elapsed / 1_000) + index) % SLURP_LIVE_REACTIONS.length]!,
       }));
   const cursor = slurpLiveCrowdCursor(show.events, show.id, Date.now() - start);
   await createSlurpLiveStorage(db).appendEvent(show.id, slurpLiveEnqueueCrowd(show.id, batch, cursor));
