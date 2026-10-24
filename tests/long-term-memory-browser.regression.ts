@@ -2573,6 +2573,20 @@ async function main() {
       const blankDraft = page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.blank}"]`);
       await blankDraft.waitFor();
       assert.equal(await blankDraft.innerText(), "No draft summary.\n0\nFresh");
+      // Counts and the Fresh chip use the full text color, and Fresh carries no accent (#1654 contrast).
+      const blankDraftStyle = await blankDraft.evaluate((button) => {
+        const [title, count] = Array.from(button.querySelectorAll<HTMLElement>("span.min-w-0 > span > span"));
+        const chip = button.querySelector<HTMLElement>("[data-ltm-freshness]")!;
+        return {
+          title: getComputedStyle(title).color,
+          count: getComputedStyle(count).color,
+          chip: getComputedStyle(chip).color,
+          chipBorder: getComputedStyle(chip).borderTopWidth,
+        };
+      });
+      assert.equal(blankDraftStyle.count, blankDraftStyle.title, "draft counts use the full text color");
+      assert.equal(blankDraftStyle.chip, blankDraftStyle.title, "the Fresh chip uses the full text color");
+      assert.equal(blankDraftStyle.chipBorder, "0px", "Fresh has no border");
       await blankDraft.click();
       assert.equal(await page.locator("[data-ltm-review-draft-title]").innerText(), "No draft summary.");
       const reviewSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
@@ -5082,6 +5096,19 @@ async function main() {
       const firstMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"]`);
       assert.equal(await firstMutation.locator("[data-ltm-review-summary]").count(), 1);
       assert.equal(await firstMutation.locator("[data-ltm-review-evidence-summary]").count(), 1);
+      const summaryColors = await firstMutation.evaluate((row) => ({
+        change: Array.from(
+          row.querySelector("[data-ltm-review-summary]")!.children,
+          (child) => getComputedStyle(child).color,
+        ),
+        evidence: Array.from(
+          row.querySelector("[data-ltm-review-evidence-summary]")!.children,
+          (child) => getComputedStyle(child).color,
+        ),
+      }));
+      for (const [label, value] of [summaryColors.change, summaryColors.evidence]) {
+        assert.equal(value, label, "the Change and Evidence lines use the full text color");
+      }
       // An accept keeps the queue on screen while its memory context reloads, and every action waits for the
       // reloaded context (#1584).
       const reviewWorkspace = page.locator('[data-ltm-surface="review-queue"] [data-ltm-workspace-container]');

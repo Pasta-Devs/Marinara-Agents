@@ -116,18 +116,16 @@ const freshnessLabel: Record<string, string> = {
   not_pending: "ui.longTermMemory.reviewqueue.notPending",
 };
 
+// Fresh is the normal state, so it reads as plain text. A state that needs attention follows DESIGN.md: the warning
+// border (no hue) for stale or replaced drafts, destructive for a missing or invalid source. The text stays at full
+// strength, because the accent and muted tokens miss 4.5:1 at this size.
 function freshnessClass(freshness: string) {
-  if (freshness === "fresh") return "text-[var(--marinara-editor-accent)]";
-  if (
-    freshness === "stale" ||
-    freshness === "missing" ||
-    freshness === "invalid" ||
-    freshness === "superseded" ||
-    freshness === "invalidated" ||
-    freshness === "not_pending"
-  )
-    return "";
-  return "border-[var(--border)] text-[var(--muted-foreground)]";
+  if (freshness === "fresh") return "text-[var(--foreground)]";
+  if (freshness === "missing" || freshness === "invalid" || freshness === "invalidated")
+    return "border border-[var(--destructive)] text-[var(--foreground)]";
+  if (freshness === "stale" || freshness === "superseded" || freshness === "not_pending")
+    return "border border-[var(--marinara-editor-border-strong)] text-[var(--foreground)]";
+  return "border border-[var(--border)] text-[var(--foreground)]";
 }
 
 function isAbortError(error: unknown) {
@@ -1746,7 +1744,7 @@ export default function ReviewQueue({
           >
             <span className="block text-sm font-semibold">{displayTitle}</span>
             {collapsedBody ? (
-              <span className="mt-1 block truncate text-xs text-[var(--muted-foreground)]">{collapsedBody}</span>
+              <span className="mt-1 block truncate text-xs text-[var(--foreground)]">{collapsedBody}</span>
             ) : null}
             <span className="mt-1 flex flex-wrap gap-1 text-[0.6875rem]">
               {targetType ? (
@@ -1800,13 +1798,13 @@ export default function ReviewQueue({
               <span className="block font-semibold text-[var(--foreground)]">
                 {localizeUi("ui.longTermMemory.reviewqueue.changeLabel")}
               </span>
-              <span className="block line-clamp-2 break-words text-[var(--muted-foreground)]">{changeSummary}</span>
+              <span className="block line-clamp-2 break-words text-[var(--foreground)]">{changeSummary}</span>
             </span>
             <span data-ltm-review-evidence-summary className="mt-2 block space-y-1 text-xs">
               <span className="block font-semibold text-[var(--foreground)]">
                 {localizeUi("ui.longTermMemory.reviewqueue.evidenceLabel")}
               </span>
-              <span className="block line-clamp-2 break-words text-[var(--muted-foreground)]">
+              <span className="block line-clamp-2 break-words text-[var(--foreground)]">
                 {humanizeText(row.mutation.evidence[0] ?? localizeUi("ui.longTermMemory.reviewqueue.noEvidence"))}
                 {row.mutation.evidence.length > 1
                   ? ` ${localizeUi("ui.longTermMemory.reviewqueue.moreEvidence", { count: row.mutation.evidence.length - 1 })}`
@@ -1912,7 +1910,7 @@ export default function ReviewQueue({
                   {row.mutation.evidence.map((evidence, index) => (
                     <blockquote
                       key={`${evidence}-${index}`}
-                      className="break-words border-l border-[var(--border)] py-0.5 pl-3 leading-5 text-[var(--muted-foreground)]"
+                      className="break-words border-l border-[var(--border)] py-0.5 pl-3 leading-5 text-[var(--foreground)]"
                     >
                       {humanizeText(evidence)}
                     </blockquote>
@@ -2312,7 +2310,7 @@ export default function ReviewQueue({
                           <span className="min-w-0 flex-1 truncate font-semibold" title={sourceTitleHint(id)}>
                             {sourceDisplayTitle(id)}
                           </span>
-                          <span className="shrink-0 text-xs text-[var(--muted-foreground)]">
+                          <span className="shrink-0 text-xs text-[var(--foreground)]">
                             {(source?.drafts.length ?? 0) + rejectedCount}
                           </span>
                         </button>
@@ -2357,12 +2355,12 @@ export default function ReviewQueue({
                                 <span className="min-w-0 truncate" title={reviewDraftTitle(item)}>
                                   {reviewDraftTitle(item)}
                                 </span>
-                                <span className="text-[var(--muted-foreground)]">{item.draft.mutations.length}</span>
+                                <span className="text-[var(--foreground)]">{item.draft.mutations.length}</span>
                               </span>
                             </span>
                             <span
                               data-ltm-freshness={noteById.has(id) ? item.freshness : "missing"}
-                              className={`shrink-0 rounded-full border px-2 py-0.5 text-[0.6875rem] font-semibold ${freshnessClass(noteById.has(id) ? item.freshness : "missing")}`}
+                              className={`shrink-0 rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold ${freshnessClass(noteById.has(id) ? item.freshness : "missing")}`}
                             >
                               {localizeUi(freshnessLabel[noteById.has(id) ? item.freshness : "missing"])}
                             </span>
@@ -2485,7 +2483,7 @@ export default function ReviewQueue({
                       <span className="block text-sm font-semibold">
                         {localizeUi("ui.longTermMemory.reviewqueue.suggestionsThatWerentSaved")}
                       </span>
-                      <span className="block text-xs text-[var(--muted-foreground)]">
+                      <span className="block text-xs text-[var(--foreground)]">
                         {localizeUi("ui.longTermMemory.reviewqueue.rejectedSuggestionsRemainUntilAction")}
                       </span>
                     </span>
@@ -2632,7 +2630,7 @@ export default function ReviewQueue({
                       <span className="block text-sm font-semibold">
                         {localizeUi("ui.longTermMemory.reviewqueue.savedIdentityChoices")}
                       </span>
-                      <span className="block text-xs text-[var(--muted-foreground)]">
+                      <span className="block text-xs text-[var(--foreground)]">
                         {localizeUi("ui.longTermMemory.reviewqueue.savedIdentityChoicesDescription")}
                       </span>
                     </span>
