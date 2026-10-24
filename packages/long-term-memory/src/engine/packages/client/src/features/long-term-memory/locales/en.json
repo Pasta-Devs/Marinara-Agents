@@ -1391,5 +1391,8 @@
   "ui.longTermMemory.memoryvault.discardAndContinue": "Discard and continue",
   "ui.longTermMemory.memoryvault.saveAndContinue": "Save and continue",
   "ui.longTermMemory.sourcesworkspace.loadMoreSources": "Load more sources",
-  "ui.longTermMemory.sourcesworkspace.loadingMoreSources": "Loading more sources…"
+  "ui.longTermMemory.sourcesworkspace.loadingMoreSources": "Loading more sources…",
+  "ui.longTermMemory.sourcesworkspace.reimportFromSource": "Re-import from source",
+  "ui.longTermMemory.sourcesworkspace.reimportFromSourceDescription": "Overwrites the imported text and metadata with the current source. Extraction is not run.",
+  "ui.longTermMemory.sourcesworkspace.reloadList": "Reload list"
 }

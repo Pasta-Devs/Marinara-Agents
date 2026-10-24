@@ -283,6 +283,7 @@ export default function SourcesWorkspace({
   const sourceScopeLabelId = useId();
   const importResultLabelId = useId();
   const importReasonId = useId();
+  const reimportDescriptionId = `${importReasonId}-reimport`;
   const client = useQueryClient();
   const selectAllRef = useRef<HTMLInputElement>(null);
   const lorebookBarRef = useRef<HTMLDivElement>(null);
@@ -1863,7 +1864,7 @@ export default function SourcesWorkspace({
                         ) : (
                           <RefreshCw aria-hidden="true" size="0.75rem" />
                         )}
-                        {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.reloadList")}
                       </Button>
                     </div>
                     <div
@@ -2352,7 +2353,7 @@ export default function SourcesWorkspace({
                         ) : (
                           <RefreshCw aria-hidden="true" size="0.75rem" />
                         )}
-                        {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.reloadList")}
                       </Button>
                     </div>
                     <div
@@ -2670,17 +2671,25 @@ export default function SourcesWorkspace({
                             <Button
                               disabled={importing}
                               {...destinationWait(importReasonId)}
+                              aria-describedby={
+                                currentDestinationScope
+                                  ? reimportDescriptionId
+                                  : `${reimportDescriptionId} ${importReasonId}`
+                              }
                               onClick={() => {
                                 if (currentDestinationScope) void runImport([focusedFlatRow.sourceId], "refresh");
                               }}
                               data-ltm-source-action="refresh"
                             >
                               <RefreshCw aria-hidden="true" size="0.75rem" />
-                              {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
+                              {localizeUi("ui.longTermMemory.sourcesworkspace.reimportFromSource")}
                             </Button>
                             {bulkSelectionActive
                               ? null
                               : sourceInlineActions(focusedFlatRow.existingNoteId, focusedFlatRow.existingNoteTitle)}
+                            <p id={reimportDescriptionId} className="basis-full text-xs text-[var(--muted-foreground)]">
+                              {localizeUi("ui.longTermMemory.sourcesworkspace.reimportFromSourceDescription")}
+                            </p>
                           </>
                         )}
                         {importReason(importReasonId)}

@@ -982,6 +982,19 @@ assert.match(vaultRow, /selected \? "bg-\[var\(--primary\)\]\/10" : ""/u);
 assert.doesNotMatch(vaultRow, /bg-\[var\(--accent\)\]\/50/u);
 assert.match(vaultRow, /\{selected \? \(\s*<span\s+aria-hidden="true"\s+data-ltm-note-open-bar/u);
 assert.match(vaultRow, /aria-current=\{selected \? "true" : undefined\}/u);
+// #1659: the source write and the list reload no longer share a name. The write says what it overwrites, and its
+// description joins the destination reason instead of replacing it.
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.reimportFromSource"], "Re-import from source");
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.reloadList"], "Reload list");
+assert.match(
+  locale["ui.longTermMemory.sourcesworkspace.reimportFromSourceDescription"],
+  /Overwrites the imported text/u,
+);
+assert.match(workspace, /data-ltm-source-action="refresh"[\s\S]{0,200}sourcesworkspace\.reimportFromSource"/u);
+assert.equal((workspace.match(/data-ltm-source-action="refresh-preview"/gu) ?? []).length, 2);
+assert.match(workspace, /<p id=\{reimportDescriptionId\}/u);
+assert.equal((workspace.match(/sourcesworkspace\.reloadList"/gu) ?? []).length, 2);
+assert.match(workspace, /`\$\{reimportDescriptionId\} \$\{importReasonId\}`/u);
 
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, defaults, and scope loading ok\n",
