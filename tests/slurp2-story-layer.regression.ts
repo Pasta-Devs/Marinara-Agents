@@ -12,4 +12,12 @@ assert.doesNotMatch(helpers, /first-child\]:hidden/, "no hidden Engine modal hea
 assert.match(helpers, /function SlpStoryLayer\([\s\S]*?createPortal\(/);
 assert.match(helpers, /function SlpStoryLayer\([\s\S]*?useDialogFocusScope\(true, panelRef\)/);
 
+// Slurp's portal deliberately lets pointer events through; each full-screen layer must opt back in.
+const layer = helpers.slice(helpers.indexOf("function SlpStoryLayer("));
+assert.match(
+  layer,
+  /className="pointer-events-auto fixed inset-0/,
+  "the Story layer receives clicks instead of passing controls and scrim taps to the feed",
+);
+
 console.log("slurp2 story layer: ok");
