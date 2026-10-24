@@ -208,3 +208,7 @@ node scripts/test-catalog-lanes.mjs
 node scripts/validate-package-locales.mjs
 node scripts/validate-catalog.mjs
 ```
+
+## Automatic continuity (in development)
+
+Tracked in [#1657](https://github.com/Pasta-Devs/Marinara-Agents/issues/1657): automatically archive completed canonical chapters and character memories, maintain a compressed overview within 10% of the generation model's context, and recall relevant detailed history without replacing the stored originals.
