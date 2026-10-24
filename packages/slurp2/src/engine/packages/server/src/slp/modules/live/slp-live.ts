@@ -12,6 +12,8 @@ export type SlurpLiveOrder = {
   personaId?: string;
   at: number;
   served: boolean;
+  /** The segment whose lines play this order; its picture waits until that segment is on. */
+  servedIn?: number;
   requestId: string;
   status?: "pending" | "paid";
 };
@@ -116,7 +118,10 @@ export function slurpLivePictureTriggers(show: SlurpLiveShow, personaId: string,
   )
     triggers.push("finale");
   for (const order of show.queue.filter(
-    (item) => item.served && show.menu.some((entry) => entry.id === item.itemId && entry.picture),
+    (item) =>
+      item.served &&
+      (item.servedIn ?? 0) <= slurpLiveSegmentIndex(show, at) &&
+      show.menu.some((entry) => entry.id === item.itemId && entry.picture),
   ))
     triggers.push(`menu:${order.requestId}`);
   if (show.private?.personaId === personaId && Date.parse(show.private.until) > at.getTime())
@@ -297,6 +302,24 @@ export function slurpLiveSegmentToWrite(
   const total = Math.ceil((Date.parse(show.endsAt) - Date.parse(show.startedAt)) / SLURP_LIVE_SEGMENT_MS);
   const elapsed = at.getTime() - Date.parse(show.startedAt) - current * SLURP_LIVE_SEGMENT_MS;
   return current + 1 < total && elapsed >= SLURP_LIVE_SEGMENT_MS / 2 ? current + 1 : null;
+}
+
+/** A private show that starts after the next segment was written: drop that public segment so it is written again as private. */
+export function slurpLiveDropAhead(
+  show: Pick<SlurpLiveShow, "startedAt" | "segment" | "script" | "queue">,
+  at: Date,
+): Pick<SlurpLiveShow, "segment" | "script" | "queue"> | null {
+  const current = slurpLiveSegmentIndex(show, at);
+  const segment = show.segment;
+  if (!segment || segment.index <= current || segment.lease) return null;
+  const start = segment.index * SLURP_LIVE_SEGMENT_MS;
+  return {
+    segment: { index: current, lease: null, claimedAt: null },
+    script: show.script.filter((line) => line.personaId || line.at < start),
+    queue: show.queue.map((order) =>
+      order.servedIn === segment.index ? { ...order, served: false, servedIn: undefined } : order,
+    ),
+  };
 }
 
 /** A segment written late squeezes its lines into the time it has left instead of dumping them at once. */

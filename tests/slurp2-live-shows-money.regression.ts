@@ -171,7 +171,21 @@ assert.match(storage, /audienceTipKeys: JSON\.stringify\(\[\.\.\.keys, audienceK
 assert.match(service, /await storage\.pruneEnded\(at\)/);
 assert.match(routes, /slurpLiveCanWatch\(personaId/);
 assert.match(routes, /kickSlurpLiveShow\(app\.db, id\)/, "a watcher's poll moves the show on");
-assert.match(service, /if \(liveBusy\.has\(show\.id\)\) return;/, "one show never advances twice at once");
+assert.match(
+  service,
+  /liveBusy\.get\(show\.id\) \?\? 0\) < 120_000\) return;/,
+  "one show never advances twice at once",
+);
+assert.match(
+  service,
+  /if \(fresh && !fresh\.endedAt\) await advanceShowNow/,
+  "a stale snapshot never ends a show twice",
+);
+assert.match(
+  slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/data/live/slp-live-private-storage.ts"),
+  /extending \? null : slurpLiveDropAhead\(map\(row\), at\)/,
+  "a new private show rewrites a public segment written ahead",
+);
 assert.match(storage, /slurpLiveSegmentToWrite\(map\(row\), at\) !== index/);
 
 console.log("slurp2 live shows money and claims: ok");

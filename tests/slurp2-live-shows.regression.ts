@@ -9,6 +9,7 @@ import {
   slurpLiveSegmentIndex,
   slurpLiveSegmentToWrite,
   slurpLiveSegmentLineAt,
+  slurpLiveDropAhead,
   slurpLiveWatched,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/live/slp-live.ts";
 import { slurp2Source } from "./slurp2-source.ts";
@@ -75,6 +76,24 @@ assert.ok(
   "late lines fit the time left",
 );
 assert.ok(late[0]! < late[1]! && late[1]! < late[2]!, "late lines keep their order");
+const ahead = {
+  ...show,
+  segment: { index: 2, lease: null, claimedAt: null },
+  script: [
+    { at: 200_000, kind: "crowd" as const, text: "now" },
+    { at: 500_000, kind: "crowd" as const, text: "ahead" },
+    { at: 500_000, kind: "reaction" as const, text: "dm", personaId: "p" },
+  ],
+  queue: [{ itemId: "i", label: "Kiss", name: "Fan", at: 400_000, served: true, servedIn: 2, requestId: "r" }],
+} as any;
+const dropped = slurpLiveDropAhead(ahead, minute(6));
+assert.deepEqual(dropped?.segment, { index: 1, lease: null, claimedAt: null });
+assert.deepEqual(
+  dropped?.script.map((line) => line.text),
+  ["now", "dm"],
+);
+assert.equal(dropped?.queue[0]?.served, false, "orders of the dropped segment are served again");
+assert.equal(slurpLiveDropAhead(ahead, minute(9)), null, "a segment already on air stays");
 assert.equal(slurpLiveWatched(startedAt, new Date("2026-10-23T12:01:29.000Z")), true);
 assert.equal(slurpLiveWatched(startedAt, new Date("2026-10-23T12:01:31.000Z")), false);
 const service = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/live/slp-live-service.ts");

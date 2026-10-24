@@ -9,6 +9,7 @@ import {
   slurpLiveDueNotifications,
   slurpLiveParseLines,
   slurpLivePlayerTipAmount,
+  slurpLiveSegmentIndex,
   slurpLiveSegmentToWrite,
   slurpLiveSegmentLineAt,
   slurpLiveWatched,
@@ -155,7 +156,7 @@ export async function announceSlurpLive(db: DB, show: SlurpLiveShow): Promise<Sl
 }
 
 // ponytail: in-process guards, fine for one Engine process; move into storage leases if the Engine ever runs several.
-const liveBusy = new Set<string>();
+const liveBusy = new Map<string, number>();
 const liveKicks = new Map<string, number>();
 
 /** A viewer's poll moves the show on (at most every 3 s), so watched shows do not wait for the world tick. */
@@ -170,12 +171,15 @@ export function kickSlurpLiveShow(db: DB, showId: string, at = new Date()): void
 }
 
 async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date): Promise<void> {
-  if (liveBusy.has(show.id)) return;
-  liveBusy.add(show.id);
+  // A run older than the 2-minute segment lease is treated as hung, so one stuck model call cannot stall the show.
+  const token = Date.now();
+  if (token - (liveBusy.get(show.id) ?? 0) < 120_000) return;
+  liveBusy.set(show.id, token);
   try {
-    await advanceShowNow(db, show, settings, at);
+    const fresh = await createSlurpLiveStorage(db).get(show.id);
+    if (fresh && !fresh.endedAt) await advanceShowNow(db, fresh, settings, at);
   } finally {
-    liveBusy.delete(show.id);
+    if (liveBusy.get(show.id) === token) liveBusy.delete(show.id);
   }
 }
 
@@ -374,7 +378,8 @@ async function advanceShowNow(db: DB, show: SlurpLiveShow, settings: any, at: Da
       await makeLivePictures(db, current, viewer.personaId, at);
   }
   const index = slurpLiveSegmentToWrite(current, at);
-  if (index === null) return;
+  // Not ahead during a private show: it may end inside the next segment, which must then be public.
+  if (index === null || (privateActive && index > slurpLiveSegmentIndex(show, at))) return;
   const lease = await storage.claimSegment(show.id, index, at);
   if (!lease) return;
   const creator = await createSlurpStorage(db).getNoodlerAccountById(show.hostId);

@@ -2,6 +2,7 @@ import type { DB } from "../../../db/connection.js";
 import { eq } from "../../../db/file-query.js";
 import { slurpLiveShows } from "../../../db/schema/slurp.js";
 import {
+  slurpLiveDropAhead,
   slurpLivePictureTriggers,
   slurpLiveWatched,
   slurpLivePrivateUntil,
@@ -137,10 +138,12 @@ export function createSlurpLivePrivateStorage(db: DB) {
           until: row.endedAt ? at.toISOString() : slurpLivePrivateUntil(current, claim.personaId, at),
           block: claim.block,
         };
-        const script = parse<SlurpLiveLine[]>(row.script, []);
+        const extending = !!current && current.until > at.toISOString();
+        const dropped = extending ? null : slurpLiveDropAhead(map(row), at);
+        const script = dropped?.script ?? parse<SlurpLiveLine[]>(row.script, []);
         const alreadyPrivateNotice = script.some((line) => line.text === "she went private 🔒");
         const withNotice =
-          (current && current.until > at.toISOString()) || alreadyPrivateNotice
+          extending || alreadyPrivateNotice
             ? script
             : [
                 ...script,
@@ -156,6 +159,7 @@ export function createSlurpLivePrivateStorage(db: DB) {
             claims.map((item) => (item.requestId === requestId ? { ...item, status: "paid" } : item)),
           ),
           script: JSON.stringify(withNotice),
+          ...(dropped ? { segment: JSON.stringify(dropped.segment), queue: JSON.stringify(dropped.queue) } : {}),
         };
         await tx.update(slurpLiveShows).set(patch).where(eq(slurpLiveShows.id, id));
         return map({ ...row, ...patch });

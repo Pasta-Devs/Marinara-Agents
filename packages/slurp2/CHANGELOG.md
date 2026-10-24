@@ -4,7 +4,8 @@
 
 - Live shows write ahead: from halfway through a 4-minute segment the next one is written, so chat never runs dry (`slurpLiveSegmentToWrite`).
 - A segment written late spreads its lines over the time left instead of dumping them at once (`slurpLiveSegmentLineAt`).
-- A watcher's 3 s poll kicks the show (`kickSlurpLiveShow`, at most every 3 s); one show never advances twice at once.
+- A watcher's 3 s poll kicks the show (`kickSlurpLiveShow`, at most every 3 s); one show never advances twice at once (a run hung over 2 minutes is dropped).
+- A private show that starts after the next segment was written rewrites it as private; no segment is written ahead during a private show; a menu picture waits until its segment plays.
 
 ## 0.4.3 — 2026-10-24
 
