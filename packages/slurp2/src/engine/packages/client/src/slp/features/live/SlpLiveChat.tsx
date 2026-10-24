@@ -181,7 +181,7 @@ export function SlpLiveChat({
             key={`${line.at}-${index}`}
             className={`slp-live-pop mx-auto w-fit rounded-full px-3 py-1.5 text-sm font-bold ${
               slpLiveBigTip(show, line.amount ?? 0)
-                ? "bg-[linear-gradient(135deg,var(--slurp-warning),var(--noodle-accent))] text-[var(--slurp-ink)] shadow-[0_4px_18px_color-mix(in_srgb,var(--slurp-warning)_45%,transparent)]"
+                ? "bg-[linear-gradient(135deg,var(--slurp-warning),var(--noodle-accent))] text-neutral-950 shadow-[0_4px_18px_color-mix(in_srgb,var(--slurp-warning)_45%,transparent)]"
                 : "bg-[color-mix(in_srgb,var(--slurp-warning)_18%,transparent)] text-[var(--slurp-warning)]"
             }`}
           >

@@ -39,20 +39,13 @@ export function renderSlurpHomeDestinations({
     viewerPersonaId,
   } = model;
   if (navigation.mode === "creator" && navigation.view === "live") {
-    const host = accountsQuery.data?.find(
-      (account) =>
-        account.id ===
-        (navigation.returnTo?.mode === "creator" && navigation.returnTo.view === "profile"
-          ? navigation.returnTo.accountId
-          : null),
-    );
     return (
       <SlpShell {...shellProps}>
         <SlpLiveScreen
           showId={navigation.showId}
           personaId={viewerPersonaId}
-          creatorName={host?.displayName ?? localizeUi("ui.slurp.live.creator")}
-          avatarUrl={host?.avatarUrl}
+          hosts={accountsQuery.data}
+          creatorName={localizeUi("ui.slurp.live.creator")}
           onBack={() => (navigation.returnTo ? onNavigate(navigation.returnTo) : exitToCreatorHub())}
           onOpenRecap={() => onNavigate({ mode: "creator", view: "hub" })}
         />

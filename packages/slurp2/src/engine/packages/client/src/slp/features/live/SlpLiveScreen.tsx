@@ -14,6 +14,7 @@ export function SlpLiveScreen({
   personaId,
   creatorName,
   avatarUrl,
+  hosts,
   onBack,
   onOpenRecap,
 }: {
@@ -21,6 +22,8 @@ export function SlpLiveScreen({
   personaId: string | null;
   creatorName: string;
   avatarUrl?: string | null;
+  /** Accounts to find the host by the show's own host id, whichever screen opened it. */
+  hosts?: Array<{ id: string; displayName: string; avatarUrl?: string | null }>;
   onBack: () => void;
   onOpenRecap: (postId: string) => void;
 }) {
@@ -37,12 +40,13 @@ export function SlpLiveScreen({
         <p>{t("ui.slurp.live.unavailable")}</p>
       </div>
     );
+  const hostAccount = hosts?.find((account) => account.id === query.data.hostId);
   return (
     <SlpLiveContent
       show={query.data}
       personaId={personaId}
-      creatorName={creatorName}
-      avatarUrl={avatarUrl}
+      creatorName={hostAccount?.displayName ?? creatorName}
+      avatarUrl={hostAccount?.avatarUrl ?? avatarUrl}
       onBack={onBack}
       onOpenRecap={onOpenRecap}
     />
@@ -271,7 +275,7 @@ function SlpLiveContent({
           </p>
         )}
         {personaId && (!privateActive || privateViewer) && (
-          <footer className="space-y-2 border-t border-[var(--border)] bg-[var(--background)] px-3 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:bg-transparent">
+          <footer className="space-y-2 border-t border-[var(--border)] bg-[var(--background)] px-3 pt-2.5 pb-[calc(0.75rem+var(--slp-nav-space,env(safe-area-inset-bottom)))] lg:bg-transparent">
             {host ? (
               <form onSubmit={sendNarration} className="flex gap-2">
                 <input
@@ -381,7 +385,7 @@ function SlpLiveContent({
                       type="button"
                       disabled={tip.isPending || !Number.isInteger(Number(customAmount)) || Number(customAmount) < 1}
                       onClick={() => tipLive(Number(customAmount))}
-                      className="min-h-11 rounded-full bg-[var(--slurp-warning)] px-5 text-sm font-bold text-[var(--slurp-ink)] disabled:opacity-50"
+                      className="min-h-11 rounded-full bg-[var(--slurp-warning)] px-5 text-sm font-bold text-neutral-950 disabled:opacity-50"
                     >
                       {t("ui.slurp.live.tipCustom")}
                     </button>

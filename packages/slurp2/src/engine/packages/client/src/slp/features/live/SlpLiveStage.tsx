@@ -122,7 +122,7 @@ export function SlpLiveStage({
           ) : tipBanner ? (
             <p
               key={tipBanner.requestId ?? tipBanner.at}
-              className={`slp-live-pop rounded-2xl px-4 py-2.5 text-center font-extrabold text-[var(--slurp-ink)] shadow-[0_10px_36px_color-mix(in_srgb,var(--slurp-warning)_55%,transparent)] ${
+              className={`slp-live-pop rounded-2xl px-4 py-2.5 text-center font-extrabold text-neutral-950 shadow-[0_10px_36px_color-mix(in_srgb,var(--slurp-warning)_55%,transparent)] ${
                 slpLiveBigTip(show, tipBanner.amount ?? 0)
                   ? "bg-[linear-gradient(135deg,var(--slurp-warning),var(--noodle-accent))] text-xl"
                   : "bg-[var(--slurp-warning)] text-sm"
@@ -155,12 +155,14 @@ export function SlpLiveStage({
         </div>
         <div aria-label={t("ui.slurp.live.goalLabel")}>
           <div className="mb-1 flex justify-between text-xs font-semibold drop-shadow">
-            <SlpCoinText>
-              {t(goalTarget > show.goal ? "ui.slurp.live.secondGoal" : "ui.slurp.live.goal", {
-                raised: show.raised,
-                goal: goalTarget,
-              })}
-            </SlpCoinText>
+            <span>
+              <SlpCoinText>
+                {t(goalTarget > show.goal ? "ui.slurp.live.secondGoal" : "ui.slurp.live.goal", {
+                  raised: show.raised,
+                  goal: goalTarget,
+                })}
+              </SlpCoinText>
+            </span>
             <span>{percent}%</span>
           </div>
           <div className="h-2.5 overflow-hidden rounded-full bg-white/20 ring-1 ring-white/10">

@@ -19,7 +19,7 @@ export function SlpLiveNowRow({
     <button
       type="button"
       onClick={() => onOpen?.(show.id)}
-      className="relative mx-3 mt-3 flex min-h-16 items-center gap-3 overflow-hidden rounded-2xl bg-[linear-gradient(135deg,color-mix(in_srgb,var(--noodle-accent)_22%,var(--card)),color-mix(in_srgb,var(--slurp-violet)_18%,var(--card)))] px-3 text-start ring-1 ring-[color-mix(in_srgb,var(--noodle-accent)_45%,transparent)] transition-transform active:scale-[0.98]"
+      className="relative mx-3 mt-3 flex min-h-16 w-[calc(100%-1.5rem)] items-center gap-3 overflow-hidden rounded-2xl bg-[linear-gradient(135deg,color-mix(in_srgb,var(--noodle-accent)_22%,var(--card)),color-mix(in_srgb,var(--slurp-violet)_18%,var(--card)))] px-3 text-start ring-1 ring-[color-mix(in_srgb,var(--noodle-accent)_45%,transparent)] transition-transform active:scale-[0.98]"
     >
       <style>{SLP_LIVE_STYLES}</style>
       <Avatar
