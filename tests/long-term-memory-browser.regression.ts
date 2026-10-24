@@ -501,6 +501,7 @@ async function main() {
       let noteTotal = 5;
       let pendingDraftCount = 2;
       let failSecondReviewAccept = false;
+      let holdReviewAccept: Promise<void> | null = null;
       let failReviewContext = false;
       let missingSourceReview = false;
       const omitReviewContextId: string | null = null;
@@ -1429,6 +1430,7 @@ async function main() {
           const mutationIds = body.mutationIds ?? [];
           reviewEditedMutationIds.push((body.editedMutations ?? []).map((mutation) => mutation.id));
           reviewActionCalls.push({ action, draftId, mutationIds });
+          if (action === "accept" && holdReviewAccept) await holdReviewAccept;
           if (
             action === "accept" &&
             draftId === reviewDraftIds.second &&
@@ -5017,7 +5019,7 @@ async function main() {
       for (const sourceNoteId of [...missingSources, "source_orphaned_suggestion"]) {
         await showWorkspacePane("navigator");
         const source = page.locator(`[data-ltm-review-source-select="${sourceNoteId}"]`);
-        assert.match(await source.innerText(), /Missing source/u);
+        assert.match(await source.innerText(), /Deleted source/u);
         await source.click();
         await showWorkspacePane("workbench");
         const warning = page.locator("[data-ltm-review-source-missing]");
@@ -5060,7 +5062,7 @@ async function main() {
       await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.first}"]`).click();
       await showWorkspacePane("workbench");
       const restoredAccept = page.locator(
-        `[data-ltm-review-mutation="${reviewMutationIds.first}"] [aria-label^="Review change "]`,
+        `[data-ltm-review-mutation="${reviewMutationIds.first}"] [aria-label^="Check change "]`,
       );
       assert.equal(await restoredAccept.isDisabled(), false);
       await restoredAccept.click();
@@ -5239,10 +5241,17 @@ async function main() {
             height: rect.height,
             iconWidth: icon.getAttribute("width"),
             iconHeight: icon.getAttribute("height"),
+            visibleText: (button as HTMLElement).innerText,
+            iconShown: getComputedStyle(icon).display !== "none",
+            chips: button.closest("[role=group]")!.querySelectorAll("[data-ltm-review-state-chip]").length,
           };
         });
       assert.ok(acceptButtonSize.width >= 44);
       assert.ok(acceptButtonSize.height >= 44);
+      // #1654: from a 40rem container the commit control is the text "Check" (then "Apply"), not an icon alone.
+      assert.equal(acceptButtonSize.visibleText, "Check");
+      assert.equal(acceptButtonSize.iconShown, false);
+      assert.equal(acceptButtonSize.chips, 0);
       assert.equal(acceptButtonSize.iconWidth, "1rem");
       assert.equal(acceptButtonSize.iconHeight, "1rem");
       if (visualOutputDir)
@@ -5340,7 +5349,7 @@ async function main() {
       const emptiedPartial = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"]`);
       await emptiedPartial.locator("textarea").fill("");
       const partialAcceptReason = emptiedPartial.locator("[data-ltm-review-accept-reason]");
-      assert.equal(await partialAcceptReason.innerText(), "Can't accept yet: an edited section is empty.");
+      assert.equal(await partialAcceptReason.innerText(), "Can't apply yet: an edited section is empty.");
       assert.equal(
         await emptiedPartial.locator('[data-ltm-review-action="review"]').getAttribute("aria-describedby"),
         await partialAcceptReason.getAttribute("id"),
@@ -5348,7 +5357,7 @@ async function main() {
       await emptiedPartial.locator('[data-ltm-control="review-select"]').check();
       assert.match(
         await page.locator("[data-ltm-review-batch-accept-reason]").innerText(),
-        /^Fix 1 invalid edited mutation before accepting: /u,
+        /^Fix 1 invalid edited change before applying: /u,
       );
       await page
         .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] textarea`)
@@ -5359,7 +5368,7 @@ async function main() {
       );
       reviewPreflightBlocked = true;
       failSecondReviewAccept = false;
-      await page.getByRole("button", { name: "Accept eligible (2)" }).click();
+      await page.getByRole("button", { name: "Check eligible (2)" }).click();
       await page.locator("[data-ltm-review-preflight]").first().waitFor();
       assert.equal(await page.locator('[data-ltm-review-preflight][role="alert"]').count(), 1);
       await page
@@ -5372,7 +5381,19 @@ async function main() {
           .isDisabled(),
         true,
       );
-      assert.equal(await page.getByRole("button", { name: /^Apply preflighted \(1\)/ }).count(), 1);
+      assert.equal(await page.getByRole("button", { name: /^Apply checked \(1\)/ }).count(), 1);
+      // #1654: below 40rem the icon stays and a visible chip carries the state the text button shows when wider.
+      const blockedChip = page.locator(
+        `[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-review-state-chip="blocked"]`,
+      );
+      assert.equal(await blockedChip.innerText(), "Blocked");
+      assert.equal(await blockedChip.isVisible(), true);
+      assert.equal(
+        await page
+          .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-review-action-text]`)
+          .isVisible(),
+        false,
+      );
       assert.deepEqual(reviewActionCalls, [
         {
           action: "accept",
@@ -5389,17 +5410,24 @@ async function main() {
         .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`)
         .check();
       failSecondReviewAccept = true;
-      await page.getByRole("button", { name: "Accept eligible (2)" }).click();
-      await page.getByRole("button", { name: /^Apply preflighted \(2\)/ }).click();
+      await page.getByRole("button", { name: "Check eligible (2)" }).click();
+      // #1654: while the checked changes are being applied the batch button says "Applying...", not "Checking...".
+      let releaseReviewAccept = () => {};
+      holdReviewAccept = new Promise<void>((resolve) => (releaseReviewAccept = resolve));
+      await page.getByRole("button", { name: /^Apply checked \(2\)/ }).click();
+      await page.getByRole("button", { name: "Applying..." }).waitFor();
+      assert.equal(await page.getByRole("button", { name: "Checking..." }).count(), 0);
+      holdReviewAccept = null;
+      releaseReviewAccept();
       await page.getByRole("button", { name: "Retry failed review actions" }).waitFor();
       // #1375: each part of the batch summary is its own sentence, not a fragment glued to the last.
       assert.equal(
-        await page.getByText(/Applied \d+ mutations?; [1-9]\d* failed\. .*Draft action failed: .+\./u).count(),
+        await page.getByText(/Applied \d+ changes?; [1-9]\d* failed\. .*Draft action failed: .+\./u).count(),
         1,
       );
       // #1588: failed changes are not counted again as "other pending", and the result stays when the
       // selection changes, until the next run.
-      assert.doesNotMatch(await page.locator("[data-ltm-review-result]").innerText(), /other mutations? pending/u);
+      assert.doesNotMatch(await page.locator("[data-ltm-review-result]").innerText(), /other changes? pending/u);
       const partialSelect = page.locator(
         `[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`,
       );
@@ -5408,7 +5436,7 @@ async function main() {
       assert.equal(await page.getByRole("button", { name: "Retry failed review actions" }).count(), 1);
       failSecondReviewAccept = false;
       await page.getByRole("button", { name: "Retry failed review actions" }).click();
-      await page.getByText("Retry preflight complete. Review the results before applying again.").waitFor();
+      await page.getByText("Checked again. Review the results before applying.").waitFor();
       const editedPartial = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"]`);
       assert.match(await editedPartial.locator("[data-ltm-review-summary]").innerText(), /Edited proposal/u);
       // This accept drops the second change's merge target from the memory context, so the context reloads under a
@@ -5421,7 +5449,7 @@ async function main() {
         async () => {
           await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
           assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
-          await page.getByRole("button", { name: /^Apply preflighted \(/ }).dispatchEvent("click");
+          await page.getByRole("button", { name: /^Apply checked \(/ }).dispatchEvent("click");
         },
         reviewFocusMoved,
       );
@@ -5554,7 +5582,7 @@ async function main() {
       for (const checkbox of await invalidatedRows.locator('[data-ltm-control="review-select"]').all()) {
         await checkbox.check();
       }
-      assert.equal(await page.getByRole("button", { name: "Accept eligible (0)" }).isDisabled(), true);
+      assert.equal(await page.getByRole("button", { name: "Check eligible (0)" }).isDisabled(), true);
       for (const action of await invalidatedRows.locator("[data-ltm-review-action]").all()) {
         assert.equal(await action.isDisabled(), true);
       }

@@ -125,6 +125,32 @@ export const labelKeys = {
     building: "ui.longTermMemory.longtermmemorydetail.vaultRebuilding",
     failed: "ui.longTermMemory.longtermmemorydetail.rebuildFailed",
   },
+  reviewCode: {
+    source_stale: "ui.longTermMemory.reviewqueue.codeSourceStale",
+    source_context_unbound: "ui.longTermMemory.reviewqueue.codeSourceContextUnbound",
+    source_missing: "ui.longTermMemory.reviewqueue.codeSourceMissing",
+    source_invalid: "ui.longTermMemory.reviewqueue.codeSourceInvalid",
+    draft_superseded: "ui.longTermMemory.reviewqueue.codeDraftSuperseded",
+    draft_invalidated: "ui.longTermMemory.reviewqueue.codeDraftInvalidated",
+    draft_not_pending: "ui.longTermMemory.reviewqueue.codeDraftNotPending",
+    projection_failed: "ui.longTermMemory.reviewqueue.codeProjectionFailed",
+    no_mutations: "ui.longTermMemory.reviewqueue.codeNoMutations",
+    ltm_draft_source_stale: "ui.longTermMemory.reviewqueue.codeSourceStale",
+    ltm_draft_source_context_unbound: "ui.longTermMemory.reviewqueue.codeSourceContextUnbound",
+    ltm_draft_source_missing: "ui.longTermMemory.reviewqueue.codeSourceMissing",
+    ltm_draft_source_invalid: "ui.longTermMemory.reviewqueue.codeSourceInvalid",
+    ltm_draft_superseded: "ui.longTermMemory.reviewqueue.codeDraftSuperseded",
+    ltm_draft_invalidated: "ui.longTermMemory.reviewqueue.codeDraftInvalidated",
+    ltm_draft_not_pending: "ui.longTermMemory.reviewqueue.codeDraftNotPending",
+    ltm_draft_target_missing: "ui.longTermMemory.reviewqueue.codeDraftTargetMissing",
+    ltm_draft_target_scope_conflict: "ui.longTermMemory.reviewqueue.codeDraftTargetScopeConflict",
+    ltm_draft_mutation_invalid: "ui.longTermMemory.reviewqueue.codeDraftMutationInvalid",
+    ltm_draft_edit_invalid: "ui.longTermMemory.reviewqueue.codeDraftEditInvalid",
+    ltm_draft_ambiguous_link: "ui.longTermMemory.reviewqueue.codeDraftAmbiguousLink",
+    ltm_draft_ambiguous_link_stale: "ui.longTermMemory.reviewqueue.codeDraftAmbiguousLinkStale",
+    ltm_draft_ambiguous_link_scope: "ui.longTermMemory.reviewqueue.codeDraftAmbiguousLinkScope",
+    preflight_blocked: "ui.longTermMemory.reviewqueue.codePreflightBlocked",
+  },
   transferClassification: {
     ready: "ui.longTermMemory.sourcesworkspace.transferReady",
     conflict: "ui.longTermMemory.sourcesworkspace.transferConflict",
@@ -135,6 +161,17 @@ export const labelKeys = {
 export function localizedLabel(value: string, localizeUi: LabelLocalizer, keys: Readonly<Record<string, string>>) {
   const key = keys[value];
   return key ? localizeUi(key) : humanizeLabel(value);
+}
+
+/** A review-queue block or preflight code as one plain sentence; the engine's own message stays the fallback. */
+export function reviewCodeText(
+  code: string,
+  message: string,
+  localizeUi: LabelLocalizer,
+  humanizeText: (text: string) => string = (text) => text,
+) {
+  const key: string | undefined = labelKeys.reviewCode[code as keyof typeof labelKeys.reviewCode];
+  return key ? localizeUi(key) : `${humanizeLabel(code)}: ${humanizeText(message)}`;
 }
 
 export type ScopeKind = keyof typeof labelKeys.scopeKind;

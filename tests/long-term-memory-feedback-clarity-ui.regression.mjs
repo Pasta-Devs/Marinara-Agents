@@ -790,8 +790,25 @@ assert.match(reviewQueue, /discardDependentWarning/u);
 assert.match(reviewQueue, /reviewQueueEmpty/u);
 assert.match(reviewQueue, /className=\{workspaceUnavailable \|\| reviewDataUnavailable \? "hidden" : ""\}/u);
 assert.equal(locale["ui.longTermMemory.reviewqueue.retryFailed"], "Retry failed review actions");
-assert.equal(locale["ui.longTermMemory.reviewqueue.reviewChangeForTitle"], "Review change for {{title}}");
+assert.equal(locale["ui.longTermMemory.reviewqueue.reviewChangeForTitle"], "Check change for {{title}}");
 assert.equal(locale["ui.longTermMemory.reviewqueue.applyChangeForTitle"], "Apply change for {{title}}");
+// #1654: one Check/Apply verb pair, "changes" not "mutations", and a plain sentence for the engine's codes.
+assert.match(reviewQueue, /data-ltm-review-action-text/u);
+assert.match(reviewQueue, /data-ltm-review-state-chip/u);
+assert.match(reviewQueue, /reviewCodeText\(blocker\.code/u);
+assert.equal(locale["ui.longTermMemory.reviewqueue.missingSourceTitle"], "Deleted source");
+assert.equal(locale["ui.longTermMemory.reviewqueue.preflightReady"], "Checked, ready to apply");
+assert.equal(locale["ui.longTermMemory.reviewqueue.mutationActions"], "Change actions");
+assert.equal(locale["ui.longTermMemory.reviewqueue.rowCheck"], "Check");
+assert.equal(locale["ui.longTermMemory.reviewqueue.rowApply"], "Apply");
+assert.equal(locale["ui.longTermMemory.reviewqueue.codeSourceMissing"], "The source note was deleted.");
+for (const key of Object.keys(locale).filter((name) => name.startsWith("ui.longTermMemory.reviewqueue."))) {
+  assert.doesNotMatch(
+    locale[key].replace(/\{\{\w+\}\}/gu, ""),
+    /\bmutations?\b|\bpreflight\b/iu,
+    `${key} still uses engine wording`,
+  );
+}
 assert.equal(locale["ui.longTermMemory.reviewqueue.discard"], "Discard");
 assert.equal(locale["ui.longTermMemory.reviewqueue.sourcesPane"], "Sources");
 assert.equal(locale["ui.longTermMemory.reviewqueue.reviewPane"], "Review");

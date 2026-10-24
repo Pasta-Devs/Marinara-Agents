@@ -72,11 +72,13 @@ Disabled panes are excluded from the tab sequence. The destination rail becomes
 the mobile bottom navigation; reduced-motion behavior is defined in `DESIGN.md`.
 
 Layout inside a destination also follows container width, so a narrow panel on
-a wide window gets the phone layout. Below `48rem` of workspace, row actions
-collapse into a menu, the Review batch bar and the Sources lorebook bar stick
-to the top while rows scroll, and the flat source bar sticks to the bottom;
-from `48rem` they sit in the flow. Review
-widens its fields and padding from `40rem`. The Sources scope row stacks until
+a wide window gets the phone layout. Below `48rem` of workspace, Vault and Sources
+row actions collapse into a menu, the Review batch bar and the Sources lorebook
+bar stick to the top while rows scroll, and the flat source bar sticks to the
+bottom; from `48rem` they sit in the flow. Review rows never use a menu: their
+commit control shows the text "Check", then "Apply" once the check passes,
+from `40rem`, and below it keeps the icon with a Ready or Blocked chip under
+it. Review also widens its fields and padding from `40rem`. The Sources scope row stacks until
 its destination container reaches `40rem`. Vault note title and status share a
 row from a `28rem` workbench, and the Vault list scrolls on its own from `48rem`.
 
