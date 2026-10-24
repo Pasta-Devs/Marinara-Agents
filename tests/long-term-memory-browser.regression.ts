@@ -6915,6 +6915,32 @@ async function main() {
       const destinationReasonCount = await destinationReasons.count();
       await page.keyboard.press("Enter");
       assert.equal(await destinationReasons.count(), destinationReasonCount);
+      // #1659: the reason is on screen once (the panel's copy is screen-reader only) and ends with a route to the
+      // destination: at every width it shows the destination pane, opens the collapsed disclosure and puts focus
+      // on its summary.
+      assert.equal(await page.locator("[data-ltm-import-reason]:visible").count(), 1, "the reason shows once");
+      const destinationHintBox = await destinationPanel.locator("[data-ltm-destination-hint]").boundingBox();
+      assert.ok(destinationHintBox && destinationHintBox.width <= 1 && destinationHintBox.height <= 1);
+      for (const width of [1280, 900, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        await showWorkspacePane("navigator");
+        await destinationScope.evaluate((details) => {
+          (details as HTMLDetailsElement).open = false;
+        });
+        const chooseDestination = page.locator("[data-ltm-choose-destination]:visible");
+        assert.equal(await chooseDestination.count(), 1, `${width}px: one Choose destination button`);
+        assert.equal((await chooseDestination.innerText()).trim(), "Choose destination");
+        await chooseDestination.click();
+        assert.equal(await destinationScope.evaluate((details) => (details as HTMLDetailsElement).open), true, width);
+        await destinationScope.locator("summary").waitFor({ state: "visible" });
+        assert.equal(
+          await destinationScope.locator("summary").evaluate((summary) => summary === document.activeElement),
+          true,
+          `${width}px: focus lands on the destination summary`,
+        );
+      }
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await showWorkspacePane("navigator");
       await firstSourceSelect.uncheck();
       await page
         .locator('[data-ltm-source-preview="chats"]')

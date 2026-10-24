@@ -1003,6 +1003,9 @@ assert.equal(locale["ui.longTermMemory.sourcesworkspace.lorebookEntryCountOther"
 assert.doesNotMatch(workspace, /sourcesworkspace\.entries"/u);
 assert.equal((workspace.match(/entryCountLabel\(/gu) ?? []).length, 2);
 assert.match(workspace, /label: localizeUi\("ui\.longTermMemory\.sourcesworkspace\.entriesTab"\)/u);
+// #1659: the blocking reason ends with a route to the destination, and the panel's own hint stays screen-reader only.
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.chooseDestinationAction"], "Choose destination");
+assert.match(workspaceScreen, /<span role="status" className="sr-only" data-ltm-destination-hint>/u);
 
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, defaults, and scope loading ok\n",

@@ -9,7 +9,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import {
   BookOpen,
   Check,
@@ -572,16 +572,33 @@ export default function SourcesWorkspace({
     currentDestinationScope
       ? {}
       : ({ "aria-disabled": true, "aria-describedby": reasonId, className: "opacity-50" } as const);
+  // The destination panel sits in another pane below 72rem and starts collapsed: show its pane, open it and
+  // put focus on its summary.
+  const goToDestination = () => {
+    flushSync(() => setWorkspacePane("inspector"));
+    const details = document.querySelector<HTMLDetailsElement>(
+      "#ltm-destination-scope-control [data-ltm-destination-scope]",
+    );
+    if (!details) return;
+    details.open = true;
+    details.querySelector<HTMLElement>("summary")?.focus();
+  };
   const importReason = (id: string) =>
     currentDestinationScope ? null : (
-      <p
-        id={id}
-        data-ltm-import-reason
-        className="flex basis-full items-start gap-1.5 text-xs text-[var(--muted-foreground)]"
-      >
-        <CircleAlert aria-hidden="true" size="0.875rem" className="mt-0.5 shrink-0" />
-        {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
-      </p>
+      <div className="flex basis-full flex-wrap items-center gap-x-3" data-ltm-import-reason-line>
+        <p id={id} data-ltm-import-reason className="flex items-start gap-1.5 text-xs text-[var(--muted-foreground)]">
+          <CircleAlert aria-hidden="true" size="0.875rem" className="mt-0.5 shrink-0" />
+          {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
+        </p>
+        <button
+          type="button"
+          data-ltm-choose-destination
+          className="inline-flex min-h-11 items-center text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
+          onClick={goToDestination}
+        >
+          {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationAction")}
+        </button>
+      </div>
     );
   const currentDestinationLabel = selectedDestinationTargets.length
     ? selectedDestinationTargets.map((target) => targetDisplayLabel(target, true)).join(", ")

@@ -246,12 +246,9 @@ export function DestinationScopePanel({
           onToggle={toggleRail}
         />
       </details>
-      {/* Always mounted, so emptying the selection is read as a change; empty, it takes no space. */}
-      <span
-        role="status"
-        className={selectedTargets.length ? "sr-only" : "block shrink-0 text-xs"}
-        data-ltm-destination-hint
-      >
+      {/* Always mounted, so emptying the selection is read as a change. Screen-reader only: the import bar shows
+          the same reason, and the summary above already reads "Choose a destination". */}
+      <span role="status" className="sr-only" data-ltm-destination-hint>
         {selectedTargets.length ? null : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
       </span>
       <p className="shrink-0 text-xs text-[var(--muted-foreground)]" data-ltm-import-mode-summary>
