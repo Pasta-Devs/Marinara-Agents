@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { SlpLiveShow } from "./slp-live-contract";
 import { SlpCoinText } from "../../modules/coin/SlpCoin";
+import { slpLiveReplyPending } from "./slp-live-hooks";
 
 type ChatItem = {
   at: number;
@@ -149,6 +150,11 @@ export function SlpLiveChat({
             <b className={nameColor(line.name)}>{line.name}</b> <span>{line.text}</span>
           </p>
         ),
+      )}
+      {slpLiveReplyPending(show) && (
+        <p className="px-1 text-xs italic text-[var(--muted-foreground)]" aria-live="polite">
+          {t("ui.slurp.live.readingChat", { name: creatorName })}
+        </p>
       )}
       {newCount > 0 && (
         <button

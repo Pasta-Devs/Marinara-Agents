@@ -50,8 +50,8 @@ assert.equal(
   new Date(now.getTime() + 20 * 60_000).toISOString(),
 );
 assert.equal(slurpLivePrivateUntil(show.private, "b", now), new Date(now.getTime() + 10 * 60_000).toISOString());
-assert.equal(slurpLiveReplyClaimAllowed(now.toISOString(), new Date(now.getTime() + 20_000), true), true);
-assert.equal(slurpLiveReplyClaimAllowed(now.toISOString(), new Date(now.getTime() + 19_999), true), false);
+assert.equal(slurpLiveReplyClaimAllowed(now.toISOString(), new Date(now.getTime() + 8_000)), true);
+assert.equal(slurpLiveReplyClaimAllowed(now.toISOString(), new Date(now.getTime() + 7_999)), false);
 assert.equal(
   slurpLiveForViewer(show, "b", now).script.some((line) => line.text === "secret"),
   false,

@@ -95,6 +95,7 @@ export type SlurpSettings = {
   imageContextConnectionId: string | null;
   imageCaptionPrompt: string;
   pageConnectionId: string | null;
+  liveConnectionId: string | null;
   imagePromptConnectionId: string | null;
   imageStyleProfileId: string | null;
   imageGenerationPrompt: string;

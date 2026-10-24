@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 0.4.6 — 2026-10-24
+
+- Live replies: every player chat line and tip (`fromPlayer`) gets her model reply; one reply per 8 s (`SLURP_LIVE_REPLY_GAP_MS`, was 60 s public / 20 s private), lines sent inside the gap are answered together by a retry after it. Replies are marked `host`.
+- New `liveConnectionId` setting (Settings > Connections > Live shows) for the reply call, 300 max tokens; empty uses the Replies and fans model.
+- The live room polls every 1 s while a reply is pending and shows "reading chat...".
+
 ## 0.4.5 — 2026-10-24
 
 - Live shows keep a room ledger (`room` column, `modules/live/slp-live-room.ts`): done on camera, goal promises, refusals, running jokes. Each segment prompt reads it and the segment answer's `did` / `promise` / `joke` fields extend it in `completeSegment`; promises clear once the goal segment keeps them.

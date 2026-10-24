@@ -252,6 +252,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
       amount: parsed.data.amount,
       text: "",
       requestId: claimId,
+      fromPlayer: true,
     };
     // A retry of a known tip still goes through the payment: the DM tip id makes it charge at most once,
     // and it charges now if the first attempt crashed before paying.
@@ -274,8 +275,10 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
       await storage.releaseTip(show.id, claimId);
       return reply.code(result.status === "insufficient_funds" ? 402 : 403).send(result);
     }
+    if (!duplicate) void replyToSlurpLiveChat(app.db, show.id);
     return {
       show: await showForViewer(show.id, viewer.id),
+      replyQueued: !duplicate,
       ...(duplicate ? { duplicate: true } : {}),
       wallet: await createSlurpStorage(app.db).getWallet(viewer.id),
     };
@@ -296,6 +299,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
       text: parsed.data.text,
       personaId: show.private && Date.parse(show.private.until) > Date.now() ? viewer.id : undefined,
       private: !!show.private && Date.parse(show.private.until) > Date.now(),
+      fromPlayer: true,
     });
     void replyToSlurpLiveChat(app.db, show.id);
     return { show: await showForViewer(show.id, viewer.id), replyQueued: true };

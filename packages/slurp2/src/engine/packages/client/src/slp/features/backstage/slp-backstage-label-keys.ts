@@ -79,6 +79,7 @@ export const SLP_BACKSTAGE_LABEL_KEYS: Partial<Record<keyof SlurpSettings, strin
   imageContextConnectionId: "ui.slurp.settings.images.contextConnection",
   imageCaptionPrompt: "ui.slurp.settings.images.captionPrompt",
   pageConnectionId: "ui.slurp.settings.connections.creatorPages",
+  liveConnectionId: "ui.slurp.settings.connections.live",
   imageStyleProfileId: "ui.slurp.settings.images.styleProfile",
   imageGenerationPrompt: "ui.slurp.settings.images.instructions",
   imagePromptInterpretation: "ui.slurp.settings.images.promptStyle",

@@ -6726,5 +6726,8 @@
   "ui.slurp.live.viewMode": "Show mode",
   "ui.slurp.live.text": "Text",
   "ui.slurp.live.pictures": "Pictures",
-  "ui.slurp.live.pictureAlt": "Picture from {{name}}"
+  "ui.slurp.live.pictureAlt": "Picture from {{name}}",
+  "ui.slurp.settings.connections.live": "Live shows",
+  "ui.slurp.settings.connections.liveUse": "Her live replies to you in a live room. Pick a fast, cheap model. Empty uses the Replies and fans model.",
+  "ui.slurp.live.readingChat": "{{name}} is reading chat..."
 }

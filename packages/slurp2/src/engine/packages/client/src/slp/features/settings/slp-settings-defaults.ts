@@ -192,6 +192,7 @@ export const SLURP_SETTINGS_NOT_RESET: readonly (keyof SlurpSettings)[] = [
   "generationConnectionId",
   "imageContextConnectionId",
   "pageConnectionId",
+  "liveConnectionId",
   "imagePromptConnectionId",
   "inlineAdsImageConnectionId",
   "inlineAdsLorebookId",
