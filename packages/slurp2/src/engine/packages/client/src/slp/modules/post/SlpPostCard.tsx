@@ -406,7 +406,9 @@ export function SlpPostCard({
             }
           >
             <SlpStoryRingAvatar creatorId={post.authorAccountId} name={author.displayName}>
-              <SlpLiveAvatar live={ctx.liveHostId === post.authorAccountId}><Avatar account={author} /></SlpLiveAvatar>
+              <SlpLiveAvatar live={ctx.liveHostId === post.authorAccountId}>
+                <Avatar account={author} />
+              </SlpLiveAvatar>
             </SlpStoryRingAvatar>
           </button>
         ) : (

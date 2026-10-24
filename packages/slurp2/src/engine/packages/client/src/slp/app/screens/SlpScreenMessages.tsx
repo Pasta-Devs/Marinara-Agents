@@ -593,9 +593,12 @@ function SlurpNotificationsView({
                 {group.events.map((event) => {
                   const appearance = eventAppearance(event.kind);
                   const EventIcon = appearance.icon;
-                  const destination = event.kind === "live" && event.subjectId && onOpenLive
-                    ? () => onOpenLive(event.subjectId!)
-                    : event.creatorAccountId ? () => onOpenProfile(event.creatorAccountId!) : null;
+                  const destination =
+                    event.kind === "live" && event.subjectId && onOpenLive
+                      ? () => onOpenLive(event.subjectId!)
+                      : event.creatorAccountId
+                        ? () => onOpenProfile(event.creatorAccountId!)
+                        : null;
                   const row = (
                     <>
                       {event.actorAvatarUrl ? (
@@ -653,13 +656,14 @@ function SlurpNotificationsView({
       const actionable = group.event.kind === "commission_requested";
       const fanNote = group.event.kind === "fan_note";
       const creatorId = group.event.creatorAccountId;
-      const destination = group.event.kind === "live" && group.event.subjectId && onOpenLive
-        ? () => onOpenLive(group.event.subjectId!)
-        : actionable
-        ? () => onOpenMessages(group.event.subjectId)
-        : creatorId && !fanNote
-          ? () => onOpenProfile(creatorId)
-          : null;
+      const destination =
+        group.event.kind === "live" && group.event.subjectId && onOpenLive
+          ? () => onOpenLive(group.event.subjectId!)
+          : actionable
+            ? () => onOpenMessages(group.event.subjectId)
+            : creatorId && !fanNote
+              ? () => onOpenProfile(creatorId)
+              : null;
       const appearance = eventAppearance(group.event.kind);
       const EventIcon = appearance.icon;
       const content = (
