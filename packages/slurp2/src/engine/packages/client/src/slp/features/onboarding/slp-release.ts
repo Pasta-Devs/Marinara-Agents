@@ -18,7 +18,7 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
     version: "0.4.3",
     date: "2026-10-24",
     notes: [
-      "Live shows now have their switch in Backstage › Stir, with how often, the hours and the show length.",
+      "Live shows get their own Backstage page: the switch, how often Creators go live, the hours and the show length.",
       "Going live from Stir takes over a Creator's planned show instead of saying she already has one.",
       "Go live sits below your story picks in Stir, and only while Live shows are on.",
     ],

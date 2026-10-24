@@ -30,6 +30,7 @@ assert.deepEqual(SLP_BACKSTAGE_SECTIONS, [
   "spice",
   "prompts",
   "ads",
+  "live",
   "content",
   "world",
   // 0.3.5: Settings › Stir, now labelled Support desk; polyamory and drama moved to Storylines.

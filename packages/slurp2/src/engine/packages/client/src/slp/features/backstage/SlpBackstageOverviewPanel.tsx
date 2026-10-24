@@ -219,7 +219,7 @@ export function SlpBackstageOverviewPanel(page: SlpBackstagePageProps) {
       title: tx("live", "Live shows"),
       status: slpExtensionOn(settings, "live") ? tx("liveOnStatus", "Creators can host live shows") : onOff(false),
       Icon: Radio,
-      open: () => go("stir", "stir"),
+      open: () => go("live", "live"),
       toggle: { on: slpExtensionOn(settings, "live"), set: (on) => void update("extLive", on) },
     },
     {

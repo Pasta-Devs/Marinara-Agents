@@ -2,7 +2,7 @@
 
 ## 0.4.3 — 2026-10-24
 
-- Live shows get their extension switch on the Backstage Stir page (`SlpExtensionSwitch` for `extLive`) with how often, hours and length; the Overview row opens that page, Settings search and "Reset page" place the live keys under Stir, and Basic setup offers Live as an extra.
+- Live shows get their own Backstage extension section and page (`live`, `SlpLiveSettingsPanel`): the `extLive` switch with how often, hours and length; the Overview row opens it, Settings search and "Reset page" place the live keys there, and Basic setup offers Live as an extra.
 - `extLive` is off by default for new installs, like the other extensions; existing players keep it through the legacy mapping.
 - A Stir go-live replaces the Creator's not-yet-started plan, and shows whose end time passed never block a new plan.
 - Stir's Go live card moves below the story picks and shows only while Live is on.

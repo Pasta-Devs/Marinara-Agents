@@ -10,6 +10,7 @@ import {
   Link2,
   Megaphone,
   PenLine,
+  Radio,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -36,6 +37,7 @@ export const SLP_BACKSTAGE_SECTION_ICONS: Record<SlpBackstageSection, LucideIcon
   spice: Flame,
   prompts: PenLine,
   ads: Megaphone,
+  live: Radio,
   content: BookOpen,
   world: Globe2,
   stir: Headset,
