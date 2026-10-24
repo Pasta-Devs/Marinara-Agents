@@ -816,6 +816,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.5",
+          "date": "2026-10-24",
+          "notes": "- Live shows keep a room ledger (`room` column, `modules/live/slp-live-room.ts`): done on camera, goal promises, refusals, running jokes. Each segment prompt reads it and the segment answer's `did` / `promise` / `joke` fields extend it in `completeSegment`; promises clear once the goal segment keeps them.\n- Lines written ahead may carry `requires: \"goal-open\"`; `slurpLiveForViewer` drops them once the goal is hit before their time.",
+          "highlight": false
+        },
+        {
           "version": "0.4.4",
           "date": "2026-10-24",
           "notes": "- Live shows write ahead: from halfway through a 4-minute segment the next one is written, so chat never runs dry (`slurpLiveSegmentToWrite`).\n- A segment written late spreads its lines over the time left instead of dumping them at once (`slurpLiveSegmentLineAt`).\n- A watcher's 3 s poll kicks the show (`kickSlurpLiveShow`, at most every 3 s); one show never advances twice at once (a run hung over 2 minutes is dropped).\n- A private show that starts after the next segment was written rewrites it as private; no segment is written ahead during a private show; a menu picture waits until its segment plays.",
@@ -927,12 +933,6 @@
           "version": "0.3.40",
           "date": "2026-10-14",
           "notes": "- Changed: Slurp follows a Creator's gender instead of calling everyone \"she\". Drama packs use the gender of whoever plays each role (\"{her:he}\" tokens), and pack names and descriptions no longer assume a woman. Post, DM and scene prompts tell the model the Creator's pronouns. A Creator without a gender is \"they\".\n- Added: a \"Clothing style\" choice in the Creator's stage profile: Auto, Feminine, Masculine or Neutral. Auto follows gender. It decides what a \"lingerie\" spice post is: lingerie for feminine, an underwear shoot with briefs for masculine, either for neutral. Male Creators no longer get bra-and-panties shoots unless their style is Feminine. The post prompt also names the style.\n- Added: a picture of a Creator whose appearance text does not say their sex starts with \"Male.\" or \"Female.\" from their gender, so the image model stops defaulting to a woman.\n- Changed: the stage profile field hints read \"he\", \"she\" or \"they\" from the gender you picked.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.39",
-          "date": "2026-10-14",
-          "notes": "- Fixed: on Android, choosing a picture for a post (in the composer, or \"replace\" while editing a post) no longer opens the system photo picker, which lists only a few albums such as Camera, Screenshots and Downloads. Android now offers its full file browser, so every folder is reachable. A file that is not a picture still gets \"Choose an image file.\". Other platforms keep the picture-only file dialog. (#1378)",
           "highlight": false
         }
       ]
