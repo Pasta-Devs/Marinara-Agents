@@ -13,14 +13,14 @@
     "Engine and Agents ownership boundary",
     "package compatibility and catalog integrity",
     "failure paths",
-    "missing regression tests",
+    "proof gaps (reported as pre-merge checks, not findings)",
     "CI and catalog validation failures"
   ],
   "severity_policy": {
     "blocking": "The PR should not merge because the changed behavior is broken, unsafe, or violates a hard architecture boundary.",
     "high": "A likely production or data-loss regression, security/privacy issue, or serious package install, catalog, or persistence contract risk.",
-    "medium": "A concrete bug, edge case, maintainability trap, or missing test tied directly to changed behavior.",
-    "low": "A small but actionable correctness, proof, or maintainability risk tied to changed behavior.",
+    "medium": "A concrete bug or edge case in changed behavior that an ordinary action reaches.",
+    "low": "A small but actionable correctness or maintainability risk tied to changed behavior.",
     "nitpick": "Optional changed-line polish with no behavior risk, such as readability, naming, tiny duplication, stale comments, dead code, type clarity, or local consistency."
   },
   "repo_concerns": [
@@ -28,7 +28,7 @@
     "Bundles (packages/**/client.js, packages/**/server.mjs), artifacts, catalogs, file hashes, checksums, and catalog sizes are generated. Their source or build scripts change and they are rebuilt; they are never hand-edited.",
     "Changes to package permissions, archive handling, install or update behavior, executable client or server code, or Engine snapshots are security-sensitive and need explicit validation notes.",
     "About Me is a core Conversation feature and must never be published as an Agent package.",
-    "Changed behavior with realistic regression risk needs the smallest runnable regression proof or manual proof."
+    "Changed behavior with realistic regression risk needs the smallest runnable regression proof or manual proof; a missing one is a proof gap under pre-merge checks, not a finding."
   ],
   "path_instructions": [
     {
