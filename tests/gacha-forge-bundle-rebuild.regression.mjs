@@ -1,14 +1,21 @@
 import assert from "node:assert/strict";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { rebuildGachaBundles } from "../scripts/gacha-forge-bundle-patches.mjs";
 
 const directory = await mkdtemp(join(tmpdir(), "gacha-rebuild-"));
-const root = pathToFileURL(directory + "/");
+const root = pathToFileURL(join(directory, "packages/gacha-forge") + "/");
 try {
   const sourceRoot = new URL("../packages/gacha-forge/", import.meta.url);
+  await mkdir(root, { recursive: true });
+  const shared = pathToFileURL(join(directory, "sources/engine/packages/shared/dist") + "/");
+  for (const file of ["constants/model-lists.js"]) {
+    const target = new URL(file, shared);
+    await mkdir(new URL("./", target), { recursive: true });
+    await cp(new URL(`../sources/engine/packages/shared/dist/${file}`, import.meta.url), target);
+  }
   for (const file of ["client.js", "server.mjs", "bundle-patches.json", "src"]) {
     await cp(new URL(file, sourceRoot), new URL(file, root), { recursive: true });
   }
@@ -16,11 +23,23 @@ try {
   const originalServer = await readFile(new URL("server.mjs", root), "utf8");
   await rebuildGachaBundles(root);
   assert.equal(await readFile(new URL("client.js", root), "utf8"), originalClient, "clean replay is byte-identical");
+  assert.equal(
+    await readFile(new URL("server.mjs", root), "utf8"),
+    originalServer,
+    "server clean replay is byte-identical",
+  );
   const sources = [
     ["browser-presentation", ["client.js"]],
     ["home-presentation", ["client.js"]],
     ["unit-notifications", ["client.js"]],
     ["image-avatar-references", ["server.mjs"]],
+    ["story-memory", ["server.mjs"]],
+    ["story-memory-integration", ["server.mjs"]],
+    ["story-memory-fit", ["server.mjs"]],
+    ["story-memory-shared", ["server.mjs"]],
+    ["shared-token-estimator", ["server.mjs"]],
+    ["story-memory-client", ["client.js"]],
+    ["story-memory-en", ["client.js"]],
     ["enemy-encounters-client", ["client.js"]],
     ["enemy-encounters-server", ["server.mjs"]],
     ["player-choices-en", ["client.js"]],
@@ -34,12 +53,29 @@ try {
   for (const [name, bundles] of sources) {
     const source = new URL(`src/${name}.mjs`, root);
     const before = await readFile(source, "utf8");
-    await writeFile(source, before + "\n// source rebuild proof\n");
+    // Bundled helpers discard comments; a pure export proves their input is rebuilt as well.
+    const marker =
+      name === "story-memory-shared" ? "export const forgeRebuildProof = true;" : "// source rebuild proof";
+    const changed =
+      name === "shared-token-estimator"
+        ? before.replace("hundredthTokens / 100", "hundredthTokens / 101.125")
+        : before + `\n${marker}\n`;
+    assert.notEqual(changed, before, `${name} fixture changes its source`);
+    await writeFile(source, changed);
     await rebuildGachaBundles(root);
     const regenerated = new Map();
     for (const bundle of bundles) {
       const value = await readFile(new URL(bundle, root), "utf8");
-      assert.ok(value.includes("// source rebuild proof"), `${name} changes regenerate ${bundle}`);
+      assert.ok(
+        value.includes(
+          name === "story-memory-shared"
+            ? "forgeRebuildProof"
+            : name === "shared-token-estimator"
+              ? "101.125"
+              : "// source rebuild proof",
+        ),
+        `${name} changes regenerate ${bundle}`,
+      );
       regenerated.set(bundle, value);
     }
     await rebuildGachaBundles(root);
