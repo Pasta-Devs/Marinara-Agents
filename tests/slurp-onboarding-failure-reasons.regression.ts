@@ -62,7 +62,11 @@ assert.deepEqual(
   "A Slurp service parses a model answer without being covered here",
 );
 const coveredFiles = new Set(Object.keys(parsers).flatMap((file) => SLURP2_SOURCE_MODULES[`${serviceKey}${file}`]));
-const slpServer = "packages/slurp2/src/engine/packages/server/src/slp";
+// The live service was born under `slp`, so no historical key maps it; it guards its own answer.
+const liveService = "packages/slurp2/src/engine/packages/server/src/slp/features/live/slp-live-service.ts";
+assert.match(read(liveService), /requireModelAnswer\(response\.content/u, "The live model answer must be guarded");
+coveredFiles.add("packages/server/src/slp/features/live/slp-live-service.ts");
+const slpServer ="packages/slurp2/src/engine/packages/server/src/slp";
 for (const file of readdirSync(join(root, slpServer), { recursive: true, encoding: "utf8" })) {
   if (!file.endsWith(".ts") || !/parseGameJsonish\(/u.test(read(`${slpServer}/${file}`))) continue;
   assert.ok(
