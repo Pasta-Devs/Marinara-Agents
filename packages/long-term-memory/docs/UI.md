@@ -78,7 +78,10 @@ bar stick to the top while rows scroll, and the flat source bar sticks to the
 bottom; from `48rem` they sit in the flow. Review rows never use a menu: their
 commit control shows the text "Check", then "Apply" once the check passes,
 from `40rem`, and below it keeps the icon with a Ready or Blocked chip under
-it. Review also widens its fields and padding from `40rem`. The Sources scope row stacks until
+it. Review also widens its fields and padding from `40rem`. Review draws one progress line, in the
+navigator below `48rem` and in the workbench from it, and puts the run summary at the top of the
+workbench while rows are listed (above the pane tabs once the queue is empty), as a warning while a
+change is ready to apply. The Sources scope row stacks until
 its destination container reaches `40rem`. Vault note title and status share a
 row from a `28rem` workbench, and the Vault list scrolls on its own from `48rem`.
 

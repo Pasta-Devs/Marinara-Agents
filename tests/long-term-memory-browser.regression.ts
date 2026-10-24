@@ -5369,9 +5369,44 @@ async function main() {
         }));
       await page.setViewportSize({ width: 1280, height: 900 });
       assert.deepEqual(await reviewBarLayout(), { position: "static", workbenchPadding: "16px" });
+      // #1654: one progress line per band (the navigator's below 48rem, the workbench's from it), and the draft
+      // sits in the workbench without a frame of its own.
+      const reviewChrome = () =>
+        page.evaluate(() => {
+          const bands = ["navigator", "workbench"].map(
+            (band) => getComputedStyle(document.querySelector(`[data-ltm-review-progress-band="${band}"]`)!).display,
+          );
+          const draft = getComputedStyle(document.querySelector("[data-ltm-review-draft]")!);
+          return {
+            navigator: bands[0],
+            workbench: bands[1],
+            visibleProgress: [...document.querySelectorAll("[data-ltm-review-progress]")].filter(
+              (progress) => progress.getClientRects().length > 0,
+            ).length,
+            draftBorder: draft.borderTopWidth,
+            draftPadding: draft.paddingTop,
+          };
+        });
+      assert.deepEqual(await reviewChrome(), {
+        navigator: "none",
+        workbench: "block",
+        visibleProgress: 1,
+        draftBorder: "0px",
+        draftPadding: "0px",
+      });
       await dockDetailPanel(page, "24rem");
       await showWorkspacePane("workbench");
       assert.deepEqual(await reviewBarLayout(), { position: "sticky", workbenchPadding: "12px" });
+      assert.deepEqual(await reviewChrome(), {
+        navigator: "block",
+        workbench: "none",
+        visibleProgress: 0,
+        draftBorder: "0px",
+        draftPadding: "0px",
+      });
+      await showWorkspacePane("navigator");
+      assert.equal((await reviewChrome()).visibleProgress, 1);
+      await showWorkspacePane("workbench");
       if (visualOutputDir) await page.screenshot({ path: join(visualOutputDir, "long-term-memory-review-docked.png") });
       await dockDetailPanel(page, null);
       await page.setViewportSize({ width: 390, height: 844 });
@@ -5419,6 +5454,20 @@ async function main() {
       );
       assert.equal(await blockedChip.innerText(), "Blocked");
       assert.equal(await blockedChip.isVisible(), true);
+      // #1654: the run summary sits in the workbench, above the rows, and is a warning while a change is ready.
+      const preflightResult = page.locator("[data-ltm-review-result]");
+      assert.equal(await preflightResult.getAttribute("data-ltm-status"), "warning");
+      assert.equal(
+        await preflightResult.evaluate(
+          (result) =>
+            Boolean(result.closest("[data-ltm-review-workbench]")) &&
+            Boolean(
+              result.compareDocumentPosition(document.querySelector("[data-ltm-review-draft]")!) &
+              Node.DOCUMENT_POSITION_FOLLOWING,
+            ),
+        ),
+        true,
+      );
       assert.equal(
         await page
           .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-review-action-text]`)
@@ -5459,6 +5508,7 @@ async function main() {
       // #1588: failed changes are not counted again as "other pending", and the result stays when the
       // selection changes, until the next run.
       assert.doesNotMatch(await page.locator("[data-ltm-review-result]").innerText(), /other changes? pending/u);
+      assert.equal(await page.locator("[data-ltm-review-result]").getAttribute("data-ltm-status"), "danger");
       const partialSelect = page.locator(
         `[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`,
       );

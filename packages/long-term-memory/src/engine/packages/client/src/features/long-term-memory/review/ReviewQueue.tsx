@@ -2109,6 +2109,45 @@ export default function ReviewQueue({
   const reviewDataUnavailable =
     review.isLoading || review.isError || rejectedSuggestions.isLoading || rejectedSuggestions.isError;
 
+  const workspaceShown = !workspaceUnavailable && !reviewDataUnavailable;
+  // The run summary sits above the rows it describes. With the workspace hidden (an emptied queue) it stays above it.
+  const resultSurface = result ? (
+    <StatusSurface
+      data-ltm-review-result
+      tabIndex={-1}
+      tone={
+        result.phase === "preflight" && result.ready > 0
+          ? "warning"
+          : result.failed || result.blockedMutationIds.length || result.indexRebuildFailures.length
+            ? "danger"
+            : "success"
+      }
+    >
+      {batchResultSentences(result, localizeUi, locale).join(" ")}
+      {result.failedMutationIds.length ? (
+        <Button disabled={running !== null} onClick={retryFailed}>
+          {localizeUi("ui.longTermMemory.reviewqueue.retryFailed")}
+        </Button>
+      ) : null}
+      {result.failedDraftIds.length ? (
+        <Button disabled={running !== null} onClick={reviewFailed}>
+          {localizeUi("ui.longTermMemory.reviewqueue.reviewFailed")}
+        </Button>
+      ) : null}
+      {result.action === "accepted" && result.completed && onOpenVault ? (
+        <Button
+          onClick={() => {
+            const noteId = result.savedMemoryIds.length === 1 ? result.savedMemoryIds[0] : undefined;
+            if (noteId && onOpenMemory) onOpenMemory(noteId);
+            else onOpenVault();
+          }}
+        >
+          {localizeUi("ui.longTermMemory.reviewqueue.viewSavedMemories")}
+        </Button>
+      ) : null}
+    </StatusSurface>
+  ) : null;
+
   return (
     <section
       ref={reviewRef}
@@ -2122,6 +2161,9 @@ export default function ReviewQueue({
           gap: 0.375rem;
         }
         [data-ltm-surface="review-queue"] [data-ltm-review-action-text] {
+          display: none;
+        }
+        [data-ltm-surface="review-queue"] [data-ltm-review-progress-band="workbench"] {
           display: none;
         }
         @container ltm-workspace (min-width: 40rem) {
@@ -2141,12 +2183,17 @@ export default function ReviewQueue({
           [data-ltm-review-mutation-details] {
             margin-left: 4.25rem;
           }
-          [data-ltm-review-workbench],
-          [data-ltm-review-draft] {
+          [data-ltm-review-workbench] {
             padding: 1rem;
           }
         }
         @container ltm-workspace (min-width: 48rem) {
+          [data-ltm-surface="review-queue"] [data-ltm-review-progress-band="navigator"] {
+            display: none;
+          }
+          [data-ltm-surface="review-queue"] [data-ltm-review-progress-band="workbench"] {
+            display: block;
+          }
           [data-ltm-review-batch-actions] {
             position: static;
             z-index: auto;
@@ -2174,40 +2221,7 @@ export default function ReviewQueue({
           </Button>
         </StatusSurface>
       ) : null}
-      {result ? (
-        <StatusSurface
-          data-ltm-review-result
-          tabIndex={-1}
-          tone={
-            result.failed || result.blockedMutationIds.length || result.indexRebuildFailures.length
-              ? "danger"
-              : "success"
-          }
-        >
-          {batchResultSentences(result, localizeUi, locale).join(" ")}
-          {result.failedMutationIds.length ? (
-            <Button disabled={running !== null} onClick={retryFailed}>
-              {localizeUi("ui.longTermMemory.reviewqueue.retryFailed")}
-            </Button>
-          ) : null}
-          {result.failedDraftIds.length ? (
-            <Button disabled={running !== null} onClick={reviewFailed}>
-              {localizeUi("ui.longTermMemory.reviewqueue.reviewFailed")}
-            </Button>
-          ) : null}
-          {result.action === "accepted" && result.completed && onOpenVault ? (
-            <Button
-              onClick={() => {
-                const noteId = result.savedMemoryIds.length === 1 ? result.savedMemoryIds[0] : undefined;
-                if (noteId && onOpenMemory) onOpenMemory(noteId);
-                else onOpenVault();
-              }}
-            >
-              {localizeUi("ui.longTermMemory.reviewqueue.viewSavedMemories")}
-            </Button>
-          ) : null}
-        </StatusSurface>
-      ) : null}
+      {workspaceShown ? null : resultSurface}
       {deleteSuggestionError ? <StatusSurface tone="danger">{deleteSuggestionError}</StatusSurface> : null}
       {rejectedSuggestionsMessage ? (
         <StatusSurface tone="success">
@@ -2272,7 +2286,9 @@ export default function ReviewQueue({
                     />
                   ) : null}
                 </h2>
-                <ReviewProgress {...reviewProgress} />
+                <div data-ltm-review-progress-band="navigator">
+                  <ReviewProgress {...reviewProgress} />
+                </div>
               </header>
               <div className="mari-editor-panel overflow-hidden">
                 {sourceIds.map((id) => {
@@ -2461,6 +2477,7 @@ export default function ReviewQueue({
                   ) : null}
                 </div>
               </header>
+              {workspaceShown ? resultSurface : null}
               {selectedSourceMissing ? (
                 <StatusSurface tone="danger" data-ltm-review-source-missing>
                   {localizeUi("ui.longTermMemory.reviewqueue.missingSourceHelp")}
@@ -2687,7 +2704,9 @@ export default function ReviewQueue({
                         );
                   }}
                 />
-                <ReviewProgress {...reviewProgress} />
+                <div data-ltm-review-progress-band="workbench">
+                  <ReviewProgress {...reviewProgress} />
+                </div>
               </div>
               {selectedRows.length ? (
                 <div
@@ -2785,11 +2804,7 @@ export default function ReviewQueue({
                             }
                             const diagnosticsOnly = item.draft.mutations.length === 0;
                             return (
-                              <section
-                                key={item.draft.id}
-                                data-ltm-review-draft={item.draft.id}
-                                className="mari-editor-panel space-y-3 p-3"
-                              >
+                              <section key={item.draft.id} data-ltm-review-draft={item.draft.id} className="space-y-3">
                                 {item.blockReasons.length ? (
                                   <div
                                     data-ltm-review-blocks
