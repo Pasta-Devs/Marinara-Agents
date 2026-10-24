@@ -139,6 +139,19 @@ async function main() {
     assert.ok(immediate);
     await live.update(creatorC.id, { endedAt: at.toISOString() });
     assert.equal((await live.startPlanned(immediate.id, at))?.id, immediate.id);
+    const roomLease = await live.claimSegment(immediate.id, 0, at);
+    assert.ok(roomLease);
+    assert.equal(
+      await live.completeSegment(immediate.id, 0, roomLease, [], { shown: ["robe off"], jokes: ["the cat"] }),
+      true,
+    );
+    assert.deepEqual((await live.get(immediate.id)).room, {
+      shown: ["robe off"],
+      promises: [],
+      refused: [],
+      jokes: ["the cat"],
+      before: { index: 0, shown: [], promises: [], refused: [], jokes: [] },
+    });
     assert.equal((await live.byStirRequestId("now-request"))?.startedNoticeAt, at.toISOString());
     assert.equal(await live.privateClaim(creatorB.id, "viewer-a", "private-1", at), "new");
     assert.equal(await live.privateClaim(creatorB.id, "viewer-b", "private-2", at), "busy");

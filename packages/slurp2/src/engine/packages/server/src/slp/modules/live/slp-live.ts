@@ -1,4 +1,5 @@
 import { slurpFanTypeWeeklyBudget, type SlurpFanType } from "../../../../../shared/src/slp/slp-fan-types.js";
+import { slurpLiveRoomRewind, type SlurpLiveRoom } from "./slp-live-room.js";
 
 export type SlurpLivePhase = "warmup" | "main" | "finish";
 export type SlurpLiveLineKind = "narration" | "crowd" | "reaction" | "picture";
@@ -26,6 +27,8 @@ export type SlurpLiveLine = {
   personaId?: string;
   private?: boolean;
   mediaId?: string;
+  /** Written ahead on a condition: `goal-open` lines drop out once the tip goal is hit. */
+  requires?: "goal-open";
 };
 export type SlurpLiveEvent = {
   at: number;
@@ -69,6 +72,7 @@ export type SlurpLiveShow = {
   audienceTipKeys: string[];
   lastReplyAt: string | null;
   recapPostId: string | null;
+  room: SlurpLiveRoom;
   menu: SlurpLiveMenuItem[];
   queue: SlurpLiveOrder[];
   segment: SlurpLiveSegment | null;
@@ -135,6 +139,7 @@ export function slurpLivePictureTriggers(show: SlurpLiveShow, personaId: string,
 export function slurpLiveForViewer(show: SlurpLiveShow, personaId: string | null, at: Date): SlurpLiveShow {
   const isPrivate = !!show.private && Date.parse(show.private.until) > at.getTime();
   const privateViewer = isPrivate && show.private?.personaId === personaId;
+  const goalHit = show.goalHitAt ? Date.parse(show.goalHitAt) - Date.parse(show.startedAt) : null;
   const pictureViewers = show.pictureViewers ?? [];
   const pictureViewer = pictureViewers.find((item) => item.personaId === personaId);
   const pictureMode = pictureViewer?.mode ?? (show.pictureViewerId === personaId ? show.mode : "text");
@@ -158,7 +163,10 @@ export function slurpLiveForViewer(show: SlurpLiveShow, personaId: string | null
     pictureSeenAt: pictureViewer?.seenAt ?? null,
     pictureModeBusy,
     script: show.script.filter(
-      (line) => (!line.personaId || line.personaId === personaId) && (!isPrivate || privateViewer || !line.personaId),
+      (line) =>
+        (!line.personaId || line.personaId === personaId) &&
+        (!isPrivate || privateViewer || !line.personaId) &&
+        !(line.requires === "goal-open" && goalHit !== null && line.at >= goalHit),
     ),
     events: show.events.filter((event) => !event.personaId || event.personaId === personaId),
     queue: show.queue.filter((order) => !order.personaId || order.personaId === personaId),
@@ -306,15 +314,16 @@ export function slurpLiveSegmentToWrite(
 
 /** A private show that starts after the next segment was written: drop that public segment so it is written again as private. */
 export function slurpLiveDropAhead(
-  show: Pick<SlurpLiveShow, "startedAt" | "segment" | "script" | "queue">,
+  show: Pick<SlurpLiveShow, "startedAt" | "segment" | "script" | "queue" | "room">,
   at: Date,
-): Pick<SlurpLiveShow, "segment" | "script" | "queue"> | null {
+): Pick<SlurpLiveShow, "segment" | "script" | "queue" | "room"> | null {
   const current = slurpLiveSegmentIndex(show, at);
   const segment = show.segment;
   if (!segment || segment.index <= current || segment.lease) return null;
   const start = segment.index * SLURP_LIVE_SEGMENT_MS;
   return {
     segment: { index: current, lease: null, claimedAt: null },
+    room: slurpLiveRoomRewind(show.room, segment.index),
     script: show.script.filter((line) => line.personaId || line.at < start),
     queue: show.queue.map((order) =>
       order.servedIn === segment.index ? { ...order, served: false, servedIn: undefined } : order,
@@ -452,6 +461,7 @@ export function slurpLiveParseLines(value: unknown): SlurpLiveLine[] {
         kind,
         ...(typeof item.name === "string" ? { name: item.name } : {}),
         ...(typeof item.mediaId === "string" ? { mediaId: item.mediaId } : {}),
+        ...(item.requires === "goal-open" ? { requires: "goal-open" as const } : {}),
         text: item.text.slice(0, 1000),
       },
     ];

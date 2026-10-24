@@ -3,6 +3,8 @@
  * her level, turn-ons and hard-nos in plain words), so a live show never goes past what she does in
  * her DMs. `level` is the spice step (0 clean, 1 flirty, 2 suggestive, 3 explicit).
  */
+import { slurpLiveRoomLines, type SlurpLiveRoom } from "./slp-live-room.js";
+
 type LiveSpice = { level: number; spiceLines?: readonly string[] };
 
 const LEVEL_DIRECTION = [
@@ -31,12 +33,14 @@ export function slurpLiveSegmentPrompt(
     fans?: readonly string[];
     totalSegments?: number;
     goalReached?: boolean;
+    room?: SlurpLiveRoom;
   } & LiveSpice,
 ): string {
   const last = input.totalSegments !== undefined && input.segmentIndex >= input.totalSegments - 1;
   return [
     `You are ${input.hostName}, live on camera on your fan page. This is minute ${input.minutes} of the show (segment ${input.segmentIndex + 1}${input.totalSegments ? ` of ${input.totalSegments}` : ""}).`,
     spiceBlock(input),
+    ...slurpLiveRoomLines(input.room ?? { shown: [], promises: [], refused: [], jokes: [] }, !!input.goalReached),
     input.segmentIndex === 0
       ? "Open the show: say hi to the room, tease what is coming, point at the tip menu."
       : last
@@ -54,6 +58,10 @@ export function slurpLiveSegmentPrompt(
     input.fans?.length ? `Fans in the room you can name: ${input.fans.join(", ")}.` : "",
     "Write 8-14 lines spread over the segment: mostly narration and reactions, 2-4 crowd lines. Short lines, emojis welcome, no stage directions in brackets.",
     LINE_FORMAT,
+    input.goalReached
+      ? ""
+      : 'Add "requires":"goal-open" to lines that only make sense before the goal is hit (counting down, begging for the last coins).',
+    'Also add to the JSON: "did": the new things she did or showed on camera this segment, 2-6 words each; "promise": what she promises the room for the goal, or ""; "joke": a running joke that started in chat, or "".',
   ]
     .filter(Boolean)
     .join("\n");

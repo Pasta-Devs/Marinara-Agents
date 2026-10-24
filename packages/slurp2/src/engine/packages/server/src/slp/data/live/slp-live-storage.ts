@@ -3,6 +3,7 @@ import { and, desc, eq, isNotNull, isNull, lt, lte, or } from "../../../db/file-
 import { slurpLiveShows } from "../../../db/schema/slurp.js";
 import { newId } from "../../../utils/id-generator.js";
 import { createSlurpLivePrivateStorage } from "./slp-live-private-storage.js";
+import { slurpLiveMergeRoom, slurpLiveParseRoom, type SlurpLiveRoom } from "../../modules/live/slp-live-room.js";
 import {
   slurpLiveCapEvents,
   slurpLiveClaimTipEvent,
@@ -43,6 +44,7 @@ const map = (row: typeof slurpLiveShows.$inferSelect): SlurpLiveShow => ({
   audienceTipKeys: parse(row.audienceTipKeys ?? "[]", []),
   lastReplyAt: row.lastReplyAt ?? null,
   recapPostId: row.recapPostId ?? null,
+  room: slurpLiveParseRoom(row.room),
   menu: parse(row.menu ?? "[]", []),
   queue: parse(row.queue ?? "[]", []),
   segment: parse(row.segment ?? "null", null),
@@ -476,7 +478,14 @@ export function createSlurpLiveStorage(db: DB) {
         return lease;
       });
     },
-    async completeSegment(id: string, index: number, lease: string, lines: SlurpLiveLine[]) {
+    async completeSegment(
+      id: string,
+      index: number,
+      lease: string,
+      lines: SlurpLiveLine[],
+      room: Partial<SlurpLiveRoom> = {},
+      keptPromises = false,
+    ) {
       return db.transaction(async (tx) => {
         const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
         if (!row || row.endedAt) return false;
@@ -487,6 +496,7 @@ export function createSlurpLiveStorage(db: DB) {
           !!current &&
           current.until > new Date(Date.parse(row.startedAt) + index * 240_000).toISOString() &&
           lines.some((line) => line.personaId === current.personaId);
+        const roomBefore = slurpLiveParseRoom(row.room);
         const queue = parse<SlurpLiveOrder[]>(row.queue ?? "[]", []).map((order) =>
           order.served || isPrivate || order.status === "pending" || order.at > (index + 1) * 240_000
             ? order
@@ -498,6 +508,10 @@ export function createSlurpLiveStorage(db: DB) {
             script: JSON.stringify([...parse<SlurpLiveLine[]>(row.script, []), ...lines]),
             queue: JSON.stringify(queue),
             segment: JSON.stringify({ index, lease: null, claimedAt: null }),
+            room: JSON.stringify({
+              ...slurpLiveMergeRoom(roomBefore, room, keptPromises),
+              before: { ...slurpLiveMergeRoom(roomBefore, {}), index },
+            }),
           })
           .where(eq(slurpLiveShows.id, id));
         return true;

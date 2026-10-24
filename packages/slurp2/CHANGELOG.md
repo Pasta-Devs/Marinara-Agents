@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 0.4.5 — 2026-10-24
+
+- Live shows keep a room ledger (`room` column, `modules/live/slp-live-room.ts`): done on camera, goal promises, refusals, running jokes. Each segment prompt reads it and the segment answer's `did` / `promise` / `joke` fields extend it in `completeSegment`; promises clear once the goal segment keeps them.
+- Lines written ahead may carry `requires: "goal-open"`; `slurpLiveForViewer` drops them once the goal is hit before their time.
+
 ## 0.4.4 — 2026-10-24
 
 - Live shows write ahead: from halfway through a 4-minute segment the next one is written, so chat never runs dry (`slurpLiveSegmentToWrite`).
