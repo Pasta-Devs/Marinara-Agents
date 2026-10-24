@@ -109,7 +109,16 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
             encoding: "utf8",
             flag: forgeAnimationFlags.O_RDONLY | forgeAnimationFlags.O_NOFOLLOW,
           }).catch(() => null);
-          if (prior && body.retry !== true) return { ok: false, error: "animation-failed", retry: true };
+          if (prior && body.retry !== true) {
+            let reason;
+            try {
+              const saved = JSON.parse(prior);
+              if (saved?.state === "failed" && saved.reason === "seedance-reference-setup") reason = saved.reason;
+            } catch {
+              // Legacy pending and unreadable attempt markers retain the generic retry guidance.
+            }
+            return { ok: false, error: "animation-failed", ...(reason ? { reason } : {}), retry: true };
+          }
           // A persisted attempt also survives a restart during a paid request. Only an explicit retry starts another.
           if (body.retry === true)
             await forgeAnimationUnlink(status).catch((error) => {
@@ -156,7 +165,34 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
         } catch (error) {
           if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
           runtime.logger?.warn(error, "[gacha-forge] Banner animation failed");
-          return { ok: false, error: "animation-failed", retry: true };
+          const setup =
+            /Seedance image-to-video references require a publicly reachable HTTPS image URL|Seedance (?:first|last) frame reference URL must be public HTTPS/u.test(
+              typeof error?.message === "string" ? error.message : "",
+            );
+          if (setup)
+            await mutate(runId, async () => {
+              if (superseded() || job.controller.signal.aborted) return;
+              if ((await directory(forgeAnimationDigest(runId))) !== folder)
+                throw new Error("Invalid animation directory");
+              const temporary = forgeAnimationJoin(folder, `.${key}.${forgeAnimationUuid()}.status.tmp`);
+              try {
+                await forgeAnimationWrite(
+                  temporary,
+                  JSON.stringify({ state: "failed", reason: "seedance-reference-setup" }),
+                  { flag: "wx", mode: 0o600 },
+                );
+                await forgeAnimationRename(temporary, status);
+              } finally {
+                await forgeAnimationUnlink(temporary).catch(() => {});
+              }
+            });
+          if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
+          return {
+            ok: false,
+            error: "animation-failed",
+            ...(setup ? { reason: "seedance-reference-setup" } : {}),
+            retry: true,
+          };
         }
       })()
         .catch((error) => {

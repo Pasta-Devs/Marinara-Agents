@@ -8,7 +8,10 @@ export const forgeAnimationEnglish = {
   unavailable: "Selected video connection unavailable, choose a replacement",
   connectionsFailed: "Could not read video connections. Open Engine Settings to check them.",
   generating: "Animating banner…",
+  retrying: "Retrying animation…",
   failed: "Banner animation unavailable. The illustration is still shown.",
+  seedanceSetup:
+    'Seedance needs a public HTTPS banner image. In Engine Settings → Connections, edit this video connection and enable "Upload Seedance reference frames temporarily", then retry.',
   retry: "Retry animation",
   playbackFailed: "This animation could not play. The illustration is still shown.",
   pause: "Pause animation",

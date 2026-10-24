@@ -222,6 +222,164 @@ try {
   assert.equal(failures, 1);
   assert.equal((await failService.generate({ ...failedBody, retry: true })).ok, true);
   assert.equal(failures, 2);
+  let setupCalls = 0,
+    setupCorrected = false;
+  const setupOptions = {
+    dataDir,
+    readBanner: async () => meta,
+    runtime: {
+      logger: log,
+      integrations: {
+        videos: {
+          animateGalleryImage: async () => {
+            setupCalls++;
+            if (!setupCorrected)
+              throw new Error(
+                "Seedance image-to-video references require a publicly reachable HTTPS image URL for the first frame. SECRET_PROVIDER_DETAIL",
+              );
+            return video;
+          },
+        },
+      },
+    },
+  };
+  const setupService = createForgeBannerAnimations(setupOptions);
+  const setupBody = { runId: "setup-world", banner: "char-standard" };
+  assert.deepEqual(await setupService.generate(setupBody), {
+    ok: false,
+    error: "animation-failed",
+    reason: "seedance-reference-setup",
+    retry: true,
+  });
+  assert.equal((await setupService.generate(setupBody)).retry, true);
+  assert.equal(setupCalls, 1, "a setup failure never automatically purchases another attempt");
+  const setupReopened = createForgeBannerAnimations(setupOptions);
+  assert.deepEqual(await setupReopened.generate(setupBody), {
+    ok: false,
+    error: "animation-failed",
+    reason: "seedance-reference-setup",
+    retry: true,
+  });
+  assert.equal(setupCalls, 1, "reopening replays the safe setup reason without contacting the provider");
+  const setupFolder = join(
+      dataDir,
+      "capability-package-data",
+      "gacha-forge",
+      "banner-animations",
+      digest(setupBody.runId),
+    ),
+    setupStatus = join(
+      setupFolder,
+      (await readdir(setupFolder)).find((name) => name.endsWith(".json")),
+    ),
+    savedFailure = await readFile(setupStatus, "utf8");
+  assert.deepEqual(JSON.parse(savedFailure), { state: "failed", reason: "seedance-reference-setup" });
+  assert.equal(savedFailure.includes("SECRET_PROVIDER_DETAIL"), false);
+  for (const marker of [
+    '{"state":"pending"}',
+    '{"state":"pending","reason":"seedance-reference-setup"}',
+    '{"state":"failed","reason":"SECRET_PROVIDER_DETAIL"}',
+    "{broken",
+    "",
+  ]) {
+    await writeFile(setupStatus, marker);
+    assert.deepEqual(await setupReopened.generate(setupBody), { ok: false, error: "animation-failed", retry: true });
+    assert.equal(setupCalls, 1, "legacy or corrupt markers never authorize an automatic purchase");
+  }
+  await writeFile(setupStatus, savedFailure);
+  setupCorrected = true;
+  assert.equal((await setupReopened.generate({ ...setupBody, retry: true })).ok, true);
+  assert.equal(setupCalls, 2);
+
+  const statusReady = deferred(),
+    statusFailure = deferred(),
+    statusBody = { runId: "status-link-world", banner: "char-standard" };
+  const statusService = createForgeBannerAnimations({
+    ...setupOptions,
+    runtime: {
+      logger: log,
+      integrations: {
+        videos: {
+          animateGalleryImage: () => {
+            statusReady.resolve();
+            return statusFailure.promise;
+          },
+        },
+      },
+    },
+  });
+  const statusJob = statusService.generate(statusBody);
+  await statusReady.promise;
+  const statusFolder = join(
+      dataDir,
+      "capability-package-data",
+      "gacha-forge",
+      "banner-animations",
+      digest(statusBody.runId),
+    ),
+    statusPath = join(
+      statusFolder,
+      (await readdir(statusFolder)).find((name) => name.endsWith(".json")),
+    ),
+    outsideStatus = join(directory, "outside-status-sentinel");
+  await writeFile(outsideStatus, "keep outside bytes");
+  await rm(statusPath);
+  await symlink(outsideStatus, statusPath);
+  statusFailure.reject(new Error("Seedance first frame reference URL must be public HTTPS. SECRET_PROVIDER_DETAIL"));
+  assert.equal((await statusJob).reason, "seedance-reference-setup");
+  assert.equal(
+    await readFile(outsideStatus, "utf8"),
+    "keep outside bytes",
+    "atomic marker replacement never follows a symlink",
+  );
+  assert.equal((await lstat(statusPath)).isSymbolicLink(), false);
+  assert.deepEqual(JSON.parse(await readFile(statusPath, "utf8")), {
+    state: "failed",
+    reason: "seedance-reference-setup",
+  });
+
+  const statusWriteHeld = deferred(),
+    releaseStatusWrite = deferred(),
+    statusOriginalWrite = fsPromises.writeFile,
+    deletedStatusBody = { runId: "deleted-status-world", banner: "char-standard" };
+  const deletedStatus = createForgeBannerAnimations({
+    ...setupOptions,
+    runtime: {
+      logger: log,
+      integrations: {
+        videos: {
+          animateGalleryImage: async () => {
+            throw new Error("Seedance first frame reference URL must be public HTTPS.");
+          },
+        },
+      },
+    },
+  });
+  fsPromises.writeFile = async (path, ...options) => {
+    if (String(path).includes(digest(deletedStatusBody.runId)) && String(path).endsWith(".status.tmp")) {
+      statusWriteHeld.resolve();
+      await releaseStatusWrite.promise;
+    }
+    return statusOriginalWrite(path, ...options);
+  };
+  syncBuiltinESMExports();
+  try {
+    const failingStatusJob = deletedStatus.generate(deletedStatusBody);
+    await statusWriteHeld.promise;
+    const removal = deletedStatus.removeWorld(deletedStatusBody.runId);
+    releaseStatusWrite.resolve();
+    await removal;
+    assert.equal((await failingStatusJob).error, "not-found");
+    await assert.rejects(
+      lstat(
+        join(dataDir, "capability-package-data", "gacha-forge", "banner-animations", digest(deletedStatusBody.runId)),
+      ),
+      { code: "ENOENT" },
+    );
+  } finally {
+    fsPromises.writeFile = statusOriginalWrite;
+    syncBuiltinESMExports();
+  }
   const late = deferred(),
     lateStarted = deferred();
   const deleting = createForgeBannerAnimations({
@@ -594,6 +752,11 @@ try {
       child.parentElement = this;
       this.children.push(child);
     }
+    prepend(child) {
+      child.remove();
+      child.parentElement = this;
+      this.children.unshift(child);
+    }
     remove() {
       if (this.parentElement)
         this.parentElement.children = this.parentElement.children.filter((child) => child !== this);
@@ -654,8 +817,9 @@ try {
         _summonBannerState: "ready",
         _summonBanner: { banner: { id: "char-featured", art: "same-art", music: { cue: "banner-char-featured-f1" } } },
         _root: { querySelector: () => target },
-        _postJson: () => {
+        _postJson: (_path, body) => {
           const request = deferred();
+          request.body = body;
           requests.push(request);
           return request.promise;
         },
@@ -756,6 +920,40 @@ try {
     await wait();
     assert.equal(remounted.children[0]?.tagName, "video", "fresh banner metadata recovers normally");
     disposeForgeBannerAnimation(stale.host);
+
+    const retrying = client(),
+      setupFailure = { ok: false, error: "animation-failed", reason: "seedance-reference-setup", retry: true };
+    wireForgeBannerAnimation(retrying.host);
+    retrying.requests[0].resolve({ ...setupFailure, detail: "SECRET_PROVIDER_DETAIL" });
+    await wait();
+    assert.ok(retrying.chips.children.some((node) => node.textContent === forgeAnimationEnglish.seedanceSetup));
+    const retryButton = retrying.chips.querySelector("[data-animation-retry]");
+    retryButton.onclick();
+    assert.equal(retrying.requests.length, 2);
+    assert.equal(retrying.requests[1].body.retry, true);
+    assert.equal(retryButton.disabled, true);
+    assert.equal(retryButton.attributes["aria-busy"], "true");
+    assert.equal(retryButton.textContent, forgeAnimationEnglish.retrying);
+    assert.ok(retrying.chips.children.some((node) => node.textContent === forgeAnimationEnglish.generating));
+    retryButton.onclick();
+    retrying.host._forgeBannerAnimation.onVisibility();
+    assert.equal(retrying.requests.length, 2, "pending retries cannot submit or purchase duplicate attempts");
+    retrying.requests[1].resolve(setupFailure);
+    await wait();
+    assert.equal(retryButton.disabled, false);
+    assert.equal(retryButton.textContent, forgeAnimationEnglish.retry);
+    assert.ok(retrying.chips.children.some((node) => node.textContent === forgeAnimationEnglish.seedanceSetup));
+    assert.equal(retrying.requests.length, 2, "a setup failure waits for another explicit retry");
+    retryButton.onclick();
+    retrying.requests[2].resolve(response);
+    await wait();
+    retrying.target.children[0].events.playing();
+    assert.equal(retrying.chips.querySelector("[data-animation-retry]"), undefined);
+    assert.equal(
+      retrying.chips.children.some((node) => /SECRET_PROVIDER_DETAIL/u.test(node.textContent || "")),
+      false,
+    );
+    disposeForgeBannerAnimation(retrying.host);
 
     for (const interruption of ["hidden", "offscreen", "manual"]) {
       let intersect;

@@ -379,6 +379,21 @@ async function decodedBannerVideo(forge: Locator) {
   return video;
 }
 
+async function settleBannerCapture(forge: Locator) {
+  const view = forge.locator(".gf-stage > .gf-view");
+  await view.evaluate(async (node) => {
+    await Promise.all(
+      node
+        .getAnimations({ subtree: true })
+        .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+        .map((animation) => animation.finished.catch(() => {})),
+    );
+  });
+  await expect(forge.locator(".gf-stage > .gf-leave, .gf-stage > .gf-hold")).toHaveCount(0);
+  await expect(view).toHaveCSS("opacity", "1");
+  await expect(view).toHaveCSS("transform", "none");
+}
+
 async function seedScene(forge: Locator, theme = "aurora") {
   await forge.evaluate(
     (node, fixture) => {
@@ -816,6 +831,89 @@ test("Banner generation and actual video decode failures retain the still artwor
   expect(state.compositions).toBe(1);
   expect(state.browserErrors).toEqual([]);
 });
+
+for (const theme of ["aurora", "bloom"]) {
+  test(`Animation retry shows setup guidance, pending state and recovery in ${theme}`, async ({ page }, testInfo) => {
+    const { forge, state } = await animationProof(page, testInfo, { selected: true });
+    await forge.evaluate((node, theme) => {
+      const game = node as any;
+      game._run.hudStyle = theme;
+      game._renderBrowser();
+    }, theme);
+    let releaseRetry: () => void = () => {};
+    const waiting = new Promise<void>((resolve) => {
+      releaseRetry = resolve;
+    });
+    await page.route("**/api/gacha-forge/banner-animation", async (route) => {
+      const body = route.request().postDataJSON();
+      state.posts.push(body);
+      if (state.posts.length === 2) await waiting;
+      if (state.posts.length < 3)
+        return route.fulfill({
+          json: {
+            ok: false,
+            error: "animation-failed",
+            reason: "seedance-reference-setup",
+            retry: true,
+            detail: "SECRET_PROVIDER_DETAIL",
+          },
+        });
+      return route.fulfill({
+        json: {
+          ok: true,
+          animation: {
+            key: "b".repeat(64),
+            url: `/api/gacha-forge/banner-animation/file/${"a".repeat(64)}/${"b".repeat(64)}.mp4`,
+            poster: portrait,
+          },
+        },
+      });
+    });
+    await openAnimatedBanner(forge);
+    const status = forge.locator("[data-banner-animation-status]"),
+      retry = forge.locator("[data-animation-retry]");
+    await expect(status).toContainText('enable "Upload Seedance reference frames temporarily", then retry');
+    await expect(status).not.toContainText("SECRET_PROVIDER_DETAIL");
+    await settleBannerCapture(forge);
+    const bounds = await status.evaluate((node) => {
+      const message = node.getBoundingClientRect(),
+        banner = node.closest(".show")!.getBoundingClientRect(),
+        title = node.closest(".show")!.querySelector(".bname")!.getBoundingClientRect();
+      return {
+        message: { left: message.left, right: message.right, top: message.top },
+        banner: { left: banner.left, right: banner.right },
+        titleBottom: title.bottom,
+      };
+    });
+    expect(bounds.message.left).toBeGreaterThanOrEqual(bounds.banner.left);
+    expect(bounds.message.right).toBeLessThanOrEqual(bounds.banner.right);
+    expect(bounds.message.top).toBeGreaterThanOrEqual(bounds.titleBottom);
+    await page.screenshot({ path: testInfo.outputPath(`animation-setup-${theme}.png`) });
+    await retry.click();
+    await expect(retry).toBeDisabled();
+    await expect(retry).toHaveText("Retrying animation…");
+    await expect(retry).toHaveAttribute("aria-busy", "true");
+    await expect(status).toHaveText("Animating banner…");
+    await expect.poll(() => state.posts.length).toBe(2);
+    expect(state.posts[1].retry).toBe(true);
+    await retry.evaluate((node: HTMLButtonElement) => node.click());
+    expect(state.posts).toHaveLength(2);
+    await settleBannerCapture(forge);
+    await page.screenshot({ path: testInfo.outputPath(`animation-retry-pending-${theme}.png`) });
+    releaseRetry();
+    await expect(retry).toBeEnabled();
+    await expect(retry).toHaveText("Retry animation");
+    await expect(status).toContainText("Seedance needs a public HTTPS banner image");
+    expect(state.posts).toHaveLength(2);
+    await retry.click();
+    await decodedBannerVideo(forge);
+    await expect(retry).toHaveCount(0);
+    await expect(status).toHaveCount(0);
+    expect(state.posts).toHaveLength(3);
+    expect(state.posts[2].retry).toBe(true);
+    expect(state.browserErrors).toEqual([]);
+  });
+}
 
 test("A deferred response cannot attach a previous same-art banner rotation", async ({ page }, testInfo) => {
   const { forge, state } = await animationProof(page, testInfo, { selected: true });

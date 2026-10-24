@@ -1741,7 +1741,7 @@ var ac=`
    of this bar. With a bar on screen the control belongs IN it. */
 /* Always present, both ways: appearing only WHILE fullscreen forced a second button in the gutter
    just to get in -- two controls for one toggle. */
-`,ds="1.15.1";function cc(t){if(!t)return"";let e=Array.isArray(t.items)?t.items:[];if(!e.length)return"";let a=Math.max(0,Math.round(Number(t.vigor)||0)),r=Math.max(1,Math.round(Number(t.vigorMax)||60)),s=e.map(n=>{let i=Math.max(0,Math.round(Number(n.held)||0));return'<div class="gf-vm-slot'+(i?" has":"")+'"><button class="gf-vm-card" type="button"'+(i?' data-vigor-use="'+u(n.id)+'"':" disabled")+">"+Eg+'<span class="amt">+'+(Number(n.vigor)||0)+'</span><span class="what">'+u(n.name)+'</span></button><span class="gf-vm-n">&times;'+i+"</span></div>"}).join(""),o=e.every(n=>!(Number(n.held)>0))?'<span class="gf-vm-none">Sold in the Shop</span>':"";return'<div class="gf-vm" data-vigor-menu-panel><div class="gf-vm-veil" data-vigor-close></div><div class="gf-vm-panel"><div class="gf-vm-top"><h3 class="gf-vm-title">Vigor Items</h3><span class="gf-vm-now">'+Xo+"<b>"+a+"</b><span>/ "+r+' Vigor</span></span><button class="gf-vm-x" type="button" data-vigor-close aria-label="Close">Close</button></div><div class="gf-vm-grid">'+s+"</div>"+o+"</div></div>"}function dc({username:t="",wallet:e=null,account:a=null,vigorNextMs:r=null}={}){let s=e&&typeof e=="object"?e:{},o=Number(s.aether)||0,n=Number(s.funds)||0,i=Number(s.vigor)||0,l=Number(s.vigorMax)||60,c=a||null,h=c?Math.max(1,Number(c.level)||1):1,d=c?c.xpNeeded?ta(Number(c.xp)||0)+" / "+ta(c.xpNeeded)+" XP":"MAX":"&mdash;",m=c&&Number(c.xpNeeded)||0,v=c?m>0?Math.max(0,Math.min(100,Math.round((Number(c.xp)||0)/m*1e3)/10)):100:0,f=Number.isFinite(r)?cs(r):"",g=t&&t.trim()||"Commander",b=g.split(/\s+/).filter(Boolean).slice(0,2).map(k=>k[0]).join("").toUpperCase()||"C";return`
+`,ds="1.15.2";function cc(t){if(!t)return"";let e=Array.isArray(t.items)?t.items:[];if(!e.length)return"";let a=Math.max(0,Math.round(Number(t.vigor)||0)),r=Math.max(1,Math.round(Number(t.vigorMax)||60)),s=e.map(n=>{let i=Math.max(0,Math.round(Number(n.held)||0));return'<div class="gf-vm-slot'+(i?" has":"")+'"><button class="gf-vm-card" type="button"'+(i?' data-vigor-use="'+u(n.id)+'"':" disabled")+">"+Eg+'<span class="amt">+'+(Number(n.vigor)||0)+'</span><span class="what">'+u(n.name)+'</span></button><span class="gf-vm-n">&times;'+i+"</span></div>"}).join(""),o=e.every(n=>!(Number(n.held)>0))?'<span class="gf-vm-none">Sold in the Shop</span>':"";return'<div class="gf-vm" data-vigor-menu-panel><div class="gf-vm-veil" data-vigor-close></div><div class="gf-vm-panel"><div class="gf-vm-top"><h3 class="gf-vm-title">Vigor Items</h3><span class="gf-vm-now">'+Xo+"<b>"+a+"</b><span>/ "+r+' Vigor</span></span><button class="gf-vm-x" type="button" data-vigor-close aria-label="Close">Close</button></div><div class="gf-vm-grid">'+s+"</div>"+o+"</div></div>"}function dc({username:t="",wallet:e=null,account:a=null,vigorNextMs:r=null}={}){let s=e&&typeof e=="object"?e:{},o=Number(s.aether)||0,n=Number(s.funds)||0,i=Number(s.vigor)||0,l=Number(s.vigorMax)||60,c=a||null,h=c?Math.max(1,Number(c.level)||1):1,d=c?c.xpNeeded?ta(Number(c.xp)||0)+" / "+ta(c.xpNeeded)+" XP":"MAX":"&mdash;",m=c&&Number(c.xpNeeded)||0,v=c?m>0?Math.max(0,Math.min(100,Math.round((Number(c.xp)||0)/m*1e3)/10)):100:0,f=Number.isFinite(r)?cs(r):"",g=t&&t.trim()||"Commander",b=g.split(/\s+/).filter(Boolean).slice(0,2).map(k=>k[0]).join("").toUpperCase()||"C";return`
 <header class="gf-bar">
   <div class="command">
     <div class="avatar">${u(b)}</div>
@@ -4896,7 +4896,10 @@ const forgeAnimationEnglish = {
   unavailable: "Selected video connection unavailable, choose a replacement",
   connectionsFailed: "Could not read video connections. Open Engine Settings to check them.",
   generating: "Animating banner…",
+  retrying: "Retrying animation…",
   failed: "Banner animation unavailable. The illustration is still shown.",
+  seedanceSetup:
+    'Seedance needs a public HTTPS banner image. In Engine Settings → Connections, edit this video connection and enable "Upload Seedance reference frames temporarily", then retry.',
   retry: "Retry animation",
   playbackFailed: "This animation could not play. The illustration is still shown.",
   pause: "Pause animation",
@@ -5006,10 +5009,20 @@ function wireForgeBannerAnimation(host) {
   state.banner = banner;
   if (state.media?.matches) return;
   const chips = target.parentElement?.querySelector(".chips");
+  const statusHost = target.parentElement?.querySelector(".float") || chips;
   const status = document.createElement("span");
   status.className = "chip";
   status.setAttribute("role", "status");
   status.setAttribute("data-banner-animation-status", "");
+  Object.assign(status.style, {
+    maxWidth: "min(65ch, 100%)",
+    alignSelf: "flex-start",
+    whiteSpace: "normal",
+    overflowWrap: "anywhere",
+    textTransform: "none",
+    letterSpacing: "normal",
+    cursor: "default",
+  });
   let video,
     pause,
     labelPause = () => {},
@@ -5043,13 +5056,14 @@ function wireForgeBannerAnimation(host) {
   };
   const notice = (text) => {
     status.textContent = text;
-    chips?.append(status);
+    statusHost?.prepend(status);
   };
   const mount = (result) => {
     if (!current()) return;
     if (result?.ok && result.animation?.poster !== art) {
       state.requests.delete(identity);
       state.staleBanner = banner;
+      chips?.querySelector("[data-animation-retry]")?.remove();
       notice(forgeAnimationEnglish.failed);
       return;
     }
@@ -5059,7 +5073,8 @@ function wireForgeBannerAnimation(host) {
         result.animation?.url || "",
       )
     ) {
-      notice(forgeAnimationEnglish.failed);
+      notice(forgeAnimationEnglish[result.reason === "seedance-reference-setup" ? "seedanceSetup" : "failed"]);
+      if (!result.retry) chips?.querySelector("[data-animation-retry]")?.remove();
       if (result.retry && !chips?.querySelector("[data-animation-retry]")) {
         const retry = document.createElement("button");
         retry.type = "button";
@@ -5067,15 +5082,26 @@ function wireForgeBannerAnimation(host) {
         retry.dataset.animationRetry = "";
         retry.textContent = forgeAnimationEnglish.retry;
         retry.onclick = () => {
-          retry.remove();
+          if (retry.disabled) return;
+          retry.disabled = true;
+          retry.textContent = forgeAnimationEnglish.retrying;
+          retry.setAttribute("aria-busy", "true");
+          retry.setAttribute("aria-disabled", "true");
           state.requests.delete(identity);
-          void ensure(true);
+          void ensure(true).finally(() => {
+            if (!current()) return;
+            retry.disabled = false;
+            retry.textContent = forgeAnimationEnglish.retry;
+            retry.setAttribute("aria-busy", "false");
+            retry.setAttribute("aria-disabled", "false");
+          });
         };
         chips?.append(retry);
       }
       return;
     }
     if (video) return;
+    chips?.querySelector("[data-animation-retry]")?.remove();
     video = document.createElement("video");
     video.dataset.bannerAnimation = "";
     video.muted = true;
