@@ -816,6 +816,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.7",
+          "date": "2026-10-24",
+          "notes": "- Crowd lane: a watched Creator show asks the model for 8-12 chat lines when less than 10 s of crowd chat is queued, and places them 3-9 s apart (`modules/live/slp-live-rooms.ts`). They use the fast live connection; when the model is out, 5 short reactions from real fans fill about 30 s.\n- Room types (mixed, simps, hype, lurkers, whales) steer the crowd; player shows pick one at setup (`crowd` column), Creator shows use the new `liveRoom` setting.\n- `runLiveModel` moved to `features/live/slp-live-model.ts`.",
+          "highlight": false
+        },
+        {
           "version": "0.4.6",
           "date": "2026-10-24",
           "notes": "- Live replies: every player chat line and tip (`fromPlayer`) gets her model reply; one reply per 8 s (`SLURP_LIVE_REPLY_GAP_MS`, was 60 s public / 20 s private), lines sent inside the gap are answered together by a retry after it. Replies are marked `host`.\n- New `liveConnectionId` setting (Settings > Connections > Live shows) for the reply call, 300 max tokens; empty uses the Replies and fans model.\n- The live room polls every 1 s while a reply is pending and shows \"reading chat...\".",
@@ -927,12 +933,6 @@
           "version": "0.3.42",
           "date": "2026-10-15",
           "notes": "- Added: chats with \"Carryover to chats\" on also learn the character's Slurp storyline, love life, how well they know you, and the Slurp memories a chat with you may read.\n- Added: Carryover settings show in how many chats with your Creators \"Include Slurp activity\" is on.\n- Fixed: a scene started from a DM runs on the connection Slurp planned it with, not the Engine's plain default.\n- Fixed: an unreadable scene plan is asked for once more before \"The scene plan got lost\" shows.\n- Fixed: \"Start the scene\" shows an error when the Engine's scene host is missing.\n- Fixed: lorebook entries set to \"At Depth\" reach Slurp DMs and posts.\n- Added: Deep details has a \"Lore\" section with the entries a reply used or had no room for.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.41",
-          "date": "2026-10-14",
-          "notes": "- Faster: Slurp shows character and persona avatars as small copies instead of the full card picture. On opening Slurp the feed downloaded about 16 MB of avatar pictures (1–2.5 MB each, shown 44 px wide), and Discover about 14 MB more; those downloads also held up the feed's other requests. The small copies are made once and kept in Slurp's own media folder.\n- Faster: the \"Report\" sheet of a post or a reply is built only when you open it. Before, every post card and reply built a closed copy, which made the feed and Creator pages slower to open.\n- Faster: the ambient background colour measures the pictures on screen only after the screen has drawn, so opening a screen no longer forces extra layout work.",
           "highlight": false
         }
       ]
