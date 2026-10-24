@@ -273,6 +273,13 @@ export function slurpLiveMenuClaimState(
   return existing.status === "pending" ? "resume" : "duplicate";
 }
 
+export function slurpLiveMenuServed(queue: readonly SlurpLiveOrder[], requestId: string): SlurpLiveOrder[] | null {
+  const order = queue.find((entry) => entry.requestId === requestId);
+  if (!order || order.status !== "paid") return null;
+  if (order.served) return [...queue];
+  return queue.map((entry) => (entry.requestId === requestId ? { ...entry, served: true } : entry));
+}
+
 export function slurpLiveSegmentIndex(show: Pick<SlurpLiveShow, "startedAt">, at: Date): number {
   return Math.max(0, Math.floor((at.getTime() - Date.parse(show.startedAt)) / SLURP_LIVE_SEGMENT_MS));
 }
@@ -440,6 +447,31 @@ export function slurpLiveTipSchedule(types: readonly SlurpFanType[], seed: numbe
 
 export function slurpLiveTopTip(events: readonly SlurpLiveEvent[]) {
   return events.filter((event) => event.kind === "tip").sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))[0] ?? null;
+}
+
+export function slurpLivePrivateOffersDue(show: SlurpLiveShow): boolean {
+  return (
+    show.hostKind === "player" &&
+    show.privateClaims.filter((claim) => claim.requestId.includes(":private-offer:")).length < 2
+  );
+}
+
+export function slurpLiveMenuPriceInBounds(price: number): boolean {
+  return Number.isInteger(price) && price >= 1 && price <= 9999;
+}
+
+export function slurpLivePlayerMenuDue(showId: string, fanId: string, segment: number): boolean {
+  return liveHash(`${showId}:${fanId}:menu:${segment}`) % 4 === 0;
+}
+
+export function slurpLivePlayerRecapText(show: SlurpLiveShow): string {
+  // Menu purchases are already added to `raised` when their order is claimed.
+  const earnings =
+    show.raised ??
+    show.events.filter((event) => event.kind === "tip").reduce((total, event) => total + (event.amount ?? 0), 0);
+  const topTipper = slurpLiveTipTopper(show.events)?.name ?? "nobody";
+  const served = show.queue.filter((order) => order.served).length;
+  return `Live show recap: ${earnings} earned, ${served} menu items served, top tipper: ${topTipper}.`;
 }
 
 export function slurpLiveReplyAllowed(lastReplyAt: string | null, now = new Date()) {

@@ -51,6 +51,14 @@ export function useSlpLiveActions(showId: string) {
       api.post<{ show: SlpLiveShow; wallet: unknown }>(`/slurp2/live/${encodeURIComponent(showId)}/menu`, input),
     onSettled: invalidate,
   });
+  const done = useMutation({
+    mutationFn: (input: { personaId: string; requestId: string }) =>
+      api.post<{ show: SlpLiveShow }>(
+        `/slurp2/live/${encodeURIComponent(showId)}/menu/${encodeURIComponent(input.requestId)}/done`,
+        { personaId: input.personaId },
+      ),
+    onSettled: invalidate,
+  });
   const privateShow = useMutation({
     mutationFn: (input: { personaId: string; requestId: string }) =>
       api.post<{ show: SlpLiveShow }>(`/slurp2/live/${encodeURIComponent(showId)}/private`, input),
@@ -71,14 +79,18 @@ export function useSlpLiveActions(showId: string) {
       api.post<{ show: SlpLiveShow }>(`/slurp2/live/${encodeURIComponent(showId)}/end`, input),
     onSettled: invalidate,
   });
-  return { tip, chat, menu, privateShow, mode, narrate, end };
+  return { tip, chat, menu, done, privateShow, mode, narrate, end };
 }
 
 export function useStartSlpPlayerLive() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { personaId: string; duration: 20 | 30 | 40 }) =>
-      api.post<{ show: SlpLiveShow }>("/slurp2/live/start", input),
+    mutationFn: (input: {
+      personaId: string;
+      duration: 20 | 30 | 40;
+      goal?: number;
+      menu?: { id: string; enabled: boolean; price: number }[];
+    }) => api.post<{ show: SlpLiveShow }>("/slurp2/live/start", input),
     onSettled: () => qc.invalidateQueries({ queryKey: ["slurp2", "live"] }),
   });
 }

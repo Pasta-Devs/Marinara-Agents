@@ -1,5 +1,5 @@
 import type { DB } from "../../../db/connection.js";
-import { createSlurpStorage } from "../../data/slp-storage.js";
+import { createSlurpStorage, createSlurpMessagesStorage } from "../../data/slp-storage.js";
 import { createSlurpLiveStorage } from "../../data/live/slp-live-storage.js";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import {
@@ -15,6 +15,9 @@ import {
   SLURP_LIVE_REACTIONS,
   slurpLiveRecap,
   slurpLiveTipTopper,
+  slurpLivePlayerRecapText,
+  slurpLivePrivatePrice,
+  slurpLivePrivateOffersDue,
   slurpLiveAudienceTipDue,
   slurpLivePictureTriggers,
   type SlurpLiveShow,
@@ -48,6 +51,7 @@ import {
 import { slurpMembersActiveAt } from "../../../../../shared/src/slp/slp-population.js";
 import { slurpLivePlayerCrowdPrompt } from "../../modules/live/slp-live-prompt.js";
 import { slurpLiveMenuItems } from "../../modules/live/slp-live-menu.js";
+import { slurpLivePlayerMenuDue } from "../../modules/live/slp-live.js";
 import { resolveSlurpCreatorSpice } from "../../data/creators/slp-spice-storage.js";
 import { slurpSpiceBriefLines } from "../../modules/creators/slp-spice.js";
 import { slurpLivePictureBrief, slurpLivePrivatePrompt } from "../../modules/live/slp-live-private-prompt.js";
@@ -245,18 +249,18 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
       const orderFan = currentFans[(slot + 3) % Math.max(1, currentFans.length)];
       const item = current.menu[slot % Math.max(1, current.menu.length)];
       const requestId = `live:${show.id}:menu:${slot}`;
-      if (orderFan && item && !current.queue.some((order) => order.requestId === requestId)) {
+      if (
+        orderFan &&
+        item &&
+        slurpLivePlayerMenuDue(show.id, orderFan.id, slot) &&
+        !current.queue.some((order) => order.requestId === requestId)
+      ) {
         const type = orderFan.fanTypeId
           ? slurpResolveFanType(settingsFans, orderFan)
           : slurpFanTypeForPinnedOrSeed(settingsFans, null, orderFan.id);
         if (
           type.enabled &&
-          slurpLiveFanDue(
-            show.id,
-            `${orderFan.id}:menu`,
-            Date.parse(show.endsAt) - Date.parse(show.startedAt),
-            type.spend.tipChance,
-          ) !== null &&
+          type.spend.tipChance > 0 &&
           (await population.reserveWeeklySpend(
             orderFan.id,
             show.hostId,
@@ -278,7 +282,13 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
             if (!(await storage.claimMenu(show.id, order, item.price))) {
               await population.releaseWeeklySpend(orderFan.id, show.hostId, item.price, at);
             } else {
-              await createSlurpStorage(db).creditCreatorIncome(show.hostId, item.price, "tip", requestId);
+              await createSlurpStorage(db).creditCreatorIncome(
+                show.hostId,
+                item.price,
+                "tip",
+                requestId,
+                "Live show menu",
+              );
               await population.advanceTie(orderFan.id, show.hostId, {
                 stage: "follower",
                 spent: item.price,
@@ -292,6 +302,32 @@ async function advanceShow(db: DB, show: SlurpLiveShow, settings: any, at: Date)
             await population.releaseWeeklySpend(orderFan.id, show.hostId, item.price, at);
             logger.warn(error, "[slurp-live] Could not process audience menu order");
           }
+        }
+      }
+    }
+    if (show.hostKind === "player" && slurpLivePrivateOffersDue(show)) {
+      const currentShow = await storage.get(show.id);
+      const priorOffers = (currentShow?.privateClaims ?? show.privateClaims).filter((claim) =>
+        claim.requestId.includes(":private-offer:"),
+      );
+      const offeredFans = new Set(priorOffers.map((claim) => claim.personaId));
+      const candidate = (await population.listNamedCast(show.hostId, 120)).find(
+        ({ member }) => !offeredFans.has(member.id),
+      );
+      if (candidate) {
+        const playerAccount = await createSlurpStorage(db).getNoodlerAccountById(show.hostId);
+        const ppv = Number(playerAccount?.settings?.messaging?.ppvPrice ?? 25);
+        const requestId = `live:${show.id}:private-offer:${candidate.member.id}`;
+        const claimed = await storage.claimPrivateOffer(show.id, candidate.member.id, requestId, at);
+        if (claimed) {
+          const result = await createSlurpMessagesStorage(db).sendViewerMessage(
+            candidate.member.id,
+            show.hostId,
+            `${candidate.member.displayName} wants a 10-minute private show for ${slurpLivePrivatePrice(ppv)}`,
+            requestId,
+          );
+          if (result.status !== "sent")
+            logger.warn({ status: result.status }, "[slurp-live] Could not send private offer");
         }
       }
     }
@@ -497,7 +533,7 @@ export async function endSlurpPlayerLiveShow(db: DB, showId: string, at = new Da
   if (!claimed) return null;
   const post = await createSlurpStorage(db).createNoodlerPost({
     authorAccountId: claimed.hostId,
-    content: slurpLiveRecap(claimed),
+    content: slurpLivePlayerRecapText(claimed),
     source: "generated",
     metadata: { liveShowId: claimed.id },
   });

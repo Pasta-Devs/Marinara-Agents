@@ -390,6 +390,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
       creatorAccountId: string,
       amount: number,
       operationId?: string,
+      incomeNote?: string,
     ): Promise<SlurpWallet | null> {
       if (viewerAccountId === creatorAccountId || !Number.isInteger(amount) || amount <= 0) return null;
       const settings = await this.getSettings();
@@ -407,7 +408,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
           creator.id,
           "tip",
           Math.floor((amount * settings.walletCreatorRevenueSharePercent) / 100),
-          `tip: ${creator.handle}`,
+          incomeNote ?? `tip: ${creator.handle}`,
           operationId,
         );
         return charged;
@@ -505,6 +506,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
       price: number,
       reason: "unlock" | "subscribe" | "renew" | "tip" | "messageRequest" | "ppv" | "commission",
       operationId?: string,
+      ledgerNote?: string,
     ) {
       const settings = await this.getSettings();
       if (!settings.walletEnabled || settings.walletCreatorRevenueSharePercent <= 0) return;
@@ -516,7 +518,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
       // operator's spending wallet made income and spending money the same balance, so a real
       // audience would have ended every purchasing decision in the game. See slurp-earnings.ts.
       await enqueueFinancial(() =>
-        creditEarningsNow(creator.id, reason, share, `${reason}: ${creator.handle}`, operationId),
+        creditEarningsNow(creator.id, reason, share, ledgerNote ?? `${reason}: ${creator.handle}`, operationId),
       );
     },
   } satisfies ThisType<Record<string, any>>;

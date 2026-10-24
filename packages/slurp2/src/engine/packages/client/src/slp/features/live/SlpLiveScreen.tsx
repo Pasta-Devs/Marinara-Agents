@@ -62,7 +62,7 @@ function SlpLiveContent({
   onOpenRecap: (postId: string) => void;
 }) {
   const { t } = useTranslation();
-  const { tip, chat, menu, privateShow, mode, narrate, end } = useSlpLiveActions(show.id);
+  const { tip, chat, menu, done, privateShow, mode, narrate, end } = useSlpLiveActions(show.id);
   const [message, setMessage] = useState("");
   const [privateRequestId, setPrivateRequestId] = useState<string | null>(null);
   const [tipRequestIds, setTipRequestIds] = useState<Record<number, string>>({});
@@ -248,9 +248,22 @@ function SlpLiveContent({
           {show.queue
             .filter((order) => !order.served)
             .map((order) => (
-              <span key={order.requestId} className="shrink-0 rounded-full bg-[var(--muted)] px-2 py-1 text-xs">
-                {order.label}
-              </span>
+              <div
+                key={order.requestId}
+                className="flex shrink-0 items-center gap-2 rounded bg-[var(--muted)] px-2 py-1 text-xs"
+              >
+                <span>{order.label}</span>
+                {host && personaId && (
+                  <button
+                    type="button"
+                    disabled={done.isPending}
+                    onClick={() => done.mutate({ personaId, requestId: order.requestId })}
+                    className="min-h-8 px-2 font-semibold"
+                  >
+                    {t("ui.slurp.live.done")}
+                  </button>
+                )}
+              </div>
             ))}
         </div>
       )}

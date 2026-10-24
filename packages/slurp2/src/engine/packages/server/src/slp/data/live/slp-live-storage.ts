@@ -10,6 +10,7 @@ import {
   slurpLiveReplyClaimAllowed,
   slurpLiveSegmentIndex,
   slurpLiveMenuClaimState,
+  slurpLiveMenuServed,
   slurpLiveAudienceTipDue,
   slurpLivePruneBefore,
   slurpLiveMayStart,
@@ -552,6 +553,21 @@ export function createSlurpLiveStorage(db: DB) {
         return true;
       });
     },
+    async markMenuServed(id: string, requestId: string) {
+      return db.transaction(async (tx) => {
+        const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
+        if (!row || row.hostKind !== "player" || row.endedAt) return null;
+        const queue = parse<SlurpLiveOrder[]>(row.queue ?? "[]", []);
+        const next = slurpLiveMenuServed(queue, requestId);
+        if (!next) return null;
+        if (next.every((order, index) => order === queue[index])) return map(row);
+        await tx
+          .update(slurpLiveShows)
+          .set({ queue: JSON.stringify(next) })
+          .where(eq(slurpLiveShows.id, id));
+        return map({ ...row, queue: JSON.stringify(next) });
+      });
+    },
     async appendEvent(id: string, event: SlurpLiveEvent) {
       return db.transaction(async (tx) => {
         const rows = await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id));
@@ -699,6 +715,22 @@ export function createSlurpLiveStorage(db: DB) {
     async setRecap(id: string, recapPostId: string | null) {
       await db.update(slurpLiveShows).set({ recapPostId }).where(eq(slurpLiveShows.id, id));
       return this.get(id);
+    },
+    async claimPrivateOffer(id: string, personaId: string, requestId: string, at = new Date()) {
+      return db.transaction(async (tx) => {
+        const row = (await tx.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id)))[0];
+        if (!row || row.hostKind !== "player" || row.endedAt) return false;
+        const claims = parse<SlurpLiveShow["privateClaims"]>(row.privateClaims ?? "[]", []);
+        if (claims.some((claim) => claim.requestId === requestId)) return false;
+        const offers = claims.filter((claim) => claim.requestId.includes(":private-offer:"));
+        if (offers.length >= 2) return false;
+        const next = [...claims, { requestId, personaId, status: "pending" as const, block: 0, at: at.toISOString() }];
+        await tx
+          .update(slurpLiveShows)
+          .set({ privateClaims: JSON.stringify(next) })
+          .where(eq(slurpLiveShows.id, id));
+        return true;
+      });
     },
     async releaseReply(id: string, at: Date) {
       await db

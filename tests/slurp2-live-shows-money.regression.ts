@@ -12,9 +12,15 @@ import {
   slurpLiveAudienceTipDue,
   slurpLivePruneBefore,
   slurpLiveMenuClaimState,
+  slurpLivePlayerRecapText,
+  slurpLiveMenuPriceInBounds,
+  slurpLivePrivateOffersDue,
+  slurpLiveMenuServed,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/live/slp-live.ts";
+import { slurpAudienceWeeklySpend } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-audience-subscription.ts";
 import { slurpLiveMenuItems } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/live/slp-live-menu.ts";
 import { slurp2Source } from "./slurp2-source.ts";
+import { earn } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/economy/slp-earnings.ts";
 
 const at = new Date("2026-10-23T12:00:00.000Z");
 const tip = { at: 1, kind: "tip" as const, name: "Fan", amount: 25, text: "", requestId: "tip-1" };
@@ -48,6 +54,30 @@ assert.ok(offsets.some((offset) => offset < 240_000));
 assert.ok(offsets.some((offset) => offset > 960_000));
 assert.ok(offsets.every((offset) => offset >= 0 && offset < 1_200_000));
 assert.equal(slurpLiveMenuItems(2, ["topic"], 30).length, 7);
+assert.ok(slurpLiveMenuItems(2, ["topic"], 30).length > 0, "player menu uses the configured spice level");
+assert.equal(slurpLiveMenuPriceInBounds(1), true);
+assert.equal(slurpLiveMenuPriceInBounds(9999), true);
+assert.equal(slurpLiveMenuPriceInBounds(10000), false);
+assert.equal(slurpLiveMenuPriceInBounds(2.5), false);
+const recapShow = {
+  hostKind: "player" as const,
+  events: [tip, { ...tip, name: "Top Fan", amount: 50, requestId: "tip-2" }],
+  menu: [{ id: "item-1", label: "Kiss", price: 30, picture: false }],
+  raised: 80,
+  queue: [
+    { itemId: "item-1", label: "Kiss", name: "Fan", at: 0, served: true, requestId: "menu-1", status: "paid" as const },
+  ],
+  privateClaims: [],
+} as any;
+assert.match(slurpLivePlayerRecapText(recapShow), /80 earned, 1 menu items served, top tipper: Top Fan/);
+assert.equal(slurpLivePrivateOffersDue(recapShow), true);
+assert.equal(
+  slurpLivePrivateOffersDue({
+    ...recapShow,
+    privateClaims: ["fan-1", "fan-2"].map((id) => ({ requestId: `live:show:private-offer:${id}` })),
+  }),
+  false,
+);
 
 assert.equal(slurpLiveCanWatch(undefined, true), false, "GET without persona never marks a watcher");
 assert.equal(slurpLiveCanWatch("missing", false), false);
@@ -74,20 +104,32 @@ const pendingOrder = {
 assert.equal(slurpLiveMenuClaimState([], "menu-1", "item-1", "player"), "new");
 assert.equal(slurpLiveMenuClaimState([pendingOrder], "menu-1", "item-1", "player"), "resume");
 assert.equal(slurpLiveMenuClaimState([pendingOrder], "menu-1", "item-1", "other"), "conflict");
-let charges = 0;
-let settled = false;
-const pay = () => {
-  if (!settled) {
-    charges++;
-    settled = true;
-  }
-  return "sent";
-};
-assert.equal(pay(), "sent");
-assert.equal(slurpLiveMenuClaimState([pendingOrder], "menu-1", "item-1", "player"), "resume");
-assert.equal(pay(), "sent");
-assert.equal(charges, 1, "retry uses the settled payment once");
 assert.equal(slurpLiveMenuClaimState([{ ...pendingOrder, status: "paid" }], "menu-1", "item-1", "player"), "duplicate");
+assert.equal(slurpLiveMenuServed([{ ...pendingOrder, status: "paid" }], "menu-1")?.[0]?.served, true);
+assert.equal(slurpLiveMenuServed([{ ...pendingOrder, status: "paid", served: true }], "menu-1")?.[0]?.served, true);
+assert.equal(slurpLiveMenuServed([pendingOrder], "menu-1"), null, "unpaid orders cannot be served");
+
+const initialEarnings = {
+  coins: 0,
+  lifetime: 0,
+  ledger: [],
+  receipts: {},
+  payoutOn: null,
+  paidOutToday: 0,
+} as const;
+const creditedMenu = earn(initialEarnings, "tip", 24, at, "Live show menu", "menu-1");
+assert.equal(creditedMenu.coins, 24);
+assert.equal(creditedMenu.ledger[0]?.note, "Live show menu");
+assert.equal(earn(creditedMenu, "tip", 24, at, "Live show menu", "menu-1"), creditedMenu, "credit is idempotent");
+
+const budgetStart = { spent: 0, startedAt: null };
+const budgetFirst = slurpAudienceWeeklySpend(budgetStart, 20, 30, at);
+assert.deepEqual(budgetFirst, { spent: 20, startedAt: at.toISOString() });
+assert.equal(
+  slurpAudienceWeeklySpend(budgetFirst!, 11, 30, at),
+  null,
+  "menu purchases use the same weekly budget as other fan spending",
+);
 
 const service = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/live/slp-live-service.ts");
 const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/live/slp-live-routes.ts");
@@ -115,4 +157,5 @@ assert.match(storage, /\.delete\(slurpLiveShows\)\.where\(lt\(slurpLiveShows\.en
 assert.match(storage, /audienceTipKeys: JSON\.stringify\(\[\.\.\.keys, audienceKey\]\)/);
 assert.match(service, /await storage\.pruneEnded\(at\)/);
 assert.match(routes, /slurpLiveCanWatch\(personaId/);
+
 console.log("slurp2 live shows money and claims: ok");

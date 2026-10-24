@@ -165,13 +165,16 @@ export function createMessagesStorageActions(context: SlurpMessagesContext) {
       amount: number,
       note: string,
       requestId?: string,
+      incomeNote?: string,
     ): Promise<SlurpSendResult> {
       if (requestId) {
         const key = `${viewerAccountId}:${creatorAccountId}:${requestId}`;
         const previous = directMessageTips.get(key) ?? Promise.resolve(null);
         const current = previous
           .catch(() => null)
-          .then(() => context.storage.tipInThreadUnlocked(viewerAccountId, creatorAccountId, amount, note, requestId));
+          .then(() =>
+            context.storage.tipInThreadUnlocked(viewerAccountId, creatorAccountId, amount, note, requestId, incomeNote),
+          );
         directMessageTips.set(key, current);
         try {
           return await current;
@@ -187,12 +190,14 @@ export function createMessagesStorageActions(context: SlurpMessagesContext) {
       amount: number,
       note: string,
       requestId?: string,
+      incomeNote?: string,
     ): Promise<SlurpSendResult> {
       const opened = await context.storage.openThread(viewerAccountId, creatorAccountId, "viewer", "waive");
       if (opened.status !== "ok") return opened;
       const settings = await slurp.getSettings();
       const tipId = requestId ?? newId();
       const tipOperationId = `dm:${tipId}:credit`;
+      const paymentNote = "direct-message tip";
       if (requestId) {
         const existing = (await context.storage.listMessages(opened.thread.id)).find(
           (message) => message.kind === "tip" && message.metadata.requestId === requestId,
@@ -216,7 +221,7 @@ export function createMessagesStorageActions(context: SlurpMessagesContext) {
             viewerAccountId,
             creatorAccountId,
             price: amount,
-            note: "direct-message tip",
+            note: paymentNote,
             creditOperationId: tipOperationId,
           },
           tipOperationId,
@@ -234,7 +239,7 @@ export function createMessagesStorageActions(context: SlurpMessagesContext) {
       }
       try {
         if (settings.walletEnabled) {
-          const wallet = await slurp.tipCreator(viewerAccountId, creatorAccountId, amount, tipOperationId);
+          const wallet = await slurp.tipCreator(viewerAccountId, creatorAccountId, amount, tipOperationId, incomeNote);
           if (!wallet) {
             await resetSlurpPaymentIntentAfterInsufficientFunds(slurp, tipOperationId);
             return { status: "insufficient_funds", required: amount };

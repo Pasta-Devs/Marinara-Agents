@@ -14,7 +14,6 @@ import { StageProfileView } from "./SlpScreenProfile";
 import type { ReactNode } from "react";
 import type { SlpShellProps } from "../../modules/chrome/slp-shell.types";
 import type { useSlurpHomeState } from "../slp-home-actions";
-import { useSlpCurrentLiveShow, useStartSlpPlayerLive } from "../../features/live/slp-live-hooks";
 
 export type SlurpHomeHostView = {
   model: ReturnType<typeof useSlurpHomeState>;
@@ -22,6 +21,8 @@ export type SlurpHomeHostView = {
   reviewModal: ReactNode;
   feedRightRail?: ReactNode;
   showDiscovery?: boolean;
+  playerLiveSetupOpen: boolean;
+  setPlayerLiveSetupOpen: (open: boolean) => void;
 };
 
 /** Creator setup and the selected stage profile: every branch that edits a Creator. */
@@ -31,6 +32,8 @@ export function renderSlurpHomeCreatorFlow({
   reviewModal,
   feedRightRail,
   showDiscovery,
+  playerLiveSetupOpen,
+  setPlayerLiveSetupOpen,
 }: SlurpHomeHostView) {
   void [shellProps, reviewModal, feedRightRail, showDiscovery];
   const {
@@ -107,8 +110,6 @@ export function renderSlurpHomeCreatorFlow({
     viewerPersonaId,
     viewerQuery,
   } = model;
-  const liveShow = useSlpCurrentLiveShow(navigation.mode === "creator" && navigation.view === "profile");
-  const startPlayerLive = useStartSlpPlayerLive();
   if (creationStep === "source") {
     return (
       <SlpShell {...shellProps}>
@@ -335,12 +336,7 @@ export function renderSlurpHomeCreatorFlow({
                 label: localizeUi("ui.slurp.live.goLive", { defaultValue: "Go live" }),
                 icon: Radio,
                 action: () => {
-                  const duration = window.prompt("Duration in minutes: 20, 30, or 40", "20");
-                  if (!["20", "30", "40"].includes(duration ?? "")) return;
-                  startPlayerLive.mutate({ personaId: viewerPersonaId!, duration: Number(duration) as 20 | 30 | 40 }, {
-                    onSuccess: ({ show }) => onNavigate({ mode: "creator", view: "live", showId: show.id, returnTo: navigation }),
-                    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not start live show"),
-                  });
+                  setPlayerLiveSetupOpen(true);
                 },
               },
               {

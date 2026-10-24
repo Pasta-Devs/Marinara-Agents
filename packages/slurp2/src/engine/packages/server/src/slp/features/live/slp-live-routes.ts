@@ -17,8 +17,10 @@ import {
   slurpLiveForViewer,
   slurpLivePrivatePrice,
   slurpLiveViewerCount,
+  slurpLiveMenuPriceInBounds,
 } from "../../modules/live/slp-live.js";
 import { resolveCreatorMediaAbsolutePath, sendSlurpImageFile } from "../../base/media/slp-media.js";
+import { resolveSlurpCreatorSpice } from "../../data/creators/slp-spice-storage.js";
 import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
 import { announceSlurpLive } from "./slp-live-service.js";
 
@@ -145,21 +147,40 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
   });
   app.post("/live/start", async (request, reply) => {
     const parsed = z
-      .object({ personaId: z.string().trim().min(1), duration: z.union([z.literal(20), z.literal(30), z.literal(40)]) })
+      .object({
+        personaId: z.string().trim().min(1),
+        duration: z.union([z.literal(20), z.literal(30), z.literal(40)]),
+        goal: z.number().int().min(1).max(9999).optional(),
+        menu: z
+          .array(z.object({ id: z.string().min(1), enabled: z.boolean(), price: z.number() }))
+          .max(8)
+          .optional(),
+      })
       .safeParse(request.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     if (!(await enabled())) return reply.code(404).send({ error: "Live is switched off." });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     const player = viewer && (await noodle.getSlurpAccountForEntity("persona", viewer.entityId, "viewer"));
     if (!viewer || !player) return reply.code(404).send({ error: "Player account not found." });
-    const goal = await noodle.getCreatorSubscriptionPrice(player.id);
+    if (parsed.data.menu?.some((item) => !slurpLiveMenuPriceInBounds(item.price)))
+      return reply.code(400).send({ error: "Menu prices must be whole numbers from 1 to 9999." });
+    const ppvPrice = await noodle.getCreatorSubscriptionPrice(player.id);
+    const spice = await resolveSlurpCreatorSpice(app.db, player);
+    const defaults = slurpLiveMenuItems(Number(spice.level) || 0, spice.turnOns, ppvPrice, spice.hardNoes);
+    const menu = parsed.data.menu
+      ? defaults.flatMap((item) => {
+          const edit = parsed.data.menu?.find((entry) => entry.id === item.id);
+          return edit?.enabled ? [{ ...item, price: edit.price }] : [];
+        })
+      : defaults;
+    const goal = parsed.data.goal ?? Math.min(9999, Math.max(1, ppvPrice * 4));
     const show = await storage.createIfNone({
       hostKind: "player",
       hostId: player.id,
       startedAt: new Date(),
       endsAt: new Date(Date.now() + parsed.data.duration * 60_000),
-      goal: Math.max(1, goal),
-      menu: slurpLiveMenuItems(0, [], goal),
+      goal,
+      menu,
     });
     if (!show) {
       const active = await storage.active();
@@ -169,6 +190,17 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
       });
     }
     return { show: slurpLiveForViewer(show, viewer.id, new Date()) };
+  });
+  app.get("/live/player-menu/:personaId", async (request, reply) => {
+    const viewer = await resolveViewerPersona((request.params as { personaId: string }).personaId);
+    const player = viewer && (await noodle.getSlurpAccountForEntity("persona", viewer.entityId, "viewer"));
+    if (!viewer || !player) return reply.code(404).send({ error: "Player account not found." });
+    const ppvPrice = await noodle.getCreatorSubscriptionPrice(player.id);
+    const spice = await resolveSlurpCreatorSpice(app.db, player);
+    return {
+      goal: Math.min(9999, Math.max(1, ppvPrice * 4)),
+      menu: slurpLiveMenuItems(Number(spice.level) || 0, spice.turnOns, ppvPrice, spice.hardNoes),
+    };
   });
   app.post("/live/:id/narrate", async (request, reply) => {
     const parsed = body.extend({ text: z.string().trim().min(1).max(500) }).safeParse(request.body ?? {});
@@ -309,6 +341,7 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
         item.price,
         `Live menu: ${item.label}`,
         claimId,
+        "Live show menu",
       );
     } catch (error) {
       // The payment may have settled. Keep the claim for a retry with the same request ID.
@@ -323,6 +356,19 @@ export async function slpLiveRoutes(app: FastifyInstance, { resolveViewerPersona
       show: await showForViewer(show.id, viewer.id),
       wallet: await createSlurpStorage(app.db).getWallet(viewer.id),
     };
+  });
+  app.post("/live/:id/menu/:requestId/done", async (request, reply) => {
+    const parsed = body.safeParse(request.body ?? {});
+    if (!parsed.success || !(await enabled())) return reply.code(400).send({ error: "Invalid request." });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    const player = viewer && (await noodle.getSlurpAccountForEntity("persona", viewer.entityId, "viewer"));
+    const params = request.params as { id: string; requestId: string };
+    const show = await storage.get(params.id);
+    if (!viewer || !player || !show || show.hostKind !== "player" || show.hostId !== player.id)
+      return reply.code(404).send({ error: "Live show not found." });
+    const updated = await storage.markMenuServed(show.id, params.requestId);
+    if (!updated) return reply.code(404).send({ error: "Menu item not found." });
+    return { show: slurpLiveForViewer(updated, viewer.id, new Date()) };
   });
   app.post("/live/:id/private", async (request, reply) => {
     const parsed = body.extend({ requestId: z.string().trim().min(1) }).safeParse(request.body ?? {});
