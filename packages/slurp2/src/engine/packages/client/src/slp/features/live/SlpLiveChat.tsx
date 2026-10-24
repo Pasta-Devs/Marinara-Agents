@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { SlpLiveShow } from "./slp-live-contract";
 import { SlpCoinText } from "../../modules/coin/SlpCoin";
+import { Avatar } from "../../base/chrome/SlpChrome";
+import { slpLiveBigTip, slpLivePictureUrl } from "./SlpLiveStage";
 import { slpLiveReplyPending } from "./slp-live-hooks";
 
 type ChatItem = {
@@ -9,6 +11,8 @@ type ChatItem = {
   name: string;
   text: string;
   mediaId?: string;
+  amount?: number;
+  mine?: boolean;
 };
 const nameColors = [
   "text-[var(--slurp-violet)]",
@@ -50,12 +54,14 @@ function catchUpLines(
 export function SlpLiveChat({
   show,
   creatorName,
+  avatarUrl,
   elapsed,
   personaId,
   t,
 }: {
   show: SlpLiveShow;
   creatorName: string;
+  avatarUrl?: string | null;
   elapsed: number;
   personaId: string | null;
   t: (key: string, values?: Record<string, unknown>) => string;
@@ -86,6 +92,8 @@ export function SlpLiveChat({
         kind: event.kind === "tip" ? "tip" : "crowd",
         name: event.name,
         text: event.kind === "tip" ? String(event.amount ?? 0) : event.text,
+        amount: event.amount,
+        mine: !!personaId && event.personaId === personaId,
       })),
     ...show.queue
       .filter((order) => order.at <= elapsed)
@@ -127,7 +135,7 @@ export function SlpLiveChat({
         atBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 32;
         if (atBottom.current) setNewCount(0);
       }}
-      className="relative min-h-0 flex-1 space-y-2 overflow-y-auto p-3"
+      className="relative min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 py-3"
       aria-live="polite"
     >
       {catchUp.length > 0 && (
@@ -155,30 +163,44 @@ export function SlpLiveChat({
         line.kind === "picture" && line.mediaId && personaId ? (
           <img
             key={`${line.at}-${index}`}
-            src={`/api/slurp2/live/${encodeURIComponent(show.id)}/picture/${encodeURIComponent(line.mediaId)}?personaId=${encodeURIComponent(personaId)}`}
+            src={slpLivePictureUrl(show, line.mediaId, personaId)}
             alt={t("ui.slurp.live.pictureAlt", { name: creatorName })}
-            className="max-h-80 max-w-full rounded object-contain"
+            className="slp-live-fade max-h-80 max-w-full rounded-2xl object-contain ring-1 ring-[var(--border)]"
             loading="lazy"
           />
         ) : line.kind === "host" ? (
-          <article key={`${line.at}-${index}`} className="rounded-lg bg-[var(--card)] p-3 text-sm">
-            <strong className="mb-1 block text-xs">{creatorName}</strong>
-            {line.text}
+          <article key={`${line.at}-${index}`} className="slp-live-fade flex items-start gap-2 py-1">
+            <Avatar account={{ displayName: creatorName, avatarUrl: avatarUrl ?? null }} size="sm" />
+            <div className="min-w-0 rounded-2xl rounded-tl-md bg-[color-mix(in_srgb,var(--noodle-accent)_14%,var(--card))] px-3 py-2 text-sm ring-1 ring-[color-mix(in_srgb,var(--noodle-accent)_30%,transparent)]">
+              <strong className="mb-0.5 block text-xs text-[var(--noodle-accent)]">{creatorName}</strong>
+              {line.text}
+            </div>
           </article>
-        ) : line.kind === "tip" || line.kind === "menu" ? (
+        ) : line.kind === "tip" ? (
           <div
             key={`${line.at}-${index}`}
-            className="mx-auto w-fit rounded-full bg-[var(--slurp-warning)]/12 px-3 py-1.5 text-sm font-semibold text-[var(--slurp-warning)]"
+            className={`slp-live-pop mx-auto w-fit rounded-full px-3 py-1.5 text-sm font-bold ${
+              slpLiveBigTip(show, line.amount ?? 0)
+                ? "bg-[linear-gradient(135deg,var(--slurp-warning),var(--noodle-accent))] text-[var(--slurp-ink)] shadow-[0_4px_18px_color-mix(in_srgb,var(--slurp-warning)_45%,transparent)]"
+                : "bg-[color-mix(in_srgb,var(--slurp-warning)_18%,transparent)] text-[var(--slurp-warning)]"
+            }`}
           >
-            {line.kind === "tip" ? (
-              <SlpCoinText>{t("ui.slurp.live.tipEvent", { name: line.name, amount: line.text })}</SlpCoinText>
-            ) : (
-              t("ui.slurp.live.menuEvent", { name: line.name, item: line.text })
-            )}
+            <SlpCoinText>{t("ui.slurp.live.tipEvent", { name: line.name, amount: line.text })}</SlpCoinText>
+          </div>
+        ) : line.kind === "menu" ? (
+          <div
+            key={`${line.at}-${index}`}
+            className="mx-auto w-fit rounded-full bg-[color-mix(in_srgb,var(--slurp-violet)_16%,transparent)] px-3 py-1.5 text-sm font-semibold text-[var(--slurp-violet)]"
+          >
+            {t("ui.slurp.live.menuEvent", { name: line.name, item: line.text })}
           </div>
         ) : (
-          <p key={`${line.at}-${index}`} className="text-sm">
-            <b className={nameColor(line.name)}>{line.name}</b> <span>{line.text}</span>
+          <p
+            key={`${line.at}-${index}`}
+            className={`text-[13px] leading-snug ${line.mine ? "-mx-1.5 rounded-lg bg-[color-mix(in_srgb,var(--noodle-accent)_10%,transparent)] px-1.5 py-0.5" : ""}`}
+          >
+            <b className={line.mine ? "text-[var(--noodle-accent)]" : nameColor(line.name)}>{line.name}</b>{" "}
+            <span>{line.text}</span>
           </p>
         ),
       )}

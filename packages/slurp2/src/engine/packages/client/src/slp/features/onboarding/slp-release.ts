@@ -1,7 +1,7 @@
 import { SLURP2_LEGACY_RELEASES } from "./slp-release-archive";
 
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.4.9";
+export const SLURP2_VERSION = "0.4.10";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -14,6 +14,15 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.4.10",
+    date: "2026-10-24",
+    notes: [
+      "Live shows got a new look: a big stage with her picture, a glowing goal bar and a LIVE badge.",
+      "Tips pop up on stage, big tips shine, and the room cheers when a goal is reached.",
+      "Going live from Stir now starts from a bright Go live card.",
+    ],
+  },
   {
     version: "0.4.9",
     date: "2026-10-24",

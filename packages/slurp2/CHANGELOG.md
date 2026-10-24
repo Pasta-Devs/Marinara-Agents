@@ -1,5 +1,12 @@
 # Slurp release notes
 
+## 0.4.10 — 2026-10-24
+
+- Live page redesign: new `SlpLiveStage` (newest live picture or a glowing avatar on a blurred backdrop, LIVE dot, viewers, time left, caption of her latest line, crown for the top tipper, gradient goal bar). Tip and goal banners pop on stage; big tips (a quarter of the goal) shine.
+- Chat: her lines are bubbles with her avatar, tips and menu orders are pills, your own lines are marked.
+- Tip dock: one row of tip chips, custom tip, menu and private; chat input below. Wide screens put the stage left and chat right.
+- Stir Go live and the Live now row are bright LIVE cards; shared styles in `modules/live/slp-live-styles.ts`.
+
 ## 0.4.9 — 2026-10-24
 
 - Merged staging: the story viewer takes taps again (#1653).

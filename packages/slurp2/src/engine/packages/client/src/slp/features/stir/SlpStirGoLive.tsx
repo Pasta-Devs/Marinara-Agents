@@ -6,6 +6,7 @@ import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import type { SlpStirView } from "../../../../../shared/src/slp/slp-stir.js";
 import { Choice, CreatorPicker } from "./SlpStirFormParts";
 import { useSlurpStirLive } from "./slp-stir-hooks";
+import { SLP_LIVE_STYLES } from "../../modules/live/slp-live-styles";
 
 const inputClass = `min-h-11 w-full rounded-xl bg-[var(--slurp-canvas)] px-3 text-base ring-1 ring-inset ring-[var(--slurp-outline)] sm:text-sm ${focusRing}`;
 
@@ -55,19 +56,31 @@ export function SlpStirGoLive({
   };
   return (
     <>
+      <style>{SLP_LIVE_STYLES}</style>
       <button
         type="button"
-        className="min-h-11 rounded-xl bg-[var(--slurp-canvas)] p-3 text-start ring-1 ring-[var(--slurp-outline)]"
+        aria-expanded={open}
+        className="relative isolate flex min-h-16 w-full items-center gap-3 overflow-hidden rounded-2xl bg-[linear-gradient(135deg,color-mix(in_srgb,var(--noodle-accent)_85%,black),color-mix(in_srgb,var(--slurp-violet)_80%,black))] p-3.5 text-start text-white shadow-[0_8px_28px_color-mix(in_srgb,var(--noodle-accent)_35%,transparent)] transition-transform active:scale-[0.98]"
         onClick={() => {
-          setOpen(true);
+          setOpen((value) => !value);
           setScheduled(false);
           setError("");
         }}
       >
-        {t("ui.slurp.stir.goLive")}
+        <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-red-600 px-2.5 py-1 text-xs font-black tracking-wide shadow-[0_0_16px_rgb(220_38_38/0.6)]">
+          <span className="slp-live-dot h-2 w-2 rounded-full bg-white" />
+          {t("ui.slurp.live.badge")}
+        </span>
+        <span className="min-w-0 flex-1">
+          <b className="block text-base">{t("ui.slurp.stir.goLive")}</b>
+          <span className="block text-xs text-white/80">{t("ui.slurp.stir.goLiveHint")}</span>
+        </span>
+        <span aria-hidden="true" className={`text-xl transition-transform ${open ? "rotate-90" : ""}`}>
+          ›
+        </span>
       </button>
       {open && (
-        <div className="space-y-3 rounded-xl bg-[var(--slurp-canvas)] p-3 ring-1 ring-[var(--slurp-outline)]">
+        <div className="space-y-3 rounded-2xl bg-[var(--slurp-canvas)] p-3.5 ring-1 ring-[color-mix(in_srgb,var(--noodle-accent)_40%,transparent)]">
           <CreatorPicker
             creators={creators.filter((item) => !item.couplePage && item.automatic)}
             picked={creator ? [creator] : []}
@@ -112,7 +125,7 @@ export function SlpStirGoLive({
             type="button"
             disabled={!creator || goLive.isPending || (when === "later" && !at)}
             onClick={submit}
-            className="min-h-11 rounded-xl bg-[var(--noodle-accent)] px-4 font-semibold text-[var(--slurp-ink)] disabled:opacity-50"
+            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[linear-gradient(135deg,var(--noodle-accent),var(--slurp-violet))] px-5 font-bold text-white shadow-[0_6px_20px_color-mix(in_srgb,var(--noodle-accent)_40%,transparent)] disabled:opacity-50"
           >
             {t("ui.slurp.stir.goLiveConfirm")}
           </button>
