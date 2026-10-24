@@ -31,6 +31,7 @@ const availabilityTabRail = readFileSync(ltmSourcePaths.availabilityTabRail, "ut
 const sourceScopeCombobox = readFileSync(ltmSourcePaths.sourceScopeCombobox, "utf8");
 const targetPicker = readFileSync(ltmSourcePaths.targetPicker, "utf8");
 const reviewQueue = readFileSync(ltmSourcePaths.reviewQueue, "utf8");
+const displayLabels = readFileSync(join(dirname(ltmSourcePaths.reviewQueue), "../display-labels.ts"), "utf8");
 const reviewQueueScreen = readScreen(ltmSourcePaths.reviewQueue);
 const api = readFileSync(ltmSourcePaths.api, "utf8");
 const workspaceLayout = readFileSync(ltmSourcePaths.workspaceLayout, "utf8");
@@ -790,8 +791,35 @@ assert.match(reviewQueue, /discardDependentWarning/u);
 assert.match(reviewQueue, /reviewQueueEmpty/u);
 assert.match(reviewQueue, /className=\{workspaceUnavailable \|\| reviewDataUnavailable \? "hidden" : ""\}/u);
 assert.equal(locale["ui.longTermMemory.reviewqueue.retryFailed"], "Retry failed review actions");
-assert.equal(locale["ui.longTermMemory.reviewqueue.reviewChangeForTitle"], "Review change for {{title}}");
+assert.equal(locale["ui.longTermMemory.reviewqueue.reviewChangeForTitle"], "Check change for {{title}}");
 assert.equal(locale["ui.longTermMemory.reviewqueue.applyChangeForTitle"], "Apply change for {{title}}");
+// #1654: one Check/Apply verb pair, "changes" not "mutations", and a plain sentence for the engine's codes.
+assert.match(reviewQueue, /data-ltm-review-action-text/u);
+assert.match(reviewQueue, /data-ltm-review-state-chip/u);
+assert.match(reviewQueue, /reviewCodeText\(blocker\.code/u);
+assert.equal(locale["ui.longTermMemory.reviewqueue.missingSourceTitle"], "Deleted source");
+assert.equal(locale["ui.longTermMemory.reviewqueue.preflightReady"], "Checked, ready to apply");
+assert.equal(locale["ui.longTermMemory.reviewqueue.mutationActions"], "Change actions");
+assert.equal(locale["ui.longTermMemory.reviewqueue.rowCheck"], "Check");
+assert.equal(locale["ui.longTermMemory.reviewqueue.rowApply"], "Apply");
+assert.equal(locale["ui.longTermMemory.reviewqueue.codeSourceMissing"], "The source note was deleted.");
+// The two stale codes name their remedy, and a catch-all code keeps the engine's own reason.
+assert.match(locale["ui.longTermMemory.reviewqueue.codeSourceStale"], /Extract the source again/u);
+assert.match(locale["ui.longTermMemory.reviewqueue.codeSourceContextUnbound"], /Extract the source again/u);
+assert.match(displayLabels, /catchAllReviewCodes[\s\S]*preflight_blocked[\s\S]*projection_failed/u);
+// Rows follow the run's own mutation ids, a missing source is only claimed once the notes context is ready, and
+// a failed request stays a danger beside ready rows.
+assert.match(reviewQueue, /runMutationIds\.has\(row\.mutation\.id\)/u);
+assert.match(reviewQueue, /reviewContextReady\s*\?[^;]*missingSourceTitle/u);
+assert.match(reviewQueue, /result\.failed \|\| result\.indexRebuildFailures\.length[\s\S]{0,80}danger/u);
+assert.match(reviewQueue, /humanizeText\(diagnostic\.message\)/u);
+for (const key of Object.keys(locale).filter((name) => name.startsWith("ui.longTermMemory.reviewqueue."))) {
+  assert.doesNotMatch(
+    locale[key].replace(/\{\{\w+\}\}/gu, ""),
+    /\bmutations?\b|\bpreflight\b/iu,
+    `${key} still uses engine wording`,
+  );
+}
 assert.equal(locale["ui.longTermMemory.reviewqueue.discard"], "Discard");
 assert.equal(locale["ui.longTermMemory.reviewqueue.sourcesPane"], "Sources");
 assert.equal(locale["ui.longTermMemory.reviewqueue.reviewPane"], "Review");
