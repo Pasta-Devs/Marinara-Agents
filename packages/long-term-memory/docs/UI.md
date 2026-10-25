@@ -84,6 +84,17 @@ workbench while rows are listed (above the pane tabs once the queue is empty), a
 change is ready to apply. The Sources scope row stacks until
 its destination container reaches `40rem`. Vault note title and status share a
 row from a `28rem` workbench, and the Vault list scrolls on its own from `48rem`.
+Memory Settings puts its four section tabs, its recall field pairs, its three
+active-template pickers and its activity detail pairs in one row from a `40rem`
+settings container. The header's add action keeps its `2.75rem` target and drops
+its label, and the Vault health pill hides, below `48rem` of the detail surface;
+the health pill's detail text appears from `40rem`. Below `48rem` the header
+tightens its gaps and padding and the activation switch keeps a `3rem` minimum
+width; below `22.5rem` it also hides the icon tile. The setup guide pads more
+from `40rem` and puts its illustration beside the text from `48rem` of its own
+container. The Vault and Debug lists cap at the window height minus `12rem`
+(`dvh`, with a `vh` fallback and a `10rem` floor), so a zoomed or short window
+scrolls the list instead of the page.
 
 ## Workflow Contracts
 
@@ -164,7 +175,8 @@ report their result without hiding vault-health warnings. Unsaved edits show a d
 form. A finished identity repair names the backup it saved first (the first eight characters of its id, in the
 `long-term-memory-identity-repairs` backups folder); there is no restore button, so restoring is manual.
 Success messages (`StatusSurface` with the success tone) use the `--ltm-success` token (the accent mixed toward
-the editor text, 4.5:1 or better in both themes) and a check icon, never the bare accent color.
+the editor text, measured at no less than 10.0:1 in the light and 9.1:1 in the dark default theme) and a check
+icon, never the bare accent color.
 
 Debug operation details lead with recorded problems and guidance, then extraction,
 recall, or apply outcomes before diagnostic facts and the timeline. Dropped
