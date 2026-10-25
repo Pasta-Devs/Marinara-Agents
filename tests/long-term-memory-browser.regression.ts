@@ -4296,25 +4296,15 @@ async function main() {
         assert.equal(await resetButton.isDisabled(), false, "Reset is available again once the refetch resolves");
         assert.equal(settingsReads, 1, "Reset reads the settings once");
         // #1588: each result shows under the controls that produced it, not at the top of the panel.
-        const maintenanceResultPlace = (text: RegExp) =>
+        // #1659: Maintenance has Backup, Repair and Delete or reset groups; a result shows in its own group.
+        const maintenanceResultGroup = (text: RegExp) =>
           maintenancePanel
             .locator("[data-ltm-status]")
             .filter({ hasText: text })
-            .evaluate((result) => {
-              const buttons = [...document.querySelectorAll<HTMLButtonElement>("#settings-panel-maintenance button")];
-              const reset = buttons.find((item) => item.textContent?.trim() === "Reset settings")!;
-              const run = buttons.find((item) => item.textContent?.trim() === "Run selected maintenance")!;
-              return {
-                afterReset: Boolean(reset.compareDocumentPosition(result) & Node.DOCUMENT_POSITION_FOLLOWING),
-                beforeRun: Boolean(result.compareDocumentPosition(run) & Node.DOCUMENT_POSITION_FOLLOWING),
-                afterRun: Boolean(run.compareDocumentPosition(result) & Node.DOCUMENT_POSITION_FOLLOWING),
-              };
-            });
-        assert.deepEqual(await maintenanceResultPlace(/^Memory settings reset to defaults, but/u), {
-          afterReset: true,
-          beforeRun: true,
-          afterRun: false,
-        });
+            .evaluate((result) =>
+              result.closest("[data-ltm-maintenance-group]")?.getAttribute("data-ltm-maintenance-group"),
+            );
+        assert.equal(await maintenanceResultGroup(/^Memory settings reset to defaults, but/u), "reset");
         await resetPage.route("**/api/long-term-memory/repair", (route) =>
           route.fulfill({ json: { actions: [{ action: "rebuild_indexes", result: "completed", count: 4 }] } }),
         );
@@ -4324,11 +4314,7 @@ async function main() {
           .locator("[data-ltm-status]")
           .filter({ hasText: /\(4\)$/u })
           .waitFor();
-        assert.deepEqual(await maintenanceResultPlace(/\(4\)$/u), {
-          afterReset: true,
-          beforeRun: false,
-          afterRun: true,
-        });
+        assert.equal(await maintenanceResultGroup(/\(4\)$/u), "repair");
         assert.equal(
           await maintenancePanel.getByText(/^Memory settings reset to defaults, but/u).count(),
           0,
@@ -4341,6 +4327,162 @@ async function main() {
           "the forms show the settings read after the reset",
         );
         await resetPage.close();
+      }
+      // #1659: Maintenance groups Backup, Repair and Delete or reset. Reset is a warning, Run selected
+      // maintenance is not red, and Delete all data offers "Export a backup first" before the host's confirmation.
+      for (const width of [1280, 390]) {
+        const groupPage = await browserContext.newPage();
+        await groupPage.setViewportSize({ width, height: 900 });
+        let deleteRequests = 0;
+        await groupPage.route("**/api/long-term-memory/data", (route) => {
+          if (route.request().method() !== "DELETE") return route.continue();
+          deleteRequests += 1;
+          return route.fulfill({ json: { ok: true } });
+        });
+        await groupPage.goto(`http://127.0.0.1:${address.port}/`);
+        await groupPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await groupPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = {
+            confirmAction: (options) => {
+              window.__ltmConfirms = [...(window.__ltmConfirms ?? []), options];
+              return window.__ltmConfirmResult ?? false;
+            },
+          };
+          document.body.append(element);
+        })()`);
+        await groupPage.locator('[data-ltm-destination="settings"]:visible').first().click();
+        await groupPage.locator("#settings-tab-maintenance").click();
+        const panel = groupPage.locator("#settings-panel-maintenance");
+        const groupNames = await panel
+          .locator("[data-ltm-maintenance-group]")
+          .evaluateAll((groups) => groups.map((group) => group.getAttribute("data-ltm-maintenance-group")));
+        assert.deepEqual(groupNames, ["backup", "repair", "reset"], `Maintenance groups at ${width}px`);
+        const groupOf = (name: string) => panel.locator(`[data-ltm-maintenance-group="${name}"]`);
+        for (const [group, button] of [
+          ["backup", "Export backup"],
+          ["backup", "Choose backup"],
+          ["repair", "Run selected maintenance"],
+          ["reset", "Reset settings"],
+          ["reset", "Delete all data"],
+        ] as const) {
+          assert.equal(
+            await groupOf(group).getByRole("button", { name: button }).count(),
+            1,
+            `${button} is in ${group}`,
+          );
+        }
+        const tones = await panel.evaluate((root) => {
+          const buttons = [...root.querySelectorAll<HTMLElement>("button")];
+          const run = buttons.find((item) => item.textContent?.trim() === "Run selected maintenance")!;
+          const reset = buttons.find((item) => item.textContent?.trim() === "Reset settings")!;
+          const remove = buttons.find((item) => item.textContent?.trim() === "Delete all data")!;
+          return {
+            runPrimary: run.classList.contains("mari-editor-action--primary"),
+            runDanger: run.classList.contains("mari-editor-action--danger"),
+            resetWarning: reset.dataset.ltmTone,
+            resetDanger: reset.classList.contains("mari-editor-action--danger"),
+            resetBorderInline: reset.style.borderColor,
+            resetIcon: Boolean(reset.querySelector("svg")),
+            deleteDanger: remove.classList.contains("mari-editor-action--danger"),
+            separated: remove.getBoundingClientRect().top - reset.getBoundingClientRect().bottom >= 16,
+            deleteBorderTop: remove.parentElement ? getComputedStyle(remove.parentElement).borderTopWidth : "",
+          };
+        });
+        assert.deepEqual(tones, {
+          runPrimary: true,
+          runDanger: false,
+          resetWarning: "warning",
+          resetDanger: false,
+          resetBorderInline: "var(--marinara-editor-border-strong)",
+          resetIcon: true,
+          deleteDanger: true,
+          separated: true,
+          deleteBorderTop: "1px",
+        });
+        assert.equal(
+          await groupPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+          true,
+          `Maintenance does not overflow horizontally at ${width}px`,
+        );
+        // Delete all data opens the export offer first; declining the host confirmation deletes nothing.
+        const deleteAll = groupOf("reset").getByRole("button", { name: "Delete all data" });
+        await deleteAll.click();
+        const prompt = groupOf("reset").locator("[data-ltm-delete-prompt]");
+        await prompt.waitFor();
+        const exportFirst = prompt.getByRole("button", { name: "Export a backup first" });
+        await groupPage.waitForFunction(() => document.activeElement?.textContent?.includes("Export a backup first"));
+        assert.equal(await exportFirst.evaluate((element) => element === document.activeElement), true);
+        assert.equal(
+          await groupPage.evaluate(
+            () => (window as unknown as { __ltmConfirms?: unknown[] }).__ltmConfirms?.length ?? 0,
+          ),
+          0,
+        );
+        assert.equal(
+          await groupPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+          true,
+          `the open export offer does not overflow horizontally at ${width}px`,
+        );
+        // "Export a backup first" exports from here, reports in Delete or reset, and deletes nothing.
+        let exportRequests = 0;
+        await groupPage.route("**/api/long-term-memory/backup/export", (route) => {
+          exportRequests += 1;
+          return route.fulfill({ json: { version: 1, notes: [] } });
+        });
+        await exportFirst.click();
+        await groupOf("reset").locator("[data-ltm-status]").filter({ hasText: "Memory backup exported." }).waitFor();
+        assert.equal(exportRequests, 1, "the export offer exports once");
+        assert.equal(await groupOf("backup").locator("[data-ltm-maintenance-result]").count(), 0);
+        assert.equal(await prompt.count(), 1, "exporting leaves the offer open");
+        assert.equal(deleteRequests, 0);
+        assert.equal(
+          await groupPage.evaluate(
+            () => (window as unknown as { __ltmConfirms?: unknown[] }).__ltmConfirms?.length ?? 0,
+          ),
+          0,
+        );
+        assert.equal(
+          await prompt.getAttribute("aria-describedby"),
+          await prompt.locator("p").first().getAttribute("id"),
+          "the offer text describes the group",
+        );
+        // Escape closes the offer and returns focus to Delete all data.
+        await exportFirst.focus();
+        await groupPage.keyboard.press("Escape");
+        assert.equal(await prompt.count(), 0, "Escape closes the export offer");
+        assert.equal(await deleteAll.evaluate((element) => element === document.activeElement), true);
+        await deleteAll.click();
+        await prompt.waitFor();
+        await prompt.getByRole("button", { name: "Cancel" }).click();
+        assert.equal(await prompt.count(), 0, "Cancel closes the export offer");
+        assert.equal(
+          await deleteAll.evaluate((element) => element === document.activeElement),
+          true,
+          "Cancel returns focus",
+        );
+        await deleteAll.click();
+        await prompt.getByRole("button", { name: "Continue to delete" }).click();
+        await groupPage.waitForFunction(
+          () => (window as unknown as { __ltmConfirms?: unknown[] }).__ltmConfirms?.length === 1,
+        );
+        const confirmOptions = await groupPage.evaluate(
+          () =>
+            (window as unknown as { __ltmConfirms: Array<{ confirmLabel?: string; tone?: string }> }).__ltmConfirms[0],
+        );
+        assert.equal(confirmOptions?.confirmLabel, "Delete everything");
+        assert.equal(confirmOptions?.tone, "destructive");
+        assert.equal(deleteRequests, 0, "declining the host confirmation deletes nothing");
+        assert.equal(await prompt.count(), 1, "a declined confirmation leaves the export offer open");
+        await groupPage.evaluate(() => {
+          (window as unknown as { __ltmConfirmResult: boolean }).__ltmConfirmResult = true;
+        });
+        await prompt.getByRole("button", { name: "Continue to delete" }).click();
+        await groupOf("reset").locator("[data-ltm-status]").filter({ hasText: "All memory data deleted." }).waitFor();
+        assert.equal(deleteRequests, 1);
+        assert.equal(await prompt.count(), 0, "the export offer closes once the delete runs");
+        await groupPage.close();
       }
       // #1452: when the settings read after Reset or Import fails, Retry on the error surface loads the
       // new settings instead of the cached ones the action replaced. An import whose integrity read
@@ -4515,7 +4657,8 @@ async function main() {
           focusPage.evaluate(() =>
             document.activeElement === document.body ? "body" : (document.activeElement?.textContent?.trim() ?? ""),
           );
-        // The visible Choose backup button opens the file input, so Tab goes from it to Reset settings (#1584).
+        // The visible Choose backup button opens the file input, so Tab skips the input and goes to the next
+        // control, the first repair option (#1584, #1659).
         assert.deepEqual(
           await maintenancePanel
             .locator('input[type="file"]')
@@ -4524,7 +4667,10 @@ async function main() {
         );
         await maintenancePanel.locator("button", { hasText: "Choose backup" }).focus();
         await focusPage.keyboard.press("Tab");
-        assert.equal(await focusedControl(), "Reset settings");
+        assert.equal(
+          await focusPage.evaluate(() => document.activeElement?.closest("label")?.textContent?.trim()),
+          "Reindex recall data",
+        );
         for (const action of ["reset", "import"] as const) {
           settingsGate = new Promise<void>((resolve) => {
             releaseSettings = () => resolve();
