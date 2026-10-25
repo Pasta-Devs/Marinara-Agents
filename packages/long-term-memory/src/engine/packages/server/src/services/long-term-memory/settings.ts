@@ -86,6 +86,10 @@ export function splitUnknownLtmSettings(schema: z.ZodTypeAny, value: unknown, pa
       });
     };
     const outOfRange: LtmSettingsPath[] = [];
+    // zod 4 also reports a range issue for a value of the wrong type (a string for a list); the type error decides.
+    const wrongType = new Set(
+      result.error.issues.filter((issue) => issue.code === "invalid_type").map((issue) => issue.path.join(".")),
+    );
     for (const issue of result.error.issues) {
       const code: string = issue.code;
       const issuePath = issue.path as LtmSettingsPath;
@@ -99,7 +103,12 @@ export function splitUnknownLtmSettings(schema: z.ZodTypeAny, value: unknown, pa
           changed = true;
         }
       } else if (isUnknownEnumValue(code, issuePath)) remove(issuePath);
-      else if ((code === "too_big" || code === "too_small") && issuePath.length > 0) outOfRange.push(issuePath);
+      else if (
+        (code === "too_big" || code === "too_small") &&
+        issuePath.length > 0 &&
+        !wrongType.has(issuePath.join("."))
+      )
+        outOfRange.push(issuePath);
     }
     if (!changed) {
       for (const list of outOfRange) for (const index of unknownEntries(list)) remove([...list, index]);

@@ -582,6 +582,18 @@ async function main() {
         "modes",
         "modes.4",
       ]);
+      // zod 4 also reports `too_big` for a string given where a list belongs; the wrong type must not read as newer.
+      const z4WrongType = splitUnknownLtmSettings(
+        z4Schema,
+        { version: 1, modes: "abcd" },
+        join(tmpdir(), `ltm-zod4-${randomUUID()}.json`),
+      );
+      assert.deepEqual(
+        z4WrongType.known,
+        { version: 1, modes: "abcd" },
+        "a wrong-typed list is kept so the parse fails",
+      );
+      assert.deepEqual(z4WrongType.newer, []);
       const tooLongPrompt = await rollbackRoot({
         extraction: { version: 1, promptTemplates: [{ id: "t", name: "T", prompt: "x".repeat(20_001) }] },
       });
@@ -1138,7 +1150,7 @@ async function main() {
               ...exported,
               settings: { ...exported.settings, [key]: value },
             }),
-          /unrecognized|unknown|greater than or equal/i,
+          /unrecognized|unknown|greater than or equal|too small/i,
           `malformed legacy ${key} fields must remain rejected`,
         );
       }
