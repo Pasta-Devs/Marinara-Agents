@@ -30,7 +30,7 @@ import {
   SAUCELING_EVOLVE_MOVES,
   SAUCELING_EVOLVE_PATHS,
   ORDINARY_SPECIES,
-  SAUCELING_OWN_PHRASE_MOMENTS,
+  SAUCELING_ROUTINE_MOMENTS,
   SAUCELING_SPECIES,
   SAUCELING_STAGES,
   SEASONAL_SPECIES,
@@ -119,6 +119,7 @@ import {
   templateCheckInLine,
   templateEggFarewellScene,
   templateEggFoundScene,
+  templateEggFoundByOther,
   templateEggFoundWhileTalking,
   templateEggReturnScene,
   templateEvolveScene,
@@ -580,14 +581,14 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
   const eggLines = [
     templateEggFoundScene(dottore),
     templateEggFoundScene(dottore, true),
-    templateEggFoundWhileTalking(dottore),
+    templateEggFoundWhileTalking(dottore, { name: "Biscotti", stage: "egg" }),
     templateCaretakerCareLine(dottore, "Biscotti", "kept-warm"),
     templateCaretakerCareLine(dottore, "Biscotti", "let-cool"),
     templateCaretakerCareLine(dottore, "Biscotti", "chatted"),
     templateCheckInLine(dottore, { ...fed, stage: "egg" }),
     templateAbsenceScene(dottore, "Biscotti", "days", { "kept-warm": 3, "let-cool": 1, chatted: 2 }, true),
-    templateEggFarewellScene(),
-    templateEggReturnScene(),
+    templateEggFarewellScene(dottore),
+    templateEggReturnScene(dottore),
   ];
   const lines = [
     ...eggLines,
@@ -600,10 +601,10 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
     templateCheckInLine(dottore, { ...fed, stage: "adult", meters: { hunger: 30, mood: 80, bond: 50 } }),
     templateCheckInLine(dottore, { ...fed, stage: "adult", meters: { hunger: 80, mood: 30, bond: 50 } }),
     templateStageUpScene(dottore, "Biscotti", "juvenile"),
-    templateTemperamentShiftScene("Biscotti", "zesto"),
+    templateTemperamentShiftScene(dottore, "Biscotti", "zesto"),
     templateAbsenceScene(dottore, "Biscotti", "week", { "fed-fine": 3, forgot: 1, played: 2, cuddled: 1 }, false),
     templateFarewellScene(dottore, "Biscotti"),
-    templateReturnScene(dottore, "elder"),
+    templateReturnScene(dottore, "Biscotti", "elder"),
   ];
   for (const line of lines) {
     assert.equal(/["“”]/u.test(line), false, line);
@@ -613,7 +614,10 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
     for (const species of SAUCELING_SPECIES) assert.equal(line.toLowerCase().includes(species), false, line);
     assert.equal(line.includes("Biscotti"), false, line);
   }
-  assert.equal(templateReturnScene(dottore, "elder"), "Welcome back, little dumpling! Still a fine elder, I see.");
+  assert.equal(
+    templateReturnScene(dottore, "Biscotti", "elder"),
+    "Welcome back, little dumpling! Still a fine elder, I see.",
+  );
   assert.equal(
     templateAbsenceScene(
       dottore,
@@ -631,12 +635,12 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
   varies((pick) => templateEggFoundScene(dottore, false, pick));
   varies((pick) => templateEggFoundScene(dottore, true, pick));
   varies((pick) => templateEvolveScene(dottore, "Biscotti", "Ember Lentino", pick));
-  varies((pick) => templateTemperamentShiftScene("Biscotti", "zesto", pick));
-  varies((pick) => templateTakesAfterScene("Biscotti", "Quietly Curious", pick));
+  varies((pick) => templateTemperamentShiftScene(dottore, "Biscotti", "zesto", pick));
+  varies((pick) => templateTakesAfterScene(dottore, "Biscotti", "Quietly Curious", pick));
   varies((pick) => templateAbsenceScene(dottore, "Biscotti", "week", { played: 1 }, false, pick));
-  varies((pick) => templateEggFarewellScene(pick));
-  varies((pick) => templateEggReturnScene(pick));
-  varies((pick) => templateReturnScene(dottore, "elder", pick));
+  varies((pick) => templateEggFarewellScene(dottore, pick));
+  varies((pick) => templateEggReturnScene(dottore, pick));
+  varies((pick) => templateReturnScene(dottore, "Biscotti", "elder", pick));
 
   // A model's line keeps only what is said
   assert.equal(spokenLine("“Il Dottore: Still warm, still quiet.”", "Il Dottore"), "Still warm, still quiet.");
@@ -666,6 +670,23 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
     templateCaretakerCareLine(voiced, "Biscotti", "played"),
     HOUSE_PHRASES.play[0].replace("{pet}", "Biscotti"),
   );
+  // ...and so do the one-off moments, with their own {...} filled in
+  const sceneVoiced = {
+    ...dottore,
+    voice: {
+      ...dottore.voice,
+      phrases: {
+        returnHome: ["Back on my table, {pet}. Still a {stage}."],
+        eggFoundByOther: ["{finder} found an egg. {pet} will have to share."],
+      },
+    },
+  };
+  assert.equal(templateReturnScene(sceneVoiced, "Biscotti", "elder"), "Back on my table, Biscotti. Still an elder.");
+  assert.equal(
+    templateEggFoundByOther(sceneVoiced, { name: "Biscotti", stage: "adult" }, "Nahida", 1),
+    "Nahida found an egg. Biscotti will have to share.",
+  );
+  assert.equal(templateFarewellScene(sceneVoiced, "Biscotti", 1), templateFarewellScene(dottore, "Biscotti", 1));
 
   // {kind}, {stage} and {nickname} are filled in
   assert.equal(
@@ -821,8 +842,8 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
   const fallback = neutralCareProfile("x", "x").voice.catchphrases;
   assert.deepEqual(normal.voice.catchphrases, ["Fascinating.", fallback[1], fallback[2]]);
 
-  // The phrasebook keeps at most four short, spoken lines per moment, using only the {...} that moment fills in,
-  // and three short sign-offs per feeling with none
+  // The phrasebook keeps at most four short, spoken lines for each of its moments, using only the {...} that moment
+  // fills in, and three short sign-offs per feeling with none; a moment with no line is left out
   const book = normalizePhrasebook(
     {
       phrases: {
@@ -837,9 +858,9 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
       signoffs: { pleased: ["Good.", "Fine.", "Adequate.", "Acceptable."], worried: ["Hm, {pet}.", "x".repeat(61)] },
     },
     "Il Dottore",
+    SAUCELING_ROUTINE_MOMENTS,
   );
   assert.deepEqual(book.phrases, {
-    ...Object.fromEntries(SAUCELING_OWN_PHRASE_MOMENTS.map((moment) => [moment, []])),
     feed: ["Eat, {pet}.", "One, {nickname}.", "Two.", "Three."],
     play: ["Run, {pet}."],
     hatch: ["A {kind}, {pet}."],
@@ -2654,7 +2675,7 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
   assert.equal(glued.ownTemperament, null);
   assert.equal(ownTemperamentDue(glued, at(0)), "first");
   assert.equal(
-    templateTakesAfterScene("Mossimo", "Quietly Curious"),
+    templateTakesAfterScene(neutralCareProfile("x", "x"), "Mossimo", "Quietly Curious"),
     "Have you noticed? Mossimo has been a bit more quietly curious lately. I think it's picking up my ways.",
   );
 
@@ -3304,9 +3325,9 @@ async function testBundledServer() {
   );
 
   // Read <name>'s card (POST /voice) has the writing connection make the caretaker's own voice: the profile model
-  // sees the backstory and the example dialogue, then a second call writes the phrasebook in that speech style; the
-  // pet's profile gets both, and the state says the character has a voice. No answer, or one with no speech style,
-  // is refused and changes nothing
+  // sees the backstory and the example dialogue, then two calls side by side write the phrasebook in that speech
+  // style, one for the routine moments and one for the one-off ones; the pet's profile gets all of it, and the state
+  // says the character has a voice. No answer, or one with no speech style, is refused and changes nothing
   const dottoreOf = (state: any) => state.characters.find((ch: any) => ch.id === "dottore-1");
   const voiceRefused = () =>
     assert.rejects(
@@ -3324,8 +3345,13 @@ async function testBundledServer() {
   assert.equal(voiceless.world.activePet.careProfile.generatedByModel, false);
   let profilePrompt = "";
   let bookPrompt = "";
+  let oneOffPrompt = "";
   model = async (_options, messages) => {
     const prompt = messages.map((message) => message.content).join("\n");
+    if (/one-off moments/u.test(prompt)) {
+      oneOffPrompt = prompt;
+      return JSON.stringify({ phrases: { hello: ["*nods* Hold still, {pet}."], feed: ["Not a one-off."] } });
+    }
     if (/You write a phrasebook/u.test(prompt)) {
       bookPrompt = prompt;
       return JSON.stringify({
@@ -3338,8 +3364,10 @@ async function testBundledServer() {
   };
   const callsBeforeVoice = modelCalls;
   const refreshed = await routes.get("POST /voice")!({ body: { characterId: "dottore-1" } });
-  assert.equal(modelCalls, callsBeforeVoice + 2);
+  assert.equal(modelCalls, callsBeforeVoice + 3);
   const refreshedVoice = refreshed.world.activePet.careProfile.voice;
+  assert.deepEqual(refreshedVoice.phrases.feed, ["Eat, {pet}. Data requires it."]);
+  assert.deepEqual(refreshedVoice.phrases.hello, ["Hold still, {pet}."]);
   assert.equal(refreshedVoice.speechStyle, "Clipped, clinical, faintly amused.");
   assert.deepEqual(refreshedVoice.phrases.warmEgg, ["Stay warm, {pet}."]);
   assert.deepEqual(refreshedVoice.signoffs, { pleased: [], worried: [], neutral: ["Noted."] });
@@ -3353,6 +3381,11 @@ async function testBundledServer() {
   assert.match(bookPrompt, /How Il Dottore talks: Clipped, clinical, faintly amused\./u);
   assert.match(bookPrompt, /Backstory: Second of the Fatui Harbingers\./u);
   assert.match(bookPrompt, /- hatch: .*write \{kind\} for what hatched/u);
+  assert.doesNotMatch(bookPrompt, /- hello:/u);
+  assert.match(oneOffPrompt, /How Il Dottore talks: Clipped, clinical, faintly amused\./u);
+  assert.match(oneOffPrompt, /write 3 different lines/u);
+  assert.match(oneOffPrompt, /- eggFoundByOther: .*write \{finder\} for who found it/u);
+  assert.doesNotMatch(oneOffPrompt, /- feed:|signoffs/u);
 
   // Switching caretaker never asks for a profile: a caretaker with no voice of their own starts with one guessed
   // from their card and says hello in a line of their own, which does not count against the daily limit; picking the
@@ -3393,8 +3426,8 @@ async function testBundledServer() {
   assert.equal(modelCalls, callsBeforeSwitch + 1);
   const nahidaVoice = await routes.get("POST /voice")!({ body: { characterId: "nahida-2" } });
   assert.equal(nahidaVoice.world.activePet.careProfile.voice.speechStyle, "Soft and wondering.");
-  // The profile and the phrasebook
-  assert.equal(modelCalls, callsBeforeSwitch + 3);
+  // The profile and the two parts of the phrasebook
+  assert.equal(modelCalls, callsBeforeSwitch + 4);
   [...storedDocs.values()].find((doc) => doc.kind === "saucelings-world")!.data.profileCache["dottore-1"].cardDigest =
     "an older card";
   const switchedBack = await routes.get("PATCH /pet")!({ body: { caretakerId: "dottore-1" } });
@@ -3402,7 +3435,7 @@ async function testBundledServer() {
   assert.equal(switchedBack.world.activePet.journal[0].speaker, "Il Dottore");
   await linesLanded();
   // Only the hello was written
-  assert.equal(modelCalls, callsBeforeSwitch + 4);
+  assert.equal(modelCalls, callsBeforeSwitch + 5);
 
   // Bring back hands a Menagerie pet to the caretaker picked for it, with their voice and no profile call, and the
   // return line theirs; leaving the caretaker out keeps the one it had

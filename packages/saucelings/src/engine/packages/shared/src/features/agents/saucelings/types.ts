@@ -121,8 +121,8 @@ export type SaucelingTendencyKey = (typeof SAUCELING_TENDENCIES)[number];
 
 export type SaucelingCareTendencies = Record<SaucelingTendencyKey, number>;
 
-/** The routine moments a caretaker's own phrasebook covers, written once by the model. */
-export const SAUCELING_OWN_PHRASE_MOMENTS = [
+/** The routine moments: the caretaker's first phrasebook call writes four lines for each, and their sign-offs. */
+export const SAUCELING_ROUTINE_MOMENTS = [
   "feed",
   "fedBadly",
   "overfed",
@@ -136,17 +136,30 @@ export const SAUCELING_OWN_PHRASE_MOMENTS = [
   "hatch",
   "stageUp",
 ] as const;
-/** Every moment with a phrasebook line; the house phrasebook alone covers the ones after the caretaker's own, since
- *  the model writes those lines itself on every click. */
-export const SAUCELING_PHRASE_MOMENTS = [
-  ...SAUCELING_OWN_PHRASE_MOMENTS,
+/** The one-off moments: a second phrasebook call writes three lines for each. The model may still write a fresh line
+ *  for any of them; these are what is said until it does, or when it cannot. */
+export const SAUCELING_SCENE_MOMENTS = [
+  "hello",
+  "farewell",
   "checkInEgg",
   "checkInContent",
   "checkInHungry",
   "checkInSad",
-  "hello",
-  "farewell",
+  "backSoon",
+  "backLong",
+  "returnHome",
+  "eggFound",
+  "eggFoundTalking",
+  "anotherEgg",
+  "eggFoundByOther",
+  "evolveOffer",
+  "evolve",
+  "temperamentShift",
+  "takesAfter",
+  "eggFarewell",
+  "eggReturn",
 ] as const;
+export const SAUCELING_PHRASE_MOMENTS = [...SAUCELING_ROUTINE_MOMENTS, ...SAUCELING_SCENE_MOMENTS] as const;
 export type SaucelingPhraseMoment = (typeof SAUCELING_PHRASE_MOMENTS)[number];
 
 /** Which sign-offs go after a line: how the caretaker feels about what they just said. */
@@ -161,8 +174,8 @@ export interface SaucelingCareVoice {
   worryLevel: 0 | 1 | 2 | 3;
   /** How they talk, read from their card; it steers the model's lines. Profiles made before it have none. */
   speechStyle?: string;
-  /** Up to four lines in their own voice per routine moment, with {pet} where the pet's name goes (and {nickname},
-   *  {kind} or {stage} where they fit). A moment with none uses the house phrasebook. */
+  /** Lines in their own voice per moment, with {pet} where the pet's name goes (and {nickname}, or what the moment
+   *  fills in, where they fit). A moment with none uses the house phrasebook. */
   phrases?: Partial<Record<SaucelingPhraseMoment, string[]>>;
   /** Short tags they may add after a line, by feeling. Voices made before them sign off with their catchphrases. */
   signoffs?: Partial<Record<SaucelingSignoffFeeling, string[]>>;

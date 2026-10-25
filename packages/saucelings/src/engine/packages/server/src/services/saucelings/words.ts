@@ -435,7 +435,7 @@ async function writeTemperament(
             id: `takes-after-${Date.parse(nowIso)}`,
             kind: "temperament-shift",
             createdAt: nowIso,
-            text: templateTakesAfterScene(live.name, temperament.name, Date.parse(nowIso)),
+            text: templateTakesAfterScene(live.careProfile, live.name, temperament.name, Date.parse(nowIso)),
             generated: false,
             speaker: live.careProfile.characterName,
           },

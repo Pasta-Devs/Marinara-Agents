@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import type { CapabilityCharacterRecord } from "@marinara-engine/shared";
 import { spokenLine } from "../../../../shared/src/features/agents/saucelings/templates.js";
 import {
-  SAUCELING_OWN_PHRASE_MOMENTS,
+  SAUCELING_ROUTINE_MOMENTS,
+  SAUCELING_SCENE_MOMENTS,
   SAUCELING_SCORED_TEMPERAMENTS,
   SAUCELING_SIGNOFF_FEELINGS,
   ORDINARY_SPECIES,
@@ -20,7 +21,8 @@ import { getSaucelingsRuntime } from "./package-runtime.js";
 const PROFILE_TIMEOUT_MS = 30_000;
 /** Room for the speech style as well as the tendencies. */
 const PROFILE_MAX_TOKENS = 900;
-/** The phrasebook is four lines for each of twelve moments and nine sign-offs: longer to write than the profile. */
+/** Each phrasebook call is about sixty lines (four for each routine moment and nine sign-offs, or three for each
+ *  one-off moment): longer to write than the profile. */
 const PHRASEBOOK_TIMEOUT_MS = 60_000;
 const PHRASEBOOK_MAX_TOKENS = 2000;
 
@@ -280,14 +282,63 @@ export function normalizeCareProfile(
   };
 }
 
-/** The {...} a moment's lines may use; a line with any other is dropped. */
-const PHRASE_FILLS: Partial<Record<SaucelingPhraseMoment, string[]>> = { hatch: ["kind"], stageUp: ["stage"] };
+/** What each moment is, for the model writing the caretaker's lines. */
+export const MOMENT_BRIEFS: Record<SaucelingPhraseMoment, string> = {
+  feed: "serving the pet its dinner, said to the pet",
+  fedBadly: "telling the player they made a poor dinner (burnt, lumpy) and the pet ate it anyway",
+  overfed: "telling the player they gave the pet far too much",
+  forgot: "telling the player they forgot the pet's dinner",
+  play: "playing a game with the pet, said to the pet",
+  cuddle: "cuddling the pet, said to the pet",
+  milestone: "telling the player the pet is coming along well",
+  warmEgg: "keeping the egg warm, said to the egg",
+  letCool: "telling the player they let the egg get cold",
+  chatEgg: "chatting to the egg about their day, said to the egg",
+  hatch: "the egg is hatching, said to the player",
+  stageUp: "the pet has grown into its next life stage, said to the player",
+  hello: "taking over as the pet's caretaker from someone else, said to the pet",
+  farewell: "sending the pet off to live in the Menagerie, said to the pet",
+  checkInEgg: "the player asks how the egg is, and it is doing fine",
+  checkInContent: "the player asks how the pet is, and it is fed and happy",
+  checkInHungry: "the player asks how the pet is, and it is hungry",
+  checkInSad: "the player asks how the pet is, and it is unhappy",
+  backSoon:
+    "greeting the player, back after a day or a few days away; what you did meanwhile is said after it, so only the greeting",
+  backLong:
+    "greeting the player, back after a week or more away; what you did meanwhile is said after it, so only the greeting",
+  returnHome: "welcoming the pet back to the nook from the Menagerie, said to the pet",
+  eggFound: "telling the player you found an egg by the nook",
+  eggFoundTalking: "telling the player you found an egg while chatting with them",
+  anotherEgg:
+    "telling the player you found another egg while chatting with them; it is not the pet, it waits in the Menagerie",
+  eggFoundByOther:
+    "telling the player another character found an egg while chatting with them; it is not the pet, it waits in the Menagerie",
+  evolveOffer: "telling the player the pet seems ready to become something new, and to have a look",
+  evolve: "the pet has just evolved into something new, said to the player",
+  temperamentShift: "telling the player the pet's temperament has changed",
+  takesAfter: "telling the player the pet is picking up your own ways",
+  eggFarewell: "sending the egg off to the Menagerie, said to the egg",
+  eggReturn: "the egg is back in the nook from the Menagerie, said to the egg",
+};
 
-/** The model's phrasebook: up to four spoken lines per moment and three sign-offs per feeling, each short and
- *  using only the {...} the templates fill in. */
+/** The {...} a moment fills in besides {pet} and {nickname}, and what each stands for; a line with any other is
+ *  dropped. */
+export const PHRASE_FILLS: Partial<Record<SaucelingPhraseMoment, Record<string, string>>> = {
+  hatch: { kind: "what hatched" },
+  stageUp: { stage: "the new stage" },
+  returnHome: { stage: "its life stage" },
+  eggFoundByOther: { finder: "who found it" },
+  evolve: { form: "what it became" },
+  temperamentShift: { readsAs: "how it behaves now, a few words such as bright, bouncy, chatty" },
+  takesAfter: { temperament: "the way it is turning, a few words" },
+};
+
+/** The model's phrasebook for `moments`: up to four spoken lines per moment and three sign-offs per feeling, each short
+ *  and using only the {...} the templates fill in. A moment with no line is left out. */
 export function normalizePhrasebook(
   raw: unknown,
   characterName: string,
+  moments: readonly SaucelingPhraseMoment[],
 ): Pick<SaucelingCareProfile["voice"], "phrases" | "signoffs"> {
   const obj = parseRecord(raw);
   const lines = (value: unknown, maxLen: number, fills: string[], max: number) =>
@@ -301,11 +352,13 @@ export function normalizePhrasebook(
   const signoffsObj = parseRecord(obj.signoffs);
   return {
     phrases: Object.fromEntries(
-      SAUCELING_OWN_PHRASE_MOMENTS.map((moment) => [
-        moment,
-        lines(phrasesObj[moment], 120, ["pet", "nickname", ...(PHRASE_FILLS[moment] ?? [])], 4),
-      ]),
-    ) as Record<SaucelingPhraseMoment, string[]>,
+      moments
+        .map((moment) => [
+          moment,
+          lines(phrasesObj[moment], 120, ["pet", "nickname", ...Object.keys(PHRASE_FILLS[moment] ?? {})], 4),
+        ])
+        .filter(([, said]) => said.length > 0),
+    ),
     signoffs: Object.fromEntries(
       SAUCELING_SIGNOFF_FEELINGS.map((feeling) => [feeling, lines(signoffsObj[feeling], 60, [], 3)]),
     ) as Record<SaucelingSignoffFeeling, string[]>,
@@ -419,42 +472,46 @@ async function modelCareProfile(card: CareCard, connectionId: string | null): Pr
   return parsed ? normalizeCareProfile(parsed, card.id, card.name, card.cardDigest, true) : null;
 }
 
-/** The caretaker's phrasebook, written once in the voice their profile found, or null when the call fails. */
+/** One of the caretaker's phrasebook calls, written once in the voice their profile found: the routine moments, with
+ *  four lines each and sign-offs, or the one-off moments, with three. Null when the call fails. */
 async function modelPhrasebook(
   card: CareCard,
   record: CapabilityCharacterRecord,
   profile: SaucelingCareProfile,
   connectionId: string | null,
+  routine: boolean,
 ): Promise<Pick<SaucelingCareProfile["voice"], "phrases" | "signoffs"> | null> {
   const { characterName: name, voice } = profile;
   const persona = cardPersona(record);
+  const moments = routine ? SAUCELING_ROUTINE_MOMENTS : SAUCELING_SCENE_MOMENTS;
+  const count = routine ? 4 : 3;
   const system = [
     `You write a phrasebook for ${name}, who looks after a little pet in the virtual pet game Saucelings.`,
-    `The lines are said out loud exactly as written at routine moments, so each must sound like ${name} and make sense on its own.`,
+    routine
+      ? `The lines are said out loud exactly as written at routine moments, so each must sound like ${name} and make sense on its own.`
+      : `The lines are said out loud exactly as written at one-off moments, so each must sound like ${name} and make sense on its own.`,
     persona.who ? `Who ${name} is, from their character card:\n${persona.who}` : "",
     voice.speechStyle ? `How ${name} talks: ${voice.speechStyle}` : "",
     `${name} calls the pet "${voice.petNickname}". A line in ${name}'s voice: ${JSON.stringify(voice.voiceSample)}.`,
     `These lines come round again and again, so keep ${name}'s catchphrases out of them: ${JSON.stringify(voice.catchphrases)}.`,
-    "For each moment below, write 4 different lines, each under 120 characters, in first person.",
+    `For each moment below, write ${count} different lines, each under 120 characters, in first person.`,
     "Spoken words only: no narration, no actions, no asterisks, no quotation marks.",
-    "Make the 4 lines different from each other: don't start two the same way.",
+    `Make the ${count} lines different from each other: don't start two the same way.`,
     `Write {pet} where the pet's name goes and {nickname} where ${name} would use their pet name for it.`,
-    "Egg moments are said to an unhatched egg: never guess or name what is inside it.",
+    "Egg moments are said to an unhatched egg or about a new one: never guess or name what is inside it.",
     "Moments:",
-    "- feed: serving the pet its dinner, said to the pet",
-    "- fedBadly: telling the player they made a poor dinner (burnt, lumpy) and the pet ate it anyway",
-    "- overfed: telling the player they gave the pet far too much",
-    "- forgot: telling the player they forgot the pet's dinner",
-    "- play: playing a game with the pet, said to the pet",
-    "- cuddle: cuddling the pet, said to the pet",
-    "- milestone: telling the player the pet is coming along well",
-    "- warmEgg: keeping the egg warm, said to the egg",
-    "- letCool: telling the player they let the egg get cold",
-    "- chatEgg: chatting to the egg about their day, said to the egg",
-    "- hatch: the egg is hatching, said to the player; write {kind} for what hatched",
-    "- stageUp: the pet has grown into its next life stage, said to the player; write {stage} for the new stage",
-    `signoffs: short tags (under 60 characters) ${name} might add after any line: 3 pleased, 3 worried, 3 neutral, all different and none of them a catchphrase.`,
-    'Return ONLY JSON: {"phrases":{"feed":["..."],...},"signoffs":{"pleased":["..."],"worried":["..."],"neutral":["..."]}}',
+    ...moments.map((moment) =>
+      [
+        `- ${moment}: ${MOMENT_BRIEFS[moment]}`,
+        ...Object.entries(PHRASE_FILLS[moment] ?? {}).map(([key, meaning]) => `write {${key}} for ${meaning}`),
+      ].join("; "),
+    ),
+    routine
+      ? `signoffs: short tags (under 60 characters) ${name} might add after any line: 3 pleased, 3 worried, 3 neutral, all different and none of them a catchphrase.`
+      : "",
+    routine
+      ? 'Return ONLY JSON: {"phrases":{"feed":["..."],...},"signoffs":{"pleased":["..."],"worried":["..."],"neutral":["..."]}}'
+      : 'Return ONLY JSON: {"phrases":{"hello":["..."],...}}',
   ]
     .filter(Boolean)
     .join("\n");
@@ -463,12 +520,13 @@ async function modelPhrasebook(
     temperature: 0.7,
     timeoutMs: PHRASEBOOK_TIMEOUT_MS,
   });
-  return parsed ? normalizePhrasebook(parsed, name) : null;
+  return parsed ? normalizePhrasebook(parsed, name, moments) : null;
 }
 
-/** The caretaker's own voice, made once by the writing connection from their card: a profile, then a phrasebook in
- *  that voice. Null when the card is missing, there is no connection, the profile call fails or its answer has no
- *  speech style; a failed phrasebook keeps the profile, and the house phrasebook speaks for them. */
+/** The caretaker's own voice, made once by the writing connection from their card: a profile, then the two parts of
+ *  their phrasebook in that voice, side by side. Null when the card is missing, there is no connection, the profile
+ *  call fails or its answer has no speech style; a part that fails keeps the profile, and the house phrasebook speaks
+ *  for them at those moments. */
 export async function makeCareVoice(
   characterId: string,
   connectionId: string | null,
@@ -478,6 +536,16 @@ export async function makeCareVoice(
   const card = extractReducedCard(record);
   const made = await modelCareProfile(card, connectionId);
   if (!hasOwnVoice(made)) return null;
-  const book = await modelPhrasebook(card, record, made, connectionId);
-  return book ? { ...made, voice: { ...made.voice, ...book } } : made;
+  const [routine, scenes] = await Promise.all([
+    modelPhrasebook(card, record, made, connectionId, true),
+    modelPhrasebook(card, record, made, connectionId, false),
+  ]);
+  return {
+    ...made,
+    voice: {
+      ...made.voice,
+      phrases: { ...routine?.phrases, ...scenes?.phrases },
+      ...(routine ? { signoffs: routine.signoffs } : {}),
+    },
+  };
 }

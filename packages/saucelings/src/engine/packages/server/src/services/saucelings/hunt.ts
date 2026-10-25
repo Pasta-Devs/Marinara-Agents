@@ -103,8 +103,8 @@ async function saveFind(
       createdAt: nowIso,
       text:
         nook.caretakerId === finderId
-          ? templateEggFoundWhileTalking(teller, Date.parse(nowIso))
-          : templateEggFoundByOther(teller, profile.characterName, Date.parse(nowIso)),
+          ? templateEggFoundWhileTalking(teller, nook, Date.parse(nowIso))
+          : templateEggFoundByOther(teller, nook, profile.characterName, Date.parse(nowIso)),
       generated: false,
       speaker: teller.characterName,
     };

@@ -469,7 +469,7 @@ export function advance(
       kind: "temperament-shift",
       createdAt: nowIso,
       temperament: shiftedTemperament,
-      text: templateTemperamentShiftScene(nextPet.name, shiftedTemperament, nowMs),
+      text: templateTemperamentShiftScene(nextPet.careProfile, nextPet.name, shiftedTemperament, nowMs),
       generated: false,
       speaker: nextPet.careProfile.characterName,
     });
@@ -610,7 +610,7 @@ export function performUserAction(
       kind: "temperament-shift",
       createdAt: nowIso,
       temperament: shiftedTemperament,
-      text: templateTemperamentShiftScene(nextPet.name, shiftedTemperament, nowMs),
+      text: templateTemperamentShiftScene(nextPet.careProfile, nextPet.name, shiftedTemperament, nowMs),
       generated: false,
       speaker: nextPet.careProfile.characterName,
     });

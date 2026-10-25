@@ -42,7 +42,7 @@ export function retirePetToMenagerie(
 ): { entry: SaucelingMenagerieEntry; farewellEvent: SaucelingEvent } {
   const farewellText =
     pet.stage === "egg"
-      ? templateEggFarewellScene(Date.parse(nowIso))
+      ? templateEggFarewellScene(pet.careProfile, Date.parse(nowIso))
       : templateFarewellScene(pet.careProfile, pet.name, Date.parse(nowIso));
   const farewellEvent: SaucelingEvent = {
     id: `farewell-${Date.parse(nowIso)}`,
@@ -126,8 +126,8 @@ export function restorePetFromMenagerie(
     stage: activeStage,
     text:
       activeStage === "egg"
-        ? templateEggReturnScene(Date.parse(nowIso))
-        : templateReturnScene(caretaker.profile, activeStage, Date.parse(nowIso)),
+        ? templateEggReturnScene(caretaker.profile, Date.parse(nowIso))
+        : templateReturnScene(caretaker.profile, entry.name, activeStage, Date.parse(nowIso)),
     generated: false,
     speaker: caretaker.profile.characterName,
   };
