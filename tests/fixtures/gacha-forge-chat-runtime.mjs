@@ -11,7 +11,7 @@ export const chatUnitId = `${chatRunId}:unit:arden`;
 export const chatConnectionId = "same-main-connection";
 const clone = structuredClone;
 
-export async function createChatRuntime({ stored, archived = 0, port = 0 } = {}) {
+export async function createChatRuntime({ stored, archived = 0, port = 0, allowWorldDelete = false } = {}) {
   const docs = new Map(stored ? clone(stored) : []);
   const handlers = new Map();
   const calls = [];
@@ -134,7 +134,8 @@ export async function createChatRuntime({ stored, archived = 0, port = 0 } = {})
       docs.set(saved.id, saved);
       return clone(saved);
     },
-    remove: async () => {
+    remove: async (_packageId, id, revision) => {
+      if (allowWorldDelete) return docs.get(id)?.revision === revision && docs.delete(id);
       throw new Error("Chat history must never be deleted");
     },
   };
@@ -232,6 +233,8 @@ export async function createChatRuntime({ stored, archived = 0, port = 0 } = {})
   }
   return {
     origin,
+    handlers,
+    directory,
     docs,
     persistence,
     calls,
