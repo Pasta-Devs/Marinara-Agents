@@ -167,7 +167,7 @@ export function ExtractionPromptTemplates({
           {localizeUi("ui.longTermMemory.extractionprompttemplates.createTemplate")}
         </Button>
       </div>
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div data-ltm-active-template-grid className="grid gap-2">
         {modes.map((mode) => (
           <div
             key={mode}

@@ -484,9 +484,25 @@ const onboarding = readFileSync(join(dirname(ltmSourcePaths.detail), "Onboarding
 assert.match(onboarding, /@container ltm-onboarding \(min-width: 48rem\)/u);
 assert.doesNotMatch(onboarding, /@media \(min-width: 768px\)/u);
 // The scrollers fit a short or zoomed viewport: no 20rem floor, and dvh so mobile chrome cannot inflate the cap.
-assert.match(vault, /max-height: calc\(100dvh - 12rem\);/u);
+// A vh line above it covers browsers without dvh; a 10rem floor stops a very short window collapsing the list.
+const dvhCap = /max-height: calc\(100vh - 12rem\);\s*max-height: max\(10rem, calc\(100dvh - 12rem\)\);/u;
+assert.match(vault, dvhCap);
 assert.doesNotMatch(vault, /max\(20rem, calc\(100vh/u);
-assert.match(activity, /maxHeight: "calc\(100dvh - 12rem\)"/u);
+assert.match(activity, new RegExp(`\\[data-ltm-debug-list\\] \\{\\s*${dvhCap.source}`, "u"));
+assert.doesNotMatch(activity, /maxHeight: "calc\(/u);
+// The last two window breakpoints in the settings and setup guide follow their containers too.
+assert.doesNotMatch(onboarding, /sm:p-6/u);
+assert.match(
+  onboarding,
+  /@container ltm-onboarding \(min-width: 40rem\) \{\s*\[data-ltm-onboarding-body\] \{\s*padding: 1\.5rem;/u,
+);
+const promptTemplates = readFileSync(
+  join(dirname(ltmSourcePaths.detail), "settings", "ExtractionPromptTemplates.tsx"),
+  "utf8",
+);
+assert.doesNotMatch(promptTemplates, /sm:grid-cols-3/u);
+assert.match(promptTemplates, /<div data-ltm-active-template-grid className="grid gap-2">/u);
+assert.match(settings, /\[data-ltm-active-template-grid\] \{\s*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/u);
 // #1673: the last raw text-style buttons meet the 2.75rem floor instead of a ~20px target.
 assert.match(
   maintenance,

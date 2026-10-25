@@ -84,10 +84,15 @@ workbench while rows are listed (above the pane tabs once the queue is empty), a
 change is ready to apply. The Sources scope row stacks until
 its destination container reaches `40rem`. Vault note title and status share a
 row from a `28rem` workbench, and the Vault list scrolls on its own from `48rem`.
-Memory Settings puts its four section tabs, its recall field pairs, and its
-activity detail pairs in one row from a `40rem` settings container; the header's
-add action keeps its `2.75rem` target and drops its label below `48rem` of the
-detail surface.
+Memory Settings puts its four section tabs, its recall field pairs, its three
+active-template pickers and its activity detail pairs in one row from a `40rem`
+settings container. The header's add action keeps its `2.75rem` target and drops
+its label, and the Vault health pill hides, below `48rem` of the detail surface;
+the health pill's detail text appears from `40rem`. The setup guide pads more
+from `40rem` and puts its illustration beside the text from `48rem` of its own
+container. The Vault and Debug lists cap at the window height minus `12rem`
+(`dvh`, with a `vh` fallback and a `10rem` floor), so a zoomed or short window
+scrolls the list instead of the page.
 
 ## Workflow Contracts
 

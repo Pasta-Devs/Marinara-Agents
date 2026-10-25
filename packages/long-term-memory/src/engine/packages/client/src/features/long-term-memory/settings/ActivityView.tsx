@@ -1618,6 +1618,11 @@ export default function ActivityView({
         [data-ltm-debug-operation]:hover [data-ltm-debug-muted] {
           color: var(--marinara-editor-text, var(--foreground));
         }
+        /* vh first for browsers without dvh; the floor keeps a very short window from collapsing the log. */
+        [data-ltm-debug-list] {
+          max-height: calc(100vh - 12rem);
+          max-height: max(10rem, calc(100dvh - 12rem));
+        }
         @container ltm-memory-settings (min-width: 40rem) {
           [data-ltm-debug-settings-grid],
           [data-ltm-debug-facts-grid] {
@@ -1820,7 +1825,7 @@ export default function ActivityView({
                 data-ltm-debug-list
                 aria-label={localizeUi("ui.longTermMemory.activityview.longTermMemoryActivityLog")}
                 className="mari-editor-panel min-w-0"
-                style={{ maxHeight: "calc(100dvh - 12rem)", overflowY: "auto" }}
+                style={{ overflowY: "auto" }}
               >
                 {activity.data && visibleOperations.length === 0 ? (
                   <StatusSurface>

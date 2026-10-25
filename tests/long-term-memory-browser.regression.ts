@@ -2948,6 +2948,8 @@ async function main() {
       const desktopAddBox = await page.locator('[aria-label="Add memories"]').boundingBox();
       assert.ok(desktopActivationBox);
       assert.ok(desktopAddBox);
+      // #1673: a wide detail surface shows the add label.
+      assert.equal(await page.locator("[data-ltm-add-label]").isVisible(), true, "a wide surface shows the add label");
       assert.equal(
         Math.abs(
           desktopActivationBox.y + desktopActivationBox.height / 2 - (desktopAddBox.y + desktopAddBox.height / 2),
@@ -2978,6 +2980,20 @@ async function main() {
           };
         });
       assert.equal(desktopExtractionLayout.columns, 2);
+      assert.equal(
+        await page
+          .locator("[data-ltm-settings-tab-rail]")
+          .evaluate((rail) => getComputedStyle(rail).gridTemplateColumns.split(/\s+/u).length),
+        4,
+        "a wide Settings container shows four tab columns",
+      );
+      assert.equal(
+        await page
+          .locator("[data-ltm-active-template-grid]")
+          .evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(/\s+/u).length),
+        3,
+        "a wide Settings container puts the three active-template pickers in one row",
+      );
       assert.deepEqual(desktopExtractionLayout.labelHeights, [44, 44]);
       assert.equal(Math.abs(desktopExtractionLayout.labelTops[0]! - desktopExtractionLayout.labelTops[1]!) <= 1, true);
       assert.equal(
@@ -2986,7 +3002,8 @@ async function main() {
       );
       assert.deepEqual(desktopExtractionLayout.selectHeights, [44, 44]);
       assert.equal(desktopExtractionLayout.infoSize, 14);
-      // #1673: a 420px window stands in for 200% zoom (Playwright has no zoom API); both scrollers must fit it.
+      // #1673: a 420px-high window stands in for the height at 200% zoom (Playwright has no zoom API). Headless
+      // Chromium reads vh and dvh alike, so this proves the caps track the window; the dvh unit is pinned statically.
       const fitsWindow = (list: ReturnType<typeof page.locator>) =>
         list.evaluate((element) => parseFloat(getComputedStyle(element).maxHeight) + 12 * 16 <= innerHeight + 1);
       await page.setViewportSize({ width: 1280, height: 420 });

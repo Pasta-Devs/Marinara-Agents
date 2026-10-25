@@ -518,6 +518,9 @@ export default function MemorySettings({
           [data-ltm-prompt-template-grid] {
             grid-template-columns: 12rem minmax(0, 1fr);
           }
+          [data-ltm-active-template-grid] {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
           [data-ltm-settings-tab-rail] {
             grid-template-columns: repeat(4, minmax(0, 1fr));
           }
