@@ -4625,8 +4625,39 @@ async function main() {
         await customPage.getByRole("button", { name: "Discard changes" }).click();
         await customPage.getByRole("button", { name: "Discard changes" }).waitFor({ state: "detached" });
         assert.equal(await style.inputValue(), "custom", "Discard returns to the saved Custom style");
+        await recall.getByText("Reset to preset returns to Balanced.", { exact: false }).waitFor();
         assert.match(await note.innerText(), /returns to Balanced\./u, "the discarded pick is not remembered");
         await customPage.close();
+      }
+      // #1659: saving a form as Custom also drops the preset history, so Reset to preset agrees with a reload.
+      {
+        const savePage = await browserContext.newPage();
+        await savePage.setViewportSize({ width: 1280, height: 900 });
+        await savePage.route("**/api/long-term-memory/settings", (route) =>
+          route.request().method() === "PUT"
+            ? route.fulfill({ json: route.request().postDataJSON() })
+            : route.continue(),
+        );
+        await savePage.goto(`http://127.0.0.1:${address.port}/`);
+        await savePage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await savePage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await savePage.locator('[data-ltm-destination="settings"]:visible').first().click();
+        const recall = savePage.locator("#settings-panel-recall");
+        const style = recall.getByLabel("Recall style", { exact: true });
+        await style.selectOption("exact");
+        await recall.getByLabel("Meaning match", { exact: true }).fill("0.91");
+        await recall.getByLabel("Meaning match", { exact: true }).press("Enter");
+        await recall.getByText("Reset to preset returns to Exact.", { exact: false }).waitFor();
+        await savePage.getByRole("button", { name: "Save settings" }).click();
+        await savePage.getByRole("button", { name: "Save settings" }).waitFor({ state: "detached" });
+        assert.equal(await style.inputValue(), "custom", "the saved form stays Custom");
+        await recall.getByText("Reset to preset returns to Balanced.", { exact: false }).waitFor();
+        await savePage.close();
       }
       // #1659: success text reads at 4.5:1 in both themes and carries a check icon, an unsaved tab shows a dot,
       // Save stays reachable while the form scrolls, and an identity repair names the backup it made.

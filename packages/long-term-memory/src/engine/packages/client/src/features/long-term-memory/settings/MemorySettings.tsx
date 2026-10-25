@@ -253,8 +253,8 @@ export default function MemorySettings({
   }, [maintenanceBusy]);
 
   // "Reset to preset" returns to the last named style: the one chosen or saved before the weights were
-  // edited. Wherever the form is replaced from saved or fetched settings the history restarts, so a form
-  // saved as Custom has none and falls back to Balanced.
+  // edited. Whenever the form equals the saved settings (first load, Save, Discard, import or reset) the
+  // history restarts from them, so a form saved as Custom has none and falls back to Balanced.
   const [lastRecallPreset, setLastRecallPreset] =
     useState<Exclude<GlobalForm["longTermMemoryRecallStyle"], "custom">>("balanced");
   const restartRecallPreset = (form: GlobalForm) =>
@@ -264,11 +264,13 @@ export default function MemorySettings({
     if (recallStyle && recallStyle !== "custom") setLastRecallPreset(recallStyle);
   }, [recallStyle]);
   useEffect(() => {
+    if (globalForm && savedGlobal && same(globalForm, savedGlobal)) restartRecallPreset(savedGlobal);
+  }, [globalForm, savedGlobal]);
+  useEffect(() => {
     if (!global.data || global.isError || globalForm || global.dataUpdatedAt < refillSince) return;
     const next = settingsForm(global.data);
     setGlobalForm(next);
     setSavedGlobal(next);
-    restartRecallPreset(next);
   }, [global.data, global.dataUpdatedAt, global.isError, globalForm, refillSince]);
   useEffect(() => {
     if (!extraction.data || extraction.isError || extractionFormState || extraction.dataUpdatedAt < refillSince) return;
@@ -402,7 +404,6 @@ export default function MemorySettings({
     ) {
       if (savedGlobal) {
         setGlobalForm(savedGlobal);
-        restartRecallPreset(savedGlobal);
       }
       if (savedExtraction) setExtractionFormState(savedExtraction);
       // An earlier save's result no longer describes the form, so focus goes to the tab.
@@ -423,7 +424,6 @@ export default function MemorySettings({
       const nextGlobal = settingsForm(nextGlobalSettings);
       setGlobalForm(nextGlobal);
       setSavedGlobal(nextGlobal);
-      restartRecallPreset(nextGlobal);
       const nextExtraction = extractionForm(nextExtractionSettings);
       setExtractionFormState(nextExtraction);
       setSavedExtraction(nextExtraction);
