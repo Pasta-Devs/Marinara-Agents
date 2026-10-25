@@ -80,7 +80,7 @@ assert.deepEqual(
   slurpLivePictureTriggers(
     {
       ...show,
-      pictures: Array.from({ length: 6 }, (_, i) => ({
+      pictures: Array.from({ length: 12 }, (_, i) => ({
         personaId: "a",
         trigger: `used:${i}`,
         status: "ready" as const,

@@ -305,7 +305,7 @@ function SlpLiveContent({
         <p
           className={`px-3 py-2 text-sm ${wide ? "border-t border-[var(--border)] text-[var(--muted-foreground)]" : "text-white/80"}`}
         >
-          {t("ui.noodleshell.pickAPersona")}
+          {t("ui.noodle.noodleshell.pickAPersona")}
         </p>
       )}
       {canTalk && (
