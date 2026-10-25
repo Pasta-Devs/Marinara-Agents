@@ -1,9 +1,6 @@
 // Maintained package source, inlined after player-choices-en.mjs by the bundle builder.
 /* global forgeChoiceEnglish, forgeChoiceLabel, forgeSeasonalEnglish */
 const forgeChoiceSettingsLayout = `
-.st-pane .gf-choice-settings-toggle {
-  grid-template-columns: 44px minmax(0, 1fr); gap: 0.75rem; align-items: center; padding: 0.4rem 0.6rem;
-}
 .st-pane .gf-choice-settings-toggle > .ob-bx {
   width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0;
   display: grid; place-items: center; line-height: 1;

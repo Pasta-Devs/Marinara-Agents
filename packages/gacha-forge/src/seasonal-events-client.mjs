@@ -1,7 +1,7 @@
 /* global forgeSeasonalEnglish, stopForgeStoryRequests, wireForgeBannerAnimation, syncForgeAudio */
 const forgeSeasonalLayout = `
 .gf-story-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-column:1/-1; gap:var(--sp-2); }
-.gf-story-options .st-plate { min-width:0; margin:0; }
+.gf-story-options .st-plate { min-width:0; margin:0; display:grid; grid-template-rows:subgrid; grid-row:span 2; row-gap:0; }
 .gf-story-options .ob-toggle { display:grid; grid-template-columns:44px minmax(0,1fr); gap:.35rem; align-items:start; padding:.2rem; }
 .gf-story-options .ob-toggle > .ob-bx { position:relative; width:44px; height:44px; min-width:44px; min-height:44px; padding:0; border:0; background:transparent; clip-path:none; }
 .gf-story-options .ob-bx::before { content:""; position:absolute; width:24px; height:24px; left:10px; top:10px; border:1px solid var(--steel); border-radius:var(--radius-sm); background:var(--ink-2); }

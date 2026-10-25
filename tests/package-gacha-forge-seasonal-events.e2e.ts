@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
@@ -185,8 +185,24 @@ for (const theme of ["dark", "light"]) {
       await page.screenshot({ path: testInfo.outputPath(`seasonal-continuity-${theme}.png`) });
       if (testInfo.project.name.includes("mobile")) {
         await page.setViewportSize({ width: 390, height: 844 });
-        await optionsGeometry(forge);
+        const portraitGeometry = await optionsGeometry(forge);
         await page.screenshot({ path: testInfo.outputPath(`seasonal-continuity-portrait-${theme}.png`) });
+        // A wider platform font can wrap only one heading; the paired controls must stay aligned.
+        await forge.evaluate((node) => {
+          const style = document.createElement("style");
+          style.dataset.seasonalFontFallback = "";
+          style.textContent = ".gf-story-options h3 {font-family:Arial,sans-serif;font-stretch:normal;}";
+          (node as any)._root.append(style);
+        });
+        const fallbackGeometry = await optionsGeometry(forge);
+        const geometryPath = testInfo.outputPath("paired-settings-portrait-geometry.json");
+        writeFileSync(geometryPath, JSON.stringify({ portraitGeometry, fallbackGeometry }, null, 2));
+        await testInfo.attach("paired-settings-portrait-geometry", {
+          path: geometryPath,
+          contentType: "application/json",
+        });
+        await page.screenshot({ path: testInfo.outputPath(`seasonal-continuity-fallback-font-${theme}.png`) });
+        await forge.evaluate((node) => (node as any)._root.querySelector("[data-seasonal-font-fallback]")?.remove());
         await page.setViewportSize({ width: 874, height: 402 });
       }
       // Worlds → New, using the normal saved setup-draft contract.
