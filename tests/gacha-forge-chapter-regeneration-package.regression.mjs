@@ -40,6 +40,8 @@ const enteredBeforeReturn = (entered, request) =>
 test("actual SDK rejects positional choices and mutations from an old displayed plan until explicit reopening", async () => {
   const f = await createChapterRuntime();
   try {
+    // This successful planner needs room for its canon plus the 8192-token answer floor.
+    f.transport.maxContext = 262144;
     f.session().progress[2].normal = 0;
     f.docs.get("index").data.runs[0].story.choices = true;
     const oldPlan = f.docs.get(`${chapterRunId}:chapter:2`).data;
@@ -178,6 +180,8 @@ test("the actual queued callback preserves its old scope and skips paid work aft
 test("actual SDK reset writes a fresh main plan and retains first-clear rewards and unrelated canon", async () => {
   const f = await createChapterRuntime();
   try {
+    // This successful planner needs room for its canon plus the 8192-token answer floor.
+    f.transport.maxContext = 262144;
     const wallet = structuredClone(f.session().wallet),
       account = structuredClone(f.session().account);
     const completed = structuredClone(f.docs.get(`${chapterRunId}:beat:1:0`));

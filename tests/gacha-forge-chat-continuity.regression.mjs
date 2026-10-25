@@ -325,6 +325,30 @@ const attempt = (extra = {}) => ({
   ...extra,
 });
 
+test("actual client explains output capacity while preserving the saved player row and explicit retry", async () => {
+  const { host, requests } = await actualClient((path) =>
+    path === "/chat/send"
+      ? {
+          ok: false,
+          error: "generation-failed",
+          detail: "generation-output-capacity",
+          capacity: { minimumOutputTokens: 8192, availableContextTokens: 7000, configuredMaxOutputTokens: 4096 },
+          retry: true,
+        }
+      : { ok: true, unit: { id: "u" }, messages: [player("saved", "Hello")], retry: true, activeCount: 1 },
+  );
+  host._chatSay({ text: "Hello" });
+  await settleClient();
+  for (const expected of ["8192", "7000", "4096", "context", "Max Output Tokens Override"])
+    assert.ok(host._chat.error.includes(expected), expected);
+  assert.deepEqual(
+    host._chat.messages.map((row) => row.id),
+    ["saved"],
+  );
+  assert.equal(host._chat.retry, true);
+  assert.equal(requests.filter((request) => request.path === "/chat/send").length, 1);
+});
+
 test("a failed HTTP response reconciles persisted text and never sends again", async () => {
   const snapshot = { ok: true, unit: { id: "u" }, messages: [player("saved", "Hello")], retry: true, activeCount: 1 };
   const { host, requests } = client([player("local-current", "Hello"), player("local-other", "Other")], snapshot);
