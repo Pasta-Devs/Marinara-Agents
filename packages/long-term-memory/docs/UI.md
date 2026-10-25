@@ -88,7 +88,9 @@ Memory Settings puts its four section tabs, its recall field pairs, its three
 active-template pickers and its activity detail pairs in one row from a `40rem`
 settings container. The header's add action keeps its `2.75rem` target and drops
 its label, and the Vault health pill hides, below `48rem` of the detail surface;
-the health pill's detail text appears from `40rem`. The setup guide pads more
+the health pill's detail text appears from `40rem`. Below `48rem` the header
+tightens its gaps and padding and the activation switch keeps a `3rem` minimum
+width; below `22.5rem` it also hides the icon tile. The setup guide pads more
 from `40rem` and puts its illustration beside the text from `48rem` of its own
 container. The Vault and Debug lists cap at the window height minus `12rem`
 (`dvh`, with a `vh` fallback and a `10rem` floor), so a zoomed or short window

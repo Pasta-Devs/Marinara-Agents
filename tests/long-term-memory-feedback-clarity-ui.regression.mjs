@@ -467,7 +467,7 @@ assert.match(
 // #1673: the panel's width decides these, so a narrow panel on a wide window keeps the compact layout.
 assert.doesNotMatch(settings, /sm:grid-cols-4/u);
 assert.match(settings, /\[data-ltm-settings-tab-rail\] \{\s*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/u);
-assert.equal((settings.match(/<div data-ltm-recall-grid className="grid gap-2">/gu) ?? []).length, 2);
+assert.equal((settings.match(/<div\s+data-ltm-recall-grid\s+className="grid gap-2"\s*>/gu) ?? []).length, 2);
 assert.match(settings, /\[data-ltm-recall-grid\] \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/u);
 assert.doesNotMatch(detail, /sm:min-h-9|sm:min-w-0|hidden sm:inline|md:flex/u);
 assert.match(detail, /\[data-ltm-add-label\] \{\s*display: inline;/u);
@@ -501,7 +501,7 @@ const promptTemplates = readFileSync(
   "utf8",
 );
 assert.doesNotMatch(promptTemplates, /sm:grid-cols-3/u);
-assert.match(promptTemplates, /<div data-ltm-active-template-grid className="grid gap-2">/u);
+assert.match(promptTemplates, /<div\s+data-ltm-active-template-grid\s+className="grid gap-2"\s*>/u);
 assert.match(settings, /\[data-ltm-active-template-grid\] \{\s*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/u);
 // #1673: the last raw text-style buttons meet the 2.75rem floor instead of a ~20px target.
 assert.match(
