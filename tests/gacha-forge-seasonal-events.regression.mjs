@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import {
   createForgeSeasonalEvents,
   forgeSeasonalEnabled,
@@ -457,3 +458,47 @@ console.log(
   assert.equal((await f.service.complete({ ...f.body, nodeIndex: 9 })).cached, true);
   assert.equal(f.session().wallet.aether, 320);
 }
+
+for (const inactive of ["expiry", "opt-out"])
+  test(`played event completion remains cached after ${inactive}`, async () => {
+    const f = fixture();
+    await f.service.list({ runId });
+    await f.service.plan(f.body);
+    f.seedBeats();
+    await f.service.complete({ ...f.body, nodeIndex: 0 });
+    const wallet = structuredClone(f.session().wallet),
+      progress = structuredClone(f.session().progress);
+    if (inactive === "expiry") f.setTime(f.docs.get(`${runId}:story-event:1`).data.endsAt);
+    else f.docs.get("index").data.runs[0].story.seasonalEvents = false;
+    const replay = await f.service.complete({ ...f.body, nodeIndex: 0 });
+    assert.equal(replay.ok, true, JSON.stringify(replay));
+    assert.equal(replay.cached, true);
+    assert.deepEqual(replay.gained, []);
+    assert.deepEqual(f.session().wallet, wallet);
+    assert.deepEqual(f.session().progress, progress);
+    assert.equal(
+      (await f.service.complete({ ...f.body, nodeIndex: 1 })).error,
+      inactive === "expiry" ? "event-expired" : "events-off",
+    );
+  });
+
+for (const inactive of ["expiry", "opt-out"])
+  test(`concurrent event completion remains cached when ${inactive} happens before its transaction`, async () => {
+    const f = fixture();
+    await f.service.list({ runId });
+    await f.service.plan(f.body);
+    f.seedBeats();
+    const wallet = structuredClone(f.session().wallet),
+      transaction = f.persistence.transaction;
+    f.persistence.transaction = (operation) =>
+      transaction(async (context) => {
+        f.session().progress["event-1"] = { normal: 1 };
+        if (inactive === "expiry") f.setTime(f.docs.get(`${runId}:story-event:1`).data.endsAt);
+        else f.docs.get("index").data.runs[0].story.seasonalEvents = false;
+        return operation(context);
+      });
+    const result = await f.service.complete({ ...f.body, nodeIndex: 0 });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.cached, true);
+    assert.deepEqual(f.session().wallet, wallet);
+  });

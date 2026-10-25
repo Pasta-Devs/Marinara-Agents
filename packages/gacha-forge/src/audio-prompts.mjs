@@ -65,8 +65,12 @@ export function createForgeMusicPromptService({ readWorld, readSession, updateSe
     const messages = forgeMusicBriefMessages(run, cue, banner);
     const fingerprint = forgeMusicHash("sha256").update(JSON.stringify(messages)).digest("hex");
     const saved = session?.audioPrompts?.[cue];
-    if (banner?.event && saved?.event === true && normalizeForgeMusicPrompt(saved))
-      return { ok: true, prompt: saved.prompt, cached: true };
+    // Older prepared event themes could exceed the brief limit; reuse their bounded text without another paid request.
+    const eventBrief =
+      banner?.event && saved?.event === true && typeof saved.prompt === "string"
+        ? normalizeForgeMusicPrompt({ prompt: saved.prompt.trim().slice(0, 1000) })
+        : null;
+    if (eventBrief) return { ok: true, prompt: eventBrief.prompt, cached: true };
     if (saved?.fingerprint === fingerprint && normalizeForgeMusicPrompt(saved))
       return { ok: true, prompt: saved.prompt, cached: true };
     const key = JSON.stringify([runId, cue, fingerprint]);

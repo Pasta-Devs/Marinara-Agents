@@ -1,3 +1,45 @@
+const forgeStoryOpenedTime = (row) => {
+  const value = Number(row?.opened);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+};
+export function forgeStoryOpenedBefore(row, other) {
+  return (
+    forgeStoryOpenedTime(row) > 0 &&
+    forgeStoryOpenedTime(other) > 0 &&
+    forgeStoryOpenedTime(row) < forgeStoryOpenedTime(other)
+  );
+}
+
+// Replace only known side-story slots; unknown openings and every other source keep their legacy position.
+export function orderForgeStorySources(rows) {
+  const result = [...rows],
+    groups = new Map();
+  result.forEach((row, index) => {
+    const opening = row.opening;
+    if (
+      !["character-story", "story-event"].includes(row.kind) ||
+      !Number.isSafeInteger(opening?.after) ||
+      opening.after < 0 ||
+      !Number.isSafeInteger(opening?.opened) ||
+      opening.opened <= 0
+    )
+      return;
+    if (!groups.has(opening.after)) groups.set(opening.after, { positions: [], entries: [], kinds: new Set() });
+    const group = groups.get(opening.after);
+    group.positions.push(index);
+    group.entries.push(row);
+    group.kinds.add(row.kind);
+  });
+  for (const group of groups.values()) {
+    if (group.kinds.size < 2) continue;
+    group.entries.sort((left, right) => left.opening.opened - right.opening.opened || left.id.localeCompare(right.id));
+    group.positions.forEach((position, index) => {
+      result[position] = group.entries[index];
+    });
+  }
+  return result;
+}
+
 // The legacy bundle supplies its existing persistence/model wrappers. No Engine-internal
 // memory service, new storage format, or transfer limit is introduced here.
 export function createForgeStoryMemoryIntegration({
@@ -118,35 +160,54 @@ export function createForgeStoryMemoryIntegration({
       const suffix = row.part > 1 ? String(row.part) : "";
       if (!(Number(session?.bondChapters?.[row.unitId]?.[`beats${suffix}`]) >= bondLength)) continue;
       if (target && (row.after >= ceiling || (bondTarget && index >= history.indexOf(bondTarget)))) continue;
+      if (
+        eventTarget?.eventId &&
+        Number(row.after) === Number(eventTarget.after) &&
+        !forgeStoryOpenedBefore(row, eventTarget)
+      )
+        continue;
       const chapter = bondChapterId(row.unitId, row.part);
       const plan = await readPlan(runId, chapter);
       if (!plan) continue;
       const content = await canonical(chapter, storyNodes(plan).length);
       if (!content) continue;
-      rows.push({
-        id: chapter,
-        kind: "character-story",
-        title: text(plan.title) || `Character Story ${chapter}`,
-        content,
-        order: row.after * 10000 + 5000 + (Number(row.opened) || row.part) / 1e13,
-      });
+      rows.push(
+        Object.defineProperty(
+          {
+            id: chapter,
+            kind: "character-story",
+            title: text(plan.title) || `Character Story ${chapter}`,
+            content,
+            order: row.after * 10000 + 5000 + (Number(row.opened) || row.part) / 1e13,
+          },
+          "opening",
+          { value: { after: Number(row.after), opened: forgeStoryOpenedTime(row) } },
+        ),
+      );
     }
     for (const doc of plans.filter((row) => row.data.eventId)) {
       const plan = doc.data,
         chapter = doc.id.slice(`${runId}:chapter:`.length);
       if (normal(session, chapter) < allNodes(plan).length || plan.after >= ceiling || chapter === target?.chapter)
         continue;
-      if (eventTarget?.eventId && plan.after === eventTarget.after && Number(plan.opened) >= Number(eventTarget.opened))
+      const sideTarget = eventTarget?.eventId ? eventTarget : bondTarget;
+      if (sideTarget && Number(plan.after) === Number(sideTarget.after) && !forgeStoryOpenedBefore(plan, sideTarget))
         continue;
       const content = await canonical(chapter, storyNodes(plan).length);
       if (content)
-        rows.push({
-          id: chapter,
-          kind: "story-event",
-          title: `Story event: ${text(plan.title)}`,
-          content,
-          order: Number(plan.after) * 10000 + 6000 + (Number(plan.opened) || 0) / 1e13,
-        });
+        rows.push(
+          Object.defineProperty(
+            {
+              id: chapter,
+              kind: "story-event",
+              title: `Story event: ${text(plan.title)}`,
+              content,
+              order: Number(plan.after) * 10000 + 6000 + (Number(plan.opened) || 0) / 1e13,
+            },
+            "opening",
+            { value: { after: Number(plan.after), opened: forgeStoryOpenedTime(plan) } },
+          ),
+        );
     }
     const targetPlan = target && Number.isInteger(target.chapter) ? await readPlan(runId, target.chapter) : null;
     const targetNodes = targetPlan ? allNodes(targetPlan) : [];
@@ -185,7 +246,7 @@ export function createForgeStoryMemoryIntegration({
         });
       }
     }
-    return rows.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+    return orderForgeStorySources(rows.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)));
   };
   const partialBondHistory = async (runId, excludeChapter) => {
     const session = await readSession(runId);
@@ -359,6 +420,7 @@ export function createForgeStoryMemoryIntegration({
       return saved;
     },
     readSources: sourceRows,
+    orderSources: orderForgeStorySources,
     resolveContext,
     estimateTokens,
     fitsSummary: async (options) => !!(await summaryBudget(options)),
@@ -428,9 +490,15 @@ export function createForgeStoryMemoryIntegration({
       let previous = "",
         previousContent = "";
       const legacy = async () => {
-        const eventRows = (await sourceRows(runId, { chapter, storyIndex })).filter(
-          (row) => row.kind === "story-event",
-        );
+        let eventRows = [];
+        try {
+          eventRows = (await sourceRows(runId, { chapter, storyIndex })).filter((row) => row.kind === "story-event");
+        } catch (error) {
+          logger?.warn?.(
+            "[gacha-forge] event memory unavailable; using legacy history: %s",
+            error?.message || "failed",
+          );
+        }
         const history = [await fallback(), ...eventRows.map((row) => `# ${row.title}\n${row.content}`)]
           .filter(Boolean)
           .join("\n\n");

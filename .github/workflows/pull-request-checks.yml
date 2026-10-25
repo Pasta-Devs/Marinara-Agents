@@ -100,6 +100,7 @@ jobs:
           node tests/gacha-forge-seasonal-events-package.regression.mjs
           node tests/gacha-forge-seasonal-admission.regression.mjs
           node tests/gacha-forge-seasonal-formation.regression.mjs
+          node tests/gacha-forge-seasonal-replay-package.regression.mjs
           node tests/gacha-forge-story-memory-fit.regression.mjs
           node tests/gacha-forge-story-memory-client.regression.mjs
           node tests/gacha-forge-story-memory-package.regression.mjs
