@@ -14,6 +14,13 @@ export function forgeStoryAssertActive() {
   if (!scope.current()) throw forgeStoryCancelled();
 }
 
+export function forgeStoryWork(operation) {
+  forgeStoryAssertActive();
+  const pending = operation();
+  forgeStoryScope.getStore()?.trackOperation(pending);
+  return pending;
+}
+
 export function forgeStoryDocuments(documents) {
   return {
     ...documents,
@@ -73,6 +80,7 @@ export function createForgeStoryCancellation() {
           signal,
           current: () => worlds.get(runId) === state && state.epoch === epoch,
           trackWrite: (write) => track(state.writes, write),
+          trackOperation: (pending) => track(state.operations, pending),
         },
         async () => {
           let onAbort;

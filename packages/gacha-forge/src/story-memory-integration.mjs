@@ -22,6 +22,7 @@ export function createForgeStoryMemoryIntegration({
   findKnownModel,
   estimateTokens,
   background,
+  runStory = (_runId, operation) => operation(),
   prepareMessages = async (messages) => messages,
   renderContext = (result, { prefix, fate }) => [result.text, prefix, fate].filter(Boolean).join("\n\n"),
   logger,
@@ -339,7 +340,7 @@ export function createForgeStoryMemoryIntegration({
     }
     const entry = { again: false, promise: null };
     entry.promise = Promise.resolve()
-      .then(() => background(() => memory.maintain({ runId, ...options })))
+      .then(() => runStory(runId, () => background(() => memory.maintain({ runId, ...options }))))
       .catch((error) => logger?.warn?.("[gacha-forge] automatic story memory failed: %s", error?.message || "failed"))
       .finally(() => {
         if (scheduled.get(runId) !== entry) return;

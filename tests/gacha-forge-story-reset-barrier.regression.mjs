@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createForgeStoryCancellation, forgeStoryDocuments } from "../packages/gacha-forge/src/story-cancel-server.mjs";
+import {
+  createForgeStoryCancellation,
+  forgeStoryDocuments,
+  forgeStoryWork,
+} from "../packages/gacha-forge/src/story-cancel-server.mjs";
+import { createForgeStoryMemoryIntegration } from "../packages/gacha-forge/src/story-memory-integration.mjs";
 
 const deferred = () => Promise.withResolvers();
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -99,5 +104,63 @@ test("reset failure releases admission while keeping the canceled epoch fenced",
     /transaction rollback/,
   );
   assert.equal(await runtime.run("world", async () => "recover"), "recover");
+  runtime.dispose();
+});
+
+test("scheduled automatic memory joins the same story scope and cannot repopulate reset records", async () => {
+  const runtime = createForgeStoryCancellation(),
+    started = deferred(),
+    release = deferred(),
+    events = [];
+  const documents = forgeStoryDocuments({ update: async () => events.push("late memory write") });
+  const memory = createForgeStoryMemoryIntegration({
+    createMemory: () => ({
+      maintain: async () => {
+        started.resolve();
+        await release.promise;
+        await documents.update({ id: "world:summary:memory" });
+      },
+    }),
+    background: (operation) => operation(),
+    runStory: (runId, operation) => runtime.run(runId, operation),
+  });
+  const scheduled = memory.schedule("world");
+  await started.promise;
+  const reset = runtime.reset("world", async () => events.push("reset"));
+  await scheduled;
+  await tick();
+  assert.deepEqual(events, []);
+  release.resolve();
+  await reset;
+  assert.deepEqual(events, ["reset"]);
+  runtime.dispose();
+});
+
+test("detached provider descendants remain tracked after their route returned", async () => {
+  const runtime = createForgeStoryCancellation(),
+    release = deferred(),
+    events = [];
+  let child;
+  assert.equal(
+    await runtime.run("world", async () => {
+      child = forgeStoryWork(async () => {
+        await release.promise;
+        forgeStoryWork(() => {
+          events.push("late upload");
+          return Promise.resolve();
+        });
+      });
+      void child.catch(() => {});
+      return "route returned";
+    }),
+    "route returned",
+  );
+  const reset = runtime.reset("world", async () => events.push("reset"));
+  await tick();
+  assert.deepEqual(events, []);
+  release.resolve();
+  await reset;
+  await assert.rejects(child, { name: "AbortError" });
+  assert.deepEqual(events, ["reset"]);
   runtime.dispose();
 });

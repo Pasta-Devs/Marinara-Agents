@@ -1,0 +1,14 @@
+export const forgeChapterResetEnglish = {
+  "chapter.reset.action": "Regenerate chapter",
+  "chapter.reset.confirmTitle": "Are you sure?",
+  "chapter.reset.warning":
+    "This discards this chapter’s generated story, choices and progress, then writes it again using your current story settings. This cannot be undone.",
+  "chapter.reset.preserved":
+    "Completed chapters, your cast, conversations and earned items stay saved. Newly generated beats use the usual Vigor costs.",
+  "chapter.reset.cancel": "Keep chapter",
+  "chapter.reset.pending": "Stopping generation and resetting this chapter…",
+  "chapter.reset.failed": "The chapter could not be reset. Reopen it and try again.",
+  "chapter.reset.completed": "This chapter is complete and cannot be regenerated.",
+  "chapter.reset.changed": "The story changed while this page was open. Reopen the chapter before trying again.",
+  "chapter.reset.busy": "Another story reset is already in progress. Wait for it to finish.",
+};
