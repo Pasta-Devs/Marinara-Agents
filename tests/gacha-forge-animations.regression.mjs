@@ -172,6 +172,110 @@ try {
   assert.equal(result.ok, true);
   assert.equal((await restarted.generate(body)).cached, true);
   assert.equal(restartedCalls, 0);
+  // Explicit recovery replaces a cached clip only after a successful provider result.
+  const recoveryBody = { runId: "cached-recovery", banner: "char-featured" };
+  let recoveryCalls = 0;
+  let recoveryProvider = async () => video;
+  const recoveryOptions = {
+    dataDir,
+    readBanner: async () => meta,
+    runtime: {
+      logger: log,
+      integrations: {
+        videos: {
+          animateGalleryImage: async () => {
+            recoveryCalls++;
+            return recoveryProvider();
+          },
+        },
+      },
+    },
+  };
+  const recovery = createForgeBannerAnimations(recoveryOptions);
+  const originalClip = await recovery.generate(recoveryBody);
+  recoveryProvider = async () => {
+    throw new Error("replacement provider rejected");
+  };
+  assert.equal(
+    (await recovery.generate({ ...recoveryBody, retry: true })).ok,
+    false,
+    "an explicit retry must reach the provider instead of returning the broken cached clip",
+  );
+  assert.equal(recoveryCalls, 2);
+  const originalParams = originalClip.animation.url.split("/").slice(-2);
+  const originalResponse = await recovery.serve(
+    { params: { world: originalParams[0], filename: originalParams[1] }, headers: {} },
+    reply(),
+  );
+  assert.deepEqual(await collect(originalResponse), bytes, "failed replacement preserves the previous media bytes");
+  assert.equal(
+    (await createForgeBannerAnimations(recoveryOptions).generate(recoveryBody)).animation.url,
+    originalClip.animation.url,
+    "offline/reopened cache remains the old clip after a failed explicit replacement",
+  );
+  assert.equal(recoveryCalls, 2, "normal reopen never retries a failed provider automatically");
+  const replacement = Buffer.concat([bytes, Buffer.from("replacement")]);
+  const recoveryPending = deferred();
+  recoveryProvider = () => recoveryPending.promise;
+  const replacing = recovery.generate({ ...recoveryBody, retry: true });
+  while (recoveryCalls < 3) await wait();
+  const duplicateReplacing = recovery.generate({ ...recoveryBody, retry: true });
+  await wait();
+  assert.equal(recoveryCalls, 3, "concurrent explicit retry clicks share one paid attempt");
+  recoveryPending.resolve({ ...video, base64: replacement.toString("base64") });
+  const replaced = await replacing;
+  assert.deepEqual(await duplicateReplacing, replaced);
+  assert.notEqual(
+    replaced.animation.url,
+    originalClip.animation.url,
+    "new bytes receive a new immutable URL instead of replaying the old browser cache",
+  );
+  const replacementParams = replaced.animation.url.split("/").slice(-2);
+  assert.deepEqual(
+    await collect(
+      await recovery.serve(
+        { params: { world: replacementParams[0], filename: replacementParams[1] }, headers: {} },
+        reply(),
+      ),
+    ),
+    replacement,
+  );
+  assert.equal(
+    (await createForgeBannerAnimations(recoveryOptions).generate(recoveryBody)).animation.url,
+    replaced.animation.url,
+    "restart reuses the successfully published replacement",
+  );
+  assert.equal(recoveryCalls, 3);
+  const legacyBody = { ...recoveryBody, runId: "legacy-clip-world" };
+  recoveryProvider = async () => video;
+  const legacy = await recovery.generate(legacyBody);
+  const legacyFolder = join(
+    dataDir,
+    "capability-package-data",
+    "gacha-forge",
+    "banner-animations",
+    digest(legacyBody.runId),
+  );
+  const legacyFilename = `${legacy.animation.key}.mp4`;
+  await fsPromises.rename(
+    join(legacyFolder, legacy.animation.url.split("/").at(-1)),
+    join(legacyFolder, legacyFilename),
+  );
+  await rm(join(legacyFolder, `${legacy.animation.key}.json`));
+  const legacyCalls = recoveryCalls;
+  assert.equal(
+    (await recovery.generate(legacyBody)).animation.url.split("/").at(-1),
+    legacyFilename,
+    "pre-upgrade input-key clips remain cached without a new provider call",
+  );
+  assert.equal(recoveryCalls, legacyCalls);
+  assert.equal((await recovery.generate({ ...legacyBody, retry: true })).cached, false);
+  assert.equal(recoveryCalls, legacyCalls + 1, "legacy clips also support deliberate replacement");
+  assert.deepEqual(
+    await readFile(join(legacyFolder, legacyFilename)),
+    bytes,
+    "publishing the content-addressed replacement does not delete legacy media",
+  );
   const [world, filename] = result.animation.url.split("/").slice(-2);
   for (const [range, expected] of [
     ["bytes=0-1", bytes.subarray(0, 2)],
@@ -286,10 +390,12 @@ try {
     assert.deepEqual(await setupReopened.generate(setupBody), { ok: false, error: "animation-failed", retry: true });
     assert.equal(setupCalls, 1, "legacy or corrupt markers never authorize an automatic purchase");
   }
+  assert.equal((await setupReopened.generate({ ...setupBody, retry: true })).reason, "seedance-reference-setup");
+  assert.equal(setupCalls, 2, "an explicit retry can atomically replace an empty marker and reach the provider");
   await writeFile(setupStatus, savedFailure);
   setupCorrected = true;
   assert.equal((await setupReopened.generate({ ...setupBody, retry: true })).ok, true);
-  assert.equal(setupCalls, 2);
+  assert.equal(setupCalls, 3);
 
   const statusReady = deferred(),
     statusFailure = deferred(),
@@ -726,6 +832,11 @@ try {
   assert.equal(shippedCalls[0].galleryImageId, "owned-gallery-id");
   assert.equal((await route("/banner-animation", { runId: "shipped", banner: "char-standard" })).cached, true);
   assert.equal(shippedCalls.length, 1);
+  assert.equal(
+    (await route("/banner-animation", { runId: "shipped", banner: "char-standard", retry: true })).cached,
+    false,
+  );
+  assert.equal(shippedCalls.length, 2, "the shipped route passes an explicit cached-media retry to the provider");
   assert.equal((await route("/run/sources", { runId: "shipped", sources: { animationConnectionId: "" } })).ok, true);
   assert.equal(
     (await route("/banner-animation", { runId: "shipped", banner: "char-standard" })).error,
@@ -884,6 +995,47 @@ try {
     assert.equal(target.children.length, 0, "late completion cannot attach to another world");
     disposeForgeBannerAnimation(host);
 
+    const playback = client();
+    wireForgeBannerAnimation(playback.host);
+    playback.requests[0].resolve(response);
+    await wait();
+    const failedClip = playback.target.children[0];
+    failedClip.events.playing();
+    failedClip.events.error();
+    const playbackRetry = playback.chips.querySelector("[data-animation-retry]");
+    assert.ok(playbackRetry, "a decoder/network error exposes an explicit regeneration action");
+    playback.host._forgeBannerAnimation.onVisibility();
+    wireForgeBannerAnimation(playback.host);
+    await wait();
+    assert.equal(playback.requests.length, 1, "playback errors never trigger automatic paid regeneration");
+    playbackRetry.onclick();
+    assert.equal(playback.requests.length, 2);
+    assert.equal(playback.requests[1].body.retry, true);
+    playbackRetry.onclick();
+    assert.equal(playback.requests.length, 2, "duplicate clicks cannot start another paid recovery");
+    playback.requests[1].resolve({ ok: false, retry: true });
+    await wait();
+    assert.equal(playbackRetry.disabled, false, "provider rejection restores the explicit recovery control");
+    playbackRetry.onclick();
+    playback.requests[2].resolve({
+      ...response,
+      animation: { ...response.animation, url: response.animation.url.replace(/b{64}/u, "c".repeat(64)) },
+    });
+    await wait();
+    const recoveredClip = playback.target.children[0];
+    recoveredClip.events.playing();
+    failedClip.events.error();
+    failedClip.events.playing();
+    assert.equal(
+      playback.target.children[0],
+      recoveredClip,
+      "late events from a removed clip cannot tear down its successful replacement",
+    );
+    assert.equal(recoveredClip.style.opacity, "1");
+    assert.equal(playback.chips.querySelector("[data-animation-retry]"), undefined);
+    assert.equal(playback.requests.length, 3);
+    disposeForgeBannerAnimation(playback.host);
+
     const stale = client();
     wireForgeBannerAnimation(stale.host);
     const staleIdentity = stale.host._forgeBannerAnimation.identity;
@@ -895,7 +1047,12 @@ try {
       false,
       "a mismatched poster evicts the stale resolved request",
     );
-    assert.ok(stale.chips.children.some((node) => node.textContent === forgeAnimationEnglish.failed));
+    assert.ok(
+      stale.chips.children.some(
+        (node) => node.textContent === `${forgeAnimationEnglish.failed} ${forgeAnimationEnglish.retryCost}`,
+      ),
+    );
+    assert.ok(stale.chips.querySelector("[data-animation-retry]"), "stale poster metadata offers explicit recovery");
     assert.equal(
       stale.chips.children.some((node) => node.textContent === forgeAnimationEnglish.generating),
       false,
@@ -912,7 +1069,11 @@ try {
     wireForgeBannerAnimation(stale.host);
     await wait();
     assert.equal(stale.requests.length, 1, "visibility and DOM remounts cannot repurchase a stale poster clip");
-    assert.ok(stale.chips.children.some((node) => node.textContent === forgeAnimationEnglish.failed));
+    assert.ok(
+      stale.chips.children.some(
+        (node) => node.textContent === `${forgeAnimationEnglish.failed} ${forgeAnimationEnglish.retryCost}`,
+      ),
+    );
     stale.host._summonBanner = { banner: structuredClone(stale.host._summonBanner.banner) };
     wireForgeBannerAnimation(stale.host);
     assert.equal(stale.requests.length, 2, "fresh banner metadata can retry the same textual identity");
@@ -926,7 +1087,11 @@ try {
     wireForgeBannerAnimation(retrying.host);
     retrying.requests[0].resolve({ ...setupFailure, detail: "SECRET_PROVIDER_DETAIL" });
     await wait();
-    assert.ok(retrying.chips.children.some((node) => node.textContent === forgeAnimationEnglish.seedanceSetup));
+    assert.ok(
+      retrying.chips.children.some(
+        (node) => node.textContent === `${forgeAnimationEnglish.seedanceSetup} ${forgeAnimationEnglish.retryCost}`,
+      ),
+    );
     const retryButton = retrying.chips.querySelector("[data-animation-retry]");
     retryButton.onclick();
     assert.equal(retrying.requests.length, 2);
@@ -942,7 +1107,11 @@ try {
     await wait();
     assert.equal(retryButton.disabled, false);
     assert.equal(retryButton.textContent, forgeAnimationEnglish.retry);
-    assert.ok(retrying.chips.children.some((node) => node.textContent === forgeAnimationEnglish.seedanceSetup));
+    assert.ok(
+      retrying.chips.children.some(
+        (node) => node.textContent === `${forgeAnimationEnglish.seedanceSetup} ${forgeAnimationEnglish.retryCost}`,
+      ),
+    );
     assert.equal(retrying.requests.length, 2, "a setup failure waits for another explicit retry");
     retryButton.onclick();
     retrying.requests[2].resolve(response);

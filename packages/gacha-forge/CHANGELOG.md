@@ -1,3 +1,8 @@
+## 1.16.1 — 2026-10-25 [highlight]
+
+- Hide the neutral story portrait silhouette when the current artwork is loaded, retaining safe loading and missing-art fallbacks.
+- Restore explicit banner animation recovery after playback or stale-clip errors. Failed replacement attempts keep previous saved media; successful replacements receive a fresh immutable URL.
+
 ## 1.16.0 — 2026-10-25
 
 - Punctuate choice labels. Keep the correct speaker portrait and prevent fullscreen/mute from advancing.

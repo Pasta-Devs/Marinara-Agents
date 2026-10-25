@@ -8,7 +8,7 @@ With music generation on, opening a summon banner generates its own theme throug
 
 Settings → World → Sources includes an optional **Animations** connection, listing Engine video connections. Selecting one animates generated banner illustrations as those banners are opened. A banner image and connection reuse their saved clip, including after reload. A featured rotation or redrawn image gets its own clip. Portraits remain still.
 
-Clips play muted on a loop, with Pause and Play controls. Reduced-motion preferences keep the illustration and skip automatic generation; hidden banners pause playback. Loading, provider failures and unsupported playback keep the illustration visible. A failed or interrupted generation requires **Retry animation**, which may use provider credits again.
+Clips play muted on a loop, with Pause and Play controls. Reduced-motion preferences keep the illustration and skip automatic generation; hidden banners pause playback. Loading, provider failures and unsupported playback keep the illustration visible. A failed or interrupted generation requires **Retry animation**, which may use provider credits again. Since 1.16.1, playback failures and stale clips also offer that explicit recovery action. A replacement keeps the previous saved clip until the new one succeeds; reopening a banner never automatically retries a failed paid attempt.
 
 The Engine handles video provider settings, credentials, queues and fallback connections. Matching first and last frames are requested where the provider supports them; duration and loop quality depend on the model. This feature requires Engine Capability API 1.384 or newer.
 
@@ -26,7 +26,7 @@ All saved character memories contribute to the overview. Relevant Character Stor
 
 ## Artwork references and mobile controls (1.13.1)
 
-Character scenes, gacha banners, portraits and outfits now attach available avatar references from their selected Engine character cards or persona. A unit’s own saved artwork is the fallback when its source avatar is unavailable. Reference support and limits still depend on the configured image provider and model. Existing generated artwork remains unchanged; the references apply when generating new art.
+Character scenes, gacha banners, portraits and outfits now attach available avatar references from their selected Engine character cards or persona. A unit’s own saved artwork is the fallback when its source avatar is unavailable. Reference support and limits still depend on the configured image provider and model. Existing generated artwork remains unchanged; the references apply when generating new art. In 1.16.1, loaded story portraits hide their neutral silhouette correctly; missing or failed artwork still shows the neutral fallback.
 
 Story artwork begins below the chapter controls and retains the top of the image. On short mobile screens, ordinary and expanded text editors adapt to the space left by the keyboard. Expanded editors keep Close available beside the text and preserve their draft when the settings refresh.
 

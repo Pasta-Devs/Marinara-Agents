@@ -90,12 +90,21 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
           forgeAnimationPrompt,
         ]),
       );
-      let folder, file, status;
-      const result = (cached) => ({
+      let folder, file, status, previousKey;
+      const result = (cached, mediaKey = key) => ({
         ok: true,
-        animation: { key, url: urlFor(runId, key), poster: banner.art },
+        animation: { key, url: urlFor(runId, mediaKey), poster: banner.art },
         cached,
       });
+      const writeStatus = async (value) => {
+        const temporary = forgeAnimationJoin(folder, `.${key}.${forgeAnimationUuid()}.status.tmp`);
+        try {
+          await forgeAnimationWrite(temporary, JSON.stringify(value), { flag: "wx", mode: 0o600 });
+          await forgeAnimationRename(temporary, status);
+        } finally {
+          await forgeAnimationUnlink(temporary).catch(() => {});
+        }
+      };
       if (jobs.has(key)) return jobs.get(key).promise;
       const job = { controller: new AbortController(), runId };
       job.promise = (async () => {
@@ -104,27 +113,32 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
           folder = await directory(forgeAnimationDigest(runId), true);
           file = forgeAnimationJoin(folder, `${key}.mp4`);
           status = forgeAnimationJoin(folder, `${key}.json`);
-          if (await exists(file)) return result(true);
           const prior = await forgeAnimationRead(status, {
             encoding: "utf8",
             flag: forgeAnimationFlags.O_RDONLY | forgeAnimationFlags.O_NOFOLLOW,
           }).catch(() => null);
-          if (prior && body.retry !== true) {
-            let reason;
-            try {
-              const saved = JSON.parse(prior);
-              if (saved?.state === "failed" && saved.reason === "seedance-reference-setup") reason = saved.reason;
-            } catch {
-              // Legacy pending and unreadable attempt markers retain the generic retry guidance.
-            }
+          let saved;
+          try {
+            saved = JSON.parse(prior);
+          } catch {
+            // Older pending markers remain explicit-retry only.
+          }
+          if (
+            /^[a-f0-9]{64}$/u.test(saved?.mediaKey || "") &&
+            (await exists(forgeAnimationJoin(folder, `${saved.mediaKey}.mp4`)))
+          )
+            previousKey = saved.mediaKey;
+          else if (await exists(file)) previousKey = key; // Clips saved before content-addressed replacements.
+          if (previousKey && body.retry !== true) return result(true, previousKey);
+          if (prior !== null && body.retry !== true) {
+            const reason =
+              saved?.state === "failed" && saved.reason === "seedance-reference-setup" ? saved.reason : null;
             return { ok: false, error: "animation-failed", ...(reason ? { reason } : {}), retry: true };
           }
           // A persisted attempt also survives a restart during a paid request. Only an explicit retry starts another.
-          if (body.retry === true)
-            await forgeAnimationUnlink(status).catch((error) => {
-              if (error.code !== "ENOENT") throw error;
-            });
-          await forgeAnimationWrite(status, JSON.stringify({ state: "pending" }), { flag: "wx", mode: 0o600 });
+          const pending = { state: "pending", ...(previousKey ? { mediaKey: previousKey } : {}) };
+          if (body.retry === true || prior !== null) await writeStatus(pending);
+          else await forgeAnimationWrite(status, JSON.stringify(pending), { flag: "wx", mode: 0o600 });
           return null;
         });
         if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
@@ -152,6 +166,10 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
             throw new Error("Invalid banner animation video");
           return await mutate(runId, async () => {
             if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
+            // Each successful replacement has its own immutable URL. Keep the previous file and pointer
+            // until both the new clip and its ready marker have been committed successfully.
+            const mediaKey = forgeAnimationDigest(bytes);
+            file = forgeAnimationJoin(folder, `${mediaKey}.mp4`);
             const temporary = forgeAnimationJoin(folder, `.${key}.${forgeAnimationUuid()}.tmp`);
             try {
               await forgeAnimationWrite(temporary, bytes, { flag: "wx", mode: 0o600 });
@@ -159,8 +177,8 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
             } finally {
               await forgeAnimationUnlink(temporary).catch(() => {});
             }
-            await forgeAnimationUnlink(status).catch(() => {});
-            return result(false);
+            await writeStatus({ state: "ready", mediaKey });
+            return result(false, mediaKey);
           });
         } catch (error) {
           if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
@@ -174,17 +192,11 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
               if (superseded() || job.controller.signal.aborted) return;
               if ((await directory(forgeAnimationDigest(runId))) !== folder)
                 throw new Error("Invalid animation directory");
-              const temporary = forgeAnimationJoin(folder, `.${key}.${forgeAnimationUuid()}.status.tmp`);
-              try {
-                await forgeAnimationWrite(
-                  temporary,
-                  JSON.stringify({ state: "failed", reason: "seedance-reference-setup" }),
-                  { flag: "wx", mode: 0o600 },
-                );
-                await forgeAnimationRename(temporary, status);
-              } finally {
-                await forgeAnimationUnlink(temporary).catch(() => {});
-              }
+              await writeStatus({
+                state: "failed",
+                reason: "seedance-reference-setup",
+                ...(previousKey ? { mediaKey: previousKey } : {}),
+              });
             });
           if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
           return {

@@ -833,6 +833,45 @@ test("Banner generation and actual video decode failures retain the still artwor
 });
 
 for (const theme of ["aurora", "bloom"]) {
+  test(`Failed banner playback offers explicit replacement and recovers in ${theme}`, async ({ page }, testInfo) => {
+    const { forge, state } = await animationProof(page, testInfo, { selected: true });
+    await forge.evaluate((node, theme) => {
+      const game = node as any;
+      game._run.hudStyle = theme;
+      game._renderBrowser();
+    }, theme);
+    state.playbackFailed = true;
+    await openAnimatedBanner(forge);
+    const status = forge.locator("[data-banner-animation-status]");
+    const retry = forge.locator("[data-animation-retry]");
+    await expect(status).toContainText("could not play");
+    await expect(status).toContainText("provider credits");
+    await expect(retry).toBeVisible();
+    await expect(forge.locator("video[data-banner-animation]")).toHaveCount(0);
+    const still = forge.locator('[data-screen="banner"] .show > .art.wide');
+    await expect(still).toBeVisible();
+    expect(await still.evaluate((node: HTMLElement) => node.style.backgroundImage)).toContain(portrait);
+    await settleBannerCapture(forge);
+    await page.screenshot({ path: testInfo.outputPath(`banner-playback-recovery-${theme}.png`) });
+    expect(state.posts).toHaveLength(1);
+    state.generationFailed = true;
+    await retry.click();
+    await expect(retry).toBeEnabled();
+    await expect(status).toContainText("animation unavailable");
+    await expect(still).toBeVisible();
+    expect(state.posts).toHaveLength(2);
+    expect(state.posts[1].retry).toBe(true);
+    state.generationFailed = false;
+    state.playbackFailed = false;
+    await retry.click();
+    await decodedBannerVideo(forge);
+    await expect(retry).toHaveCount(0);
+    await expect(status).toHaveCount(0);
+    expect(state.posts).toHaveLength(3);
+    expect(state.posts[2].retry).toBe(true);
+    expect(state.browserErrors).toEqual([]);
+  });
+
   test(`Animation retry shows setup guidance, pending state and recovery in ${theme}`, async ({ page }, testInfo) => {
     const { forge, state } = await animationProof(page, testInfo, { selected: true });
     await forge.evaluate((node, theme) => {

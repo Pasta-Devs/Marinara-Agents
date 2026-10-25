@@ -28,6 +28,8 @@ const forgeBrowserLayout = `
 /* Home and chapter sheets are loaded lazily, so keep this ahead of their inset shorthand. */
 .gf-stage .hm-plate, .gf-stage .vn-plate[data-side] { padding-bottom: var(--edge-w); }
 .gf-stage .hm-art, .gf-stage .vn-plate[data-side] .vn-art { bottom: var(--edge-w); }
+/* SVG fallbacks and author-styled images must both honor the portrait's hidden state. */
+.vn-art > [hidden] { display: none !important; }
 .gf-mute { display: inline-grid; place-items: center; padding: 0; cursor: pointer; }
 .gf-mute svg { display: block; width: 1em; height: 1em; }
 .gf-mute:focus-visible { outline: 2px solid var(--coral); outline-offset: -3px; }
@@ -299,13 +301,14 @@ export function setForgeStoryPortrait(plate, character) {
           if (image.getAttribute("src") === url) image.hidden = false;
         };
         image.onerror = () => {
-          if (image.getAttribute("src") === url && figure) figure.hidden = false;
+          if (image.getAttribute("src") === url && figure) figure.removeAttribute("hidden");
         };
         image.setAttribute("src", url);
         if (image.complete && image.naturalWidth > 0) image.hidden = false;
       }
     }
-    if (figure) figure.hidden = !!url;
+    // SVGElement does not reflect the HTML-only hidden property into an attribute.
+    if (figure) figure.toggleAttribute("hidden", !!url);
   }
   plate.setAttribute("data-front", "a");
 }
