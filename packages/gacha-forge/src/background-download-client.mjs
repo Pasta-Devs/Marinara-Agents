@@ -8,9 +8,10 @@ const forgeBackgroundDownloadEnglish = {
 const forgeBackgroundDownloadStyle = `
 .gf-background-download-card{position:relative;display:grid;min-width:0}
 .gf-background-download-card>.hm-pk-card{width:100%;height:100%;min-width:0}
-.gf-background-download{position:absolute;inset-block-start:6px;inset-inline-end:6px;z-index:1;display:grid;place-items:center;width:44px;height:44px;padding:0;clip-path:none;border:1px solid var(--steel-dark);border-radius:var(--radius-sm);background:var(--ink-2);color:var(--text);cursor:pointer}
-.gf-background-download svg{width:16px;height:16px;display:block}
-.gf-background-download:hover{border-color:var(--coral)}
+.gf-background-download{position:absolute;inset-block-start:0;inset-inline-end:0;z-index:1;display:grid;place-items:center;width:44px;height:44px;padding:0;clip-path:none;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--text);cursor:pointer}
+.gf-background-download::before{content:"";position:absolute;inset:8px;border:1px solid var(--steel-dark);border-radius:var(--radius-sm);background:var(--ink-2)}
+.gf-background-download svg{position:relative;width:16px;height:16px;display:block}
+.gf-background-download:hover::before{border-color:var(--coral)}
 .gf-background-download:focus-visible{outline:2px solid var(--coral);outline-offset:2px}
 .gf-background-download:disabled{opacity:.55;cursor:default}
 `;

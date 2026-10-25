@@ -1,3 +1,9 @@
+## Home background downloads and scene unlocks (1.21.0)
+
+Open **Home → Background → Change**. Each image in **Story**, **Story CG**, **Banners** and **Bond** has its own download button. Downloading keeps the picker open and leaves the selected background unchanged. On iPhone, images prepare before the button becomes available; tapping opens the same native share sheet as Engine’s galleries. Cancelling does not report a failure. This feature requires Engine Capability API 1.385 or newer.
+
+Story backgrounds and key images become available after their scenes are viewed, including Character Stories and Seasonal events. A brief **New background unlocked** notice confirms newly seen artwork. Generating future chapters does not unlock their images. Existing completed scenes and chosen backgrounds stay available; replacing generated art does not overwrite a previously unlocked snapshot.
+
 ## Optional Formation combat (1.19.0)
 
 Choose **Classic** or **Formation** while creating a playthrough. Existing worlds keep Classic. For a saved world, open **Settings → Story → Continuity → Combat mode**. The confirmation explains the model requests needed to remake every character's kit. Up to three conversions are queued at a time; progress, individual failures, explicit retry and cancellation remain available after reopening. The world stays in its current mode until every current character kit is ready and one atomic transaction activates the change.

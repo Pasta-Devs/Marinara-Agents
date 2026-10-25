@@ -1,3 +1,9 @@
+## 1.21.0 — 2026-10-26
+
+- Download individual images from every Home background picker category without selecting them. Reuse Engine gallery saving, including prepared iPhone sharing.
+- Unlock story and Character Story backgrounds and key images only after viewing their scenes, with a brief unlock notice. Future generated scenes stay out of the picker.
+- Preserve completed scenes, saved artwork and existing background choices across updates and chapter regeneration.
+
 ## 1.19.0 — 2026-10-25
 
 - Choose optional Formation combat: frontline actions, protected elemental supports, shared energy, repositioning and generated tactical kits.

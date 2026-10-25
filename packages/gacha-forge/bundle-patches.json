@@ -1143,8 +1143,8 @@
               "sourceId": "background-download-client"
             },
             {
-              "find": "wireForgeHome(this,bt,ao),",
-              "replace": "wireForgeHome(this,bt,ao),wireForgeBackgroundDownloads(this),"
+              "find": "wireForgeUnitNotifications(this,od(this._nextStepCtx)),",
+              "replace": "wireForgeUnitNotifications(this,od(this._nextStepCtx)),wireForgeBackgroundDownloads(this),"
             },
             {
               "find": "disposeForgeFormationSettings(this),",
@@ -1161,6 +1161,31 @@
             {
               "find": "ds=\"1.19.0\"",
               "replace": "ds=\"1.21.0\""
+            },
+            {
+              "find": "var ac=",
+              "replaceFrom": "src/background-unlocks-client.mjs",
+              "sourceId": "background-unlocks-client"
+            },
+            {
+              "find": "Te(W),Qe(W),c&&",
+              "replace": "Te(W),Qe(W),typeof e.onArtwork===\"function\"&&e.onArtwork({segment:W,index:_,url:ye}),c&&"
+            },
+            {
+              "find": "onAt:S=>{this._beatAt=S,this._beatLineWrite(S)},segments:this._beat",
+              "replace": "onAt:S=>{this._beatAt=S,this._beatLineWrite(S)},onArtwork:S=>witnessForgeBackground(this,S),segments:this._beat"
+            },
+            {
+              "find": "_clearBeat(){clearForgeChoices(this),",
+              "replace": "_clearBeat(){disposeForgeBackgroundWitness(this);clearForgeChoices(this),"
+            },
+            {
+              "find": "disposeForgeBackgroundDownloads(this),disposeForgeFormationSettings(this),",
+              "replace": "disposeForgeBackgroundWitness(this),disposeForgeBackgroundDownloads(this),disposeForgeFormationSettings(this),"
+            },
+            {
+              "find": "_adoptRun(e){disposeForgeBackgroundDownloads(this);",
+              "replace": "_adoptRun(e){disposeForgeBackgroundWitness(this);disposeForgeBackgroundDownloads(this);"
             }
           ]
         }
@@ -2311,6 +2336,36 @@
             {
               "find": "cancellation:forgeStoryCancellation,normalizeKit:normalizeForgeFormationKit",
               "replace": "cancellation:forgeStoryCancellation,retireInactiveFight:runId=>typeof forgeSeasonalEvents!==\"undefined\"?forgeSeasonalEvents.retireInactiveFight(runId):undefined,normalizeKit:normalizeForgeFormationKit"
+            }
+          ]
+        },
+        {
+          "version": "1.21.0",
+          "edits": [
+            {
+              "find": "async function vi(s){",
+              "replaceFrom": "src/background-unlocks-server.mjs",
+              "sourceId": "background-unlocks-server"
+            },
+            {
+              "find": "async function vi(s){let c=await a.getById(n.id,`${s}:locations`),d=c&&c.data&&c.data.places||{},v=[];for(let[K,ae]of Object.entries(d))!ae||!l(ae.url)||v.push({key:K,name:l(ae.name)||K,url:l(ae.url)});let k=[],E=new Set,N=await a.list(n.id,ca);for(let K of N){if(!K||typeof K.id!=\"string\"||!K.id.startsWith(`${s}:banner:`))continue;let ae=K.data&&K.data.art;if(!(!ae||typeof ae!=\"object\"))for(let[re,oe]of Object.entries(ae)){let ye=l(oe);!ye||E.has(ye)||(E.add(ye),k.push({key:`${K.id}|${re}`,name:l(K.data.title)||re,url:ye}))}}let P=[],B=await a.list(n.id,Lc);for(let K of B){if(!K||typeof K.id!=\"string\"||!K.id.startsWith(`${s}:cg:`)||!K.data||!l(K.data.url))continue;let ae=K.id.slice(`${s}:cg:`.length).split(\":\");P.push({key:K.id,name:l(K.data.title)||K.id,url:l(K.data.url),at:[Number(ae[0])||0,Number(ae[1])||0]})}P.sort((K,ae)=>ae.at[0]-K.at[0]||ae.at[1]-K.at[1]);for(let K of P)delete K.at;let H=[],q=await a.list(n.id,kt);for(let K of q){if(!K||typeof K.id!=\"string\"||!K.id.startsWith(`${s}:unit:`)||!K.data)continue;let ae=l(K.data.bondBg&&K.data.bondBg.url);ae&&H.push({key:K.id,name:l(K.data.name)||K.id,url:ae})}return{story:v,banner:k,cg:P,bond:H}}async function as(s,c,d){let v=(k,E)=>l(E)?{key:d,name:l(k)||d,url:l(E)}:null;if(c===\"cg\"){if(!d.startsWith(`${s}:cg:`))return null;let k=await a.getById(n.id,d);return k&&k.data?v(k.data.title,k.data.url):null}if(c===\"banner\"){let k=d.lastIndexOf(\"|\");if(k<1)return null;let E=d.slice(0,k),N=d.slice(k+1);if(!E.startsWith(`${s}:banner:`))return null;let P=await a.getById(n.id,E),B=P&&P.data&&P.data.art;return B&&typeof B==\"object\"?v(P.data.title||N,B[N]):null}if(c===\"story\"){let k=await a.getById(n.id,`${s}:locations`),E=k&&k.data&&k.data.places&&k.data.places[d];return E?v(E.name,E.url):null}if(c===\"bond\"){if(!d.startsWith(`${s}:unit:`))return null;let k=await a.getById(n.id,d),E=k&&k.data&&k.data.bondBg;return E?v(k.data.name,E.url):null}return null}",
+              "replace": "async function forgeRawBackgroundOptions(s,forgeStore=a){let c=await forgeStore.getById(n.id,`${s}:locations`),d=c&&c.data&&c.data.places||{},v=[];for(let[K,ae]of Object.entries(d))!ae||!l(ae.url)||v.push({key:K,name:l(ae.name)||K,url:l(ae.url),ref:l(ae.ref)});let k=[],E=new Set,N=await forgeStore.list(n.id,ca);for(let K of N){if(!K||typeof K.id!=\"string\"||!K.id.startsWith(`${s}:banner:`))continue;let ae=K.data&&K.data.art;if(!(!ae||typeof ae!=\"object\"))for(let[re,oe]of Object.entries(ae)){let ye=l(oe);!ye||E.has(ye)||(E.add(ye),k.push({key:`${K.id}|${re}`,name:l(K.data.title)||re,url:ye,ref:l(K.data.artRef&&K.data.artRef[re])}))}}let P=[],B=await forgeStore.list(n.id,Lc);for(let K of B){if(!K||typeof K.id!=\"string\"||!K.id.startsWith(`${s}:cg:`)||!K.data||!l(K.data.url))continue;let ae=K.id.slice(`${s}:cg:`.length).split(\":\");let forgeStoryIndex=Number(ae.pop())||0;let forgeChapter=ae.join(\":\");P.push({key:K.id,name:l(K.data.title)||K.id,url:l(K.data.url),ref:l(K.data.ref),at:[Number(forgeChapter)||0,forgeStoryIndex]})}P.sort((K,ae)=>ae.at[0]-K.at[0]||ae.at[1]-K.at[1]);for(let K of P)delete K.at;let H=[],q=await forgeStore.list(n.id,kt);for(let K of q){if(!K||typeof K.id!=\"string\"||!K.id.startsWith(`${s}:unit:`)||!K.data)continue;let ae=l(K.data.bondBg&&K.data.bondBg.url);ae&&H.push({key:K.id,name:l(K.data.name)||K.id,url:ae,ref:l(K.data.bondBg&&K.data.bondBg.ref)})}return{story:v,banner:k,cg:P,bond:H}}async function vi(s){return forgeBackgrounds.options(s)}async function as(s,c,d){return forgeBackgrounds.select(s,c,d)}"
+            },
+            {
+              "find": "const forgeStoryMemory=",
+              "replace": "const forgeBackgrounds=createForgeBackgroundUnlocks({packageId:n.id,persistence:r.persistence,rawOptions:forgeRawBackgroundOptions,allNodes:tr});const forgeStoryMemory="
+            },
+            {
+              "find": "if(!Ae(i,o))return{ok:!1,error:\"bad-request\"};let g=await xn(o,w=>{if(w.decor=",
+              "replace": "if(!Ae(i,o))return{ok:!1,error:\"bad-request\"};let forgeBg=null;if(u.bg&&l(u.bg.key)){forgeBg=await forgeBackgrounds.select(o,l(u.bg.src),l(u.bg.key));if(!forgeBg)return{ok:!1,error:\"background-locked\"}}let g=await xn(o,w=>{if(w.decor="
+            },
+            {
+              "find": "b&&l(b.key)?{src:l(b.src),key:l(b.key)}:null",
+              "replace": "b&&l(b.key)?forgeBg:null"
+            },
+            {
+              "find": "s.post(\"/home-options\",",
+              "replace": "s.post(\"/artwork/witness\",p=>forgeBackgrounds.witness(p&&p.body)),s.post(\"/home-options\","
             }
           ]
         }

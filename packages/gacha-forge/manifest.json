@@ -299,8 +299,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "e633990c763bfd3731383f4ab2ac5e187b4771275ce5cb4ba161877dccb6a7b7",
-      "bytes": 1712357
+      "sha256": "72e3302588817af0591a09fd6685576704fdeb06f30ee4d6547539d26923a2ce",
+      "bytes": 1724927
     },
     {
       "path": "farm-asc.webp",
@@ -774,8 +774,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "58a5e74ce0d9c0dd07f4754d9e57768685ee3bf3a422ee9e99fa14f1c8c8ff43",
-      "bytes": 824294
+      "sha256": "6ec36c52dc3ce6d39f0e49860a8bb1a0d6ffa91cdb3fcd72eb173182453741e2",
+      "bytes": 835769
     },
     {
       "path": "skill-aoe_damage-dark.webp",
@@ -1583,7 +1583,19 @@
       "bytes": 18271
     },
     {
-      "path": "src/background-download-client.mjs"
+      "path": "src/background-download-client.mjs",
+      "sha256": "2ef9e96e3c243f6a5d4ed6b815e89cdfc7412ef3cb8983818dae061e406d9e26",
+      "bytes": 6420
+    },
+    {
+      "path": "src/background-unlocks-server.mjs",
+      "sha256": "af782ce72612652b2dc34af0a30e3a0397c785981b0b40fc9f8e45d5aabbe508",
+      "bytes": 11417
+    },
+    {
+      "path": "src/background-unlocks-client.mjs",
+      "sha256": "2c8a37d92eda1ef08389e5f0ae4af2b9a5d5d7f8d6843b31b3555099a4f646b2",
+      "bytes": 5215
     }
   ]
 }
