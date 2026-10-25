@@ -150,8 +150,12 @@ export async function confirmForgeChapterReset(host, request) {
             ? "chapter.reset.changed"
             : result?.error === "reset-in-progress"
               ? "chapter.reset.busy"
-              : "chapter.reset.failed"
+              : result?.error === "bond-chapter-open"
+                ? "chapter.reset.bondOpen"
+                : "chapter.reset.failed"
       ];
+    request.heldById = result?.error === "bond-chapter-open" ? result.heldById : "";
+    request.heldPart = result?.heldPart;
     wireForgeChapterRegeneration(host);
     return;
   }
@@ -176,6 +180,7 @@ export function wireForgeChapterRegeneration(host) {
   if (!forgeResetSameTarget(request, target))
     request = host._forgeChapterReset = {
       ...target,
+      title: String(host._plan.title || forgeChapterResetEnglish["chapter.reset.untitled"]),
       storyRevision: host._forgeChapterVersions?.get(target.runId) || 0,
       asking: false,
       pending: false,
@@ -186,6 +191,7 @@ export function wireForgeChapterRegeneration(host) {
     section = document.createElement("section");
     section.dataset.forgeChapterReset = "";
     section.className = "forge-chapter-reset";
+    section.addEventListener("click", (event) => event.stopPropagation());
     scroll.append(section);
   }
   if (!root.querySelector("[data-forge-chapter-reset-style]")) {
@@ -220,6 +226,10 @@ export function wireForgeChapterRegeneration(host) {
     title.id = "forge-chapter-reset-title";
     section.setAttribute("role", "group");
     section.setAttribute("aria-labelledby", title.id);
+    copy("p", "chapter.reset.selected").textContent = forgeChapterResetEnglish["chapter.reset.selected"].replace(
+      "{title}",
+      request.title,
+    );
     copy("p", "chapter.reset.warning");
     copy("p", "chapter.reset.preserved");
     button("chapter.reset.cancel", () => {
@@ -247,6 +257,9 @@ export function wireForgeChapterRegeneration(host) {
       root.querySelector("[data-forge-reset-confirm]")?.focus();
     });
     ask.dataset.forgeResetAsk = "";
+    if (request.heldById) {
+      button("chapter.reset.openBond", () => host._openBondChapter(request.heldById, request.heldPart));
+    }
     section.append(actions);
   }
 }

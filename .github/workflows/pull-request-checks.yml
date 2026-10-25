@@ -84,6 +84,9 @@ jobs:
           node tests/gacha-forge-bundle-rebuild.regression.mjs
           node tests/gacha-forge-story-memory.regression.mjs
           node tests/gacha-forge-story-memory-integration.regression.mjs
+          node tests/gacha-forge-story-reset-barrier.regression.mjs
+          node tests/gacha-forge-chapter-regeneration.regression.mjs
+          node tests/gacha-forge-chapter-regeneration-client.regression.mjs
           node tests/gacha-forge-story-memory-fit.regression.mjs
           node tests/gacha-forge-story-memory-client.regression.mjs
           node tests/gacha-forge-story-memory-package.regression.mjs

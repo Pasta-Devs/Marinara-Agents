@@ -1,6 +1,8 @@
 export const forgeChapterResetEnglish = {
   "chapter.reset.action": "Regenerate chapter",
   "chapter.reset.confirmTitle": "Are you sure?",
+  "chapter.reset.selected": "“{title}” will be written again from the beginning.",
+  "chapter.reset.untitled": "This chapter",
   "chapter.reset.warning":
     "This discards this chapter’s generated story, choices and progress, then writes it again using your current story settings. This cannot be undone.",
   "chapter.reset.preserved":
@@ -11,4 +13,6 @@ export const forgeChapterResetEnglish = {
   "chapter.reset.completed": "This chapter is complete and cannot be regenerated.",
   "chapter.reset.changed": "The story changed while this page was open. Reopen the chapter before trying again.",
   "chapter.reset.busy": "Another story reset is already in progress. Wait for it to finish.",
+  "chapter.reset.bondOpen": "Finish the open Character Story before regenerating this chapter.",
+  "chapter.reset.openBond": "Open Character Story",
 };

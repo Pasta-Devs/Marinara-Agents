@@ -242,6 +242,22 @@ test("the current Character Story part resets without altering completed parts o
   f.runtime.dispose();
 });
 
+test("an open Character Story blocks normal reset before any cancellation or deletion", async () => {
+  const f = fixture();
+  f.docs.get(`${runId}:session`).data.bondChapters = { [unitId]: { beats: 1, after: 2, opened: 100 } };
+  const before = clone(f.docs);
+  assert.deepEqual(await f.service.reset({ runId, chapter: 2 }), {
+    ok: false,
+    error: "bond-chapter-open",
+    heldBy: "Arden",
+    heldById: unitId,
+    heldPart: 1,
+  });
+  assert.deepEqual(f.docs, before);
+  assert.deepEqual(f.invalidated, []);
+  f.runtime.dispose();
+});
+
 test("paid progress is monotonic across repeated resets while play progress can rewind", async () => {
   const f = fixture();
   assert.equal((await f.service.reset({ runId, chapter: 2 })).ok, true);
@@ -250,6 +266,8 @@ test("paid progress is monotonic across repeated resets while play progress can 
   assert.equal((await f.service.reset({ runId, chapter: 2, storyRevision: 1 })).ok, true);
   const session = f.docs.get(`${runId}:session`).data;
   assert.equal(forgeStoryPaidThrough(session, 2, 0), 3);
+  assert.equal(forgeStoryPaidThrough(session, 2, 0, "hard"), 0);
+  assert.equal(forgeStoryPaidThrough(session, 2, 0, "veryhard"), 0);
   assert.equal(3 + 1 > forgeStoryPaidThrough(session, 2, 3), true);
   assert.equal(2 + 1 > forgeStoryPaidThrough(session, 2, 2), false);
   assert.equal(session.storyRevision, 2);

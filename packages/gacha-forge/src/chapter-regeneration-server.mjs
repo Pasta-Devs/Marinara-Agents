@@ -7,7 +7,8 @@ export function forgeStoryVersion(session) {
   return forgeStoryCount(session?.storyRevision);
 }
 
-export function forgeStoryPaidThrough(session, chapter, progress) {
+export function forgeStoryPaidThrough(session, chapter, progress, difficulty = "normal") {
+  if (difficulty !== "normal") return forgeStoryCount(progress);
   return Math.max(forgeStoryCount(progress), forgeStoryCount(session?.storyRewardProgress?.[String(chapter)]));
 }
 
@@ -78,6 +79,17 @@ export function createForgeChapterRegeneration({
       const count = allNodes(plan.data).length;
       progress = forgeStoryCount(data.progress?.[String(chapter)]?.normal);
       if (!count || progress >= count) return { ok: false, error: "chapter-completed" };
+      const current = openBond(data);
+      if (current.id) {
+        const unit = await documents.getById(packageId, current.id);
+        return {
+          ok: false,
+          error: "bond-chapter-open",
+          heldBy: text(unit?.data?.name),
+          heldById: current.id,
+          heldPart: current.part,
+        };
+      }
       const plans = (await documents.list(packageId, "chapter-plan")).filter((row) =>
         row.id.startsWith(`${runId}:chapter:`),
       );
@@ -135,7 +147,7 @@ export function createForgeChapterRegeneration({
             (record?.kind === (unitId ? "character-story" : "chapter") && String(record.id) === String(chapter));
           const records = Array.isArray(memory.records) ? memory.records : [];
           const covered = Array.isArray(memory.overview?.sources) ? memory.overview.sources : [];
-          if (records.some(relevant) || covered.some(([source]) => source === key)) {
+          if (records.some(relevant) || covered.some((entry) => Array.isArray(entry) && entry[0] === key)) {
             memory.records = records.filter((record) => !relevant(record));
             memory.overview = null;
             memory.work = [];
