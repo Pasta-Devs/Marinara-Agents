@@ -5989,6 +5989,19 @@ async function main() {
         await emptiedPartial.locator('[data-ltm-review-action="review"]').getAttribute("aria-describedby"),
         await partialAcceptReason.getAttribute("id"),
       );
+      // #1673: the lock is aria-disabled, never `disabled`, so the button takes focus and a press applies nothing.
+      const lockedAccept = emptiedPartial.locator('[data-ltm-review-action="review"]');
+      const lockedAcceptCalls = reviewActionCalls.length;
+      await lockedAccept.focus();
+      assert.equal(
+        await lockedAccept.evaluate((button) => button === document.activeElement && !button.hasAttribute("disabled")),
+        true,
+      );
+      assert.equal(await lockedAccept.getAttribute("aria-disabled"), "true");
+      await page.keyboard.press("Enter");
+      await lockedAccept.click({ force: true });
+      await page.waitForTimeout(150);
+      assert.equal(reviewActionCalls.length, lockedAcceptCalls);
       await emptiedPartial.locator('[data-ltm-control="review-select"]').check();
       assert.match(
         await page.locator("[data-ltm-review-batch-accept-reason]").innerText(),
@@ -8149,6 +8162,29 @@ async function main() {
       );
       assert.equal(await desktopReextract.isDisabled(), true);
       await page.locator("[data-ltm-source-task-progress]").waitFor();
+      // #1673: while a run holds the lock, Import stays focusable (aria-disabled, never `disabled`), points at the
+      // visible lock text, and a press or click sends nothing.
+      await page.locator('[data-ltm-source-tab="characters"]').click();
+      await page.locator('[data-ltm-source-preview="characters"]').waitFor();
+      const lockedImport = page.locator('[data-ltm-source-action="import"]:visible').first();
+      assert.equal(await lockedImport.getAttribute("aria-disabled"), "true");
+      assert.equal(await lockedImport.evaluate((button) => button.hasAttribute("disabled")), false);
+      const lockedImportReasonId = await lockedImport.getAttribute("aria-describedby");
+      assert.ok(lockedImportReasonId, "a locked Import points at the lock text");
+      assert.equal(await page.locator(`[id="${lockedImportReasonId}"]`).innerText(), "Locked while an import runs");
+      await lockedImport.focus();
+      assert.equal(await lockedImport.evaluate((button) => button === document.activeElement), true);
+      const lockedImportWrites: string[] = [];
+      const recordWrite = (request: { method(): string; url(): string }) => {
+        if (request.method() !== "GET") lockedImportWrites.push(request.url());
+      };
+      page.on("request", recordWrite);
+      await page.keyboard.press("Enter");
+      await lockedImport.click({ force: true });
+      await page.waitForTimeout(150);
+      page.off("request", recordWrite);
+      assert.deepEqual(lockedImportWrites, []);
+      await page.locator('[data-ltm-source-tab="chats"]').click();
       const desktopSourcesNavigation = page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]');
       assert.match(await desktopSourcesNavigation.innerText(), /Re-extracting\.\.\./u);
       assert.match(await page.locator("[data-ltm-source-task-progress]").innerText(), /Re-extracting 1/u);
