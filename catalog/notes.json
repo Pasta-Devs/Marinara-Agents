@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.18.0",
+          "date": "2026-10-25",
+          "notes": "- Choose optional Formation combat: frontline actions, protected elemental supports, shared energy, repositioning and generated tactical kits.\n- Convert saved worlds after confirmation with bounded parallel generation, persistent progress and explicit retry, preserving characters and progression.\n- Add creative, validated boss objectives, elemental Ultimate portrait effects and optional fixed, saved combat voice lines for assigned voices.\n- Keep Classic combat, existing boss dialogue and authoritative reward replay.",
+          "highlight": true
+        },
+        {
           "version": "1.17.0",
           "date": "2026-10-25",
           "notes": "- Regenerate an ongoing chapter or the current open Character Story from its bottom action after a named confirmation. Completed chapters remain protected.\n- Discard only the selected chapter’s story, choices and reading progress, then write a fresh plan with current settings and character cards. Preserve other chapters, conversations, characters, inventory and earned rewards.\n- Stop and drain pending story work before resetting. Replaying cleared progress does not award first-clear rewards again; the usual Vigor cost to play still applies.",
@@ -284,12 +290,6 @@
           "date": "2026-10-22",
           "notes": "### New\n- The fullscreen control beside Settings expands inside the Engine, hiding Home browser controls while keeping the Engine topbar. Outward/inward arrows show the action, and the button works on iPhone Safari too.\n- Every Forge screen fills the available width and height instead of fitting a fixed 16:9 frame.\n- A floating exit control stays available on screens without the shared toolbar and on the portrait rotation notice. Requires Engine capability API 1.376.",
           "highlight": true
-        },
-        {
-          "version": "1.8.15",
-          "date": "2026-10-22",
-          "notes": "- Fixed: on iPhone and other Safari-based browsers, ticking a cast member or an outfit theme no longer scrolls the list (and, on a phone turned sideways, the whole world-creation page) back to the top.",
-          "highlight": false
         }
       ]
     },
