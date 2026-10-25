@@ -364,6 +364,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.92",
+          "date": "2026-10-25",
+          "notes": "- Sources tells re-importing from the source apart from reloading the list: \"Re-import from source\" and \"Reload list\".\n- The lorebook tab in Sources reads \"Entries\", and a single entry no longer says \"1 entries\".\n- When Import is blocked for lack of a destination, Sources offers a \"Choose destination\" button.\n- While an import runs, Sources keeps its locked controls focusable and says why they are locked.\n- Tabs, filters and action buttons in Sources, Memory Settings and Debug are 2.75rem tall for touch.\n- Maintenance groups Backup, Repair and Delete or reset, and offers a backup export before Delete all data.\n- Recall settings are grouped under Budget, Ranking, Text filters and Sharing, and show when edits make the style Custom.\n- Maintenance success messages are readable in the light theme and carry a check icon, unsaved Memory Settings tabs show a dot, and an identity repair says which backup it made.",
+          "highlight": false
+        },
+        {
           "version": "1.4.91",
           "date": "2026-10-24",
           "notes": "- Review rows now say what each button does: \"Check\" then \"Apply\" (with a Ready or Blocked chip on narrow panels), and engine terms like preflight and source_deleted read as plain sentences.\n- Reviewing who a memory is about now says \"Skip this memory\" and lists each person by name and a distinguishing detail instead of a raw key.\n- Freshness labels, draft counts and the Change and Source lines in the Review Queue are now easier to read in both themes.\n- The Review Queue drops a redundant frame and duplicate progress line, and shows the run summary inside the workbench on narrow panels.",
@@ -475,12 +481,6 @@
           "version": "1.4.73",
           "date": "2026-10-21",
           "notes": "- An extraction no longer fails as a whole when it leaves out a memory about a note whose id has a digit right after its prefix. This hit older notes with ids such as rel_96dfe1cd8f75, and new characters whose name starts with a digit, such as \"2B\". The left-out suggestion couldn't be saved, so nothing from that source was kept. The left-out memory now appears as a rejected suggestion, like any other.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.72",
-          "date": "2026-10-21",
-          "notes": "- No change in what Long-Term Memory does. Internally, the shared file that defines settings, memories, drafts and backups is split into ten files by area.",
           "highlight": false
         }
       ]

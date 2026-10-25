@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { Info, Loader2, TriangleAlert, type LucideIcon } from "lucide-react";
+import { Check, Info, Loader2, TriangleAlert, type LucideIcon } from "lucide-react";
 import { useLtmTranslation } from "./localization";
 
 let activePopover: { id: string; close: () => void } | null = null;
@@ -352,7 +352,7 @@ export function StatusSurface({
 } & HTMLAttributes<HTMLDivElement>) {
   const toneClass = {
     neutral: "text-[var(--marinara-editor-muted)]",
-    success: "text-[var(--marinara-editor-accent)]",
+    success: "",
     warning: "text-[var(--marinara-editor-text)]",
     danger: "text-[var(--destructive)]",
   }[tone];
@@ -370,7 +370,13 @@ export function StatusSurface({
       aria-live="polite"
       data-ltm-status={tone}
       className={`${compact ? `rounded-md border ${borderColor ? "" : "border-[var(--border)]"} bg-[var(--background)]/75 px-2 py-1.5 text-[0.625rem]` : "mari-editor-panel mari-editor-panel--soft min-h-11 px-3 py-2 text-xs"} flex items-center gap-2 ${toneClass} ${className}`}
-      style={borderColor ? { borderColor, ...style } : style}
+      style={{
+        ...(borderColor ? { borderColor } : null),
+        // Accent text on the accent-tinted surface is below 4.5:1 in the light theme, so success text uses a
+        // package-local token (accent mixed toward the editor text) set in LongTermMemoryDetail's style block.
+        ...(tone === "success" ? { color: "var(--ltm-success, var(--marinara-editor-text))" } : null),
+        ...style,
+      }}
       {...props}
     >
       {busy ? <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin motion-reduce:animate-none" /> : null}
@@ -381,6 +387,9 @@ export function StatusSurface({
           className="shrink-0"
           data-ltm-status-icon
         />
+      ) : null}
+      {tone === "success" ? (
+        <Check aria-hidden="true" size={compact ? "0.75rem" : "1rem"} className="shrink-0" data-ltm-status-icon />
       ) : null}
       {children}
     </div>

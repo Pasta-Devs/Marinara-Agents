@@ -1584,6 +1584,18 @@ async function main() {
           const rect = element.getBoundingClientRect();
           return rect.width >= 44 && rect.height >= 44 ? "fits" : `${rect.width}x${rect.height}`;
         });
+      // #1659: the visible tabs and compact actions inside a surface that are shorter than 2.75rem (44px).
+      // The Engine's unlayered .mari-editor-tab and --compact min-heights beat the min-h-11 utilities.
+      const shortTouchTargets = (surface: string) =>
+        page.locator(surface).evaluate((root) =>
+          [...root.querySelectorAll<HTMLElement>('[role="tab"], .mari-editor-action--compact')]
+            .filter((element) => element.getClientRects().length > 0)
+            .map(
+              (element) =>
+                `${(element.textContent ?? "").trim().slice(0, 24)}: ${element.getBoundingClientRect().height}`,
+            )
+            .filter((entry) => Number.parseFloat(entry.slice(entry.lastIndexOf(":") + 1)) < 44),
+        );
       // #1588: scrolls the bar's scroller to one end; "in view" when the bar is still inside the scrollport and
       // the window.
       const stickyBarInView = (bar: ReturnType<typeof page.locator>, end: "top" | "bottom") =>
@@ -2911,6 +2923,11 @@ async function main() {
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]').click();
       await page.locator('[data-ltm-source-tab="lorebooks"][aria-selected="true"]').waitFor();
       await page.locator('[data-ltm-source-tab="chats"]').click();
+      assert.deepEqual(
+        await shortTouchTargets('[data-ltm-surface="sources"]'),
+        [],
+        "Sources tabs and actions fit 2.75rem",
+      );
       assert.equal(
         scopeTargetQueries.slice(scopeTargetQueryCount).includes("?includeAllChats=true&chatId=desktop-chat"),
         true,
@@ -2930,6 +2947,11 @@ async function main() {
       );
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
       await page.locator("#settings-tab-extraction").click();
+      assert.deepEqual(
+        await shortTouchTargets('[data-ltm-surface="memory-settings"]'),
+        [],
+        "Settings tabs fit 2.75rem",
+      );
       const desktopExtractionLayout = await page
         .locator("#settings-panel-extraction > [data-ltm-extraction-grid]")
         .evaluate((grid) => {
@@ -4274,25 +4296,15 @@ async function main() {
         assert.equal(await resetButton.isDisabled(), false, "Reset is available again once the refetch resolves");
         assert.equal(settingsReads, 1, "Reset reads the settings once");
         // #1588: each result shows under the controls that produced it, not at the top of the panel.
-        const maintenanceResultPlace = (text: RegExp) =>
+        // #1659: Maintenance has Backup, Repair and Delete or reset groups; a result shows in its own group.
+        const maintenanceResultGroup = (text: RegExp) =>
           maintenancePanel
             .locator("[data-ltm-status]")
             .filter({ hasText: text })
-            .evaluate((result) => {
-              const buttons = [...document.querySelectorAll<HTMLButtonElement>("#settings-panel-maintenance button")];
-              const reset = buttons.find((item) => item.textContent?.trim() === "Reset settings")!;
-              const run = buttons.find((item) => item.textContent?.trim() === "Run selected maintenance")!;
-              return {
-                afterReset: Boolean(reset.compareDocumentPosition(result) & Node.DOCUMENT_POSITION_FOLLOWING),
-                beforeRun: Boolean(result.compareDocumentPosition(run) & Node.DOCUMENT_POSITION_FOLLOWING),
-                afterRun: Boolean(run.compareDocumentPosition(result) & Node.DOCUMENT_POSITION_FOLLOWING),
-              };
-            });
-        assert.deepEqual(await maintenanceResultPlace(/^Memory settings reset to defaults, but/u), {
-          afterReset: true,
-          beforeRun: true,
-          afterRun: false,
-        });
+            .evaluate((result) =>
+              result.closest("[data-ltm-maintenance-group]")?.getAttribute("data-ltm-maintenance-group"),
+            );
+        assert.equal(await maintenanceResultGroup(/^Memory settings reset to defaults, but/u), "reset");
         await resetPage.route("**/api/long-term-memory/repair", (route) =>
           route.fulfill({ json: { actions: [{ action: "rebuild_indexes", result: "completed", count: 4 }] } }),
         );
@@ -4302,11 +4314,7 @@ async function main() {
           .locator("[data-ltm-status]")
           .filter({ hasText: /\(4\)$/u })
           .waitFor();
-        assert.deepEqual(await maintenanceResultPlace(/\(4\)$/u), {
-          afterReset: true,
-          beforeRun: false,
-          afterRun: true,
-        });
+        assert.equal(await maintenanceResultGroup(/\(4\)$/u), "repair");
         assert.equal(
           await maintenancePanel.getByText(/^Memory settings reset to defaults, but/u).count(),
           0,
@@ -4319,6 +4327,504 @@ async function main() {
           "the forms show the settings read after the reset",
         );
         await resetPage.close();
+      }
+      // #1659: Maintenance groups Backup, Repair and Delete or reset. Reset is a warning, Run selected
+      // maintenance is not red, and Delete all data offers "Export a backup first" before the host's confirmation.
+      for (const width of [1280, 390]) {
+        const groupPage = await browserContext.newPage();
+        await groupPage.setViewportSize({ width, height: 900 });
+        let deleteRequests = 0;
+        await groupPage.route("**/api/long-term-memory/data", (route) => {
+          if (route.request().method() !== "DELETE") return route.continue();
+          deleteRequests += 1;
+          return route.fulfill({ json: { ok: true } });
+        });
+        await groupPage.goto(`http://127.0.0.1:${address.port}/`);
+        await groupPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await groupPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = {
+            confirmAction: (options) => {
+              window.__ltmConfirms = [...(window.__ltmConfirms ?? []), options];
+              return window.__ltmConfirmResult ?? false;
+            },
+          };
+          document.body.append(element);
+        })()`);
+        await groupPage.locator('[data-ltm-destination="settings"]:visible').first().click();
+        await groupPage.locator("#settings-tab-maintenance").click();
+        const panel = groupPage.locator("#settings-panel-maintenance");
+        const groupNames = await panel
+          .locator("[data-ltm-maintenance-group]")
+          .evaluateAll((groups) => groups.map((group) => group.getAttribute("data-ltm-maintenance-group")));
+        assert.deepEqual(groupNames, ["backup", "repair", "reset"], `Maintenance groups at ${width}px`);
+        const groupOf = (name: string) => panel.locator(`[data-ltm-maintenance-group="${name}"]`);
+        for (const [group, button] of [
+          ["backup", "Export backup"],
+          ["backup", "Choose backup"],
+          ["repair", "Run selected maintenance"],
+          ["reset", "Reset settings"],
+          ["reset", "Delete all data"],
+        ] as const) {
+          assert.equal(
+            await groupOf(group).getByRole("button", { name: button }).count(),
+            1,
+            `${button} is in ${group}`,
+          );
+        }
+        const tones = await panel.evaluate((root) => {
+          const buttons = [...root.querySelectorAll<HTMLElement>("button")];
+          const run = buttons.find((item) => item.textContent?.trim() === "Run selected maintenance")!;
+          const reset = buttons.find((item) => item.textContent?.trim() === "Reset settings")!;
+          const remove = buttons.find((item) => item.textContent?.trim() === "Delete all data")!;
+          return {
+            runPrimary: run.classList.contains("mari-editor-action--primary"),
+            runDanger: run.classList.contains("mari-editor-action--danger"),
+            resetWarning: reset.dataset.ltmTone,
+            resetDanger: reset.classList.contains("mari-editor-action--danger"),
+            resetBorderInline: reset.style.borderColor,
+            resetIcon: Boolean(reset.querySelector("svg")),
+            deleteDanger: remove.classList.contains("mari-editor-action--danger"),
+            separated: remove.getBoundingClientRect().top - reset.getBoundingClientRect().bottom >= 16,
+            deleteBorderTop: remove.parentElement ? getComputedStyle(remove.parentElement).borderTopWidth : "",
+          };
+        });
+        assert.deepEqual(tones, {
+          runPrimary: true,
+          runDanger: false,
+          resetWarning: "warning",
+          resetDanger: false,
+          resetBorderInline: "var(--marinara-editor-border-strong)",
+          resetIcon: true,
+          deleteDanger: true,
+          separated: true,
+          deleteBorderTop: "1px",
+        });
+        assert.equal(
+          await groupPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+          true,
+          `Maintenance does not overflow horizontally at ${width}px`,
+        );
+        // Delete all data opens the export offer first; declining the host confirmation deletes nothing.
+        const deleteAll = groupOf("reset").getByRole("button", { name: "Delete all data" });
+        await deleteAll.click();
+        const prompt = groupOf("reset").locator("[data-ltm-delete-prompt]");
+        await prompt.waitFor();
+        const exportFirst = prompt.getByRole("button", { name: "Export a backup first" });
+        await groupPage.waitForFunction(() => document.activeElement?.textContent?.includes("Export a backup first"));
+        assert.equal(await exportFirst.evaluate((element) => element === document.activeElement), true);
+        assert.equal(
+          await groupPage.evaluate(
+            () => (window as unknown as { __ltmConfirms?: unknown[] }).__ltmConfirms?.length ?? 0,
+          ),
+          0,
+        );
+        assert.equal(
+          await groupPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+          true,
+          `the open export offer does not overflow horizontally at ${width}px`,
+        );
+        // "Export a backup first" exports from here, reports in Delete or reset, and deletes nothing.
+        let exportRequests = 0;
+        await groupPage.route("**/api/long-term-memory/backup/export", (route) => {
+          exportRequests += 1;
+          return route.fulfill({ json: { version: 1, notes: [] } });
+        });
+        await exportFirst.click();
+        await groupOf("reset").locator("[data-ltm-status]").filter({ hasText: "Memory backup exported." }).waitFor();
+        assert.equal(exportRequests, 1, "the export offer exports once");
+        assert.equal(await groupOf("backup").locator("[data-ltm-maintenance-result]").count(), 0);
+        assert.equal(await prompt.count(), 1, "exporting leaves the offer open");
+        assert.equal(deleteRequests, 0);
+        assert.equal(
+          await groupPage.evaluate(
+            () => (window as unknown as { __ltmConfirms?: unknown[] }).__ltmConfirms?.length ?? 0,
+          ),
+          0,
+        );
+        assert.equal(
+          await prompt.getAttribute("aria-describedby"),
+          await prompt.locator("p").first().getAttribute("id"),
+          "the offer text describes the group",
+        );
+        // Escape closes the offer and returns focus to Delete all data.
+        await exportFirst.focus();
+        await groupPage.keyboard.press("Escape");
+        assert.equal(await prompt.count(), 0, "Escape closes the export offer");
+        assert.equal(await deleteAll.evaluate((element) => element === document.activeElement), true);
+        await deleteAll.click();
+        await prompt.waitFor();
+        await prompt.getByRole("button", { name: "Cancel" }).click();
+        assert.equal(await prompt.count(), 0, "Cancel closes the export offer");
+        assert.equal(
+          await deleteAll.evaluate((element) => element === document.activeElement),
+          true,
+          "Cancel returns focus",
+        );
+        await deleteAll.click();
+        await prompt.getByRole("button", { name: "Continue to delete" }).click();
+        await groupPage.waitForFunction(
+          () => (window as unknown as { __ltmConfirms?: unknown[] }).__ltmConfirms?.length === 1,
+        );
+        const confirmOptions = await groupPage.evaluate(
+          () =>
+            (window as unknown as { __ltmConfirms: Array<{ confirmLabel?: string; tone?: string }> }).__ltmConfirms[0],
+        );
+        assert.equal(confirmOptions?.confirmLabel, "Delete everything");
+        assert.equal(confirmOptions?.tone, "destructive");
+        assert.equal(deleteRequests, 0, "declining the host confirmation deletes nothing");
+        assert.equal(await prompt.count(), 1, "a declined confirmation leaves the export offer open");
+        await groupPage.evaluate(() => {
+          (window as unknown as { __ltmConfirmResult: boolean }).__ltmConfirmResult = true;
+        });
+        await prompt.getByRole("button", { name: "Continue to delete" }).click();
+        await groupOf("reset").locator("[data-ltm-status]").filter({ hasText: "All memory data deleted." }).waitFor();
+        assert.equal(deleteRequests, 1);
+        assert.equal(await prompt.count(), 0, "the export offer closes once the delete runs");
+        await groupPage.close();
+      }
+      // #1659: Recall settings are grouped (Budget, Ranking, Text filters, Sharing), the four weights use
+      // plain names with the old term in their help, and editing a weight shows the Custom note with a
+      // button that restores the preset the weights came from.
+      for (const width of [1280, 390]) {
+        const recallPage = await browserContext.newPage();
+        await recallPage.setViewportSize({ width, height: 900 });
+        await recallPage.goto(`http://127.0.0.1:${address.port}/`);
+        await recallPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await recallPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => false };
+          document.body.append(element);
+        })()`);
+        await recallPage.locator('[data-ltm-destination="settings"]:visible').first().click();
+        const recall = recallPage.locator("#settings-panel-recall");
+        await recall.waitFor();
+        const groups = await recall.locator("[data-ltm-recall-group]").evaluateAll((nodes) =>
+          nodes.map((node) => ({
+            group: node.getAttribute("data-ltm-recall-group"),
+            heading: node.querySelector("h4")?.textContent?.trim(),
+            labelled: node.getAttribute("aria-labelledby") === node.querySelector("h4")?.id,
+          })),
+        );
+        assert.deepEqual(
+          groups,
+          [
+            { group: "budget", heading: "Budget", labelled: true },
+            { group: "ranking", heading: "Ranking", labelled: true },
+            { group: "text", heading: "Text filters", labelled: true },
+            { group: "sharing", heading: "Sharing", labelled: true },
+          ],
+          `Recall groups at ${width}px`,
+        );
+        const inGroup = (group: string) => recall.locator(`[data-ltm-recall-group="${group}"]`);
+        for (const [group, label] of [
+          ["budget", "Recall budget tokens"],
+          ["budget", "Maximum recalled memories"],
+          ["budget", "Recent messages for recall"],
+          ["ranking", "Recall style"],
+          ["ranking", "Score threshold"],
+          ["ranking", "Meaning match"],
+          ["ranking", "Exact words match"],
+          ["ranking", "Linked memories match"],
+          ["ranking", "Stored keywords match"],
+          ["text", "Memory context instructions"],
+          ["text", "Memory stop words"],
+          ["sharing", "Other Agents can read memories"],
+        ] as const) {
+          assert.equal(await inGroup(group).getByLabel(label, { exact: true }).count(), 1, `${label} is in ${group}`);
+        }
+        assert.equal(await recall.getByText("Graph weight", { exact: true }).count(), 0, "the old graph label is gone");
+        assert.equal(
+          await recall.getByText("Keyword weight", { exact: true }).count(),
+          0,
+          "the old keyword label is gone",
+        );
+        await recall.locator('[data-ltm-info="Linked memories match"]').click();
+        assert.match(
+          await recallPage.locator('[data-ltm-info-panel="Linked memories match"]').innerText(),
+          /Also called graph weight/u,
+          "the help names the old term",
+        );
+        await recallPage.keyboard.press("Escape");
+
+        const style = recall.getByLabel("Recall style", { exact: true });
+        const note = recall.locator("[data-ltm-recall-custom]");
+        assert.equal((await note.innerText()).trim(), "", "no Custom note while a preset is in use");
+        assert.equal(await recall.getByRole("button", { name: "Reset to preset" }).count(), 0);
+        await style.selectOption("exact");
+        const exactWeight = await recall.getByLabel("Meaning match", { exact: true }).inputValue();
+        await recall.getByLabel("Meaning match", { exact: true }).fill("0.91");
+        await recall.getByLabel("Meaning match", { exact: true }).press("Enter");
+        assert.equal(await style.inputValue(), "custom", "editing a weight flips the style to Custom");
+        assert.match(await note.innerText(), /^Custom \(edited weights\)\. Reset to preset returns to Exact\./u);
+        assert.equal(await note.getAttribute("role"), "status");
+        const reset = recall.getByRole("button", { name: "Reset to preset" });
+        assert.equal(
+          await reset.evaluate((button) => button.getBoundingClientRect().height >= 44),
+          true,
+          "Reset to preset is a 2.75rem target",
+        );
+        await reset.click();
+        assert.equal(await style.inputValue(), "exact", "Reset to preset restores the preset it came from");
+        // NumberField copies the new value into its text in an effect, so give it a frame or two.
+        for (let attempt = 0; attempt < 40; attempt += 1) {
+          if ((await recall.getByLabel("Meaning match", { exact: true }).inputValue()) === exactWeight) break;
+          await recallPage.waitForTimeout(50);
+        }
+        assert.equal(await recall.getByLabel("Meaning match", { exact: true }).inputValue(), exactWeight);
+        assert.equal((await note.innerText()).trim(), "", "the note clears once the preset is back");
+        // Choosing Custom by hand, with no edit, still resets to the last preset. Balanced is the saved style,
+        // so the form is clean again and the Save bar goes away.
+        await style.selectOption("balanced");
+        await style.selectOption("custom");
+        await recall.getByRole("button", { name: "Reset to preset" }).click();
+        assert.equal(await style.inputValue(), "balanced", "choosing Custom by hand still resets to the last preset");
+        for (let attempt = 0; attempt < 40; attempt += 1) {
+          if ((await recallPage.getByRole("button", { name: "Save settings" }).count()) === 0) break;
+          await recallPage.waitForTimeout(50);
+        }
+        assert.equal(
+          await recallPage.getByRole("button", { name: "Save settings" }).count(),
+          0,
+          "Reset to preset back to the saved preset leaves the form clean",
+        );
+        assert.equal(
+          await recallPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+          true,
+          `Recall has no horizontal overflow at ${width}px`,
+        );
+        await recallPage.close();
+      }
+      // #1659: a form saved as Custom has no preset history. Picking Exact and discarding must not leave
+      // "returns to Exact" behind: the note falls back to Balanced.
+      {
+        const customPage = await browserContext.newPage();
+        await customPage.setViewportSize({ width: 1280, height: 900 });
+        await customPage.route("**/api/long-term-memory/settings", (route) =>
+          route.request().method() === "GET"
+            ? route.fulfill({ json: { longTermMemoryRecallStyle: "custom", longTermMemorySemanticWeight: 0.7 } })
+            : route.continue(),
+        );
+        await customPage.goto(`http://127.0.0.1:${address.port}/`);
+        await customPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await customPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await customPage.locator('[data-ltm-destination="settings"]:visible').first().click();
+        const recall = customPage.locator("#settings-panel-recall");
+        const note = recall.locator("[data-ltm-recall-custom]");
+        await recall.getByText("Reset to preset returns to Balanced.", { exact: false }).waitFor();
+        const style = recall.getByLabel("Recall style", { exact: true });
+        assert.equal(await style.inputValue(), "custom");
+        await style.selectOption("exact");
+        await customPage.getByRole("button", { name: "Discard changes" }).click();
+        await customPage.getByRole("button", { name: "Discard changes" }).waitFor({ state: "detached" });
+        assert.equal(await style.inputValue(), "custom", "Discard returns to the saved Custom style");
+        await recall.getByText("Reset to preset returns to Balanced.", { exact: false }).waitFor();
+        assert.match(await note.innerText(), /returns to Balanced\./u, "the discarded pick is not remembered");
+        await customPage.close();
+      }
+      // #1659: saving a form as Custom also drops the preset history, so Reset to preset agrees with a reload.
+      {
+        const savePage = await browserContext.newPage();
+        await savePage.setViewportSize({ width: 1280, height: 900 });
+        await savePage.route("**/api/long-term-memory/settings", (route) =>
+          route.request().method() === "PUT"
+            ? route.fulfill({ json: route.request().postDataJSON() })
+            : route.continue(),
+        );
+        await savePage.goto(`http://127.0.0.1:${address.port}/`);
+        await savePage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await savePage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await savePage.locator('[data-ltm-destination="settings"]:visible').first().click();
+        const recall = savePage.locator("#settings-panel-recall");
+        const style = recall.getByLabel("Recall style", { exact: true });
+        await style.selectOption("exact");
+        await recall.getByLabel("Meaning match", { exact: true }).fill("0.91");
+        await recall.getByLabel("Meaning match", { exact: true }).press("Enter");
+        await recall.getByText("Reset to preset returns to Exact.", { exact: false }).waitFor();
+        await savePage.getByRole("button", { name: "Save settings" }).click();
+        await savePage.getByRole("button", { name: "Save settings" }).waitFor({ state: "detached" });
+        assert.equal(await style.inputValue(), "custom", "the saved form stays Custom");
+        await recall.getByText("Reset to preset returns to Balanced.", { exact: false }).waitFor();
+        await savePage.close();
+      }
+      // #1659: success text reads at 4.5:1 in both themes and carries a check icon, an unsaved tab shows a dot,
+      // Save stays reachable while the form scrolls, and an identity repair names the backup it made.
+      {
+        const critiquePage = await browserContext.newPage();
+        await critiquePage.setViewportSize({ width: 1280, height: 520 });
+        const candidateId = "a".repeat(64);
+        const repairNote = (noteId: string, title: string) => ({
+          noteId,
+          title,
+          basis: "exact_name",
+          alreadyBound: false,
+          exactFullName: true,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        });
+        const repairPreview = {
+          generatedAt: "2026-01-01T00:00:00.000Z",
+          scope: { kind: "global" },
+          counts: { analyzedNotes: 2, candidateCount: 1, bindableNotes: 2, duplicateNotes: 1, unresolvedNotes: 0 },
+          candidates: [
+            {
+              id: candidateId,
+              subjectNames: ["Mira"],
+              noteType: "character",
+              matchBasis: ["exact_name"],
+              blockingReasons: [],
+              notes: [repairNote("note-canonical", "Mira"), repairNote("note-duplicate", "Mira (copy)")],
+              canonicalNoteId: "note-canonical",
+              duplicateNoteIds: ["note-duplicate"],
+              additiveContent: [],
+              supersedingConflicts: [],
+            },
+          ],
+          unresolved: [],
+        };
+        await critiquePage.route("**/api/long-term-memory/identity-repair/preview", (route) =>
+          route.fulfill({ json: repairPreview }),
+        );
+        await critiquePage.route("**/api/long-term-memory/identity-repair/apply", (route) =>
+          route.fulfill({
+            json: {
+              repairedAt: "2026-01-01T00:00:00.000Z",
+              backup: { id: "0123abcd-4567-89ef-0123-456789abcdef", createdAt: "2026-01-01T00:00:00.000Z" },
+              repairs: [{ candidateId }],
+            },
+          }),
+        );
+        await critiquePage.goto(`http://127.0.0.1:${address.port}/`);
+        await critiquePage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await critiquePage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await critiquePage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+        // Contrast of an element's text against its composited ancestor backgrounds, drawn on a canvas so
+        // every CSS color syntax (color-mix, oklab) is resolved by the browser itself.
+        const contrastOf = (selector: string) =>
+          critiquePage.evaluate(`(() => {
+            const element = document.querySelector(${JSON.stringify(selector)});
+            const context = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+            context.canvas.width = 1;
+            context.canvas.height = 1;
+            const paint = (css) => {
+              context.fillStyle = css;
+              context.fillRect(0, 0, 1, 1);
+            };
+            const read = () => [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+            const chain = [];
+            for (let node = element; node; node = node.parentElement) {
+              chain.unshift(getComputedStyle(node).backgroundColor);
+            }
+            paint("#fff");
+            for (const color of chain) paint(color);
+            const background = read();
+            paint("rgb(" + background.join(",") + ")");
+            paint(getComputedStyle(element).color);
+            const text = read();
+            const luminance = (rgb) => {
+              const [r, g, b] = rgb.map((value) => {
+                const channel = value / 255;
+                return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+              });
+              return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            };
+            const [light, dark] = [luminance(text), luminance(background)].sort((a, b) => b - a);
+            return (light + 0.05) / (dark + 0.05);
+          })()`) as Promise<number>;
+        const maintenance = critiquePage.locator("#settings-panel-maintenance");
+        await critiquePage.locator("#settings-tab-maintenance").click();
+        const integrityOk = maintenance
+          .locator('[data-ltm-status="success"]')
+          .filter({ hasText: "Integrity check passed" });
+        await integrityOk.waitFor();
+        assert.equal(await integrityOk.locator("[data-ltm-status-icon]").count(), 1, "success carries a check icon");
+        for (const theme of ["light", "dark"]) {
+          await critiquePage.evaluate((value) => {
+            document.documentElement.dataset.theme = value;
+          }, theme);
+          // The tabs use transition-colors, so measure after the theme change has finished fading.
+          await critiquePage.evaluate(
+            "Promise.all(document.getAnimations().filter((animation) => animation.effect.getComputedTiming().endTime !== Infinity).map((animation) => animation.finished))",
+          );
+          const ratios = {
+            success: await contrastOf('#settings-panel-maintenance [data-ltm-status="success"]'),
+            selectedTab: await contrastOf('#settings-tab-maintenance[data-active="true"]'),
+            inactiveTab: await contrastOf('#settings-tab-recall[data-active="false"]'),
+          };
+          for (const [name, ratio] of Object.entries(ratios)) {
+            assert.equal(
+              ratio >= 4.5,
+              true,
+              `${name} text is at least 4.5:1 in the ${theme} theme (${ratio.toFixed(2)})`,
+            );
+          }
+        }
+        // The identity repair says which backup it made.
+        await maintenance.getByRole("button", { name: "Preview identity repairs" }).click();
+        await maintenance.getByRole("button", { name: /Apply selected repairs/u }).click();
+        const repairResult = maintenance.locator('[data-ltm-maintenance-result="identity"]');
+        await repairResult.waitFor();
+        assert.match(
+          await repairResult.innerText(),
+          /Applied 1 identity repair\(s\)\. Backup 0123abcd was saved first/u,
+        );
+        // Unsaved edits: a dot on the tab that holds them, Save and Discard sticky while the form scrolls.
+        await critiquePage.locator("#settings-tab-recall").click();
+        const recallTab = critiquePage.locator("#settings-tab-recall");
+        assert.equal(await critiquePage.locator("[data-ltm-tab-dirty]").count(), 0, "a clean form shows no dot");
+        const chunks = critiquePage.getByRole("spinbutton", { name: "Maximum recalled memories", exact: true });
+        const chunksBefore = Number(await chunks.inputValue());
+        await chunks.fill(String(chunksBefore === 37 ? 38 : 37));
+        await chunks.blur();
+        await critiquePage.getByRole("button", { name: "Save settings" }).waitFor();
+        assert.equal(await recallTab.locator("[data-ltm-tab-dirty]").count(), 1, "the Recall tab shows the dot");
+        assert.equal(await critiquePage.locator("#settings-tab-extraction [data-ltm-tab-dirty]").count(), 0);
+        assert.equal(
+          await critiquePage.getByRole("tab", { name: /^Recall\s+Unsaved changes$/u }).count(),
+          1,
+          "the dot is spoken, not only drawn",
+        );
+        // The Engine shell bounds .mari-editor-content and scrolls it; this host does not, so bound it here.
+        await critiquePage.addStyleTag({ content: ".mari-editor-content { max-height: 520px; }" });
+        await critiquePage
+          .locator("#settings-panel-recall")
+          .getByText("Memory context instructions", { exact: false })
+          .first()
+          .scrollIntoViewIfNeeded();
+        assert.deepEqual(
+          await critiquePage.evaluate(
+            "(() => { const scroller = document.querySelector('.mari-editor-content'); const header = document.querySelector('[data-ltm-settings-header]'); return { scrolled: scroller.scrollTop > 0, sticky: getComputedStyle(header).position }; })()",
+          ),
+          { scrolled: true, sticky: "sticky" },
+          "the form scrolled under a sticky header",
+        );
+        const saveBox = await critiquePage.getByRole("button", { name: "Save settings" }).boundingBox();
+        assert.ok(saveBox);
+        assert.equal(
+          saveBox.y >= 0 && saveBox.y + saveBox.height <= 520,
+          true,
+          "Save settings stays in view after scrolling the form",
+        );
+        await critiquePage.getByRole("button", { name: "Discard changes" }).click();
+        await critiquePage.getByRole("button", { name: "Discard changes" }).waitFor({ state: "detached" });
+        assert.equal(await critiquePage.locator("[data-ltm-tab-dirty]").count(), 0, "Discard clears the dot");
+        await critiquePage.close();
       }
       // #1452: when the settings read after Reset or Import fails, Retry on the error surface loads the
       // new settings instead of the cached ones the action replaced. An import whose integrity read
@@ -4493,7 +4999,8 @@ async function main() {
           focusPage.evaluate(() =>
             document.activeElement === document.body ? "body" : (document.activeElement?.textContent?.trim() ?? ""),
           );
-        // The visible Choose backup button opens the file input, so Tab goes from it to Reset settings (#1584).
+        // The visible Choose backup button opens the file input, so Tab skips the input and goes to the next
+        // control, the first repair option (#1584, #1659).
         assert.deepEqual(
           await maintenancePanel
             .locator('input[type="file"]')
@@ -4502,7 +5009,10 @@ async function main() {
         );
         await maintenancePanel.locator("button", { hasText: "Choose backup" }).focus();
         await focusPage.keyboard.press("Tab");
-        assert.equal(await focusedControl(), "Reset settings");
+        assert.equal(
+          await focusPage.evaluate(() => document.activeElement?.closest("label")?.textContent?.trim()),
+          "Reindex recall data",
+        );
         for (const action of ["reset", "import"] as const) {
           settingsGate = new Promise<void>((resolve) => {
             releaseSettings = () => resolve();
@@ -6915,6 +7425,39 @@ async function main() {
       const destinationReasonCount = await destinationReasons.count();
       await page.keyboard.press("Enter");
       assert.equal(await destinationReasons.count(), destinationReasonCount);
+      // #1659: the reason is on screen once (the panel's copy is screen-reader only) and ends with a route to the
+      // destination: at every width it shows the destination pane, opens the collapsed disclosure and puts focus
+      // on its summary.
+      assert.equal(await page.locator("[data-ltm-import-reason]:visible").count(), 1, "the reason shows once");
+      const destinationHintBox = await destinationPanel.locator("[data-ltm-destination-hint]").boundingBox();
+      assert.ok(destinationHintBox && destinationHintBox.width <= 1 && destinationHintBox.height <= 1);
+      for (const width of [1280, 900, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        await showWorkspacePane("navigator");
+        await destinationScope.evaluate((details) => {
+          (details as HTMLDetailsElement).open = false;
+        });
+        const chooseDestination = page.locator("[data-ltm-choose-destination]:visible");
+        assert.equal(await chooseDestination.count(), 1, `${width}px: one Choose destination button`);
+        assert.equal((await chooseDestination.innerText()).trim(), "Choose destination");
+        await chooseDestination.click();
+        assert.equal(await destinationScope.evaluate((details) => (details as HTMLDetailsElement).open), true, width);
+        await destinationScope.locator("summary").waitFor({ state: "visible" });
+        assert.equal(
+          await destinationScope.locator("summary").evaluate((summary) => summary === document.activeElement),
+          true,
+          `${width}px: focus lands on the destination summary`,
+        );
+        // #1659: with selection mode on and the destination open, the pane tabs (narrow), status filters, Done and
+        // the destination rows all keep 2.75rem.
+        assert.deepEqual(
+          await shortTouchTargets('[data-ltm-surface="sources"]'),
+          [],
+          `${width}px: Sources tabs and actions fit 2.75rem`,
+        );
+      }
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await showWorkspacePane("navigator");
       await firstSourceSelect.uncheck();
       await page
         .locator('[data-ltm-source-preview="chats"]')
@@ -7305,6 +7848,56 @@ async function main() {
         assert.match(await visibleSourceCountOwners.innerText(), /Importing 1/u);
         assert.equal(await importingButton.isDisabled(), true);
         assert.equal(await idleButton.isDisabled(), true);
+        // #1659: the controls a run locks stay focusable (aria-disabled, never `disabled`) and a status line says why.
+        for (const locked of [
+          page.locator('[data-ltm-scope-picker-trigger="source"]'),
+          page.locator("[data-ltm-source-mode]"),
+        ]) {
+          assert.equal(await locked.getAttribute("aria-disabled"), "true");
+          assert.equal(await locked.evaluate((control) => control.matches(":disabled")), false);
+        }
+        // The last selected chat mode is natively disabled for its own reason, so only the others are checked.
+        const lockedModeBoxes = page.locator("#ltm-destination-scope-control [data-ltm-availability-mode-checkbox]");
+        assert.equal(
+          await lockedModeBoxes.evaluateAll((boxes) =>
+            boxes.every((box) => box.getAttribute("aria-disabled") === "true"),
+          ),
+          true,
+        );
+        const modeBefore = await page.locator("[data-ltm-source-mode]").inputValue();
+        await page.locator("[data-ltm-source-mode]").focus();
+        await page.keyboard.press(modeBefore === "roleplay" ? "ArrowUp" : "ArrowDown");
+        assert.equal(
+          await page.locator("[data-ltm-source-mode]").inputValue(),
+          modeBefore,
+          "a locked mode filter ignores a change",
+        );
+        const modeCheckedBefore = await lockedModeBoxes.evaluateAll((boxes) =>
+          boxes.map((box) => (box as HTMLInputElement).checked),
+        );
+        await lockedModeBoxes.last().click({ force: true });
+        assert.deepEqual(
+          await lockedModeBoxes.evaluateAll((boxes) => boxes.map((box) => (box as HTMLInputElement).checked)),
+          modeCheckedBefore,
+          "a locked chat mode ignores a click",
+        );
+        assert.equal(
+          await page.locator('[data-ltm-import-lock="sources"]').textContent(),
+          "Locked while an import runs",
+        );
+        assert.equal(await page.locator('[data-ltm-import-lock="destination"]:visible').count(), 1);
+        const lockedTrigger = page.locator('[data-ltm-scope-picker-trigger="source"]');
+        await lockedTrigger.focus();
+        await page.evaluate(
+          () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+        );
+        assert.equal(
+          await lockedTrigger.evaluate((trigger) => document.activeElement === trigger),
+          true,
+          "a control locked by a running import keeps focus",
+        );
+        await lockedTrigger.press("Enter");
+        assert.equal(await lockedTrigger.getAttribute("aria-expanded"), "false", "a locked picker does not open");
         assert.equal(
           await idleButton.locator("svg").getAttribute("class"),
           idleIcon,
@@ -7560,6 +8153,14 @@ async function main() {
         await page.locator('[data-ltm-lorebook-entry="entry_mobile_harbor"]').innerText(),
         /blue lantern marks the safe channel/u,
       );
+      // #1659: counts read as whole sentences; one entry is "1 entry", and no fragment like "entries ·" is left.
+      const lorebookDetailText = await page
+        .locator('[data-ltm-lorebook-workbench="lorebook_mobile_fixture"] header')
+        .first()
+        .innerText();
+      assert.match(lorebookDetailText, /\b1 entry\b/u);
+      assert.doesNotMatch(lorebookDetailText, /1 entries|entries ·/u);
+      assert.match(await page.locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]').innerText(), /\b1 entry\b/u);
       await page.locator("[data-ltm-lorebook-browser]").getByRole("button", { name: "Select", exact: true }).click();
       await page.locator('[data-ltm-lorebook-entry-select="entry_mobile_harbor"]').check();
       // #1588: the label around an entry checkbox is a 44px target.
@@ -8005,6 +8606,10 @@ async function main() {
         },
       );
       await mobilePage.locator('[data-ltm-lorebook-entry="entry_mobile_harbor"]').waitFor();
+      assert.equal(
+        (await mobilePage.locator('[data-ltm-workspace-pane-tab="workbench"]').innerText()).trim(),
+        "Entries",
+      );
       assert.equal(
         await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
         true,

@@ -151,10 +151,20 @@ explanation above the controls; the Recall style info popover lists every style
 and marks the current one. While the global defaults have not arrived, an
 inherited value shows "Loading default…" (or "Default unavailable" after a
 failed load) instead of an invented number, and the controls stay usable. Memory Settings
-has Recall, Extraction, Maintenance, and Debug tabs; Maintenance holds index and
-identity repair, backup, reset, and delete all data, and Debug is the activity
-view. Repair actions
-report their result without hiding vault-health warnings.
+has Recall, Extraction, Maintenance, and Debug tabs; Recall is grouped under Budget, Ranking, Text filters, and
+Sharing headings, names the four weights in plain words (Meaning match, Exact words match, Linked memories
+match, Stored keywords match; the help keeps "graph weight" and "keyword weight"), and shows "Custom (edited
+weights)" with a Reset to preset button beside the style once an edited weight has flipped it to Custom (the
+button returns to the last named style, Balanced if none); Maintenance holds Backup (export, choose backup), Repair (integrity, selected repairs;
+identity repair follows as its own section), and Delete or reset (Reset settings in warning tone, Delete all data
+in destructive tone; Delete all first offers "Export a backup first", then the host
+confirmation), and Debug is the activity view. Repair actions
+report their result without hiding vault-health warnings. Unsaved edits show a dot on the tab that holds them
+(spoken as "unsaved changes") and keep Save and Discard in a header row that sticks to the top of the scrolling
+form. A finished identity repair names the backup it saved first (the first eight characters of its id, in the
+`long-term-memory-identity-repairs` backups folder); there is no restore button, so restoring is manual.
+Success messages (`StatusSurface` with the success tone) use the `--ltm-success` token (the accent mixed toward
+the editor text, 4.5:1 or better in both themes) and a check icon, never the bare accent color.
 
 Debug operation details lead with recorded problems and guidance, then extraction,
 recall, or apply outcomes before diagnostic facts and the timeline. Dropped

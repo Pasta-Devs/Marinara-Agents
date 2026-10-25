@@ -116,6 +116,11 @@ export function DestinationScopePanel({
           content={localizeUi("ui.longTermMemory.sourcesworkspace.bulkDestinationHelp")}
         />
       </div>
+      {disabled ? (
+        <p className="shrink-0 text-xs text-[var(--muted-foreground)]" data-ltm-import-lock="destination">
+          {localizeUi("ui.longTermMemory.sourcesworkspace.lockedWhileImportRuns")}
+        </p>
+      ) : null}
       <fieldset
         className="shrink-0 space-y-1.5 border-b border-[var(--border)] pb-2.5"
         data-ltm-availability-modes-fieldset
@@ -135,11 +140,13 @@ export function DestinationScopePanel({
               >
                 <input
                   type="checkbox"
-                  className={sourceCheckboxClass}
+                  className={`${sourceCheckboxClass}${disabled ? " opacity-50" : ""}`}
                   data-ltm-availability-mode-checkbox={chatMode}
                   checked={checked}
-                  disabled={disabled || availabilityDisabled || isLastSelected}
+                  disabled={availabilityDisabled || isLastSelected}
+                  aria-disabled={disabled || undefined}
                   onChange={() => {
+                    if (disabled) return;
                     const next = checked
                       ? availabilityModes.filter((m) => m !== chatMode)
                       : [...availabilityModes, chatMode];
@@ -176,12 +183,14 @@ export function DestinationScopePanel({
                 </span>
                 <button
                   type="button"
-                  disabled={disabled}
+                  aria-disabled={disabled || undefined}
                   aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.removeLocationValue1", {
                     value1: targetDisplayLabel(target, true),
                   })}
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded hover:bg-[var(--accent)]"
-                  onClick={() => onChange(selectedIds.filter((id) => id !== target.id))}
+                  className={`grid h-11 w-11 shrink-0 place-items-center rounded hover:bg-[var(--accent)]${disabled ? " opacity-50" : ""}`}
+                  onClick={() => {
+                    if (!disabled) onChange(selectedIds.filter((id) => id !== target.id));
+                  }}
                 >
                   <X aria-hidden="true" size="0.75rem" />
                 </button>
@@ -246,12 +255,9 @@ export function DestinationScopePanel({
           onToggle={toggleRail}
         />
       </details>
-      {/* Always mounted, so emptying the selection is read as a change; empty, it takes no space. */}
-      <span
-        role="status"
-        className={selectedTargets.length ? "sr-only" : "block shrink-0 text-xs"}
-        data-ltm-destination-hint
-      >
+      {/* Always mounted, so emptying the selection is read as a change. Screen-reader only: the import bar shows
+          the same reason, and the summary above already reads "Choose a destination". */}
+      <span role="status" className="sr-only" data-ltm-destination-hint>
         {selectedTargets.length ? null : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
       </span>
       <p className="shrink-0 text-xs text-[var(--muted-foreground)]" data-ltm-import-mode-summary>

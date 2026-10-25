@@ -1,5 +1,16 @@
 # Long-Term Memory changelog
 
+## 1.4.92 — 2026-10-25
+
+- Sources tells re-importing from the source apart from reloading the list: "Re-import from source" and "Reload list".
+- The lorebook tab in Sources reads "Entries", and a single entry no longer says "1 entries".
+- When Import is blocked for lack of a destination, Sources offers a "Choose destination" button.
+- While an import runs, Sources keeps its locked controls focusable and says why they are locked.
+- Tabs, filters and action buttons in Sources, Memory Settings and Debug are 2.75rem tall for touch.
+- Maintenance groups Backup, Repair and Delete or reset, and offers a backup export before Delete all data.
+- Recall settings are grouped under Budget, Ranking, Text filters and Sharing, and show when edits make the style Custom.
+- Maintenance success messages are readable in the light theme and carry a check icon, unsaved Memory Settings tabs show a dot, and an identity repair says which backup it made.
+
 ## 1.4.91 — 2026-10-24
 
 - Review rows now say what each button does: "Check" then "Apply" (with a Ready or Blocked chip on narrow panels), and engine terms like preflight and source_deleted read as plain sentences.

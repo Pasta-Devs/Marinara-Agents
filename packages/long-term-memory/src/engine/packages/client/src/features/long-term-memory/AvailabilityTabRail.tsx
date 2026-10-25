@@ -222,12 +222,13 @@ export function AvailabilityTabRail({
             className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--marinara-editor-muted)]"
           />
           <input
-            className={`${inputClass} pl-9`}
+            className={`${inputClass} pl-9${disabled ? " opacity-50" : ""}`}
             value={query}
             placeholder={activeCopy.searchPlaceholder}
             aria-label={activeCopy.searchPlaceholder}
             data-ltm-availability-search={activeKind}
-            disabled={disabled}
+            readOnly={disabled}
+            aria-disabled={disabled || undefined}
             onChange={(event) => setQueries((current) => ({ ...current, [activeKind]: event.target.value }))}
           />
         </label>
@@ -247,9 +248,11 @@ export function AvailabilityTabRail({
                   data-ltm-availability-target={key}
                   data-selected={selected ? "true" : "false"}
                   aria-pressed={selected}
-                  disabled={disabled}
-                  className={`mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center gap-2 rounded-none border-t-0 px-3 py-2 text-left text-sm last:border-b-0 ${selected ? "bg-[var(--primary)]/10" : ""}`}
-                  onClick={() => onToggle(target.kind, target.id)}
+                  aria-disabled={disabled || undefined}
+                  className={`mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center gap-2 rounded-none border-t-0 px-3 py-2 text-left text-sm last:border-b-0 ${selected ? "bg-[var(--primary)]/10" : ""}${disabled ? " opacity-50" : ""}`}
+                  onClick={() => {
+                    if (!disabled) onToggle(target.kind, target.id);
+                  }}
                 >
                   <Check
                     aria-hidden="true"
@@ -274,9 +277,11 @@ export function AvailabilityTabRail({
             <button
               type="button"
               data-ltm-availability-show-more
-              disabled={disabled}
-              className="mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center rounded-none border-t-0 px-3 py-2 text-left text-xs font-semibold text-[var(--marinara-editor-muted)] last:border-b-0"
-              onClick={showMore}
+              aria-disabled={disabled || undefined}
+              className={`mari-editor-action mari-editor-action--compact flex min-h-11 w-full items-center rounded-none border-t-0 px-3 py-2 text-left text-xs font-semibold text-[var(--marinara-editor-muted)] last:border-b-0${disabled ? " opacity-50" : ""}`}
+              onClick={() => {
+                if (!disabled) showMore();
+              }}
             >
               {localizeUi("ui.longTermMemory.memoryvault.showMoreMemories", {
                 value1: Math.min(placeListLimit, filtered.length - shownTargets.length).toLocaleString(locale),

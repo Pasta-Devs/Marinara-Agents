@@ -495,6 +495,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         [data-ltm-tab-focus]:focus-visible {
           outline: 2px solid var(--marinara-editor-focus-ring);
         }
+        [data-ltm-surface="detail"] {
+          --ltm-success: color-mix(in oklab, var(--marinara-editor-accent) 40%, var(--marinara-editor-text));
+        }
         [data-ltm-accent-border],
         [data-ltm-status="success"]:not(.mari-editor-panel),
         [data-ltm-freshness="fresh"] {

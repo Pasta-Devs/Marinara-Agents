@@ -9,7 +9,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import {
   BookOpen,
   Check,
@@ -59,7 +59,7 @@ import {
 import { humanizeLabel, labelKeys, localizedLabel } from "../display-labels";
 import { nextTabIndex } from "../tab-keys";
 import type { LongTermMemoryDestinationProps } from "../types";
-import { useLtmTranslation, type LtmTranslationFunction } from "../localization";
+import { selectLtmPluralForm, useLtmTranslation, type LtmTranslationFunction } from "../localization";
 import { LtmWorkspace } from "../LtmWorkspace";
 import type { LtmWorkspacePane } from "../LtmWorkspace";
 import {
@@ -278,11 +278,19 @@ export default function SourcesWorkspace({
   selectedSource,
   onSourceChange,
 }: LongTermMemoryDestinationProps) {
-  const { t: localizeUi } = useLtmTranslation();
+  const { t: localizeUi, locale } = useLtmTranslation();
+  const entryCountLabel = (count: number) =>
+    localizeUi(
+      selectLtmPluralForm(locale, count) === "one"
+        ? "ui.longTermMemory.sourcesworkspace.lorebookEntryCountOne"
+        : "ui.longTermMemory.sourcesworkspace.lorebookEntryCountOther",
+      { count },
+    );
   const confirmAction = props.confirmAction;
   const sourceScopeLabelId = useId();
   const importResultLabelId = useId();
   const importReasonId = useId();
+  const reimportDescriptionId = `${importReasonId}-reimport`;
   const client = useQueryClient();
   const selectAllRef = useRef<HTMLInputElement>(null);
   const lorebookBarRef = useRef<HTMLDivElement>(null);
@@ -564,16 +572,33 @@ export default function SourcesWorkspace({
     currentDestinationScope
       ? {}
       : ({ "aria-disabled": true, "aria-describedby": reasonId, className: "opacity-50" } as const);
+  // The destination panel sits in another pane below 72rem and starts collapsed: show its pane, open it and
+  // put focus on its summary.
+  const goToDestination = () => {
+    flushSync(() => setWorkspacePane("inspector"));
+    const details = document.querySelector<HTMLDetailsElement>(
+      "#ltm-destination-scope-control [data-ltm-destination-scope]",
+    );
+    if (!details) return;
+    details.open = true;
+    details.querySelector<HTMLElement>("summary")?.focus();
+  };
   const importReason = (id: string) =>
     currentDestinationScope ? null : (
-      <p
-        id={id}
-        data-ltm-import-reason
-        className="flex basis-full items-start gap-1.5 text-xs text-[var(--muted-foreground)]"
-      >
-        <CircleAlert aria-hidden="true" size="0.875rem" className="mt-0.5 shrink-0" />
-        {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
-      </p>
+      <div className="flex basis-full flex-wrap items-center gap-x-3" data-ltm-import-reason-line>
+        <p id={id} data-ltm-import-reason className="flex items-start gap-1.5 text-xs text-[var(--muted-foreground)]">
+          <CircleAlert aria-hidden="true" size="0.875rem" className="mt-0.5 shrink-0" />
+          {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
+        </p>
+        <button
+          type="button"
+          data-ltm-choose-destination
+          className="inline-flex min-h-11 items-center text-xs font-semibold text-[var(--primary)] underline underline-offset-2"
+          onClick={goToDestination}
+        >
+          {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationAction")}
+        </button>
+      </div>
     );
   const currentDestinationLabel = selectedDestinationTargets.length
     ? selectedDestinationTargets.map((target) => targetDisplayLabel(target, true)).join(", ")
@@ -1603,6 +1628,10 @@ export default function SourcesWorkspace({
           overflow: hidden;
           overflow: clip;
         }
+        /* The Engine's unlayered .mari-editor-tab (2.25rem) and --compact (auto) beat the min-h-11 utilities. */
+        [data-ltm-surface="sources"] :is(.mari-editor-tab, .mari-editor-action--compact) {
+          min-height: 2.75rem;
+        }
         [data-ltm-workbench-mode="operation"] > :not([data-ltm-source-operation-workbench]),
         [data-ltm-workbench-mode="task-result"] > :not([data-ltm-source-task-result-workbench]) {
           display: none;
@@ -1686,6 +1715,14 @@ export default function SourcesWorkspace({
           />
         </div>
       </div>
+      {/* Always mounted, so the lock is announced when a run starts. Dimmed controls stay focusable and say why. */}
+      <p
+        role="status"
+        className={activeSourceTask ? "text-xs text-[var(--muted-foreground)]" : "sr-only"}
+        data-ltm-import-lock="sources"
+      >
+        {activeSourceTask ? localizeUi("ui.longTermMemory.sourcesworkspace.lockedWhileImportRuns") : null}
+      </p>
       {!availabilityReady ? (
         <StatusSurface tone={settingsQuery.isError ? "danger" : "neutral"} busy={!settingsQuery.isError}>
           {settingsQuery.isError
@@ -1838,10 +1875,12 @@ export default function SourcesWorkspace({
                       <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
                         {localizeUi("ui.longTermMemory.transferworkbench.mode")}
                         <select
-                          className={`${inputClass} w-36`}
+                          className={`${inputClass} w-36${activeSourceTask ? " opacity-50" : ""}`}
                           value={modeFilter}
-                          disabled={activeSourceTask !== null}
-                          onChange={(event) => void changeModeFilter(event.target.value as LtmMode | "all")}
+                          aria-disabled={activeSourceTask ? true : undefined}
+                          onChange={(event) => {
+                            if (!activeSourceTask) void changeModeFilter(event.target.value as LtmMode | "all");
+                          }}
                           aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.filterSourcesByMode")}
                           data-ltm-source-mode
                         >
@@ -1863,7 +1902,7 @@ export default function SourcesWorkspace({
                         ) : (
                           <RefreshCw aria-hidden="true" size="0.75rem" />
                         )}
-                        {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.reloadList")}
                       </Button>
                     </div>
                     <div
@@ -1943,8 +1982,7 @@ export default function SourcesWorkspace({
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-semibold">{book.name}</span>
                             <span className="block text-xs text-[var(--muted-foreground)]">
-                              {book.category} · {book.totals.entries}{" "}
-                              {localizeUi("ui.longTermMemory.sourcesworkspace.entries")} {book.totals.imported}{" "}
+                              {book.category} · {entryCountLabel(book.totals.entries)} {book.totals.imported}{" "}
                               {localizeUi("ui.longTermMemory.sourcesworkspace.imported")}
                             </span>
                           </span>
@@ -1966,7 +2004,7 @@ export default function SourcesWorkspace({
               ),
             }}
             workbench={{
-              label: localizeUi("ui.longTermMemory.sourcesworkspace.entries"),
+              label: localizeUi("ui.longTermMemory.sourcesworkspace.entriesTab"),
               content: (
                 <section
                   data-ltm-lorebook-workbench={selectedLorebook?.id ?? "empty"}
@@ -1995,8 +2033,7 @@ export default function SourcesWorkspace({
                           <div className="min-w-0">
                             <h2 className="text-base font-semibold">{selectedLorebook.name}</h2>
                             <p className="text-xs text-[var(--muted-foreground)]">
-                              {selectedLorebook.category} · {selectedLorebook.totals.entries}{" "}
-                              {localizeUi("ui.longTermMemory.sourcesworkspace.entries")}{" "}
+                              {selectedLorebook.category} · {entryCountLabel(selectedLorebook.totals.entries)}{" "}
                               {selectedLorebook.totals.candidates}{" "}
                               {localizeUi("ui.longTermMemory.sourcesworkspace.sourceParts")}
                             </p>
@@ -2327,10 +2364,12 @@ export default function SourcesWorkspace({
                       <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
                         {localizeUi("ui.longTermMemory.transferworkbench.mode")}
                         <select
-                          className={`${inputClass} w-36`}
+                          className={`${inputClass} w-36${activeSourceTask ? " opacity-50" : ""}`}
                           value={modeFilter}
-                          disabled={activeSourceTask !== null}
-                          onChange={(event) => void changeModeFilter(event.target.value as LtmMode | "all")}
+                          aria-disabled={activeSourceTask ? true : undefined}
+                          onChange={(event) => {
+                            if (!activeSourceTask) void changeModeFilter(event.target.value as LtmMode | "all");
+                          }}
                           aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.filterSourcesByMode")}
                           data-ltm-source-mode
                         >
@@ -2352,7 +2391,7 @@ export default function SourcesWorkspace({
                         ) : (
                           <RefreshCw aria-hidden="true" size="0.75rem" />
                         )}
-                        {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.reloadList")}
                       </Button>
                     </div>
                     <div
@@ -2670,17 +2709,25 @@ export default function SourcesWorkspace({
                             <Button
                               disabled={importing}
                               {...destinationWait(importReasonId)}
+                              aria-describedby={
+                                currentDestinationScope
+                                  ? reimportDescriptionId
+                                  : `${reimportDescriptionId} ${importReasonId}`
+                              }
                               onClick={() => {
                                 if (currentDestinationScope) void runImport([focusedFlatRow.sourceId], "refresh");
                               }}
                               data-ltm-source-action="refresh"
                             >
                               <RefreshCw aria-hidden="true" size="0.75rem" />
-                              {localizeUi("ui.longTermMemory.sourcesworkspace.refreshPreview")}
+                              {localizeUi("ui.longTermMemory.sourcesworkspace.reimportFromSource")}
                             </Button>
                             {bulkSelectionActive
                               ? null
                               : sourceInlineActions(focusedFlatRow.existingNoteId, focusedFlatRow.existingNoteTitle)}
+                            <p id={reimportDescriptionId} className="basis-full text-xs text-[var(--muted-foreground)]">
+                              {localizeUi("ui.longTermMemory.sourcesworkspace.reimportFromSourceDescription")}
+                            </p>
                           </>
                         )}
                         {importReason(importReasonId)}

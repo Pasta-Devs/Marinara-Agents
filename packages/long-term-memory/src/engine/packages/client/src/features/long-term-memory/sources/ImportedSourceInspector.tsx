@@ -32,8 +32,11 @@ export function ImportedSourceInspector({
           {localizeUi("ui.longTermMemory.memoryvault.reviewRelatedDrafts")}
         </Button>
         <Button
-          disabled={disabled}
-          onClick={() => onReextract(source.id)}
+          aria-disabled={disabled || undefined}
+          className={disabled ? "opacity-50" : ""}
+          onClick={() => {
+            if (!disabled) onReextract(source.id);
+          }}
           data-ltm-source-inspector-action="re-extract"
         >
           <Sparkles aria-hidden="true" size="0.75rem" />
@@ -48,9 +51,12 @@ export function ImportedSourceInspector({
           {(["copy", "move", "archive", "delete"] as const).map((operation) => (
             <Button
               key={operation}
-              disabled={disabled}
+              aria-disabled={disabled || undefined}
+              className={disabled ? "opacity-50" : ""}
               destructive={operation === "delete"}
-              onClick={(event) => onManage(source.id, source.title, operation, event.currentTarget)}
+              onClick={(event) => {
+                if (!disabled) onManage(source.id, source.title, operation, event.currentTarget);
+              }}
               data-ltm-source-management-action={operation}
             >
               {localizeUi(`ui.longTermMemory.sourceoperation.${operation}`)}

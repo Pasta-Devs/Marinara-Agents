@@ -190,6 +190,7 @@ export default function MemorySettings({
   const { t: localizeUi } = useLtmTranslation();
   const memorySettingsTitleId = useId();
   const recallStyleLabelId = useId();
+  const recallGroupId = useId();
   const recallPreambleLabelId = useId();
   const memoryStopWordsLabelId = useId();
   const reasoningEffortLabelId = useId();
@@ -251,6 +252,20 @@ export default function MemorySettings({
     if (maintenanceBusy) setMessage("");
   }, [maintenanceBusy]);
 
+  // "Reset to preset" returns to the last named style: the one chosen or saved before the weights were
+  // edited. Whenever the form equals the saved settings (first load, Save, Discard, import or reset) the
+  // history restarts from them, so a form saved as Custom has none and falls back to Balanced.
+  const [lastRecallPreset, setLastRecallPreset] =
+    useState<Exclude<GlobalForm["longTermMemoryRecallStyle"], "custom">>("balanced");
+  const restartRecallPreset = (form: GlobalForm) =>
+    setLastRecallPreset(form.longTermMemoryRecallStyle === "custom" ? "balanced" : form.longTermMemoryRecallStyle);
+  const recallStyle = globalForm?.longTermMemoryRecallStyle;
+  useEffect(() => {
+    if (recallStyle && recallStyle !== "custom") setLastRecallPreset(recallStyle);
+  }, [recallStyle]);
+  useEffect(() => {
+    if (globalForm && savedGlobal && same(globalForm, savedGlobal)) restartRecallPreset(savedGlobal);
+  }, [globalForm, savedGlobal]);
   useEffect(() => {
     if (!global.data || global.isError || globalForm || global.dataUpdatedAt < refillSince) return;
     const next = settingsForm(global.data);
@@ -274,6 +289,18 @@ export default function MemorySettings({
   const debugDirty = Boolean(
     globalForm && savedGlobal && globalForm.longTermMemoryDebug !== savedGlobal.longTermMemoryDebug,
   );
+  // Save and Discard sit in a sticky header, but the tab holding the edit still needs its own cue: Debug owns
+  // only the debug toggle, Extraction owns the extraction form, and Recall owns every other global field.
+  const recallDirty = Boolean(
+    globalForm &&
+    savedGlobal &&
+    !same({ ...globalForm, longTermMemoryDebug: false }, { ...savedGlobal, longTermMemoryDebug: false }),
+  );
+  const dirtyTabs: Partial<Record<SettingsTab, boolean>> = {
+    recall: recallDirty,
+    extraction: extractionDirty,
+    debug: debugDirty,
+  };
   useEffect(() => {
     onDirtyChange?.(dirty);
     return () => onDirtyChange?.(false);
@@ -375,7 +402,9 @@ export default function MemorySettings({
         true,
       ))
     ) {
-      if (savedGlobal) setGlobalForm(savedGlobal);
+      if (savedGlobal) {
+        setGlobalForm(savedGlobal);
+      }
       if (savedExtraction) setExtractionFormState(savedExtraction);
       // An earlier save's result no longer describes the form, so focus goes to the tab.
       setMessage("");
@@ -455,6 +484,18 @@ export default function MemorySettings({
       }}
     >
       <style>{`
+        /* The Engine's unlayered .mari-editor-tab sets min-height: 2.25rem, which beats min-h-11. */
+        [data-ltm-surface="memory-settings"] [role="tablist"] > .mari-editor-tab {
+          min-height: 2.75rem;
+        }
+        /* The Engine's muted tab text is 4.46:1 in the light theme; inactive tabs read from the editor text. */
+        [data-ltm-surface="memory-settings"] [role="tablist"] > .mari-editor-tab[data-active="false"]:not(:hover) {
+          color: color-mix(in srgb, var(--marinara-editor-text) 78%, transparent);
+        }
+        /* Keep a control focused by keyboard clear of the sticky Save bar. */
+        .mari-editor-content:has([data-ltm-surface="memory-settings"]) {
+          scroll-padding-top: 4rem;
+        }
         [data-ltm-extraction-grid] {
           display: grid;
           gap: 0.5rem;
@@ -479,7 +520,10 @@ export default function MemorySettings({
           }
         }
       `}</style>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div
+        data-ltm-settings-header
+        className={`flex flex-wrap items-center justify-between gap-2 py-1 ${dirty ? "sticky top-0 z-10 bg-[var(--marinara-editor-bg)]" : ""}`}
+      >
         <div>
           <h2 id={memorySettingsTitleId} className="text-sm font-semibold">
             {localizeUi("ui.longTermMemory.memorysettings.memorySettings")}
@@ -536,9 +580,19 @@ export default function MemorySettings({
             }}
             data-active={activeTab === tab.id}
             data-ltm-tab-focus
-            className="mari-editor-tab min-h-10 rounded-md px-2 text-xs font-semibold transition-colors"
+            className="mari-editor-tab min-h-11 rounded-md px-2 text-xs font-semibold transition-colors"
           >
             {localizeUi(tab.labelKey)}
+            {dirtyTabs[tab.id] ? (
+              <>
+                <span
+                  aria-hidden="true"
+                  data-ltm-tab-dirty
+                  className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[var(--marinara-editor-accent)] align-middle"
+                />
+                <span className="sr-only"> {localizeUi("ui.longTermMemory.memorysettings.tabUnsavedChanges")}</span>
+              </>
+            ) : null}
           </button>
         ))}
       </div>
@@ -555,7 +609,7 @@ export default function MemorySettings({
         role="tabpanel"
         aria-labelledby="settings-tab-recall"
         hidden={activeTab !== "recall"}
-        className="mari-editor-panel space-y-3 p-3"
+        className="mari-editor-panel space-y-4 p-3"
       >
         <div className="flex items-center gap-1">
           <h3 className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memorysettings.globalRecall")}</h3>
@@ -564,210 +618,269 @@ export default function MemorySettings({
             content={localizeUi("ui.longTermMemory.memorysettings.defaultsUsedByEveryChatUnlessThatChatOverrides")}
           />
         </div>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Toggle
-            label={localizeUi("ui.longTermMemory.memorysettings.includeResolvedMemories")}
-            help={localizeUi(
-              "ui.longTermMemory.memorysettings.allowsResolvedMemoriesToParticipateInRecallArchivedMemories",
-            )}
-            checked={globalForm.longTermMemoryIncludeResolved}
-            onChange={(value) =>
-              setGlobalForm({
-                ...globalForm,
-                longTermMemoryIncludeResolved: value,
-              })
-            }
-          />
-          <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-            <span id={recallStyleLabelId} className="flex items-center gap-1">
-              {localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
+        <div
+          role="group"
+          aria-labelledby={`${recallGroupId}-budget`}
+          data-ltm-recall-group="budget"
+          className="space-y-2"
+        >
+          <h4 id={`${recallGroupId}-budget`} className="text-xs font-semibold">
+            {localizeUi("ui.longTermMemory.memorysettings.recallBudgetGroup")}
+          </h4>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <NumberField
+              label={localizeUi("ui.longTermMemory.memorysettings.recallBudgetTokens")}
+              help={localizeUi("ui.longTermMemory.memorysettings.maximumTokenBudgetAvailableForMemoriesAddedToA")}
+              value={globalForm.longTermMemoryBudgetTokens}
+              min={128}
+              max={16384}
+              step={128}
+              onChange={(value) =>
+                setGlobalForm({
+                  ...globalForm,
+                  longTermMemoryBudgetTokens: value,
+                })
+              }
+            />
+            <NumberField
+              label={localizeUi("ui.longTermMemory.memorysettings.maximumRecalledMemories")}
+              help={localizeUi("ui.longTermMemory.memorysettings.maximumNumberOfMemoriesThatMayBeIncludedIn")}
+              value={globalForm.longTermMemoryMaxChunks}
+              min={1}
+              max={100}
+              onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryMaxChunks: value })}
+            />
+            <NumberField
+              label={localizeUi("ui.longTermMemory.memorysettings.recentMessagesForRecall")}
+              help={localizeUi("ui.longTermMemory.memorysettings.numberOfRecentChatMessagesUsedToBuildThe")}
+              value={globalForm.longTermMemoryRecallContextMessages}
+              min={1}
+              max={20}
+              onChange={(value) =>
+                setGlobalForm({
+                  ...globalForm,
+                  longTermMemoryRecallContextMessages: value,
+                })
+              }
+            />
+          </div>
+        </div>
+        <div
+          role="group"
+          aria-labelledby={`${recallGroupId}-ranking`}
+          data-ltm-recall-group="ranking"
+          className="space-y-2"
+        >
+          <h4 id={`${recallGroupId}-ranking`} className="text-xs font-semibold">
+            {localizeUi("ui.longTermMemory.memorysettings.recallRankingGroup")}
+          </h4>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+              <span id={recallStyleLabelId} className="flex items-center gap-1">
+                {localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
+                <InfoPopover
+                  label={localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
+                  content={localizeUi(recallStyleDescriptionKey(globalForm.longTermMemoryRecallStyle))}
+                />
+              </span>
+              <select
+                aria-labelledby={recallStyleLabelId}
+                className={inputClass}
+                value={globalForm.longTermMemoryRecallStyle}
+                onChange={(event) =>
+                  setGlobalForm(
+                    applyRecallStyle(globalForm, event.target.value as GlobalForm["longTermMemoryRecallStyle"]),
+                  )
+                }
+              >
+                <option value="balanced">{localizeUi("ui.longTermMemory.chatsettings.balanced")}</option>
+                <option value="exact">{localizeUi("ui.longTermMemory.chatsettings.exact")}</option>
+                <option value="broad">{localizeUi("ui.longTermMemory.chatsettings.broad")}</option>
+                <option value="story">{localizeUi("ui.longTermMemory.chatsettings.story")}</option>
+                <option value="custom">{localizeUi("ui.longTermMemory.chatsettings.custom")}</option>
+              </select>
+              {/* The status span stays mounted (inline and empty, so it takes no room) so the flip to Custom is
+                  announced; the button sits outside it so a screen reader does not read it as part of the message. */}
+              <span
+                role="status"
+                className={globalForm.longTermMemoryRecallStyle === "custom" ? "block" : undefined}
+                data-ltm-recall-custom
+              >
+                {globalForm.longTermMemoryRecallStyle === "custom"
+                  ? localizeUi("ui.longTermMemory.memorysettings.recallCustomNote", {
+                      preset: localizeUi(`ui.longTermMemory.chatsettings.${lastRecallPreset}`),
+                    })
+                  : null}
+              </span>
+              {globalForm.longTermMemoryRecallStyle === "custom" ? (
+                <Button
+                  onClick={() => setGlobalForm(applyRecallStyle(globalForm, lastRecallPreset))}
+                  data-ltm-recall-reset-preset
+                >
+                  {localizeUi("ui.longTermMemory.memorysettings.resetToPreset")}
+                </Button>
+              ) : null}
+            </div>
+            <Toggle
+              label={localizeUi("ui.longTermMemory.memorysettings.includeResolvedMemories")}
+              help={localizeUi(
+                "ui.longTermMemory.memorysettings.allowsResolvedMemoriesToParticipateInRecallArchivedMemories",
+              )}
+              checked={globalForm.longTermMemoryIncludeResolved}
+              onChange={(value) =>
+                setGlobalForm({
+                  ...globalForm,
+                  longTermMemoryIncludeResolved: value,
+                })
+              }
+            />
+            <NumberField
+              label={localizeUi("ui.longTermMemory.memorysettings.scoreThreshold")}
+              help={localizeUi(
+                "ui.longTermMemory.memorysettings.excludesCandidatesWhoseCombinedRetrievalScoreFallsBelowThis",
+              )}
+              value={globalForm.longTermMemoryScoreThreshold}
+              min={0}
+              max={LTM_RECALL_SCORE_THRESHOLD_CEILING}
+              step={0.01}
+              onChange={(value) =>
+                setGlobalForm({
+                  ...globalForm,
+                  longTermMemoryScoreThreshold: value,
+                })
+              }
+            />
+            <NumberField
+              label={localizeUi("ui.longTermMemory.memorysettings.meaningMatch")}
+              help={localizeUi("ui.longTermMemory.memorysettings.weightGivenToSemanticSimilarityBetweenTheCurrentChat")}
+              value={globalForm.longTermMemorySemanticWeight}
+              min={0}
+              max={1}
+              step={0.01}
+              onChange={(value) => setGlobalForm(applyCustomWeight(globalForm, "longTermMemorySemanticWeight", value))}
+            />
+            <NumberField
+              label={localizeUi("ui.longTermMemory.memorysettings.exactWordsMatch")}
+              help={localizeUi("ui.longTermMemory.memorysettings.weightGivenToMatchingWordsAndPhrases")}
+              value={globalForm.longTermMemoryLexicalWeight}
+              min={0}
+              max={1}
+              step={0.01}
+              onChange={(value) => setGlobalForm(applyCustomWeight(globalForm, "longTermMemoryLexicalWeight", value))}
+            />
+            <NumberField
+              label={localizeUi("ui.longTermMemory.memorysettings.linkedMemoriesMatch")}
+              help={localizeUi("ui.longTermMemory.memorysettings.weightGivenToRelationshipsBetweenLinkedMemories")}
+              value={globalForm.longTermMemoryGraphWeight}
+              min={0}
+              max={1}
+              step={0.01}
+              onChange={(value) => setGlobalForm(applyCustomWeight(globalForm, "longTermMemoryGraphWeight", value))}
+            />
+            <NumberField
+              label={localizeUi("ui.longTermMemory.memorysettings.storedKeywordsMatch")}
+              help={localizeUi("ui.longTermMemory.memorysettings.weightGivenToMatchingStoredKeywords")}
+              value={globalForm.longTermMemoryKeywordWeight}
+              min={0}
+              max={1}
+              step={0.01}
+              onChange={(value) => setGlobalForm(applyCustomWeight(globalForm, "longTermMemoryKeywordWeight", value))}
+            />
+          </div>
+        </div>
+        <div role="group" aria-labelledby={`${recallGroupId}-text`} data-ltm-recall-group="text" className="space-y-2">
+          <h4 id={`${recallGroupId}-text`} className="text-xs font-semibold">
+            {localizeUi("ui.longTermMemory.memorysettings.recallTextFiltersGroup")}
+          </h4>
+          <div className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <span id={recallPreambleLabelId} className="flex items-center gap-1">
+              {localizeUi("ui.longTermMemory.memorysettings.memoryContextInstructions")}
               <InfoPopover
-                label={localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
-                content={localizeUi(recallStyleDescriptionKey(globalForm.longTermMemoryRecallStyle))}
+                label={localizeUi("ui.longTermMemory.memorysettings.memoryContextInstructions")}
+                content={localizeUi(
+                  "ui.longTermMemory.memorysettings.instructionsPlacedBeforeRecalledMemoryContextWhenItIs",
+                )}
               />
             </span>
-            <select
-              aria-labelledby={recallStyleLabelId}
-              className={inputClass}
-              value={globalForm.longTermMemoryRecallStyle}
+            <textarea
+              aria-labelledby={recallPreambleLabelId}
+              className={`${inputClass} min-h-24 py-2`}
+              maxLength={500}
+              value={globalForm.longTermMemoryRecallPreamble}
               onChange={(event) =>
-                setGlobalForm(
-                  applyRecallStyle(globalForm, event.target.value as GlobalForm["longTermMemoryRecallStyle"]),
-                )
+                setGlobalForm({
+                  ...globalForm,
+                  longTermMemoryRecallPreamble: event.target.value,
+                })
               }
-            >
-              <option value="balanced">{localizeUi("ui.longTermMemory.chatsettings.balanced")}</option>
-              <option value="exact">{localizeUi("ui.longTermMemory.chatsettings.exact")}</option>
-              <option value="broad">{localizeUi("ui.longTermMemory.chatsettings.broad")}</option>
-              <option value="story">{localizeUi("ui.longTermMemory.chatsettings.story")}</option>
-              <option value="custom">{localizeUi("ui.longTermMemory.chatsettings.custom")}</option>
-            </select>
+            />
           </div>
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.recallBudgetTokens")}
-            help={localizeUi("ui.longTermMemory.memorysettings.maximumTokenBudgetAvailableForMemoriesAddedToA")}
-            value={globalForm.longTermMemoryBudgetTokens}
-            min={128}
-            max={16384}
-            step={128}
-            onChange={(value) =>
-              setGlobalForm({
-                ...globalForm,
-                longTermMemoryBudgetTokens: value,
-              })
-            }
-          />
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.maximumRecalledMemories")}
-            help={localizeUi("ui.longTermMemory.memorysettings.maximumNumberOfMemoriesThatMayBeIncludedIn")}
-            value={globalForm.longTermMemoryMaxChunks}
-            min={1}
-            max={100}
-            onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryMaxChunks: value })}
-          />
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.scoreThreshold")}
-            help={localizeUi(
-              "ui.longTermMemory.memorysettings.excludesCandidatesWhoseCombinedRetrievalScoreFallsBelowThis",
-            )}
-            value={globalForm.longTermMemoryScoreThreshold}
-            min={0}
-            max={LTM_RECALL_SCORE_THRESHOLD_CEILING}
-            step={0.01}
-            onChange={(value) =>
-              setGlobalForm({
-                ...globalForm,
-                longTermMemoryScoreThreshold: value,
-              })
-            }
-          />
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.recentMessagesForRecall")}
-            help={localizeUi("ui.longTermMemory.memorysettings.numberOfRecentChatMessagesUsedToBuildThe")}
-            value={globalForm.longTermMemoryRecallContextMessages}
-            min={1}
-            max={20}
-            onChange={(value) =>
-              setGlobalForm({
-                ...globalForm,
-                longTermMemoryRecallContextMessages: value,
-              })
-            }
-          />
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.meaningMatch")}
-            help={localizeUi("ui.longTermMemory.memorysettings.weightGivenToSemanticSimilarityBetweenTheCurrentChat")}
-            value={globalForm.longTermMemorySemanticWeight}
-            min={0}
-            max={1}
-            step={0.01}
-            onChange={(value) => setGlobalForm(applyCustomWeight(globalForm, "longTermMemorySemanticWeight", value))}
-          />
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.exactWordsMatch")}
-            help={localizeUi("ui.longTermMemory.memorysettings.weightGivenToMatchingWordsAndPhrases")}
-            value={globalForm.longTermMemoryLexicalWeight}
-            min={0}
-            max={1}
-            step={0.01}
-            onChange={(value) => setGlobalForm(applyCustomWeight(globalForm, "longTermMemoryLexicalWeight", value))}
-          />
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.graphWeight")}
-            help={localizeUi("ui.longTermMemory.memorysettings.weightGivenToRelationshipsBetweenLinkedMemories")}
-            value={globalForm.longTermMemoryGraphWeight}
-            min={0}
-            max={1}
-            step={0.01}
-            onChange={(value) => setGlobalForm(applyCustomWeight(globalForm, "longTermMemoryGraphWeight", value))}
-          />
-          <NumberField
-            label={localizeUi("ui.longTermMemory.memorysettings.keywordWeight")}
-            help={localizeUi("ui.longTermMemory.memorysettings.weightGivenToMatchingStoredKeywords")}
-            value={globalForm.longTermMemoryKeywordWeight}
-            min={0}
-            max={1}
-            step={0.01}
-            onChange={(value) => setGlobalForm(applyCustomWeight(globalForm, "longTermMemoryKeywordWeight", value))}
-          />
-        </div>
-        <div className="block space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-          <span id={recallPreambleLabelId} className="flex items-center gap-1">
-            {localizeUi("ui.longTermMemory.memorysettings.memoryContextInstructions")}
-            <InfoPopover
-              label={localizeUi("ui.longTermMemory.memorysettings.memoryContextInstructions")}
-              content={localizeUi(
-                "ui.longTermMemory.memorysettings.instructionsPlacedBeforeRecalledMemoryContextWhenItIs",
-              )}
+          <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <span id={memoryStopWordsLabelId} className="flex items-center gap-1">
+              {localizeUi("ui.longTermMemory.memorysettings.memoryStopWords")}
+              <InfoPopover
+                label={localizeUi("ui.longTermMemory.memorysettings.memoryStopWords")}
+                content={localizeUi("ui.longTermMemory.memorysettings.wordsIgnoredDuringKeywordMatchingOnePerLine")}
+              />
+            </span>
+            <textarea
+              aria-labelledby={memoryStopWordsLabelId}
+              className={`${inputClass} min-h-20 py-2`}
+              spellCheck={false}
+              value={globalForm.longTermMemoryStopWordsText}
+              onChange={(event) =>
+                setGlobalForm({
+                  ...globalForm,
+                  longTermMemoryStopWordsText: event.target.value,
+                })
+              }
             />
-          </span>
-          <textarea
-            aria-labelledby={recallPreambleLabelId}
-            className={`${inputClass} min-h-24 py-2`}
-            maxLength={500}
-            value={globalForm.longTermMemoryRecallPreamble}
-            onChange={(event) =>
-              setGlobalForm({
-                ...globalForm,
-                longTermMemoryRecallPreamble: event.target.value,
-              })
-            }
-          />
-        </div>
-        <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-          <span id={memoryStopWordsLabelId} className="flex items-center gap-1">
-            {localizeUi("ui.longTermMemory.memorysettings.memoryStopWords")}
-            <InfoPopover
-              label={localizeUi("ui.longTermMemory.memorysettings.memoryStopWords")}
-              content={localizeUi("ui.longTermMemory.memorysettings.wordsIgnoredDuringKeywordMatchingOnePerLine")}
-            />
-          </span>
-          <textarea
-            aria-labelledby={memoryStopWordsLabelId}
-            className={`${inputClass} min-h-20 py-2`}
-            spellCheck={false}
-            value={globalForm.longTermMemoryStopWordsText}
-            onChange={(event) =>
-              setGlobalForm({
-                ...globalForm,
-                longTermMemoryStopWordsText: event.target.value,
-              })
-            }
-          />
-        </div>
-        <Toggle
-          label={localizeUi("ui.longTermMemory.memorysettings.blockStopWordsInGeneratedKeywords")}
-          help={localizeUi(
-            "ui.longTermMemory.memorysettings.preventsListedWordsFromBecomingGeneratedKeywordsWhileStill",
-          )}
-          checked={globalForm.longTermMemoryStopWordsFilterGenerated}
-          onChange={(value) =>
-            setGlobalForm({
-              ...globalForm,
-              longTermMemoryStopWordsFilterGenerated: value,
-            })
-          }
-        />
-        <div className="space-y-1">
+          </div>
           <Toggle
-            label={localizeUi("ui.longTermMemory.memorysettings.otherAgentsCanReadMemories")}
-            help={localizeUi("ui.longTermMemory.memorysettings.otherAgentsReadOnlyMemoriesAvailableEverywhere")}
-            checked={globalForm.longTermMemoryShareWithPackages}
-            onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryShareWithPackages: value })}
+            label={localizeUi("ui.longTermMemory.memorysettings.blockStopWordsInGeneratedKeywords")}
+            help={localizeUi(
+              "ui.longTermMemory.memorysettings.preventsListedWordsFromBecomingGeneratedKeywordsWhileStill",
+            )}
+            checked={globalForm.longTermMemoryStopWordsFilterGenerated}
+            onChange={(value) =>
+              setGlobalForm({
+                ...globalForm,
+                longTermMemoryStopWordsFilterGenerated: value,
+              })
+            }
           />
-          {packageReaders.data ? (
-            <p className="text-xs text-[var(--muted-foreground)]">
-              {packageReaders.data.readers.length
-                ? localizeUi("ui.longTermMemory.memorysettings.readLatelyBy", {
-                    names: packageReaders.data.readers
-                      .map(
-                        (reader) => reader.caller ?? localizeUi("ui.longTermMemory.memorysettings.anAgentWithoutAName"),
-                      )
-                      .join(", "),
-                  })
-                : localizeUi("ui.longTermMemory.memorysettings.noOtherAgentHasReadMemoriesLately")}
-            </p>
-          ) : null}
+        </div>
+        <div
+          role="group"
+          aria-labelledby={`${recallGroupId}-sharing`}
+          data-ltm-recall-group="sharing"
+          className="space-y-2"
+        >
+          <h4 id={`${recallGroupId}-sharing`} className="text-xs font-semibold">
+            {localizeUi("ui.longTermMemory.memorysettings.recallSharingGroup")}
+          </h4>
+          <div className="space-y-1">
+            <Toggle
+              label={localizeUi("ui.longTermMemory.memorysettings.otherAgentsCanReadMemories")}
+              help={localizeUi("ui.longTermMemory.memorysettings.otherAgentsReadOnlyMemoriesAvailableEverywhere")}
+              checked={globalForm.longTermMemoryShareWithPackages}
+              onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryShareWithPackages: value })}
+            />
+            {packageReaders.data ? (
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {packageReaders.data.readers.length
+                  ? localizeUi("ui.longTermMemory.memorysettings.readLatelyBy", {
+                      names: packageReaders.data.readers
+                        .map(
+                          (reader) =>
+                            reader.caller ?? localizeUi("ui.longTermMemory.memorysettings.anAgentWithoutAName"),
+                        )
+                        .join(", "),
+                    })
+                  : localizeUi("ui.longTermMemory.memorysettings.noOtherAgentHasReadMemoriesLately")}
+              </p>
+            ) : null}
+          </div>
         </div>
       </section>
 

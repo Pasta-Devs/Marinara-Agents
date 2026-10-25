@@ -119,6 +119,11 @@ export function SourceScopeCombobox({
     setShown({ key: "", counts: initialShownCounts });
     requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
   };
+  // A lock that starts while the list is open closes it, so the open list cannot still change the scope.
+  useEffect(() => {
+    if (disabled && open) close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [disabled]);
   const selectKind = (kind: ScopeTargetKind, focusTab = false) => {
     setActiveKind(kind);
     setHighlightedId("");
@@ -146,6 +151,7 @@ export function SourceScopeCombobox({
   // The "Show N places" and "Show N more" rows grow the list without choosing a place. A place moves focus to the
   // place button before onChange, so an unsaved-changes prompt records the button, not an option the close removes.
   const choose = (id: string) => {
+    if (disabled) return;
     if (id.startsWith(showMorePrefix)) {
       const groupIndex = Number(id.slice(showMorePrefix.length));
       setShown({
@@ -248,12 +254,14 @@ export function SourceScopeCombobox({
         aria-haspopup="listbox"
         aria-required={required}
         aria-invalid={invalid}
-        disabled={disabled}
+        aria-disabled={disabled || undefined}
         data-ltm-scope-picker-trigger={testId}
-        className={`${inputClass} flex items-center gap-2 text-left`}
-        onClick={() => setOpen((current) => !current)}
+        className={`${inputClass} flex items-center gap-2 text-left${disabled ? " opacity-50" : ""}`}
+        onClick={() => {
+          if (!disabled) setOpen((current) => !current);
+        }}
         onKeyDown={(event) => {
-          if (["Enter", " ", "ArrowDown"].includes(event.key)) {
+          if (!disabled && ["Enter", " ", "ArrowDown"].includes(event.key)) {
             event.preventDefault();
             setOpen(true);
           }

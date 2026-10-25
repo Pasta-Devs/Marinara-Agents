@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, RotateCcw, Trash2, Upload } from "lucide-react";
+import { Download, Trash2, TriangleAlert, Upload } from "lucide-react";
 import type {
   LtmExtractionSettingsPatch,
   LtmGlobalSettings,
@@ -13,6 +13,8 @@ import type { LongTermMemoryDestinationProps } from "../types";
 import { useLtmTranslation } from "../localization";
 import { labelKeys, localizedLabel } from "../display-labels";
 import { confirm, Toggle, type SettingsRebuildOutcome } from "./settings-shared";
+
+type MaintenanceArea = "backup" | "repair" | "identity" | "reset";
 
 type RepairAction = "rebuild_indexes" | "quarantine_malformed_notes" | "backfill_imported_source_titles";
 
@@ -72,11 +74,11 @@ export function MaintenancePanel({
   const [messageState, setMessageState] = useState<{
     text: string;
     tone: "success" | "danger";
-    area: "backup" | "repair" | "identity";
+    area: MaintenanceArea;
   }>({ text: "", tone: "success", area: "backup" });
-  const setMessage = (text: string, tone: "success" | "danger" = "success", area?: "backup" | "repair" | "identity") =>
+  const setMessage = (text: string, tone: "success" | "danger" = "success", area?: MaintenanceArea) =>
     setMessageState((current) => ({ text, tone, area: area ?? current.area }));
-  const resultFor = (area: "backup" | "repair" | "identity", className = "") =>
+  const resultFor = (area: MaintenanceArea, className = "") =>
     messageState.text && messageState.area === area ? (
       <StatusSurface tone={messageState.tone} className={className} data-ltm-maintenance-result={area}>
         {messageState.text}
@@ -100,6 +102,17 @@ export function MaintenancePanel({
   const backupInput = useRef<HTMLInputElement>(null);
   const chooseBackupButton = useRef<HTMLButtonElement>(null);
   const resetButton = useRef<HTMLButtonElement>(null);
+  const deleteButton = useRef<HTMLButtonElement>(null);
+  const exportFirstButton = useRef<HTMLButtonElement>(null);
+  // Delete all data asks first whether to export a backup; the host's confirm dialog cannot hold that button.
+  const [deletePromptOpen, setDeletePromptOpen] = useState(false);
+  useEffect(() => {
+    if (hidden) setDeletePromptOpen(false);
+  }, [hidden]);
+  const closeDeletePrompt = () => {
+    setDeletePromptOpen(false);
+    deleteButton.current?.focus();
+  };
   // Reset and backup import hide this panel while the forms reload, which drops focus to the page.
   // Once the panel is back and idle, return focus to the control that started the action, unless
   // the user has already moved it. Import's Replace button is gone by then, so it uses Choose backup.
@@ -321,6 +334,7 @@ export function MaintenancePanel({
       setMessage(
         localizeUi("ui.longTermMemory.memorysettings.appliedIdentityRepairs", {
           count: result.repairs.length,
+          backup: result.backup.id.slice(0, 8),
         }),
       );
       setIdentityPreview(null);
@@ -350,9 +364,9 @@ export function MaintenancePanel({
     }
   };
 
-  const exportBackup = async () => {
+  const exportBackup = async (area: MaintenanceArea = "backup") => {
     setPending("backup-export");
-    setMessage("", "success", "backup");
+    setMessage("", "success", area);
     try {
       const response = await requestRaw("/backup/export");
       if (!response.ok) throw await failedResponseError(response);
@@ -456,7 +470,7 @@ export function MaintenancePanel({
     )
       return;
     setPending("settings-reset");
-    setMessage("", "success", "backup");
+    setMessage("", "success", "reset");
     focusAfterReload.current = resetButton.current;
     try {
       const response = await request<{ rebuild?: SettingsRebuildOutcome | null }>("/settings/reset", "POST");
@@ -501,8 +515,10 @@ export function MaintenancePanel({
       ))
     )
       return;
+    setDeletePromptOpen(false);
+    focusAfterReload.current = deleteButton.current;
     setPending("data-delete");
-    setMessage("", "success", "backup");
+    setMessage("", "success", "reset");
     try {
       await request("/data", "DELETE");
       setBackupPreview(null);
@@ -558,11 +574,11 @@ export function MaintenancePanel({
           .
         </p>
       </div>
-      <div className="border-t border-[var(--border)] pt-3">
+      <div data-ltm-maintenance-group="backup" className="border-t border-[var(--border)] pt-3">
         <div className="flex items-center gap-1">
-          <h4 className="text-xs font-semibold">{localizeUi("ui.longTermMemory.memorysettings.backupAndReset")}</h4>
+          <h4 className="text-xs font-semibold">{localizeUi("ui.longTermMemory.memorysettings.backupGroup")}</h4>
           <InfoPopover
-            label={localizeUi("ui.longTermMemory.memorysettings.backupAndReset")}
+            label={localizeUi("ui.longTermMemory.memorysettings.backupGroup")}
             content={localizeUi("ui.longTermMemory.memorysettings.exportOrReplaceThePackageOwnedMemoryVaultAnd")}
           />
         </div>
@@ -587,13 +603,6 @@ export function MaintenancePanel({
               if (file) void previewBackup(file);
             }}
           />
-          <Button ref={resetButton} disabled={busy} onClick={() => void resetSettings()}>
-            <RotateCcw aria-hidden="true" size="0.875rem" />{" "}
-            {localizeUi("ui.longTermMemory.memorysettings.resetSettings")}
-          </Button>
-          <Button destructive disabled={busy} onClick={() => void deleteAll()}>
-            <Trash2 aria-hidden="true" size="0.875rem" /> {localizeUi("ui.longTermMemory.memorysettings.deleteAllData")}
-          </Button>
         </div>
         {backupPreview ? (
           <div className="mari-editor-panel mari-editor-panel--soft mt-2 space-y-2 p-3 text-xs">
@@ -618,53 +627,56 @@ export function MaintenancePanel({
         ) : null}
         {resultFor("backup", "mt-2")}
       </div>
-      {integrity.isError ? (
-        <StatusSurface tone="danger">
-          {localizeUi("ui.longTermMemory.memorysettings.integrityCheckCouldNotLoad")}{" "}
-          <button type="button" className="underline" onClick={() => void integrity.refetch()}>
-            {localizeUi("ui.longTermMemory.activityview.retry")}
-          </button>
-        </StatusSurface>
-      ) : null}
-      {integrity.data && !integrity.isError ? (
-        <StatusSurface tone={integrity.data.ok ? "success" : "danger"}>
-          {integrity.data.ok
-            ? localizeUi("ui.longTermMemory.memorysettings.integrityCheckPassedForValue1Notes", {
-                value1: integrity.data.noteCount,
-              })
-            : localizeUi("ui.longTermMemory.memorysettings.value1IntegrityIssueSFound", {
-                value1: integrity.data.issues.length,
-              })}
-        </StatusSurface>
-      ) : null}
-      {integrity.data?.issues.length && !integrity.isError ? (
-        <ul className="space-y-1 text-xs text-[var(--muted-foreground)]">
-          {integrity.data.issues.slice(0, 20).map((issue, index) => (
-            <li key={`${issue.code}-${index}`}>
-              {issue.severity}: {issue.message}
-            </li>
+      <div data-ltm-maintenance-group="repair" className="space-y-2 border-t border-[var(--border)] pt-3">
+        <h4 className="text-xs font-semibold">{localizeUi("ui.longTermMemory.memorysettings.repairGroup")}</h4>
+        {integrity.isError ? (
+          <StatusSurface tone="danger">
+            {localizeUi("ui.longTermMemory.memorysettings.integrityCheckCouldNotLoad")}{" "}
+            <button type="button" className="underline" onClick={() => void integrity.refetch()}>
+              {localizeUi("ui.longTermMemory.activityview.retry")}
+            </button>
+          </StatusSurface>
+        ) : null}
+        {integrity.data && !integrity.isError ? (
+          <StatusSurface tone={integrity.data.ok ? "success" : "danger"}>
+            {integrity.data.ok
+              ? localizeUi("ui.longTermMemory.memorysettings.integrityCheckPassedForValue1Notes", {
+                  value1: integrity.data.noteCount,
+                })
+              : localizeUi("ui.longTermMemory.memorysettings.value1IntegrityIssueSFound", {
+                  value1: integrity.data.issues.length,
+                })}
+          </StatusSurface>
+        ) : null}
+        {integrity.data?.issues.length && !integrity.isError ? (
+          <ul className="space-y-1 text-xs text-[var(--muted-foreground)]">
+            {integrity.data.issues.slice(0, 20).map((issue, index) => (
+              <li key={`${issue.code}-${index}`}>
+                {issue.severity}: {issue.message}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <div className="space-y-2">
+          {repairActions.map((action) => (
+            <Toggle
+              key={action.id}
+              label={localizeUi(action.labelKey)}
+              help={localizeUi(action.descriptionKey)}
+              checked={selectedActions.includes(action.id)}
+              onChange={(checked) =>
+                setSelectedActions(
+                  checked ? [...selectedActions, action.id] : selectedActions.filter((id) => id !== action.id),
+                )
+              }
+            />
           ))}
-        </ul>
-      ) : null}
-      <div className="space-y-2">
-        {repairActions.map((action) => (
-          <Toggle
-            key={action.id}
-            label={localizeUi(action.labelKey)}
-            help={localizeUi(action.descriptionKey)}
-            checked={selectedActions.includes(action.id)}
-            onChange={(checked) =>
-              setSelectedActions(
-                checked ? [...selectedActions, action.id] : selectedActions.filter((id) => id !== action.id),
-              )
-            }
-          />
-        ))}
+        </div>
+        <Button primary disabled={busy || !selectedActions.length} onClick={() => void runRepair()}>
+          {localizeUi("ui.longTermMemory.memorysettings.runSelectedMaintenance")}
+        </Button>
+        {resultFor("repair")}
       </div>
-      <Button destructive disabled={busy || !selectedActions.length} onClick={() => void runRepair()}>
-        {localizeUi("ui.longTermMemory.memorysettings.runSelectedMaintenance")}
-      </Button>
-      {resultFor("repair")}
       <div className="border-t border-[var(--border)] pt-3">
         <div className="flex items-center gap-1">
           <h4 className="text-xs font-semibold">{localizeUi("ui.longTermMemory.memorysettings.identityRepair")}</h4>
@@ -854,6 +866,77 @@ export function MaintenancePanel({
             ))}
           </div>
         ) : null}
+      </div>
+      <div data-ltm-maintenance-group="reset" className="border-t border-[var(--border)] pt-3">
+        <h4 className="text-xs font-semibold">{localizeUi("ui.longTermMemory.memorysettings.deleteOrResetGroup")}</h4>
+        <div className="mt-2 space-y-3">
+          <div>
+            {/* No Engine defines a warning color: the strong editor border and an icon carry the tone. */}
+            <Button
+              ref={resetButton}
+              disabled={busy}
+              data-ltm-tone="warning"
+              style={{ borderColor: "var(--marinara-editor-border-strong)" }}
+              onClick={() => void resetSettings()}
+            >
+              <TriangleAlert aria-hidden="true" size="0.875rem" />{" "}
+              {localizeUi("ui.longTermMemory.memorysettings.resetSettings")}
+            </Button>
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              {localizeUi("ui.longTermMemory.memorysettings.resetSettingsHint")}
+            </p>
+          </div>
+          <div className="border-t border-[var(--border)] pt-3">
+            <Button
+              ref={deleteButton}
+              destructive
+              disabled={busy}
+              aria-expanded={deletePromptOpen}
+              onClick={() => {
+                setDeletePromptOpen(true);
+                requestAnimationFrame(() => exportFirstButton.current?.focus());
+              }}
+            >
+              <Trash2 aria-hidden="true" size="0.875rem" />{" "}
+              {localizeUi("ui.longTermMemory.memorysettings.deleteAllData")}
+            </Button>
+            <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+              {localizeUi("ui.longTermMemory.memorysettings.deleteAllMemoryDataDescription")}
+            </p>
+            {deletePromptOpen ? (
+              <div
+                role="group"
+                aria-label={localizeUi("ui.longTermMemory.memorysettings.deleteAllData")}
+                aria-describedby="ltm-delete-prompt-text"
+                data-ltm-delete-prompt
+                onKeyDown={(event) => {
+                  if (event.key === "Escape" && !busy) {
+                    event.stopPropagation();
+                    closeDeletePrompt();
+                  }
+                }}
+                className="mari-editor-panel mari-editor-panel--soft mt-2 space-y-2 p-3 text-xs"
+              >
+                <p id="ltm-delete-prompt-text">
+                  {localizeUi("ui.longTermMemory.memorysettings.exportBackupFirstPrompt")}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button ref={exportFirstButton} primary disabled={busy} onClick={() => void exportBackup("reset")}>
+                    <Download aria-hidden="true" size="0.875rem" />{" "}
+                    {localizeUi("ui.longTermMemory.memorysettings.exportBackupFirst")}
+                  </Button>
+                  <Button destructive disabled={busy} onClick={() => void deleteAll()}>
+                    {localizeUi("ui.longTermMemory.memorysettings.continueToDelete")}
+                  </Button>
+                  <Button disabled={busy} onClick={closeDeletePrompt}>
+                    {localizeUi("ui.longTermMemory.memoryvault.cancel")}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        {resultFor("reset", "mt-2")}
       </div>
     </section>
   );
