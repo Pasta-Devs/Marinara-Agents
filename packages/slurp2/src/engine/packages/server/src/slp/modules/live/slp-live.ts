@@ -2,7 +2,8 @@ import { slurpFanTypeWeeklyBudget, type SlurpFanType } from "../../../../../shar
 import { slurpLiveRoomRewind, type SlurpLiveRoom } from "./slp-live-room.js";
 
 export type SlurpLivePhase = "warmup" | "main" | "finish";
-export type SlurpLiveLineKind = "narration" | "crowd" | "reaction" | "picture";
+/** `act` is a segment's title on stage; `shot` is the segment's camera brief, server only (never sent to viewers). */
+export type SlurpLiveLineKind = "narration" | "crowd" | "reaction" | "picture" | "act" | "shot";
 export type SlurpLiveEventKind = "tip" | "chat";
 export type SlurpLiveMenuItem = { id: string; label: string; price: number; picture: boolean };
 export type SlurpLiveOrder = {

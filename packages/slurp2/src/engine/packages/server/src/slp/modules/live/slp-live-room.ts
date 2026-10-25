@@ -1,7 +1,12 @@
 /** The show's memory: what she already did on camera, what she promised, refused and keeps joking about. */
 export type SlurpLiveRoomLists = { shown: string[]; promises: string[]; refused: string[]; jokes: string[] };
 /** `before` is the ledger as it was before the last segment was written, so a dropped segment can be undone. */
-export type SlurpLiveRoom = SlurpLiveRoomLists & { before?: SlurpLiveRoomLists & { index: number } };
+/** `goal` / `secondGoal`: what she does when that tip goal is reached, shown on the goal bar. */
+export type SlurpLiveRoom = SlurpLiveRoomLists & {
+  before?: SlurpLiveRoomLists & { index: number };
+  goal?: string;
+  secondGoal?: string;
+};
 
 const LIMITS: Record<keyof SlurpLiveRoomLists, number> = { shown: 12, promises: 3, refused: 8, jokes: 4 };
 
