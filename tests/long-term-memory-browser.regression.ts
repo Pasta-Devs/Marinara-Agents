@@ -4931,7 +4931,13 @@ async function main() {
             .filter({ hasText: "Could not load memory settings." });
           await loadError.waitFor({ timeout: 5000 });
           failSettings = false;
-          await loadError.getByRole("button", { name: "Retry" }).click();
+          const loadRetry = loadError.getByRole("button", { name: "Retry" });
+          // #1673: a text-style retry keeps the 2.75rem touch floor.
+          assert.ok(
+            (await loadRetry.evaluate((element) => element.getBoundingClientRect().height)) >= 44,
+            "the settings load retry meets 2.75rem",
+          );
+          await loadRetry.click();
         }
         await maintenancePanel
           .getByText(
@@ -4945,6 +4951,12 @@ async function main() {
         if (failure === "import-integrity") {
           // The failed integrity read shows only its error, not the report cached before the import.
           await maintenancePanel.getByText("Integrity check could not load.").waitFor();
+          assert.ok(
+            (await maintenancePanel
+              .getByRole("button", { name: "Retry" })
+              .evaluate((element) => element.getBoundingClientRect().height)) >= 44,
+            "the integrity retry meets 2.75rem",
+          );
           assert.equal(
             await maintenancePanel.getByText("Integrity check passed").count(),
             0,

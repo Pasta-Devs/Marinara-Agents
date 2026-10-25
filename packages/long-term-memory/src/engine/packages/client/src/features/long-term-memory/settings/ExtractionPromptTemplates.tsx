@@ -203,7 +203,11 @@ export function ExtractionPromptTemplates({
                 </option>
               ))}
             </select>
-            <button type="button" className="text-[0.6875rem] underline" onClick={() => setActive(mode, null)}>
+            <button
+              type="button"
+              className="inline-flex min-h-11 items-center text-[0.6875rem] underline"
+              onClick={() => setActive(mode, null)}
+            >
               {localizeUi("ui.longTermMemory.extractionprompttemplates.resetToDefault")}
             </button>
           </div>

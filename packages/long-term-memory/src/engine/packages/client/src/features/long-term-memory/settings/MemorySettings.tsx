@@ -455,7 +455,7 @@ export default function MemorySettings({
         {localizeUi("ui.longTermMemory.memorysettings.couldNotLoadMemorySettings")}{" "}
         <button
           type="button"
-          className="underline"
+          className="inline-flex min-h-11 items-center underline"
           onClick={() => {
             void global.refetch();
             void extraction.refetch();
@@ -939,7 +939,11 @@ export default function MemorySettings({
             {connections.isError ? (
               <StatusSurface tone="danger">
                 {localizeUi("ui.longTermMemory.memorysettings.couldNotLoadLanguageConnections")}{" "}
-                <button type="button" className="underline" onClick={() => void connections.refetch()}>
+                <button
+                  type="button"
+                  className="inline-flex min-h-11 items-center underline"
+                  onClick={() => void connections.refetch()}
+                >
                   {localizeUi("ui.longTermMemory.activityview.retry")}
                 </button>
               </StatusSurface>

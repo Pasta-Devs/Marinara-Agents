@@ -487,6 +487,24 @@ assert.doesNotMatch(onboarding, /@media \(min-width: 768px\)/u);
 assert.match(vault, /max-height: calc\(100dvh - 12rem\);/u);
 assert.doesNotMatch(vault, /max\(20rem, calc\(100vh/u);
 assert.match(activity, /maxHeight: "calc\(100dvh - 12rem\)"/u);
+// #1673: the last raw text-style buttons meet the 2.75rem floor instead of a ~20px target.
+assert.match(
+  maintenance,
+  /<button\s+type="button"\s+className="inline-flex min-h-11 items-center underline"\s+onClick=\{\(\) => void integrity\.refetch\(\)\}/u,
+);
+assert.match(
+  settings,
+  /className="inline-flex min-h-11 items-center underline"\s+onClick=\{\(\) => void connections\.refetch\(\)\}/u,
+);
+assert.match(
+  settings,
+  /className="inline-flex min-h-11 items-center underline"\s+onClick=\{\(\) => \{\s*void global\.refetch\(\);/u,
+);
+assert.match(
+  settingsScreen,
+  /className="inline-flex min-h-11 items-center text-\[0\.6875rem\] underline"\s+onClick=\{\(\) => setActive\(mode, null\)\}/u,
+);
+assert.doesNotMatch(settingsScreen, /className="(?:text-\[0\.6875rem\] )?underline"/u);
 assert.match(detail, /health !== "healthy" && !needsHealthAttention/u);
 assert.match(detail, /howToRepairVaultHealth[\s\S]*compact/u);
 assert.match(detail, /tone=\{healthNeedsDangerTone \? "danger" : "warning"\}/u);
