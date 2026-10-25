@@ -146,6 +146,7 @@ async function countInput(forge: Locator) {
   const input = forge.locator(countSelector);
   await input.scrollIntoViewIfNeeded();
   await expect(input).toBeVisible();
+  await expect(input).toHaveAccessibleName("Daily unit messages");
   await expect(input).toHaveAttribute("type", "number");
   await expect(input).toHaveAttribute("min", "0");
   await expect(input).toHaveAttribute("step", "1");

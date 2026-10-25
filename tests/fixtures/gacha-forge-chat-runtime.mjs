@@ -172,6 +172,7 @@ export async function createChatRuntime({ stored, archived = 0, port = 0, allowW
                 model: "controlled-same-main-model",
                 maxContext: 10000,
                 chatComplete: async (messages, options) => {
+                  transport.completionOptions?.push({ ...options });
                   const response = await nativeFetch(`${origin}/v1/chat/completions`, {
                     method: "POST",
                     headers: { "content-type": "application/json" },

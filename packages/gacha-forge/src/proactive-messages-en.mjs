@@ -1,4 +1,5 @@
 export const forgeUnitMessagesEnglish = {
+  "messages.settings.storyGroup": "Story settings",
   "messages.settings.daily": "Daily unit messages",
   "messages.settings.hint":
     "Up to this many messages per local day from random units with messages unlocked. 0 turns this off. Runs while this world is open. Uses its story connection; automatic memory may also prepare context.",
