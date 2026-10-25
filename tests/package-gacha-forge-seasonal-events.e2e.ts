@@ -75,8 +75,10 @@ for (const theme of ["dark", "light"]) {
           '<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540"><rect width="960" height="540" fill="#162438"/><circle cx="480" cy="220" r="100" fill="#e9c879"/></svg>',
         );
       const requests: { path: string; body: any }[] = [];
+      const actualState = await (await fetch(f.origin + "/state")).json();
       const saved = {
         ...run,
+        events: actualState.activeRun.events,
         name: "Seasonal UI proof",
         hudStyle: "vanguard",
         hasStandardBanner: true,
@@ -126,7 +128,8 @@ for (const theme of ["dark", "light"]) {
           path.startsWith("/story-event") ||
           path === "/beat/mark" ||
           path === "/story/cancel" ||
-          path === "/run/sources"
+          path === "/run/sources" ||
+          path === "/login"
         ) {
           const body = route.request().postDataJSON();
           requests.push({ path, body });
@@ -210,17 +213,29 @@ for (const theme of ["dark", "light"]) {
       });
       await expect(forge.locator('[data-field="story.seasonalEvents"]')).toBeVisible();
       await optionsGeometry(forge);
+      await forge.locator('[data-field="story.seasonalEvents"]').scrollIntoViewIfNeeded();
       await page.screenshot({ path: testInfo.outputPath(`seasonal-setup-${theme}.png`) });
+      if (testInfo.project.name.includes("mobile")) {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await optionsGeometry(forge);
+        await forge.locator('[data-field="story.seasonalEvents"]').scrollIntoViewIfNeeded();
+        await page.screenshot({ path: testInfo.outputPath(`seasonal-setup-portrait-${theme}.png`) });
+        await page.setViewportSize({ width: 874, height: 402 });
+      }
       await forge.evaluate((node, saved) => {
         const game = node as any;
         game._run = saved;
         game._activeRunId = saved.runId;
         game._creatingNew = false;
         game._hudView = "events";
-        game._eventId = "story-events";
+        game._eventId = "login";
         game._renderKey = null;
         game._renderBrowser();
       }, saved);
+      const rail = forge.locator('[data-event="story-events"]');
+      await expect(rail).toBeVisible();
+      await rail.click();
+      await expect(rail).toHaveAttribute("aria-pressed", "true");
       const card = forge.locator('[data-story-event-card="event-1"]');
       await expect(card.getByRole("heading", { name: "The Lantern Crossing" })).toBeVisible();
       expect(
@@ -257,7 +272,10 @@ for (const theme of ["dark", "light"]) {
       await page.screenshot({ path: testInfo.outputPath(`seasonal-archive-${theme}.png`) });
       await archive.locator('[data-story-event-open="event-1"]').click();
       await expect.poll(() => forge.evaluate((node) => (node as any)._planChapter)).toBe("event-1");
-      await expect(forge.locator("[data-play]").first()).toBeDisabled();
+      await expect(forge.locator("[data-start]").first()).toBeDisabled();
+      await forge.locator('[data-replay="0"]').click();
+      await expect(forge.getByText("We keep the promise together.", { exact: true })).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`seasonal-archive-reread-${theme}.png`) });
       const replay = await f.post("/story-event/beat", { runId, chapter: "event-1", storyIndex: 0 });
       expect(replay.body.ok).toBe(true);
       await testInfo.attach("seasonal-route-proof", {
