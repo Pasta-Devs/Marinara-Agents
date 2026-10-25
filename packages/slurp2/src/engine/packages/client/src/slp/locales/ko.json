@@ -3998,6 +3998,7 @@
   "ui.slurp.live.orderNow": "지금: {{name}}님의 {{item}}",
   "ui.slurp.live.orderNext": "다음: {{name}}님의 {{item}}",
   "ui.slurp.live.shownSoFar": "지금까지 보여준 것",
+  "ui.slurp.live.settingUp": "{{name}} 님이 카메라 앞에서 준비 중이에요…",
   "ui.slurp.live.openChat": "전체 채팅 열기",
   "ui.slurp.live.chatTitle": "라이브 채팅",
   "ui.slurp.live.catchUp.raised": "지금까지 {{raised}} / {{goal}} <coin/> 모금",

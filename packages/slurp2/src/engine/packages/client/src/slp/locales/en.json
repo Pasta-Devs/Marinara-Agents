@@ -6736,6 +6736,7 @@
   "ui.slurp.live.orderNow": "Now: {{item}} for {{name}}",
   "ui.slurp.live.orderNext": "Next: {{item}} for {{name}}",
   "ui.slurp.live.shownSoFar": "Shown so far",
+  "ui.slurp.live.settingUp": "{{name}} is getting ready on camera…",
   "ui.slurp.live.openChat": "Open the full chat",
   "ui.slurp.live.chatTitle": "Live chat",
   "ui.slurp.live.catchUp.raised": "{{raised}} / {{goal}} <coin/> raised so far",

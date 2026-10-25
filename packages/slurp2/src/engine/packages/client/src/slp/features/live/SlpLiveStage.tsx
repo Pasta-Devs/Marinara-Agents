@@ -230,6 +230,12 @@ export function SlpLiveStage({
             )}
           </div>
         )}
+        {spoken.length === 0 && !act && (
+          // The first act takes the model a while; say so instead of a silent stage.
+          <p aria-live="polite" className="slp-live-dot rounded-2xl bg-black/45 px-4 py-3 text-center text-sm backdrop-blur-sm">
+            {t("ui.slurp.live.settingUp", { name: creatorName })}
+          </p>
+        )}
         {spoken.length > 0 && (
           <div aria-live="polite" className="space-y-1 rounded-2xl bg-black/45 px-4 py-3 backdrop-blur-sm">
             {spoken.map((line, index) => (

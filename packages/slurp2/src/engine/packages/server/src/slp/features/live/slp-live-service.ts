@@ -214,7 +214,7 @@ async function advanceShowNow(db: DB, show: SlurpLiveShow, settings: any, at: Da
   if (!privateActive) {
     const population = createSlurpPopulationStorage(db);
     const all = await population.listTiesForCreator(show.hostId);
-    const currentFans = (await population.listAll()).filter((member) => slurpMembersActiveAt(member, at));
+    const currentFans = slurpMembersActiveAt(await population.listAll(), at.getUTCHours(), 400);
     const fansById = new Map(currentFans.map((fan) => [fan.id, fan]));
     const eligible = all.filter((tie) => tie.stage !== "lapsed" && fansById.has(tie.memberId)).slice(0, 120);
     for (const tie of eligible) {

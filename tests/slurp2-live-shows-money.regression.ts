@@ -150,6 +150,8 @@ const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/slp
 assert.match(service, /trySlpOperation\("slurp-live-start"/);
 assert.match(service, /reserveWeeklySpend/);
 assert.match(service, /slurpLiveFanDue/);
+// slurpMembersActiveAt takes the whole list; calling it per member threw "e is not iterable" on every kick.
+assert.match(service, /slurpMembersActiveAt\(await population\.listAll\(\), at\.getUTCHours\(\)/);
 assert.match(service, /slurpLiveRecap/);
 assert.match(service, /slurpLiveReplyPrompt/);
 assert.match(routes, /tipInThread\([\s\S]*?"Live show tip"/);

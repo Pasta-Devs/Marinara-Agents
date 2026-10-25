@@ -3220,6 +3220,7 @@
   "ui.slurp.live.orderNow": "Teraz: {{item}} dla {{name}}",
   "ui.slurp.live.orderNext": "Następnie: {{item}} dla {{name}}",
   "ui.slurp.live.shownSoFar": "Pokazane do tej pory",
+  "ui.slurp.live.settingUp": "{{name}} szykuje się przed kamerą…",
   "ui.slurp.live.openChat": "Otwórz cały czat",
   "ui.slurp.live.chatTitle": "Czat na żywo",
   "ui.slurp.live.catchUp.raised": "Na razie zebrano {{raised}} / {{goal}} <coin/>",

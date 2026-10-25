@@ -3184,6 +3184,7 @@
   "ui.slurp.live.orderNow": "Jetzt: {{item}} für {{name}}",
   "ui.slurp.live.orderNext": "Als Nächstes: {{item}} für {{name}}",
   "ui.slurp.live.shownSoFar": "Bisher gezeigt",
+  "ui.slurp.live.settingUp": "{{name}} macht sich vor der Kamera bereit …",
   "ui.slurp.live.openChat": "Ganzen Chat öffnen",
   "ui.slurp.live.chatTitle": "Live-Chat",
   "ui.slurp.live.catchUp.raised": "Bisher {{raised}} / {{goal}} <coin/> gesammelt",
