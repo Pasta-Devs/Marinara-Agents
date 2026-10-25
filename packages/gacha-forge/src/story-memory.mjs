@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-const sourceKinds = new Set(["chapter", "character-story", "chat"]);
+const sourceKinds = new Set(["chapter", "character-story", "story-event", "chat"]);
 const overviewHeading = "# Canon to date\n";
 const stopWords = new Set(
   "a an and are as at be been by for from had has have he her his i in is it its of on or our she that the their them they this to was we were what when where which who will with you your".split(
@@ -13,7 +13,7 @@ const sourceKey = (source) => JSON.stringify([source.kind, source.id]);
 const sourceStamp = (sources) => sources.map(({ key, fingerprint }) => [key, fingerprint]);
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
-function sourcesFrom(value) {
+function sourcesFrom(value, orderSources) {
   const result = new Map();
   for (const source of Array.isArray(value) ? value : []) {
     if (
@@ -33,11 +33,24 @@ function sourcesFrom(value) {
     };
     normalized.key = sourceKey(normalized);
     normalized.fingerprint = hash(normalized);
+    const opening = source.opening;
+    if (
+      ["character-story", "story-event"].includes(normalized.kind) &&
+      Number.isSafeInteger(opening?.after) &&
+      opening.after >= 0 &&
+      Number.isSafeInteger(opening?.opened) &&
+      opening.opened > 0
+    )
+      Object.defineProperty(normalized, "opening", { value: { after: opening.after, opened: opening.opened } });
     if (result.has(normalized.key) && result.get(normalized.key).fingerprint !== normalized.fingerprint)
       throw new Error("ambiguous-source");
     result.set(normalized.key, normalized);
   }
-  return [...result.values()].sort((left, right) => left.order - right.order || left.key.localeCompare(right.key));
+  const legacy = [...result.values()].sort(
+    (left, right) => left.order - right.order || left.key.localeCompare(right.key),
+  );
+  if (typeof orderSources !== "function") return legacy;
+  return orderSources(legacy).map((source, index) => Object.defineProperty(source, "viewOrder", { value: index }));
 }
 
 function memoryFrom(value) {
@@ -59,7 +72,7 @@ function validRecords(memory, sources) {
         typeof entry.content === "string" &&
         entry.content.trim(),
     );
-    return record ? [record] : [];
+    return record ? [Number.isSafeInteger(source.viewOrder) ? { ...record, order: source.viewOrder } : record] : [];
   });
 }
 
@@ -179,6 +192,7 @@ export function createForgeStoryMemory({
   readMemory,
   updateMemory,
   readSources,
+  orderSources,
   resolveContext,
   summarize,
   fitsSummary,
@@ -266,12 +280,12 @@ export function createForgeStoryMemory({
       budget,
       maxContext,
     });
-    const sources = sourcesFrom(await readSources(runId, target));
+    const sources = sourcesFrom(await readSources(runId, target), orderSources);
     const stamps = sourceStamp(sources);
     const stillCurrent = async () =>
       current(runId, epoch) &&
       !signal.aborted &&
-      same(sourceStamp(sourcesFrom(await readSources(runId, target))), stamps);
+      same(sourceStamp(sourcesFrom(await readSources(runId, target), orderSources)), stamps);
     async function fold(kind, source, initial, messagesFor) {
       const text = [...source.content];
       const id = hash([
@@ -382,9 +396,8 @@ export function createForgeStoryMemory({
     // from intact detail records instead of trimming the old overview.
     let reusable =
       overviewFits(data.overview) &&
-      data.overview?.sources?.every(([key, fingerprint]) =>
-        stamps.some((entry) => entry[0] === key && entry[1] === fingerprint),
-      );
+      Array.isArray(data.overview?.sources) &&
+      same(data.overview.sources, stamps.slice(0, data.overview.sources.length));
     if (reusable && fitsSummary && records.length) {
       const record = records.find((entry) => !data.overview.sources.some(([key]) => key === entry.key)) || records[0];
       const { id, kind, title, order } = record;
@@ -518,14 +531,11 @@ export function createForgeStoryMemory({
       const epoch = epochFor(options.runId);
       const result = await maintain(options);
       if (!result.budget || !current(options.runId, epoch)) return { ...result, overview: "", details: [], text: "" };
-      const sources = sourcesFrom(await readSources(options.runId, options.target));
+      const sources = sourcesFrom(await readSources(options.runId, options.target), orderSources);
       const { data } = await read(options.runId);
       const records = validRecords(data, sources);
-      const eligible = (stamps) =>
-        Array.isArray(stamps) &&
-        stamps.every(([key, fingerprint]) =>
-          sources.some((source) => source.key === key && source.fingerprint === fingerprint),
-        );
+      const currentStamps = sourceStamp(sources);
+      const eligible = (stamps) => Array.isArray(stamps) && same(stamps, currentStamps.slice(0, stamps.length));
       const saved =
         result.overview != null && eligible(result.overviewSources)
           ? { content: result.overview }

@@ -172,6 +172,30 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.19.0",
+          "date": "2026-10-25",
+          "notes": "- Choose optional Formation combat: frontline actions, protected elemental supports, shared energy, repositioning and generated tactical kits.\n- Convert saved worlds after confirmation with bounded parallel generation, persistent progress and explicit retry, preserving characters and progression.\n- Add creative, validated boss objectives, elemental Ultimate portrait effects and optional fixed, saved combat voice lines for assigned voices.\n- Keep Classic combat, existing boss dialogue and authoritative reward replay.",
+          "highlight": true
+        },
+        {
+          "version": "1.18.0",
+          "date": "2026-10-25",
+          "notes": "- Enable optional Seasonal events beside compact Player choices in setup or Story Continuity.\n- Explore a new, world-specific story and combat adventure every three weeks, with an event banner and optional animation and music. Event themes, familiar cast and rewards are prepared before you start; the chapter is written against current canon when you choose to play.\n- Earn bounded resources, Aether, four-star characters or themed outfits once. Expired events close new progress and rewards; played scenes remain in Chapters. Existing banner minigames stay available.\n- Keep event progress and rewards safe across refresh, restart, opt-out and concurrent requests, using existing chapter, combat and media systems.",
+          "highlight": true
+        },
+        {
+          "version": "1.17.0",
+          "date": "2026-10-25",
+          "notes": "- Regenerate an ongoing chapter or the current open Character Story from its bottom action after a named confirmation. Completed chapters remain protected.\n- Discard only the selected chapter’s story, choices and reading progress, then write a fresh plan with current settings and character cards. Preserve other chapters, conversations, characters, inventory and earned rewards.\n- Stop and drain pending story work before resetting. Replaying cleared progress does not award first-clear rewards again; the usual Vigor cost to play still applies.",
+          "highlight": true
+        },
+        {
+          "version": "1.16.1",
+          "date": "2026-10-25",
+          "notes": "- Restore first-send character replies and keep sent and remembered messages scrollable in the same chat window, without automatic resends.\n- Use current linked character cards’ full Description, Personality, Backstory and Appearance in story prompts, excluding card Scenario, greetings and example dialogue.\n- Keep Writing help buttons compact and preserve tapped explanations through viewport updates.\n- Use “They did not answer.” as the neutral direct-message failure fallback.\n- Hide the neutral story portrait silhouette when the current artwork is loaded, retaining safe loading and missing-art fallbacks.\n- Restore explicit banner animation recovery after playback or stale-clip errors. Failed replacement attempts keep previous saved media; successful replacements receive a fresh immutable URL.",
+          "highlight": true
+        },
+        {
           "version": "1.16.0",
           "date": "2026-10-25",
           "notes": "- Punctuate choice labels. Keep the correct speaker portrait and prevent fullscreen/mute from advancing.\n- Tap Writing help on mobile; keep daily rewards clear of Claim and animate loaded unit art smoothly.\n- Use the current timezone for resets and new banner periods, including clock changes. Catch up automatic chapter memory on world open; retain manual controls and show compressed/combined counts.\n- Auto-select affordable character, weapon, relic and skill upgrades before confirmation. Auto-equip the best free gear and clear stale Units dots.\n- Open farming domains from upgrade materials and show their next rotation; Mandates open their Login Event.\n- Reuse matching dialogue audio; reveal fresh opening lines while preserving saved reading positions.\n- Generate richer music briefs with world motifs, varied arrangements and musical development.",
@@ -228,7 +252,7 @@
         {
           "version": "1.12.0",
           "date": "2026-10-24",
-          "notes": "### New\n- World-specific soundtrack briefs generated through the narration connection, cached for each music context and translated into original musical qualities.\n\n### Fixed\n- Audio failures show their HTTP status and, on newer Engine hosts, the provider's safe rejection reason while stock audio continues.\n- Unit and relic achievements count every gained level; capped duplicates do not count as gained facets, and Tower-shop facet gains count.\n- Existing worlds recover proven achievement progress without changing claimed rewards or pass progress.",
+          "notes": "### New\n\n- World-specific soundtrack briefs generated through the narration connection, cached for each music context and translated into original musical qualities.\n\n### Fixed\n\n- Audio failures show their HTTP status and, on newer Engine hosts, the provider's safe rejection reason while stock audio continues.\n- Unit and relic achievements count every gained level; capped duplicates do not count as gained facets, and Tower-shop facet gains count.\n- Existing worlds recover proven achievement progress without changing claimed rewards or pass progress.",
           "highlight": true
         },
         {
@@ -240,7 +264,7 @@
         {
           "version": "1.11.0",
           "date": "2026-10-23",
-          "notes": "### New\n- Optional dialogue using explicitly assigned Engine character voices, with the current speech connection.\n- Stock Game music and effects, plus opt-in generated audio reused per world and cue.\n- A shared mute control, three precise channel volume sliders and configurable autoplay pacing.\n\n### Fixed\n- Home and story portrait frames include their bottom edge.",
+          "notes": "### New\n\n- Optional dialogue using explicitly assigned Engine character voices, with the current speech connection.\n- Stock Game music and effects, plus opt-in generated audio reused per world and cue.\n- A shared mute control, three precise channel volume sliders and configurable autoplay pacing.\n\n### Fixed\n\n- Home and story portrait frames include their bottom edge.",
           "highlight": true
         },
         {
@@ -265,30 +289,6 @@
           "version": "1.9.1",
           "date": "2026-10-23",
           "notes": "- Chapter fullscreen controls now use a small icon aligned with the top-right header fade, with a usable touch target and visible keyboard focus.\n- Visible unit portraits use eager loading and synchronous decoding on detail updates.\n- Favorite and help icons are centered; unit cards show their existing affinity symbol in the top-right corner.",
-          "highlight": false
-        },
-        {
-          "version": "1.9.0",
-          "date": "2026-10-22",
-          "notes": "### New\n- The fullscreen control beside Settings expands inside the Engine, hiding Home browser controls while keeping the Engine topbar. Outward/inward arrows show the action, and the button works on iPhone Safari too.\n- Every Forge screen fills the available width and height instead of fitting a fixed 16:9 frame.\n- A floating exit control stays available on screens without the shared toolbar and on the portrait rotation notice. Requires Engine capability API 1.376.",
-          "highlight": true
-        },
-        {
-          "version": "1.8.15",
-          "date": "2026-10-22",
-          "notes": "- Fixed: on iPhone and other Safari-based browsers, ticking a cast member or an outfit theme no longer scrolls the list (and, on a phone turned sideways, the whole world-creation page) back to the top.",
-          "highlight": false
-        },
-        {
-          "version": "1.8.14",
-          "date": "2026-10-22",
-          "notes": "- On a phone turned sideways, creating a world now uses the whole width of the screen and scrolls as one page: the title and the step tabs scroll away with the fields, and a slim Back and Next row stays at the bottom until you start typing.\n- Fixed: tapping a text field in the game no longer makes iPhone zoom in.",
-          "highlight": false
-        },
-        {
-          "version": "1.8.13",
-          "date": "2026-10-19",
-          "notes": "- Fixed: places named in Korean, or in any other non-Latin script, get their background painted. Their names used to come out empty, so the background was never made; places whose names mixed Hangul and numbers could also share one background.\n- Backgrounds already painted for a place keep showing; nothing is painted twice.\n- On a phone held sideways the game uses more of the screen, text no longer grows when you turn the phone, and Settings packs its panels tighter. Where the browser has no fullscreen (iPhone Safari), the fullscreen button is hidden instead of doing nothing.",
           "highlight": false
         }
       ]
@@ -363,6 +363,12 @@
     },
     "long-term-memory": {
       "versions": [
+        {
+          "version": "1.4.94",
+          "date": "2026-10-26",
+          "notes": "- Long-Term Memory loads settings written by a newer version instead of failing to start, on Engines that use zod 4 or check a list's length before its entries.",
+          "highlight": false
+        },
         {
           "version": "1.4.93",
           "date": "2026-10-25",
@@ -475,12 +481,6 @@
           "version": "1.4.75",
           "date": "2026-10-21",
           "notes": "- In the Memory Vault, opening another memory while an archive Undo, a save or a permanent delete is still running no longer leaves it half-finished: the buttons work again, the list reloads, an Undo that could only restore some memories archives them again, a memory reopened during its own save shows what was saved, and deleted memories leave the list and the selection, closing one you had opened with a message that says so. Escape no longer closes the Rename detail dialog while the rename is still running.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.74",
-          "date": "2026-10-21",
-          "notes": "- After a recall index rebuild fails, the integrity check in Maintenance and the package status no longer show the raw error, which could include the vault's file paths. They now say that the latest index rebuild failed and to see the server log, which records the full error. A rebuild that fails while the Engine switches to a new embedding connection is now logged there too.",
           "highlight": false
         }
       ]

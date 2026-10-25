@@ -411,3 +411,161 @@ test("live-chat recovery deduplicates played text across different legacy headin
   await context("COMPRESSED_FIRST_CHAPTER");
   assert.equal(rendered.prefix, `COMPRESSED_FIRST_CHAPTER\n\n# Current chapter so far\n${body}`);
 });
+
+for (const failAt of [1, 3])
+  test(`legacy fallback survives event source failure on read${failAt}`, async () => {
+    let eventReads = 0;
+    const f = fixture({
+      phase: "pending",
+      readSegments: async (_, chapter, index) => {
+        if (chapter === "event-1" && ++eventReads >= failAt) throw new Error("Controlled event segment read failure");
+        return [{ text: `Canonical ${chapter}:${index}` }];
+      },
+    });
+    f.plan(1);
+    Object.assign(f.plan("event-1", ["story"]), { eventId: "event-record", after: 1, opened: 100 });
+    f.session.progress = { 1: { normal: 3 }, "event-1": { normal: 1 } };
+    assert.match(await f.context(2), /legacy fallback/);
+    assert.ok(eventReads >= failAt);
+  });
+function pairedSideStories({ eventOpened, bondOpened, eventAfter = 1, bondAfter = 1 }, options = {}) {
+  const f = fixture(options);
+  f.plan(1);
+  f.plan(2);
+  Object.assign(f.plan("event-1", ["story"]), { eventId: "event-record", after: eventAfter, opened: eventOpened });
+  f.plan("bond-keeper", ["story", "story", "story"]);
+  f.session.progress = { 1: { normal: 3 }, 2: { normal: 3 }, "event-1": { normal: 1 } };
+  f.session.bondChapters.keeper = { after: bondAfter, opened: bondOpened, beats: 3 };
+  return f;
+}
+for (const target of ["event", "bond"])
+  for (const [label, sourceOpened, targetOpened, sourceAfter, targetAfter, expected] of [
+    ["later", 200, 100, 1, 1, false],
+    ["earlier", 100, 200, 1, 1, true],
+    ["equal", 100, 100, 1, 1, false],
+    ["missing-source", undefined, 100, 1, 1, false],
+    ["missing-target", 100, undefined, 1, 1, false],
+    ["zero-source", 0, 100, 1, 1, false],
+    ["zero-target", 100, 0, 1, 1, false],
+    ["unknown-earlier-boundary", 0, 0, 1, 2, true],
+  ])
+    test(`${target} replay scopes ${label} cross-kind canon`, async () => {
+      const f = pairedSideStories(
+        target === "event"
+          ? { eventOpened: targetOpened, bondOpened: sourceOpened, eventAfter: targetAfter, bondAfter: sourceAfter }
+          : { eventOpened: sourceOpened, bondOpened: targetOpened, eventAfter: sourceAfter, bondAfter: targetAfter },
+      );
+      const rows = await f.memory.readSources(f.runId, {
+        chapter: target === "event" ? "event-1" : "bond-keeper",
+        storyIndex: 0,
+      });
+      assert.equal(
+        rows.some((row) => row.kind === (target === "event" ? "character-story" : "story-event")),
+        expected,
+        JSON.stringify(rows),
+      );
+    });
+
+for (const [eventOpened, bondOpened] of [
+  [10, 20],
+  [20, 10],
+  [1792950000001, 1792950000002],
+  [1792950000002, 1792950000001],
+  [0, 0],
+])
+  test(`current canon and actual compression rank side stories ${eventOpened}/${bondOpened}`, async () => {
+    let saved,
+      revision = 0;
+    const compressed = [];
+    const f = pairedSideStories(
+      { eventOpened, bondOpened },
+      {
+        realMemory: true,
+        documents: {
+          getById: async () => (saved ? { data: structuredClone(saved), revision } : null),
+          create: async ({ data }) => {
+            if (saved) return false;
+            saved = structuredClone(data);
+            revision++;
+            return true;
+          },
+          update: async ({ expectedRevision, data }) => {
+            if (expectedRevision !== revision) return false;
+            saved = structuredClone(data);
+            revision++;
+            return true;
+          },
+        },
+        generate: async ({ kind, messages }) => {
+          const value = JSON.parse(messages[1].content);
+          if (kind === "detail") compressed.push(value.source.id);
+          return {
+            ok: true,
+            value: kind === "detail" ? value.source.content : "Canonical history in its established order.",
+          };
+        },
+      },
+    );
+    const expected =
+      eventOpened > 0 && bondOpened > 0 && eventOpened < bondOpened
+        ? ["event-1", "bond-keeper"]
+        : ["bond-keeper", "event-1"];
+    const rows = await f.memory.readSources(f.runId);
+    assert.deepEqual(
+      rows.filter((row) => ["story-event", "character-story"].includes(row.kind)).map((row) => row.id),
+      expected,
+    );
+    assert.equal(rows.find((row) => row.id === "1").order, 10000);
+    assert.equal(rows.find((row) => row.id === "2").order, 20000);
+    assert.equal((await f.memory.maintain({ runId: f.runId })).status.phase, "ready");
+    assert.deepEqual(
+      compressed.filter((id) => expected.includes(id)),
+      expected,
+      "The real memory core must retain the rank after its own numeric sort",
+    );
+  });
+
+test("a later side-story opening keeps existing memory fingerprints and compression work", async () => {
+  let saved,
+    revision = 0;
+  const compressed = [];
+  const f = pairedSideStories(
+    { eventOpened: 10, bondOpened: 20 },
+    {
+      realMemory: true,
+      documents: {
+        getById: async () => (saved ? { data: structuredClone(saved), revision } : null),
+        create: async ({ data }) => {
+          if (saved) return false;
+          saved = structuredClone(data);
+          revision++;
+          return true;
+        },
+        update: async ({ expectedRevision, data }) => {
+          if (expectedRevision !== revision) return false;
+          saved = structuredClone(data);
+          revision++;
+          return true;
+        },
+      },
+      generate: async ({ kind, messages }) => {
+        const value = JSON.parse(messages[1].content);
+        if (kind === "detail") compressed.push(value.source.id);
+        return { ok: true, value: kind === "detail" ? value.source.content : "Established canon in order." };
+      },
+    },
+  );
+  assert.equal((await f.memory.maintain({ runId: f.runId })).status.phase, "ready");
+  const before = new Map((await f.memory.readSources(f.runId)).map((row) => [row.id, row.order])),
+    calls = compressed.length;
+  Object.assign(f.plan("event-2", ["story"]), { eventId: "next-event", after: 1, opened: 30 });
+  f.session.progress["event-2"] = { normal: 1 };
+  for (const row of await f.memory.readSources(f.runId))
+    if (before.has(row.id)) assert.equal(row.order, before.get(row.id));
+  assert.equal((await f.memory.maintain({ runId: f.runId })).status.phase, "ready");
+  assert.deepEqual(
+    compressed.slice(calls),
+    ["event-2"],
+    "Existing canonical detail summaries must not be regenerated just because the boundary acquired a later event",
+  );
+});

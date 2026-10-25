@@ -14,20 +14,23 @@ const forgeBrowserLayout = `
 .forge-material { appearance: none; background: none; border: 0; color: inherit; font: inherit; text-align: left; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: .15em; }
 .forge-material:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; }
 .gw-acts { flex-wrap: wrap; }
-.ob-labelrow:has(.ob-help[aria-expanded="true"]) { flex-wrap: wrap; }
-.ob-labelrow:has(.ob-help[aria-expanded="true"]) .ob-tip {
-  position: static; flex-basis: 100%; opacity: 1; visibility: visible;
+.gf-arena .gf-stage .ob-labelrow:has(.ob-help[aria-expanded="true"]) { flex-wrap: wrap; }
+.gf-arena .gf-stage .ob-labelrow:has(.ob-help[aria-expanded="true"]) .ob-tip {
+  position: static; flex-basis: 100%; order: 1; opacity: 1; visibility: visible;
   max-height: 40cqh; overflow-y: auto; pointer-events: auto;
   font-size: max(12px, var(--t-xs)); line-height: 1.5;
 }
 @media (any-pointer: coarse), (pointer: coarse) {
   .ev-pane.nw .ev-claim { min-height: 44px; }
-  .ob-help { min-width: 44px; min-height: 44px; display: inline-grid; place-items: center; }
+  /* Touch disclosures follow their click state, rather than Safari's sticky hover. */
+  .gf-arena .gf-stage .ob-labelrow:has(.ob-help[aria-expanded="false"]) .ob-tip { opacity: 0; visibility: hidden; pointer-events: none; }
 }
 /* Portrait artwork leaves the same accent stroke at the foot as at its top. */
 /* Home and chapter sheets are loaded lazily, so keep this ahead of their inset shorthand. */
 .gf-stage .hm-plate, .gf-stage .vn-plate[data-side] { padding-bottom: var(--edge-w); }
 .gf-stage .hm-art, .gf-stage .vn-plate[data-side] .vn-art { bottom: var(--edge-w); }
+/* SVG fallbacks and author-styled images must both honor the portrait's hidden state. */
+.vn-art > [hidden] { display: none !important; }
 .gf-mute { display: inline-grid; place-items: center; padding: 0; cursor: pointer; }
 .gf-mute svg { display: block; width: 1em; height: 1em; }
 .gf-mute:focus-visible { outline: 2px solid var(--coral); outline-offset: -3px; }
@@ -260,22 +263,31 @@ export function wireForgeBrowserFullscreen(host) {
       control?.setActive(!control.active);
     };
   }
+  const helpScope = JSON.stringify([host._run?.runId, host._hudView, host._settingsCategory]);
+  if (host._forgeFieldHelp?.scope !== helpScope) host._forgeFieldHelp = { scope: helpScope, open: "" };
+  const helpState = host._forgeFieldHelp;
   for (const [index, button] of [...root.querySelectorAll(".ob-help")].entries()) {
-    const tip = button.closest(".ob-labelrow")?.querySelector(".ob-tip");
+    const row = button.closest(".ob-labelrow");
+    const tip = row?.querySelector(".ob-tip");
     if (!tip) continue;
+    const field = row.querySelector("label")?.getAttribute("for") || button.getAttribute("aria-label");
     tip.id ||= `forge-field-help-${index}`;
     button.setAttribute("aria-controls", tip.id);
-    button.setAttribute("aria-expanded", "false");
+    button.setAttribute("aria-expanded", String(helpState.open === field));
     button.onclick = (event) => {
       event.preventDefault();
       event.stopPropagation();
       const open = button.getAttribute("aria-expanded") !== "true";
+      helpState.open = open ? field : "";
       for (const other of root.querySelectorAll('.ob-help[aria-expanded="true"]'))
         other.setAttribute("aria-expanded", "false");
       button.setAttribute("aria-expanded", String(open));
     };
     button.onkeydown = (event) => {
-      if (event.key === "Escape") button.setAttribute("aria-expanded", "false");
+      if (event.key === "Escape") {
+        helpState.open = "";
+        button.setAttribute("aria-expanded", "false");
+      }
     };
   }
   syncForgeBrowserPresentation(host);
@@ -299,13 +311,14 @@ export function setForgeStoryPortrait(plate, character) {
           if (image.getAttribute("src") === url) image.hidden = false;
         };
         image.onerror = () => {
-          if (image.getAttribute("src") === url && figure) figure.hidden = false;
+          if (image.getAttribute("src") === url && figure) figure.removeAttribute("hidden");
         };
         image.setAttribute("src", url);
         if (image.complete && image.naturalWidth > 0) image.hidden = false;
       }
     }
-    if (figure) figure.hidden = !!url;
+    // SVGElement does not reflect the HTML-only hidden property into an attribute.
+    if (figure) figure.toggleAttribute("hidden", !!url);
   }
   plate.setAttribute("data-front", "a");
 }

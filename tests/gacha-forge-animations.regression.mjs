@@ -172,6 +172,321 @@ try {
   assert.equal(result.ok, true);
   assert.equal((await restarted.generate(body)).cached, true);
   assert.equal(restartedCalls, 0);
+  // Explicit recovery replaces a cached clip only after a successful provider result.
+  const recoveryBody = { runId: "cached-recovery", banner: "char-featured" };
+  let recoveryCalls = 0;
+  let recoveryProvider = async () => video;
+  const recoveryOptions = {
+    dataDir,
+    readBanner: async () => meta,
+    runtime: {
+      logger: log,
+      integrations: {
+        videos: {
+          animateGalleryImage: async () => {
+            recoveryCalls++;
+            return recoveryProvider();
+          },
+        },
+      },
+    },
+  };
+  const recovery = createForgeBannerAnimations(recoveryOptions);
+  const originalClip = await recovery.generate(recoveryBody);
+  recoveryProvider = async () => {
+    throw new Error("replacement provider rejected");
+  };
+  assert.equal(
+    (await recovery.generate({ ...recoveryBody, retry: true })).ok,
+    false,
+    "an explicit retry must reach the provider instead of returning the broken cached clip",
+  );
+  assert.equal(recoveryCalls, 2);
+  const originalParams = originalClip.animation.url.split("/").slice(-2);
+  const originalResponse = await recovery.serve(
+    { params: { world: originalParams[0], filename: originalParams[1] }, headers: {} },
+    reply(),
+  );
+  assert.deepEqual(await collect(originalResponse), bytes, "failed replacement preserves the previous media bytes");
+  assert.equal(
+    (await createForgeBannerAnimations(recoveryOptions).generate(recoveryBody)).animation.url,
+    originalClip.animation.url,
+    "offline/reopened cache remains the old clip after a failed explicit replacement",
+  );
+  assert.equal(recoveryCalls, 2, "normal reopen never retries a failed provider automatically");
+  const replacement = Buffer.concat([bytes, Buffer.from("replacement")]);
+  const recoveryPending = deferred();
+  recoveryProvider = () => recoveryPending.promise;
+  const replacing = recovery.generate({ ...recoveryBody, retry: true });
+  while (recoveryCalls < 3) await wait();
+  const duplicateReplacing = recovery.generate({ ...recoveryBody, retry: true });
+  await wait();
+  assert.equal(recoveryCalls, 3, "concurrent explicit retry clicks share one paid attempt");
+  recoveryPending.resolve({ ...video, base64: replacement.toString("base64") });
+  const replaced = await replacing;
+  assert.deepEqual(await duplicateReplacing, replaced);
+  assert.notEqual(
+    replaced.animation.url,
+    originalClip.animation.url,
+    "new bytes receive a new immutable URL instead of replaying the old browser cache",
+  );
+  const replacementParams = replaced.animation.url.split("/").slice(-2);
+  assert.deepEqual(
+    await collect(
+      await recovery.serve(
+        { params: { world: replacementParams[0], filename: replacementParams[1] }, headers: {} },
+        reply(),
+      ),
+    ),
+    replacement,
+  );
+  assert.equal(
+    (await createForgeBannerAnimations(recoveryOptions).generate(recoveryBody)).animation.url,
+    replaced.animation.url,
+    "restart reuses the successfully published replacement",
+  );
+  assert.equal(recoveryCalls, 3);
+  const recoveryFolder = join(
+    dataDir,
+    "capability-package-data",
+    "gacha-forge",
+    "banner-animations",
+    digest(recoveryBody.runId),
+  );
+  await assert.rejects(
+    readFile(join(recoveryFolder, originalParams[1])),
+    { code: "ENOENT" },
+    "a committed replacement retires its unreferenced previous clip",
+  );
+  recoveryProvider = async () => ({ ...video, base64: replacement.toString("base64") });
+  const identical = await recovery.generate({ ...recoveryBody, retry: true });
+  assert.equal(identical.animation.url, replaced.animation.url, "identical bytes keep the current immutable clip");
+  assert.deepEqual(await readFile(join(recoveryFolder, replacementParams[1])), replacement);
+  const legacyBody = { ...recoveryBody, runId: "legacy-clip-world" };
+  recoveryProvider = async () => video;
+  const legacy = await recovery.generate(legacyBody);
+  const legacyFolder = join(
+    dataDir,
+    "capability-package-data",
+    "gacha-forge",
+    "banner-animations",
+    digest(legacyBody.runId),
+  );
+  const legacyFilename = `${legacy.animation.key}.mp4`;
+  await fsPromises.rename(
+    join(legacyFolder, legacy.animation.url.split("/").at(-1)),
+    join(legacyFolder, legacyFilename),
+  );
+  await rm(join(legacyFolder, `${legacy.animation.key}.json`));
+  const legacyCalls = recoveryCalls;
+  assert.equal(
+    (await recovery.generate(legacyBody)).animation.url.split("/").at(-1),
+    legacyFilename,
+    "pre-upgrade input-key clips remain cached without a new provider call",
+  );
+  assert.equal(recoveryCalls, legacyCalls);
+  assert.equal((await recovery.generate({ ...legacyBody, retry: true })).cached, false);
+  assert.equal(recoveryCalls, legacyCalls + 1, "legacy clips also support deliberate replacement");
+  await assert.rejects(
+    readFile(join(legacyFolder, legacyFilename)),
+    { code: "ENOENT" },
+    "legacy media is retired only after its replacement is committed",
+  );
+  for (const state of ["ready", "pending", "failed"]) {
+    const request = { ...body, runId: `shared-media-${state}` };
+    recoveryProvider = async () => video;
+    const shared = createForgeBannerAnimations(recoveryOptions);
+    const first = await shared.generate(request);
+    const other = await shared.generate({ ...request, banner: "wpn-featured" });
+    const folder = join(dataDir, "capability-package-data", "gacha-forge", "banner-animations", digest(request.runId));
+    const previous = join(folder, first.animation.url.split("/").at(-1));
+    const mediaKey = first.animation.url.split("/").at(-1).slice(0, -4);
+    await writeFile(join(folder, `${other.animation.key}.json`), JSON.stringify({ state, mediaKey }));
+    recoveryProvider = async () => ({ ...video, base64: replacement.toString("base64") });
+    assert.equal((await shared.generate({ ...request, retry: true })).ok, true);
+    assert.deepEqual(await readFile(previous), bytes, `${state} markers retain a shared previous clip`);
+    assert.equal((await shared.generate({ ...request, banner: "wpn-featured", retry: true })).ok, true);
+    await assert.rejects(readFile(previous), { code: "ENOENT" }, "the last reference retires the old shared clip");
+  }
+  for (const failure of ["different", "identical", "shared"]) {
+    const request = { ...body, runId: `failed-ready-marker-${failure}` };
+    recoveryProvider = async () => video;
+    const old = await recovery.generate(request);
+    const nextBytes = failure === "identical" ? bytes : replacement;
+    if (failure === "shared") {
+      recoveryProvider = async () => ({ ...video, base64: nextBytes.toString("base64") });
+      await recovery.generate({ ...request, banner: "wpn-featured" });
+    }
+    const folder = join(dataDir, "capability-package-data", "gacha-forge", "banner-animations", digest(request.runId));
+    const originalRename = fsPromises.rename;
+    fsPromises.rename = async (from, ...args) => {
+      if (
+        String(from).includes(digest(request.runId)) &&
+        String(from).endsWith(".status.tmp") &&
+        JSON.parse(await readFile(from, "utf8")).state === "ready"
+      )
+        throw new Error("fixture ready-marker commit refused");
+      return originalRename(from, ...args);
+    };
+    syncBuiltinESMExports();
+    recoveryProvider = async () => ({ ...video, base64: nextBytes.toString("base64") });
+    try {
+      assert.equal((await recovery.generate({ ...request, retry: true })).ok, false);
+      assert.deepEqual(
+        await readFile(join(folder, old.animation.url.split("/").at(-1))),
+        bytes,
+        "failed marker commit retains previous media",
+      );
+      assert.equal((await recovery.generate(request)).animation.url, old.animation.url);
+      const newFile = join(folder, `${digest(nextBytes)}.mp4`);
+      if (failure === "different")
+        await assert.rejects(
+          readFile(newFile),
+          { code: "ENOENT" },
+          "a rejected ready marker retires only its new unreferenced clip",
+        );
+      else
+        assert.deepEqual(
+          await readFile(newFile),
+          nextBytes,
+          `${failure} media remains referenced after a failed marker commit`,
+        );
+    } finally {
+      fsPromises.rename = originalRename;
+      syncBuiltinESMExports();
+    }
+  }
+  {
+    const request = { ...body, runId: "retire-unlink-is-best-effort" };
+    recoveryProvider = async () => video;
+    const old = await recovery.generate(request);
+    const previous = join(
+      dataDir,
+      "capability-package-data",
+      "gacha-forge",
+      "banner-animations",
+      digest(request.runId),
+      old.animation.url.split("/").at(-1),
+    );
+    const originalUnlink = fsPromises.unlink;
+    fsPromises.unlink = async (path, ...args) => {
+      if (String(path).includes(digest(request.runId)) && String(path).endsWith(old.animation.url.split("/").at(-1)))
+        throw new Error("fixture unlink refused");
+      return originalUnlink(path, ...args);
+    };
+    syncBuiltinESMExports();
+    recoveryProvider = async () => ({ ...video, base64: replacement.toString("base64") });
+    try {
+      const published = await recovery.generate({ ...request, retry: true });
+      assert.equal(
+        published.ok,
+        true,
+        "cleanup failure cannot turn a committed replacement into a retryable provider failure",
+      );
+      assert.deepEqual(await readFile(previous), bytes);
+      const callsBefore = recoveryCalls;
+      assert.equal((await recovery.generate(request)).animation.url, published.animation.url);
+      assert.equal(recoveryCalls, callsBefore, "cleanup failure cannot purchase another generation");
+    } finally {
+      fsPromises.unlink = originalUnlink;
+      syncBuiltinESMExports();
+    }
+  }
+  for (const format of [
+    "empty",
+    "broken",
+    "null",
+    "array",
+    "primitive",
+    "invalid-key",
+    "missing-file",
+    "empty-file",
+    "existing-file",
+    "symlink-file",
+    "directory-file",
+    "array-key",
+  ]) {
+    for (const legacyReference of [false, true]) {
+      const request = { ...body, runId: `legacy-reference-${format}-${legacyReference}` };
+      recoveryProvider = async () => video;
+      const old = await recovery.generate(request);
+      const folder = join(
+        dataDir,
+        "capability-package-data",
+        "gacha-forge",
+        "banner-animations",
+        digest(request.runId),
+      );
+      const previousKey = old.animation.url.split("/").at(-1).slice(0, -4);
+      const stem = legacyReference ? previousKey : digest("unrelated-legacy-marker");
+      const alternate = digest("alternate-clip");
+      const named = format === "array-key" ? [previousKey] : alternate;
+      const contents = {
+        empty: "",
+        broken: "{broken",
+        null: "null",
+        array: "[]",
+        primitive: "7",
+        "invalid-key": '{"mediaKey":"not-a-key"}',
+      };
+      if (format === "existing-file") await writeFile(join(folder, `${alternate}.mp4`), bytes);
+      if (format === "empty-file") await writeFile(join(folder, `${alternate}.mp4`), "");
+      if (format === "symlink-file")
+        await symlink(join(folder, `${previousKey}.mp4`), join(folder, `${alternate}.mp4`));
+      if (format === "directory-file") await mkdir(join(folder, `${alternate}.mp4`));
+      await writeFile(join(folder, `${stem}.json`), contents[format] ?? JSON.stringify({ mediaKey: named }));
+      recoveryProvider = async () => ({ ...video, base64: replacement.toString("base64") });
+      const fresh = await recovery.generate({ ...request, retry: true });
+      assert.equal(fresh.ok, true);
+      const retained = format === "array-key" || (legacyReference && format !== "existing-file");
+      const previousFile = join(folder, `${previousKey}.mp4`);
+      if (retained)
+        assert.deepEqual(await readFile(previousFile), bytes, `${format} retains the effective legacy/media reference`);
+      else
+        await assert.rejects(readFile(previousFile), { code: "ENOENT" }, `${format} does not retain an unrelated clip`);
+      const [world, filename] = fresh.animation.url.split("/").slice(-2);
+      assert.deepEqual(
+        await collect(await recovery.serve({ params: { world, filename }, headers: {} }, reply())),
+        replacement,
+      );
+    }
+  }
+  {
+    const request = { ...body, runId: "coercible-current-marker" };
+    recoveryProvider = async () => video;
+    const old = await recovery.generate(request);
+    const folder = join(dataDir, "capability-package-data", "gacha-forge", "banner-animations", digest(request.runId));
+    await writeFile(join(folder, `${old.animation.key}.json`), JSON.stringify({ mediaKey: [digest(bytes)] }));
+    assert.equal((await recovery.generate(request)).animation.url, old.animation.url);
+    const identical = await recovery.generate({ ...request, retry: true });
+    assert.equal(identical.animation.url, old.animation.url);
+    assert.deepEqual(
+      await readFile(join(folder, `${digest(bytes)}.mp4`)),
+      bytes,
+      "coercible legacy metadata cannot cause identical replacement to unlink its current clip",
+    );
+  }
+  for (const guard of ["oversized-marker", "scan-ceiling", "directory-marker", "symlink-marker"]) {
+    const request = { ...body, runId: `retirement-${guard}` };
+    recoveryProvider = async () => video;
+    const old = await recovery.generate(request);
+    const folder = join(dataDir, "capability-package-data", "gacha-forge", "banner-animations", digest(request.runId));
+    if (guard === "scan-ceiling") {
+      for (let index = 0; index < 513; index += 1) await writeFile(join(folder, `unrelated-${index}`), "");
+    } else if (guard === "directory-marker") await mkdir(join(folder, `${digest(guard)}.json`));
+    else if (guard === "symlink-marker") {
+      const outside = join(directory, "retirement-marker-sentinel.json");
+      await writeFile(outside, "outside sentinel");
+      await symlink(outside, join(folder, `${digest(guard)}.json`));
+    } else await writeFile(join(folder, `${digest(guard)}.json`), " ".repeat(4097));
+    recoveryProvider = async () => ({ ...video, base64: replacement.toString("base64") });
+    assert.equal((await recovery.generate({ ...request, retry: true })).ok, true);
+    assert.deepEqual(
+      await readFile(join(folder, old.animation.url.split("/").at(-1))),
+      bytes,
+      `${guard} conservatively retains previous media without failing publication`,
+    );
+  }
   const [world, filename] = result.animation.url.split("/").slice(-2);
   for (const [range, expected] of [
     ["bytes=0-1", bytes.subarray(0, 2)],
@@ -286,10 +601,12 @@ try {
     assert.deepEqual(await setupReopened.generate(setupBody), { ok: false, error: "animation-failed", retry: true });
     assert.equal(setupCalls, 1, "legacy or corrupt markers never authorize an automatic purchase");
   }
+  assert.equal((await setupReopened.generate({ ...setupBody, retry: true })).reason, "seedance-reference-setup");
+  assert.equal(setupCalls, 2, "an explicit retry can atomically replace an empty marker and reach the provider");
   await writeFile(setupStatus, savedFailure);
   setupCorrected = true;
   assert.equal((await setupReopened.generate({ ...setupBody, retry: true })).ok, true);
-  assert.equal(setupCalls, 2);
+  assert.equal(setupCalls, 3);
 
   const statusReady = deferred(),
     statusFailure = deferred(),
@@ -726,6 +1043,11 @@ try {
   assert.equal(shippedCalls[0].galleryImageId, "owned-gallery-id");
   assert.equal((await route("/banner-animation", { runId: "shipped", banner: "char-standard" })).cached, true);
   assert.equal(shippedCalls.length, 1);
+  assert.equal(
+    (await route("/banner-animation", { runId: "shipped", banner: "char-standard", retry: true })).cached,
+    false,
+  );
+  assert.equal(shippedCalls.length, 2, "the shipped route passes an explicit cached-media retry to the provider");
   assert.equal((await route("/run/sources", { runId: "shipped", sources: { animationConnectionId: "" } })).ok, true);
   assert.equal(
     (await route("/banner-animation", { runId: "shipped", banner: "char-standard" })).error,
@@ -789,7 +1111,7 @@ try {
       }
       if (Element.rejectNextPlay) {
         Element.rejectNextPlay = false;
-        return Promise.reject(new Error("NotAllowedError"));
+        return Promise.reject(new DOMException("A user gesture is required.", "NotAllowedError"));
       }
       this.paused = false;
       return Promise.resolve();
@@ -884,6 +1206,66 @@ try {
     assert.equal(target.children.length, 0, "late completion cannot attach to another world");
     disposeForgeBannerAnimation(host);
 
+    const playback = client();
+    wireForgeBannerAnimation(playback.host);
+    playback.requests[0].resolve(response);
+    await wait();
+    const failedClip = playback.target.children[0];
+    failedClip.events.playing();
+    failedClip.events.error();
+    const playbackRetry = playback.chips.querySelector("[data-animation-retry]");
+    assert.ok(playbackRetry, "a decoder/network error exposes an explicit regeneration action");
+    playback.host._forgeBannerAnimation.onVisibility();
+    wireForgeBannerAnimation(playback.host);
+    await wait();
+    assert.equal(playback.requests.length, 1, "playback errors never trigger automatic paid regeneration");
+    playbackRetry.onclick();
+    assert.equal(playback.requests.length, 2);
+    assert.equal(playback.requests[1].body.retry, true);
+    playbackRetry.onclick();
+    assert.equal(playback.requests.length, 2, "duplicate clicks cannot start another paid recovery");
+    playback.requests[1].resolve({ ok: false, retry: true });
+    await wait();
+    assert.equal(playbackRetry.disabled, false, "provider rejection restores the explicit recovery control");
+    playbackRetry.onclick();
+    playback.requests[2].resolve({
+      ...response,
+      animation: { ...response.animation, url: response.animation.url.replace(/b{64}/u, "c".repeat(64)) },
+    });
+    await wait();
+    const recoveredClip = playback.target.children[0];
+    recoveredClip.events.playing();
+    failedClip.events.error();
+    failedClip.events.playing();
+    assert.equal(
+      playback.target.children[0],
+      recoveredClip,
+      "late events from a removed clip cannot tear down its successful replacement",
+    );
+    assert.equal(recoveredClip.style.opacity, "1");
+    assert.equal(playback.chips.querySelector("[data-animation-retry]"), undefined);
+    assert.equal(playback.requests.length, 3);
+    disposeForgeBannerAnimation(playback.host);
+
+    const unsupported = client(),
+      unsupportedPlay = deferred();
+    wireForgeBannerAnimation(unsupported.host);
+    Element.pendingNextPlay = unsupportedPlay;
+    unsupported.requests[0].resolve(response);
+    await wait();
+    unsupportedPlay.reject(new DOMException("No supported media source.", "NotSupportedError"));
+    await wait();
+    const unsupportedRetry = unsupported.chips.querySelector("[data-animation-retry]");
+    assert.ok(unsupportedRetry, "promise-only decoder rejection still offers deliberate regeneration");
+    assert.equal(unsupported.target.children.length, 0, "the unsupported clip cannot block mounting its replacement");
+    assert.equal(unsupported.requests.length, 1, "promise-only failures never repurchase automatically");
+    unsupportedRetry.onclick();
+    unsupported.requests[1].resolve(response);
+    await wait();
+    assert.equal(unsupported.target.children[0]?.tagName, "video");
+    assert.equal(unsupported.requests.length, 2);
+    disposeForgeBannerAnimation(unsupported.host);
+
     const stale = client();
     wireForgeBannerAnimation(stale.host);
     const staleIdentity = stale.host._forgeBannerAnimation.identity;
@@ -895,7 +1277,12 @@ try {
       false,
       "a mismatched poster evicts the stale resolved request",
     );
-    assert.ok(stale.chips.children.some((node) => node.textContent === forgeAnimationEnglish.failed));
+    assert.ok(
+      stale.chips.children.some(
+        (node) => node.textContent === `${forgeAnimationEnglish.failed} ${forgeAnimationEnglish.retryCost}`,
+      ),
+    );
+    assert.ok(stale.chips.querySelector("[data-animation-retry]"), "stale poster metadata offers explicit recovery");
     assert.equal(
       stale.chips.children.some((node) => node.textContent === forgeAnimationEnglish.generating),
       false,
@@ -912,7 +1299,11 @@ try {
     wireForgeBannerAnimation(stale.host);
     await wait();
     assert.equal(stale.requests.length, 1, "visibility and DOM remounts cannot repurchase a stale poster clip");
-    assert.ok(stale.chips.children.some((node) => node.textContent === forgeAnimationEnglish.failed));
+    assert.ok(
+      stale.chips.children.some(
+        (node) => node.textContent === `${forgeAnimationEnglish.failed} ${forgeAnimationEnglish.retryCost}`,
+      ),
+    );
     stale.host._summonBanner = { banner: structuredClone(stale.host._summonBanner.banner) };
     wireForgeBannerAnimation(stale.host);
     assert.equal(stale.requests.length, 2, "fresh banner metadata can retry the same textual identity");
@@ -926,7 +1317,11 @@ try {
     wireForgeBannerAnimation(retrying.host);
     retrying.requests[0].resolve({ ...setupFailure, detail: "SECRET_PROVIDER_DETAIL" });
     await wait();
-    assert.ok(retrying.chips.children.some((node) => node.textContent === forgeAnimationEnglish.seedanceSetup));
+    assert.ok(
+      retrying.chips.children.some(
+        (node) => node.textContent === `${forgeAnimationEnglish.seedanceSetup} ${forgeAnimationEnglish.retryCost}`,
+      ),
+    );
     const retryButton = retrying.chips.querySelector("[data-animation-retry]");
     retryButton.onclick();
     assert.equal(retrying.requests.length, 2);
@@ -942,7 +1337,11 @@ try {
     await wait();
     assert.equal(retryButton.disabled, false);
     assert.equal(retryButton.textContent, forgeAnimationEnglish.retry);
-    assert.ok(retrying.chips.children.some((node) => node.textContent === forgeAnimationEnglish.seedanceSetup));
+    assert.ok(
+      retrying.chips.children.some(
+        (node) => node.textContent === `${forgeAnimationEnglish.seedanceSetup} ${forgeAnimationEnglish.retryCost}`,
+      ),
+    );
     assert.equal(retrying.requests.length, 2, "a setup failure waits for another explicit retry");
     retryButton.onclick();
     retrying.requests[2].resolve(response);

@@ -860,6 +860,278 @@
               "replace": "Ee(a[_],e.revealFirst===true),()=>{e.choicePlayback"
             }
           ]
+        },
+        {
+          "version": "1.16.1",
+          "edits": [
+            {
+              "find": "\"She did not answer.\"",
+              "replace": "\"They did not answer.\""
+            },
+            {
+              "find": "ds=\"1.16.0\"",
+              "replace": "ds=\"1.16.1\""
+            },
+            {
+              "find": "/* forge-browser-source:start */\n",
+              "replaceFrom": "src/chat-continuity-client.mjs",
+              "sourceId": "chat-continuity"
+            },
+            {
+              "find": "_chatSay(e){let a=this._chat;",
+              "replace": "_chatSay(e){let a=this._chat,forgeChatRunId=this._run?this._run.runId:\"\";"
+            },
+            {
+              "find": "if(!n){this._chatStash={unitId:a.unit.id,error:c,retry:!!(o&&o.retry),draft:l?\"\":r};return}l||(this._chat={...this._chat,messages:(this._chat.messages||[]).filter(h=>!String(h.id||\"\").startsWith(\"local-\"))},r&&(this._chatDraft=r)),this._chat={...this._chat,error:c,retry:!!(o&&o.retry)},this._chatRev+=1,this._renderBrowser()",
+              "replace": "return reconcileForgeChatFailure(this,{runId:forgeChatRunId,unitId:a.unit.id,previous:a.messages||[],text:r,intent:e,optimistic:s,error:c,response:o})"
+            },
+            {
+              "find": "this._chat={...this._chat,error:\"\",retry:!1},this._chatReload();return",
+              "replace": "this._chat={...this._chat,error:\"\",retry:!1,messages:removeForgeChatOptimistic(this._chat.messages,s)},this._chatReload();return"
+            },
+            {
+              "find": "_chatWith(e){let a=String(e||\"\");",
+              "replace": "_chatWith(e){let a=String(e||\"\"),forgeChatRunId=this._run?this._run.runId:\"\";"
+            },
+            {
+              "find": "this._chat={...this._chat,opening:!1,error:\"\",unit:r.unit,channel:r.channel||\"\",messages:r.messages||[],past:r.past||0,cost:r.cost,max:r.max,photos:r.photos!==!1,page:Number(r.page)||1,pages:Number(r.pages)||1};let s=this._chatStash;s&&s.unitId===a&&(this._chatStash=null,this._chat={...this._chat,error:s.error||\"\",retry:!!s.retry},s.draft&&(this._chatDraft=s.draft))",
+              "replace": "adoptForgeChatSnapshot(this,r,{runId:forgeChatRunId,unitId:a,opening:!0})"
+            },
+            {
+              "find": "_chatReload(){let e=this._chat;",
+              "replace": "_chatReload(){let e=this._chat,forgeChatRunId=this._run?this._run.runId:\"\";"
+            },
+            {
+              "find": "this._chat={...this._chat,unit:a.unit,messages:a.messages||[],past:a.past||0,page:Number(a.page)||1,pages:Number(a.pages)||1},this._chatRev+=1",
+              "replace": "adoptForgeChatSnapshot(this,a,{runId:forgeChatRunId,unitId:e.unit.id}),this._chatRev+=1"
+            },
+            {
+              "find": "_chatEarlier(){let e=this._chat;",
+              "replace": "_chatEarlier(){let e=this._chat,forgeChatRunId=this._run?this._run.runId:\"\";"
+            },
+            {
+              "find": "this._chat={...this._chat,messages:[...r.messages||[],...this._chat.messages||[]],page:Number(r.page)||a,pages:Number(r.pages)||1},this._chatRev+=1,this._renderBrowser()",
+              "replace": "prependForgeChatHistory(this,r,{runId:forgeChatRunId,unitId:e.unit.id,page:a})"
+            },
+            {
+              "find": "C||!x.length?\" disabled\":\"\"}>Close and remember",
+              "replace": "C||!forgeChatHasCurrentMessages(x)?\" disabled\":\"\"}>Close and remember"
+            },
+            {
+              "find": "if(!this._chat||!this._chat.unit)return;if(o&&o.ok){if(!n)return;this._adoptFromResponse(o),this._chat={...this._chat,error:\"\",retry:!1,messages:removeForgeChatOptimistic(this._chat.messages,s)},this._chatReload();return}",
+              "replace": "if(o&&o.ok){retainForgeChatSuccess(this,{runId:forgeChatRunId,unitId:a.unit.id,previous:a.messages||[],text:r,intent:e,optimistic:s},o);if(!n)return;this._adoptFromResponse(o),this._chatReload();return}if(!this._chat||!this._chat.unit)return;"
+            }
+          ]
+        },
+        {
+          "version": "1.17.0",
+          "edits": [
+            {
+              "find": "var pb=48",
+              "replaceFrom": [
+                "src/chapter-regeneration-en.mjs",
+                "src/chapter-regeneration-client.mjs"
+              ],
+              "sourceId": "chapter-regeneration-client"
+            },
+            {
+              "find": "ds=\"1.16.1\"",
+              "replace": "ds=\"1.17.0\""
+            },
+            {
+              "find": "wireForgeStoryCancel(this),wireForgeHome",
+              "replace": "wireForgeStoryCancel(this),wireForgeChapterRegeneration(this),wireForgeHome"
+            },
+            {
+              "find": "_postJson(e,a,r){let forgeStory=forgeStoryRequest(this,e);",
+              "replace": "_postJson(e,a,r){if(!forgeChapterOriginCurrent(this,e,a))return Promise.resolve(null);a=forgeChapterRequest(this,e,a);let forgeStory=forgeStoryRequest(this,e);"
+            },
+            {
+              "find": "if(!forgeStory.current())return null;return(this._adoptFromResponse(n)",
+              "replace": "if(!forgeStory.current()||!forgeChapterOriginCurrent(this,e,a)||!adoptForgeChapterVersion(this,e,a,n))return null;return(this._adoptFromResponse(n)"
+            },
+            {
+              "find": "_advanceNode(){if(!this._run)return;let e=this._difficulty,a=this._chapterProgress[e]||0;this._chapterProgress[e]=a+1;let r=this._nodeTitle(a);this._postJson(\"/complete\",{runId:this._run.runId,chapter:this._planChapter,difficulty:e,nodeIndex:a}).then(s=>{!(s&&s.ok)&&s&&s.error!==\"lost\"&&(this._chapterProgress[e]||0)===a+1&&(this._chapterProgress[e]=a),this._afterComplete(s,r)}).catch(()=>{(this._chapterProgress[e]||0)===a+1&&(this._chapterProgress[e]=a),this._renderBrowser()}),this._renderBrowser()}",
+              "replace": "_advanceNode(){let forgeCurrent=forgeChapterCurrent(this);if(!this._run)return;let e=this._difficulty,a=this._chapterProgress[e]||0;this._chapterProgress[e]=a+1;let r=this._nodeTitle(a);this._postJson(\"/complete\",{runId:this._run.runId,chapter:this._planChapter,difficulty:e,nodeIndex:a}).then(s=>{if(!forgeCurrent())return;!(s&&s.ok)&&s&&s.error!==\"lost\"&&(this._chapterProgress[e]||0)===a+1&&(this._chapterProgress[e]=a),this._afterComplete(s,r)}).catch(()=>{if(!forgeCurrent())return;(this._chapterProgress[e]||0)===a+1&&(this._chapterProgress[e]=a),this._renderBrowser()}),this._renderBrowser()}"
+            },
+            {
+              "find": "_completeStoryBeat(){let e=this._activeStoryNode,a=!!(e&&e.prologue);if(this._beatLineWrite(0),this._clearBeat(),e&&this._run){let r=e.nodeIndex==null?this._chapterProgress[e.difficulty]||0:e.nodeIndex;this._chapterProgress[e.difficulty]=(this._chapterProgress[e.difficulty]||0)+1,this._postJson(this._bondUnit?\"/bond-chapter/complete\":\"/complete\",this._bondUnit?{runId:this._run.runId,unitId:this._bondUnit,part:this._bondPart,storyIndex:e.storyIndex}:{runId:this._run.runId,chapter:e.chapter,difficulty:e.difficulty,nodeIndex:r}).then(s=>{if(!(s&&s.ok)){this._chapterProgress[e.difficulty]=Math.max(0,(this._chapterProgress[e.difficulty]||0)-1),this._hudView===\"chapter\"&&this._renderBrowser();return}this._adoptFromResponse(s)})}a&&(this._prologue=!1),this._hudView=a?\"home\":\"chapter\",this._renderBrowser()}",
+              "replace": "_completeStoryBeat(){let forgeCurrent=forgeChapterCurrent(this);let e=this._activeStoryNode,a=!!(e&&e.prologue);if(this._beatLineWrite(0),this._clearBeat(),e&&this._run){let r=e.nodeIndex==null?this._chapterProgress[e.difficulty]||0:e.nodeIndex;this._chapterProgress[e.difficulty]=(this._chapterProgress[e.difficulty]||0)+1,this._postJson(this._bondUnit?\"/bond-chapter/complete\":\"/complete\",this._bondUnit?{runId:this._run.runId,unitId:this._bondUnit,part:this._bondPart,storyIndex:e.storyIndex}:{runId:this._run.runId,chapter:e.chapter,difficulty:e.difficulty,nodeIndex:r}).then(s=>{if(!forgeCurrent())return;if(!(s&&s.ok)){this._chapterProgress[e.difficulty]=Math.max(0,(this._chapterProgress[e.difficulty]||0)-1),this._hudView===\"chapter\"&&this._renderBrowser();return}this._adoptFromResponse(s)})}a&&(this._prologue=!1),this._hudView=a?\"home\":\"chapter\",this._renderBrowser()}"
+            },
+            {
+              "find": "_playStoryNode(e){!this._run||this._storyStarting||(this._storyStarting=!0,this._storyNotice=\"\",this._postJson(this._bondUnit?\"/bond-chapter/start\":\"/story/start\",this._bondUnit?{runId:this._run.runId,unitId:this._bondUnit,part:this._bondPart,storyIndex:e&&e.storyIndex}:{runId:this._run.runId,chapter:this._planChapter,storyIndex:e&&e.storyIndex}).then(a=>{if(this._storyStarting=!1,a&&a.ok){this._run&&(this._run.wallet=a.wallet||this._run.wallet),this._openStoryNode(e);return}this._storyNotice=a&&a.error===\"no-vigor\"?`Not enough Vigor: this beat costs ${a.cost} and you have ${a.vigor}.`:\"That beat could not be started.\",this._renderBrowser()}))}",
+              "replace": "_playStoryNode(e){let forgeOrigin=this._run?.runId,forgeLocalRevision=this._forgeStoryRevision||0,forgeCurrent=forgeChapterCurrent(this);!this._run||this._storyStarting||(this._storyStarting=!0,this._storyNotice=\"\",this._postJson(this._bondUnit?\"/bond-chapter/start\":\"/story/start\",this._bondUnit?{runId:this._run.runId,unitId:this._bondUnit,part:this._bondPart,storyIndex:e&&e.storyIndex}:{runId:this._run.runId,chapter:this._planChapter,storyIndex:e&&e.storyIndex}).then(a=>{if(!forgeCurrent()){if(this._run?.runId===forgeOrigin&&(this._forgeStoryRevision||0)===forgeLocalRevision){this._storyStarting=!1;}return;}if(this._storyStarting=!1,a&&a.ok){this._run&&(this._run.wallet=a.wallet||this._run.wallet),this._openStoryNode(e);return}this._storyNotice=a&&a.error===\"no-vigor\"?`Not enough Vigor: this beat costs ${a.cost} and you have ${a.vigor}.`:\"That beat could not be started.\",this._renderBrowser()}))}"
+            },
+            {
+              "find": "_startBattle(){if(!this._run||this._combatStarting)return;this._combatStarting=!0;let e=this._combatNode;(e&&e.tower?this._postJson(\"/tower/start\",{runId:this._run.runId,floor:e.floor,part:e.part||0,presetIndex:this._combatPreset,encounter:this._combat&&this._combat.encounter||\"\"}):e&&e.farm?this._postJson(\"/farm/start\",{runId:this._run.runId,stage:e.stage,difficulty:e.difficulty,family:e.family||\"\",presetIndex:this._combatPreset}):this._postJson(\"/battle/start\",{runId:this._run.runId,chapter:e.chapter,combatIndex:e.combatIndex,difficulty:this._difficulty,presetIndex:this._combatPreset})).then(r=>{this._combatStarting=!1,this._autoStarting=!1,r&&r.ok?(this._run&&(this._run.wallet=r.wallet||this._run.wallet),this._combatLoss=r.loss||null,this._combatRun=Gu({allies:this._combat&&this._combat.allies||[],enemies:this._combat&&this._combat.enemies||[],seed:this._combatSeed}),this._combatPhase=\"battle\",this._combatVigorError=null):r&&r.error===\"changed\"?this._combatPhase=\"loading\":this._combatVigorError=r&&r.error===\"no-vigor\"?r:{error:r&&r.error||\"failed\"},this._renderBrowser()})}",
+              "replace": "_startBattle(){let forgeOrigin=this._run?.runId,forgeLocalRevision=this._forgeStoryRevision||0,forgeCurrent=this._combatNode?.farm||this._combatNode?.tower?()=>true:forgeChapterCurrent(this);if(!this._run||this._combatStarting)return;this._combatStarting=!0;let e=this._combatNode;(e&&e.tower?this._postJson(\"/tower/start\",{runId:this._run.runId,floor:e.floor,part:e.part||0,presetIndex:this._combatPreset,encounter:this._combat&&this._combat.encounter||\"\"}):e&&e.farm?this._postJson(\"/farm/start\",{runId:this._run.runId,stage:e.stage,difficulty:e.difficulty,family:e.family||\"\",presetIndex:this._combatPreset}):this._postJson(\"/battle/start\",{runId:this._run.runId,chapter:e.chapter,combatIndex:e.combatIndex,difficulty:this._difficulty,presetIndex:this._combatPreset})).then(r=>{if(!forgeCurrent()){if(this._run?.runId===forgeOrigin&&(this._forgeStoryRevision||0)===forgeLocalRevision){this._combatStarting=!1,this._autoStarting=!1;}return;}this._combatStarting=!1,this._autoStarting=!1,r&&r.ok?(this._run&&(this._run.wallet=r.wallet||this._run.wallet),this._combatLoss=r.loss||null,this._combatRun=Gu({allies:this._combat&&this._combat.allies||[],enemies:this._combat&&this._combat.enemies||[],seed:this._combatSeed}),this._combatPhase=\"battle\",this._combatVigorError=null):r&&r.error===\"changed\"?this._combatPhase=\"loading\":this._combatVigorError=r&&r.error===\"no-vigor\"?r:{error:r&&r.error||\"failed\"},this._renderBrowser()})}"
+            },
+            {
+              "find": "_markBeatAt(e,a){let r=this._activeStoryNode;if(!r||!this._run||r.replay)return;let s=Math.max(0,Math.round(Number(e)||0));if(s===this._beatMarkSent)return;this._beatMarkSent=s;let o={runId:this._run.runId,...this._bondUnit?{unitId:this._bondUnit,part:this._bondPart}:{},chapter:r.chapter,storyIndex:r.storyIndex,at:s};this._postJson(\"/beat/mark\",o,a).then(n=>n&&n.ok?null:(this._beatMarkSent=-1,a?null:this._postJson(\"/beat/mark\",o))).catch(()=>{})}",
+              "replace": "_markBeatAt(e,a){let forgeCurrent=forgeChapterCurrent(this);let r=this._activeStoryNode;if(!r||!this._run||r.replay)return;let s=Math.max(0,Math.round(Number(e)||0));if(s===this._beatMarkSent)return;this._beatMarkSent=s;let o={runId:this._run.runId,...this._bondUnit?{unitId:this._bondUnit,part:this._bondPart}:{},chapter:r.chapter,storyIndex:r.storyIndex,at:s};this._postJson(\"/beat/mark\",o,a).then(n=>!forgeCurrent()||n&&n.ok?null:(this._beatMarkSent=-1,a?null:this._postJson(\"/beat/mark\",o))).catch(()=>{})}"
+            },
+            {
+              "find": "_loadChapters(){if(!this._run)return;let e=this._run.runId,a=this._planChapter;this._chaptersState=\"loading\",this._fillChapters(),this._postJson(\"/chapters\",{runId:e}).then(r=>{if(!this._run||this._run.runId!==e){this._chaptersState===\"loading\"&&(this._chaptersState=\"idle\");return}r&&r.ok&&Array.isArray(r.chapters)?(this._chaptersData=r,this._chaptersFor=e+\"|\"+a,this._chaptersState=\"ready\"):this._chaptersState=\"error\",this._fillChapters(),this._hudView===\"modes\"&&this._renderBrowser()})}",
+              "replace": "_loadChapters(){let forgeOrigin=this._run?.runId,forgeLocalRevision=this._forgeStoryRevision||0;if(!this._run)return;let e=this._run.runId,a=this._planChapter;this._chaptersState=\"loading\",this._fillChapters(),this._postJson(\"/chapters\",{runId:e}).then(r=>{if(this._run?.runId!==forgeOrigin||(this._forgeStoryRevision||0)!==forgeLocalRevision)return;if(!this._run||this._run.runId!==e){this._chaptersState===\"loading\"&&(this._chaptersState=\"idle\");return}r&&r.ok&&Array.isArray(r.chapters)?(this._chaptersData=r,this._chaptersFor=e+\"|\"+a,this._chaptersState=\"ready\"):this._chaptersState=\"error\",this._fillChapters(),this._hudView===\"modes\"&&this._renderBrowser()})}"
+            },
+            {
+              "find": "_loadContinuity(){let forgeMemoryRunId=this._run?.runId;forgeMemoryRunId&&(this._continuityState=\"loading\",this._fillContinuity(),this._postJson(\"/continuity\",{runId:forgeMemoryRunId}).then(e=>{if(this._run?.runId!==forgeMemoryRunId)return;adoptForgeStoryMemoryStatus(this,e,forgeMemoryRunId);e&&e.ok&&Array.isArray(e.chapters)?(this._continuity=e.chapters,this._continuityState=\"ready\",e.warnTokens&&(this._warnTokens=Number(e.warnTokens)||this._warnTokens,_a(this._root,this._contextTokens,this._warnTokens))):this._continuityState=\"error\",this._fillContinuity()}))}",
+              "replace": "_loadContinuity(){let forgeOrigin=this._run?.runId,forgeLocalRevision=this._forgeStoryRevision||0;let forgeMemoryRunId=this._run?.runId;forgeMemoryRunId&&(this._continuityState=\"loading\",this._fillContinuity(),this._postJson(\"/continuity\",{runId:forgeMemoryRunId}).then(e=>{if(this._run?.runId!==forgeOrigin||(this._forgeStoryRevision||0)!==forgeLocalRevision)return;if(this._run?.runId!==forgeMemoryRunId)return;adoptForgeStoryMemoryStatus(this,e,forgeMemoryRunId);e&&e.ok&&Array.isArray(e.chapters)?(this._continuity=e.chapters,this._continuityState=\"ready\",e.warnTokens&&(this._warnTokens=Number(e.warnTokens)||this._warnTokens,_a(this._root,this._contextTokens,this._warnTokens))):this._continuityState=\"error\",this._fillContinuity()}))}"
+            },
+            {
+              "find": "_mergeFold(e){let a=this._fold,r=Pr(e||this._continuity||[],a);!this._run||this._merging||r.length<2||(this._merging=!0,this._foldError=\"\",this._fillContinuity(),this._postJson(\"/compress/merge\",{runId:this._run.runId,rows:r.map(s=>String(s.chapter))}).then(s=>{this._merging=!1,(!s||!s.ok)&&(this._foldError=Kh(s)),this._fold=s&&s.ok?null:s&&s.error===\"stale\"?{on:!0,from:0,to:0}:a,s&&s.ok&&typeof s.contextTokens==\"number\"&&(this._contextTokens=s.contextTokens,_a(this._root,this._contextTokens,this._warnTokens)),this._continuity=null,this._continuityState=\"idle\",this._loadContinuity()}))}",
+              "replace": "_mergeFold(e){let forgeOrigin=this._run?.runId,forgeLocalRevision=this._forgeStoryRevision||0;let a=this._fold,r=Pr(e||this._continuity||[],a);!this._run||this._merging||r.length<2||(this._merging=!0,this._foldError=\"\",this._fillContinuity(),this._postJson(\"/compress/merge\",{runId:this._run.runId,rows:r.map(s=>String(s.chapter))}).then(s=>{if(this._run?.runId!==forgeOrigin||(this._forgeStoryRevision||0)!==forgeLocalRevision)return;this._merging=!1,(!s||!s.ok)&&(this._foldError=Kh(s)),this._fold=s&&s.ok?null:s&&s.error===\"stale\"?{on:!0,from:0,to:0}:a,s&&s.ok&&typeof s.contextTokens==\"number\"&&(this._contextTokens=s.contextTokens,_a(this._root,this._contextTokens,this._warnTokens)),this._continuity=null,this._continuityState=\"idle\",this._loadContinuity()}))}"
+            },
+            {
+              "find": "_compressChapter(e){let a=e&&typeof e==\"object\"?e.chapter:e,r=e&&typeof e==\"object\"&&e.bond?String(e.unitId||\"\"):\"\",s=Math.max(1,Math.round(Number(e&&e.part)||1));!this._run||this._compressing!=null||a==null||(this._compressing=a,this._fillContinuity(),this._postJson(\"/compress\",{runId:this._run.runId,chapter:a,...r?{unitId:r,part:s}:{}}).then(o=>{this._compressing=null,o&&o.ok&&Array.isArray(this._continuity)&&(this._continuity=this._continuity.map(n=>n.chapter===a?{...n,compressed:!0}:n)),o&&o.ok&&Number.isFinite(Number(o.contextTokens))&&(this._contextTokens=Number(o.contextTokens)||0,_a(this._root,this._contextTokens,this._warnTokens)),this._fillContinuity()}))}",
+              "replace": "_compressChapter(e){let forgeOrigin=this._run?.runId,forgeLocalRevision=this._forgeStoryRevision||0;let a=e&&typeof e==\"object\"?e.chapter:e,r=e&&typeof e==\"object\"&&e.bond?String(e.unitId||\"\"):\"\",s=Math.max(1,Math.round(Number(e&&e.part)||1));!this._run||this._compressing!=null||a==null||(this._compressing=a,this._fillContinuity(),this._postJson(\"/compress\",{runId:this._run.runId,chapter:a,...r?{unitId:r,part:s}:{}}).then(o=>{if(this._run?.runId!==forgeOrigin||(this._forgeStoryRevision||0)!==forgeLocalRevision)return;this._compressing=null,o&&o.ok&&Array.isArray(this._continuity)&&(this._continuity=this._continuity.map(n=>n.chapter===a?{...n,compressed:!0}:n)),o&&o.ok&&Number.isFinite(Number(o.contextTokens))&&(this._contextTokens=Number(o.contextTokens)||0,_a(this._root,this._contextTokens,this._warnTokens)),this._fillContinuity()}))}"
+            }
+          ]
+        },
+        {
+          "version": "1.18.0",
+          "notes": "Optional, generated seasonal story events with persisted windows, scoped chapters, media and transactional rewards.",
+          "edits": [
+            {
+              "find": "var pb=48",
+              "replaceFrom": [
+                "src/seasonal-events-en.mjs",
+                "src/seasonal-events-client.mjs"
+              ],
+              "sourceId": "seasonal-events-client"
+            },
+            {
+              "find": "ds=\"1.17.0\"",
+              "replace": "ds=\"1.18.0\""
+            },
+            {
+              "find": "_renderBrowser(){this._syncTypeScale();",
+              "replace": "_renderBrowser(){prepareForgeSeasonalEvents(this);this._syncTypeScale();"
+            },
+            {
+              "find": "wireForgeChapterRegeneration(this),wireForgeHome",
+              "replace": "wireForgeChapterRegeneration(this),wireForgeSeasonalEvents(this),wireForgeHome"
+            },
+            {
+              "find": "a=forgeChapterRequest(this,e,a);let forgeStory=",
+              "replace": "a=forgeChapterRequest(this,e,a);e=forgeSeasonalRequest(e,a);let forgeStory="
+            },
+            {
+              "find": "_chapterLabel(){let e=",
+              "replace": "_chapterLabel(){if(this._forgeEvent?.chapter===this._planChapter)return this._forgeEvent.title||forgeSeasonalEnglish[\"events.title\"];let e="
+            },
+            {
+              "find": "_storyLabel(e){return this._bondUnit?",
+              "replace": "_storyLabel(e){if(this._forgeEvent?.chapter===this._planChapter)return this._forgeEvent.title||forgeSeasonalEnglish[\"events.title\"];return this._bondUnit?"
+            },
+            {
+              "find": "_leaveBond(e){this._bondUnit=\"\"",
+              "replace": "_leaveBond(e){this._forgeEvent=null;this._bondUnit=\"\""
+            },
+            {
+              "find": "{id:\"story.choices\",settings:",
+              "replace": "{id:\"story.choices\",step:\"sources\",settings:"
+            },
+            {
+              "find": "{id:\"story.preforge\",settings:",
+              "replace": "{id:\"story.seasonalEvents\",step:\"sources\",settings:\"continuity\",group:\"playerChoices\",type:\"toggle\",label:forgeSeasonalEnglish[\"events.settings.allow\"],hint:forgeSeasonalEnglish[\"events.settings.hint\"],default:!1},{id:\"story.preforge\",settings:"
+            },
+            {
+              "find": "this._fillFold(a)}_fillFold(e)",
+              "replace": "this._fillFold(a);wireForgeSeasonalEvents(this)}_fillFold(e)"
+            },
+            {
+              "find": "l&&l.addEventListener(\"click\",()=>this._openBondChapter(n.id,n.part))}}_bondName()",
+              "replace": "l&&l.addEventListener(\"click\",()=>this._openBondChapter(n.id,n.part))}wireForgeSeasonalEvents(this)}_bondName()"
+            },
+            {
+              "find": "return(this._adoptFromResponse(n),refreshForgeUnitStep(this,e,a,n)",
+              "replace": "return(this._adoptFromResponse(n),adoptForgeSeasonalResponse(this,e,a,n),refreshForgeUnitStep(this,e,a,n)"
+            }
+          ]
+        },
+        {
+          "version": "1.19.0",
+          "edits": [
+            {
+              "find": "var pb=48",
+              "replaceFrom": [
+                "src/formation-combat-shared.mjs",
+                "src/formation-combat-en.mjs",
+                "src/formation-combat-client.mjs",
+                "src/formation-settings-en.mjs",
+                "src/formation-settings-client.mjs",
+                "src/combat-voices-en.mjs",
+                "src/combat-ultimate-client.mjs",
+                "src/combat-voices-client.mjs"
+              ],
+              "sourceId": "formation-combat-client"
+            },
+            {
+              "find": "function Gu({allies:t=[],enemies:e=[],seed:a=1}={}){let r={gen:sf({allies:t,enemies:e,seed:a}),",
+              "replace": "function Gu({allies:t=[],enemies:e=[],seed:a=1,combatMode,formationRules}={}){let r={gen:combatMode===\"formation\"?forgeFormationBattle({allies:t,enemies:e,seed:a,rules:formationRules||[]}):sf({allies:t,enemies:e,seed:a}),"
+            },
+            {
+              "find": "enemies:this._combat&&this._combat.enemies||[],seed:this._combatSeed",
+              "replace": "enemies:this._combat&&this._combat.enemies||[],seed:this._combatSeed,combatMode:this._combat?.combatMode,formationRules:this._combat?.formationRules"
+            },
+            {
+              "find": "function et(y){let O=te.get(String(y.actor));",
+              "replace": "function et(y){if(y.options?.formation)return forgeRenderFormationTurn({root:t,container:_e,choice:y,payload:a,onChoice:ft});let O=te.get(String(y.actor));"
+            },
+            {
+              "find": "O&&(forgeCombatSound(forgeAudio,y),forgeDialogue.event(y));",
+              "replace": "O&&(forgeCombatSound(forgeAudio,y),forgeDialogue.event(y),forgeFormationView.event(y),forgePresentation.event(y));"
+            },
+            {
+              "find": "let Xe=!1,forgeDialogue=createForgeCombatDialogue",
+              "replace": "let Xe=!1,forgeFormationView=createForgeFormationPresentation(t,a),forgePresentation=createForgeCombatPresentation(t,{payload:a,run:r,host:forgeHost,audio:forgeAudio}),forgeDialogue=createForgeCombatDialogue"
+            },
+            {
+              "find": "clearTimeout(V),forgeDialogue.dispose()",
+              "replace": "clearTimeout(V),forgeFormationView.dispose(),forgePresentation.dispose(),forgeDialogue.dispose()"
+            },
+            {
+              "find": "forgeChoiceSettings(a)+",
+              "replace": "forgeChoiceSettings(a)+forgeFormationSettings()+"
+            },
+            {
+              "find": "wireForgeChapterRegeneration(this),wireForgeSeasonalEvents(this),wireForgeHome",
+              "replace": "wireForgeChapterRegeneration(this),wireForgeSeasonalEvents(this),wireForgeFormationSettings(this),wireForgeFormationPreview(this),wireForgeHome"
+            },
+            {
+              "find": "disposeForgeAudio(this),disposeForgeBannerAnimation(this)",
+              "replace": "disposeForgeFormationSettings(this),disposeForgeAudio(this),disposeForgeBannerAnimation(this)"
+            },
+            {
+              "find": "return'<div class=\"ob-grid\">'+s+o+r+\"</div>\"",
+              "replace": "return'<div class=\"ob-grid\">'+s+o+r+(t.id===\"world\"?'<div class=\"ob-wide\">'+forgeFormationSetup(e)+\"</div>\":\"\")+\"</div>\""
+            },
+            {
+              "find": "function ye(){for(let F of it){",
+              "replace": "function ye(){h.combatMode=readForgeFormationSetup(t);for(let F of it){"
+            },
+            {
+              "find": "await e({...zs(h),storyNow:Re})",
+              "replace": "await e({...zs(h),combat:{mode:h.combatMode},storyNow:Re})"
+            },
+            {
+              "find": "d?\"This team has no units. Seat at least one in Formation.\":\"Couldn't set up the battle.\"",
+              "replace": "d?\"This team has no units. Seat at least one in Formation.\":forgeFormationErrorLabel(o)||\"Couldn't set up the battle.\""
+            },
+            {
+              "find": "`<style>${mc}${Dm}${wc}${qc}${ch}${ku}${Nd}${fd}${ca}${km}${An}</style>`",
+              "replace": "`<style>${mc}${Dm}${wc}${qc}${ch}${ku}${Nd}${fd}${ca}${km}${An}${forgeFormationCombatStyles}${forgeCombatVoiceStyles}${forgeCombatUltimateStyles}</style>`"
+            },
+            {
+              "find": "ds=\"1.18.0\"",
+              "replace": "ds=\"1.19.0\""
+            },
+            {
+              "find": "a=forgeChapterRequest(this,e,a);e=forgeSeasonalRequest(e,a);let forgeStory=",
+              "replace": "a=forgeChapterRequest(this,e,a);e=forgeSeasonalRequest(e,a);a=forgeFormationStartRequest(this,e,a);let forgeStory="
+            }
+          ]
         }
       ]
     },
@@ -1562,6 +1834,452 @@
             {
               "find": "let ee=En(x),j=gt(\"tenet\",m.data.affinity||\"\",Y.tier),J=gt(\"mandate\",\"any\",1),he=[{id:j,need:Y.tenet}];Y.mandate&&he.push({id:J,need:Y.mandate});for(let ge of he)if((Number(ee[ge.id])||0)<ge.need)return{ok:!1,error:\"short-materials\",form:$()};let Z=Math.max(0,Number(x.funds)||0);if(Z<Y.funds)return{ok:!1,error:\"short-funds\",form:$()};for(let ge of he)ee[ge.id]-=ge.need;if(x.materials=ee,x.funds=Z-Y.funds,b.wallet=x,Q.form=Q.form&&typeof Q.form==\"object\"?Q.form:typeof Q.form==\"number\"?{skill:Q.form}:{},Q.form[_.key]=ne+1,Xt(b,o,\"form-up\",1,Date.now()),!await Pe(o,w,b))",
               "replace": "let ee=En(x),Z=Math.max(0,Number(x.funds)||0),forgePlan=forgeTrainingPlan({level:ne,cap:Ql(Ua(S)),materials:ee,funds:Z,costAtLevel:level=>forgeTrainingCost(level,m.data.affinity,ed,gt,Jt),levels:u.levels===void 0?1:u.levels});if(!forgePlan.ok)return{ok:!1,error:forgePlan.error,form:$()};for(let ge of forgePlan.items)ee[ge.id]-=ge.need;if(x.materials=ee,x.funds=Z-forgePlan.funds,b.wallet=x,Q.form=Q.form&&typeof Q.form==\"object\"?Q.form:typeof Q.form==\"number\"?{skill:Q.form}:{},Q.form[_.key]=forgePlan.levelTo,Xt(b,o,\"form-up\",forgePlan.levels,Date.now()),!await Pe(o,w,b))"
+            }
+          ]
+        },
+        {
+          "version": "1.16.1",
+          "edits": [
+            {
+              "find": "query:[g.unit.name,de]",
+              "replace": "query:[g.unit.name,l(($[$.length-1]||{}).text)]"
+            },
+            {
+              "find": "/* forge-audio-settings-source:start */\n",
+              "replaceFrom": "src/chat-continuity-server.mjs",
+              "sourceId": "chat-continuity"
+            },
+            {
+              "find": "s.post(\"/chat/open\",async p=>{let u=p&&p.body||{},o=l(u.runId),i=l(u.unitId);if(!o||!i)return{ok:!1,error:\"bad-request\"};let g=await Pi(o,i);if(!g.ok)return g;let{data:m}=await Za(o,i),w=Array.isArray(m.messages)?m.messages:[],b=Ti(m),S=w.slice(b),M=Math.max(1,Math.ceil(S.length/$f)),_=Math.min(Math.max(1,Math.round(Number(u.page)||1)),M),x=S.length-(_-1)*$f,L=await xi(o,g.run);return{ok:!0,unit:{id:i,name:l(g.unit.name),portrait:sn(g.unit)||\"\",bond:g.level},channel:go(L||\"\"),cost:Qi,max:ld,photos:await jh(g.run),messages:S.slice(Math.max(0,x-$f),x),page:_,pages:M,past:(Array.isArray(m.sessions)?m.sessions:[]).length}})",
+              "replace": "s.post(\"/chat/open\",async p=>{let u=p&&p.body||{},o=l(u.runId),i=l(u.unitId);if(!o||!i)return{ok:!1,error:\"bad-request\"};let g=await Pi(o,i);if(!g.ok)return g;let{data:m}=await Za(o,i),forgePage=forgeChatHistoryPage(m,u.page,$f,forgeChatReplyBusy(o,i)),L=await xi(o,g.run);return{ok:!0,unit:{id:i,name:l(g.unit.name),portrait:sn(g.unit)||\"\",bond:g.level},channel:go(L||\"\"),cost:Qi,max:ld,photos:await jh(g.run),...forgePage}})"
+            },
+            {
+              "find": "s.post(\"/chat/send\",async p=>{let u=p&&p.body||{},o=l(u.runId),i=l(u.unitId);if(!o||!i)return{ok:!1,error:\"bad-request\"};let g=await Pi(o,i);if(!g.ok)return g;let m=await Za(o,i),w=Array.isArray(m.data.messages)?m.data.messages:[],b=w[w.length-1]||null,S=!!b&&b.who===\"player\",M=u.retry===!0;if(M&&!S)return{ok:!1,error:\"nothing-to-retry\"};let _=await jh(g.run);if(l(u.ask)===\"photo\"&&!_)return{ok:!1,error:\"images-off\"};let x=_&&l(u.ask)===\"photo\",L=null;if(!M){let de=l(u.text).trim().slice(0,ld);if(!de&&!x)return{ok:!1,error:\"bad-request\"};let ge=await Xr(o,Qi);if(!ge.ok)return ge;L=ge.wallet;let Fe={id:Fg(),who:\"player\",text:de,at:Date.now(),...x?{ask:\"photo\"}:{}};if(!await os(o,i,Ye=>{Ye.unitId=i,Ye.name=l(g.unit.name),Ye.messages=Array.isArray(Ye.messages)?Ye.messages:[],Ye.messages.some(Re=>Re&&Re.id===Fe.id)||Ye.messages.push(Fe)}))return await xn(o,Ye=>{let Re=Ye.wallet=Ye.wallet||{...Xe};Re.vigor=(Number(Re.vigor)||0)+Qi}),{ok:!1,error:\"write-conflict\"};await xn(o,Ye=>Xt(Ye,o,\"chat-message\",1,Date.now()))}let{data:O}=await Za(o,i),$=(Array.isArray(O.messages)?O.messages:[]).slice(Ti(O)).slice(-K0),F=await xi(o,g.run),U=await _r(o,await Nr(o)+1,0,{query:[g.unit.name,l(($[$.length-1]||{}).text)].filter(Boolean).join(\" \"),job:\"chat\",current:true}),Q=U.length>$g?U.slice(-$g):U,ne=l(g.unit.name),Y=await _t({runtime:r,runId:o,run:g.run,job:\"chat\",label:`chat ${ne}`,messages:forgeComposeMemoryPrompt(cv,[{unit:g.unit,scenario:l(g.run.scenario),channel:go(F||\"\"),channelBlurb:Hp(F||\"\"),protagonist:g.run.protagonist,bond:g.level,story:Q,history:$,memories:await Ei(o,{only:[ne]}),photos:_,asked:x||M&&!!b&&b.ask===\"photo\"}]),options:{temperature:.95,maxTokens:It(700)},parse:de=>{let ge=l(de).trim(),Fe=ne+\":\";return ne&&ge.slice(0,Fe.length).toLowerCase()===Fe.toLowerCase()&&(ge=ge.slice(Fe.length).trim()),ge?{value:ge}:{error:\"empty-answer\"}}});if(!Y.ok)return{ok:!1,error:\"generation-failed\",detail:l(Y.error),wallet:L,retry:!0};let ee=ov(Y.value),j=_?ee.photo:\"\",J=_?ee.wearing:\"\",he=ee.mine!==!1,Z={id:Fg(),who:\"unit\",text:ee.text,at:Date.now(),...j?{photo:{pending:!0}}:{}},ue=await os(o,i,de=>{de.messages=Array.isArray(de.messages)?de.messages:[],de.messages.some(ge=>ge&&ge.id===Z.id)||de.messages.push(Z)});return ue?(j&&$e(o,g.run,i,Z.id,j,J,he),{ok:!0,wallet:L,said:Z,count:ue.messages.length}):{ok:!1,error:\"write-conflict\",wallet:L,retry:!0}})",
+              "replace": "s.post(\"/chat/send\",async p=>withForgeChatSend(p&&p.body&&p.body.runId,p&&p.body&&p.body.unitId,async()=>{let u=p&&p.body||{},o=l(u.runId),i=l(u.unitId);if(!o||!i)return{ok:!1,error:\"bad-request\"};let g=await Pi(o,i);if(!g.ok)return g;let m=await Za(o,i),w=Array.isArray(m.data.messages)?m.data.messages:[],b=w[w.length-1]||null,S=!!b&&b.who===\"player\",M=u.retry===!0;if(M&&!S)return{ok:!1,error:\"nothing-to-retry\"};let _=await jh(g.run);if(l(u.ask)===\"photo\"&&!_)return{ok:!1,error:\"images-off\"};let x=_&&l(u.ask)===\"photo\",L=null;if(!M){let de=l(u.text).trim().slice(0,ld);if(!de&&!x)return{ok:!1,error:\"bad-request\"};let ge=await Xr(o,Qi);if(!ge.ok)return ge;L=ge.wallet;let Fe={id:Fg(),who:\"player\",text:de,at:Date.now(),...x?{ask:\"photo\"}:{}};if(!await os(o,i,Ye=>{Ye.unitId=i,Ye.name=l(g.unit.name),Ye.messages=Array.isArray(Ye.messages)?Ye.messages:[],Ye.messages.some(Re=>Re&&Re.id===Fe.id)||Ye.messages.push(Fe)}))return await xn(o,Ye=>{let Re=Ye.wallet=Ye.wallet||{...Xe};Re.vigor=(Number(Re.vigor)||0)+Qi}),{ok:!1,error:\"write-conflict\"};await xn(o,Ye=>Xt(Ye,o,\"chat-message\",1,Date.now()))}let{data:O}=await Za(o,i),$=(Array.isArray(O.messages)?O.messages:[]).slice(Ti(O)).slice(-K0),F=await xi(o,g.run),U=await _r(o,await Nr(o)+1,0,{query:[g.unit.name,l(($[$.length-1]||{}).text)].filter(Boolean).join(\" \"),job:\"chat\",current:true}),Q=U.length>$g?U.slice(-$g):U,ne=l(g.unit.name),Y=await _t({runtime:r,runId:o,run:g.run,job:\"chat\",label:`chat ${ne}`,messages:forgeComposeMemoryPrompt(cv,[{unit:g.unit,scenario:l(g.run.scenario),channel:go(F||\"\"),channelBlurb:Hp(F||\"\"),protagonist:g.run.protagonist,bond:g.level,story:Q,history:$,memories:await Ei(o,{only:[ne]}),photos:_,asked:x||M&&!!b&&b.ask===\"photo\"}]),options:{temperature:.95,maxTokens:It(700)},parse:de=>{let ge=l(de).trim(),Fe=ne+\":\";return ne&&ge.slice(0,Fe.length).toLowerCase()===Fe.toLowerCase()&&(ge=ge.slice(Fe.length).trim()),ge?{value:ge}:{error:\"empty-answer\"}}});if(!Y.ok)return{ok:!1,error:\"generation-failed\",detail:l(Y.error),wallet:L,retry:!0};let ee=ov(Y.value),j=_?ee.photo:\"\",J=_?ee.wearing:\"\",he=ee.mine!==!1,Z={id:Fg(),who:\"unit\",text:ee.text,at:Date.now(),...j?{photo:{pending:!0}}:{}},ue=await os(o,i,de=>{de.messages=Array.isArray(de.messages)?de.messages:[],de.messages.some(ge=>ge&&ge.id===Z.id)||de.messages.push(Z)});return ue?(j&&$e(o,g.run,i,Z.id,j,J,he),{ok:!0,wallet:L,said:Z,count:ue.messages.length}):{ok:!1,error:\"write-conflict\",wallet:L,retry:!0}}))"
+            },
+            {
+              "find": "s.post(\"/chat/close\",async p=>{let u=p&&p.body||{},o=l(u.runId),i=l(u.unitId);if(!o||!i)return{ok:!1,error:\"bad-request\"};let g=await Pi(o,i);if(!g.ok)return g;let{data:m}=await Za(o,i),b=(Array.isArray(m.messages)?m.messages:[]).slice(Ti(m));if(!b.some($=>$&&l($.text)))return{ok:!1,error:\"nothing-open\"};let S=await nl(o),M=l(g.run.protagonist&&g.run.protagonist.name)||\"They\",_=b.filter($=>$&&(l($.text)||$.who===\"player\"&&$.ask===\"photo\")).map($=>`${$.who===\"player\"?M:l(g.unit.name)}: ${l($.text)||\"(asked for a picture)\"}`).join(`\n`),x=await _t({runtime:r,runId:o,run:g.run,job:\"chat\",label:`chat-memory ${l(g.unit.name)}`,messages:sv({name:l(g.unit.name),player:l(g.run.protagonist&&g.run.protagonist.name),chapter:S,said:_}),options:{temperature:.5,maxTokens:It(500)},parse:Vt(r,$=>iv($))});if(!x.ok)return{ok:!1,error:\"generation-failed\",detail:l(x.error),retry:!0};let L={at:Date.now(),count:b.length,chapter:S,memory:x.value.memory,quote:x.value.quote,memoryName:l(g.unit.name),memoryPosition:await forgeStoryMemory.frontier(o)};return await os(o,i,$=>{$.sessions=Array.isArray($.sessions)?$.sessions:[],Ti($)<(Array.isArray($.messages)?$.messages.length:0)&&$.sessions.push(L)})?(forgeStoryMemory.schedule(o),{ok:!0,closed:L}):{ok:!1,error:\"write-conflict\",retry:!0}})",
+              "replace": "s.post(\"/chat/close\",async p=>{let u=p&&p.body||{},o=l(u.runId),i=l(u.unitId);if(!o||!i)return{ok:!1,error:\"bad-request\"};let g=await Pi(o,i);if(!g.ok)return g;if(forgeChatReplyBusy(o,i))return{ok:!1,error:\"generation-in-progress\",busy:!0,retry:!1};let{data:m}=await Za(o,i),b=(Array.isArray(m.messages)?m.messages:[]).slice(Ti(m));if(!b.some($=>$&&l($.text)))return{ok:!1,error:\"nothing-open\"};let S=await nl(o),M=l(g.run.protagonist&&g.run.protagonist.name)||\"They\",_=b.filter($=>$&&(l($.text)||$.who===\"player\"&&$.ask===\"photo\")).map($=>`${$.who===\"player\"?M:l(g.unit.name)}: ${l($.text)||\"(asked for a picture)\"}`).join(`\n`),x=await _t({runtime:r,runId:o,run:g.run,job:\"chat\",label:`chat-memory ${l(g.unit.name)}`,messages:sv({name:l(g.unit.name),player:l(g.run.protagonist&&g.run.protagonist.name),chapter:S,said:_}),options:{temperature:.5,maxTokens:It(500)},parse:Vt(r,$=>iv($))});if(!x.ok)return{ok:!1,error:\"generation-failed\",detail:l(x.error),retry:!0};let L={at:Date.now(),count:b.length,chapter:S,memory:x.value.memory,quote:x.value.quote,memoryName:l(g.unit.name),memoryPosition:await forgeStoryMemory.frontier(o)};return await os(o,i,$=>{$.sessions=Array.isArray($.sessions)?$.sessions:[],Ti($)<(Array.isArray($.messages)?$.messages.length:0)&&$.sessions.push(L)})?(forgeStoryMemory.schedule(o),{ok:!0,closed:L}):{ok:!1,error:\"write-conflict\",retry:!0}})"
+            },
+            {
+              "find": "function vu(e,t=!1){",
+              "replaceFrom": "src/character-card-context.mjs",
+              "sourceId": "character-card-context",
+              "reason": "Inject the frozen maintained helper before its first caller"
+            },
+            {
+              "find": "function vu(e,t=!1){let n=[],r=(a,f)=>{let h=l(a);return h.length>f?`${h.slice(0,f-1)}\\u2026`:h};for(let a of e||[]){if(!a||a.kind!==\"character\")continue;let f=l(a.name);if(!f)continue;let h=a.rarity===5?\"5\\u2605\":\"4\\u2605\",A=[a.role,a.affinity].filter(Boolean).join(\", \"),T=r(a.description,OA),R=r(a.personality,CA),C=[T,R].filter(Boolean).join(\" \\xB7 \"),I=t?r(l(a.outfitLine).replace(/^wearing\\s+/iu,\"\"),LA):\"\";n.push(`- ${f}${iw(a)} \\u2014 ${h}${A?` ${A}`:\"\"}${C?`: ${C}`:\"\"}${I?` \\xB7 Normally wears: ${I}`:\"\"}`)}return n.join(`\n`)}",
+              "replace": "function forgeLegacyCharacterSummary(e,t=!1){let n=[],r=(a,f)=>{let h=l(a);return h.length>f?`${h.slice(0,f-1)}\\u2026`:h};for(let a of e||[]){if(!a||a.kind!==\"character\")continue;let f=l(a.name);if(!f)continue;let h=a.rarity===5?\"5\\u2605\":\"4\\u2605\",A=[a.role,a.affinity].filter(Boolean).join(\", \"),T=r(a.description,OA),R=r(a.personality,CA),C=[T,R].filter(Boolean).join(\" \\xB7 \"),I=t?r(l(a.outfitLine).replace(/^wearing\\s+/iu,\"\"),LA):\"\";n.push(`- ${f}${iw(a)} \\u2014 ${h}${A?` ${A}`:\"\"}${C?`: ${C}`:\"\"}${I?` \\xB7 Normally wears: ${I}`:\"\"}`)}return n.join(`\n`)}function vu(e,t=false){return forgeFormatStoryCharacters(forgeLegacyCharacterSummary,e,t)}",
+              "reason": "Retain the exact legacy formatter and wrap its characterization with authored canon"
+            },
+            {
+              "find": "vu(E)",
+              "replace": "vu(await forgeHydrateStoryCharacters(E,(id)=>Le().characterCard(id),r.logger))",
+              "reason": "Read full current cards for the selected main chapter focus"
+            },
+            {
+              "find": "async function Lw(s,c,d){let v=await il(s);if(!v.length)return{pool:\"\",index:\"\"};await fh(s,v);let k=v.map(B=>B.data),E=py(k,c),N=k.filter(B=>!E.includes(B)),P=[];for(let B of E){let H=v.find(K=>K.data===B),q=await lh(d,H?H.id:\"\",B,\"\");P.push(q.line?{...B,outfitLine:q.line}:B)}return{pool:vu(P,!0),index:N.map(uy).join(`\n`),names:E.map(B=>l(B&&B.name)).filter(Boolean)}}",
+              "replace": "async function Lw(s,c,d,forgeForcedIds=[]){let v=await il(s);if(!v.length)return{pool:\"\",index:\"\"};await fh(s,v);let k=v.map(B=>B.data),E=forgeIncludeStoryFocusCharacters(v,py(k,c),forgeForcedIds),N=k.filter(B=>!E.includes(B)),P=[];for(let B of E){let H=v.find(K=>K.data===B),q=await lh(d,H?H.id:\"\",B,\"\");P.push(q.line?{...B,outfitLine:q.line}:B)}return{pool:vu(await forgeHydrateStoryCharacters(P,(id)=>Le().characterCard(id),r.logger),true),index:N.map(uy).join(`\n`),names:E.map(B=>l(B&&B.name)).filter(Boolean)}}",
+              "reason": "Keep ordinary guide matches and same-run forced focus, then hydrate selected scene characters"
+            },
+            {
+              "find": "forgeComposeMemoryPrompt(mS,[{scenario:w.scenario,unit:S",
+              "replace": "forgeComposeMemoryPrompt(mS,[{scenario:w.scenario,unit:(await forgeHydrateStoryCharacters([S],(id)=>Le().characterCard(id),r.logger))[0]",
+              "reason": "Hydrate a copy for Character Story planning without mutating S"
+            },
+            {
+              "find": "Lw(p,U,g)",
+              "replace": "Lw(p,U,g,w.bondUnitId?[w.bondUnitId]:[])",
+              "reason": "Always include the Character Story focus when the guide uses only pronouns"
+            },
+            {
+              "find": "function _u(e,t){if(!e)return\"\";let n=f=>f.length>sc?f.slice(0,sc)+\"\\u2026\":f,r=[`\n\nTHE CHARACTER CARD \\u2014 this is who they are, written by the player:\nName: ${e.name}`];e.description&&r.push(`Description: ${n(e.description)}`),e.personality&&r.push(`Personality: ${n(e.personality)}`),e.appearance&&r.push(`Appearance: ${n(e.appearance)}`),e.backstory&&r.push(`Backstory: ${n(e.backstory)}`),e.scenario&&r.push(`Their context: ${n(e.scenario)}`),e.tags&&e.tags.length&&r.push(`Tags: ${e.tags.join(\", \")}`);let a=[];return t&&t.role&&a.push(`their role is ${t.role}`),t&&t.affinity&&a.push(`their affinity is ${t.affinity}`),a.length&&r.push(`HARD RULE: ${a.join(\" and \")} -- the player chose ${a.length===2?\"them\":\"it\"}. Write the kit for exactly that; do not pick another.`),r.join(`\n`)}",
+              "replace": "function _u(e,t){if(!e)return\"\";let r=[\"\\n\\n\"+forgeFormatCharacterCardReference(e)],a=[];return t&&t.role&&a.push(`their role is ${t.role}`),t&&t.affinity&&a.push(`their affinity is ${t.affinity}`),a.length&&r.push(`HARD RULE: ${a.join(\" and \")} -- the player chose ${a.length===2?\"them\":\"it\"}. Write the kit for exactly that; do not pick another.`),r.join(`\n`)}",
+              "reason": "Initial forging uses only the four full authored fields and retains its exact hard-rule tail"
+            },
+            {
+              "find": "\"the game stores one line per field and reads it in every scene, so a card's paragraphs cannot be\"",
+              "replace": "\"the game stores a compact line per field for its interface; story writing separately reads the\"",
+              "reason": "Keep UI summaries compact while acknowledging fresh full-card story references"
+            },
+            {
+              "find": "\"copied in whole \\u2014 but nothing in them may be contradicted, and nothing new may be invented about\"",
+              "replace": "\"current full authored card. Nothing in it may be contradicted, and nothing new may be invented about\"",
+              "reason": "Remove the obsolete prohibition on full-card story context"
+            },
+            {
+              "find": "A.cap=Le||null,le=await $e.chatComplete(C,{...a,...ot,signal:forgeStoryGenerationSignal(),...Le?{maxTokens:Le}:{},temperature:se===1?a.temperature:Math.min(a.temperature??1,rS)})",
+              "replace": "logForgeStoryPrompt(e,h,C,a),A.cap=Le||null,le=await $e.chatComplete(C,{...a,...ot,signal:forgeStoryGenerationSignal(),...Le?{maxTokens:Le}:{},temperature:se===1?a.temperature:Math.min(a.temperature??1,rS)})",
+              "reason": "Log the final fitted messages immediately before the existing provider call"
+            }
+          ]
+        },
+        {
+          "version": "1.17.0",
+          "edits": [
+            {
+              "find": "async function _t(",
+              "replaceFrom": "src/chapter-regeneration-server.mjs",
+              "sourceId": "chapter-regeneration-server"
+            },
+            {
+              "find": "await t.registerPrivilegedRoutes(async s=>{s=forgeTimeZoneRoutes(s);",
+              "replace": "const forgeChapterRegeneration=createForgeChapterRegeneration({packageId:n.id,persistence:r.persistence,cancellation:forgeStoryCancellation,allNodes:tr,bondChapterId:T,bondLength:zt,openBond:session=>tc(session.roster,session.bondChapters),isCharacter:Os,invalidateMemory:runId=>forgeStoryMemory.invalidate(runId)});await t.registerPrivilegedRoutes(async s=>{s=forgeTimeZoneRoutes(s);const forgeStoryPost=(path,handler)=>forgeChapterRegeneration.post(s,path,handler);s.post(\"/chapter/regenerate\",p=>forgeChapterRegeneration.reset(p?.body||{}));"
+            },
+            {
+              "find": "function Fi(e,t,n){let r=lb(e),a=t&&t.background!=null?!!t.background:!!Tl.getStore(),f=Jh.getStore();if(f&&f.has(r))return n();let h=new Set(f||[]);h.add(r);let A=new ib(\"gen-queue\");return new Promise((T,R)=>{let C=()=>{A.runInAsyncScope(()=>Jh.run(h,()=>{Promise.resolve().then(n).then(T,R).finally(()=>{El(r).busy=!1,Zh(r)})}))},I=El(r);(a?I.low:I.high).push(C),Zh(r)})}",
+              "replace": "function Fi(e,t,n){let r=lb(e),a=t&&t.background!=null?!!t.background:!!Tl.getStore(),f=Jh.getStore();if(f&&f.has(r))return forgeStoryWork(n);let h=new Set(f||[]);h.add(r);let A=new ib(\"gen-queue\");return forgeStoryWork(()=>new Promise((T,R)=>{let C=()=>{A.runInAsyncScope(()=>Jh.run(h,()=>{Promise.resolve().then(()=>forgeStoryWork(n)).then(T,R).finally(()=>{El(r).busy=!1,Zh(r)})}))},I=El(r);(a?I.low:I.high).push(C),Zh(r)}))}"
+            },
+            {
+              "find": "return await c()}finally{gn.get(s)===v",
+              "replace": "return await forgeStoryWork(c)}finally{gn.get(s)===v"
+            },
+            {
+              "find": "it[c]=d=>Fi(d&&d.connectionId,{},()=>s[c].call(s,d))}}return it}",
+              "replace": "it[c]=d=>Fi(d&&d.connectionId,{},()=>s[c].call(s,d))}it.uploadToGallery=(...args)=>forgeStoryWork(()=>s.uploadToGallery.apply(s,args))}return it}"
+            },
+            {
+              "find": "let o=St(p,u);Gt(o)||An(()=>ze(o,async()=>{",
+              "replace": "let o=St(p,u);return Gt(o)?undefined:An(()=>ze(o,async()=>{"
+            },
+            {
+              "find": "estimateTokens:forgeMemoryShared.estimateTextTokens,background:An,prepareMessages:",
+              "replace": "estimateTokens:forgeMemoryShared.estimateTextTokens,background:An,runStory:(runId,operation)=>forgeStoryCancellation.run(runId,operation),prepareMessages:"
+            },
+            {
+              "find": "let x=Number(b.progress[S][g]||0),L=m+1>x,O=b.combatPending",
+              "replace": "let x=Number(b.progress[S][g]||0),L=m+1>x,forgeReward=m+1>forgeStoryPaidThrough(b,i,x,g),O=b.combatPending"
+            },
+            {
+              "find": "let U=null,Q=null;if(L){let Y=await a.getById(n.id,f(o,i))",
+              "replace": "let U=null,Q=null;if(forgeReward){let Y=await a.getById(n.id,f(o,i))"
+            },
+            {
+              "find": "if(Q[\"beats\"+w]=Math.max(ne,g+1),delete F.reading,M=null,_=null,Q[\"beats\"+w]<=ne)return;let Y=vr.story;",
+              "replace": "if(Q[\"beats\"+w]=Math.max(ne,g+1),delete F.reading,M=null,_=null,Q[\"beats\"+w]<=ne)return;if(g+1<=forgeStoryPaidThrough(F,T(i,m),ne))return;let Y=vr.story;"
+            },
+            {
+              "find": "s.post(\"/chapter-plan\",",
+              "replace": "forgeStoryPost(\"/chapter-plan\","
+            },
+            {
+              "find": "s.post(\"/bond-chapter/plan\",",
+              "replace": "forgeStoryPost(\"/bond-chapter/plan\","
+            },
+            {
+              "find": "s.post(\"/beat\",",
+              "replace": "forgeStoryPost(\"/beat\","
+            },
+            {
+              "find": "s.post(\"/bond-chapter/beat\",",
+              "replace": "forgeStoryPost(\"/bond-chapter/beat\","
+            },
+            {
+              "find": "s.post(\"/choice\",",
+              "replace": "forgeStoryPost(\"/choice\","
+            },
+            {
+              "find": "s.post(\"/complete\",",
+              "replace": "forgeStoryPost(\"/complete\","
+            },
+            {
+              "find": "s.post(\"/bond-chapter/complete\",",
+              "replace": "forgeStoryPost(\"/bond-chapter/complete\","
+            },
+            {
+              "find": "s.post(\"/beat/mark\",",
+              "replace": "forgeStoryPost(\"/beat/mark\","
+            },
+            {
+              "find": "s.post(\"/story/start\",",
+              "replace": "forgeStoryPost(\"/story/start\","
+            },
+            {
+              "find": "s.post(\"/bond-chapter/start\",",
+              "replace": "forgeStoryPost(\"/bond-chapter/start\","
+            },
+            {
+              "find": "s.post(\"/battle/start\",",
+              "replace": "forgeStoryPost(\"/battle/start\","
+            },
+            {
+              "find": "s.post(\"/combat-guide\",",
+              "replace": "forgeStoryPost(\"/combat-guide\","
+            },
+            {
+              "find": "s.post(\"/background\",",
+              "replace": "forgeStoryPost(\"/background\","
+            },
+            {
+              "find": "s.post(\"/cg-art\",",
+              "replace": "forgeStoryPost(\"/cg-art\","
+            },
+            {
+              "find": "s.post(\"/preforge\",",
+              "replace": "forgeStoryPost(\"/preforge\","
+            },
+            {
+              "find": "s.post(\"/preforge/start\",",
+              "replace": "forgeStoryPost(\"/preforge/start\","
+            },
+            {
+              "find": "s.post(\"/preforge/retry\",",
+              "replace": "forgeStoryPost(\"/preforge/retry\","
+            },
+            {
+              "find": "s.post(\"/preforge/cancel\",",
+              "replace": "forgeStoryPost(\"/preforge/cancel\","
+            },
+            {
+              "find": "s.post(\"/compress\",",
+              "replace": "forgeStoryPost(\"/compress\","
+            },
+            {
+              "find": "s.post(\"/compress/merge\",",
+              "replace": "forgeStoryPost(\"/compress/merge\","
+            },
+            {
+              "find": "s.post(\"/chapters\",",
+              "replace": "forgeStoryPost(\"/chapters\","
+            },
+            {
+              "find": "s.post(\"/continuity\",",
+              "replace": "forgeStoryPost(\"/continuity\","
+            }
+          ]
+        },
+        {
+          "version": "1.18.0",
+          "notes": "Optional, generated seasonal story events with persisted windows, scoped chapters, media and transactional rewards. Retain the active event boundary on main story actions as well as planning. Expire only global event choice holds and retire inaccessible event fights without rewards. Share existing story generation admission and prevent new Character Stories inside an active event while retaining played replay. Scope legacy event replay before dropping Character Story opening metadata.",
+          "edits": [
+            {
+              "find": "async function _t(",
+              "replaceFrom": "src/seasonal-events-server.mjs",
+              "sourceId": "seasonal-events-server"
+            },
+            {
+              "find": "const forgeBannerAnimations=createForgeBannerAnimations",
+              "replace": "let forgeSeasonalEvents;const forgeBannerAnimations=createForgeBannerAnimations"
+            },
+            {
+              "find": "readBanner:async(runId,bannerId)=>{const rule=Uf(bannerId);",
+              "replace": "readBanner:async(runId,bannerId)=>{if(/^story-event-[1-9]\\d{0,8}$/u.test(bannerId))return forgeSeasonalEvents?.mediaBanner(runId,bannerId);const rule=Uf(bannerId);"
+            },
+            {
+              "find": "const forgeStoryPost=(path,handler)=>forgeChapterRegeneration.post(s,path,handler);",
+              "replaceFrom": "src/seasonal-events-adapter.mjs",
+              "sourceId": "seasonal-events-adapter"
+            },
+            {
+              "find": "const forgeStoryPost=(path,handler)=>forgeChapterRegeneration.post(s,path,handler);",
+              "replace": "const forgeStoryPost=(path,handler)=>forgeChapterRegeneration.post(s,path,handler);forgeSeasonalEvents=createForgeSeasonalLegacyAdapter();"
+            },
+            {
+              "find": "let chapter=Number(body&&body.chapter);return Number.isInteger(chapter)",
+              "replace": "if(forgeSeasonalChapter(body?.chapter))return body.chapter;let chapter=Number(body&&body.chapter);return Number.isInteger(chapter)"
+            },
+            {
+              "find": "w.story={preforge:S,choices:forgeChoicesEnabled({story:forgeStory})}",
+              "replace": "w.story={preforge:S,choices:forgeChoicesEnabled({story:forgeStory}),seasonalEvents:forgeSeasonalEnabled({story:forgeStory})}"
+            },
+            {
+              "find": "O.story={preforge:pd({story:u.story}),choices:forgeChoicesEnabled({story:u.story})}",
+              "replace": "O.story={preforge:pd({story:u.story}),choices:forgeChoicesEnabled({story:u.story}),seasonalEvents:forgeSeasonalEnabled({story:u.story})}"
+            },
+            {
+              "find": "let forgeBlock=await forgeChoices.planGuard(o,i);if(forgeBlock)return forgeBlock;let{data:w}",
+              "replace": "let forgeBlock=await forgeSeasonalEvents.guardMain(o,i)||await forgeChoices.planGuard(o,i);if(forgeBlock)return forgeBlock;let{data:w}"
+            },
+            {
+              "find": "let forgeMemoryBefore=Number.isInteger(c)?c:((Ka((await pe(s)).data).find(row=>T(row.unitId,row.part)===c)?.after)||0)+1;",
+              "replace": "let forgeMemoryBefore=Number.isInteger(c)?c:(Number((await a.getById(n.id,f(s,c)))?.data?.after)||Ka((await pe(s)).data).find(row=>T(row.unitId,row.part)===c)?.after||0)+1;"
+            },
+            {
+              "find": "Hg=[[ia,\":chapter:\"]",
+              "replace": "Hg=[[\"story-event\",\":story-event:\"],[ia,\":chapter:\"]"
+            },
+            {
+              "find": "let body=p&&p.body||{},result=await forgeChoices.select(body);",
+              "replace": "let body=p&&p.body||{};if(forgeSeasonalChapter(body.chapter)){const target=await forgeSeasonalEvents.guardNode(body,\"story\",\"storyIndex\");if(!target.ok)return target;}let result=await forgeChoices.select(body);"
+            },
+            {
+              "find": "),{enabled:forgeChoiceEnabled,terminal:tr(w).at(-1)===M}),options:",
+              "replace": "),{enabled:forgeChoiceEnabled,terminal:tr(w).at(-1)===M,event:await forgeSeasonalEvents.narrationContext(p,w)}),options:"
+            },
+            {
+              "find": "const forgeStoryPost=(path,handler)=>forgeChapterRegeneration.post(s,path,handler);forgeSeasonalEvents=createForgeSeasonalLegacyAdapter();",
+              "replace": "const forgeStoryPost=(path,handler)=>forgeChapterRegeneration.post(s,path,async request=>{if(forgeSeasonalEvents&&[\"/story/start\",\"/battle/start\",\"/complete\"].includes(path)){const body=request?.body||{},blocked=await forgeSeasonalEvents.guardMain(body.runId,Number(body.chapter));if(blocked)return blocked;}return handler(request)});forgeSeasonalEvents=createForgeSeasonalLegacyAdapter();"
+            },
+            {
+              "find": "bondHistory:Ka,readRun:async runId=>Ae((await be()).data,runId),resolveChapter:",
+              "replace": "bondHistory:Ka,readRun:async runId=>Ae((await be()).data,runId),choiceChapterActive:(runId,chapter)=>forgeSeasonalEvents?.choiceActive(runId,chapter)??true,resolveChapter:"
+            },
+            {
+              "find": "return await qt(g,m)?(De(w,o),{ok:!0,run:w}):{ok:!1,error:\"write-conflict\"}}),s.post(\"/run/images\",",
+              "replace": "return await qt(g,m)?(await forgeSeasonalEvents.retireInactiveFight(o).catch(error=>r.logger.warn(error,\"[gacha-forge] Could not retire an inactive event fight\")),De(w,o),{ok:!0,run:w}):{ok:!1,error:\"write-conflict\"}}),s.post(\"/run/images\","
+            },
+            {
+              "find": "let forgeBlock=await forgeChoices.guard(o);if(forgeBlock)return forgeBlock;let Q=await Nr(o)+1",
+              "replace": "let forgeBlock=await forgeSeasonalEvents.guardMain(o,Number.MAX_SAFE_INTEGER)||await forgeChoices.guard(o);if(forgeBlock)return forgeBlock;let Q=await Nr(o)+1"
+            },
+            {
+              "find": "let O=T(i,g),$=async U=>{if(!wo(_[i],g)){let Q=",
+              "replace": "let O=T(i,g),$=async U=>{if(!wo(_[i],g)){let forgeEventBlock=await forgeSeasonalEvents.guardMain(o,Number.MAX_SAFE_INTEGER);if(forgeEventBlock)return forgeEventBlock;let Q="
+            },
+            {
+              "find": "let forgeMemoryBefore=Number.isInteger(c)?c:(Number((await a.getById(n.id,f(s,c)))?.data?.after)||Ka((await pe(s)).data).find(row=>T(row.unitId,row.part)===c)?.after||0)+1;let v=[],k=await tl(s),",
+              "replace": "let forgeLegacyTarget=Number.isInteger(c)?null:(await a.getById(n.id,f(s,c)))?.data;let forgeMemoryBefore=Number.isInteger(c)?c:(Number(forgeLegacyTarget?.after)||Ka((await pe(s)).data).find(row=>T(row.unitId,row.part)===c)?.after||0)+1;let v=[],k=await tl(s,forgeLegacyTarget),"
+            },
+            {
+              "find": "async function tl(s){let{data:c}=await pe(s),d=c&&c.bondChapters||{},v=new Map;for(let{unitId:k,part:E,after:N}of Ka(c)){let P=",
+              "replace": "async function tl(s,forgeEventScope){let{data:c}=await pe(s),d=c&&c.bondChapters||{},v=new Map;for(let{unitId:k,part:E,after:N,opened:forgeOpened}of Ka(c)){if(forgeEventScope?.eventId&&Number(N)===Number(forgeEventScope.after)&&!forgeStoryOpenedBefore({opened:forgeOpened},forgeEventScope))continue;let P="
+            }
+          ]
+        },
+        {
+          "version": "1.19.0",
+          "edits": [
+            {
+              "find": "async function _t(",
+              "replaceFrom": [
+                "src/formation-combat-shared.mjs",
+                "src/formation-combat-server.mjs",
+                "src/formation-migration-server.mjs",
+                "src/combat-voices-server.mjs"
+              ],
+              "sourceId": "formation-combat-server"
+            },
+            {
+              "find": "\"facets\",\"mech\",\"healAs\"",
+              "replace": "\"facets\",\"mech\",\"healAs\",\"formationKit\",\"formationScaling\""
+            },
+            {
+              "find": "W=(s,c,d)=>({allies:s.map(G),enemies:c.map(G),seed:d})",
+              "replace": "W=(s,c,d,run,rules=[])=>{let prepared=forgeFormationPrepare(run,s,c,rules);if(prepared.combatMode===\"formation\"){let error=forgeFormationEncounterError(prepared.allies,prepared.formationRules);if(error)throw Object.assign(new Error(error),{forgeFormation:true})}return{allies:prepared.allies.map(G),enemies:prepared.enemies.map(G),seed:d,combatMode:prepared.combatMode,formationRules:prepared.formationRules}}"
+            },
+            {
+              "find": "ie=(s,c)=>Gm({allies:JSON.parse(JSON.stringify(s.allies||[])),enemies:JSON.parse(JSON.stringify(s.enemies||[])),seed:Number(s.seed)||1},Array.isArray(c)?c.slice(0,te):[]).result",
+              "replace": "ie=(s,c)=>Gm({allies:JSON.parse(JSON.stringify(s.allies||[])),enemies:JSON.parse(JSON.stringify(s.enemies||[])),seed:Number(s.seed)||1,combatMode:s.combatMode,formationRules:s.formationRules},Array.isArray(c)?c.slice(0,te):[]).result"
+            },
+            {
+              "find": "function Gm(e,t){let n=0;",
+              "replace": "function Gm(e,t){if(e?.combatMode===\"formation\")return replayForgeFormationBattle({...e,rules:e.formationRules||[]},t);let n=0;"
+            },
+            {
+              "find": "facets:n&&n.fx||null,power:aw(t)",
+              "replace": "facets:n&&n.fx||null,formationKit:e.formationKit||null,formationScaling:{standard:Number(a.granted?.form)||1,ultimate:Number(a.skill?.form)||1,passive:Number(a.passive?.form)||1},power:aw(t)"
+            },
+            {
+              "find": "async function Vr(p,u,o){let i=await Ri(p,u),",
+              "replace": "async function Vr(p,u,o){let i=await Ri(p,u);let forgeReady=await forgeFormationMigration.ensure(p,u);if(forgeReady?.ok===false)return forgeReady;let "
+            },
+            {
+              "find": "portrait:sn(he)||null,isLeader:J===fn,level:Z",
+              "replace": "portrait:sn(he)||null,characterId:l(he.cardId)||null,isLeader:J===fn,level:Z"
+            },
+            {
+              "find": "return ee.length?{ok:!0,allies:ee,",
+              "replace": "if(forgeFormationMode(u)===\"formation\"){let error=forgeFormationEncounterError(ee);if(error)return{ok:!1,error}}return ee.length?{ok:!0,allies:ee,"
+            },
+            {
+              "find": "passive:x.passive||null,...forgeEnemyCombatMetadata(x,forgeEncounterCast)",
+              "replace": "passive:x.passive||null,formationKit:x.formationKit||null,...forgeEnemyCombatMetadata(x,forgeEncounterCast)"
+            },
+            {
+              "find": "enemies:M,presetList:_.presets",
+              "replace": "enemies:forgeFormationMode(u)===\"formation\"?forgeFormationEnemies(M,w.guide.formationRules||[]):M,presetList:_.presets"
+            },
+            {
+              "find": "let we=await _t({runtime:r,runId:s,run:c,messages:forgeComposeMemoryPrompt(vS,[c.scenario",
+              "replace": "let forgeEncounterSession=(await pe(s)).data,forgeEncounterDocuments=await a.list(n.id,kt);let we=await _t({runtime:r,runId:s,run:c,messages:forgeComposeMemoryPrompt(vS,[c.scenario"
+            },
+            {
+              "find": "messages:forgeComposeMemoryPrompt(vS,[c.scenario,E.premise,P,re,c.protagonist,d,await Zw(s,d,v),c.language,ye])",
+              "replace": "messages:forgeFormationEncounterMessages(forgeComposeMemoryPrompt(vS,[c.scenario,E.premise,P,re,c.protagonist,d,await Zw(s,d,v),c.language,ye]),c,forgeFormationAvailableElements((await pe(s)).data,await a.list(n.id,kt)))"
+            },
+            {
+              "find": "parse:Vt(r,De=>ES(De,U0(d),P)),label:\"combat-guide\"",
+              "replace": "parse:Vt(r,De=>forgeFormationMode(c)===\"formation\"?forgeFormationNormalizeGuide(De,ES(De,U0(d),P),forgeFormationAvailableElements(forgeEncounterSession,forgeEncounterDocuments)):ES(De,U0(d),P)),label:\"combat-guide\""
+            },
+            {
+              "find": "W(L.allies,L.enemies,Gs(I(o,i,g)))",
+              "replace": "W(L.allies,L.enemies,Gs(I(o,i,g)),S,L.ens.guide.formationRules||[])"
+            },
+            {
+              "find": "W(x.allies,Xg(i,U,g),Gs(zg(o,i,g,_?_.id:U)))",
+              "replace": "W(x.allies,Xg(i,U,g),Gs(zg(o,i,g,_?_.id:U)),S)"
+            },
+            {
+              "find": "fight:W(S.allies,L,Gs(Jg(o,i,g)))",
+              "replace": "fight:W(S.allies,L,Gs(Jg(o,i,g)),w)"
+            },
+            {
+              "find": "animationConnectionId:l(u.animationConnectionId).slice(0,200)}",
+              "replace": "animationConnectionId:l(u.animationConnectionId).slice(0,200),combat:{mode:forgeFormationMode(u),revision:0}}"
+            },
+            {
+              "find": "await t.registerPrivilegedRoutes(async s=>{s=forgeTimeZoneRoutes(s);",
+              "replace": "const forgeFormationMigration=createForgeFormationMigration({packageId:n.id,persistence:r.persistence,cancellation:forgeStoryCancellation,normalizeKit:normalizeForgeFormationKit,logger:r.logger,concurrency:3,generateKit:async({runId,run,unit,signal})=>{signal.throwIfAborted();const hydrated=(await forgeHydrateStoryCharacters([unit],id=>Le().characterCard(id),r.logger))[0];const answer=await _t({runtime:r,runId,run,job:\"structured\",messages:forgeFormationKitMessages({run,unit,cardContext:hydrated?.forgeCardCanon||\"\"}),options:{temperature:.8,maxTokens:It(2000),signal},parse:Vt(r,normalizeForgeFormationKit),label:\"formation-unit \"+unit.name});signal.throwIfAborted();if(!answer.ok)throw new Error(answer.error||\"generation-failed\");return answer.value}});const forgeCombatVoices=createForgeCombatVoices({dataDir:e.dataDir,runtime:r,readUnit:async(runId,unitId)=>{const run=Ae((await be()).data,runId);const doc=await a.getById(n.id,unitId);if(!run||!doc?.id?.startsWith(`${runId}:unit:`)||doc.data?.kind!==\"character\")return null;const unit=(await forgeHydrateStoryCharacters([doc.data],id=>Le().characterCard(id),r.logger))[0];return{run,unit:{...unit,id:unitId,characterId:l(unit.cardId)||null}}},generateLines:async({runId,run,unit,messages,debugMode,signal})=>_t({runtime:r,runId,run,job:\"structured\",messages,options:{temperature:.8,maxTokens:It(600),debugMode,signal},parse:Vt(r,normalizeForgeCombatVoiceLines),label:\"combat-voice-lines \"+unit.name})});await t.registerPrivilegedRoutes(async s=>{s=forgeFormationRoutes(forgeTimeZoneRoutes(s),{migration:forgeFormationMigration,cancellation:forgeStoryCancellation,readWorld:async runId=>Ae((await be()).data,runId)});s.post(\"/combat-mode/switch\",p=>forgeFormationMigration.start(p?.body||{}));s.post(\"/combat-mode/status\",p=>forgeFormationMigration.status(p?.body||{}));s.post(\"/combat-mode/retry\",p=>forgeFormationMigration.retry(p?.body||{}));s.post(\"/combat-mode/cancel\",p=>forgeFormationMigration.cancel(p?.body||{}));s.post(\"/combat-voices/prepare\",p=>forgeCombatVoices.prepare(p?.body||{}));s.post(\"/combat-voices/reserve\",p=>forgeCombatVoices.reserve(p?.body||{}));s.post(\"/combat-voices/commit\",p=>forgeCombatVoices.commit(p?.body||{}));s.post(\"/combat-voices/fail\",p=>forgeCombatVoices.fail(p?.body||{}));s.get(\"/combat-voices/file/:world/:filename\",(p,reply)=>forgeCombatVoices.serve(p,reply));"
+            },
+            {
+              "find": "return()=>{forgeStoryCancellation.dispose();forgeBannerAnimations.dispose()}",
+              "replace": "return()=>{forgeFormationMigration.dispose();forgeCombatVoices.dispose();forgeStoryCancellation.dispose();forgeBannerAnimations.dispose()}"
+            },
+            {
+              "find": "signal:forgeStoryGenerationSignal(),",
+              "replace": "signal:forgeStoryGenerationSignal()&&a.signal?AbortSignal.any([forgeStoryGenerationSignal(),a.signal]):forgeStoryGenerationSignal()||a.signal,"
+            },
+            {
+              "find": "allies:L,enemies:ne,...forgeEncounterPresentation(U.guide,ne)",
+              "replace": "allies:L,combatMode:x.combatMode,enemies:ne,formationRules:U.guide.formationRules||[],...forgeEncounterPresentation(U.guide,ne)"
+            },
+            {
+              "find": "forgeStoryMemory.invalidate(o);await forgeBannerAnimations.removeWorld(o)",
+              "replace": "forgeStoryMemory.invalidate(o);await Promise.resolve(forgeFormationMigration.removeWorld(o)).catch(error=>r.logger.warn(error,\"[gacha-forge] Could not stop deleted world combat conversion\"));await forgeCombatVoices.removeWorld(o).catch(error=>r.logger.warn(error,\"[gacha-forge] Could not remove deleted world combat voices\"));await forgeBannerAnimations.removeWorld(o)"
+            },
+            {
+              "find": "[Pc,\":combat-art\"]],iT=",
+              "replace": "[Pc,\":combat-art\"],[\"formation-conversion\",\":formation-conversion\"]],iT="
+            },
+            {
+              "find": "forgeStoryAssertActive();let R=cS(n,r)",
+              "replace": "forgeStoryAssertActive();f?.signal?.throwIfAborted();let R=cS(n,r)"
+            },
+            {
+              "find": "forgeStoryAssertActive();return I.ok||R===C",
+              "replace": "forgeStoryAssertActive();f?.signal?.throwIfAborted();return I.ok||R===C"
+            },
+            {
+              "find": "let le,ce=Date.now();try{forgeStoryAssertActive();",
+              "replace": "let le,ce=Date.now();try{forgeStoryAssertActive();a.signal?.throwIfAborted();"
+            },
+            {
+              "find": "});forgeStoryAssertActive()}catch($e){forgeStoryAssertActive();",
+              "replace": "});forgeStoryAssertActive();a.signal?.throwIfAborted()}catch($e){forgeStoryAssertActive();a.signal?.throwIfAborted();"
+            },
+            {
+              "find": "function ES(e,t=jc,forgeNode=null){return forgeNormalizeEncounterGuide(e,t,forgeLegacyEncounterGuide,forgeNode)}",
+              "replace": "function ES(e,t=jc,forgeNode=null){return forgeFormationNormalizeGuide(e,forgeNormalizeEncounterGuide(e,t,forgeLegacyEncounterGuide,forgeNode))}"
+            },
+            {
+              "find": "allies:ee,usedIdx:M,",
+              "replace": "allies:ee,combatMode:forgeFormationMode(u),usedIdx:M,"
+            },
+            {
+              "find": "allies:_.allies,enemies:",
+              "replace": "allies:_.allies,combatMode:_.combatMode,enemies:"
+            },
+            {
+              "find": "allies:x.allies,enemies:F,background:U",
+              "replace": "allies:x.allies,combatMode:x.combatMode,enemies:F,background:U"
+            },
+            {
+              "find": "allies:S.allies,enemies:$,background:F",
+              "replace": "allies:S.allies,combatMode:S.combatMode,enemies:$,background:F"
+            },
+            {
+              "find": "cancellation:forgeStoryCancellation,normalizeKit:normalizeForgeFormationKit",
+              "replace": "cancellation:forgeStoryCancellation,retireInactiveFight:runId=>typeof forgeSeasonalEvents!==\"undefined\"?forgeSeasonalEvents.retireInactiveFight(runId):undefined,normalizeKit:normalizeForgeFormationKit"
             }
           ]
         }

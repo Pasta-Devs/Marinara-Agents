@@ -63,16 +63,20 @@ export function wireForgeBannerAnimation(host) {
     host._forgeBannerAnimation = state;
   }
   const state = host._forgeBannerAnimation;
-  const banner = host._summonBanner?.banner;
+  const eventBanner = host._forgeSeasonalBanner,
+    activeBanner = () => (eventBanner ? host._forgeSeasonalBanner : host._summonBanner?.banner),
+    banner = activeBanner();
   const runId = run?.runId,
     connectionId = run?.animationConnectionId,
     art = banner?.art,
     bannerId = banner?.id,
     rotation = banner?.music?.cue || "";
   const target =
-    host._hudView === "summon" && host._summonPhase === "banner" && host._summonBannerState === "ready"
-      ? host._root.querySelector('[data-screen="banner"] .show > .art.wide')
-      : null;
+    eventBanner && host._hudView === "events" && host._eventId === "story-events"
+      ? host._root.querySelector("[data-story-event-banner]")
+      : host._hudView === "summon" && host._summonPhase === "banner" && host._summonBannerState === "ready"
+        ? host._root.querySelector('[data-screen="banner"] .show > .art.wide')
+        : null;
   const identity = JSON.stringify([runId, connectionId, bannerId, rotation, art]);
   if (state.target === target && state.identity === identity && state.banner === banner) return;
   state.cleanup?.();
@@ -108,18 +112,20 @@ export function wireForgeBannerAnimation(host) {
     !disposed &&
     host._run?.runId === runId &&
     host._run?.animationConnectionId === connectionId &&
-    host._summonBanner?.banner?.art === art &&
-    host._summonBanner?.banner?.id === bannerId &&
-    (host._summonBanner?.banner?.music?.cue || "") === rotation &&
+    activeBanner()?.art === art &&
+    activeBanner()?.id === bannerId &&
+    (activeBanner()?.music?.cue || "") === rotation &&
     target.isConnected;
   const update = () => {
     if (!current()) return;
     const active = visible && document.visibilityState !== "hidden" && !state.media?.matches;
     const playing = active && !state.paused;
     if (video) {
+      const clip = video;
       if (playing)
-        video.play().catch((error) => {
-          if (!current() || error?.name === "AbortError") return;
+        clip.play().catch((error) => {
+          if (!current() || video !== clip || error?.name === "AbortError") return;
+          if (error?.name !== "NotAllowedError") return failPlayback(clip);
           state.paused = true;
           video.style.opacity = "0";
           notice(forgeAnimationEnglish.playbackFailed);
@@ -133,13 +139,48 @@ export function wireForgeBannerAnimation(host) {
     status.textContent = text;
     statusHost?.prepend(status);
   };
+  const offerRetry = (message) => {
+    notice(`${message} ${forgeAnimationEnglish.retryCost}`);
+    if (chips?.querySelector("[data-animation-retry]")) return;
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "chip";
+    retry.dataset.animationRetry = "";
+    retry.textContent = forgeAnimationEnglish.retry;
+    retry.onclick = () => {
+      if (retry.disabled || !current()) return;
+      retry.disabled = true;
+      retry.textContent = forgeAnimationEnglish.retrying;
+      retry.setAttribute("aria-busy", "true");
+      retry.setAttribute("aria-disabled", "true");
+      state.requests.delete(identity);
+      state.staleBanner = null;
+      void ensure(true).finally(() => {
+        if (!current()) return;
+        retry.disabled = false;
+        retry.textContent = forgeAnimationEnglish.retry;
+        retry.setAttribute("aria-busy", "false");
+        retry.setAttribute("aria-disabled", "false");
+      });
+    };
+    chips?.append(retry);
+  };
+  const failPlayback = (clip) => {
+    if (!current() || video !== clip) return;
+    clip.pause();
+    clip.remove();
+    video = null;
+    pause?.remove();
+    pause = null;
+    state.requests.set(identity, Promise.resolve({ ok: false, retry: true, reason: "playback" }));
+    offerRetry(forgeAnimationEnglish.playbackFailed);
+  };
   const mount = (result) => {
     if (!current()) return;
     if (result?.ok && result.animation?.poster !== art) {
       state.requests.delete(identity);
       state.staleBanner = banner;
-      chips?.querySelector("[data-animation-retry]")?.remove();
-      notice(forgeAnimationEnglish.failed);
+      offerRetry(forgeAnimationEnglish.failed);
       return;
     }
     if (
@@ -148,36 +189,25 @@ export function wireForgeBannerAnimation(host) {
         result.animation?.url || "",
       )
     ) {
-      notice(forgeAnimationEnglish[result.reason === "seedance-reference-setup" ? "seedanceSetup" : "failed"]);
-      if (!result.retry) chips?.querySelector("[data-animation-retry]")?.remove();
-      if (result.retry && !chips?.querySelector("[data-animation-retry]")) {
-        const retry = document.createElement("button");
-        retry.type = "button";
-        retry.className = "chip";
-        retry.dataset.animationRetry = "";
-        retry.textContent = forgeAnimationEnglish.retry;
-        retry.onclick = () => {
-          if (retry.disabled) return;
-          retry.disabled = true;
-          retry.textContent = forgeAnimationEnglish.retrying;
-          retry.setAttribute("aria-busy", "true");
-          retry.setAttribute("aria-disabled", "true");
-          state.requests.delete(identity);
-          void ensure(true).finally(() => {
-            if (!current()) return;
-            retry.disabled = false;
-            retry.textContent = forgeAnimationEnglish.retry;
-            retry.setAttribute("aria-busy", "false");
-            retry.setAttribute("aria-disabled", "false");
-          });
-        };
-        chips?.append(retry);
+      const message =
+        forgeAnimationEnglish[
+          result.reason === "seedance-reference-setup"
+            ? "seedanceSetup"
+            : result.reason === "playback"
+              ? "playbackFailed"
+              : "failed"
+        ];
+      if (result.retry || result.ok) offerRetry(message);
+      else {
+        notice(message);
+        chips?.querySelector("[data-animation-retry]")?.remove();
       }
       return;
     }
     if (video) return;
     chips?.querySelector("[data-animation-retry]")?.remove();
     video = document.createElement("video");
+    const clip = video;
     video.dataset.bannerAnimation = "";
     video.muted = true;
     video.defaultMuted = true;
@@ -198,18 +228,12 @@ export function wireForgeBannerAnimation(host) {
       pointerEvents: "none",
     });
     video.addEventListener("playing", () => {
-      if (current()) {
-        video.style.opacity = "1";
+      if (current() && video === clip) {
+        clip.style.opacity = "1";
         status.remove();
       }
     });
-    video.addEventListener("error", () => {
-      if (!current()) return;
-      video.pause();
-      video.remove();
-      pause?.remove();
-      notice(forgeAnimationEnglish.playbackFailed);
-    });
+    video.addEventListener("error", () => failPlayback(clip));
     video.src = result.animation.url;
     target.append(video);
     pause = document.createElement("button");
@@ -232,7 +256,7 @@ export function wireForgeBannerAnimation(host) {
   const ensure = async (retry = false) => {
     if (!current() || !visible || document.visibilityState === "hidden" || state.media?.matches) return;
     if (state.staleBanner === banner) {
-      notice(forgeAnimationEnglish.failed);
+      offerRetry(forgeAnimationEnglish.failed);
       return;
     }
     let request = state.requests.get(identity);

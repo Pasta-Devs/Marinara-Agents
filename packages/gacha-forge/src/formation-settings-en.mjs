@@ -1,0 +1,37 @@
+export const forgeFormationEnglish = {
+  "combat.mode.title": "Combat mode",
+  "combat.mode.classic": "Classic",
+  "combat.mode.formation": "Formation",
+  "combat.mode.classicHint": "The existing turn-based combat system.",
+  "combat.mode.formationHint":
+    "Frontline fighters act while back-row supports supply shared elemental energy. Deploy up to four characters, with at least one in front.",
+  "combat.mode.switchFormation": "Switch to Formation",
+  "combat.mode.switchClassic": "Switch to Classic",
+  "combat.mode.confirmTitle": "Change this playthrough’s combat mode?",
+  "combat.mode.warning":
+    "Formation needs a new combat kit for every character. This uses your generation connection and may incur provider costs. Up to three conversions are queued at a time. The current mode stays active until every kit is ready.",
+  "combat.mode.preserved":
+    "Character identities, classic kits, levels, equipment, inventory, conversations and story stay saved. Already earned rewards are unchanged.",
+  "combat.mode.classicWarning": "Classic restores the saved classic kits. Formation kits stay saved for later use.",
+  "combat.mode.keep": "Keep current mode",
+  "combat.mode.confirm": "Confirm change",
+  "combat.mode.loading": "Checking combat mode…",
+  "combat.mode.preparing": "Preparing combat kits",
+  "combat.mode.committing": "Finishing the mode change…",
+  "combat.mode.failed":
+    "The mode has not changed. Review the failed characters, then retry. Ready kits will be reused.",
+  "combat.mode.retry": "Retry conversion",
+  "combat.mode.cancel": "Cancel conversion",
+  "combat.mode.progress": "{ready} of {total} characters ready",
+  "combat.mode.unit.pending": "Queued",
+  "combat.mode.unit.generating": "Generating",
+  "combat.mode.unit.ready": "Ready",
+  "combat.mode.unit.failed": "Needs retry",
+  "combat.mode.error": "Combat settings could not be updated. Try again.",
+  "combat.mode.battlePending": "Finish the current battle before changing combat mode.",
+  "combat.mode.teamTooLarge": "Formation supports up to four characters. Edit the active team before changing modes.",
+  "combat.mode.frontRequired": "Put at least one character in the Front Row before changing modes.",
+  "combat.mode.editTeam": "Edit team",
+  "combat.mode.drainTimeout": "Generation is still stopping. The combat mode has not changed. Wait a moment and retry.",
+  "combat.mode.interrupted": "A generation was interrupted. Retry explicitly to generate its missing kit.",
+};

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { orderForgeStorySources } from "../packages/gacha-forge/src/story-memory-integration.mjs";
 import {
   createForgeStoryMemory,
   forgeStoryMemoryText,
@@ -665,4 +666,158 @@ test("an input that cannot fit even one Unicode point fails without model work o
   assert.equal(f.memory().records.length, 0);
   assert.equal(f.memory().overview, null);
   assert.equal(f.memory().work.length, 0);
+});
+
+const sideSource = (id, kind, opened, order, content = "The keeper returned safely.") =>
+  source(id, content, { kind, title: "Keeper", order, opening: { after: 0, opened } });
+
+test("opening chronology reuses legacy paid archives and embeddings while rebuilding only the misordered overview", async () => {
+  const bond = sideSource("bond", "character-story", 20, 5000);
+  const event = sideSource("event", "story-event", 10, 6000);
+  const f = fixture([bond, event]);
+  const embeddingInputs = [];
+  const options = {
+    resolveEmbeddings: async () => ({
+      spaceId: "fixture",
+      embed: async (texts, _signal, intent) => {
+        embeddingInputs.push({ texts, intent });
+        return texts.map(() => [1, 0]);
+      },
+    }),
+  };
+  await f.create(options).maintain({ runId: "world" });
+  const paid = f.memory().records;
+  assert.equal(embeddingInputs.length, 2);
+  assert.ok(paid.every((record) => record.embeddingSpaceId === "fixture"));
+  const previousCalls = f.calls.length;
+  const previousEmbeddings = embeddingInputs.length;
+  const service = f.create({ ...options, orderSources: orderForgeStorySources });
+  const result = await service.maintain({ runId: "world" });
+  assert.equal(result.status.phase, "ready");
+  assert.deepEqual(f.memory().records, paid, "numeric identities, details and embeddings stay byte-compatible");
+  assert.equal(embeddingInputs.length, previousEmbeddings, "paid document embeddings are reused");
+  const rebuild = f.calls.slice(previousCalls);
+  assert.deepEqual(
+    rebuild.map((call) => call.kind),
+    ["overview", "overview"],
+  );
+  assert.deepEqual(
+    rebuild.map((call) => JSON.parse(call.messages[1].content).records[0].id),
+    ["event", "bond"],
+  );
+  assert.equal(JSON.parse(rebuild[0].messages[1].content).previousOverview, "");
+  const recalled = await service.recall({ runId: "world", query: "keeper" });
+  assert.deepEqual(
+    recalled.details.map((record) => record.id),
+    ["bond", "event"],
+    "equal relevance prefers the later opening",
+  );
+  assert.deepEqual(f.memory().records, paid, "ephemeral recency never rewrites archived order");
+  assert.doesNotMatch(JSON.stringify(f.memory()), /"(?:opening|viewOrder)"/u);
+  assert.doesNotMatch(JSON.stringify(f.calls), /"(?:opening|viewOrder)"/u);
+});
+
+test("a later opening extends a prefix overview without repeating paid detail or embedding work", async () => {
+  const bond = sideSource("bond", "character-story", 10, 5000);
+  const event = sideSource("event", "story-event", 20, 6000);
+  const f = fixture([bond, event]);
+  await f.create().maintain({ runId: "world" });
+  const paid = f.memory().records;
+  const overview = f.memory().overview;
+  const previousCalls = f.calls.length;
+  f.setRows([bond, event, sideSource("later", "story-event", 30, 6001)]);
+  await f.create({ orderSources: orderForgeStorySources }).maintain({ runId: "world" });
+  assert.deepEqual(f.memory().records.slice(0, 2), paid);
+  const extension = f.calls.slice(previousCalls);
+  assert.deepEqual(
+    extension.map((call) => call.kind),
+    ["detail", "overview"],
+  );
+  assert.equal(JSON.parse(extension[0].messages[1].content).source.id, "later");
+  assert.equal(JSON.parse(extension[1].messages[1].content).previousOverview, overview.content);
+});
+
+test("inserting an earlier opening cannot reuse a covered suffix overview, including fallback recall", async () => {
+  const bond = sideSource("bond", "character-story", 20, 5000);
+  const event = sideSource("event", "story-event", 30, 6000);
+  const earlier = sideSource("earlier", "story-event", 10, 6001);
+  const f = fixture([bond, event]);
+  await f.create().maintain({ runId: "world" });
+  const paid = f.memory().records;
+  f.setRows([bond, event, earlier]);
+  const failed = await f
+    .create({
+      orderSources: orderForgeStorySources,
+      summarize: async () => {
+        throw new Error("fixture offline before inserted detail");
+      },
+    })
+    .recall({ runId: "world", query: "keeper" });
+  assert.equal(failed.status.phase, "error");
+  assert.equal(failed.overview, "", "the saved suffix is not an eligible chronology prefix");
+  const previousCalls = f.calls.length;
+  await f.create({ orderSources: orderForgeStorySources }).maintain({ runId: "world" });
+  const rebuild = f.calls.slice(previousCalls).filter((call) => call.kind === "overview");
+  assert.deepEqual(
+    rebuild.map((call) => JSON.parse(call.messages[1].content).records[0].id),
+    ["earlier", "bond", "event"],
+  );
+  assert.equal(JSON.parse(rebuild[0].messages[1].content).previousOverview, "");
+  assert.deepEqual(f.memory().records.slice(0, 2), paid);
+});
+
+test("legacy partial detail checkpoints resume after enabling opening metadata without repeating successful chunks", async () => {
+  const event = sideSource("event", "story-event", 10, 6000, "The keeper returned safely with the lighthouse key.");
+  const f = fixture([event]);
+  const attempts = [];
+  let fail = true;
+  const options = {
+    fitsSummary: async ({ kind, messages }) => {
+      const input = JSON.parse(messages[1].content);
+      return [...(kind === "detail" ? input.source.content : input.records[0].content)].length <= 10;
+    },
+    summarize: async (request) => {
+      const input = JSON.parse(request.messages[1].content);
+      const part = request.kind === "detail" ? input.source : input.records[0];
+      attempts.push({ kind: request.kind, id: part.id, from: part.range.from });
+      if (fail && request.kind === "detail" && part.range.from > 0) throw new Error("fixture interrupted");
+      return request.kind === "detail" ? part.content : "Keeper returned.";
+    },
+  };
+  assert.equal((await f.create(options).maintain({ runId: "world" })).status.phase, "error");
+  const checkpoint = f.memory().work[0];
+  assert.equal(checkpoint.offset, 10);
+  const previousAttempts = attempts.length;
+  f.setRows([sideSource("bond", "character-story", 20, 5000), event]);
+  fail = false;
+  assert.equal(
+    (await f.create({ ...options, orderSources: orderForgeStorySources }).maintain({ runId: "world" })).status.phase,
+    "ready",
+  );
+  const resumed = attempts
+    .slice(previousAttempts)
+    .filter((attempt) => attempt.kind === "detail" && attempt.id === "event");
+  assert.ok(resumed.length > 0);
+  assert.ok(resumed.every((attempt) => attempt.from >= checkpoint.offset));
+  assert.equal(f.memory().work.length, 0);
+});
+
+test("mixed-boundary permutation preserves unknown, main and chat slots and accepts boundary zero", () => {
+  const rows = [
+    source("main", "main"),
+    sideSource("bond", "character-story", 30, 2),
+    sideSource("unknown", "story-event", 0, 3),
+    source("chat", "chat", { kind: "chat", order: 4 }),
+    sideSource("event", "story-event", 10, 5),
+    sideSource("invalid", "story-event", Number.NaN, 6),
+    sideSource("negative", "story-event", -1, 7),
+  ];
+  assert.deepEqual(
+    orderForgeStorySources(rows).map((row) => row.id),
+    ["main", "event", "unknown", "chat", "bond", "invalid", "negative"],
+  );
+  assert.deepEqual(
+    rows.map((row) => row.id),
+    ["main", "bond", "unknown", "chat", "event", "invalid", "negative"],
+  );
 });

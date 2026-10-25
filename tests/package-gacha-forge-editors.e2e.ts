@@ -249,15 +249,34 @@ test("Writing Advanced field help opens with a tap and stays readable in the mob
 }, testInfo) => {
   const { forge } = await openEditors(page, "light");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  await forge.locator(".gf-fs-bar").click();
+  await expect(page.locator(".mari-home-browser-chrome")).toBeHidden();
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty("--mari-safe-area-inset-left", "63px");
+    document.documentElement.style.setProperty("--mari-safe-area-inset-right", "0px");
+  });
   await forge.evaluate((node) => (node as any)._openSettings("advanced"));
   const help = forge.locator(".ob-help").first();
-  await help.click();
+  if (testInfo.project.name.includes("mobile")) await help.tap();
+  else await help.click();
   await expect(help).toHaveAttribute("aria-expanded", "true");
   const tipId = await help.getAttribute("aria-controls");
   const tip = forge.locator(`[id="${tipId}"]`);
   await expect(tip).toBeVisible();
-  await expect(tip).not.toBeEmpty();
+  await expect(tip).toContainText("The game follows these as orders, not suggestions.");
+  // A viewport/host callback rebinds these controls without the user dismissing the disclosure.
+  await forge.evaluate((node) => (node as any)._wireFullscreen());
+  // A sticky emulated hover must not impersonate the click disclosure's visible text.
+  await page.mouse.move(0, 0);
+  await expect(tip).toBeVisible();
+  await expect(tip).toHaveCSS("opacity", "1");
+  await expect(help).toHaveAttribute("aria-expanded", "true");
+  await forge.evaluate((node) => {
+    const game = node as any;
+    game._settingsRev += 1;
+    game._renderBrowser();
+  });
+  await expect(tip).toBeVisible();
+  await expect(tip).toContainText("The game follows these as orders, not suggestions.");
   expect(
     await tip.evaluate((element) => {
       const bounds = element.getBoundingClientRect();
@@ -265,6 +284,9 @@ test("Writing Advanced field help opens with a tap and stays readable in the mob
       return bounds.left >= stage.left - 1 && bounds.right <= stage.right + 1 && bounds.height > 0;
     }),
   ).toBe(true);
+  const buttonSize = await help.boundingBox();
+  expect(buttonSize!.width).toBeLessThanOrEqual(24);
+  expect(buttonSize!.height).toBeLessThanOrEqual(24);
   await expect
     .poll(() =>
       forge.evaluate((node) => {
@@ -275,6 +297,8 @@ test("Writing Advanced field help opens with a tap and stays readable in the mob
     )
     .toBe(true);
   await page.screenshot({ path: testInfo.outputPath("writing-help-open.png"), animations: "disabled" });
-  await help.click();
+  if (testInfo.project.name.includes("mobile")) await help.tap();
+  else await help.click();
   await expect(help).toHaveAttribute("aria-expanded", "false");
+  if (testInfo.project.name.includes("mobile")) await expect(tip).toBeHidden();
 });

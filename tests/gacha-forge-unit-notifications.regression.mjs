@@ -5,6 +5,16 @@ import { test } from "node:test";
 import vm from "node:vm";
 import { forgeUserTimeZone } from "../packages/gacha-forge/src/browser-presentation.mjs";
 import { forgeStoryRequest } from "../packages/gacha-forge/src/story-cancel-client.mjs";
+import { forgeFormationStartRequest } from "../packages/gacha-forge/src/formation-combat-client.mjs";
+import {
+  forgeSeasonalRequest,
+  adoptForgeSeasonalResponse,
+} from "../packages/gacha-forge/src/seasonal-events-client.mjs";
+import {
+  adoptForgeChapterVersion,
+  forgeChapterOriginCurrent,
+  forgeChapterRequest,
+} from "../packages/gacha-forge/src/chapter-regeneration-client.mjs";
 import {
   forgeUnitRecommendation,
   forgeUnitStepIsCurrent,
@@ -63,6 +73,12 @@ function method(name, following, globals) {
   return vm.runInNewContext(`({${source.slice(start, end)}}).${name}`, {
     forgeUserTimeZone,
     forgeStoryRequest,
+    adoptForgeChapterVersion,
+    forgeChapterOriginCurrent,
+    forgeChapterRequest,
+    forgeFormationStartRequest,
+    forgeSeasonalRequest,
+    adoptForgeSeasonalResponse,
     ...globals,
   });
 }

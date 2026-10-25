@@ -1,9 +1,6 @@
 // Maintained package source, inlined after player-choices-en.mjs by the bundle builder.
-/* global forgeChoiceEnglish, forgeChoiceLabel */
+/* global forgeChoiceEnglish, forgeChoiceLabel, forgeSeasonalEnglish */
 const forgeChoiceSettingsLayout = `
-.st-pane .gf-choice-settings-toggle {
-  grid-template-columns: 44px minmax(0, 1fr); gap: 0.75rem; align-items: center; padding: 0.4rem 0.6rem;
-}
 .st-pane .gf-choice-settings-toggle > .ob-bx {
   width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0;
   display: grid; place-items: center; line-height: 1;
@@ -45,10 +42,26 @@ function forgeChoiceEscape(value) {
 }
 
 export function forgeChoiceSettings(run) {
-  return `<style data-forge-choice-settings-layout>${forgeChoiceSettingsLayout}</style><div class="st-plate" data-player-choice-settings><div class="hd"><h3>${forgeChoiceEnglish["settings.playerChoices.title"]}</h3></div><label class="ob-toggle gf-choice-settings-toggle"><button class="ob-bx" type="button" role="checkbox" aria-checked="${run?.story?.choices !== false}" data-forge-allow-choices aria-label="${forgeChoiceEnglish["settings.playerChoices.allow"]}"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 8.4 3.1 3.1 5.9-7.3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><span class="bt gf-choice-settings-copy"><b>${forgeChoiceEnglish["settings.playerChoices.allow"]}</b><span class="bd">${forgeChoiceEnglish["settings.playerChoices.hint"]}</span></span></label></div>`;
+  const tick =
+    '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 8.4 3.1 3.1 5.9-7.3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  return `<style data-forge-choice-settings-layout>${forgeChoiceSettingsLayout}</style><div class="gf-story-options"><div class="st-plate" data-player-choice-settings><div class="hd"><h3>${forgeChoiceEnglish["settings.playerChoices.title"]}</h3></div><label class="ob-toggle gf-choice-settings-toggle"><button class="ob-bx" type="button" role="checkbox" aria-checked="${run?.story?.choices !== false}" data-forge-allow-choices aria-label="${forgeChoiceEnglish["settings.playerChoices.allow"]}">${tick}</button><span class="bt gf-choice-settings-copy"><b>${forgeChoiceEnglish["settings.playerChoices.allow"]}</b><span class="bd">${forgeChoiceEnglish["settings.playerChoices.hint"]}</span></span></label></div><div class="st-plate"><div class="hd"><h3>${forgeSeasonalEnglish["events.settings.title"]}</h3></div><label class="ob-toggle"><button class="ob-bx" type="button" role="checkbox" aria-checked="${run?.story?.seasonalEvents === true}" data-forge-seasonal-events aria-label="${forgeSeasonalEnglish["events.settings.allow"]}">${tick}</button><span class="bt"><b>${forgeSeasonalEnglish["events.settings.allow"]}</b><span class="bd">${forgeSeasonalEnglish["events.settings.hint"]}</span></span></label></div></div>`;
 }
 
 export function wireForgeChoiceSettings(root, _run, onSources) {
+  const seasonal = root.querySelector("[data-forge-seasonal-events]");
+  seasonal?.addEventListener("click", async () => {
+    if (seasonal.disabled || typeof onSources !== "function") return;
+    const value = seasonal.getAttribute("aria-checked") !== "true";
+    seasonal.disabled = true;
+    seasonal.setAttribute("aria-checked", String(value));
+    try {
+      await onSources({ story: { seasonalEvents: value } });
+    } catch {
+      seasonal.setAttribute("aria-checked", String(!value));
+    } finally {
+      seasonal.disabled = false;
+    }
+  });
   const toggle = root.querySelector("[data-forge-allow-choices]");
   if (!toggle || typeof onSources !== "function") return;
   toggle.addEventListener("click", async () => {
@@ -90,6 +103,8 @@ export function prepareForgeChoices(host, response) {
   if (!choices.length) return;
   const node = host._activeStoryNode;
   const runId = host._run?.runId;
+  const plan = host._plan;
+  const storyRevision = host._forgeChapterPlanVersions?.get(plan) ?? host._forgeChapterVersions?.get(runId) ?? 0;
   const bondUnit = host._bondUnit;
   const bondPart = host._bondPart;
   const canon = { ...(response.choiceCanon || {}) };
@@ -106,7 +121,7 @@ export function prepareForgeChoices(host, response) {
   let active = true;
   let busy = false;
   let resumePlayback = null;
-  const isCurrent = () => active && host._activeStoryNode === node && host._run?.runId === runId;
+  const isCurrent = () => active && host._activeStoryNode === node && host._run?.runId === runId && host._plan === plan;
   const rebuild = () => {
     timeline.length = 0;
     mainIndexes.length = 0;
@@ -203,12 +218,17 @@ export function prepareForgeChoices(host, response) {
           ...(node.replay ? { replay: true } : {}),
           choiceId: choice.id,
           optionId: button.dataset.forgeChoiceOption,
+          storyRevision,
         });
       } catch {
         result = null;
       }
       if (!isCurrent()) return;
       busy = false;
+      if (result?.error === "story-changed") {
+        status.textContent = forgeChoiceEnglish["story.choices.changed"];
+        return;
+      }
       const optionId = result?.ok
         ? result.optionId
         : result?.error === "choice-locked"

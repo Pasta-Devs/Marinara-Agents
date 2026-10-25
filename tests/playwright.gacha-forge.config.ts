@@ -19,9 +19,20 @@ export default defineConfig({
     "package-gacha-forge-audio.e2e.ts",
     "package-gacha-forge-boss-dialogue.e2e.ts",
     "package-gacha-forge-story-memory.e2e.ts",
+    "package-gacha-forge-seasonal-events.e2e.ts",
+    "package-gacha-forge-formation.e2e.ts",
   ],
   projects: [
     ...config.projects!,
+    {
+      name: "desktop-webkit",
+      testMatch: ["package-gacha-forge-seasonal-events.e2e.ts", "package-gacha-forge-formation.e2e.ts"],
+      use: {
+        ...devices["Desktop Safari"],
+        baseURL: config.projects![0]!.use!.baseURL,
+        viewport: { width: 1440, height: 900 },
+      },
+    },
     {
       name: "hybrid-chromium",
       testMatch: "package-gacha-forge-welcome-gift.e2e.ts",
