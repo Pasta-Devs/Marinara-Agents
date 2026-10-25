@@ -9,7 +9,7 @@ import {
 for (const lane of ["main", "bond"])
   for (const first of ["ordinary", "event"]) {
     const f = await createChapterRuntime();
-    let release;
+    let release, lead, follow;
     try {
       for (const [id] of f.docs)
         if (id.startsWith(`${runId}:chapter:2`) || id.startsWith(`${runId}:beat:2:`)) f.docs.delete(id);
@@ -51,9 +51,20 @@ for (const lane of ["main", "bond"])
           ...(lane === "main" ? { chapter: 2 } : { unitId, part: 1 }),
         });
       const event = () => f.post("/story-event/plan", { runId, chapter: "event-1" });
-      const lead = first === "event" ? event() : ordinary();
-      await providerStarted;
-      const follow = first === "event" ? ordinary() : event();
+      lead = first === "event" ? event() : ordinary();
+      void lead.catch(() => {});
+      let startTimer;
+      await Promise.race([
+        providerStarted,
+        new Promise((_, reject) => {
+          startTimer = setTimeout(
+            () => reject(new Error(`${lane}/${first}: leading planner did not reach the provider within 5 seconds`)),
+            5000,
+          );
+        }),
+      ]).finally(() => clearTimeout(startTimer));
+      follow = first === "event" ? ordinary() : event();
+      void follow.catch(() => {});
       // Let the second actual HTTP route reach admission while the first provider remains held.
       await new Promise((resolve) => setTimeout(resolve, 100));
       assert.deepEqual(providers, [first], `${lane}/${first}: only the admitted planner may call the provider`);
@@ -86,6 +97,7 @@ for (const lane of ["main", "bond"])
       }
     } finally {
       release?.();
+      await Promise.allSettled([lead, follow]);
       await f.close();
     }
   }

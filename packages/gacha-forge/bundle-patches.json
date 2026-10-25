@@ -1967,7 +1967,7 @@
         },
         {
           "version": "1.18.0",
-          "notes": "Optional, generated seasonal story events with persisted windows, scoped chapters, media and transactional rewards.",
+          "notes": "Optional, generated seasonal story events with persisted windows, scoped chapters, media and transactional rewards. Retain the active event boundary on main story actions as well as planning. Expire only global event choice holds and retire inaccessible event fights without rewards. Share existing story generation admission and prevent new Character Stories inside an active event while retaining played replay.",
           "edits": [
             {
               "find": "async function _t(",
@@ -2022,23 +2022,11 @@
             {
               "find": "),{enabled:forgeChoiceEnabled,terminal:tr(w).at(-1)===M}),options:",
               "replace": "),{enabled:forgeChoiceEnabled,terminal:tr(w).at(-1)===M,event:await forgeSeasonalEvents.narrationContext(p,w)}),options:"
-            }
-          ]
-        },
-        {
-          "version": "1.18.0",
-          "notes": "Retain the active event boundary on main story actions as well as planning.",
-          "edits": [
+            },
             {
               "find": "const forgeStoryPost=(path,handler)=>forgeChapterRegeneration.post(s,path,handler);forgeSeasonalEvents=createForgeSeasonalLegacyAdapter();",
               "replace": "const forgeStoryPost=(path,handler)=>forgeChapterRegeneration.post(s,path,async request=>{if(forgeSeasonalEvents&&[\"/story/start\",\"/battle/start\",\"/complete\"].includes(path)){const body=request?.body||{},blocked=await forgeSeasonalEvents.guardMain(body.runId,Number(body.chapter));if(blocked)return blocked;}return handler(request)});forgeSeasonalEvents=createForgeSeasonalLegacyAdapter();"
-            }
-          ]
-        },
-        {
-          "version": "1.18.0",
-          "notes": "Expire only global event choice holds and retire inaccessible event fights without rewards.",
-          "edits": [
+            },
             {
               "find": "bondHistory:Ka,readRun:async runId=>Ae((await be()).data,runId),resolveChapter:",
               "replace": "bondHistory:Ka,readRun:async runId=>Ae((await be()).data,runId),choiceChapterActive:(runId,chapter)=>forgeSeasonalEvents?.choiceActive(runId,chapter)??true,resolveChapter:"
@@ -2046,13 +2034,7 @@
             {
               "find": "return await qt(g,m)?(De(w,o),{ok:!0,run:w}):{ok:!1,error:\"write-conflict\"}}),s.post(\"/run/images\",",
               "replace": "return await qt(g,m)?(await forgeSeasonalEvents.retireInactiveFight(o).catch(error=>r.logger.warn(error,\"[gacha-forge] Could not retire an inactive event fight\")),De(w,o),{ok:!0,run:w}):{ok:!1,error:\"write-conflict\"}}),s.post(\"/run/images\","
-            }
-          ]
-        },
-        {
-          "version": "1.18.0",
-          "notes": "Share existing story generation admission and prevent new Character Stories inside an active event while retaining played replay.",
-          "edits": [
+            },
             {
               "find": "let forgeBlock=await forgeChoices.guard(o);if(forgeBlock)return forgeBlock;let Q=await Nr(o)+1",
               "replace": "let forgeBlock=await forgeSeasonalEvents.guardMain(o,Number.MAX_SAFE_INTEGER)||await forgeChoices.guard(o);if(forgeBlock)return forgeBlock;let Q=await Nr(o)+1"
