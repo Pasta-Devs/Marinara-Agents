@@ -528,6 +528,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.5.10",
+          "date": "2026-10-25",
+          "notes": "- Posts, replies, and expanded prompt editors keep the text you are typing visible above the mobile landscape keyboard. Noodle hides its mobile navigation while the keyboard is open and restores it when you finish typing.",
+          "highlight": false
+        },
+        {
           "version": "1.5.9",
           "date": "2026-10-21",
           "notes": "- Image failures marked nonretryable by the Engine no longer start automatic replacement requests.",
@@ -639,12 +645,6 @@
           "version": "1.2.20",
           "date": "2026-09-03",
           "notes": "- Added independent image width and height settings to Noodle settings.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.19",
-          "date": "2026-09-03",
-          "notes": "- Fixed automatic timeline refresh when Marinara requires an admin secret on loopback.",
           "highlight": false
         }
       ]
