@@ -269,6 +269,15 @@ test("Writing Advanced field help floats above clipping panels and preserves dra
   await expect(tip).toBeVisible();
   await expect.poll(() => tip.evaluate((element) => element.matches(":popover-open"))).toBe(true);
   await expect(tip).toContainText("The game follows these as orders, not suggestions.");
+  // Its native invoker must count as inside the popover so a retap reaches the close branch.
+  await expect(help).toHaveAttribute("popovertarget", tipId!);
+  if (testInfo.project.name.includes("mobile")) await help.tap();
+  else await help.click();
+  await expect(help).toHaveAttribute("aria-expanded", "false");
+  await expect(tip).toBeHidden();
+  if (testInfo.project.name.includes("mobile")) await help.tap();
+  else await help.click();
+  await expect(tip).toBeVisible();
   // A viewport/host callback rebinds these controls without the user dismissing the disclosure.
   await forge.evaluate((node) => (node as any)._wireFullscreen());
   // A sticky emulated hover must not impersonate the click disclosure's visible text.

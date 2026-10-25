@@ -153,6 +153,50 @@ async function countInput(forge: Locator) {
   return input;
 }
 
+async function settledChatGeometry(page: Page, forge: Locator, editing: boolean) {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
+  let previous = "";
+  let geometry!: {
+    top: number;
+    scrollHeight: number;
+    clientHeight: number;
+    stageHeight: number;
+    editorHeight: number;
+    editing: boolean;
+  };
+  // Focus schedules a viewport/ResizeObserver pass. Flush its frames before attributing any
+  // later scroll change to delivery, without weakening the delivery-position assertion.
+  await expect
+    .poll(async () => {
+      await page.clock.runFor(32);
+      geometry = await forge.evaluate((node) => {
+        const root = (node as any)._root;
+        const log = root.querySelector("[data-chat-log]") as HTMLElement;
+        const stage = root.querySelector(".gf-stage") as HTMLElement;
+        return {
+          top: log.scrollTop,
+          scrollHeight: log.scrollHeight,
+          clientHeight: log.clientHeight,
+          stageHeight: stage.clientHeight,
+          editorHeight: parseFloat(stage.style.getPropertyValue("--forge-editor-height")),
+          editing: stage.hasAttribute("data-forge-editing"),
+        };
+      });
+      const next = JSON.stringify(geometry);
+      const stable = next === previous;
+      previous = next;
+      return (
+        stable &&
+        geometry.editing === editing &&
+        Math.abs(geometry.editorHeight - Math.max(44, geometry.stageHeight - 16)) < 1
+      );
+    })
+    .toBe(true);
+  return geometry;
+}
+
 for (const theme of ["dark", "light"]) {
   test(`daily message count defaults off in setup and persists through actual Sources · ${theme}`, async ({
     page,
@@ -253,11 +297,7 @@ for (const theme of ["dark", "light"]) {
       await expect(composer).toBeVisible();
       await composer.fill("A draft I am still writing.");
       const log = f.forge.locator("[data-chat-log]");
-      const before = await log.evaluate((node) => ({
-        top: node.scrollTop,
-        scrollHeight: node.scrollHeight,
-        clientHeight: node.clientHeight,
-      }));
+      const before = await settledChatGeometry(page, f.forge, true);
       expect(before.scrollHeight).toBeGreaterThan(before.clientHeight + 100);
       f.deliveries.push({ id: "controlled-incoming-1", text: "A saved spontaneous lighthouse check-in." });
       await page.clock.fastForward(60_001);
@@ -274,6 +314,7 @@ for (const theme of ["dark", "light"]) {
       await expect(composer).toHaveValue("A draft I am still writing.");
       await composer.fill("");
       await composer.evaluate((node: HTMLTextAreaElement) => node.blur());
+      await settledChatGeometry(page, f.forge, false);
       const older = await log.evaluate((node) => {
         node.scrollTop = 25;
         return node.scrollTop;

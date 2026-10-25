@@ -207,7 +207,10 @@ function wireForgeFieldHelp(host) {
     if (!tip) continue;
     const field = row.querySelector("label")?.getAttribute("for") || button.getAttribute("aria-label");
     tip.id ||= `forge-field-help-${index}`;
-    if (typeof tip.showPopover === "function") tip.setAttribute("popover", "auto");
+    if (typeof tip.showPopover === "function") {
+      tip.setAttribute("popover", "auto");
+      button.setAttribute("popovertarget", tip.id);
+    }
     tip.tabIndex = 0;
     button.setAttribute("aria-controls", tip.id);
     button.setAttribute("aria-describedby", tip.id);

@@ -1199,6 +1199,10 @@
             {
               "find": "Wd(this._root,{onClose:",
               "replace": "Wd(this._root,{quiet:!!this._forgeChatQuietRefresh,onClose:"
+            },
+            {
+              "find": "function Gh(t,e){let a=xa(t,\"continuity\")[e.id];return typeof a==\"string\"?a:\"\"}",
+              "replace": "function Gh(t,e){let a=xa(t,\"continuity\")[e.id];return typeof a==\"string\"||typeof a==\"number\"?a:\"\"}"
             }
           ]
         }
