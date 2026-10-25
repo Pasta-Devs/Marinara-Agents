@@ -1,3 +1,11 @@
+## Regenerate an ongoing story (1.17.0)
+
+At the bottom of an ongoing chapter or the current open Character Story, choose **Regenerate chapter**. The **Are you sure?** confirmation names the selected story and explains what will be discarded. **Keep chapter** leaves its content, choices, reading position and progress unchanged. Confirming starts that story again using the current story settings and linked character cards.
+
+Completed chapters and completed Character Story parts cannot be regenerated. Finish an open Character Story before resetting the main chapter. Other chapters, your cast, authored cards, conversations and earned items stay saved. First-clear rewards already earned remain claimed; regenerating does not pay them again. Newly generated beats use the usual Vigor costs.
+
+Installing an update never resets a saved story. A reset happens only after you confirm the selected ongoing chapter.
+
 ## Soundtrack collection (1.15.0)
 
 Settings → Look → Visual includes **Home page menu music**, listing this world's available generated songs. **Automatic soundtrack** restores the usual Home music. Collected songs remain playable with generation off; mute and volume still apply. If a saved song is missing, the existing soundtrack plays.
