@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { useSlpCurrentLiveShow } from "./slp-live-hooks";
+import { SLP_LIVE_STYLES } from "../../modules/live/slp-live-styles";
 
 export function SlpLiveNowRow({
   creators,
@@ -18,8 +19,9 @@ export function SlpLiveNowRow({
     <button
       type="button"
       onClick={() => onOpen?.(show.id)}
-      className="mx-3 mt-3 flex min-h-16 items-center gap-3 rounded-lg border border-[var(--border)] px-3 text-start"
+      className="relative mx-3 mt-3 flex min-h-16 w-[calc(100%-1.5rem)] items-center gap-3 overflow-hidden rounded-2xl bg-[linear-gradient(135deg,color-mix(in_srgb,var(--noodle-accent)_22%,var(--card)),color-mix(in_srgb,var(--slurp-violet)_18%,var(--card)))] px-3 text-start ring-1 ring-[color-mix(in_srgb,var(--noodle-accent)_45%,transparent)] transition-transform active:scale-[0.98]"
     >
+      <style>{SLP_LIVE_STYLES}</style>
       <Avatar
         account={{ displayName: host?.displayName ?? t("ui.slurp.live.creator"), avatarUrl: host?.avatarUrl ?? null }}
         size="md"
@@ -31,7 +33,10 @@ export function SlpLiveNowRow({
             (show.hostKind === "player" ? t("ui.slurp.live.playerHost") : t("ui.slurp.live.creator"))}
         </span>
       </span>
-      <span className="rounded-full bg-red-600 px-2 py-1 text-xs font-bold text-white">{t("ui.slurp.live.badge")}</span>
+      <span className="flex items-center gap-1.5 rounded-full bg-red-600 px-2.5 py-1 text-xs font-black text-white shadow-[0_0_16px_rgb(220_38_38/0.55)]">
+        <span className="slp-live-dot h-2 w-2 rounded-full bg-white" />
+        {t("ui.slurp.live.badge")}
+      </span>
     </button>
   );
 }

@@ -7,12 +7,14 @@ import { useSlpLiveActions, useSlpLiveShow } from "./slp-live-hooks";
 import type { SlpLiveMenuItem, SlpLiveShow } from "./slp-live-contract";
 import { SlpLiveChat } from "./SlpLiveChat";
 import { SlpLiveMenuSheet } from "./SlpLiveMenuSheet";
+import { SlpLiveStage } from "./SlpLiveStage";
 
 export function SlpLiveScreen({
   showId,
   personaId,
   creatorName,
   avatarUrl,
+  hosts,
   onBack,
   onOpenRecap,
 }: {
@@ -20,6 +22,8 @@ export function SlpLiveScreen({
   personaId: string | null;
   creatorName: string;
   avatarUrl?: string | null;
+  /** Accounts to find the host by the show's own host id, whichever screen opened it. */
+  hosts?: Array<{ id: string; displayName: string; avatarUrl?: string | null }>;
   onBack: () => void;
   onOpenRecap: (postId: string) => void;
 }) {
@@ -36,12 +40,13 @@ export function SlpLiveScreen({
         <p>{t("ui.slurp.live.unavailable")}</p>
       </div>
     );
+  const hostAccount = hosts?.find((account) => account.id === query.data.hostId);
   return (
     <SlpLiveContent
       show={query.data}
       personaId={personaId}
-      creatorName={creatorName}
-      avatarUrl={avatarUrl}
+      creatorName={hostAccount?.displayName ?? creatorName}
+      avatarUrl={hostAccount?.avatarUrl ?? avatarUrl}
       onBack={onBack}
       onOpenRecap={onOpenRecap}
     />
@@ -72,6 +77,7 @@ function SlpLiveContent({
   const [customAmount, setCustomAmount] = useState("");
   const [narration, setNarration] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (show.endedAt) return;
@@ -146,152 +152,131 @@ function SlpLiveContent({
   const privateViewer = privateActive && !!personaId && show.private?.personaId === personaId;
   if (show.endedAt)
     return (
-      <main className="mx-auto flex h-full max-w-lg flex-col items-center justify-center gap-4 p-6 text-center">
-        <h1 className="text-xl font-bold">{t("ui.slurp.live.ended")}</h1>
-        <p className="text-sm text-[var(--muted-foreground)]">
+      <main className="relative isolate mx-auto flex h-full w-full max-w-lg flex-col items-center justify-center gap-4 overflow-hidden p-6 text-center">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_30%,color-mix(in_srgb,var(--noodle-accent)_28%,transparent),transparent_65%)]"
+        />
+        <Avatar account={{ displayName: creatorName, avatarUrl: avatarUrl ?? null }} size="xl" />
+        <h1 className="slp-display text-2xl">{t("ui.slurp.live.ended")}</h1>
+        <p className="rounded-full bg-[var(--card)] px-4 py-2 text-sm font-semibold ring-1 ring-[var(--border)]">
           <SlpCoinText>{t("ui.slurp.live.raised", { name: creatorName, amount: show.raised })}</SlpCoinText>
         </p>
         {show.recapPostId && (
           <button
-            className="min-h-11 rounded-lg bg-[var(--noodle-accent)] px-4 text-[var(--noodle-accent-foreground)]"
+            className="min-h-11 rounded-full bg-[var(--noodle-accent)] px-6 font-semibold text-[var(--noodle-accent-foreground)]"
             onClick={() => onOpenRecap(show.recapPostId!)}
           >
             {t("ui.slurp.live.recap")}
           </button>
         )}
-        <button className="min-h-11 px-4" onClick={onBack}>
+        <button className="min-h-11 px-4 text-sm text-[var(--muted-foreground)]" onClick={onBack}>
           {t("ui.slurp.live.back")}
         </button>
       </main>
     );
-  return (
-    <main className="mx-auto flex h-full max-w-lg flex-col">
-      <header className="flex min-h-16 items-center gap-3 border-b border-[var(--border)] px-3">
-        <button onClick={onBack} className="min-h-11 min-w-11" aria-label={t("ui.slurp.live.back")}>
-          ‹
-        </button>
-        <Avatar account={{ displayName: creatorName, avatarUrl: avatarUrl ?? null }} size="md" />
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-sm font-bold">{creatorName}</h1>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            {t("ui.slurp.live.left", { count: left })} · {t("ui.slurp.live.viewers", { count: show.viewers ?? 0 })}
-          </p>
-        </div>
-        <span
-          role="status"
-          aria-label={t("ui.slurp.live.liveNow")}
-          className="rounded-full bg-red-600 px-2 py-1 text-xs font-bold text-white"
+  const chip =
+    "min-h-11 shrink-0 rounded-full px-4 text-sm font-semibold ring-1 transition-transform active:scale-95 disabled:opacity-50";
+  const stageActions = host ? (
+    <button
+      type="button"
+      disabled={!personaId || end.isPending}
+      onClick={() => personaId && end.mutate({ personaId })}
+      className="min-h-11 rounded-full bg-red-600 px-4 text-sm font-bold text-white"
+    >
+      {t("ui.slurp.live.endShow")}
+    </button>
+  ) : show.picturesAllowed && personaId ? (
+    <div
+      role="group"
+      aria-label={t("ui.slurp.live.viewMode")}
+      className="flex rounded-full bg-black/40 p-0.5 ring-1 ring-white/15 backdrop-blur-md"
+    >
+      {(["text", "pictures"] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          disabled={!personaId || mode.isPending || (option === "pictures" && !!show.pictureModeBusy)}
+          aria-pressed={show.mode === option && (option === "text" || show.pictureViewerId === personaId)}
+          onClick={() => mode.mutate({ personaId, mode: option })}
+          className="min-h-11 rounded-full px-3 text-xs font-semibold text-white/80 aria-pressed:bg-white aria-pressed:text-black disabled:opacity-50"
         >
-          {t("ui.slurp.live.badge")}
-        </span>
-      </header>
-      <section className="border-b border-[var(--border)] px-4 py-3" aria-label={t("ui.slurp.live.goalLabel")}>
-        <div className="mb-2 flex justify-between text-xs">
-          <span>
-            <SlpCoinText>
-              {t(goalTarget > show.goal ? "ui.slurp.live.secondGoal" : "ui.slurp.live.goal", {
-                raised: show.raised,
-                goal: goalTarget,
-              })}
-            </SlpCoinText>
-          </span>
-          <span>{Math.min(100, Math.round((show.raised / Math.max(1, goalTarget)) * 100))}%</span>
-        </div>
-        <div className="h-2 overflow-hidden rounded-full bg-[var(--muted)]">
+          {t(`ui.slurp.live.${option}`)}
+        </button>
+      ))}
+    </div>
+  ) : null;
+  return (
+    <main className="mx-auto flex h-full w-full max-w-lg flex-col lg:max-w-6xl lg:flex-row lg:gap-4 lg:p-4">
+      <SlpLiveStage
+        show={show}
+        elapsed={elapsed}
+        creatorName={creatorName}
+        avatarUrl={avatarUrl}
+        personaId={personaId}
+        left={left}
+        goalTarget={goalTarget}
+        topTip={topTip}
+        onBack={onBack}
+        actions={stageActions}
+        t={t}
+      />
+      <div className="flex min-h-0 flex-1 flex-col lg:w-[400px] lg:flex-none lg:overflow-hidden lg:rounded-3xl lg:bg-[var(--card)] lg:ring-1 lg:ring-[var(--border)]">
+        {!host && personaId && privateActive && (
           <div
-            className="h-full bg-[var(--noodle-accent)]"
-            style={{ width: `${Math.min(100, (show.raised / Math.max(1, goalTarget)) * 100)}%` }}
-          />
-        </div>
-      </section>
-      {!host && personaId && (
-        <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-sm">
-          {privateActive ? (
-            <span role="status" className="flex-1">
-              {privateViewer
-                ? t("ui.slurp.live.privateTimer", {
-                    count: Math.max(0, Math.ceil((Date.parse(show.private!.until) - now) / 1000)),
-                  })
-                : t("ui.slurp.live.inPrivate")}
-            </span>
-          ) : (
-            <span className="flex-1" />
-          )}
-          {(!privateActive || privateViewer) && (
-            <button
-              type="button"
-              disabled={privateShow.isPending}
-              onClick={() => {
-                const requestId = privateRequestId ?? newRequestId();
-                setPrivateRequestId(requestId);
-                privateShow.mutate({ personaId, requestId }, { onSuccess: () => setPrivateRequestId(null) });
-              }}
-              className="min-h-11 rounded border border-[var(--border)] px-3"
-            >
-              {privateViewer ? (
-                t("ui.slurp.live.extend")
-              ) : (
-                <SlpCoinText>{t("ui.slurp.live.goPrivate", { price: show.privatePrice ?? 0 })}</SlpCoinText>
-              )}
-            </button>
-          )}
-          {show.picturesAllowed && (
-            <div
-              role="group"
-              aria-label={t("ui.slurp.live.viewMode")}
-              className="flex rounded border border-[var(--border)]"
-            >
-              {(["text", "pictures"] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  disabled={mode.isPending || (option === "pictures" && !!show.pictureModeBusy)}
-                  aria-pressed={show.mode === option && (option === "text" || show.pictureViewerId === personaId)}
-                  onClick={() => mode.mutate({ personaId, mode: option })}
-                  className="min-h-11 px-2"
+            role="status"
+            className="border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--slurp-violet)_14%,transparent)] px-4 py-2 text-sm font-semibold text-[var(--slurp-violet)]"
+          >
+            {privateViewer
+              ? t("ui.slurp.live.privateTimer", {
+                  count: Math.max(0, Math.ceil((Date.parse(show.private!.until) - now) / 1000)),
+                })
+              : t("ui.slurp.live.inPrivate")}
+          </div>
+        )}
+        {(!privateActive || privateViewer) && show.queue.some((order) => !order.served) && (
+          <div className="flex items-center gap-2 overflow-x-auto border-b border-[var(--border)] px-3 py-2">
+            <b className="shrink-0 text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
+              {t("ui.slurp.live.nextUp")}
+            </b>
+            {show.queue
+              .filter((order) => !order.served)
+              .map((order) => (
+                <div
+                  key={order.requestId}
+                  className="flex shrink-0 items-center gap-2 rounded-full bg-[color-mix(in_srgb,var(--slurp-violet)_16%,transparent)] px-3 py-1 text-xs font-semibold text-[var(--slurp-violet)]"
                 >
-                  {t(`ui.slurp.live.${option}`)}
-                </button>
+                  <span>{order.label}</span>
+                  {host && personaId && (
+                    <button
+                      type="button"
+                      disabled={done.isPending}
+                      onClick={() => done.mutate({ personaId, requestId: order.requestId })}
+                      className="min-h-8 rounded-full bg-[var(--slurp-violet)] px-2 font-bold text-white"
+                    >
+                      {t("ui.slurp.live.done")}
+                    </button>
+                  )}
+                </div>
               ))}
-            </div>
-          )}
-        </div>
-      )}
-      {(!privateActive || privateViewer) && show.queue.some((order) => !order.served) && (
-        <div className="flex gap-2 overflow-x-auto border-b border-[var(--border)] px-3 py-2">
-          <b className="shrink-0 text-xs">{t("ui.slurp.live.nextUp")}</b>
-          {show.queue
-            .filter((order) => !order.served)
-            .map((order) => (
-              <div
-                key={order.requestId}
-                className="flex shrink-0 items-center gap-2 rounded bg-[var(--muted)] px-2 py-1 text-xs"
-              >
-                <span>{order.label}</span>
-                {host && personaId && (
-                  <button
-                    type="button"
-                    disabled={done.isPending}
-                    onClick={() => done.mutate({ personaId, requestId: order.requestId })}
-                    className="min-h-8 px-2 font-semibold"
-                  >
-                    {t("ui.slurp.live.done")}
-                  </button>
-                )}
-              </div>
-            ))}
-        </div>
-      )}
-      <SlpLiveChat show={show} creatorName={creatorName} elapsed={elapsed} t={t} personaId={personaId} />
-      {!personaId && (
-        <p className="border-t border-[var(--border)] px-3 py-2 text-sm text-[var(--muted-foreground)]">
-          {t("ui.noodle.noodleshell.pickAPersona")}
-        </p>
-      )}
-      {personaId && (!privateActive || privateViewer) && (
-        <footer className="space-y-2 border-t border-[var(--border)] p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-          {host ? (
-            <>
+          </div>
+        )}
+        <SlpLiveChat
+          show={show}
+          creatorName={creatorName}
+          avatarUrl={avatarUrl}
+          elapsed={elapsed}
+          t={t}
+          personaId={personaId}
+        />
+        {!personaId && (
+          <p className="border-t border-[var(--border)] px-3 py-2 text-sm text-[var(--muted-foreground)]">
+            {t("ui.noodle.noodleshell.pickAPersona")}
+          </p>
+        )}
+        {personaId && (!privateActive || privateViewer) && (
+          <footer className="space-y-2 border-t border-[var(--border)] bg-[var(--background)] px-3 pt-2.5 pb-[calc(0.75rem+var(--slp-nav-space,env(safe-area-inset-bottom)))] lg:bg-transparent">
+            {host ? (
               <form onSubmit={sendNarration} className="flex gap-2">
                 <input
                   aria-label={t("ui.slurp.live.narrationLabel")}
@@ -300,40 +285,88 @@ function SlpLiveContent({
                   maxLength={500}
                   disabled={!personaId || narrate.isPending}
                   placeholder={t("ui.slurp.live.narrationPlaceholder")}
-                  className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm"
+                  className="min-h-11 min-w-0 flex-1 rounded-full bg-[var(--card)] px-4 text-sm ring-1 ring-[var(--border)]"
                 />
                 <button
                   disabled={!personaId || !narration.trim() || narrate.isPending}
-                  className="min-h-11 rounded-lg border border-[var(--border)] px-4 text-sm font-semibold"
+                  className="min-h-11 rounded-full bg-[var(--noodle-accent)] px-5 text-sm font-semibold text-[var(--noodle-accent-foreground)] disabled:opacity-50"
                 >
                   {t("ui.slurp.live.send")}
                 </button>
               </form>
-              <button
-                type="button"
-                disabled={!personaId || end.isPending}
-                onClick={() => personaId && end.mutate({ personaId })}
-                className="min-h-11 w-full rounded-lg bg-red-600 px-3 text-sm font-bold text-white"
-              >
-                {t("ui.slurp.live.endShow")}
-              </button>
-            </>
-          ) : (
-            <>
-              {!privateViewer && (
-                <>
-                  <div className="flex gap-2">
+            ) : (
+              <>
+                {!privateViewer && (
+                  <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-0.5">
+                    <button
+                      type="button"
+                      disabled={tip.isPending}
+                      onClick={() => tipLive(topTip?.amount ?? prices[0]!)}
+                      className={`${chip} bg-[linear-gradient(135deg,var(--noodle-accent),var(--slurp-violet))] text-white ring-transparent`}
+                    >
+                      <SlpCoinText>
+                        {topTip
+                          ? t("ui.slurp.live.matchTop", { amount: topTip.amount ?? prices[0] })
+                          : t("ui.slurp.live.firstTipper", { amount: prices[0] })}
+                      </SlpCoinText>
+                    </button>
                     {prices.map((amount) => (
                       <button
                         key={amount}
-                        disabled={!personaId || tip.isPending}
+                        type="button"
+                        disabled={tip.isPending}
                         onClick={() => tipLive(amount)}
-                        className="min-h-11 flex-1 rounded-lg border border-[var(--border)] text-sm font-semibold disabled:opacity-50"
+                        className={`${chip} bg-[color-mix(in_srgb,var(--slurp-warning)_16%,transparent)] text-[var(--foreground)] ring-[color-mix(in_srgb,var(--slurp-warning)_45%,transparent)]`}
                       >
-                        {t("ui.slurp.live.tip", { amount })}
+                        <SlpCoinText>{`${amount} <coin/>`}</SlpCoinText>
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      aria-expanded={customOpen}
+                      onClick={() => setCustomOpen((open) => !open)}
+                      className={`${chip} bg-[var(--card)] ring-[var(--border)]`}
+                    >
+                      {t("ui.slurp.live.customTip")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMenuOpen(true)}
+                      className={`${chip} bg-[color-mix(in_srgb,var(--slurp-violet)_16%,transparent)] text-[var(--slurp-violet)] ring-[color-mix(in_srgb,var(--slurp-violet)_40%,transparent)]`}
+                    >
+                      {t("ui.slurp.live.openMenu")}
+                    </button>
+                    {!privateActive && (
+                      <button
+                        type="button"
+                        disabled={privateShow.isPending}
+                        onClick={() => {
+                          const requestId = privateRequestId ?? newRequestId();
+                          setPrivateRequestId(requestId);
+                          privateShow.mutate({ personaId, requestId }, { onSuccess: () => setPrivateRequestId(null) });
+                        }}
+                        className={`${chip} bg-[var(--card)] ring-[var(--border)]`}
+                      >
+                        <SlpCoinText>{t("ui.slurp.live.goPrivate", { price: show.privatePrice ?? 0 })}</SlpCoinText>
+                      </button>
+                    )}
                   </div>
+                )}
+                {privateViewer && (
+                  <button
+                    type="button"
+                    disabled={privateShow.isPending}
+                    onClick={() => {
+                      const requestId = privateRequestId ?? newRequestId();
+                      setPrivateRequestId(requestId);
+                      privateShow.mutate({ personaId, requestId }, { onSuccess: () => setPrivateRequestId(null) });
+                    }}
+                    className={`${chip} w-full bg-[color-mix(in_srgb,var(--slurp-violet)_16%,transparent)] text-[var(--slurp-violet)] ring-[color-mix(in_srgb,var(--slurp-violet)_40%,transparent)]`}
+                  >
+                    {t("ui.slurp.live.extend")}
+                  </button>
+                )}
+                {customOpen && !privateViewer && (
                   <div className="flex gap-2">
                     <label className="sr-only" htmlFor="live-custom-tip">
                       {t("ui.slurp.live.customTip")}
@@ -346,61 +379,40 @@ function SlpLiveContent({
                       value={customAmount}
                       onChange={(event) => setCustomAmount(event.target.value)}
                       placeholder={t("ui.slurp.live.customTip")}
-                      className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm"
+                      className="min-h-11 min-w-0 flex-1 rounded-full bg-[var(--card)] px-4 text-sm ring-1 ring-[var(--border)]"
                     />
                     <button
                       type="button"
-                      disabled={
-                        !personaId ||
-                        tip.isPending ||
-                        !Number.isInteger(Number(customAmount)) ||
-                        Number(customAmount) < 1
-                      }
+                      disabled={tip.isPending || !Number.isInteger(Number(customAmount)) || Number(customAmount) < 1}
                       onClick={() => tipLive(Number(customAmount))}
-                      className="min-h-11 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold"
+                      className="min-h-11 rounded-full bg-[var(--slurp-warning)] px-5 text-sm font-bold text-neutral-950 disabled:opacity-50"
                     >
                       {t("ui.slurp.live.tipCustom")}
                     </button>
                   </div>
+                )}
+                <form onSubmit={sendChat} className="flex gap-2">
+                  <input
+                    aria-label={t("ui.slurp.live.chatLabel")}
+                    value={message}
+                    onChange={(event) => setMessage(event.target.value)}
+                    maxLength={1000}
+                    disabled={chat.isPending}
+                    placeholder={t("ui.slurp.live.chatPlaceholder")}
+                    className="min-h-11 min-w-0 flex-1 rounded-full bg-[var(--card)] px-4 text-sm ring-1 ring-[var(--border)]"
+                  />
                   <button
-                    disabled={!personaId || tip.isPending}
-                    onClick={() => tipLive(topTip?.amount ?? prices[0]!)}
-                    className="min-h-11 w-full rounded-lg bg-[var(--noodle-accent)] px-3 text-sm font-bold text-[var(--noodle-accent-foreground)]"
+                    disabled={!message.trim() || chat.isPending}
+                    className="min-h-11 rounded-full bg-[var(--noodle-accent)] px-5 text-sm font-semibold text-[var(--noodle-accent-foreground)] disabled:opacity-50"
                   >
-                    {topTip
-                      ? t("ui.slurp.live.matchTop", { amount: topTip.amount ?? prices[0] })
-                      : t("ui.slurp.live.firstTipper", { amount: prices[0] })}
+                    {t("ui.slurp.live.send")}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setMenuOpen(true)}
-                    className="min-h-11 w-full rounded-lg border border-[var(--border)] text-sm font-semibold"
-                  >
-                    {t("ui.slurp.live.openMenu")}
-                  </button>
-                </>
-              )}
-              <form onSubmit={sendChat} className="flex gap-2">
-                <input
-                  aria-label={t("ui.slurp.live.chatLabel")}
-                  value={message}
-                  onChange={(event) => setMessage(event.target.value)}
-                  maxLength={1000}
-                  disabled={!personaId || chat.isPending}
-                  placeholder={t("ui.slurp.live.chatPlaceholder")}
-                  className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm"
-                />
-                <button
-                  disabled={!personaId || !message.trim() || chat.isPending}
-                  className="min-h-11 rounded-lg border border-[var(--border)] px-4 text-sm font-semibold"
-                >
-                  {t("ui.slurp.live.send")}
-                </button>
-              </form>
-            </>
-          )}
-        </footer>
-      )}
+                </form>
+              </>
+            )}
+          </footer>
+        )}
+      </div>
       {menuOpen && (
         <SlpLiveMenuSheet
           items={show.menu}

@@ -203,7 +203,12 @@ assert.match(liveScreen, /chatLabel/);
 assert.match(liveScreen, /SlpLiveMenuSheet/);
 assert.match(liveScreen, /newRequestId\(\)/);
 assert.match(liveScreen, /customTip/);
-assert.match(liveScreen, /show\.viewers/);
+assert.match(
+  slurp2Source("packages/slurp2/src/engine/packages/client/src/slp/features/live/SlpLiveStage.tsx"),
+  /show\.viewers/,
+  "the stage shows the viewer count",
+);
+assert.match(liveScreen, /<SlpLiveStage/);
 assert.match(
   liveChat,
   /joinedLate \? catchUpLines\(show, elapsed, t\) : \[\]/,
@@ -231,7 +236,10 @@ assert.match(liveHooks, /!query\.state\.data\?\.endedAt/);
 assert.match(liveHooks, /enabled: Boolean\(id\)/);
 assert.match(liveHooks, /personaId \? `\?personaId=\$\{encodeURIComponent\(personaId\)\}` : ""/);
 assert.match(liveScreen, /useSlpLiveShow\(showId, personaId\)/);
-assert.match(liveScreen, /role="status"\s+aria-label=\{t\("ui\.slurp\.live\.liveNow"\)\}/);
+assert.match(
+  slurp2Source("packages/slurp2/src/engine/packages/client/src/slp/features/live/SlpLiveStage.tsx"),
+  /role="status"\s+aria-label=\{t\("ui\.slurp\.live\.liveNow"\)\}/,
+);
 assert.match(liveScreen, /!personaId && \(/);
 assert.match(liveChat, /filter\(\(order\) => order\.at <= elapsed\)/);
 const postCard = slurp2Source("packages/slurp2/src/engine/packages/client/src/slp/modules/post/SlpPostCard.tsx");
