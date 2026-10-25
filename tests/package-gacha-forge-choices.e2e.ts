@@ -71,7 +71,7 @@ const scene = {
   places: [],
 };
 
-async function openForge(page: Page, testInfo: TestInfo, activeRun?: typeof run) {
+async function openForge(page: Page, testInfo: TestInfo, activeRun?: typeof run, hostTheme: "dark" | "light" = "dark") {
   await page.setViewportSize(
     testInfo.project.name.includes("mobile") ? { width: 874, height: 402 } : { width: 1440, height: 900 },
   );
@@ -79,18 +79,27 @@ async function openForge(page: Page, testInfo: TestInfo, activeRun?: typeof run)
   await page.route("**/api/app-settings/ui", (route) =>
     route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
   );
-  await page.addInitScript((version) => {
-    localStorage.removeItem("marinara-active-chat-id");
-    localStorage.setItem("marinara:whats-new:seen-version", version);
-    localStorage.setItem(
-      "marinara-engine-ui",
-      JSON.stringify({
-        state: { hasCompletedOnboarding: true, sidebarOpen: false, rightPanelOpen: false, appAccentPulseMode: false },
-        version: 65,
-      }),
-    );
-  }, appVersion);
-  await page.route("**/api/gacha-forge/state", (route) =>
+  await page.addInitScript(
+    ({ version, hostTheme }) => {
+      localStorage.removeItem("marinara-active-chat-id");
+      localStorage.setItem("marinara:whats-new:seen-version", version);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            theme: hostTheme,
+            hasCompletedOnboarding: true,
+            sidebarOpen: false,
+            rightPanelOpen: false,
+            appAccentPulseMode: false,
+          },
+          version: 65,
+        }),
+      );
+    },
+    { version: appVersion, hostTheme },
+  );
+  await page.route("**/api/gacha-forge/state*", (route) =>
     route.fulfill({
       json: activeRun
         ? {
@@ -193,6 +202,193 @@ async function assertChoiceLayout(forge: Locator) {
     expect(button.fitsText).toBe(true);
   }
 }
+
+test("Fresh chapter entry types its first line while a saved reading position stays revealed", async ({
+  page,
+}, testInfo) => {
+  const opening = "A new chapter opens, one word at a time. ".repeat(12);
+  const resumed = "The reader already reached this second line.";
+  await page.route("**/api/gacha-forge/beat", (route) =>
+    route.fulfill({
+      json: {
+        ok: true,
+        segments: [
+          { speaker: "", text: opening },
+          { speaker: "", text: resumed },
+          { speaker: "", text: "Later." },
+        ],
+        cast: [],
+        places: [],
+      },
+    }),
+  );
+  const forge = await openForge(page, testInfo);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await seedScene(forge);
+  await expect.poll(() => forge.locator("[data-text]").textContent()).not.toBe(opening);
+  await expect
+    .poll(async () => {
+      const text = await forge.locator("[data-text]").textContent();
+      return !!text && text.length < opening.length;
+    })
+    .toBe(true);
+  await forge.locator("[data-box]").click();
+  await expect(forge.locator("[data-text]")).toHaveText(opening);
+  await forge.locator("[data-box]").click();
+  await forge.locator("[data-box]").click();
+  await expect(forge.locator("[data-text]")).toHaveText(resumed);
+  // The package's real session position survives opening the same scene again.
+  await seedScene(forge);
+  await expect(forge.locator("[data-count]")).toHaveText("02 / 03");
+  await expect(forge.locator("[data-text]")).toHaveText(resumed);
+});
+
+test("Speaker changes open the correct portrait without exposing an earlier character's buffer", async ({
+  page,
+}, testInfo) => {
+  const cast = [
+    { name: "Arden", art: "https://forge.test/arden.svg" },
+    { name: "Brin", art: "https://forge.test/brin.svg" },
+    { name: "Mari", art: "https://forge.test/mari.svg", prota: true },
+  ];
+  await page.route("https://forge.test/*.svg", (route) =>
+    route.fulfill({
+      contentType: "image/svg+xml",
+      body: `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="260"><rect width="180" height="260" fill="${route.request().url().includes("arden") ? "#bf3333" : route.request().url().includes("brin") ? "#338f55" : "#3355bf"}"/></svg>`,
+    }),
+  );
+  const segments = ["Arden", "Brin", "Mari", "Arden"].map((speaker) => ({ speaker, text: `${speaker} speaks.` }));
+  await page.route("**/api/gacha-forge/beat", (route) =>
+    route.fulfill({ json: { ok: true, cast, segments, places: [] } }),
+  );
+  const forge = await openForge(page, testInfo);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await seedScene(forge);
+  await expect(forge.locator("[data-text]")).toHaveText(segments[0].text);
+  await forge.evaluate((node, cast) => {
+    const root = node.shadowRoot!;
+    const sample = { changes: 0, wrong: [] as string[] };
+    (window as any).forgePortraitProof = sample;
+    const observer = new MutationObserver(() => {
+      const speaker = root.querySelector("[data-who]")?.textContent;
+      const current = cast.find((entry) => entry.name === speaker);
+      if (!current) return;
+      sample.changes += 1;
+      for (const image of root.querySelectorAll<HTMLImageElement>('.vn-plate[data-open="true"] [data-img]'))
+        if (!image.hidden && image.getAttribute("src") && image.getAttribute("src") !== current.art)
+          sample.wrong.push(`${speaker}:${image.getAttribute("src")}`);
+    });
+    observer.observe(root.querySelector("[data-vn]")!, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ["src", "data-open", "data-front", "hidden"],
+    });
+    (window as any).stopForgePortraitProof = () => observer.disconnect();
+  }, cast);
+  for (const segment of segments.slice(1)) {
+    await forge.locator("[data-box]").click();
+    await expect(forge.locator("[data-who]")).toHaveText(segment.speaker);
+    const url = cast.find((entry) => entry.name === segment.speaker)!.art;
+    await expect
+      .poll(() =>
+        forge
+          .locator('.vn-plate[data-open="true"] [data-img]')
+          .evaluateAll((images) => images.map((image) => image.getAttribute("src"))),
+      )
+      .toEqual([url, url]);
+    await expect(forge.locator("[data-text]")).toHaveText(segment.text);
+  }
+  const sample = await page.evaluate(() => {
+    (window as any).stopForgePortraitProof();
+    return (window as any).forgePortraitProof;
+  });
+  expect(sample.changes).toBeGreaterThan(0);
+  expect(sample.wrong).toEqual([]);
+  await testInfo.attach("speaker-portrait-buffers.json", {
+    body: JSON.stringify(sample),
+    contentType: "application/json",
+  });
+});
+
+test("Choices preserve an intentional final em dash and controls do not advance in either theme", async ({
+  page,
+}, testInfo) => {
+  const text =
+    "The dogs. Who's got the dogs? Belka won't eat if you watch her. You've gotta turn your back, somebody has to turn their—";
+  const fullText = text;
+  const beat = {
+    ...scene,
+    segments: [
+      { speaker: "", text: "Listen before answering." },
+      { speaker: "Lev Ostrog", text: fullText },
+    ],
+    choices: [
+      {
+        id: "choice-1",
+        kind: "small",
+        at: 1,
+        options: smallOptions.slice(0, 3).map((option) => ({ ...option, text: option.text.replace(/\.$/u, "") })),
+      },
+    ],
+  };
+  await page.route("**/api/gacha-forge/beat", (route) => route.fulfill({ json: beat }));
+  let currentTheme = "aurora";
+  await page.route("**/api/gacha-forge/run/sources", (route) =>
+    route.fulfill({
+      json: {
+        ok: true,
+        run: { ...run, hudStyle: currentTheme, ...route.request().postDataJSON().sources },
+      },
+    }),
+  );
+  const forge = await openForge(page, testInfo, undefined, "light");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  for (const theme of ["aurora", "bloom"]) {
+    currentTheme = theme;
+    await forge.evaluate((node) => (node as any)._beatLineWrite(0));
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await seedScene(forge, false, theme);
+    await expect(forge.locator("[data-text]")).toHaveText("Listen before answering.");
+    const count = forge.locator("[data-count]");
+    const before = await count.textContent();
+    const initialText = await forge.locator("[data-text]").textContent();
+    await forge.locator(".gf-fs-chapter").click();
+    await forge.locator(".gf-fs-chapter").click();
+    const mute = forge.locator(".gf-mute-chapter");
+    await expect(mute).toBeVisible();
+    await mute.click();
+    await expect(count).toHaveText(before!);
+    await expect(forge.locator("[data-text]")).toHaveText(initialText!);
+    await forge.locator("[data-box]").click();
+    await expect(forge.locator("[data-forge-choices]")).toHaveCount(0);
+    // One more story click reveals the remainder, rather than advancing past the unanswered choice.
+    await forge.locator("[data-box]").click();
+    await expect(forge.locator("[data-text]")).toHaveText(fullText);
+    await expect(forge.locator("[data-forge-choices]")).toBeVisible();
+    await expect(forge.locator(".vn-choice-option").first()).toHaveText(smallOptions[0].text);
+    const tailVisible = await forge.locator(".vn-dock").evaluate((dock) => {
+      dock.scrollTop = dock.scrollHeight;
+      const text = dock.querySelector("[data-text]")!.firstChild!;
+      const tail = document.createRange();
+      tail.setStart(text, Math.max(0, text.textContent!.length - 20));
+      tail.setEnd(text, text.textContent!.length);
+      const bounds = tail.getBoundingClientRect();
+      const viewport = dock.getBoundingClientRect();
+      const stage = dock.closest(".gf-stage")!.getBoundingClientRect();
+      const finalGlyph = document.createRange();
+      finalGlyph.setStart(text, text.textContent!.length - 1);
+      finalGlyph.setEnd(text, text.textContent!.length);
+      return (
+        finalGlyph.toString() === "—" &&
+        finalGlyph.getBoundingClientRect().width > 0 &&
+        bounds.top >= Math.max(viewport.top, stage.top) - 1 &&
+        bounds.bottom <= Math.min(viewport.bottom, stage.bottom) + 1
+      );
+    });
+    expect(tailVisible, "The supplied final em dash remains visible after choices appear").toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`choice-complete-${theme}.png`), animations: "disabled" });
+  }
+});
 
 test("Choices pause playback, preserve resume canon and allow only small replay alternatives", async ({
   page,

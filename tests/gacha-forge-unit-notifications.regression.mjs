@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import vm from "node:vm";
+import { forgeUserTimeZone } from "../packages/gacha-forge/src/browser-presentation.mjs";
+import { forgeStoryRequest } from "../packages/gacha-forge/src/story-cancel-client.mjs";
 import {
   forgeUnitRecommendation,
   forgeUnitStepIsCurrent,
@@ -58,7 +60,11 @@ function method(name, following, globals) {
   const offset = source.slice(start).search(new RegExp(`${following}\\([^)]*\\)\\{`, "u"));
   const end = start + offset;
   assert.ok(start >= 0 && end > start, `Locate the actual ${name} method`);
-  return vm.runInNewContext(`({${source.slice(start, end)}}).${name}`, globals);
+  return vm.runInNewContext(`({${source.slice(start, end)}}).${name}`, {
+    forgeUserTimeZone,
+    forgeStoryRequest,
+    ...globals,
+  });
 }
 
 test("the Home dot's three existing recommendations name their actual Units destinations", () => {
@@ -78,6 +84,16 @@ test("the Home dot's three existing recommendations name their actual Units dest
   for (const context of [completed, { ...level, done: ["level"] }, { ...completed, unformed: 1 }]) {
     assert.equal(forgeUnitRecommendation(nextStep(context)), null);
   }
+  assert.equal(
+    forgeUnitRecommendation(nextStep({ ...level, canLevel: false })),
+    null,
+    "No dot for a capped unit or insufficient Funds",
+  );
+  assert.equal(
+    forgeUnitRecommendation(nextStep({ ...ascend, canAscend: false })),
+    null,
+    "No dot for an unaffordable ascension",
+  );
 });
 
 test("recommendation labels insert character and weapon names literally", () => {
@@ -121,7 +137,13 @@ class Element {
       "[data-forge-unit-next]": "forgeUnitNext",
       "[data-forge-unit-notification-style]": "forgeUnitNotificationStyle",
     }[selector];
-    return this.children.find((child) => (dataKey ? Object.hasOwn(child.dataset, dataKey) : child.tag === selector));
+    return this.children.find((child) =>
+      dataKey
+        ? Object.hasOwn(child.dataset, dataKey)
+        : selector.startsWith(".")
+          ? child.className === selector.slice(1)
+          : child.tag === selector,
+    );
   }
 }
 
@@ -148,6 +170,7 @@ test("Units explains the dot inline, uses text nodes, and removes the hint when 
     assert.equal(note.querySelector("strong").textContent, "Next step: Equip signature");
     assert.ok(note.querySelector("span").textContent.includes("Arden's Blade. Open the matching character"));
     assert.ok(home.attributes.title.includes("Equip signature"));
+    assert.ok(home.querySelector(".hm-dot"), "An actionable recommendation has its existing notification dot");
     wireForgeUnitNotifications(host, {
       ...nextStep(signature),
       detail: "<img src=x onerror=alert(1)>",
@@ -159,6 +182,11 @@ test("Units explains the dot inline, uses text nodes, and removes the hint when 
     wireForgeUnitNotifications(host, nextStep(completed));
     assert.equal(body.querySelector("[data-forge-unit-next]"), undefined);
     assert.equal(home.attributes.title, undefined);
+    assert.equal(
+      home.querySelector(".hm-dot"),
+      undefined,
+      "A cleared recommendation removes the dot without a full repaint",
+    );
   } finally {
     globalThis.document = oldDocument;
   }
@@ -206,7 +234,9 @@ function refreshHarness() {
   const refresh = method("_refreshStepData", "_refreshState", {
     Ia: "/api/gacha-forge",
     Ze: (url) => {
-      assert.equal(url, "/api/gacha-forge/state");
+      const request = new URL(url, "http://fixture.invalid");
+      assert.equal(request.pathname, "/api/gacha-forge/state");
+      assert.equal(request.searchParams.get("timeZone"), forgeUserTimeZone());
       const read = deferred();
       reads.push(read);
       return read.promise;

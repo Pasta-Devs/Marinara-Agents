@@ -118,7 +118,7 @@ async function openBattle(
   await page.route("**/api/app-settings/ui", (route) =>
     route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
   );
-  await page.route("**/api/gacha-forge/state", (route) =>
+  await page.route("**/api/gacha-forge/state*", (route) =>
     route.fulfill({
       json: { runs: [run], activeRunId: run.runId, activeRun: run, guidesSeen: ["welcome", "home", "combat"] },
     }),

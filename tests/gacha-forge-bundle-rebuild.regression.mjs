@@ -30,6 +30,12 @@ try {
   );
   const sources = [
     ["browser-presentation", ["client.js"]],
+    ["material-navigation", ["client.js"]],
+    ["story-entry", ["client.js"]],
+    ["upgrade-assist-client", ["client.js"]],
+    ["upgrade-assist-server", ["server.mjs"]],
+    ["time-zone-server", ["server.mjs"]],
+    ["player-choice-text", ["client.js", "server.mjs"]],
     ["home-presentation", ["client.js"]],
     ["unit-notifications", ["client.js"]],
     ["image-avatar-references", ["server.mjs"]],

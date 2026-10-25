@@ -352,6 +352,24 @@ try {
     assert.doesNotMatch(context, /I am sorry I kept you waiting/u);
   });
 
+  await test("raw intent labels retain their 280-character allowance before terminal punctuation", async () => {
+    for (const length of [280, 281]) {
+      const host = await harness();
+      const graph = smallBeat();
+      graph.choices[0].options[0].text = "x".repeat(length);
+      host.responses.push(graph);
+      const generated = await host.post("/beat", { runId, chapter: 1, storyIndex: 0 });
+      if (length === 280) {
+        assert.equal(generated.ok, true, JSON.stringify(generated));
+        assert.equal(generated.choices[0].options[0].text, `${"x".repeat(length)}.`);
+        assert.equal(host.data(beatId(1, 0)).choices[0].options[0].text, `${"x".repeat(length)}.`);
+      } else {
+        expectError(generated, "invalid-shape");
+        assert.equal(host.data(beatId(1, 0)), undefined);
+      }
+    }
+  });
+
   await test("terminal selected actions and spoken words keep their type and immutable canon", async () => {
     for (const kind of ["action", "dialogue"]) {
       const host = await harness({ chapters: [plan(1, 1), plan(2)] });

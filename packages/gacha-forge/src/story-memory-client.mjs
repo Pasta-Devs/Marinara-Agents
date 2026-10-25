@@ -23,8 +23,21 @@ function forgeStoryMemoryView(memory, { busy = false, retrying = false, unavaila
           : phase || "checking";
   const retry = phase === "context-unknown" || (memory?.retryable === true && (phase === "stale" || phase === "error"));
   const label = unavailable ? "checkAgain" : phase === "context-unknown" ? "checkContext" : "retry";
+  const counts =
+    key === "ready" && Number.isInteger(memory?.chapters)
+      ? " " +
+        forgeStoryMemoryEnglish["story.memory.counts"].replace(/\{(chapters|characters|combined)\}/gu, (_, name) =>
+          String(
+            {
+              chapters: memory.chapters,
+              characters: memory.characterMemories ?? 0,
+              combined: memory.combinedRecords ?? 0,
+            }[name],
+          ),
+        )
+      : "";
   return {
-    text: forgeStoryMemoryEnglish[`story.memory.${key}`],
+    text: forgeStoryMemoryEnglish[`story.memory.${key}`] + counts,
     action: unavailable || retry,
     label: forgeStoryMemoryEnglish[`story.memory.${label}`],
     busy,

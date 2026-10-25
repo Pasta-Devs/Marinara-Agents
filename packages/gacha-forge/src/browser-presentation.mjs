@@ -8,8 +8,21 @@ const forgeBrowserLayout = `
 .ev-pane.nw { overflow-y: auto; }
 .ev-pane.nw .nw-track { flex-shrink: 0; min-height: min-content; }
 .ev-pane.nw .ev-week { flex-shrink: 0; grid-auto-rows: minmax(min-content, 1fr); }
+.ev-pane > .ev-week { flex-shrink: 0; min-height: min-content; }
+.ev-foot { flex-wrap: wrap; padding-top: var(--sp-2); }
+.ev-foot .ev-claim { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.forge-material { appearance: none; background: none; border: 0; color: inherit; font: inherit; text-align: left; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: .15em; }
+.forge-material:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; }
+.gw-acts { flex-wrap: wrap; }
+.ob-labelrow:has(.ob-help[aria-expanded="true"]) { flex-wrap: wrap; }
+.ob-labelrow:has(.ob-help[aria-expanded="true"]) .ob-tip {
+  position: static; flex-basis: 100%; opacity: 1; visibility: visible;
+  max-height: 40cqh; overflow-y: auto; pointer-events: auto;
+  font-size: max(12px, var(--t-xs)); line-height: 1.5;
+}
 @media (any-pointer: coarse), (pointer: coarse) {
   .ev-pane.nw .ev-claim { min-height: 44px; }
+  .ob-help { min-width: 44px; min-height: 44px; display: inline-grid; place-items: center; }
 }
 /* Portrait artwork leaves the same accent stroke at the foot as at its top. */
 /* Home and chapter sheets are loaded lazily, so keep this ahead of their inset shorthand. */
@@ -115,6 +128,10 @@ const forgeBrowserLayout = `
   .ob-xm:has(> .ob-xta) .ob-count { display: none; }
 }
 `;
+
+export function forgeUserTimeZone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
 const forgeFullscreenIcons = {
   enter:
     '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 3h6v6m0-6-7 7M9 21H3v-6m0 6 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -237,13 +254,60 @@ export function wireForgeBrowserFullscreen(host) {
     if (chapterToggle.parentElement !== chapterHeader) chapterHeader.append(chapterToggle);
   }
   for (const button of root.querySelectorAll(forgeFullscreenButtons)) {
-    button.onclick = () => {
+    button.onclick = (event) => {
+      event.stopPropagation();
       const control = host.capabilityProps?.browserFullscreen;
       control?.setActive(!control.active);
     };
   }
+  for (const [index, button] of [...root.querySelectorAll(".ob-help")].entries()) {
+    const tip = button.closest(".ob-labelrow")?.querySelector(".ob-tip");
+    if (!tip) continue;
+    tip.id ||= `forge-field-help-${index}`;
+    button.setAttribute("aria-controls", tip.id);
+    button.setAttribute("aria-expanded", "false");
+    button.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const open = button.getAttribute("aria-expanded") !== "true";
+      for (const other of root.querySelectorAll('.ob-help[aria-expanded="true"]'))
+        other.setAttribute("aria-expanded", "false");
+      button.setAttribute("aria-expanded", String(open));
+    };
+    button.onkeydown = (event) => {
+      if (event.key === "Escape") button.setAttribute("aria-expanded", "false");
+    };
+  }
   syncForgeBrowserPresentation(host);
   wireForgeViewportPresentation(host);
+}
+
+// A frame must never roll back in with a previous speaker still in either image buffer.
+export function setForgeStoryPortrait(plate, character) {
+  if (!plate) return;
+  const url = typeof character?.art === "string" ? character.art : "";
+  for (const layer of plate.querySelectorAll("[data-art]")) {
+    if (!layer) continue;
+    const image = layer.querySelector("[data-img]");
+    const figure = layer.querySelector("[data-figure]");
+    if (image) {
+      // Clearing first prevents an undecoded replacement from exposing the previous bitmap.
+      image.hidden = true;
+      image.removeAttribute("src");
+      if (url) {
+        image.onload = () => {
+          if (image.getAttribute("src") === url) image.hidden = false;
+        };
+        image.onerror = () => {
+          if (image.getAttribute("src") === url && figure) figure.hidden = false;
+        };
+        image.setAttribute("src", url);
+        if (image.complete && image.naturalWidth > 0) image.hidden = false;
+      }
+    }
+    if (figure) figure.hidden = !!url;
+  }
+  plate.setAttribute("data-front", "a");
 }
 
 function wireForgeViewportPresentation(host) {

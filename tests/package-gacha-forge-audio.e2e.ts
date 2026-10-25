@@ -202,7 +202,7 @@ async function openForge(
     }),
   );
   await page.route("**/api/game-assets/file/**", (route) => route.fulfill({ contentType: "audio/wav", body: wav }));
-  await page.route("**/api/gacha-forge/state", (route) =>
+  await page.route("**/api/gacha-forge/state*", (route) =>
     route.fulfill({
       json: options.empty
         ? { runs: [], guidesSeen: ["welcome"] }
@@ -1790,7 +1790,7 @@ test("Story Cancel exits delayed chapter generation without losing progress", as
     await cancel.click();
     await expect(forge.getByRole("button", { name: "Game settings", exact: true })).toBeVisible();
     await expect.poll(() => cancelled.length).toBe(1);
-    expect(cancelled[0]).toEqual({ runId: saved.runId, chapter: 2 });
+    expect(cancelled[0]).toEqual({ runId: saved.runId, chapter: 2, timeZone: expect.any(String) });
     expect(
       await forge.evaluate((node) => ({ view: (node as any)._hudView, progress: (node as any)._run.progress })),
     ).toEqual({
