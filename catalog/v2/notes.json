@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.17.0",
+          "date": "2026-10-25",
+          "notes": "- Regenerate an ongoing chapter or the current open Character Story from its bottom action after a named confirmation. Completed chapters remain protected.\n- Discard only the selected chapter’s story, choices and reading progress, then write a fresh plan with current settings and character cards. Preserve other chapters, conversations, characters, inventory and earned rewards.\n- Stop and drain pending story work before resetting. Replaying cleared progress does not award first-clear rewards again; the usual Vigor cost to play still applies.",
+          "highlight": true
+        },
+        {
           "version": "1.16.1",
           "date": "2026-10-25",
           "notes": "- Restore first-send character replies and keep sent and remembered messages scrollable in the same chat window, without automatic resends.\n- Use current linked character cards’ full Description, Personality, Backstory and Appearance in story prompts, excluding card Scenario, greetings and example dialogue.\n- Keep Writing help buttons compact and preserve tapped explanations through viewport updates.\n- Use “They did not answer.” as the neutral direct-message failure fallback.\n- Hide the neutral story portrait silhouette when the current artwork is loaded, retaining safe loading and missing-art fallbacks.\n- Restore explicit banner animation recovery after playback or stale-clip errors. Failed replacement attempts keep previous saved media; successful replacements receive a fresh immutable URL.",
@@ -283,12 +289,6 @@
           "version": "1.8.15",
           "date": "2026-10-22",
           "notes": "- Fixed: on iPhone and other Safari-based browsers, ticking a cast member or an outfit theme no longer scrolls the list (and, on a phone turned sideways, the whole world-creation page) back to the top.",
-          "highlight": false
-        },
-        {
-          "version": "1.8.14",
-          "date": "2026-10-22",
-          "notes": "- On a phone turned sideways, creating a world now uses the whole width of the screen and scrolls as one page: the title and the step tabs scroll away with the fields, and a slim Back and Next row stays at the bottom until you start typing.\n- Fixed: tapping a text field in the game no longer makes iPhone zoom in.",
           "highlight": false
         }
       ]

@@ -1,3 +1,9 @@
+## 1.17.0 — 2026-10-25 [highlight]
+
+- Regenerate an ongoing chapter or the current open Character Story from its bottom action after a named confirmation. Completed chapters remain protected.
+- Discard only the selected chapter’s story, choices and reading progress, then write a fresh plan with current settings and character cards. Preserve other chapters, conversations, characters, inventory and earned rewards.
+- Stop and drain pending story work before resetting. Replaying cleared progress does not award first-clear rewards again; the usual Vigor cost to play still applies.
+
 ## 1.16.1 — 2026-10-25 [highlight]
 
 - Restore first-send character replies and keep sent and remembered messages scrollable in the same chat window, without automatic resends.
