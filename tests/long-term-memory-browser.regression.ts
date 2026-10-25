@@ -2037,6 +2037,15 @@ async function main() {
       await setupGuide.click();
       // #1611: Help from another screen goes to the Vault first, where the full guide shows.
       await page.locator('[data-ltm-surface="onboarding"]').waitFor();
+      // #1673: the guide's two-column body follows its own container, not the window.
+      const onboardingColumns = () =>
+        page
+          .locator("[data-ltm-onboarding-body]")
+          .evaluate((body) => getComputedStyle(body).gridTemplateColumns.split(/\s+/u).length);
+      assert.equal(await onboardingColumns(), 2);
+      await dockDetailPanel(page, "24rem");
+      assert.equal(await onboardingColumns(), 1);
+      await dockDetailPanel(page, null);
       const onboardingTitle = page.locator("#ltm-onboarding-title");
       assert.equal(
         await page.locator('[data-ltm-surface="onboarding"]').getByText("Step 1 of 7 · Overview").count(),
@@ -2939,6 +2948,8 @@ async function main() {
       const desktopAddBox = await page.locator('[aria-label="Add memories"]').boundingBox();
       assert.ok(desktopActivationBox);
       assert.ok(desktopAddBox);
+      // #1673: a wide detail surface shows the add label.
+      assert.equal(await page.locator("[data-ltm-add-label]").isVisible(), true, "a wide surface shows the add label");
       assert.equal(
         Math.abs(
           desktopActivationBox.y + desktopActivationBox.height / 2 - (desktopAddBox.y + desktopAddBox.height / 2),
@@ -2969,6 +2980,20 @@ async function main() {
           };
         });
       assert.equal(desktopExtractionLayout.columns, 2);
+      assert.equal(
+        await page
+          .locator("[data-ltm-settings-tab-rail]")
+          .evaluate((rail) => getComputedStyle(rail).gridTemplateColumns.split(/\s+/u).length),
+        4,
+        "a wide Settings container shows four tab columns",
+      );
+      assert.equal(
+        await page
+          .locator("[data-ltm-active-template-grid]")
+          .evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(/\s+/u).length),
+        3,
+        "a wide Settings container puts the three active-template pickers in one row",
+      );
       assert.deepEqual(desktopExtractionLayout.labelHeights, [44, 44]);
       assert.equal(Math.abs(desktopExtractionLayout.labelTops[0]! - desktopExtractionLayout.labelTops[1]!) <= 1, true);
       assert.equal(
@@ -2977,6 +3002,45 @@ async function main() {
       );
       assert.deepEqual(desktopExtractionLayout.selectHeights, [44, 44]);
       assert.equal(desktopExtractionLayout.infoSize, 14);
+      // #1673: a 420px-high window stands in for the height at 200% zoom (Playwright has no zoom API). Headless
+      // Chromium reads vh and dvh alike, so this proves the caps track the window; the dvh unit is pinned statically.
+      const fitsWindow = (list: ReturnType<typeof page.locator>) =>
+        list.evaluate((element) => parseFloat(getComputedStyle(element).maxHeight) + 12 * 16 <= innerHeight + 1);
+      await page.setViewportSize({ width: 1280, height: 420 });
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+      assert.equal(
+        await fitsWindow(page.locator("[data-ltm-memory-list]")),
+        true,
+        "the Vault list cap fits a short window",
+      );
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+      await page.locator("#settings-tab-debug").click();
+      assert.equal(
+        await fitsWindow(page.locator("[data-ltm-debug-list]")),
+        true,
+        "the Debug log cap fits a short window",
+      );
+      await page.setViewportSize({ width: 1280, height: 900 });
+      // #1673: a narrow panel on a wide window keeps the phone layout inside the panel, not at a window breakpoint.
+      await dockDetailPanel(page, "24rem");
+      await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="vault"]').click();
+      const narrowAdd = page.locator('[aria-label="Add memories"]');
+      await narrowAdd.waitFor();
+      assert.equal(await touchTargetSize(narrowAdd), "fits", "a 24rem panel keeps the add control at 2.75rem");
+      assert.equal(await page.locator("[data-ltm-add-label]").isVisible(), false, "a 24rem panel shows the icon only");
+      await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="settings"]').click();
+      assert.equal(
+        await page
+          .locator("[data-ltm-settings-tab-rail]")
+          .evaluate((rail) => getComputedStyle(rail).gridTemplateColumns.split(/\s+/u).length),
+        2,
+        "a 24rem Settings container keeps two tab columns",
+      );
+      if (visualOutputDir)
+        await page.screenshot({ path: join(visualOutputDir, "long-term-memory-settings-docked.png") });
+      await dockDetailPanel(page, null);
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+      await page.locator("#settings-tab-extraction").click();
       const debugEvent = (operationId: string, action: string, status: string, fields = {}) => ({
         id: `${operationId}-${action}-${status}`,
         operationId,
@@ -4884,7 +4948,13 @@ async function main() {
             .filter({ hasText: "Could not load memory settings." });
           await loadError.waitFor({ timeout: 5000 });
           failSettings = false;
-          await loadError.getByRole("button", { name: "Retry" }).click();
+          const loadRetry = loadError.getByRole("button", { name: "Retry" });
+          // #1673: a text-style retry keeps the 2.75rem touch floor.
+          assert.ok(
+            (await loadRetry.evaluate((element) => element.getBoundingClientRect().height)) >= 44,
+            "the settings load retry meets 2.75rem",
+          );
+          await loadRetry.click();
         }
         await maintenancePanel
           .getByText(
@@ -4898,6 +4968,12 @@ async function main() {
         if (failure === "import-integrity") {
           // The failed integrity read shows only its error, not the report cached before the import.
           await maintenancePanel.getByText("Integrity check could not load.").waitFor();
+          assert.ok(
+            (await maintenancePanel
+              .getByRole("button", { name: "Retry" })
+              .evaluate((element) => element.getBoundingClientRect().height)) >= 44,
+            "the integrity retry meets 2.75rem",
+          );
           assert.equal(
             await maintenancePanel.getByText("Integrity check passed").count(),
             0,
@@ -4917,6 +4993,43 @@ async function main() {
           `${failure}: the forms show the settings read after the action`,
         );
         await failPage.close();
+      }
+      // #1673: the connections-load Retry and every active-template "Reset to default" meet the 2.75rem floor.
+      {
+        const touchPage = await browserContext.newPage();
+        await touchPage.route("**/api/connections", (route) =>
+          route.fulfill({ status: 500, json: { error: "Fixture connections read failed." } }),
+        );
+        await touchPage.goto(`http://127.0.0.1:${address.port}/`);
+        await touchPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await touchPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await touchPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+        await touchPage.locator("#settings-tab-extraction").click();
+        const connectionsError = touchPage
+          .locator('[data-ltm-status="danger"]')
+          .filter({ hasText: "Could not load language connections." });
+        await connectionsError.waitFor({ timeout: 10000 });
+        assert.ok(
+          (await connectionsError
+            .getByRole("button", { name: "Retry" })
+            .evaluate((element) => element.getBoundingClientRect().height)) >= 44,
+          "the connections retry meets 2.75rem",
+        );
+        const resets = touchPage.getByRole("button", { name: "Reset to default", exact: true });
+        const resetCount = await resets.count();
+        assert.ok(resetCount > 0, "the active-template pickers render their Reset to default buttons");
+        for (let index = 0; index < resetCount; index += 1) {
+          assert.ok(
+            (await resets.nth(index).evaluate((element) => element.getBoundingClientRect().height)) >= 44,
+            `Reset to default ${index + 1} meets 2.75rem`,
+          );
+        }
+        await touchPage.close();
       }
       // Settings that remount after a failed reload wait for a successful read instead of filling
       // the forms from the settings cached before the Reset, which the next Save would write back.
@@ -5930,6 +6043,19 @@ async function main() {
         await emptiedPartial.locator('[data-ltm-review-action="review"]').getAttribute("aria-describedby"),
         await partialAcceptReason.getAttribute("id"),
       );
+      // #1673: the lock is aria-disabled, never `disabled`, so the button takes focus and a press applies nothing.
+      const lockedAccept = emptiedPartial.locator('[data-ltm-review-action="review"]');
+      const lockedAcceptCalls = reviewActionCalls.length;
+      await lockedAccept.focus();
+      assert.equal(
+        await lockedAccept.evaluate((button) => button === document.activeElement && !button.hasAttribute("disabled")),
+        true,
+      );
+      assert.equal(await lockedAccept.getAttribute("aria-disabled"), "true");
+      await page.keyboard.press("Enter");
+      await lockedAccept.click({ force: true });
+      await page.waitForTimeout(150);
+      assert.equal(reviewActionCalls.length, lockedAcceptCalls);
       await emptiedPartial.locator('[data-ltm-control="review-select"]').check();
       assert.match(
         await page.locator("[data-ltm-review-batch-accept-reason]").innerText(),
@@ -8090,6 +8216,29 @@ async function main() {
       );
       assert.equal(await desktopReextract.isDisabled(), true);
       await page.locator("[data-ltm-source-task-progress]").waitFor();
+      // #1673: while a run holds the lock, Import stays focusable (aria-disabled, never `disabled`), points at the
+      // visible lock text, and a press or click sends nothing.
+      await page.locator('[data-ltm-source-tab="characters"]').click();
+      await page.locator('[data-ltm-source-preview="characters"]').waitFor();
+      const lockedImport = page.locator('[data-ltm-source-action="import"]:visible').first();
+      assert.equal(await lockedImport.getAttribute("aria-disabled"), "true");
+      assert.equal(await lockedImport.evaluate((button) => button.hasAttribute("disabled")), false);
+      const lockedImportReasonId = await lockedImport.getAttribute("aria-describedby");
+      assert.ok(lockedImportReasonId, "a locked Import points at the lock text");
+      assert.equal(await page.locator(`[id="${lockedImportReasonId}"]`).innerText(), "Locked while an import runs");
+      await lockedImport.focus();
+      assert.equal(await lockedImport.evaluate((button) => button === document.activeElement), true);
+      const lockedImportWrites: string[] = [];
+      const recordWrite = (request: { method(): string; url(): string }) => {
+        if (request.method() !== "GET") lockedImportWrites.push(request.url());
+      };
+      page.on("request", recordWrite);
+      await page.keyboard.press("Enter");
+      await lockedImport.click({ force: true });
+      await page.waitForTimeout(150);
+      page.off("request", recordWrite);
+      assert.deepEqual(lockedImportWrites, []);
+      await page.locator('[data-ltm-source-tab="chats"]').click();
       const desktopSourcesNavigation = page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]');
       assert.match(await desktopSourcesNavigation.innerText(), /Re-extracting\.\.\./u);
       assert.match(await page.locator("[data-ltm-source-task-progress]").innerText(), /Re-extracting 1/u);

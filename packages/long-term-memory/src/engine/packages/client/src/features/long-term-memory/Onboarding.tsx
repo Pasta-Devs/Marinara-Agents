@@ -260,6 +260,7 @@ export function Onboarding({
       aria-describedby="ltm-onboarding-description"
       data-ltm-surface="onboarding"
       className="mari-editor-panel mari-editor-panel--soft overflow-hidden"
+      style={{ containerName: "ltm-onboarding", containerType: "inline-size" }}
     >
       <style>{`
                 [data-ltm-onboarding-body] {
@@ -267,6 +268,7 @@ export function Onboarding({
                   grid-template-columns: minmax(0, 1fr);
                   align-items: center;
                   gap: 1.25rem;
+                  padding: 1rem;
                 }
                 [data-ltm-onboarding-sprite-wrap] {
                   display: flex;
@@ -323,7 +325,12 @@ export function Onboarding({
                   padding: 0.375rem 0.625rem;
                   font-size: 0.75rem;
                 }
-                @media (min-width: 768px) {
+                @container ltm-onboarding (min-width: 40rem) {
+                  [data-ltm-onboarding-body] {
+                    padding: 1.5rem;
+                  }
+                }
+                @container ltm-onboarding (min-width: 48rem) {
                   [data-ltm-onboarding-body] {
                     grid-template-columns: minmax(0, 1fr) 12rem;
                   }
@@ -368,7 +375,7 @@ export function Onboarding({
           })}
         </p>
       </div>
-      <div data-ltm-onboarding-body className="p-4 sm:p-6">
+      <div data-ltm-onboarding-body>
         <div className="space-y-4">
           <div className="space-y-2">
             <h2

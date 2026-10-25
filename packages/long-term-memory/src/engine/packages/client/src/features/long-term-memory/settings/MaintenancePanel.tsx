@@ -632,7 +632,11 @@ export function MaintenancePanel({
         {integrity.isError ? (
           <StatusSurface tone="danger">
             {localizeUi("ui.longTermMemory.memorysettings.integrityCheckCouldNotLoad")}{" "}
-            <button type="button" className="underline" onClick={() => void integrity.refetch()}>
+            <button
+              type="button"
+              className="inline-flex min-h-11 items-center underline"
+              onClick={() => void integrity.refetch()}
+            >
               {localizeUi("ui.longTermMemory.activityview.retry")}
             </button>
           </StatusSurface>

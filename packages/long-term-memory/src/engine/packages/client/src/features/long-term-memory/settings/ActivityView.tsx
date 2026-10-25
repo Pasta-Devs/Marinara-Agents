@@ -1449,7 +1449,7 @@ export default function ActivityView({
             ) : null}
             <section>
               <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.recallSettingsUsed")}</h4>
-              <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+              <dl data-ltm-debug-settings-grid className="grid gap-x-6 gap-y-2">
                 {recallSettings.map(([term, value]) => (
                   <div key={term}>
                     <dt className="text-[var(--muted-foreground)]">{term}</dt>
@@ -1463,7 +1463,7 @@ export default function ActivityView({
         {hasFacts ? (
           <section data-ltm-debug-facts>
             <h4 className="mb-1 font-semibold">{localizeUi("ui.longTermMemory.activityview.paneDetails")}</h4>
-            <div className="grid gap-1 text-[var(--muted-foreground)] sm:grid-cols-2">
+            <div data-ltm-debug-facts-grid className="grid gap-1 text-[var(--muted-foreground)]">
               {subject?.kind === "memory" ? (
                 <span>
                   {localizeUi("ui.longTermMemory.activityview.detailSource")}: {subject.value}
@@ -1617,6 +1617,17 @@ export default function ActivityView({
       <style>{`
         [data-ltm-debug-operation]:hover [data-ltm-debug-muted] {
           color: var(--marinara-editor-text, var(--foreground));
+        }
+        /* vh first for browsers without dvh; the floor keeps a very short window from collapsing the log. */
+        [data-ltm-debug-list] {
+          max-height: calc(100vh - 12rem);
+          max-height: max(10rem, calc(100dvh - 12rem));
+        }
+        @container ltm-memory-settings (min-width: 40rem) {
+          [data-ltm-debug-settings-grid],
+          [data-ltm-debug-facts-grid] {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
         }
       `}</style>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1814,7 +1825,7 @@ export default function ActivityView({
                 data-ltm-debug-list
                 aria-label={localizeUi("ui.longTermMemory.activityview.longTermMemoryActivityLog")}
                 className="mari-editor-panel min-w-0"
-                style={{ maxHeight: "calc(100vh - 12rem)", overflowY: "auto" }}
+                style={{ overflowY: "auto" }}
               >
                 {activity.data && visibleOperations.length === 0 ? (
                   <StatusSurface>

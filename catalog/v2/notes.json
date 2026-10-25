@@ -364,6 +364,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.93",
+          "date": "2026-10-25",
+          "notes": "- Blocked and running controls in Review and Sources stay reachable by keyboard, so the reason beside them can be read.\n- Memory Settings, the activation switch and the setup guide now follow the panel's width instead of the window, and the Vault and Debug lists fit a zoomed or short screen.\n- The retry and clear actions in Memory Settings are large enough to tap.\n- Typing in Review and the Memory Vault no longer rebuilds every row's text and the whole search index.\n- The activation switch's shadow follows the theme, and the success colour is documented at its measured contrast.",
+          "highlight": false
+        },
+        {
           "version": "1.4.92",
           "date": "2026-10-25",
           "notes": "- Sources tells re-importing from the source apart from reloading the list: \"Re-import from source\" and \"Reload list\".\n- The lorebook tab in Sources reads \"Entries\", and a single entry no longer says \"1 entries\".\n- When Import is blocked for lack of a destination, Sources offers a \"Choose destination\" button.\n- While an import runs, Sources keeps its locked controls focusable and says why they are locked.\n- Tabs, filters and action buttons in Sources, Memory Settings and Debug are 2.75rem tall for touch.\n- Maintenance groups Backup, Repair and Delete or reset, and offers a backup export before Delete all data.\n- Recall settings are grouped under Budget, Ranking, Text filters and Sharing, and show when edits make the style Custom.\n- Maintenance success messages are readable in the light theme and carry a check icon, unsaved Memory Settings tabs show a dot, and an identity repair says which backup it made.",
@@ -475,12 +481,6 @@
           "version": "1.4.74",
           "date": "2026-10-21",
           "notes": "- After a recall index rebuild fails, the integrity check in Maintenance and the package status no longer show the raw error, which could include the vault's file paths. They now say that the latest index rebuild failed and to see the server log, which records the full error. A rebuild that fails while the Engine switches to a new embedding connection is now logged there too.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.73",
-          "date": "2026-10-21",
-          "notes": "- An extraction no longer fails as a whole when it leaves out a memory about a note whose id has a digit right after its prefix. This hit older notes with ids such as rel_96dfe1cd8f75, and new characters whose name starts with a digit, such as \"2B\". The left-out suggestion couldn't be saved, so nothing from that source was kept. The left-out memory now appears as a rejected suggestion, like any other.",
           "highlight": false
         }
       ]
