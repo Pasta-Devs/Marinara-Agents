@@ -1060,8 +1060,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "f6094d32dc27833fa356a9b612f5f5872567990e71309a1bf0ed8c175bfb60b5",
-            "bytes": 1714349
+            "sha256": "113eff6790bf86cdf5d452b28d2757967a3073e8cf1200d8cff65bcbbaf23cd1",
+            "bytes": 1731258
           },
           {
             "path": "farm-asc.webp",
@@ -1535,8 +1535,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "58a5e74ce0d9c0dd07f4754d9e57768685ee3bf3a422ee9e99fa14f1c8c8ff43",
-            "bytes": 824294
+            "sha256": "5af4af0dab2b591b7fe270dadc438e8dfba436bbebc8b9dc1edc54f9d657806c",
+            "bytes": 844077
           },
           {
             "path": "skill-aoe_damage-dark.webp",
@@ -2315,8 +2315,8 @@
           },
           {
             "path": "src/formation-settings-client.mjs",
-            "sha256": "4643636a538cfcf224b461c6150fc2d6770cac798447fbd6ef18e790bc9d9a6c",
-            "bytes": 7802
+            "sha256": "70dac0a5b945dc7d97e3da117d87d71282bc1159ecb795301ce2df8c94e940a6",
+            "bytes": 8301
           },
           {
             "path": "src/formation-settings-en.mjs",
@@ -2344,6 +2344,26 @@
             "bytes": 18271
           },
           {
+            "path": "src/proactive-messages-en.mjs",
+            "sha256": "b3267859a9afd60574694848b90b41a3ab91a0f1d089f88f80a95a35c2e3e0e4",
+            "bytes": 885
+          },
+          {
+            "path": "src/proactive-messages-client.mjs",
+            "sha256": "ba4cef01a431147aa5310cbdb8d248a6793c8152b74e32bfc4bcf5a1e0f63b1e",
+            "bytes": 7552
+          },
+          {
+            "path": "src/proactive-messages-server.mjs",
+            "sha256": "2ac0079fc45e446b83c73d787a289b3aa7ec659a3083a3c2a10e4ca056b8f5c1",
+            "bytes": 14954
+          },
+          {
+            "path": "src/proactive-messages-adapter.mjs",
+            "sha256": "f508d2f3b013f8c0ffac15014c16c26a8787f8887cd5db31b25f46ec04838b01",
+            "bytes": 3158
+          },
+          {
             "path": "src/unit-art-client.mjs",
             "sha256": "7cf5a2703acd816e8b3b27538e9939d5da3fbf1241e735defdd8394a5fc9eeec",
             "bytes": 1768
@@ -2354,8 +2374,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.20.2.zip",
-        "sha256": "1508df099136779ed4c8ccd25966ddc6c93353890fd95eaf91c3bd7a30b789c0",
-        "bytes": 8573851
+        "sha256": "7e3c87638033e8e07c45629c591eb3ae9fd583c30301fcb70505bc2b6ea9d449",
+        "bytes": 8638822
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     },
@@ -2624,7 +2644,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.4.93",
+        "version": "1.4.94",
         "description": "Remembers important things from your chat summaries, characters, and lorebooks, and brings them back when they matter. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.4.1",
@@ -2656,8 +2676,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "2a5a6b5aec812eefa196012a2ac1452d87e0d9bdcee805a21ddbc07d0b9692b8",
-            "bytes": 488930
+            "sha256": "d383cad1bc9c8844d7a348f1808c0af1242ecedfd4fbab513c21f88556405171",
+            "bytes": 489428
           },
           {
             "path": "client.js",
@@ -2678,9 +2698,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.4.93.zip",
-        "sha256": "94da58531574b0e5eca5e54e153659d2dd722cdc3941d7d220c509f1431a0387",
-        "bytes": 1187279
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.4.94.zip",
+        "sha256": "e79a259e073e559d1427c75af1ecc7b0721da1be678d773076f060bee0557a55",
+        "bytes": 1187777
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },

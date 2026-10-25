@@ -244,7 +244,7 @@ test("Story images start below the header while retaining crossfade layers and t
     .toEqual({ belowHeader: true, layers: 2, position: "50% 0%", top: "none", bottom: "block" });
 });
 
-test("Writing Advanced field help opens with a tap and stays readable in the mobile panel", async ({
+test("Writing Advanced field help floats above clipping panels and preserves drafts until dismissed outside", async ({
   page,
 }, testInfo) => {
   const { forge } = await openEditors(page, "light");
@@ -256,13 +256,28 @@ test("Writing Advanced field help opens with a tap and stays readable in the mob
   });
   await forge.evaluate((node) => (node as any)._openSettings("advanced"));
   const help = forge.locator(".ob-help").first();
+  const fieldId = await help.evaluate((button) => button.closest(".ob-field")!.querySelector("textarea")!.id);
+  const field = forge.locator(`[id=${JSON.stringify(fieldId)}]`);
+  const draft = "Keep this directive while I read its help.";
+  await field.fill(draft);
+  const rowHeight = await help.evaluate((button) => button.closest(".ob-labelrow")!.getBoundingClientRect().height);
   if (testInfo.project.name.includes("mobile")) await help.tap();
   else await help.click();
   await expect(help).toHaveAttribute("aria-expanded", "true");
   const tipId = await help.getAttribute("aria-controls");
   const tip = forge.locator(`[id="${tipId}"]`);
   await expect(tip).toBeVisible();
+  await expect.poll(() => tip.evaluate((element) => element.matches(":popover-open"))).toBe(true);
   await expect(tip).toContainText("The game follows these as orders, not suggestions.");
+  // Its native invoker must count as inside the popover so a retap reaches the close branch.
+  await expect(help).toHaveAttribute("popovertarget", tipId!);
+  if (testInfo.project.name.includes("mobile")) await help.tap();
+  else await help.click();
+  await expect(help).toHaveAttribute("aria-expanded", "false");
+  await expect(tip).toBeHidden();
+  if (testInfo.project.name.includes("mobile")) await help.tap();
+  else await help.click();
+  await expect(tip).toBeVisible();
   // A viewport/host callback rebinds these controls without the user dismissing the disclosure.
   await forge.evaluate((node) => (node as any)._wireFullscreen());
   // A sticky emulated hover must not impersonate the click disclosure's visible text.
@@ -280,13 +295,27 @@ test("Writing Advanced field help opens with a tap and stays readable in the mob
   expect(
     await tip.evaluate((element) => {
       const bounds = element.getBoundingClientRect();
-      const stage = element.closest(".gf-stage")!.getBoundingClientRect();
-      return bounds.left >= stage.left - 1 && bounds.right <= stage.right + 1 && bounds.height > 0;
+      const root = element.getRootNode() as ShadowRoot;
+      const viewport = window.visualViewport!;
+      const hit = root.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
+      return (
+        bounds.left >= viewport.offsetLeft + 11 &&
+        bounds.right <= viewport.offsetLeft + viewport.width - 11 &&
+        bounds.top >= viewport.offsetTop + 11 &&
+        bounds.bottom <= viewport.offsetTop + viewport.height - 11 &&
+        bounds.height > 0 &&
+        (hit === element || element.contains(hit))
+      );
     }),
   ).toBe(true);
   const buttonSize = await help.boundingBox();
   expect(buttonSize!.width).toBeLessThanOrEqual(24);
   expect(buttonSize!.height).toBeLessThanOrEqual(24);
+  expect(await help.evaluate((button) => button.closest(".ob-labelrow")!.getBoundingClientRect().height)).toBeCloseTo(
+    rowHeight,
+    0,
+  );
+  await expect(field).toHaveValue(draft);
   await expect
     .poll(() =>
       forge.evaluate((node) => {
@@ -297,8 +326,45 @@ test("Writing Advanced field help opens with a tap and stays readable in the mob
     )
     .toBe(true);
   await page.screenshot({ path: testInfo.outputPath("writing-help-open.png"), animations: "disabled" });
-  if (testInfo.project.name.includes("mobile")) await help.tap();
-  else await help.click();
+  // The panel is top-layer, rather than part of a field that expands and clips the text.
+  if (testInfo.project.name.includes("mobile")) await tip.tap();
+  else await tip.click();
+  await expect(tip).toBeVisible();
+  await forge.evaluate((node) => {
+    document.addEventListener("click", () => (node as any)._wireFullscreen(), { once: true });
+  });
+  if (testInfo.project.name.includes("mobile")) await page.touchscreen.tap(1, 1);
+  else await page.mouse.click(1, 1);
   await expect(help).toHaveAttribute("aria-expanded", "false");
-  if (testInfo.project.name.includes("mobile")) await expect(tip).toBeHidden();
+  await expect(tip).toBeHidden();
+  await expect(field).toHaveValue(draft);
+  await help.focus();
+  await expect(tip).toBeVisible();
+  await help.press("ArrowDown");
+  await expect(tip).toBeFocused();
+  await tip.press("Escape");
+  await expect(tip).toBeHidden();
+  await expect(help).toBeFocused();
+  await expect(field).toHaveValue(draft);
+});
+
+test("Writing Advanced help retains desktop hover and keyboard dismissal", async ({ page }, testInfo) => {
+  test.skip(
+    testInfo.project.name.includes("mobile"),
+    "Hover belongs to a fine pointer; touch disclosure is covered above",
+  );
+  const { forge } = await openEditors(page);
+  await forge.evaluate((node) => (node as any)._openSettings("advanced"));
+  const help = forge.locator(".ob-help").first();
+  await help.hover();
+  const tip = forge.locator(`[id="${await help.getAttribute("aria-controls")}"]`);
+  await expect(tip).toBeVisible();
+  await tip.hover();
+  await expect(tip).toBeVisible();
+  await page.mouse.move(1, 1);
+  await expect(tip).toBeHidden();
+  await help.focus();
+  await expect(tip).toBeVisible();
+  await help.press("Escape");
+  await expect(tip).toBeHidden();
 });

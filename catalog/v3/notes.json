@@ -175,6 +175,12 @@
           "version": "1.20.2",
           "date": "2026-10-26",
           "notes": "- Keep an unchanged, decoded unit portrait mounted while switching unit tabs. Replace it normally when the unit or artwork changes.\n- Preserve cached Units cards when a background refresh returns identical data, while keeping real card updates and loading status current.",
+          "highlight": false
+        },
+        {
+          "version": "1.20.0",
+          "date": "2026-10-25",
+          "notes": "- Add optional daily messages from randomly selected units with conversations unlocked, configured in setup or Story Continuity and disabled by default.\n- Keep incoming conversations saved, preserve drafts and pace generation within each local day without offline catch-up.\n- Open mobile Writing help above Settings with outside-tap dismissal and compact question-mark controls.\n- Request at least 8,192 output tokens for every text generation, including character messages and Formation kits, while retaining reasoning headroom. Report insufficient connection capacity instead of silently using a smaller output cap.\n- Keep Classic and Formation descriptions readable beside their setup choices.\n- Preserve the paced message deadline when reopening a world or updating its settings.",
           "highlight": true
         },
         {
@@ -284,12 +290,6 @@
           "date": "2026-10-23",
           "notes": "- Fixed: the Welcome Gift rewards no longer overlap Claim on short mobile screens. The event scrolls when needed, and Claim has a larger touch target.",
           "highlight": false
-        },
-        {
-          "version": "1.10.0",
-          "date": "2026-10-23",
-          "notes": "- Choose your protagonist's dialogue or actions from two to four themed options above the dialogue box. Player choices are on by default in Settings > Story > Continuity.\n- Small choices include every alternative scene in the same generation and return to the shared story. Your first-play choices become canon; replaying another route does not rewrite them.\n- A chapter or Character Story can end with one optional big choice. That fate is permanent, and later story generation waits for it before continuing from the chosen outcome.\n- Choices survive reloads. Existing linear chapters still work; turning choices off affects newly written scenes and keeps existing decisions.",
-          "highlight": true
         }
       ]
     },
@@ -363,6 +363,12 @@
     },
     "long-term-memory": {
       "versions": [
+        {
+          "version": "1.4.94",
+          "date": "2026-10-26",
+          "notes": "- Long-Term Memory loads settings written by a newer version instead of failing to start, on Engines that use zod 4 or check a list's length before its entries.",
+          "highlight": false
+        },
         {
           "version": "1.4.93",
           "date": "2026-10-25",
@@ -475,12 +481,6 @@
           "version": "1.4.75",
           "date": "2026-10-21",
           "notes": "- In the Memory Vault, opening another memory while an archive Undo, a save or a permanent delete is still running no longer leaves it half-finished: the buttons work again, the list reloads, an Undo that could only restore some memories archives them again, a memory reopened during its own save shows what was saved, and deleted memories leave the list and the selection, closing one you had opened with a message that says so. Escape no longer closes the Rename detail dialog while the rename is still running.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.74",
-          "date": "2026-10-21",
-          "notes": "- After a recall index rebuild fails, the integrity check in Maintenance and the package status no longer show the raw error, which could include the vault's file paths. They now say that the latest index rebuild failed and to see the server log, which records the full error. A rebuild that fails while the Engine switches to a new embedding connection is now logged there too.",
           "highlight": false
         }
       ]

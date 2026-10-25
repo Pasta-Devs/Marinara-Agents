@@ -637,12 +637,16 @@ export function wireForgeAudio(host) {
 }
 
 export function saveForgeAudioSources(host, sources) {
-  if (!sources?.audio) return host._setSourcesNow(sources);
+  // Story controls write the same world index and must serialize with audio saves too.
+  if (!sources?.audio && !sources?.story) return host._setSourcesNow(sources);
   const runId = host._run?.runId;
   const save = () => {
     if (host._run?.runId !== runId) return;
     return host
-      ._setSourcesNow({ ...sources, audio: normalizeForgeAudio({ ...host._run.audio, ...sources.audio }) })
+      ._setSourcesNow({
+        ...sources,
+        ...(sources.audio ? { audio: normalizeForgeAudio({ ...host._run.audio, ...sources.audio }) } : {}),
+      })
       .finally(() => wireForgeAudio(host));
   };
   const next = (host._forgeAudioSave ?? Promise.resolve()).catch(() => {}).then(save);

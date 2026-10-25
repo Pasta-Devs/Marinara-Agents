@@ -3,6 +3,14 @@
 - Keep an unchanged, decoded unit portrait mounted while switching unit tabs. Replace it normally when the unit or artwork changes.
 - Preserve cached Units cards when a background refresh returns identical data, while keeping real card updates and loading status current.
 
+## 1.20.0 — 2026-10-25
+- Add optional daily messages from randomly selected units with conversations unlocked, configured in setup or Story Continuity and disabled by default.
+- Keep incoming conversations saved, preserve drafts and pace generation within each local day without offline catch-up.
+- Open mobile Writing help above Settings with outside-tap dismissal and compact question-mark controls.
+- Request at least 8,192 output tokens for every text generation, including character messages and Formation kits, while retaining reasoning headroom. Report insufficient connection capacity instead of silently using a smaller output cap.
+- Keep Classic and Formation descriptions readable beside their setup choices.
+- Preserve the paced message deadline when reopening a world or updating its settings.
+
 ## 1.19.0 — 2026-10-25
 
 - Choose optional Formation combat: frontline actions, protected elemental supports, shared energy, repositioning and generated tactical kits.
