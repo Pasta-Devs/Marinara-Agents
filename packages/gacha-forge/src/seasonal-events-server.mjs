@@ -63,7 +63,7 @@ export function normalizeForgeSeasonalOverview(value, cast) {
     cast: ids,
     newCharacter,
     bannerPrompt: forgeEventText(value.bannerPrompt, 2000) || theme,
-    musicPrompt: forgeEventText(value.musicPrompt, 1000) || theme,
+    musicPrompt: forgeEventText(forgeEventText(value.musicPrompt, 1000) || theme, 1000),
     rewards: [
       { nodeIndex: 2, kind: "funds", qty: bounded(value.rewards?.funds, 5000, 20000) },
       { nodeIndex: 5, kind: "aether", qty: bounded(value.rewards?.aether, 160, 800) },
@@ -388,7 +388,7 @@ export function createForgeSeasonalEvents({
 
   async function complete(body) {
     await retireInactiveFight(body?.runId);
-    const initial = await selected(body, { live: true });
+    const initial = await selected(body);
     if (!initial.ok) return initial;
     const planDoc = await documents.getById(packageId, planId(initial.runId, initial.chapter));
     const nodeIndex = Number(body.nodeIndex),
@@ -397,6 +397,8 @@ export function createForgeSeasonalEvents({
       return { ok: false, error: "event-node-locked" };
     if (nodeIndex < initial.played)
       return { ok: true, progress: initial.data.progress, gained: [], reward: null, cached: true };
+    const live = await selected(body, { live: true });
+    if (!live.ok) return live;
     const waiting = await choices.completeGuard(initial.runId, initial.chapter, { nodeIndex });
     if (waiting) return waiting;
     if (node.type === "story") {
@@ -406,13 +408,15 @@ export function createForgeSeasonalEvents({
       if (!(await readBeat(initial.runId, initial.chapter, storyIndex))) return { ok: false, error: "beat-missing" };
     }
     const response = await persistence.transaction(async ({ documents: store }) => {
-      const current = await selected(body, { live: true, store });
+      const current = await selected(body, { store });
       if (!current.ok) return current;
       if (current.played !== nodeIndex)
         return current.played > nodeIndex
           ? { ok: true, progress: current.data.progress, gained: [], cached: true }
           : { ok: false, error: "event-node-locked" };
-      const data = current.data;
+      const active = await selected(body, { live: true, store });
+      if (!active.ok) return active;
+      const data = active.data;
       if (node.type === "combat") {
         const pendingFight = data.combatPending;
         if (pendingFight?.chapter !== current.chapter || pendingFight.nodeIndex !== nodeIndex || !pendingFight.fight)

@@ -1967,7 +1967,7 @@
         },
         {
           "version": "1.18.0",
-          "notes": "Optional, generated seasonal story events with persisted windows, scoped chapters, media and transactional rewards. Retain the active event boundary on main story actions as well as planning. Expire only global event choice holds and retire inaccessible event fights without rewards. Share existing story generation admission and prevent new Character Stories inside an active event while retaining played replay.",
+          "notes": "Optional, generated seasonal story events with persisted windows, scoped chapters, media and transactional rewards. Retain the active event boundary on main story actions as well as planning. Expire only global event choice holds and retire inaccessible event fights without rewards. Share existing story generation admission and prevent new Character Stories inside an active event while retaining played replay. Scope legacy event replay before dropping Character Story opening metadata.",
           "edits": [
             {
               "find": "async function _t(",
@@ -2042,6 +2042,14 @@
             {
               "find": "let O=T(i,g),$=async U=>{if(!wo(_[i],g)){let Q=",
               "replace": "let O=T(i,g),$=async U=>{if(!wo(_[i],g)){let forgeEventBlock=await forgeSeasonalEvents.guardMain(o,Number.MAX_SAFE_INTEGER);if(forgeEventBlock)return forgeEventBlock;let Q="
+            },
+            {
+              "find": "let forgeMemoryBefore=Number.isInteger(c)?c:(Number((await a.getById(n.id,f(s,c)))?.data?.after)||Ka((await pe(s)).data).find(row=>T(row.unitId,row.part)===c)?.after||0)+1;let v=[],k=await tl(s),",
+              "replace": "let forgeLegacyTarget=Number.isInteger(c)?null:(await a.getById(n.id,f(s,c)))?.data;let forgeMemoryBefore=Number.isInteger(c)?c:(Number(forgeLegacyTarget?.after)||Ka((await pe(s)).data).find(row=>T(row.unitId,row.part)===c)?.after||0)+1;let v=[],k=await tl(s,forgeLegacyTarget),"
+            },
+            {
+              "find": "async function tl(s){let{data:c}=await pe(s),d=c&&c.bondChapters||{},v=new Map;for(let{unitId:k,part:E,after:N}of Ka(c)){let P=",
+              "replace": "async function tl(s,forgeEventScope){let{data:c}=await pe(s),d=c&&c.bondChapters||{},v=new Map;for(let{unitId:k,part:E,after:N,opened:forgeOpened}of Ka(c)){if(forgeEventScope?.eventId&&Number(N)===Number(forgeEventScope.after)&&!forgeStoryOpenedBefore({opened:forgeOpened},forgeEventScope))continue;let P="
             }
           ]
         }

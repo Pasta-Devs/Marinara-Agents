@@ -234,8 +234,12 @@ function createForgeMusicPromptService({ readWorld, readSession, updateSession, 
     const messages = forgeMusicBriefMessages(run, cue, banner);
     const fingerprint = forgeMusicHash("sha256").update(JSON.stringify(messages)).digest("hex");
     const saved = session?.audioPrompts?.[cue];
-    if (banner?.event && saved?.event === true && normalizeForgeMusicPrompt(saved))
-      return { ok: true, prompt: saved.prompt, cached: true };
+    // Older prepared event themes could exceed the brief limit; reuse their bounded text without another paid request.
+    const eventBrief =
+      banner?.event && saved?.event === true && typeof saved.prompt === "string"
+        ? normalizeForgeMusicPrompt({ prompt: saved.prompt.trim().slice(0, 1000) })
+        : null;
+    if (eventBrief) return { ok: true, prompt: eventBrief.prompt, cached: true };
     if (saved?.fingerprint === fingerprint && normalizeForgeMusicPrompt(saved))
       return { ok: true, prompt: saved.prompt, cached: true };
     const key = JSON.stringify([runId, cue, fingerprint]);
@@ -1595,7 +1599,7 @@ function normalizeForgeSeasonalOverview(value, cast) {
     cast: ids,
     newCharacter,
     bannerPrompt: forgeEventText(value.bannerPrompt, 2000) || theme,
-    musicPrompt: forgeEventText(value.musicPrompt, 1000) || theme,
+    musicPrompt: forgeEventText(forgeEventText(value.musicPrompt, 1000) || theme, 1000),
     rewards: [
       { nodeIndex: 2, kind: "funds", qty: bounded(value.rewards?.funds, 5000, 20000) },
       { nodeIndex: 5, kind: "aether", qty: bounded(value.rewards?.aether, 160, 800) },
@@ -1920,7 +1924,7 @@ function createForgeSeasonalEvents({
 
   async function complete(body) {
     await retireInactiveFight(body?.runId);
-    const initial = await selected(body, { live: true });
+    const initial = await selected(body);
     if (!initial.ok) return initial;
     const planDoc = await documents.getById(packageId, planId(initial.runId, initial.chapter));
     const nodeIndex = Number(body.nodeIndex),
@@ -1929,6 +1933,8 @@ function createForgeSeasonalEvents({
       return { ok: false, error: "event-node-locked" };
     if (nodeIndex < initial.played)
       return { ok: true, progress: initial.data.progress, gained: [], reward: null, cached: true };
+    const live = await selected(body, { live: true });
+    if (!live.ok) return live;
     const waiting = await choices.completeGuard(initial.runId, initial.chapter, { nodeIndex });
     if (waiting) return waiting;
     if (node.type === "story") {
@@ -1938,13 +1944,15 @@ function createForgeSeasonalEvents({
       if (!(await readBeat(initial.runId, initial.chapter, storyIndex))) return { ok: false, error: "beat-missing" };
     }
     const response = await persistence.transaction(async ({ documents: store }) => {
-      const current = await selected(body, { live: true, store });
+      const current = await selected(body, { store });
       if (!current.ok) return current;
       if (current.played !== nodeIndex)
         return current.played > nodeIndex
           ? { ok: true, progress: current.data.progress, gained: [], cached: true }
           : { ok: false, error: "event-node-locked" };
-      const data = current.data;
+      const active = await selected(body, { live: true, store });
+      if (!active.ok) return active;
+      const data = active.data;
       if (node.type === "combat") {
         const pendingFight = data.combatPending;
         if (pendingFight?.chapter !== current.chapter || pendingFight.nodeIndex !== nodeIndex || !pendingFight.fight)
@@ -2653,7 +2661,7 @@ const sourceKey = (source) => JSON.stringify([source.kind, source.id]);
 const sourceStamp = (sources) => sources.map(({ key, fingerprint }) => [key, fingerprint]);
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
-function sourcesFrom(value) {
+function sourcesFrom(value, orderSources) {
   const result = new Map();
   for (const source of Array.isArray(value) ? value : []) {
     if (
@@ -2673,11 +2681,24 @@ function sourcesFrom(value) {
     };
     normalized.key = sourceKey(normalized);
     normalized.fingerprint = hash(normalized);
+    const opening = source.opening;
+    if (
+      ["character-story", "story-event"].includes(normalized.kind) &&
+      Number.isSafeInteger(opening?.after) &&
+      opening.after >= 0 &&
+      Number.isSafeInteger(opening?.opened) &&
+      opening.opened > 0
+    )
+      Object.defineProperty(normalized, "opening", { value: { after: opening.after, opened: opening.opened } });
     if (result.has(normalized.key) && result.get(normalized.key).fingerprint !== normalized.fingerprint)
       throw new Error("ambiguous-source");
     result.set(normalized.key, normalized);
   }
-  return [...result.values()].sort((left, right) => left.order - right.order || left.key.localeCompare(right.key));
+  const legacy = [...result.values()].sort(
+    (left, right) => left.order - right.order || left.key.localeCompare(right.key),
+  );
+  if (typeof orderSources !== "function") return legacy;
+  return orderSources(legacy).map((source, index) => Object.defineProperty(source, "viewOrder", { value: index }));
 }
 
 function memoryFrom(value) {
@@ -2699,7 +2720,7 @@ function validRecords(memory, sources) {
         typeof entry.content === "string" &&
         entry.content.trim(),
     );
-    return record ? [record] : [];
+    return record ? [Number.isSafeInteger(source.viewOrder) ? { ...record, order: source.viewOrder } : record] : [];
   });
 }
 
@@ -2819,6 +2840,7 @@ function createForgeStoryMemory({
   readMemory,
   updateMemory,
   readSources,
+  orderSources,
   resolveContext,
   summarize,
   fitsSummary,
@@ -2906,12 +2928,12 @@ function createForgeStoryMemory({
       budget,
       maxContext,
     });
-    const sources = sourcesFrom(await readSources(runId, target));
+    const sources = sourcesFrom(await readSources(runId, target), orderSources);
     const stamps = sourceStamp(sources);
     const stillCurrent = async () =>
       current(runId, epoch) &&
       !signal.aborted &&
-      same(sourceStamp(sourcesFrom(await readSources(runId, target))), stamps);
+      same(sourceStamp(sourcesFrom(await readSources(runId, target), orderSources)), stamps);
     async function fold(kind, source, initial, messagesFor) {
       const text = [...source.content];
       const id = hash([
@@ -3022,9 +3044,8 @@ function createForgeStoryMemory({
     // from intact detail records instead of trimming the old overview.
     let reusable =
       overviewFits(data.overview) &&
-      data.overview?.sources?.every(([key, fingerprint]) =>
-        stamps.some((entry) => entry[0] === key && entry[1] === fingerprint),
-      );
+      Array.isArray(data.overview?.sources) &&
+      same(data.overview.sources, stamps.slice(0, data.overview.sources.length));
     if (reusable && fitsSummary && records.length) {
       const record = records.find((entry) => !data.overview.sources.some(([key]) => key === entry.key)) || records[0];
       const { id, kind, title, order } = record;
@@ -3158,14 +3179,11 @@ function createForgeStoryMemory({
       const epoch = epochFor(options.runId);
       const result = await maintain(options);
       if (!result.budget || !current(options.runId, epoch)) return { ...result, overview: "", details: [], text: "" };
-      const sources = sourcesFrom(await readSources(options.runId, options.target));
+      const sources = sourcesFrom(await readSources(options.runId, options.target), orderSources);
       const { data } = await read(options.runId);
       const records = validRecords(data, sources);
-      const eligible = (stamps) =>
-        Array.isArray(stamps) &&
-        stamps.every(([key, fingerprint]) =>
-          sources.some((source) => source.key === key && source.fingerprint === fingerprint),
-        );
+      const currentStamps = sourceStamp(sources);
+      const eligible = (stamps) => Array.isArray(stamps) && same(stamps, currentStamps.slice(0, stamps.length));
       const saved =
         result.overview != null && eligible(result.overviewSources)
           ? { content: result.overview }
@@ -3210,6 +3228,48 @@ function createForgeStoryMemory({
 }
 /* forge-story-memory-source:end */
 /* forge-story-memory-integration-source:start */
+const forgeStoryOpenedTime = (row) => {
+  const value = Number(row?.opened);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+};
+function forgeStoryOpenedBefore(row, other) {
+  return (
+    forgeStoryOpenedTime(row) > 0 &&
+    forgeStoryOpenedTime(other) > 0 &&
+    forgeStoryOpenedTime(row) < forgeStoryOpenedTime(other)
+  );
+}
+
+// Replace only known side-story slots; unknown openings and every other source keep their legacy position.
+function orderForgeStorySources(rows) {
+  const result = [...rows],
+    groups = new Map();
+  result.forEach((row, index) => {
+    const opening = row.opening;
+    if (
+      !["character-story", "story-event"].includes(row.kind) ||
+      !Number.isSafeInteger(opening?.after) ||
+      opening.after < 0 ||
+      !Number.isSafeInteger(opening?.opened) ||
+      opening.opened <= 0
+    )
+      return;
+    if (!groups.has(opening.after)) groups.set(opening.after, { positions: [], entries: [], kinds: new Set() });
+    const group = groups.get(opening.after);
+    group.positions.push(index);
+    group.entries.push(row);
+    group.kinds.add(row.kind);
+  });
+  for (const group of groups.values()) {
+    if (group.kinds.size < 2) continue;
+    group.entries.sort((left, right) => left.opening.opened - right.opening.opened || left.id.localeCompare(right.id));
+    group.positions.forEach((position, index) => {
+      result[position] = group.entries[index];
+    });
+  }
+  return result;
+}
+
 // The legacy bundle supplies its existing persistence/model wrappers. No Engine-internal
 // memory service, new storage format, or transfer limit is introduced here.
 function createForgeStoryMemoryIntegration({
@@ -3330,35 +3390,54 @@ function createForgeStoryMemoryIntegration({
       const suffix = row.part > 1 ? String(row.part) : "";
       if (!(Number(session?.bondChapters?.[row.unitId]?.[`beats${suffix}`]) >= bondLength)) continue;
       if (target && (row.after >= ceiling || (bondTarget && index >= history.indexOf(bondTarget)))) continue;
+      if (
+        eventTarget?.eventId &&
+        Number(row.after) === Number(eventTarget.after) &&
+        !forgeStoryOpenedBefore(row, eventTarget)
+      )
+        continue;
       const chapter = bondChapterId(row.unitId, row.part);
       const plan = await readPlan(runId, chapter);
       if (!plan) continue;
       const content = await canonical(chapter, storyNodes(plan).length);
       if (!content) continue;
-      rows.push({
-        id: chapter,
-        kind: "character-story",
-        title: text(plan.title) || `Character Story ${chapter}`,
-        content,
-        order: row.after * 10000 + 5000 + (Number(row.opened) || row.part) / 1e13,
-      });
+      rows.push(
+        Object.defineProperty(
+          {
+            id: chapter,
+            kind: "character-story",
+            title: text(plan.title) || `Character Story ${chapter}`,
+            content,
+            order: row.after * 10000 + 5000 + (Number(row.opened) || row.part) / 1e13,
+          },
+          "opening",
+          { value: { after: Number(row.after), opened: forgeStoryOpenedTime(row) } },
+        ),
+      );
     }
     for (const doc of plans.filter((row) => row.data.eventId)) {
       const plan = doc.data,
         chapter = doc.id.slice(`${runId}:chapter:`.length);
       if (normal(session, chapter) < allNodes(plan).length || plan.after >= ceiling || chapter === target?.chapter)
         continue;
-      if (eventTarget?.eventId && plan.after === eventTarget.after && Number(plan.opened) >= Number(eventTarget.opened))
+      const sideTarget = eventTarget?.eventId ? eventTarget : bondTarget;
+      if (sideTarget && Number(plan.after) === Number(sideTarget.after) && !forgeStoryOpenedBefore(plan, sideTarget))
         continue;
       const content = await canonical(chapter, storyNodes(plan).length);
       if (content)
-        rows.push({
-          id: chapter,
-          kind: "story-event",
-          title: `Story event: ${text(plan.title)}`,
-          content,
-          order: Number(plan.after) * 10000 + 6000 + (Number(plan.opened) || 0) / 1e13,
-        });
+        rows.push(
+          Object.defineProperty(
+            {
+              id: chapter,
+              kind: "story-event",
+              title: `Story event: ${text(plan.title)}`,
+              content,
+              order: Number(plan.after) * 10000 + 6000 + (Number(plan.opened) || 0) / 1e13,
+            },
+            "opening",
+            { value: { after: Number(plan.after), opened: forgeStoryOpenedTime(plan) } },
+          ),
+        );
     }
     const targetPlan = target && Number.isInteger(target.chapter) ? await readPlan(runId, target.chapter) : null;
     const targetNodes = targetPlan ? allNodes(targetPlan) : [];
@@ -3397,7 +3476,7 @@ function createForgeStoryMemoryIntegration({
         });
       }
     }
-    return rows.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+    return orderForgeStorySources(rows.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)));
   };
   const partialBondHistory = async (runId, excludeChapter) => {
     const session = await readSession(runId);
@@ -3571,6 +3650,7 @@ function createForgeStoryMemoryIntegration({
       return saved;
     },
     readSources: sourceRows,
+    orderSources: orderForgeStorySources,
     resolveContext,
     estimateTokens,
     fitsSummary: async (options) => !!(await summaryBudget(options)),
@@ -3640,9 +3720,15 @@ function createForgeStoryMemoryIntegration({
       let previous = "",
         previousContent = "";
       const legacy = async () => {
-        const eventRows = (await sourceRows(runId, { chapter, storyIndex })).filter(
-          (row) => row.kind === "story-event",
-        );
+        let eventRows = [];
+        try {
+          eventRows = (await sourceRows(runId, { chapter, storyIndex })).filter((row) => row.kind === "story-event");
+        } catch (error) {
+          logger?.warn?.(
+            "[gacha-forge] event memory unavailable; using legacy history: %s",
+            error?.message || "failed",
+          );
+        }
         const history = [await fallback(), ...eventRows.map((row) => `# ${row.title}\n${row.content}`)]
           .filter(Boolean)
           .join("\n\n");
@@ -3815,11 +3901,11 @@ function fitForgeMemoryPrompt(messages, { maxContext, maxTokens, estimateMessage
 async function lT(e){let{api:t,package:n}=e,r=t.runtime,a=forgeStoryDocuments(r.persistence.documents),forgeStoryCancellation=createForgeStoryCancellation(),forgeMusicPrompts=createForgeMusicPromptService({readWorld:async runId=>{let{data}=await be();return Ae(data,runId)},readSession:async runId=>(await pe(runId)).data,updateSession:xn,generate:({runId,run,messages,debugMode})=>_t({runtime:r,runId,run,job:"narration",messages,options:{temperature:.7,maxTokens:It(1024),debugMode:debugMode===!0||/^(1|true)$/i.test(process.env.DEBUG_AGENTS||"")},parse:Vt(r,normalizeForgeMusicPrompt),label:"music-prompt"}),log:(messages,debugMode)=>r.logger[debugMode===!0||/^(1|true)$/i.test(process.env.DEBUG_AGENTS||"")?"info":"debug"]("[debug/gacha-forge/music-prompt] Messages sent to the provider: %s",JSON.stringify(messages))}),f=(s,c)=>`${s}:chapter:${c}`,h=s=>`${s}:session`,A=(s,c,d)=>`${s}:beat:${c}:${d}`,T=(s,c)=>Gp(s,c),R=s=>{let c=Math.round(Number(s)||1);return Number.isInteger(c)&&c>=1&&c<=va.length?c:0},C=(s,c,d)=>`${s}:cg:${c}:${d}`,I=(s,c,d)=>`${s}:combat:${c}:${d}`,D=["id","name","role","affinity","position","power","stats","skill","passive","granted","facets","mech","healAs"],G=s=>{let c={};for(let d of D)s&&s[d]!=null&&(c[d]=s[d]);return c},W=(s,c,d)=>({allies:s.map(G),enemies:c.map(G),seed:d}),te=256,ie=(s,c)=>Gm({allies:JSON.parse(JSON.stringify(s.allies||[])),enemies:JSON.parse(JSON.stringify(s.enemies||[])),seed:Number(s.seed)||1},Array.isArray(c)?c.slice(0,te):[]).result,se=(s,c)=>`${s}:summary:${c}`,le=(s,c)=>`${s}:banner:${c}`,ce=(s,c)=>`${s}:unit:${c}`,Ce=(s,c,d)=>{let v=ce(c,"protagonist"),k=s.roster=s.roster||{},E=new Set,N=[];for(let P of d&&d.allies||[]){let B=l(P&&P.id);if(!B||B===v||E.has(B)||!k[B])continue;E.add(B);let H=k[B],q=gr(H.bondFights);H.bondFights=Math.max(0,Math.round(Number(H.bondFights)||0))+1,H.bondCurve=Xi;let K=gr(H.bondFights),ae=Rs(H),re=null,oe=[];for(let ye=1;ye<=K;ye+=1){if(ae.includes(ye))continue;let we=Up(ye);if(we){if(we.aether){let Me=s.wallet=s.wallet||{...Xe};Me.aether=(Number(Me.aether)||0)+we.aether,re={aether:(re?re.aether:0)+we.aether},ae.push(ye);continue}we.background&&oe.push(ye)}}re&&(H.bondPaid=ae.sort((ye,we)=>ye-we),H.bondV=Zi),N.push({id:B,name:l(P&&P.name),bond:K,bondFights:H.bondFights,leveled:K>q,granted:re,owes:oe})}return N};async function Ee(s,c,d){return!!await xn(s,v=>{let k=(v.roster=v.roster||{})[c]=v.roster[c]||{},E=Rs(k);E.includes(d)||E.push(d),k.bondPaid=E.sort((N,P)=>N-P),k.bondV=Zi})}async function ke(s,c,d,v,{repaint:k=!1,wait:E=!1}={}){let N=`${s}:bondbg:${d}`;if(Gt(N))return E?{ok:!1,error:"already-painting"}:void 0;let P=async()=>{try{let B=await a.getById(n.id,d),H=B&&B.data;if(!H||H.kind!=="character")return;if(k||!l(H.bondBg&&H.bondBg.url)){let K=nt(c);if(K.off)return;let ae=await nn(c);if(!ae)return;let re=await ya(c,d)||H,oe=`${l(re.name)} \u2014 Bond`;if(!await dt(ae,{force:k,have:async()=>{let we=await a.getById(n.id,d);return l(we&&we.data&&we.data.bondBg&&we.data.bondBg.url)?!0:null},paint:async()=>{let we=await Le().generateBannerArt({connectionId:ae.id,name:oe,units:[re],scene:"",styleProfileId:K.styleProfileId,size:K}),Me=await Le().uploadToGallery({image:we,name:oe,prompt:we.prompt,provider:ae.provider,model:ae.model});return Wn(d,Ue=>{Ue.bondBg={url:Me.url,ref:vn(Me.id),at:new Date().toISOString()}})}}))return{ok:!1,error:"write-conflict"}}await Ee(s,d,v);let q=await a.getById(n.id,d);return{ok:!0,bondBg:q&&q.data&&q.data.bondBg||null}}catch(B){return r.logger.warn("[gacha-forge] bond background failed for %s: %s",d,B&&B.message),{ok:!1,error:"paint-failed",detail:l(B&&B.message)}}};if(E)return ze(N,P);await ze(N,async()=>An(P)).catch(()=>{})}async function $e(s,c,d,v,k,E,N=!0){let P=`${s}:chatphoto:${v}`;Gt(P)||ze(P,async()=>{try{let B=nt(c);if(B.off)throw new Error("images are off");let H=await nn(c);if(!H)throw new Error("no image connection");let q=await a.getById(n.id,d);if(!q||!q.data)throw new Error("unit gone");let K=N?await ch(c,d,q.data,E,!1,!0):null,ae=`${l(q.data.name)} \u2014 photo`,re=await Le().generateBannerArt({connectionId:H.id,name:ae,units:K?[K]:[],scene:k,styleProfileId:B.styleProfileId,size:B,framing:"scene"}),oe=await Le().uploadToGallery({image:re,name:ae,prompt:re.prompt,provider:H.provider,model:H.model});await os(s,d,ye=>{let we=(Array.isArray(ye.messages)?ye.messages:[]).find(Me=>Me&&Me.id===v);we&&(we.photo={url:oe.url,ref:vn(oe.id),at:Date.now()})})}catch(B){r.logger.warn("[gacha-forge] chat photo failed for %s: %s",d,B&&B.message),await os(s,d,H=>{let q=(Array.isArray(H.messages)?H.messages:[]).find(K=>K&&K.id===v);q&&q.photo&&q.photo.pending&&(q.photo={failed:!0})})}}).catch(()=>{})}async function ot(s,c){let d=(c||[]).filter(N=>N&&(N.owes||[]).length),v=(c||[]).some(N=>N&&Number(N.bond)>=Ea);if(!d.length&&!v)return;let{data:k}=await be(),E=Ae(k,s);if(E){v&&xi(s,E).catch(()=>{});for(let N of d)for(let P of N.owes)ke(s,E,N.id,P)}}let it=null,st=["generateScene","generateBannerArt","generatePortrait","generateOutfit"];function Le(){if(!it){let s=Rg({logger:r.logger});it=Object.create(s);for(let c of st){if(typeof s[c]!="function")throw new Error("engine-image lost "+c+": the paint queue would not cover it");it[c]=d=>Fi(d&&d.connectionId,{},()=>s[c].call(s,d))}it.uploadToGallery=(...args)=>forgeStoryWork(()=>s.uploadToGallery.apply(s,args))}return it}let mt=(s,c)=>Fi(s.id,{},c),dt=(s,{force:c=!1,have:d,paint:v})=>mt(s,async()=>{if(!c){let k=await d();if(k)return k}return v()}),Tn=1200*1e3,gn=new Map,Gt=s=>{let c=gn.get(s);return!!c&&Date.now()-c.at<Tn};function ze(s,c){let d=gn.get(s);if(d&&Date.now()-d.at<Tn)return d.promise;d&&r.logger.warn("[gacha-forge] dedupe ceiling reached for %s after %d min: letting a new attempt through",s,Math.round((Date.now()-d.at)/6e4));let v={at:Date.now(),promise:null,background:ep()};return v.promise=(async()=>{try{return await forgeStoryWork(c)}finally{gn.get(s)===v&&gn.delete(s)}})(),gn.set(s,v),v.promise}function el(s){let c=l(s);if(!c)return null;let d=oS;if(c.length<=d*2)return c;let v=`
 `;return c.slice(0,d)+v+"[... "+(c.length-d*2)+" chars ...]"+v+c.slice(-d)}async function bi(s,c,d,v,k,E,N,P){if(!s)return;let B=v&&v.usage||null,H=Me=>Number.isFinite(Me)?Me:null,q=B?H(B.promptTokens):null,K=B?H(B.cachedPromptTokens):null,ae=B?H(B.cacheWritePromptTokens):null,re=B?H(B.completionTokens):null,oe=B?(q||0)+(K||0)+(ae||0):null,ye={at:Date.now(),label:c||"generation",attempt:d,outcome:k,reported:!!B,sent:oe,sentNew:q,cached:K,cacheWrite:ae,received:re,total:B?(oe||0)+(re||0):null,reasoning:B?H(B.completionReasoningTokens):null,finishReason:v&&v.finishReason?l(v.finishReason):null,connection:l(P&&P.connectionId)||null,model:l(P&&P.model)||null,ms:P&&Number.isFinite(P.ms)?P.ms:null,cap:P&&P.cap?P.cap:null,refused:k==="ok"?null:l(N).slice(0,sS)||null,sample:k==="ok"||!E?null:el(E)};ru&&ru(s,ye);let we=ua(s);for(let Me=0;Me<5;Me+=1){let Ue=await a.getById(n.id,we),De=(Ue&&Ue.data&&Array.isArray(Ue.data.entries)?Ue.data.entries:[]).concat([ye]),et=De.length>ou?De.slice(De.length-ou):De,Ke={entries:et,dropped:(Number(Ue&&Ue.data&&Ue.data.dropped)||0)+(De.length-et.length)},tt=new Date().toISOString();if(Ue){if(await a.update({id:we,packageId:n.id,expectedRevision:Ue.revision,name:"tokens",description:"model token usage",data:Ke,updatedAt:tt}))return}else try{await a.create({id:we,packageId:n.id,kind:jy,name:"tokens",description:"model token usage",data:Ke,createdAt:tt,updatedAt:tt});return}catch{}}r.logger.warn("token ledger append lost every retry to concurrent writes")}Tu=bi;let Cn=new Map,xr=(s,c)=>{!c||!c.connection||!c.reasoning||s.set(c.connection,Math.max(s.get(c.connection)||0,JA([c])))};Eu=async(s,c)=>{if(!s||!c)return 0;if(!Cn.has(s)){let d=new Map;try{let v=await a.getById(n.id,ua(s));for(let k of v&&v.data&&Array.isArray(v.data.entries)?v.data.entries:[])xr(d,k)}catch{}Cn.set(s,d)}return Cn.get(s).get(c)||0},ru=(s,c)=>{let d=Cn.get(s);d&&xr(d,c)},xu=async s=>{let{data:c}=await be(),d=Ae(c,s);return d&&d.language||""};async function Mt(s,c){if(typeof s!="string"||!s)throw new Error("ensureDoc: id must be a non-empty string (called with the whole doc?)");let d=await a.getById(n.id,s);return d||a.create({id:s,...c})}function ua(s){return`${s}:tokens`}async function nr(s,c,d){let v=await a.getById(n.id,A(s,c,d));return forgeCanonicalSegments(v&&v.data)}async function rr(s,c){let d=await a.getById(n.id,se(s,c)),v=d&&d.data&&l(d.data.digest);if(!v)return null;let k=Array.isArray(d.data.bonds)?d.data.bonds.map(l).filter(Boolean):[];if(!Number.isInteger(c))return{digest:v,from:c,to:c,bonds:k};let E=Number(d.data.from)||c,N=Math.max(c,Number(d.data.to)||c);return{digest:v,from:E,to:N,bonds:k}}async function Qu(s,c){let d=await rr(s,c);return d?d.digest:null}async function eh(s,c){let d=[],v=1;for(;v<=c;){let k=await rr(s,v);if(!k){v+=1;continue}d.push({from:v,to:Math.min(k.to,c),digest:k.digest}),v=Math.max(v+1,k.to+1)}return d}async function Ln(s,c,d,v){let k=tr(d),E=k.indexOf(v),N=[];for(let K=E-1;K>=0&&k[K].type==="combat";K-=1)N.unshift(k[K]);let P=[];for(let K=E+1;K<k.length&&k[K].type==="combat";K+=1)P.push(k[K]);let B=new Map(Ur(d).map((K,ae)=>[K.index,ae])),H=[];for(let K of N){let ae=B.get(K.index),re="";if(ae!=null){let oe=await a.getById(n.id,I(s,c,ae));oe&&oe.data&&typeof oe.data.outcomeOnWin=="string"&&(re=oe.data.outcomeOnWin)}H.push({title:K.title,setup:K.setup,outcome:re})}let q=[d.premise,v.title,v.guide,v.goal,v.setup,H.map(K=>`${K.title} ${K.setup} ${K.outcome}`).join(" "),P.map(K=>`${K.title} ${K.setup}`).join(" ")].filter(Boolean).join(" ");return{precedingRich:H,upcoming:P,sceneText:q}}async function ki(s,c,d,v){let k=Math.max(0,Math.round(Number(v)||0));if(!k)return"";let E=[],N=Number(c),P=(Number(d)||0)-1;if(!Number.isInteger(N)){for(;P>=0&&E.length<k;P-=1){let re=await nr(s,c,P);re&&E.push(jo(re))}let q=E.length<k?await Gr(s,c):null,{data:K}=q?await pe(s):{data:null},ae=q?(K&&K.bondChapters||{})[q.unitId]||{}:{};N=Math.round(Number(ae["after"+(q&&q.part>1?q.part:"")])||0),P=mn-1}let B=0,H=mn*2+2;for(;E.length<k&&N>=1&&B<H;){if(B+=1,P<0){N-=1,P=mn-1;continue}let q=await nr(s,N,P);q&&E.push(jo(q)),P-=1}return E.reverse().join(`
 
-`)}async function Nr(s){let c=`${s}:chapter:`,d=0;for(let v of await a.list(n.id,ia)){if(!v||typeof v.id!="string"||!v.id.startsWith(c))continue;let k=Number(v.id.slice(c.length));Number.isInteger(k)&&k>d&&(d=k)}return d}async function tl(s){let{data:c}=await pe(s),d=c&&c.bondChapters||{},v=new Map;for(let{unitId:k,part:E,after:N}of Ka(c)){let P=yo(d[k]||{},E);P<=0||(v.has(N)||v.set(N,[]),v.get(N).push({unitId:k,part:E,beats:P}))}return v}function Ka(s){let c=s&&s.bondChapters||{},d=[];for(let v of Object.keys(c)){let k=c[v]||{};for(let E of bo){let N=E<=1?"":String(E);if(k["after"+N]==null&&k["beats"+N]==null)continue;let P=Math.max(0,Math.round(Number(k["after"+N])||0));d.push({unitId:v,part:E,after:P,opened:Number(k["opened"+N])||0,seq:d.length})}}return d.sort((v,k)=>v.after-k.after||v.opened-k.opened||v.seq-k.seq)}async function ha(s,forgeBefore){let c=`${s}:summary:`,d=new Set;for(let v of await a.list(n.id,hu))if(!(!v||typeof v.id!="string"||!v.id.startsWith(c))&&!(forgeBefore&&(Number(v.data?.to)||Number(v.id.slice(c.length)))>=forgeBefore))for(let k of Array.isArray(v.data&&v.data.bonds)?v.data.bonds:[])l(k)&&d.add(l(k));return d}async function Ir(s,c){let d=await Gr(s,c),v=d&&d.name||"a companion",k=d&&d.part||Ta(c)||1;return{name:v,part:k,label:`${v}'s bond chapter${k>1?` (part ${k})`:""}`,title:Ls(v,k)}}async function Va(s,c,d,v,k=new Set){let E=await a.getById(n.id,c),N=l(E&&E.data&&E.data.name)||"a companion",P=T(c,v);if(k.has(P))return"";let B=`${N}'s bond chapter${Ta(P)>1?` (part ${Ta(P)})`:""}`,H=await rr(s,P);if(H){let K=[];for(let ae of H.bonds)K.push((await Ir(s,ae)).label);return`# ${[B,...K].join(" + ")} (summary)
+`)}async function Nr(s){let c=`${s}:chapter:`,d=0;for(let v of await a.list(n.id,ia)){if(!v||typeof v.id!="string"||!v.id.startsWith(c))continue;let k=Number(v.id.slice(c.length));Number.isInteger(k)&&k>d&&(d=k)}return d}async function tl(s,forgeEventScope){let{data:c}=await pe(s),d=c&&c.bondChapters||{},v=new Map;for(let{unitId:k,part:E,after:N,opened:forgeOpened}of Ka(c)){if(forgeEventScope?.eventId&&Number(N)===Number(forgeEventScope.after)&&!forgeStoryOpenedBefore({opened:forgeOpened},forgeEventScope))continue;let P=yo(d[k]||{},E);P<=0||(v.has(N)||v.set(N,[]),v.get(N).push({unitId:k,part:E,beats:P}))}return v}function Ka(s){let c=s&&s.bondChapters||{},d=[];for(let v of Object.keys(c)){let k=c[v]||{};for(let E of bo){let N=E<=1?"":String(E);if(k["after"+N]==null&&k["beats"+N]==null)continue;let P=Math.max(0,Math.round(Number(k["after"+N])||0));d.push({unitId:v,part:E,after:P,opened:Number(k["opened"+N])||0,seq:d.length})}}return d.sort((v,k)=>v.after-k.after||v.opened-k.opened||v.seq-k.seq)}async function ha(s,forgeBefore){let c=`${s}:summary:`,d=new Set;for(let v of await a.list(n.id,hu))if(!(!v||typeof v.id!="string"||!v.id.startsWith(c))&&!(forgeBefore&&(Number(v.data?.to)||Number(v.id.slice(c.length)))>=forgeBefore))for(let k of Array.isArray(v.data&&v.data.bonds)?v.data.bonds:[])l(k)&&d.add(l(k));return d}async function Ir(s,c){let d=await Gr(s,c),v=d&&d.name||"a companion",k=d&&d.part||Ta(c)||1;return{name:v,part:k,label:`${v}'s bond chapter${k>1?` (part ${k})`:""}`,title:Ls(v,k)}}async function Va(s,c,d,v,k=new Set){let E=await a.getById(n.id,c),N=l(E&&E.data&&E.data.name)||"a companion",P=T(c,v);if(k.has(P))return"";let B=`${N}'s bond chapter${Ta(P)>1?` (part ${Ta(P)})`:""}`,H=await rr(s,P);if(H){let K=[];for(let ae of H.bonds)K.push((await Ir(s,ae)).label);return`# ${[B,...K].join(" + ")} (summary)
 ${H.digest}`}let q=[];for(let K=0;K<Math.min(d,zt);K+=1){let ae=await nr(s,P,K);ae&&q.push(jo(ae))}return q.length?`# ${B}
 ${q.join(`
 
-`)}`:""}async function _r(s,c,d,forgeMemoryOptions){if(forgeMemoryOptions)return forgeMemoryHistory(s,c,d,forgeMemoryOptions);let forgeMemoryBefore=Number.isInteger(c)?c:(Number((await a.getById(n.id,f(s,c)))?.data?.after)||Ka((await pe(s)).data).find(row=>T(row.unitId,row.part)===c)?.after||0)+1;let v=[],k=await tl(s),E=await ha(s,forgeMemoryBefore),N=Number.isInteger(c)?null:await Gr(s,c),P=async ae=>{for(let re of k.get(ae)||[]){if(N&&re.unitId===N.unitId&&re.part===N.part)continue;let oe=await Va(s,re.unitId,re.beats,re.part,E);oe&&v.push(oe)}},B=forgeMemoryBefore;await P(0);let H=1;for(;H<B;){let ae=await rr(s,H);if(ae&&ae.to<B){let oe=Math.min(ae.to,B-1),ye=[];for(let Me of ae.bonds)ye.push((await Ir(s,Me)).label);let we=ye.length?`, including ${ye.join(", ")}`:"";v.push(oe>H?`# Chapters ${H}-${oe}${we} (summary)
+`)}`:""}async function _r(s,c,d,forgeMemoryOptions){if(forgeMemoryOptions)return forgeMemoryHistory(s,c,d,forgeMemoryOptions);let forgeLegacyTarget=Number.isInteger(c)?null:(await a.getById(n.id,f(s,c)))?.data;let forgeMemoryBefore=Number.isInteger(c)?c:(Number(forgeLegacyTarget?.after)||Ka((await pe(s)).data).find(row=>T(row.unitId,row.part)===c)?.after||0)+1;let v=[],k=await tl(s,forgeLegacyTarget),E=await ha(s,forgeMemoryBefore),N=Number.isInteger(c)?null:await Gr(s,c),P=async ae=>{for(let re of k.get(ae)||[]){if(N&&re.unitId===N.unitId&&re.part===N.part)continue;let oe=await Va(s,re.unitId,re.beats,re.part,E);oe&&v.push(oe)}},B=forgeMemoryBefore;await P(0);let H=1;for(;H<B;){let ae=await rr(s,H);if(ae&&ae.to<B){let oe=Math.min(ae.to,B-1),ye=[];for(let Me of ae.bonds)ye.push((await Ir(s,Me)).label);let we=ye.length?`, including ${ye.join(", ")}`:"";v.push(oe>H?`# Chapters ${H}-${oe}${we} (summary)
 ${ae.digest}`:`# Chapter ${H}${we} (summary)
 ${ae.digest}`);for(let Me=H;Me<=oe;Me+=1)await P(Me);H=Math.max(H+1,oe+1);continue}let re=[];for(let oe=0;oe<mn;oe+=1){let ye=await nr(s,H,oe);ye&&re.push(jo(ye))}re.length&&v.push(`# Chapter ${H}
 ${re.join(`
