@@ -1,0 +1,807 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import type {
+  SaucelingCharacterSummary,
+  SaucelingStateResponse,
+  SaucelingSpecialSpeciesId,
+  SaucelingTendencyKey,
+  SaucelingUnlocks,
+  SaucelingUserAction,
+} from "../../../../shared/src/features/agents/saucelings/types.js";
+import { SAUCELING_GROWTH_MIN_HUNGER } from "../../../../shared/src/features/agents/saucelings/types.js";
+import {
+  CARETAKER_SPEECH_KINDS,
+  petKind,
+  SPECIES_CATALOG,
+  temperamentOf,
+} from "../../../../shared/src/features/agents/saucelings/vocabulary.js";
+import { packageAssetUrl, saucelingsRequest } from "./api.js";
+import {
+  ACTION_ICONS,
+  ACTION_LABEL_KEYS,
+  CARE_POSE_MS,
+  CaretakerAvatar,
+  actionCoversGap,
+  actionsFor,
+  cooldownMinutes,
+  eggWarmth,
+  hatchDueAt,
+  hatchPercent,
+  useCaretakerAvatar,
+  useCaretakerFigure,
+  useCaretakerMotion,
+  useCaretakerSprites,
+  useForAMoment,
+  useNow,
+  usePanelAtLeast,
+} from "./care-ui.js";
+import { BackgroundPicker } from "./BackgroundPicker.js";
+import { CaretakerBox } from "./CaretakerBox.js";
+import { EvolveButton, UndoEvolution } from "./EvolveDialog.js";
+import { caretakerCareAction, caretakerPose, standingCaretaker } from "./caretaker-look.js";
+import { CaretakerFlip, FigurePainter, FormPainter, FormRepaint, PetFlip } from "./FormPainter.js";
+import { HelpTip } from "./HelpTip.js";
+import { useSaucelingsTranslation } from "./localization.js";
+import { SaucelingSprite, useSpriteReaction } from "./SaucelingSprite.js";
+import { RareMark } from "./RareMark.js";
+import { SaucelingStage, type SaucelingStageHandle } from "./SaucelingStage.js";
+
+/** Caretaker and the button that brings an egg; used for the first egg and for a swap. The egg has no
+ *  name: the player names it once it hatches. */
+function EggForm({
+  characters,
+  defaultCaretakerId,
+  submitLabel,
+  pending,
+  onSubmit,
+  onCancel,
+}: {
+  characters: SaucelingCharacterSummary[];
+  defaultCaretakerId: string;
+  submitLabel: string;
+  pending: boolean;
+  onSubmit: (input: { characterId: string }) => void;
+  onCancel?: () => void;
+}) {
+  const { t } = useSaucelingsTranslation();
+  const [caretakerId, setCaretakerId] = useState(defaultCaretakerId);
+  const caretaker = characters.find((ch) => ch.id === caretakerId);
+  const avatar = useCaretakerAvatar(caretakerId, Boolean(caretaker));
+  return (
+    <div
+      className="sl-egg-form"
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "0.6rem",
+        justifyContent: "center",
+        alignItems: "center",
+        marginTop: "0.5rem",
+      }}
+    >
+      <CaretakerAvatar name={caretaker?.name ?? t("saucelings.empty.houseCaretaker")} src={avatar} />
+      <select
+        className="sl-select"
+        value={caretakerId}
+        onChange={(e) => setCaretakerId(e.target.value)}
+        aria-label={t("saucelings.empty.pickCaretaker")}
+      >
+        {characters.length === 0 ? (
+          <option value="caretaker">{t("saucelings.empty.houseCaretaker")}</option>
+        ) : (
+          characters.map((ch) => (
+            <option key={ch.id} value={ch.id}>
+              {ch.name}
+            </option>
+          ))
+        )}
+      </select>
+      <button
+        type="button"
+        className="sl-btn sl-btn--primary"
+        disabled={pending}
+        onClick={() => onSubmit({ characterId: caretakerId })}
+      >
+        {pending ? t("saucelings.empty.bringingEgg") : submitLabel}
+      </button>
+      {onCancel ? (
+        <button type="button" className="sl-btn" onClick={onCancel}>
+          {t("saucelings.common.cancel")}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** What a new egg may be: each special egg's milestone, and the Halloween ones. Shown beside the Adopt button. */
+function SpecialEggs({ unlocks }: { unlocks: SaucelingUnlocks }) {
+  const { t } = useSaucelingsTranslation();
+  const line = (id: SaucelingSpecialSpeciesId, todo: string) =>
+    unlocks[id].done ? t("saucelings.unlocks.done", { name: SPECIES_CATALOG[id].name }) : todo;
+  return (
+    <div className="sl-unlocks" style={{ fontSize: "0.8rem", opacity: 0.85, textAlign: "left", margin: "0 auto" }}>
+      <div style={{ fontWeight: 600 }}>{t("saucelings.unlocks.title")}</div>
+      <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.1rem", display: "grid", gap: "0.15rem" }}>
+        <li>{line("prismite", t("saucelings.unlocks.prismite", { ...unlocks.prismite }))}</li>
+        <li>{line("thundrake", t("saucelings.unlocks.thundrake", { ...unlocks.thundrake }))}</li>
+        <li>{line("clockrit", t("saucelings.unlocks.clockrit", { ...unlocks.clockrit }))}</li>
+        <li>{unlocks.halloween ? t("saucelings.unlocks.halloweenNow") : t("saucelings.unlocks.halloween")}</li>
+      </ul>
+    </div>
+  );
+}
+
+/** One meter in the strip under the stage: label and value on a line, the bar beneath; amber when it is a gap. */
+function Meter({ label, value, gapLabel }: { label: string; value: number; gapLabel?: string | null }) {
+  return (
+    <div className={`sl-meter-box ${gapLabel ? "sl-meter-box--gap" : ""}`} title={gapLabel ?? undefined}>
+      <div className="sl-meter-head">
+        <span>{label}</span>
+        <span className="sl-meter-value">{value}%</span>
+      </div>
+      <div className="sl-meter-bar">
+        <div className={`sl-meter-fill ${gapLabel ? "sl-meter-fill--gap" : ""}`} style={{ width: `${value}%` }} />
+      </div>
+      {gapLabel ? <div className="sl-meter-gap">{gapLabel}</div> : null}
+    </div>
+  );
+}
+
+/** The caretaker care line whose effect the stage last played. It lives as long as the page, so you see their
+ *  latest care when you open the Nook, and not again each time you come back to the tab. */
+let lastShownCareId: string | null = null;
+/** How long the caretaker looks happy after you fill a gap or good news lands. */
+const CHEER_MS = 4_000;
+/** The kinds of line that are good news. */
+const NEWS_KINDS = ["hatch", "stage-up", "evolve-offer", "evolve"];
+
+/** The panel width at which the care card moves beside the stage; the same as the styles' container query. */
+const SIDE_BY_SIDE_REM = 48;
+
+export function SaucelingsNookView({
+  state,
+  packageId,
+  packageVersion,
+  askVoice,
+}: {
+  state: SaucelingStateResponse;
+  packageId?: string;
+  packageVersion?: string | null;
+  /** Offers to make a caretaker's own voice when they have none (see VoiceDialog.tsx). */
+  askVoice: (characterId: string, onDone?: (go: boolean) => void) => void;
+}) {
+  const { t } = useSaucelingsTranslation();
+  const queryClient = useQueryClient();
+  const pet = state.world.activePet;
+  const characters = state.characters;
+  const [swapOpen, setSwapOpen] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [nudgePick, setNudgePick] = useState<SaucelingTendencyKey>("feedReliability");
+  const [reaction, playReaction] = useSpriteReaction();
+  // A care has the pet come over to the caretaker first (see the stage director).
+  const stageHandle = useRef<SaucelingStageHandle>(null);
+  const [nowMs, refreshNow] = useNow(15_000);
+  const assetUrl = (path: string) => packageAssetUrl(packageId, path, packageVersion);
+
+  // A custom background is its own request, so the state stays small; it loads once per picture.
+  const backgroundId = pet?.backgroundId ?? null;
+  const backgroundQuery = useQuery({
+    queryKey: ["saucelings", "background", backgroundId],
+    queryFn: () => saucelingsRequest<{ image: string }>(`/background/${encodeURIComponent(backgroundId ?? "")}`),
+    enabled: backgroundId !== null,
+    staleTime: Infinity,
+  });
+  const backgroundSrc = backgroundId ? (backgroundQuery.data?.image ?? null) : null;
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  // The player's own latest care line shows under the care buttons for a few seconds, then fades.
+  const lastCare = pet?.journal.find((ev) => ev.kind === "user-care" || ev.kind === "nudge") ?? null;
+  const careId = lastCare?.id;
+  const careText = lastCare?.text;
+  const seenCareId = useRef(careId);
+  const [careNote, setCareNote] = useState({ text: "", shown: false });
+  useEffect(() => {
+    if (!careId || careId === seenCareId.current) return;
+    seenCareId.current = careId;
+    setCareNote({ text: careText ?? "", shown: true });
+    // The words stay while the line fades out.
+    const timer = window.setTimeout(() => setCareNote((note) => ({ ...note, shown: false })), 6_000);
+    return () => window.clearTimeout(timer);
+  }, [careId, careText]);
+
+  // Check in and Ask sit in the caretaker's box when the care card is beside the stage; on a narrower panel they
+  // go under the care buttons, so the buttons stay near the pet.
+  const [panelRef, sideBySide] = usePanelAtLeast(SIDE_BY_SIDE_REM);
+  // The caretaker stands in the scene when the Engine has sprites for them.
+  const caretakerSprites = useCaretakerSprites(
+    pet?.caretakerId ?? "",
+    characters.some((ch) => ch.id === pet?.caretakerId),
+  );
+  // A caretaker painted for the Nook stands as their pixel figure instead.
+  const figureId = pet ? state.world.caretakerFigures[pet.caretakerId] : undefined;
+  const figure = useCaretakerFigure(figureId);
+  // They breathe as the pet does, and their eyes shut now and then when the figure's eyes can be found.
+  const motion = useCaretakerMotion(figureId, figure);
+  // Their newest line, once its words are in: the pet listens to it, and a line about their care plays it once.
+  const newestLine = pet?.journal.find((ev) => CARETAKER_SPEECH_KINDS.includes(ev.kind)) ?? null;
+  const heardLine = newestLine && !state.writing.includes(newestLine.id) ? newestLine : null;
+  const careEffect = heardLine?.kind === "caretaker-care" ? caretakerCareAction(heardLine.outcome) : null;
+  const careEffectId = careEffect ? (heardLine?.id ?? null) : null;
+  // A painted caretaker turns to the pet for the care that plays: theirs, or yours. The pet comes over first.
+  const [caring, showCaring] = useForAMoment<SaucelingUserAction>(CARE_POSE_MS);
+  useEffect(() => {
+    if (!careEffect || !careEffectId || careEffectId === lastShownCareId) return;
+    lastShownCareId = careEffectId;
+    void (stageHandle.current?.comeOver() ?? Promise.resolve()).then(() => {
+      playReaction(careEffect);
+      showCaring(careEffect);
+    });
+  }, [careEffect, careEffectId, playReaction, showCaring]);
+  // They look happy for a moment after you fill a gap, and as good news lands while you watch.
+  const [cheering, cheer] = useForAMoment<true>(CHEER_MS);
+  const newsId = heardLine && NEWS_KINDS.includes(heardLine.kind) ? heardLine.id : null;
+  const cheeredId = useRef(newsId);
+  useEffect(() => {
+    if (!newsId || newsId === cheeredId.current) return;
+    cheeredId.current = newsId;
+    cheer(true);
+  }, [newsId, cheer]);
+  // Their newest line types out in the box.
+  const [typing, setTyping] = useState(false);
+  // A cared-for egg hatches on the first state read after its wait, so read it then.
+  const hatchDue = hatchDueAt(pet);
+  useEffect(() => {
+    if (hatchDue === null) return;
+    const timer = window.setTimeout(
+      () => void queryClient.invalidateQueries({ queryKey: ["saucelings", "state"] }),
+      Math.max(0, hatchDue - Date.now()) + 1_000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [hatchDue, queryClient]);
+
+  const updateState = (next: SaucelingStateResponse) => {
+    setErrorMsg(null);
+    queryClient.setQueryData(["saucelings", "state"], next);
+  };
+  const showError = (err: unknown) => setErrorMsg(err instanceof Error ? err.message : t("saucelings.error.request"));
+
+  const adoptMutation = useMutation({
+    mutationFn: (payload: { characterId: string; swap?: boolean }) =>
+      saucelingsRequest<SaucelingStateResponse>("/adopt", "POST", payload),
+    onSuccess: (next) => {
+      setSwapOpen(false);
+      updateState(next);
+    },
+    onError: showError,
+  });
+
+  const actionMutation = useMutation({
+    mutationFn: (action: SaucelingUserAction) =>
+      saucelingsRequest<SaucelingStateResponse>("/action", "POST", { action }),
+    // The pet sets off for the caretaker as you tap, and the care plays once it is there and the answer is in.
+    onMutate: () => ({ arrived: stageHandle.current?.comeOver() ?? Promise.resolve() }),
+    onSuccess: (next, action, context) => {
+      updateState(next);
+      refreshNow();
+      void context.arrived.then(() => {
+        playReaction(action);
+        // They join in, except when you talk to the egg: they would seem to be the one talking.
+        if (action !== "talk") showCaring(action);
+      });
+    },
+    onError: showError,
+  });
+
+  const checkInMutation = useMutation({
+    mutationFn: () => saucelingsRequest<SaucelingStateResponse>("/check-in", "POST", {}),
+    onSuccess: updateState,
+    onError: showError,
+  });
+
+  const nudgeMutation = useMutation({
+    mutationFn: (tendency: SaucelingTendencyKey) =>
+      saucelingsRequest<SaucelingStateResponse>("/nudge", "POST", { tendency }),
+    onSuccess: (next) => {
+      updateState(next);
+      // A tick up to 15 s old would show a fresh ask as 49 hours left.
+      refreshNow();
+    },
+    onError: showError,
+  });
+
+  const patchPetMutation = useMutation({
+    mutationFn: (payload: { name?: string; caretakerId?: string; eggSpot?: { x: number; y: number } }) =>
+      saucelingsRequest<SaucelingStateResponse>("/pet", "PATCH", payload),
+    onSuccess: (data, payload) => {
+      setEditingName(false);
+      updateState(data);
+      // A new caretaker with no voice of their own is offered one once they have said hello.
+      if (payload.caretakerId) askVoice(payload.caretakerId);
+    },
+    onError: showError,
+  });
+
+  // Reads the caretaker's card again, so an edit to it reaches their care profile and their phrasebook.
+  const refreshVoiceMutation = useMutation({
+    mutationFn: ({ characterId, name }: { characterId: string; name: string }) =>
+      saucelingsRequest<SaucelingStateResponse>("/voice", "POST", { characterId }).catch(() => {
+        throw new Error(t("saucelings.voice.failed", { name }));
+      }),
+    onSuccess: updateState,
+    onError: showError,
+  });
+  // A caretaker with no voice of their own is offered one before they bring the egg; closing the offer brings none.
+  const adopt = (input: { characterId: string; swap?: boolean }) =>
+    askVoice(input.characterId, (go) => {
+      if (go) adoptMutation.mutate(input);
+    });
+
+  const retireMutation = useMutation({
+    mutationFn: () => saucelingsRequest<SaucelingStateResponse>("/retire", "POST", {}),
+    onSuccess: updateState,
+    onError: showError,
+  });
+
+  if (!pet) {
+    return (
+      <div className="sl-card" style={{ display: "grid", gap: "1rem", textAlign: "center", padding: "2rem" }}>
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <SaucelingSprite
+            species="rigamuffin"
+            stage="egg"
+            mood="content"
+            assetUrl={assetUrl}
+            alt={t("saucelings.empty.eggAlt")}
+            scale={2}
+          />
+        </div>
+        <h2 style={{ fontSize: "1.125rem", fontWeight: 600, margin: 0 }}>{t("saucelings.empty.title")}</h2>
+        <p style={{ fontSize: "0.85rem", opacity: 0.8, maxWidth: "32rem", margin: "0 auto" }}>
+          {t("saucelings.empty.body")}
+        </p>
+        <EggForm
+          characters={characters}
+          defaultCaretakerId={characters[0]?.id ?? "caretaker"}
+          submitLabel={t("saucelings.empty.bringEgg")}
+          pending={adoptMutation.isPending}
+          onSubmit={adopt}
+        />
+        <SpecialEggs unlocks={state.unlocks} />
+        {errorMsg ? <p style={{ color: "#f87171", fontSize: "0.8rem", margin: 0 }}>{errorMsg}</p> : null}
+      </div>
+    );
+  }
+
+  const isEgg = pet.stage === "egg";
+  const sp = petKind(pet);
+  const temper = temperamentOf(pet);
+  const sauce = temper?.sauce ?? null;
+  // A hatchling keeps its kind's name until the player gives it one.
+  const unnamed = pet.name === sp.name;
+  const caretakerName = pet.careProfile.characterName;
+  const isCharacter = characters.some((ch) => ch.id === pet.caretakerId);
+  const hatching = hatchPercent(pet, nowMs);
+  // A sauceling that is not pasta keeps the house colours.
+  const sauceStyle = (
+    sauce ? { "--sl-sauce-accent": sauce.accentColor, "--sl-sauce-bg": sauce.badgeBg } : {}
+  ) as CSSProperties;
+  const nudges: Array<{ tendency: SaucelingTendencyKey; label: string }> = isEgg
+    ? [
+        { tendency: "feedReliability", label: t("saucelings.nudge.warm") },
+        { tendency: "affection", label: t("saucelings.nudge.talk") },
+      ]
+    : [
+        { tendency: "feedReliability", label: t("saucelings.nudge.meals") },
+        { tendency: "overfeeding", label: t("saucelings.nudge.portions") },
+        { tendency: "playfulness", label: t("saucelings.nudge.play") },
+        { tendency: "affection", label: t("saucelings.nudge.cuddles") },
+      ];
+  // The egg and the hatchling offer different asks; an ask the pet no longer has falls back to the first.
+  const nudge = nudges.some((n) => n.tendency === nudgePick) ? nudgePick : nudges[0].tendency;
+  // The asks still on, worded for what they help with now: an egg's "keep it warm" is "remember meals" once hatched.
+  const asked = nudges.flatMap((option) => {
+    const on = pet.nudges.find((n) => n.tendency === option.tendency && Date.parse(n.expiresAt) > nowMs);
+    if (!on) return [];
+    const hours = Math.ceil((Date.parse(on.expiresAt) - nowMs) / 3_600_000);
+    return [t("saucelings.nudge.left", { ask: option.label, hours })];
+  });
+  const caretakerLines = pet.journal.filter((ev) => CARETAKER_SPEECH_KINDS.includes(ev.kind));
+  // It follows how things are now, not an older line paged back to in the box.
+  const pose = caretakerPose({
+    gaps: state.gaps,
+    line: newestLine,
+    speaking: typing || (newestLine !== null && state.writing.includes(newestLine.id)),
+    cheering: cheering !== null,
+    caring,
+  });
+  // While a painted figure loads, nobody stands and the box leaves its picture out, so neither flashes before it.
+  const standing = standingCaretaker(figure, caretakerSprites, pose, motion);
+
+  // Check in and Ask: in the caretaker's box beside a wide panel's care card, under the care buttons otherwise.
+  const talk = (
+    <>
+      <div className="sl-care-row">
+        <button
+          type="button"
+          className="sl-btn"
+          disabled={checkInMutation.isPending}
+          onClick={() => checkInMutation.mutate()}
+        >
+          {checkInMutation.isPending
+            ? t("saucelings.checkIn.pending", { name: caretakerName })
+            : `💬 ${t("saucelings.checkIn.button", { name: caretakerName })}`}
+        </button>
+      </div>
+
+      <div className="sl-care-row sl-ask-row">
+        <label htmlFor="sl-nudge-pick" className="sl-care-ask">
+          {t("saucelings.nudge.heading", { name: caretakerName })}
+        </label>
+        <select
+          id="sl-nudge-pick"
+          className="sl-select sl-select--small"
+          value={nudge}
+          onChange={(e) => setNudgePick(e.target.value as SaucelingTendencyKey)}
+        >
+          {nudges.map((option) => (
+            <option key={option.tendency} value={option.tendency}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="sl-btn sl-btn--small"
+          disabled={nudgeMutation.isPending}
+          onClick={() => nudgeMutation.mutate(nudge)}
+        >
+          {t("saucelings.nudge.ask")}
+        </button>
+        <span className="sl-care-note">
+          {asked.length > 0 ? t("saucelings.nudge.active", { asks: asked.join(", ") }) : t("saucelings.nudge.note")}
+        </span>
+      </div>
+    </>
+  );
+  return (
+    <div ref={panelRef} className="sl-nook" style={sauceStyle}>
+      {errorMsg ? (
+        <div
+          role="alert"
+          className="sl-card"
+          style={{ borderColor: "#ef4444", color: "#fca5a5", fontSize: "0.8125rem", padding: "0.65rem 1rem" }}
+        >
+          {errorMsg}
+        </div>
+      ) : null}
+
+      {pet.retireReady ? (
+        <div className="sl-card sl-retire">
+          <span>{t("saucelings.retire.ready", { name: pet.name })}</span>
+          <button
+            type="button"
+            className="sl-btn sl-btn--primary"
+            disabled={retireMutation.isPending}
+            onClick={() => retireMutation.mutate()}
+          >
+            📖 {t("saucelings.retire.button")}
+          </button>
+        </div>
+      ) : null}
+
+      {/* The stage card holds the name, the stage and the caretaker's box joined under it, with Check in and Ask;
+          the care card is beside it on a wide panel and under it on a phone. */}
+      <div className="sl-nook-main">
+        <div className="sl-card sl-stage-card">
+          <div className="sl-stage-bar">
+            {editingName ? (
+              <div className="sl-rename">
+                <input
+                  className="sl-input"
+                  style={{ flex: "1 1 8rem", width: "100%" }}
+                  value={renameValue}
+                  maxLength={40}
+                  placeholder={t("saucelings.pet.namePlaceholder")}
+                  aria-label={t("saucelings.pet.namePlaceholder")}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="sl-btn sl-btn--primary"
+                  disabled={!renameValue.trim() || patchPetMutation.isPending}
+                  onClick={() => patchPetMutation.mutate({ name: renameValue })}
+                >
+                  {t("saucelings.common.save")}
+                </button>
+                <button type="button" className="sl-btn" onClick={() => setEditingName(false)}>
+                  {t("saucelings.common.cancel")}
+                </button>
+              </div>
+            ) : (
+              <div className="sl-stage-title">
+                <div className="sl-stage-name">
+                  <h2 style={{ fontSize: "1.35rem", fontWeight: 700, margin: 0, overflowWrap: "anywhere" }}>
+                    {isEgg ? t("saucelings.egg.name") : pet.name}
+                  </h2>
+                  {isEgg ? null : <RareMark pet={pet} />}
+                  {isEgg ? null : (
+                    <button
+                      type="button"
+                      className={`sl-btn sl-btn--small ${unnamed ? "sl-btn--primary" : ""}`}
+                      aria-label={unnamed ? undefined : t("saucelings.pet.rename")}
+                      title={unnamed ? undefined : t("saucelings.pet.rename")}
+                      onClick={() => {
+                        setRenameValue(unnamed ? "" : pet.name);
+                        setEditingName(true);
+                      }}
+                    >
+                      {unnamed ? t("saucelings.pet.nameIt") : "✏️"}
+                    </button>
+                  )}
+                </div>
+                {isEgg ? null : (
+                  <div className="sl-stage-sub" title={sauce ? `${sauce.origin} — ${sauce.readsAs}` : temper?.readsAs}>
+                    {temper
+                      ? `${sauce ? t("saucelings.pet.sauce", { sauce: sauce.name }) : t("saucelings.pet.temperament", { temperament: temper.name })} · `
+                      : null}
+                    {sp.name} ·{" "}
+                    {pet.lockedStage
+                      ? t("saucelings.pet.locked", { stage: t(`saucelings.stage.${pet.lockedStage}`) })
+                      : t(`saucelings.stage.${pet.stage}`)}
+                    {!pet.lockedStage && pet.stage !== "elder" && pet.meters.hunger < SAUCELING_GROWTH_MIN_HUNGER
+                      ? ` · ${t("saucelings.pet.growthPaused")}`
+                      : null}
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              type="button"
+              className="sl-btn sl-btn--small"
+              aria-expanded={pickerOpen}
+              aria-label={t("saucelings.nook.background")}
+              title={t("saucelings.nook.background")}
+              onClick={() => setPickerOpen((open) => !open)}
+            >
+              🖼<span className="sl-btn-label"> {t("saucelings.nook.background")}</span>
+            </button>
+          </div>
+
+          <div className="sl-scene">
+            <SaucelingStage
+              pet={pet}
+              reaction={reaction}
+              assetUrl={assetUrl}
+              backgroundSrc={backgroundSrc}
+              caretaker={standing}
+              caretakerFlipped={state.world.flippedCaretakers.includes(pet.caretakerId)}
+              listenKey={heardLine?.id ?? null}
+              handle={stageHandle}
+              onMoveEgg={(eggSpot) => patchPetMutation.mutateAsync({ eggSpot })}
+            />
+
+            <CaretakerBox
+              lines={caretakerLines}
+              fallbackLine={
+                isEgg ? t("saucelings.caretaker.idleEgg") : t("saucelings.caretaker.idle", { name: pet.name })
+              }
+              caretakerId={pet.caretakerId}
+              caretakerName={caretakerName}
+              isCharacter={isCharacter}
+              meals={state.gaps.meals}
+              isEgg={isEgg}
+              writing={state.writing}
+              standing={standing !== null || figure === undefined}
+              onTyping={setTyping}
+            >
+              {sideBySide ? talk : null}
+            </CaretakerBox>
+          </div>
+        </div>
+
+        <div className="sl-card sl-care-card">
+          <div className="sl-meters sl-meters--strip">
+            {isEgg ? (
+              <>
+                <Meter
+                  label={t("saucelings.meter.warmth")}
+                  value={eggWarmth(pet)}
+                  gapLabel={state.gaps.warmth ? t("saucelings.meter.warmthGap") : null}
+                />
+                <Meter
+                  label={t("saucelings.meter.hatching")}
+                  value={hatching}
+                  gapLabel={hatching >= 100 && pet.careActionCount < 1 ? t("saucelings.meter.hatchingGap") : null}
+                />
+              </>
+            ) : (
+              <>
+                <Meter
+                  label={t("saucelings.meter.hunger")}
+                  value={pet.meters.hunger}
+                  gapLabel={state.gaps.hunger ? t("saucelings.meter.hungerGap") : null}
+                />
+                <Meter
+                  label={t("saucelings.meter.mood")}
+                  value={pet.meters.mood}
+                  gapLabel={state.gaps.mood ? t("saucelings.meter.moodGap") : null}
+                />
+              </>
+            )}
+            <Meter label={t("saucelings.meter.bond")} value={pet.meters.bond} />
+          </div>
+
+          <div className="sl-actions">
+            {actionsFor(pet).map((action) => {
+              const wait = cooldownMinutes(pet, action, nowMs);
+              // Filling a gap cheers the caretaker up for a moment.
+              const fillsGap = actionCoversGap(action, state.gaps);
+              return (
+                <button
+                  key={action}
+                  type="button"
+                  className={`sl-btn ${fillsGap ? "sl-btn--gap" : ""}`}
+                  disabled={actionMutation.isPending || wait > 0}
+                  onClick={() =>
+                    actionMutation.mutate(action, {
+                      onSuccess: () => {
+                        if (fillsGap) cheer(true);
+                      },
+                    })
+                  }
+                >
+                  {ACTION_ICONS[action]} {t(ACTION_LABEL_KEYS[action])}
+                  {wait > 0 ? ` · ${t("saucelings.action.wait", { minutes: wait })}` : ""}
+                </button>
+              );
+            })}
+          </div>
+          <p className={`sl-action-note ${careNote.shown ? "sl-action-note--shown" : ""}`} aria-live="polite">
+            {careNote.text}
+          </p>
+
+          <FormPainter state={state} assetUrl={assetUrl} />
+          <EvolveButton state={state} assetUrl={assetUrl} />
+          {sideBySide ? null : talk}
+        </div>
+      </div>
+
+      {pickerOpen ? (
+        <BackgroundPicker
+          pet={pet}
+          settings={state.world.settings}
+          assetUrl={assetUrl}
+          onClose={() => setPickerOpen(false)}
+        />
+      ) : null}
+
+      <details className="sl-card sl-about">
+        <summary>{isEgg ? t("saucelings.about.egg") : t("saucelings.about.summary", { name: pet.name })}</summary>
+        <div className="sl-about-body">
+          {isEgg ? (
+            <p>{t("saucelings.egg.about")}</p>
+          ) : (
+            <>
+              <p>
+                {sp.look} — <em>{pet.quirk}</em>
+              </p>
+              <p>
+                {sauce
+                  ? t("saucelings.pet.sauceAbout", { sauce: sauce.name, readsAs: sauce.readsAs })
+                  : temper && pet.ownTemperament
+                    ? t("saucelings.pet.temperamentAbout", {
+                        temperament: temper.name,
+                        readsAs: temper.readsAs,
+                        after: pet.ownTemperament.takesAfter.name,
+                      })
+                    : t("saucelings.pet.temperamentForming")}
+              </p>
+              {pet.evolution.look ? (
+                <p title={pet.evolution.look.description}>
+                  {t("saucelings.evolve.into", { form: pet.evolution.look.form })}
+                </p>
+              ) : null}
+              {pet.evolution.look ? (
+                <p>{t("saucelings.evolve.move", { move: t(`saucelings.evolve.moves.${pet.evolution.look.move}`) })}</p>
+              ) : null}
+              <div className="sl-traits">
+                {pet.traits.map((trait) => (
+                  <span key={trait} className="sl-trait">
+                    #{trait}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+          <p>{t("saucelings.menagerie.foundBy", { name: pet.finder.name })}</p>
+
+          {characters.length > 1 ? (
+            <label className="sl-about-row">
+              <span>{isEgg ? t("saucelings.pet.eggCaretaker") : t("saucelings.pet.caretaker")}</span>
+              <select
+                className="sl-select sl-select--small"
+                aria-label={t("saucelings.empty.pickCaretaker")}
+                value={pet.caretakerId}
+                onChange={(e) => patchPetMutation.mutate({ caretakerId: e.target.value })}
+              >
+                {characters.map((ch) => (
+                  <option key={ch.id} value={ch.id}>
+                    {ch.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          {isCharacter ? (
+            <div className="sl-about-row">
+              <HelpTip
+                text={t("saucelings.about.refreshVoiceNote")}
+                label={t("saucelings.help.label", {
+                  action: t("saucelings.about.refreshVoice", { name: caretakerName }),
+                })}
+              >
+                <button
+                  type="button"
+                  className="sl-btn"
+                  disabled={refreshVoiceMutation.isPending}
+                  onClick={() => refreshVoiceMutation.mutate({ characterId: pet.caretakerId, name: caretakerName })}
+                >
+                  {refreshVoiceMutation.isPending
+                    ? t("saucelings.about.refreshingVoice", { name: caretakerName })
+                    : `🔄 ${t("saucelings.about.refreshVoice", { name: caretakerName })}`}
+                </button>
+              </HelpTip>
+            </div>
+          ) : null}
+          {isCharacter ? (
+            <FigurePainter
+              state={state}
+              characterId={pet.caretakerId}
+              name={caretakerName}
+              sprites={caretakerSprites}
+            />
+          ) : null}
+          {isCharacter ? <CaretakerFlip state={state} characterId={pet.caretakerId} name={caretakerName} /> : null}
+
+          <FormRepaint state={state} assetUrl={assetUrl} />
+          <PetFlip state={state} />
+          <UndoEvolution state={state} />
+
+          <div className="sl-about-row">
+            <button
+              type="button"
+              className="sl-btn"
+              aria-expanded={swapOpen}
+              onClick={() => setSwapOpen((open) => !open)}
+            >
+              🥚 {t("saucelings.swap.button")}
+            </button>
+          </div>
+          {swapOpen ? (
+            <div style={{ display: "grid", gap: "0.5rem", textAlign: "center" }}>
+              <p style={{ margin: 0, fontSize: "0.85rem" }}>
+                {isEgg ? t("saucelings.swap.noteEgg") : t("saucelings.swap.note", { name: pet.name })}
+              </p>
+              <EggForm
+                characters={characters}
+                defaultCaretakerId={
+                  characters.some((ch) => ch.id === pet.caretakerId)
+                    ? pet.caretakerId
+                    : (characters[0]?.id ?? "caretaker")
+                }
+                submitLabel={t("saucelings.swap.confirm")}
+                pending={adoptMutation.isPending}
+                onSubmit={(input) => adopt({ ...input, swap: true })}
+                onCancel={() => setSwapOpen(false)}
+              />
+              <SpecialEggs unlocks={state.unlocks} />
+            </div>
+          ) : null}
+        </div>
+      </details>
+    </div>
+  );
+}

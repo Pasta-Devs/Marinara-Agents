@@ -119,6 +119,9 @@ jobs:
           npx tsx --tsconfig tests/tsconfig.regressions.json tests/slurp2-slice-i.regression.ts
           npx tsx --tsconfig tests/tsconfig.regressions.json tests/slurp2-step1-shell.regression.ts
 
+          # Saucelings simulation and routes.
+          npm run test:saucelings
+
           # Package localization catalogs.
           node scripts/tests/ui-translation-retention.regression.mjs
           node scripts/validate-package-locales.mjs
