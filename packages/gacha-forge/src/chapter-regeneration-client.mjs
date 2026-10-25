@@ -180,11 +180,13 @@ export async function confirmForgeChapterReset(host, request) {
           ? "chapter.reset.completed"
           : result?.error === "story-changed"
             ? "chapter.reset.changed"
-            : result?.error === "reset-in-progress"
-              ? "chapter.reset.busy"
-              : result?.error === "bond-chapter-open"
-                ? "chapter.reset.bondOpen"
-                : "chapter.reset.failed"
+            : result?.error === "reset-drain-timeout"
+              ? "chapter.reset.drainTimeout"
+              : result?.error === "reset-in-progress"
+                ? "chapter.reset.busy"
+                : result?.error === "bond-chapter-open"
+                  ? "chapter.reset.bondOpen"
+                  : "chapter.reset.failed"
       ];
     request.heldById = result?.error === "bond-chapter-open" ? result.heldById : "";
     request.heldPart = result?.heldPart;

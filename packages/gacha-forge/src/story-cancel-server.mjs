@@ -39,7 +39,7 @@ export function forgeStoryDocuments(documents) {
   };
 }
 
-export function createForgeStoryCancellation() {
+export function createForgeStoryCancellation({ resetDrainTimeoutMs = 30_000 } = {}) {
   const worlds = new Map();
   let disposed = false;
   const world = (runId) => {
@@ -145,8 +145,20 @@ export function createForgeStoryCancellation() {
         state.controller.abort(forgeStoryCancelled());
         // Cancel replies promptly; destructive reset joins the actual work, including writes
         // that entered persistence before their epoch lost permission to start another one.
-        while (state.operations.size || state.writes.size) {
-          await Promise.allSettled([...state.operations, ...state.writes]);
+        let deadline;
+        try {
+          const expired = new Promise((resolve) => {
+            deadline = setTimeout(() => resolve(false), resetDrainTimeoutMs);
+          });
+          while (state.operations.size || state.writes.size) {
+            const drained = await Promise.race([
+              Promise.allSettled([...state.operations, ...state.writes]).then(() => true),
+              expired,
+            ]);
+            if (!drained) return { ok: false, error: "reset-drain-timeout", retryable: true };
+          }
+        } finally {
+          clearTimeout(deadline);
         }
         if (disposed) return { ok: false, error: "cancelled" };
         return await forgeStoryScope.run(undefined, operation);

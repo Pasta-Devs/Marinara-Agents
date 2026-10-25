@@ -110,6 +110,17 @@ test("a reset requires the explicit displayed confirmation and ignores a second 
   assert.deepEqual(requests, []);
 });
 
+test("drain timeout explains that the original chapter remains saved and requires another explicit attempt", async () => {
+  const { host, request, loads } = client(async () => ({ ok: false, error: "reset-drain-timeout", retryable: true }));
+  const plan = host._plan;
+  await confirmForgeChapterReset(host, request);
+  assert.equal(host._plan, plan);
+  assert.equal(host._chapterProgress.normal, 3);
+  assert.deepEqual(loads, []);
+  assert.equal(request.pending, false);
+  assert.equal(request.error, forgeChapterResetEnglish["chapter.reset.drainTimeout"]);
+});
+
 test("confirmed reset clears only selected caches and starts fresh generation after the server response", async () => {
   const gate = Promise.withResolvers(),
     { host, request, requests, loads, events } = client(() => gate.promise);

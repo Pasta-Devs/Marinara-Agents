@@ -13,6 +13,7 @@ export const forgeChapterResetEnglish = {
   "chapter.reset.completed": "This chapter is complete and cannot be regenerated.",
   "chapter.reset.changed": "The story changed while this page was open. Reopen the chapter before trying again.",
   "chapter.reset.busy": "Another story reset is already in progress. Wait for it to finish.",
+  "chapter.reset.drainTimeout": "Generation is still stopping. The chapter was not reset. Wait a moment and try again.",
   "chapter.reset.bondOpen": "Finish the open Character Story before regenerating this chapter.",
   "chapter.reset.openBond": "Open Character Story",
   "chapter.reset.reopen": "Reopen chapter",

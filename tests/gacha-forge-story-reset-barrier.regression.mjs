@@ -10,6 +10,53 @@ import { createForgeStoryMemoryIntegration } from "../packages/gacha-forge/src/s
 const deferred = () => Promise.withResolvers();
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
+for (const kind of ["operation", "write"]) {
+  test(`a timed-out ${kind} drain preserves the chapter and pending work for explicit retry`, async () => {
+    const runtime = createForgeStoryCancellation({ resetDrainTimeoutMs: 30 });
+    const started = deferred(),
+      release = deferred();
+    let calls = 0,
+      cleanups = 0,
+      retry;
+    const documents = forgeStoryDocuments({
+      update() {
+        calls++;
+        started.resolve();
+        return release.promise;
+      },
+    });
+    const work = runtime.run("world", async () => {
+      if (kind === "write") {
+        void documents.update();
+        return "write entered";
+      }
+      calls++;
+      started.resolve();
+      await release.promise;
+    });
+    try {
+      await started.promise;
+      const result = await runtime.reset("world", async () => ++cleanups);
+      assert.deepEqual(result, { ok: false, error: "reset-drain-timeout", retryable: true });
+      assert.equal(cleanups, 0, "a deadline must not enter transactional cleanup");
+      assert.equal(calls, 1, "timeout must not resend provider or document work");
+      retry = runtime.reset("world", async () => ++cleanups);
+      await tick();
+      assert.equal(cleanups, 0, "the retry still joins the original pending work");
+      release.resolve();
+      assert.equal(await retry, 1);
+      await work;
+      assert.equal(cleanups, 1);
+      assert.equal(calls, 1);
+      assert.equal(await runtime.run("world", async () => "fresh"), "fresh");
+    } finally {
+      release.resolve();
+      await Promise.allSettled([work, retry].filter(Boolean));
+      runtime.dispose();
+    }
+  });
+}
+
 test("reset drains the actual provider operation after ordinary cancel has already replied", async () => {
   const runtime = createForgeStoryCancellation();
   const started = deferred(),
