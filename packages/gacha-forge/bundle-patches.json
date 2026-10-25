@@ -1132,6 +1132,37 @@
               "replace": "a=forgeChapterRequest(this,e,a);e=forgeSeasonalRequest(e,a);a=forgeFormationStartRequest(this,e,a);let forgeStory="
             }
           ]
+        },
+        {
+          "version": "1.21.0",
+          "notes": "Home background image downloads use the Engine gallery service without selecting artwork.",
+          "edits": [
+            {
+              "find": "var ac=",
+              "replaceFrom": "src/background-download-client.mjs",
+              "sourceId": "background-download-client"
+            },
+            {
+              "find": "wireForgeHome(this,bt,ao),",
+              "replace": "wireForgeHome(this,bt,ao),wireForgeBackgroundDownloads(this),"
+            },
+            {
+              "find": "disposeForgeFormationSettings(this),",
+              "replace": "disposeForgeBackgroundDownloads(this),disposeForgeFormationSettings(this),"
+            },
+            {
+              "find": ":(this._stopForgeBrowserPresentation?.(),",
+              "replace": ":(disposeForgeBackgroundDownloads(this),this._stopForgeBrowserPresentation?.(),"
+            },
+            {
+              "find": "_adoptRun(e){this._stopSummon(),",
+              "replace": "_adoptRun(e){disposeForgeBackgroundDownloads(this);this._stopSummon(),"
+            },
+            {
+              "find": "ds=\"1.19.0\"",
+              "replace": "ds=\"1.21.0\""
+            }
+          ]
         }
       ]
     },
