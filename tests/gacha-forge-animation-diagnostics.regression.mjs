@@ -33,10 +33,11 @@ const cases = [
     "responseFailed",
   ],
   ["Invalid banner animation video", { reason: "invalid-response" }, "responseFailed"],
+  ["Invalid URL SECRET", { reason: "invalid-response" }, "responseFailed", "ERR_INVALID_URL"],
   ["Unknown failure with SECRET raw provider details", {}, "failed"],
 ];
 try {
-  for (const [index, [message, failure, englishKey]] of cases.entries()) {
+  for (const [index, [message, failure, englishKey, code]] of cases.entries()) {
     const dataDir = join(directory, String(index));
     await mkdir(dataDir);
     let calls = 0;
@@ -46,7 +47,7 @@ try {
         videos: {
           animateGalleryImage: async () => {
             calls++;
-            throw new Error(message);
+            throw Object.assign(new Error(message), code ? { code } : {});
           },
         },
       },

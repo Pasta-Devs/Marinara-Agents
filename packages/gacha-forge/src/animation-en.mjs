@@ -16,7 +16,7 @@ export const forgeAnimationEnglish = {
   providerFailed:
     "Video generation failed (HTTP {status}). Check this video connection and provider account, then retry.",
   responseFailed:
-    "The video provider returned an unusable result. Update Engine and check the video connection, then retry.",
+    "The video request or response could not be read. Update Engine and check the video connection, then retry.",
   storageFailed: "Engine could not save the animation. Check available disk space and data-folder access, then retry.",
   seedanceSetup:
     'Seedance needs a public HTTPS banner image. In Engine Settings → Connections, edit this video connection and enable "Upload Seedance reference frames temporarily", then retry.',
