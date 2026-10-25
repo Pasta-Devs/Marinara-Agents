@@ -140,6 +140,7 @@ try {
   };
   let result = await post("/story-events");
   assert.equal(result.body.ok, true, JSON.stringify(result));
+  assert.ok(Number.isFinite(result.body.serverNow) && result.body.serverNow > 0);
   assert.equal(
     f.calls.filter((call) => call.body.messages?.[0]?.content.includes("SEASONAL EVENT:")).length,
     0,

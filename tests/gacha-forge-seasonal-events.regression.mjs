@@ -177,7 +177,9 @@ assert.equal(
 
 {
   const f = fixture({ enabled: false });
-  assert.equal((await f.service.list({ runId })).enabled, false);
+  const state = await f.service.list({ runId });
+  assert.equal(state.enabled, false);
+  assert.equal(state.serverNow, f.time(), "Event expiry reconciliation uses the authoritative clock");
   assert.deepEqual(f.counts(), { overviewCalls: 0, planCalls: 0, grants: 0, mediaCalls: 0 });
   assert.equal([...f.docs.values()].filter((row) => row.kind === "story-event").length, 0);
 }

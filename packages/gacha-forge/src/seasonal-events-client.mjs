@@ -33,6 +33,11 @@ const forgeEventEscape = (value) =>
   );
 const forgeEventT = (key) => forgeSeasonalEnglish[key] || key;
 const forgeEventChapter = (value) => typeof value === "string" && /^event-[1-9]\d{0,8}$/u.test(value);
+const forgeEventWindow = (event) => `${event.seq}:${event.endsAt}`;
+const forgeSeasonalNow = (host) => {
+  const sample = host._forgeSeasonalServerTime;
+  return sample ? sample.now + Math.max(0, Date.now() - sample.loadedAt) : Date.now();
+};
 const forgeSeasonalRouteMap = {
   "/chapter-plan": "/story-event/plan",
   "/beat": "/story-event/beat",
@@ -61,6 +66,8 @@ export function prepareForgeSeasonalEvents(host) {
     host._forgeSeasonalRevision = (host._forgeSeasonalRevision || 0) + 1;
     host._forgeSeasonalState = null;
     host._forgeSeasonalLoading = false;
+    host._forgeSeasonalExpired = new Set();
+    host._forgeSeasonalServerTime = null;
     if (host._forgeEvent?.runId !== runId) host._forgeEvent = null;
   }
   const available =
@@ -86,7 +93,15 @@ async function loadForgeSeasonalEvents(host, retry = false) {
   if (host._run?.runId !== runId || host._forgeSeasonalRevision !== revision) return;
   host._forgeSeasonalLoading = false;
   host._forgeSeasonalLoadedAt = Date.now();
+  host._forgeSeasonalServerTime =
+    Number.isFinite(result?.serverNow) && result.serverNow > 0
+      ? { now: result.serverNow, loadedAt: host._forgeSeasonalLoadedAt }
+      : null;
   host._forgeSeasonalState = result?.ok ? result : { events: [], error: true };
+  // A reconciled live window may refresh once again when the server's actual deadline arrives.
+  if (host._forgeSeasonalServerTime)
+    for (const event of result?.events || [])
+      if (event.live && result.serverNow < event.endsAt) host._forgeSeasonalExpired?.delete(forgeEventWindow(event));
   host._eventsRev = (host._eventsRev || 0) + 1;
   prepareForgeSeasonalEvents(host);
   host._renderBrowser();
@@ -170,17 +185,13 @@ export function wireForgeSeasonalEvents(host) {
     void loadForgeSeasonalEvents(host);
   const state = host._forgeSeasonalState,
     events = state?.events || [];
-  if (
-    !host._forgeSeasonalLoading &&
-    host._run.story?.seasonalEvents === true &&
-    events.some((event) => event.live && Date.now() >= event.endsAt)
-  ) {
-    // Consume this expiry edge once. A failed preparation remains an explicit retry.
-    for (const event of events)
-      if (Date.now() >= event.endsAt) {
-        event.live = false;
-        event.archived = true;
-      }
+  const expired = (host._forgeSeasonalExpired ||= new Set());
+  const due = events.filter(
+    (event) => event.live && forgeSeasonalNow(host) >= event.endsAt && !expired.has(forgeEventWindow(event)),
+  );
+  if (!host._forgeSeasonalLoading && host._run.story?.seasonalEvents === true && due.length) {
+    // Consume this window's edge before loading; a stale live response cannot start a render loop.
+    for (const event of due) expired.add(forgeEventWindow(event));
     void loadForgeSeasonalEvents(host);
   }
   if (host._hudView === "events" && host._eventId === "story-events") {
@@ -228,7 +239,7 @@ export function wireForgeSeasonalEvents(host) {
   }
   if (host._forgeEvent && forgeEventChapter(host._planChapter)) {
     for (const button of root.querySelectorAll("[data-diff]")) button.hidden = true;
-    if (Date.now() >= host._forgeEvent.endsAt || host._run.story?.seasonalEvents !== true) {
+    if (forgeSeasonalNow(host) >= host._forgeEvent.endsAt || host._run.story?.seasonalEvents !== true) {
       for (const button of root.querySelectorAll("[data-play], [data-start]")) button.disabled = true;
       const notice = root.querySelector(".cap-scroll .notice");
       if (notice) {

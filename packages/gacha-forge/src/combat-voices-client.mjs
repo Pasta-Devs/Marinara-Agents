@@ -120,6 +120,7 @@ export function createForgeCombatVoiceController({
           if (!enabled() || job.controller.signal.aborted) return;
           if (clip.state !== "missing" && !retry) throw new Error("Combat voice retry requires confirmation");
           const reserved = await post("/combat-voices/reserve", { ...request, slot, retry });
+          if (!reserved?.ok && !enabled()) return;
           if (!reserved?.ok) throw new Error("Combat voice reservation unavailable");
           if (reserved.cached && forgeCombatClipUrl.test(reserved.url || "")) {
             clips.set(slot, reserved.url);
@@ -127,6 +128,19 @@ export function createForgeCombatVoiceController({
           }
           if (typeof reserved.token !== "string") throw new Error("Invalid combat voice reservation");
           try {
+            // Keep an unspent reservation on this job while muted; a new token could repeat paid work.
+            while (active() && !enabled() && !job.controller.signal.aborted) {
+              await new Promise((resolve) => {
+                const resume = () => {
+                  if (job.resume === resume) delete job.resume;
+                  job.controller.signal.removeEventListener("abort", resume);
+                  resolve();
+                };
+                job.resume = resume;
+                job.controller.signal.addEventListener("abort", resume, { once: true });
+                if (!active() || enabled() || job.controller.signal.aborted) resume();
+              });
+            }
             if (!enabled() || job.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
             const blob = await services.tts.ttsService.generateAudio(clip.text, {
               speaker: actor.name,
@@ -166,6 +180,7 @@ export function createForgeCombatVoiceController({
   };
   async function warm(actors, retry = false) {
     if (!enabled()) return;
+    for (const job of jobs.values()) job.resume?.();
     const candidates = actors.filter((actor) => actor?.id && actor.characterId);
     if (!candidates.length) return;
     try {
@@ -183,7 +198,10 @@ export function createForgeCombatVoiceController({
     configure() {
       if (!enabled()) {
         ++voiceRevision;
-        for (const job of jobs.values()) job.controller.abort();
+        // Muting pauses new requests. Finish and save an already paid clip instead of forcing a paid retry.
+        if (!active()) for (const job of jobs.values()) job.controller.abort();
+      } else {
+        for (const job of jobs.values()) job.resume?.();
       }
       player?.setVolumes({ music: 0, sfx: audio.settings?.dialogueVolume ?? 1 });
       player?.setMuted(!enabled());

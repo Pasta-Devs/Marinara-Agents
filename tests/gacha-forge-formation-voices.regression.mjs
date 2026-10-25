@@ -350,6 +350,169 @@ try {
     assert.equal(c.synthesis, 0);
     assert.equal(s.generations, 0);
   });
+  await test("muting lets a paid clip settle silently without turning the interruption into a retry failure", async () => {
+    const s = await server();
+    const gate = deferred();
+    const started = deferred();
+    const c = client(s, {
+      generateAudio: (_text, { signal }) => {
+        started.resolve();
+        return new Promise((resolve, reject) => {
+          signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), {
+            once: true,
+          });
+          gate.promise.then(() => resolve(new Blob([wav])));
+        });
+      },
+    });
+    const preparing = c.controller.warm([actor]);
+    await started.promise;
+    c.audio.settings.muted = true;
+    c.controller.configure();
+    await c.controller.play(actor, "death");
+    gate.resolve();
+    await preparing;
+    assert.equal(c.synthesis, 1, "Mute must stop before the next clip, without discarding already paid bytes");
+    assert.equal(c.played.length, 0);
+    c.audio.settings.muted = false;
+    c.controller.configure();
+    assert.equal(
+      c.stage.children.some((element) => !element.hidden),
+      false,
+      "Mute is not a provider failure",
+    );
+    await c.controller.warm([actor]);
+    assert.equal(c.synthesis, 4, "Only the remaining three never-requested clips are generated after unmute");
+    assert.equal(c.prompts, 0);
+    const reopened = client(s);
+    await reopened.controller.warm([actor]);
+    assert.equal(reopened.synthesis, 0, "All returned clips were durably committed, including the muted one");
+  });
+  await test("muting, disabling or zeroing volume holds an unspent reservation and resumes the same token", async () => {
+    for (const [setting, paused, resumed] of [
+      ["muted", true, false],
+      ["combatVoices", false, true],
+      ["dialogueVolume", 0, 1],
+    ]) {
+      const s = await server();
+      const reserved = deferred();
+      const release = deferred();
+      const c = client(s);
+      const post = c.host._postJson;
+      const reservations = [];
+      let failures = 0;
+      c.host._postJson = async (path, body) => {
+        const result = await post(path, body);
+        if (path.endsWith("/fail")) failures++;
+        if (path.endsWith("/reserve")) {
+          reservations.push({ slot: body.slot, token: result.token });
+          if (reservations.length === 1) {
+            reserved.resolve();
+            await release.promise;
+          }
+        }
+        return result;
+      };
+      const preparing = c.controller.warm([actor]);
+      await reserved.promise;
+      c.audio.settings[setting] = paused;
+      if (setting === "combatVoices") s.run.audio.combatVoices = false;
+      c.controller.configure();
+      release.resolve();
+      await tick();
+      assert.equal(c.synthesis, 0, "A reserved token alone never authorizes synthesis while paused");
+      assert.equal(failures, 0, "An unspent token stays on the same job instead of being marked failed");
+      c.audio.settings[setting] = resumed;
+      s.run.audio.combatVoices = true;
+      c.controller.configure();
+      await preparing;
+      assert.equal(c.synthesis, 4);
+      assert.equal(reservations.length, 4, "Each fixed slot is reserved once, including the held first slot");
+      assert.equal(failures, 0);
+      assert.equal(c.prompts, 0);
+      assert.equal(
+        c.stage.children.some((element) => !element.hidden),
+        false,
+      );
+      await c.controller.warm([actor]);
+      assert.equal(c.synthesis, 4);
+      assert.equal(s.generations, 1);
+    }
+  });
+  await test("disposal and a stale run release held waiters without synthesis or automatic recovery charges", async () => {
+    for (const reason of ["dispose", "stale-run"]) {
+      const s = await server();
+      const reserved = deferred();
+      const release = deferred();
+      const c = client(s);
+      const post = c.host._postJson;
+      c.host._postJson = async (path, body) => {
+        const result = await post(path, body);
+        if (path.endsWith("/reserve")) {
+          reserved.resolve();
+          await release.promise;
+        }
+        return result;
+      };
+      const preparing = c.controller.warm([actor]);
+      await reserved.promise;
+      c.audio.settings.muted = true;
+      c.controller.configure();
+      release.resolve();
+      await tick();
+      if (reason === "dispose") c.controller.dispose();
+      else {
+        c.host._run = { runId: "other", combat: { mode: "formation" } };
+        c.controller.configure();
+      }
+      await preparing;
+      assert.equal(c.synthesis, 0);
+      assert.equal(
+        c.stage.children.some((element) => !element.hidden),
+        false,
+      );
+      const reopened = client(s);
+      await reopened.controller.warm([actor]);
+      assert.equal(reopened.synthesis, 0, "A lost controller retains conservative explicit reservation recovery");
+    }
+  });
+  await test("a genuine provider error during mute still requires explicit paid retry after unmute", async () => {
+    const s = await server();
+    const started = deferred();
+    const gate = deferred();
+    let calls = 0;
+    let confirm = false;
+    const c = client(s, {
+      generateAudio: async () => {
+        if (++calls === 1) {
+          started.resolve();
+          await gate.promise;
+          throw new Error("fixture provider failure during mute");
+        }
+        return new Blob([wav]);
+      },
+      confirm: () => confirm,
+    });
+    const preparing = c.controller.warm([actor]);
+    await started.promise;
+    c.audio.settings.muted = true;
+    c.controller.configure();
+    gate.resolve();
+    await preparing;
+    c.audio.settings.muted = false;
+    c.controller.configure();
+    await c.controller.warm([actor]);
+    assert.equal(c.synthesis, 1, "Unmute never automatically retries a genuinely failed provider attempt");
+    assert.equal(c.stage.children[0].hidden, false);
+    const retry = c.stage.children[0].children[1];
+    await retry.listeners.click({ stopPropagation() {} });
+    assert.equal(c.synthesis, 1);
+    assert.equal(c.prompts, 1);
+    confirm = true;
+    await retry.listeners.click({ stopPropagation() {} });
+    assert.equal(c.synthesis, 5);
+    assert.equal(c.stage.children[0].hidden, true);
+  });
   await test("failed paid work stays silent until a warning is accepted; saved clips survive retry", async () => {
     const s = await server();
     let calls = 0;

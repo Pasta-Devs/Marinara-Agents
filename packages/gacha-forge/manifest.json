@@ -299,8 +299,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "34af380e87852c458c6117ce0442f5fc6c02dca86f30ea7283f1fb53c8d372e7",
-      "bytes": 1710210
+      "sha256": "a3dc0ca8ca50e76953e45c325046a7a93ac0cd978a6e3b33846d3a3a70c1e20f",
+      "bytes": 1712114
     },
     {
       "path": "farm-asc.webp",
@@ -774,8 +774,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "4876c5dd3d6944cf84175e35c937e5a90c976aef940de2a257e712682643efc5",
-      "bytes": 824007
+      "sha256": "e795a280dcb93904a22fcc878f0f54155a28174a053718e3bef8f0eec0e02de2",
+      "bytes": 824031
     },
     {
       "path": "skill-aoe_damage-dark.webp",
@@ -1569,8 +1569,8 @@
     },
     {
       "path": "src/combat-voices-client.mjs",
-      "sha256": "fd90c36d89959aa78ad3bc362d9f58dde91088bdd89513679f06a7732e743dfa",
-      "bytes": 11709
+      "sha256": "1d461cd3b311749b2274de0156f2511c3713d3db03c8731e3f4bb514d7a58a09",
+      "bytes": 12713
     },
     {
       "path": "src/combat-voices-en.mjs",

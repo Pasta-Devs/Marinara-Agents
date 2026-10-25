@@ -6272,6 +6272,11 @@ const forgeEventEscape = (value) =>
   );
 const forgeEventT = (key) => forgeSeasonalEnglish[key] || key;
 const forgeEventChapter = (value) => typeof value === "string" && /^event-[1-9]\d{0,8}$/u.test(value);
+const forgeEventWindow = (event) => `${event.seq}:${event.endsAt}`;
+const forgeSeasonalNow = (host) => {
+  const sample = host._forgeSeasonalServerTime;
+  return sample ? sample.now + Math.max(0, Date.now() - sample.loadedAt) : Date.now();
+};
 const forgeSeasonalRouteMap = {
   "/chapter-plan": "/story-event/plan",
   "/beat": "/story-event/beat",
@@ -6300,6 +6305,8 @@ function prepareForgeSeasonalEvents(host) {
     host._forgeSeasonalRevision = (host._forgeSeasonalRevision || 0) + 1;
     host._forgeSeasonalState = null;
     host._forgeSeasonalLoading = false;
+    host._forgeSeasonalExpired = new Set();
+    host._forgeSeasonalServerTime = null;
     if (host._forgeEvent?.runId !== runId) host._forgeEvent = null;
   }
   const available =
@@ -6325,7 +6332,15 @@ async function loadForgeSeasonalEvents(host, retry = false) {
   if (host._run?.runId !== runId || host._forgeSeasonalRevision !== revision) return;
   host._forgeSeasonalLoading = false;
   host._forgeSeasonalLoadedAt = Date.now();
+  host._forgeSeasonalServerTime =
+    Number.isFinite(result?.serverNow) && result.serverNow > 0
+      ? { now: result.serverNow, loadedAt: host._forgeSeasonalLoadedAt }
+      : null;
   host._forgeSeasonalState = result?.ok ? result : { events: [], error: true };
+  // A reconciled live window may refresh once again when the server's actual deadline arrives.
+  if (host._forgeSeasonalServerTime)
+    for (const event of result?.events || [])
+      if (event.live && result.serverNow < event.endsAt) host._forgeSeasonalExpired?.delete(forgeEventWindow(event));
   host._eventsRev = (host._eventsRev || 0) + 1;
   prepareForgeSeasonalEvents(host);
   host._renderBrowser();
@@ -6409,17 +6424,13 @@ function wireForgeSeasonalEvents(host) {
     void loadForgeSeasonalEvents(host);
   const state = host._forgeSeasonalState,
     events = state?.events || [];
-  if (
-    !host._forgeSeasonalLoading &&
-    host._run.story?.seasonalEvents === true &&
-    events.some((event) => event.live && Date.now() >= event.endsAt)
-  ) {
-    // Consume this expiry edge once. A failed preparation remains an explicit retry.
-    for (const event of events)
-      if (Date.now() >= event.endsAt) {
-        event.live = false;
-        event.archived = true;
-      }
+  const expired = (host._forgeSeasonalExpired ||= new Set());
+  const due = events.filter(
+    (event) => event.live && forgeSeasonalNow(host) >= event.endsAt && !expired.has(forgeEventWindow(event)),
+  );
+  if (!host._forgeSeasonalLoading && host._run.story?.seasonalEvents === true && due.length) {
+    // Consume this window's edge before loading; a stale live response cannot start a render loop.
+    for (const event of due) expired.add(forgeEventWindow(event));
     void loadForgeSeasonalEvents(host);
   }
   if (host._hudView === "events" && host._eventId === "story-events") {
@@ -6467,7 +6478,7 @@ function wireForgeSeasonalEvents(host) {
   }
   if (host._forgeEvent && forgeEventChapter(host._planChapter)) {
     for (const button of root.querySelectorAll("[data-diff]")) button.hidden = true;
-    if (Date.now() >= host._forgeEvent.endsAt || host._run.story?.seasonalEvents !== true) {
+    if (forgeSeasonalNow(host) >= host._forgeEvent.endsAt || host._run.story?.seasonalEvents !== true) {
       for (const button of root.querySelectorAll("[data-play], [data-start]")) button.disabled = true;
       const notice = root.querySelector(".cap-scroll .notice");
       if (notice) {
@@ -8132,6 +8143,7 @@ function createForgeCombatVoiceController({
           if (!enabled() || job.controller.signal.aborted) return;
           if (clip.state !== "missing" && !retry) throw new Error("Combat voice retry requires confirmation");
           const reserved = await post("/combat-voices/reserve", { ...request, slot, retry });
+          if (!reserved?.ok && !enabled()) return;
           if (!reserved?.ok) throw new Error("Combat voice reservation unavailable");
           if (reserved.cached && forgeCombatClipUrl.test(reserved.url || "")) {
             clips.set(slot, reserved.url);
@@ -8139,6 +8151,19 @@ function createForgeCombatVoiceController({
           }
           if (typeof reserved.token !== "string") throw new Error("Invalid combat voice reservation");
           try {
+            // Keep an unspent reservation on this job while muted; a new token could repeat paid work.
+            while (active() && !enabled() && !job.controller.signal.aborted) {
+              await new Promise((resolve) => {
+                const resume = () => {
+                  if (job.resume === resume) delete job.resume;
+                  job.controller.signal.removeEventListener("abort", resume);
+                  resolve();
+                };
+                job.resume = resume;
+                job.controller.signal.addEventListener("abort", resume, { once: true });
+                if (!active() || enabled() || job.controller.signal.aborted) resume();
+              });
+            }
             if (!enabled() || job.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
             const blob = await services.tts.ttsService.generateAudio(clip.text, {
               speaker: actor.name,
@@ -8178,6 +8203,7 @@ function createForgeCombatVoiceController({
   };
   async function warm(actors, retry = false) {
     if (!enabled()) return;
+    for (const job of jobs.values()) job.resume?.();
     const candidates = actors.filter((actor) => actor?.id && actor.characterId);
     if (!candidates.length) return;
     try {
@@ -8195,7 +8221,10 @@ function createForgeCombatVoiceController({
     configure() {
       if (!enabled()) {
         ++voiceRevision;
-        for (const job of jobs.values()) job.controller.abort();
+        // Muting pauses new requests. Finish and save an already paid clip instead of forcing a paid retry.
+        if (!active()) for (const job of jobs.values()) job.controller.abort();
+      } else {
+        for (const job of jobs.values()) job.resume?.();
       }
       player?.setVolumes({ music: 0, sfx: audio.settings?.dialogueVolume ?? 1 });
       player?.setMuted(!enabled());

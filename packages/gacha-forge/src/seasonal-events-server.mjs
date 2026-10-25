@@ -288,6 +288,7 @@ export function createForgeSeasonalEvents({
     }
     return {
       ok: true,
+      serverNow: now(),
       enabled: forgeSeasonalEnabled(run),
       events,
       boundary,
