@@ -22,6 +22,9 @@ import {
   slurpLivePrivateOffersDue,
   slurpLiveAudienceTipDue,
   slurpLivePictureTriggers,
+  slurpLiveActLines,
+  slurpLiveShotText,
+  type SlurpLiveLine,
   type SlurpLiveShow,
 } from "../../modules/live/slp-live.js";
 import { runLiveModel } from "./slp-live-model.js";
@@ -29,7 +32,7 @@ import { logger } from "../../../lib/logger.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { slurpLiveReplyPrompt, slurpLiveSegmentPrompt } from "../../modules/live/slp-live-prompt.js";
 import { slurpLivePhase } from "../../modules/live/slp-live.js";
-import { slurpLiveRoomPatch, type SlurpLiveRoom } from "../../modules/live/slp-live-room.js";
+import { slurpLiveRoomPatch, type SlurpLiveRoomPatch } from "../../modules/live/slp-live-room.js";
 import { createSlurpEventsStorage } from "../../data/notifications/slp-notification-storage.js";
 import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
@@ -431,10 +434,12 @@ async function advanceShowNow(db: DB, show: SlurpLiveShow, settings: any, at: Da
               .map((event) => `${event.name}: ${event.amount}`),
           });
   const callStarted = Date.now();
-  let roomPatch: Partial<SlurpLiveRoom> = {};
+  let roomPatch: SlurpLiveRoomPatch = {};
+  let actLines: SlurpLiveLine[] = [];
   const lines = creator
     ? await runLiveModel(db, settings, creator.displayName, "main", minutes, prompt, "segment", (parsed) => {
         roomPatch = slurpLiveRoomPatch(parsed);
+        actLines = slurpLiveActLines(parsed, 0);
       })
     : [];
   const elapsed = at.getTime() + (Date.now() - callStarted) - Date.parse(show.startedAt);
@@ -442,7 +447,7 @@ async function advanceShowNow(db: DB, show: SlurpLiveShow, settings: any, at: Da
     show.id,
     index,
     lease,
-    lines.map((line) => ({
+    [...actLines, ...lines].map((line) => ({
       ...line,
       personaId: privateActive ? current.private?.personaId : undefined,
       private: privateActive,
@@ -691,6 +696,7 @@ async function makeLivePictures(db: DB, show: SlurpLiveShow, personaId: string, 
         brief: slurpLivePictureBrief({
           hostName: creator.displayName,
           trigger,
+          shot: slurpLiveShotText(show, trigger),
           menuLabel: trigger.startsWith("menu:")
             ? show.queue.find((order) => order.requestId === trigger.slice("menu:".length))?.label
             : undefined,

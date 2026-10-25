@@ -19,7 +19,8 @@ const spiceBlock = (input: LiveSpice) =>
 
 const LINE_FORMAT =
   'Answer with JSON only: {"lines":[{"at":<ms from the segment start, 0-239000, rising>,"kind":"narration"|"reaction"|"crowd","name":<crowd lines only: a short fan handle>,"text":<one line>}]}. ' +
-  "narration = what she says or does on camera, first person, live-stream chat style; reaction = her quick reply to a fan, a tip or a menu buy; crowd = a fan's chat line.";
+  'narration = what she says and does on camera, first person, live-stream style. Her spoken words go in "double quotes", her actions between *asterisks*, for example: *leans into the ring light, lowers her voice* "Okay, who asked for slow? Because I heard slow." ' +
+  "reaction = her quick reply to a fan, a tip or a menu buy, same style; crowd = a fan's chat line, plain text.";
 
 /** One 4-minute segment of her show while somebody watches. */
 export function slurpLiveSegmentPrompt(
@@ -40,19 +41,33 @@ export function slurpLiveSegmentPrompt(
   } & LiveSpice,
 ): string {
   const last = input.totalSegments !== undefined && input.segmentIndex >= input.totalSegments - 1;
+  const goal = input.room?.goal;
+  const secondGoal = input.room?.secondGoal;
   return [
-    `You are ${input.hostName}, live on camera on your fan page. This is minute ${input.minutes} of the show (segment ${input.segmentIndex + 1}${input.totalSegments ? ` of ${input.totalSegments}` : ""}).`,
+    `You are ${input.hostName}, live on camera on your fan page. This is minute ${input.minutes} of the show (segment ${input.segmentIndex + 1}${input.totalSegments ? ` of ${input.totalSegments}` : ""}). You are a streamer who knows how to hold a room: you talk to the camera, read names off the chat, laugh at your own jokes, and never let a minute go flat.`,
     spiceBlock(input),
     ...slurpLiveRoomLines(input.room ?? { shown: [], promises: [], refused: [], jokes: [] }, !!input.goalReached),
     input.segmentIndex === 0
-      ? "Open the show: say hi to the room, tease what is coming, point at the tip menu."
+      ? "Open the show: say hi to the room by name, tell them what tonight is, tease what is coming, point at the tip menu. Set the scene: where you sit, what you wear, how the light falls."
       : last
-        ? "This is the finale: about 90 seconds before the end make a last call for tips, then give the room the big payoff it paid for, thank the top tippers and say goodbye."
+        ? "This is the finale: about 90 seconds before the end make a last call for tips, then give the room the biggest payoff it paid for, thank the top tippers by name and say goodbye like you mean it."
         : input.secondReached
           ? "Both tip goals are reached: give the room everything you promised for the rest of the show."
           : input.goalReached
             ? `The tip goal is reached: turn the heat up a step and tease the second goal${input.secondGoal ? ` of ${input.secondGoal} coins` : ""}.`
             : "Keep the room going: build toward the tip goal, react to the chat, nudge the menu.",
+    input.segmentIndex > 0
+      ? "Go one step further than the last segment, inside the spice level above: a new piece of clothing, a new pose, a new spot in the room, a new game with the chat, a new tone of voice. A beat that already happened is not allowed to happen again."
+      : "",
+    goal
+      ? input.goalReached
+        ? `The goal on screen was: "${goal}". It is hit. Do it now, on camera, in full, and make the room feel they earned it.`
+        : `The goal on screen is: "${goal}". Keep that promise: tease it, count down to it, and when the goal is hit you do exactly that.`
+      : 'No goal is on screen yet. Name one in "goalReward": what you will do when the tip goal is hit, short and specific, something the room wants.',
+    secondGoal && input.goalReached ? `The second goal promises: "${secondGoal}". Keep teasing it.` : "",
+    input.goalReached && !secondGoal
+      ? 'The first goal is hit, so name a bigger reward for the second goal in "goalReward", one step past the first.'
+      : "",
     input.queuedMenuLabels.length
       ? `Menu items bought and waiting, do each one on camera in this segment, in order, describing it as you do it: ${input.queuedMenuLabels.join("; ")}.`
       : "",
@@ -61,12 +76,13 @@ export function slurpLiveSegmentPrompt(
       ? `Chat lines to answer (reply to each with a reaction line): ${input.recentPlayerChatLines.join(" | ")}.`
       : "",
     input.fans?.length ? `Fans in the room you can name: ${input.fans.join(", ")}.` : "",
-    "Write 8-14 lines spread over the segment: mostly narration and reactions, 2-4 crowd lines. Short lines, emojis welcome, no stage directions in brackets.",
+    "Write 14-20 narration lines, one about every 12-15 seconds across the segment, so the camera is never quiet. Each line is a moment: something she says, something she does, something she notices. Mix spoken words and *actions*, and make the details sensory: fabric, light, skin, sound, breath. Add 4-8 short crowd lines in between: fans' reactions, emojis welcome, no stage directions in brackets.",
     LINE_FORMAT,
+    'Also add to the JSON, next to "lines": "act" = the title of this segment on stage, 2-6 words (for example "Ring light, slow tease"); "shot" = one sentence of what the camera sees right now, so it can be drawn: outfit, pose, place in the room, light, consistent with what is already on camera; and "goalReward" = what you do when the current goal is hit, short, only if the prompt above asks for one.',
     input.goalReached
       ? ""
       : 'Add "requires":"goal-open" to lines that only make sense before the goal is hit (counting down, begging for the last coins).',
-    'Also add to the JSON: "did": the new things she did or showed on camera this segment, 2-6 words each; "promise": what she promises the room for the goal, or ""; "joke": a running joke that started in chat, or "".',
+    'Also add to the JSON: "did" = the new things you did or showed on camera this segment, 2-6 words each; "promise" = what you promise the room for the goal, or ""; "joke" = a running joke that started in chat, or "".',
   ]
     .filter(Boolean)
     .join("\n");

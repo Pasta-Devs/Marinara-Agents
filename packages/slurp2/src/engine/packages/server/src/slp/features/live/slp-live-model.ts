@@ -63,7 +63,7 @@ export async function runLiveModel(
           maxTokens: clampGenerationMaxOutputTokens({
             provider: connection.provider,
             model: connection.model,
-            maxTokens: kind === "reply" ? 300 : 2048,
+            maxTokens: kind === "reply" ? 300 : kind === "segment" ? 4096 : 2048,
             maxTokensOverride: connection.maxTokensOverride,
           }),
           stream: false,

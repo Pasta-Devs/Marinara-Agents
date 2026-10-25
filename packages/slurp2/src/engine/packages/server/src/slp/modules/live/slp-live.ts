@@ -2,7 +2,8 @@ import { slurpFanTypeWeeklyBudget, type SlurpFanType } from "../../../../../shar
 import { slurpLiveRoomRewind, type SlurpLiveRoom } from "./slp-live-room.js";
 
 export type SlurpLivePhase = "warmup" | "main" | "finish";
-export type SlurpLiveLineKind = "narration" | "crowd" | "reaction" | "picture";
+/** `act` is a segment's title on stage; `shot` is the segment's camera brief, server only (never sent to viewers). */
+export type SlurpLiveLineKind = "narration" | "crowd" | "reaction" | "picture" | "act" | "shot";
 export type SlurpLiveEventKind = "tip" | "chat";
 export type SlurpLiveMenuItem = { id: string; label: string; price: number; picture: boolean };
 export type SlurpLiveOrder = {
@@ -113,6 +114,21 @@ export function slurpLivePrivateUntil(current: SlurpLivePrivate | null, personaI
   return new Date(base + 10 * 60_000).toISOString();
 }
 
+/** Pictures one viewer can have per show. */
+export const SLURP_LIVE_PICTURE_CAP = 12;
+
+/** A viewer starts in pictures mode when the show allows pictures and nobody else holds that mode. */
+export function slurpLivePicturesFree(
+  show: Pick<SlurpLiveShow, "picturesAllowed" | "pictureViewers" | "pictureViewerId">,
+  personaId: string,
+): boolean {
+  return (
+    show.picturesAllowed &&
+    !(show.pictureViewers ?? []).some((item) => item.mode === "pictures" && item.personaId !== personaId) &&
+    (!show.pictureViewerId || show.pictureViewerId === personaId)
+  );
+}
+
 export function slurpLivePictureTriggers(show: SlurpLiveShow, personaId: string, at: Date): string[] {
   const viewer = (show.pictureViewers ?? []).find((item) => item.personaId === personaId);
   const pictureViewer =
@@ -136,14 +152,34 @@ export function slurpLivePictureTriggers(show: SlurpLiveShow, personaId: string,
       show.menu.some((entry) => entry.id === item.itemId && entry.picture),
   ))
     triggers.push(`menu:${order.requestId}`);
+  // Her camera brief for the current segment: one picture per segment, once the shot is on screen.
+  const segmentStart = slurpLiveSegmentIndex(show, at) * SLURP_LIVE_SEGMENT_MS;
+  const elapsedMs = at.getTime() - Date.parse(show.startedAt);
+  if (
+    show.script.some(
+      (line) =>
+        line.kind === "shot" &&
+        line.at >= segmentStart &&
+        line.at < segmentStart + SLURP_LIVE_SEGMENT_MS &&
+        line.at <= elapsedMs &&
+        (!line.personaId || line.personaId === personaId),
+    )
+  )
+    triggers.push(`shot:${slurpLiveSegmentIndex(show, at)}`);
   if (show.private?.personaId === personaId && Date.parse(show.private.until) > at.getTime())
     triggers.push(`private:${show.private.block}`);
   const used = show.pictures.filter((picture) => picture.personaId === personaId);
   return (
     triggers
       .filter((trigger) => !used.some((picture) => picture.trigger === trigger))
-      // A goal picture still hidden (goal not hit) does not take one of the 6 slots.
-      .slice(0, Math.max(0, 6 - used.filter((picture) => picture.trigger !== "goal" || show.goalHitAt).length))
+      // A goal picture still hidden (goal not hit) does not take one of the 12 slots.
+      .slice(
+        0,
+        Math.max(
+          0,
+          SLURP_LIVE_PICTURE_CAP - used.filter((picture) => picture.trigger !== "goal" || show.goalHitAt).length,
+        ),
+      )
   );
 }
 
@@ -153,12 +189,19 @@ export function slurpLiveForViewer(show: SlurpLiveShow, personaId: string | null
   const goalHit = show.goalHitAt ? Date.parse(show.goalHitAt) - Date.parse(show.startedAt) : null;
   const pictureViewers = show.pictureViewers ?? [];
   const pictureViewer = pictureViewers.find((item) => item.personaId === personaId);
-  const pictureMode = pictureViewer?.mode ?? (show.pictureViewerId === personaId ? show.mode : "text");
+  const pictureMode =
+    pictureViewer?.mode ??
+    (show.pictureViewerId === personaId
+      ? show.mode
+      : personaId && slurpLivePicturesFree(show, personaId)
+        ? "pictures"
+        : "text");
   const pictureModeBusy =
     pictureViewers.some((item) => item.mode === "pictures" && item.personaId !== personaId) ||
     (!!show.pictureViewerId && show.pictureViewerId !== personaId);
   return {
     ...show,
+    room: { ...show.room, before: undefined },
     private: isPrivate
       ? {
           personaId: privateViewer ? show.private!.personaId : "",
@@ -176,6 +219,7 @@ export function slurpLiveForViewer(show: SlurpLiveShow, personaId: string | null
     script: show.script
       .filter(
         (line) =>
+          line.kind !== "shot" &&
           (!line.personaId || line.personaId === personaId) &&
           (!isPrivate || privateViewer || !line.personaId) &&
           !(line.requires === "goal-open" && goalHit !== null && line.at >= goalHit) &&
@@ -485,6 +529,25 @@ export function slurpLiveParseLines(value: unknown): SlurpLiveLine[] {
       },
     ];
   });
+}
+
+/** The segment's stage title and camera brief, stored as script lines at its start. */
+export function slurpLiveActLines(parsed: unknown, at: number): SlurpLiveLine[] {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return [];
+  const item = parsed as Record<string, unknown>;
+  return (["act", "shot"] as const).flatMap((kind) => {
+    const text =
+      typeof item[kind] === "string" ? (item[kind] as string).trim().slice(0, kind === "act" ? 60 : 300) : "";
+    return text ? [{ at, kind, text }] : [];
+  });
+}
+
+/** The camera brief of the segment a `shot:<n>` picture trigger names. */
+export function slurpLiveShotText(show: Pick<SlurpLiveShow, "script">, trigger: string): string | undefined {
+  if (!trigger.startsWith("shot:")) return undefined;
+  const index = Number(trigger.slice(5));
+  return show.script.find((line) => line.kind === "shot" && Math.floor(line.at / SLURP_LIVE_SEGMENT_MS) === index)
+    ?.text;
 }
 
 export function slurpLiveScriptFailed(lines: readonly SlurpLiveLine[]): boolean {

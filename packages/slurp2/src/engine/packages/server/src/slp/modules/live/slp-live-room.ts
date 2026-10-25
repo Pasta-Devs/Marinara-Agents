@@ -1,12 +1,17 @@
 /** The show's memory: what she already did on camera, what she promised, refused and keeps joking about. */
 export type SlurpLiveRoomLists = { shown: string[]; promises: string[]; refused: string[]; jokes: string[] };
 /** `before` is the ledger as it was before the last segment was written, so a dropped segment can be undone. */
-export type SlurpLiveRoom = SlurpLiveRoomLists & { before?: SlurpLiveRoomLists & { index: number } };
+/** `goal` / `secondGoal`: what she does when that tip goal is reached, shown on the goal bar. */
+export type SlurpLiveRoom = SlurpLiveRoomLists & {
+  before?: SlurpLiveRoomLists & { index: number; goal?: string; secondGoal?: string };
+  goal?: string;
+  secondGoal?: string;
+};
 
 const LIMITS: Record<keyof SlurpLiveRoomLists, number> = { shown: 12, promises: 3, refused: 8, jokes: 4 };
 
 export function slurpLiveParseRoom(value: string | null | undefined): SlurpLiveRoom {
-  let parsed: Partial<Record<keyof SlurpLiveRoomLists | "before", unknown>> = {};
+  let parsed: Record<string, unknown> = {};
   try {
     parsed = value ? JSON.parse(value) : {};
   } catch {
@@ -16,7 +21,16 @@ export function slurpLiveParseRoom(value: string | null | undefined): SlurpLiveR
     Array.isArray(parsed[key])
       ? (parsed[key] as unknown[]).filter((item): item is string => typeof item === "string")
       : [];
-  const lists = { shown: list("shown"), promises: list("promises"), refused: list("refused"), jokes: list("jokes") };
+  const text = (key: "goal" | "secondGoal") =>
+    typeof parsed[key] === "string" && parsed[key] ? { [key]: (parsed[key] as string).slice(0, 80) } : {};
+  const lists = {
+    shown: list("shown"),
+    promises: list("promises"),
+    refused: list("refused"),
+    jokes: list("jokes"),
+    ...text("goal"),
+    ...text("secondGoal"),
+  };
   const before = parsed.before as { index?: unknown } | undefined;
   return before && typeof before.index === "number"
     ? { ...lists, before: { ...slurpLiveParseRoom(JSON.stringify(before)), index: before.index } }
@@ -30,19 +44,26 @@ export function slurpLiveRoomRewind(room: SlurpLiveRoom, index: number): SlurpLi
   return { ...lists, refused: room.refused };
 }
 
+export type SlurpLiveRoomPatch = Partial<SlurpLiveRoomLists> & { goal?: string };
+
 /** Reads the model's `did`, `promise` and `joke` fields from a segment answer. */
-export function slurpLiveRoomPatch(parsed: unknown): Partial<SlurpLiveRoomLists> {
+export function slurpLiveRoomPatch(parsed: unknown): SlurpLiveRoomPatch {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
   const item = parsed as Record<string, unknown>;
   const strings = (value: unknown) =>
     (Array.isArray(value) ? value : [value]).filter((entry): entry is string => typeof entry === "string");
-  return { shown: strings(item.did), promises: strings(item.promise), jokes: strings(item.joke) };
+  return {
+    shown: strings(item.did),
+    promises: strings(item.promise),
+    jokes: strings(item.joke),
+    ...(typeof item.goalReward === "string" && item.goalReward.trim() && { goal: item.goalReward.trim().slice(0, 80) }),
+  };
 }
 
 /** Adds new entries once (case-insensitive), newest kept; `keptPromises` clears promises paid off at the goal. */
 export function slurpLiveMergeRoom(
   room: SlurpLiveRoom,
-  patch: Partial<SlurpLiveRoomLists>,
+  patch: SlurpLiveRoomPatch,
   keptPromises = false,
 ): SlurpLiveRoomLists {
   const merge = (key: keyof SlurpLiveRoomLists, base: string[]) => {
@@ -52,7 +73,13 @@ export function slurpLiveMergeRoom(
       .filter((entry) => entry && !seen.has(entry.toLowerCase()) && seen.add(entry.toLowerCase()));
     return [...base, ...added].slice(-LIMITS[key]);
   };
+  // The first reward the model names is the goal; once it is hit, the next new one is the second goal.
+  const secondGoal =
+    room.secondGoal ?? (keptPromises && room.goal && patch.goal && patch.goal !== room.goal ? patch.goal : undefined);
+  const goal = room.goal ?? patch.goal;
   return {
+    ...(goal && { goal }),
+    ...(secondGoal && { secondGoal }),
     shown: merge("shown", room.shown),
     promises: merge("promises", keptPromises ? [] : room.promises),
     refused: merge("refused", room.refused),

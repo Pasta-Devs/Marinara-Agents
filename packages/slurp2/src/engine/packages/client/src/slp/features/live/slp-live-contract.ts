@@ -1,6 +1,6 @@
 export type SlpLiveLine = {
   at: number;
-  kind: "narration" | "crowd" | "reaction" | "picture";
+  kind: "narration" | "crowd" | "reaction" | "picture" | "act";
   name?: string;
   text: string;
   mediaId?: string;
@@ -24,8 +24,17 @@ export type SlpLiveOrder = {
   personaId?: string;
   at: number;
   served: boolean;
+  /** The segment that performs it once `served`. */
+  servedIn?: number;
   requestId: string;
   status?: "pending" | "paid";
+};
+/** The show's memory (server `SlurpLiveRoom`): what she showed, promised, and what each goal unlocks. */
+export type SlpLiveRoomState = {
+  shown: string[];
+  promises: string[];
+  goal?: string;
+  secondGoal?: string;
 };
 export type SlpLiveShow = {
   id: string;
@@ -55,6 +64,7 @@ export type SlpLiveShow = {
   privatePrice?: number;
   picturesAllowed?: boolean;
   viewers?: number;
+  room?: SlpLiveRoomState;
 };
 export type SlpLiveShowResponse = SlpLiveShow;
 

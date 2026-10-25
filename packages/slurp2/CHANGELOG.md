@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 0.4.11 — 2026-10-25
+
+- Show-first live: each segment answer adds `act` (stage title), `shot` (camera brief, never sent to viewers) and `goalReward` (kept as `room.goal` / `room.secondGoal`). 14-20 narration lines per segment with `*actions*` and quoted speech; segment answers get 4096 tokens.
+- Pictures: `shot:<n>` trigger draws the segment's shot while someone watches; pictures mode is the default when allowed and free; cap 12 per viewer.
+- Stage fills the phone screen: current shot with a slow drift, act title, goal reward, shown-so-far strip, subtitle box, Now/Next order pills, her replies on stage. Chat is an overlay with a full-chat sheet.
+
 ## 0.4.10 — 2026-10-24
 
 - Live page redesign: new `SlpLiveStage` (newest live picture or a glowing avatar on a blurred backdrop, LIVE dot, viewers, time left, caption of her latest line, crown for the top tipper, gradient goal bar). Tip and goal banners pop on stage; big tips (a quarter of the goal) shine.
