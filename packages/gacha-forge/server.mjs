@@ -1043,6 +1043,7 @@ function logForgeStoryPrompt(runtime, label, messages, options = {}) {
     runtime?.isDebugAgentsEnabled?.() === true ||
     /^(1|true)$/iu.test(process.env.DEBUG_AGENTS || "");
   const logger = runtime?.logger;
+  if (!override && logger?.isLevelEnabled?.("debug") === false) return;
   const format = "[debug/gacha-forge/%s] Messages sent to the provider: %s";
   if (typeof logger?.debugOverride === "function") {
     logger.debugOverride(override, format, label, JSON.stringify(messages));
