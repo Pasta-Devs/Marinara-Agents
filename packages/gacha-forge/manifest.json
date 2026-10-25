@@ -299,8 +299,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "8e5d6f2e9f0c128f72d849339d386aa0b2200d1d17cc9b1c240983f74634b735",
-      "bytes": 1691832
+      "sha256": "efcc6de50baff3c2aeb4560d597513716c70ac7f0fb51901310fb9b3901d6943",
+      "bytes": 1691834
     },
     {
       "path": "farm-asc.webp",
@@ -1529,8 +1529,8 @@
     },
     {
       "path": "src/formation-combat-client.mjs",
-      "sha256": "17b3f95af1101c59ef58ebdb0d994e93e35be6a4dcc628b95c69b4ef56b6625f",
-      "bytes": 13683
+      "sha256": "aacc89373b159262f20e6cbd165a20c91b4a70fa9dfbb688510d4bc7db92ddd3",
+      "bytes": 13685
     },
     {
       "path": "src/formation-combat-en.mjs",
