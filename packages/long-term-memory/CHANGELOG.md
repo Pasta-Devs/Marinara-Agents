@@ -1,5 +1,13 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Blocked and running controls in Review and Sources stay reachable by keyboard, so the reason beside them can be read.
+- Memory Settings, the activation switch and the setup guide now follow the panel's width instead of the window, and the Vault and Debug lists fit a zoomed or short screen.
+- The retry and clear actions in Memory Settings are large enough to tap.
+- Typing in Review and the Memory Vault no longer rebuilds every row's text and the whole search index.
+- The activation switch's shadow follows the theme, and the success colour is documented at its measured contrast.
+
 ## 1.4.92 — 2026-10-25
 
 - Sources tells re-importing from the source apart from reloading the list: "Re-import from source" and "Reload list".
