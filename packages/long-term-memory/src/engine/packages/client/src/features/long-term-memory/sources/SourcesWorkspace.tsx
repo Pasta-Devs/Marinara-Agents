@@ -290,6 +290,7 @@ export default function SourcesWorkspace({
   const sourceScopeLabelId = useId();
   const importResultLabelId = useId();
   const importReasonId = useId();
+  const importLockId = useId();
   const reimportDescriptionId = `${importReasonId}-reimport`;
   const client = useQueryClient();
   const selectAllRef = useRef<HTMLInputElement>(null);
@@ -450,6 +451,13 @@ export default function SourcesWorkspace({
       : [defaultAvailabilityMode]);
   const availabilityReady = settingsQuery.isSuccess && effectiveAvailabilityModes.length > 0;
   const importDisabled = !availabilityReady || availabilitySaving || sourceTask.active?.status === "running";
+  const importActionProps = importDisabled
+    ? {
+        "aria-disabled": true,
+        ...(sourceTask.active?.status === "running" ? { "aria-describedby": importLockId } : {}),
+        className: "opacity-50",
+      }
+    : {};
   const reextractDisabled = extractingId !== null || !availabilityReady;
 
   const changeAvailabilityModes = async (nextModes: LtmMode[]) => {
@@ -571,7 +579,11 @@ export default function SourcesWorkspace({
   const destinationWait = (reasonId: string) =>
     currentDestinationScope
       ? {}
-      : ({ "aria-disabled": true, "aria-describedby": reasonId, className: "opacity-50" } as const);
+      : ({
+          "aria-disabled": true,
+          "aria-describedby": importDisabled ? `${importLockId} ${reasonId}` : reasonId,
+          className: "opacity-50",
+        } as const);
   // The destination panel sits in another pane below 72rem and starts collapsed: show its pane, open it and
   // put focus on its summary.
   const goToDestination = () => {
@@ -1471,7 +1483,7 @@ export default function SourcesWorkspace({
           <IconButton
             icon={FileInput}
             label={localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", { value1: row.title })}
-            disabled={importDisabled}
+            {...importActionProps}
             onClick={(event) => {
               stopRowAction(event);
               void runImport([row.sourceId]);
@@ -1536,7 +1548,7 @@ export default function SourcesWorkspace({
       {restoredRetryIds.length ? (
         <Button
           primary
-          disabled={importDisabled}
+          {...importActionProps}
           onClick={() =>
             void runImport(
               restoredRetryIds,
@@ -1717,6 +1729,7 @@ export default function SourcesWorkspace({
       </div>
       {/* Always mounted, so the lock is announced when a run starts. Dimmed controls stay focusable and say why. */}
       <p
+        id={importLockId}
         role="status"
         className={activeSourceTask ? "text-xs text-[var(--muted-foreground)]" : "sr-only"}
         data-ltm-import-lock="sources"
@@ -1779,7 +1792,7 @@ export default function SourcesWorkspace({
           {cancelledImport ? (
             <Button
               onClick={() => void runImport(cancelledImport.sourceIds, "import", cancelledImport)}
-              disabled={importDisabled}
+              {...importActionProps}
               data-ltm-source-action="retry-cancelled"
             >
               <RefreshCw aria-hidden="true" size="0.75rem" />
@@ -2051,7 +2064,8 @@ export default function SourcesWorkspace({
                       <div ref={lorebookBarRef} className={lorebookPrimaryActionsClass} data-ltm-source-primary-actions>
                         <Button
                           primary
-                          disabled={importDisabled || selectedBookImportIds.length === 0}
+                          disabled={selectedBookImportIds.length === 0}
+                          {...importActionProps}
                           {...destinationWait(importReasonId)}
                           onClick={() => {
                             if (currentDestinationScope)
@@ -2065,7 +2079,8 @@ export default function SourcesWorkspace({
                           })}
                         </Button>
                         <Button
-                          disabled={importDisabled || selectedBookRefreshIds.length === 0}
+                          disabled={selectedBookRefreshIds.length === 0}
+                          {...importActionProps}
                           {...destinationWait(importReasonId)}
                           onClick={() => {
                             if (currentDestinationScope)
@@ -2188,7 +2203,7 @@ export default function SourcesWorkspace({
                                             label={localizeUi("ui.longTermMemory.sourcesworkspace.importValue1", {
                                               value1: candidate.title,
                                             })}
-                                            disabled={importDisabled}
+                                            {...importActionProps}
                                             onClick={(event) => {
                                               stopRowAction(event);
                                               void runImport([candidate.sourceId]);
@@ -2474,7 +2489,7 @@ export default function SourcesWorkspace({
                         {selectedIds.size ? (
                           <Button
                             primary
-                            disabled={importDisabled}
+                            {...importActionProps}
                             {...destinationWait(`${importReasonId}-list`)}
                             onClick={() => {
                               if (currentDestinationScope) void runImport([...selectedIds]);
@@ -2487,7 +2502,7 @@ export default function SourcesWorkspace({
                         ) : null}
                         {selectedImportedIds.size ? (
                           <Button
-                            disabled={importDisabled}
+                            {...importActionProps}
                             {...destinationWait(`${importReasonId}-list`)}
                             onClick={() => {
                               if (currentDestinationScope) void runImport([...selectedImportedIds], "refresh");
@@ -2663,7 +2678,7 @@ export default function SourcesWorkspace({
                         {selectedIds.size ? (
                           <Button
                             primary
-                            disabled={importDisabled}
+                            {...importActionProps}
                             {...destinationWait(importReasonId)}
                             onClick={() => {
                               if (currentDestinationScope) void runImport([...selectedIds]);
@@ -2677,7 +2692,7 @@ export default function SourcesWorkspace({
                           </Button>
                         ) : selectedImportedIds.size ? (
                           <Button
-                            disabled={importDisabled}
+                            {...importActionProps}
                             {...destinationWait(importReasonId)}
                             onClick={() => {
                               if (currentDestinationScope) void runImport([...selectedImportedIds], "refresh");
@@ -2692,7 +2707,7 @@ export default function SourcesWorkspace({
                         ) : focusedFlatRow.status === "pending" || retryableIdSet.has(focusedFlatRow.sourceId) ? (
                           <Button
                             primary
-                            disabled={importDisabled}
+                            {...importActionProps}
                             {...destinationWait(importReasonId)}
                             onClick={() => {
                               if (currentDestinationScope) void runImport([focusedFlatRow.sourceId]);
@@ -2707,13 +2722,13 @@ export default function SourcesWorkspace({
                         ) : (
                           <>
                             <Button
-                              disabled={importing}
+                              {...importActionProps}
                               {...destinationWait(importReasonId)}
-                              aria-describedby={
+                              aria-describedby={`${
                                 currentDestinationScope
                                   ? reimportDescriptionId
                                   : `${reimportDescriptionId} ${importReasonId}`
-                              }
+                              }${importDisabled ? ` ${importLockId}` : ""}`}
                               onClick={() => {
                                 if (currentDestinationScope) void runImport([focusedFlatRow.sourceId], "refresh");
                               }}
@@ -2836,7 +2851,7 @@ export default function SourcesWorkspace({
                 {retryableIds.length ? (
                   <Button
                     primary
-                    disabled={importDisabled}
+                    {...importActionProps}
                     onClick={() => void runImport(retryableIds, "import", importResultContract ?? undefined)}
                     data-ltm-source-action="retry-failed"
                   >

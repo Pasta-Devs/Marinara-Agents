@@ -712,7 +712,16 @@ assert.match(
 );
 assert.match(workspace, /availabilitySavingRef\.current/u);
 assert.match(workspace, /availabilityDisabled=\{availabilitySaving \|\| !availabilityReady\}/u);
-assert.match(workspace, /disabled=\{importDisabled\}/u);
+assert.match(
+  workspace,
+  /const importActionProps = importDisabled\s+\? \{[\s\S]*?"aria-disabled": true,[\s\S]*?importLockId/u,
+);
+assert.match(workspace, /id=\{importLockId\}/u);
+assert.equal((workspace.match(/disabled=\{importDisabled\}/gu) ?? []).length, 0);
+assert.doesNotMatch(workspace, /disabled=\{importing\}/u);
+assert.match(workspace, /disabled=\{selectedBookImportIds\.length === 0\}/u);
+assert.match(workspace, /disabled=\{selectedBookRefreshIds\.length === 0\}/u);
+assert.match(workspace, /\.\.\.importActionProps/u);
 assert.match(workspace, /settingsQuery\.refetch\(\)/u);
 assert.equal(
   locale["ui.longTermMemory.sourcesworkspace.availabilitySettingsCouldNotLoad"],
@@ -780,6 +789,17 @@ assert.doesNotMatch(reviewQueue, /label\.replace\("\{\{value\}\}"/u);
 assert.match(reviewQueue, /preflightBlocked/u);
 assert.match(reviewQueue, /preflightSummary/u);
 assert.match(reviewQueue, /applyPreflighted/u);
+assert.match(
+  reviewQueue,
+  /const acceptDisabled = !eligibleIds\.has\(row\.mutation\.id\) \|\| !valid \|\| preflightBlocked/u,
+);
+assert.match(reviewQueue, /aria-disabled=\{acceptDisabled \|\| runBusy \|\| undefined\}/u);
+assert.match(reviewQueue, /if \(!runBusy && !acceptDisabled\) void runBatch\("accept", \[row\]\)/u);
+assert.match(reviewQueue, /const batchAcceptDisabled =/u);
+assert.match(reviewQueue, /aria-disabled=\{batchAcceptDisabled \|\| runBusy \|\| undefined\}/u);
+assert.match(reviewQueue, /if \(!runBusy && !batchAcceptDisabled\) void runBatch\("accept"\)/u);
+assert.doesNotMatch(reviewQueue, /disabled=\{!eligibleIds\.has\(row\.mutation\.id\)/u);
+assert.doesNotMatch(reviewQueue, /disabled=\{!eligibleSelectedRows\.length \|\| invalidSelectedEdits/u);
 assert.match(reviewQueue, /data-ltm-review-action/u);
 assert.match(reviewQueue, /reviewChangeForTitle/u);
 assert.match(reviewQueue, /applyChangeForTitle/u);
@@ -1013,6 +1033,11 @@ assert.doesNotMatch(sourceScopeCombobox, /\bdisabled=\{disabled\}/u);
 assert.match(availabilityTabRail, /aria-disabled=\{disabled \|\| undefined\}/u);
 assert.match(sourceScopeCombobox, /aria-disabled=\{disabled \|\| undefined\}/u);
 assert.match(sourceScopeCombobox, /const choose = \(id: string\) => \{\s+if \(disabled\) return;/u);
+assert.match(workspaceScreen, /disabled=\{isLastSelected\}/u);
+assert.match(workspaceScreen, /aria-disabled=\{availabilityDisabled \|\| disabled \|\| undefined\}/u);
+assert.match(workspaceScreen, /aria-describedby=\{disabled \? `\$\{labelId\}-lock` : undefined\}/u);
+assert.match(workspaceScreen, /if \(availabilityDisabled \|\| disabled\) return;/u);
+assert.doesNotMatch(workspaceScreen, /disabled=\{availabilityDisabled \|\| isLastSelected\}/u);
 
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, defaults, and scope loading ok\n",

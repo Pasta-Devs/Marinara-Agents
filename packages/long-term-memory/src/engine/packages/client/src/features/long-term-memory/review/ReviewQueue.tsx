@@ -956,6 +956,7 @@ export default function ReviewQueue({
     ),
   };
   const preflightApplyDisabled = result?.phase === "preflight" && result.ready === 0;
+  const batchAcceptDisabled = !eligibleSelectedRows.length || invalidSelectedEdits.length > 0 || preflightApplyDisabled;
   const runBusy = !reviewContextReady || running !== null;
 
   const clearPreflight = () => {
@@ -1641,6 +1642,7 @@ export default function ReviewQueue({
       ? preflight
       : undefined;
     const preflightBlocked = rowPreflight?.status === "blocked";
+    const acceptDisabled = !eligibleIds.has(row.mutation.id) || !valid || preflightBlocked;
     // The request key walks every row and serialises the edits, so it is built only for a row whose preflight
     // came back ready, not for every row on every keystroke.
     // ponytail: rows with a ready preflight still cost rows x rows per render; past a few hundred ready rows,
@@ -1836,13 +1838,12 @@ export default function ReviewQueue({
                 data-ltm-review-action={preflightReady ? "apply" : preflightBlocked ? "blocked" : "review"}
                 aria-label={rowActionLabel}
                 title={rowActionLabel}
-                className={`mari-editor-action ${preflightReady ? "mari-editor-action--primary" : ""} ${runBusy ? "opacity-50" : ""}`}
+                className={`mari-editor-action ${preflightReady ? "mari-editor-action--primary" : ""} ${acceptDisabled || runBusy ? "opacity-50" : ""}`}
                 style={{ minHeight: 44, minWidth: 44 }}
-                disabled={!eligibleIds.has(row.mutation.id) || !valid || preflightBlocked}
-                aria-disabled={runBusy || undefined}
+                aria-disabled={acceptDisabled || runBusy || undefined}
                 aria-describedby={acceptReason ? acceptReasonId : undefined}
                 onClick={() => {
-                  if (!runBusy) void runBatch("accept", [row]);
+                  if (!runBusy && !acceptDisabled) void runBatch("accept", [row]);
                 }}
               >
                 <Check data-ltm-review-action-icon aria-hidden="true" size="1rem" />
@@ -2727,12 +2728,11 @@ export default function ReviewQueue({
                 >
                   <Button
                     primary
-                    className={runBusy ? "opacity-50" : ""}
-                    disabled={!eligibleSelectedRows.length || invalidSelectedEdits.length > 0 || preflightApplyDisabled}
-                    aria-disabled={runBusy || undefined}
+                    className={batchAcceptDisabled || runBusy ? "opacity-50" : ""}
+                    aria-disabled={batchAcceptDisabled || runBusy || undefined}
                     aria-describedby={batchAcceptReason ? "ltm-review-batch-accept-reason" : undefined}
                     onClick={() => {
-                      if (!runBusy) void runBatch("accept");
+                      if (!runBusy && !batchAcceptDisabled) void runBatch("accept");
                     }}
                   >
                     {running === "accept"
