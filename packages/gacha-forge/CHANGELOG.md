@@ -1,3 +1,10 @@
+## 1.19.0 — 2026-10-25
+
+- Choose optional Formation combat: frontline actions, protected elemental supports, shared energy, repositioning and generated tactical kits.
+- Convert saved worlds after confirmation with bounded parallel generation, persistent progress and explicit retry, preserving characters and progression.
+- Add creative, validated boss objectives, elemental Ultimate portrait effects and optional fixed, saved combat voice lines for assigned voices.
+- Keep Classic combat, existing boss dialogue and authoritative reward replay.
+
 ## 1.18.0 — 2026-10-25 [highlight]
 
 - Enable optional Seasonal events beside compact Player choices in setup or Story Continuity.

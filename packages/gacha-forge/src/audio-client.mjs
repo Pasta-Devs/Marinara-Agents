@@ -148,6 +148,7 @@ export class ForgeAudioController {
     }
     this.player?.setVolumes({ music: this.settings.musicVolume, sfx: this.settings.sfxVolume });
     this.player?.setMuted(this.settings.muted);
+    this._forgeCombatVoices?.configure();
     if (this.settings.muted || !this.settings.tts || this.settings.dialogueVolume === 0) this.voiceAbort?.abort();
     if (this.tts?.getActiveId()?.startsWith(`gacha-forge:${this.runId}:`)) {
       this.tts.setCurrentPlaybackVolume(this.settings.dialogueVolume, this.settings.muted);
@@ -509,6 +510,7 @@ export class ForgeAudioController {
     clearTimeout(this.noticeTimer);
     this.dismissNotice?.();
     this.voiceAbort?.abort();
+    this._forgeCombatVoices?.dispose();
     for (const request of this.requests) request.abort();
     this.host._root.removeEventListener("click", this.onClick);
     this.player?.dispose();

@@ -8,6 +8,11 @@ import {
 } from "../packages/gacha-forge/src/story-cancel-client.mjs";
 import { forgeStoryCancelEnglish } from "../packages/gacha-forge/src/story-cancel-en.mjs";
 import { forgeUserTimeZone } from "../packages/gacha-forge/src/browser-presentation.mjs";
+import { forgeFormationStartRequest } from "../packages/gacha-forge/src/formation-combat-client.mjs";
+import {
+  forgeSeasonalRequest,
+  adoptForgeSeasonalResponse,
+} from "../packages/gacha-forge/src/seasonal-events-client.mjs";
 import {
   adoptForgeChapterVersion,
   forgeChapterCurrent,
@@ -29,6 +34,9 @@ const method = (name, globals = {}) => {
     forgeChapterCurrent,
     forgeChapterOriginCurrent,
     forgeChapterRequest,
+    forgeFormationStartRequest,
+    forgeSeasonalRequest,
+    adoptForgeSeasonalResponse,
     ...globals,
   })[name];
 };

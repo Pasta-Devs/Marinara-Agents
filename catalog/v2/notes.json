@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.19.0",
+          "date": "2026-10-25",
+          "notes": "- Choose optional Formation combat: frontline actions, protected elemental supports, shared energy, repositioning and generated tactical kits.\n- Convert saved worlds after confirmation with bounded parallel generation, persistent progress and explicit retry, preserving characters and progression.\n- Add creative, validated boss objectives, elemental Ultimate portrait effects and optional fixed, saved combat voice lines for assigned voices.\n- Keep Classic combat, existing boss dialogue and authoritative reward replay.",
+          "highlight": true
+        },
+        {
           "version": "1.18.0",
           "date": "2026-10-25",
           "notes": "- Enable optional Seasonal events beside compact Player choices in setup or Story Continuity.\n- Explore a new, world-specific story and combat adventure every three weeks, with an event banner and optional animation and music. Event themes, familiar cast and rewards are prepared before you start; the chapter is written against current canon when you choose to play.\n- Earn bounded resources, Aether, four-star characters or themed outfits once. Expired events close new progress and rewards; played scenes remain in Chapters. Existing banner minigames stay available.\n- Keep event progress and rewards safe across refresh, restart, opt-out and concurrent requests, using existing chapter, combat and media systems.",
@@ -284,12 +290,6 @@
           "date": "2026-10-23",
           "notes": "- Chapter fullscreen controls now use a small icon aligned with the top-right header fade, with a usable touch target and visible keyboard focus.\n- Visible unit portraits use eager loading and synchronous decoding on detail updates.\n- Favorite and help icons are centered; unit cards show their existing affinity symbol in the top-right corner.",
           "highlight": false
-        },
-        {
-          "version": "1.9.0",
-          "date": "2026-10-22",
-          "notes": "### New\n\n- The fullscreen control beside Settings expands inside the Engine, hiding Home browser controls while keeping the Engine topbar. Outward/inward arrows show the action, and the button works on iPhone Safari too.\n- Every Forge screen fills the available width and height instead of fitting a fixed 16:9 frame.\n- A floating exit control stays available on screens without the shared toolbar and on the portrait rotation notice. Requires Engine capability API 1.376.",
-          "highlight": true
         }
       ]
     },

@@ -1049,6 +1049,89 @@
               "replace": "return(this._adoptFromResponse(n),adoptForgeSeasonalResponse(this,e,a,n),refreshForgeUnitStep(this,e,a,n)"
             }
           ]
+        },
+        {
+          "version": "1.19.0",
+          "edits": [
+            {
+              "find": "var pb=48",
+              "replaceFrom": [
+                "src/formation-combat-shared.mjs",
+                "src/formation-combat-en.mjs",
+                "src/formation-combat-client.mjs",
+                "src/formation-settings-en.mjs",
+                "src/formation-settings-client.mjs",
+                "src/combat-voices-en.mjs",
+                "src/combat-ultimate-client.mjs",
+                "src/combat-voices-client.mjs"
+              ],
+              "sourceId": "formation-combat-client"
+            },
+            {
+              "find": "function Gu({allies:t=[],enemies:e=[],seed:a=1}={}){let r={gen:sf({allies:t,enemies:e,seed:a}),",
+              "replace": "function Gu({allies:t=[],enemies:e=[],seed:a=1,combatMode,formationRules}={}){let r={gen:combatMode===\"formation\"?forgeFormationBattle({allies:t,enemies:e,seed:a,rules:formationRules||[]}):sf({allies:t,enemies:e,seed:a}),"
+            },
+            {
+              "find": "enemies:this._combat&&this._combat.enemies||[],seed:this._combatSeed",
+              "replace": "enemies:this._combat&&this._combat.enemies||[],seed:this._combatSeed,combatMode:this._combat?.combatMode,formationRules:this._combat?.formationRules"
+            },
+            {
+              "find": "function et(y){let O=te.get(String(y.actor));",
+              "replace": "function et(y){if(y.options?.formation)return forgeRenderFormationTurn({root:t,container:_e,choice:y,payload:a,onChoice:ft});let O=te.get(String(y.actor));"
+            },
+            {
+              "find": "O&&(forgeCombatSound(forgeAudio,y),forgeDialogue.event(y));",
+              "replace": "O&&(forgeCombatSound(forgeAudio,y),forgeDialogue.event(y),forgeFormationView.event(y),forgePresentation.event(y));"
+            },
+            {
+              "find": "let Xe=!1,forgeDialogue=createForgeCombatDialogue",
+              "replace": "let Xe=!1,forgeFormationView=createForgeFormationPresentation(t,a),forgePresentation=createForgeCombatPresentation(t,{payload:a,run:r,host:forgeHost,audio:forgeAudio}),forgeDialogue=createForgeCombatDialogue"
+            },
+            {
+              "find": "clearTimeout(V),forgeDialogue.dispose()",
+              "replace": "clearTimeout(V),forgeFormationView.dispose(),forgePresentation.dispose(),forgeDialogue.dispose()"
+            },
+            {
+              "find": "forgeChoiceSettings(a)+",
+              "replace": "forgeChoiceSettings(a)+forgeFormationSettings()+"
+            },
+            {
+              "find": "wireForgeChapterRegeneration(this),wireForgeSeasonalEvents(this),wireForgeHome",
+              "replace": "wireForgeChapterRegeneration(this),wireForgeSeasonalEvents(this),wireForgeFormationSettings(this),wireForgeFormationPreview(this),wireForgeHome"
+            },
+            {
+              "find": "disposeForgeAudio(this),disposeForgeBannerAnimation(this)",
+              "replace": "disposeForgeFormationSettings(this),disposeForgeAudio(this),disposeForgeBannerAnimation(this)"
+            },
+            {
+              "find": "return'<div class=\"ob-grid\">'+s+o+r+\"</div>\"",
+              "replace": "return'<div class=\"ob-grid\">'+s+o+r+(t.id===\"world\"?'<div class=\"ob-wide\">'+forgeFormationSetup(e)+\"</div>\":\"\")+\"</div>\""
+            },
+            {
+              "find": "function ye(){for(let F of it){",
+              "replace": "function ye(){h.combatMode=readForgeFormationSetup(t);for(let F of it){"
+            },
+            {
+              "find": "await e({...zs(h),storyNow:Re})",
+              "replace": "await e({...zs(h),combat:{mode:h.combatMode},storyNow:Re})"
+            },
+            {
+              "find": "d?\"This team has no units. Seat at least one in Formation.\":\"Couldn't set up the battle.\"",
+              "replace": "d?\"This team has no units. Seat at least one in Formation.\":forgeFormationErrorLabel(o)||\"Couldn't set up the battle.\""
+            },
+            {
+              "find": "`<style>${mc}${Dm}${wc}${qc}${ch}${ku}${Nd}${fd}${ca}${km}${An}</style>`",
+              "replace": "`<style>${mc}${Dm}${wc}${qc}${ch}${ku}${Nd}${fd}${ca}${km}${An}${forgeFormationCombatStyles}${forgeCombatVoiceStyles}${forgeCombatUltimateStyles}</style>`"
+            },
+            {
+              "find": "ds=\"1.18.0\"",
+              "replace": "ds=\"1.19.0\""
+            },
+            {
+              "find": "a=forgeChapterRequest(this,e,a);e=forgeSeasonalRequest(e,a);let forgeStory=",
+              "replace": "a=forgeChapterRequest(this,e,a);e=forgeSeasonalRequest(e,a);a=forgeFormationStartRequest(this,e,a);let forgeStory="
+            }
+          ]
         }
       ]
     },
@@ -2050,6 +2133,153 @@
             {
               "find": "async function tl(s){let{data:c}=await pe(s),d=c&&c.bondChapters||{},v=new Map;for(let{unitId:k,part:E,after:N}of Ka(c)){let P=",
               "replace": "async function tl(s,forgeEventScope){let{data:c}=await pe(s),d=c&&c.bondChapters||{},v=new Map;for(let{unitId:k,part:E,after:N,opened:forgeOpened}of Ka(c)){if(forgeEventScope?.eventId&&Number(N)===Number(forgeEventScope.after)&&!forgeStoryOpenedBefore({opened:forgeOpened},forgeEventScope))continue;let P="
+            }
+          ]
+        },
+        {
+          "version": "1.19.0",
+          "edits": [
+            {
+              "find": "async function _t(",
+              "replaceFrom": [
+                "src/formation-combat-shared.mjs",
+                "src/formation-combat-server.mjs",
+                "src/formation-migration-server.mjs",
+                "src/combat-voices-server.mjs"
+              ],
+              "sourceId": "formation-combat-server"
+            },
+            {
+              "find": "\"facets\",\"mech\",\"healAs\"",
+              "replace": "\"facets\",\"mech\",\"healAs\",\"formationKit\",\"formationScaling\""
+            },
+            {
+              "find": "W=(s,c,d)=>({allies:s.map(G),enemies:c.map(G),seed:d})",
+              "replace": "W=(s,c,d,run,rules=[])=>{let prepared=forgeFormationPrepare(run,s,c,rules);if(prepared.combatMode===\"formation\"){let error=forgeFormationEncounterError(prepared.allies,prepared.formationRules);if(error)throw Object.assign(new Error(error),{forgeFormation:true})}return{allies:prepared.allies.map(G),enemies:prepared.enemies.map(G),seed:d,combatMode:prepared.combatMode,formationRules:prepared.formationRules}}"
+            },
+            {
+              "find": "ie=(s,c)=>Gm({allies:JSON.parse(JSON.stringify(s.allies||[])),enemies:JSON.parse(JSON.stringify(s.enemies||[])),seed:Number(s.seed)||1},Array.isArray(c)?c.slice(0,te):[]).result",
+              "replace": "ie=(s,c)=>Gm({allies:JSON.parse(JSON.stringify(s.allies||[])),enemies:JSON.parse(JSON.stringify(s.enemies||[])),seed:Number(s.seed)||1,combatMode:s.combatMode,formationRules:s.formationRules},Array.isArray(c)?c.slice(0,te):[]).result"
+            },
+            {
+              "find": "function Gm(e,t){let n=0;",
+              "replace": "function Gm(e,t){if(e?.combatMode===\"formation\")return replayForgeFormationBattle({...e,rules:e.formationRules||[]},t);let n=0;"
+            },
+            {
+              "find": "facets:n&&n.fx||null,power:aw(t)",
+              "replace": "facets:n&&n.fx||null,formationKit:e.formationKit||null,formationScaling:{standard:Number(a.granted?.form)||1,ultimate:Number(a.skill?.form)||1,passive:Number(a.passive?.form)||1},power:aw(t)"
+            },
+            {
+              "find": "async function Vr(p,u,o){let i=await Ri(p,u),",
+              "replace": "async function Vr(p,u,o){let i=await Ri(p,u);let forgeReady=await forgeFormationMigration.ensure(p,u);if(forgeReady?.ok===false)return forgeReady;let "
+            },
+            {
+              "find": "portrait:sn(he)||null,isLeader:J===fn,level:Z",
+              "replace": "portrait:sn(he)||null,characterId:l(he.cardId)||null,isLeader:J===fn,level:Z"
+            },
+            {
+              "find": "return ee.length?{ok:!0,allies:ee,",
+              "replace": "if(forgeFormationMode(u)===\"formation\"){let error=forgeFormationEncounterError(ee);if(error)return{ok:!1,error}}return ee.length?{ok:!0,allies:ee,"
+            },
+            {
+              "find": "passive:x.passive||null,...forgeEnemyCombatMetadata(x,forgeEncounterCast)",
+              "replace": "passive:x.passive||null,formationKit:x.formationKit||null,...forgeEnemyCombatMetadata(x,forgeEncounterCast)"
+            },
+            {
+              "find": "enemies:M,presetList:_.presets",
+              "replace": "enemies:forgeFormationMode(u)===\"formation\"?forgeFormationEnemies(M,w.guide.formationRules||[]):M,presetList:_.presets"
+            },
+            {
+              "find": "let we=await _t({runtime:r,runId:s,run:c,messages:forgeComposeMemoryPrompt(vS,[c.scenario",
+              "replace": "let forgeEncounterSession=(await pe(s)).data,forgeEncounterDocuments=await a.list(n.id,kt);let we=await _t({runtime:r,runId:s,run:c,messages:forgeComposeMemoryPrompt(vS,[c.scenario"
+            },
+            {
+              "find": "messages:forgeComposeMemoryPrompt(vS,[c.scenario,E.premise,P,re,c.protagonist,d,await Zw(s,d,v),c.language,ye])",
+              "replace": "messages:forgeFormationEncounterMessages(forgeComposeMemoryPrompt(vS,[c.scenario,E.premise,P,re,c.protagonist,d,await Zw(s,d,v),c.language,ye]),c,forgeFormationAvailableElements((await pe(s)).data,await a.list(n.id,kt)))"
+            },
+            {
+              "find": "parse:Vt(r,De=>ES(De,U0(d),P)),label:\"combat-guide\"",
+              "replace": "parse:Vt(r,De=>forgeFormationMode(c)===\"formation\"?forgeFormationNormalizeGuide(De,ES(De,U0(d),P),forgeFormationAvailableElements(forgeEncounterSession,forgeEncounterDocuments)):ES(De,U0(d),P)),label:\"combat-guide\""
+            },
+            {
+              "find": "W(L.allies,L.enemies,Gs(I(o,i,g)))",
+              "replace": "W(L.allies,L.enemies,Gs(I(o,i,g)),S,L.ens.guide.formationRules||[])"
+            },
+            {
+              "find": "W(x.allies,Xg(i,U,g),Gs(zg(o,i,g,_?_.id:U)))",
+              "replace": "W(x.allies,Xg(i,U,g),Gs(zg(o,i,g,_?_.id:U)),S)"
+            },
+            {
+              "find": "fight:W(S.allies,L,Gs(Jg(o,i,g)))",
+              "replace": "fight:W(S.allies,L,Gs(Jg(o,i,g)),w)"
+            },
+            {
+              "find": "animationConnectionId:l(u.animationConnectionId).slice(0,200)}",
+              "replace": "animationConnectionId:l(u.animationConnectionId).slice(0,200),combat:{mode:forgeFormationMode(u),revision:0}}"
+            },
+            {
+              "find": "await t.registerPrivilegedRoutes(async s=>{s=forgeTimeZoneRoutes(s);",
+              "replace": "const forgeFormationMigration=createForgeFormationMigration({packageId:n.id,persistence:r.persistence,cancellation:forgeStoryCancellation,normalizeKit:normalizeForgeFormationKit,logger:r.logger,concurrency:3,generateKit:async({runId,run,unit,signal})=>{signal.throwIfAborted();const hydrated=(await forgeHydrateStoryCharacters([unit],id=>Le().characterCard(id),r.logger))[0];const answer=await _t({runtime:r,runId,run,job:\"structured\",messages:forgeFormationKitMessages({run,unit,cardContext:hydrated?.forgeCardCanon||\"\"}),options:{temperature:.8,maxTokens:It(2000),signal},parse:Vt(r,normalizeForgeFormationKit),label:\"formation-unit \"+unit.name});signal.throwIfAborted();if(!answer.ok)throw new Error(answer.error||\"generation-failed\");return answer.value}});const forgeCombatVoices=createForgeCombatVoices({dataDir:e.dataDir,runtime:r,readUnit:async(runId,unitId)=>{const run=Ae((await be()).data,runId);const doc=await a.getById(n.id,unitId);if(!run||!doc?.id?.startsWith(`${runId}:unit:`)||doc.data?.kind!==\"character\")return null;const unit=(await forgeHydrateStoryCharacters([doc.data],id=>Le().characterCard(id),r.logger))[0];return{run,unit:{...unit,id:unitId,characterId:l(unit.cardId)||null}}},generateLines:async({runId,run,unit,messages,debugMode,signal})=>_t({runtime:r,runId,run,job:\"structured\",messages,options:{temperature:.8,maxTokens:It(600),debugMode,signal},parse:Vt(r,normalizeForgeCombatVoiceLines),label:\"combat-voice-lines \"+unit.name})});await t.registerPrivilegedRoutes(async s=>{s=forgeFormationRoutes(forgeTimeZoneRoutes(s),{migration:forgeFormationMigration,cancellation:forgeStoryCancellation,readWorld:async runId=>Ae((await be()).data,runId)});s.post(\"/combat-mode/switch\",p=>forgeFormationMigration.start(p?.body||{}));s.post(\"/combat-mode/status\",p=>forgeFormationMigration.status(p?.body||{}));s.post(\"/combat-mode/retry\",p=>forgeFormationMigration.retry(p?.body||{}));s.post(\"/combat-mode/cancel\",p=>forgeFormationMigration.cancel(p?.body||{}));s.post(\"/combat-voices/prepare\",p=>forgeCombatVoices.prepare(p?.body||{}));s.post(\"/combat-voices/reserve\",p=>forgeCombatVoices.reserve(p?.body||{}));s.post(\"/combat-voices/commit\",p=>forgeCombatVoices.commit(p?.body||{}));s.post(\"/combat-voices/fail\",p=>forgeCombatVoices.fail(p?.body||{}));s.get(\"/combat-voices/file/:world/:filename\",(p,reply)=>forgeCombatVoices.serve(p,reply));"
+            },
+            {
+              "find": "return()=>{forgeStoryCancellation.dispose();forgeBannerAnimations.dispose()}",
+              "replace": "return()=>{forgeFormationMigration.dispose();forgeCombatVoices.dispose();forgeStoryCancellation.dispose();forgeBannerAnimations.dispose()}"
+            },
+            {
+              "find": "signal:forgeStoryGenerationSignal(),",
+              "replace": "signal:forgeStoryGenerationSignal()&&a.signal?AbortSignal.any([forgeStoryGenerationSignal(),a.signal]):forgeStoryGenerationSignal()||a.signal,"
+            },
+            {
+              "find": "allies:L,enemies:ne,...forgeEncounterPresentation(U.guide,ne)",
+              "replace": "allies:L,combatMode:x.combatMode,enemies:ne,formationRules:U.guide.formationRules||[],...forgeEncounterPresentation(U.guide,ne)"
+            },
+            {
+              "find": "forgeStoryMemory.invalidate(o);await forgeBannerAnimations.removeWorld(o)",
+              "replace": "forgeStoryMemory.invalidate(o);await Promise.resolve(forgeFormationMigration.removeWorld(o)).catch(error=>r.logger.warn(error,\"[gacha-forge] Could not stop deleted world combat conversion\"));await forgeCombatVoices.removeWorld(o).catch(error=>r.logger.warn(error,\"[gacha-forge] Could not remove deleted world combat voices\"));await forgeBannerAnimations.removeWorld(o)"
+            },
+            {
+              "find": "[Pc,\":combat-art\"]],iT=",
+              "replace": "[Pc,\":combat-art\"],[\"formation-conversion\",\":formation-conversion\"]],iT="
+            },
+            {
+              "find": "forgeStoryAssertActive();let R=cS(n,r)",
+              "replace": "forgeStoryAssertActive();f?.signal?.throwIfAborted();let R=cS(n,r)"
+            },
+            {
+              "find": "forgeStoryAssertActive();return I.ok||R===C",
+              "replace": "forgeStoryAssertActive();f?.signal?.throwIfAborted();return I.ok||R===C"
+            },
+            {
+              "find": "let le,ce=Date.now();try{forgeStoryAssertActive();",
+              "replace": "let le,ce=Date.now();try{forgeStoryAssertActive();a.signal?.throwIfAborted();"
+            },
+            {
+              "find": "});forgeStoryAssertActive()}catch($e){forgeStoryAssertActive();",
+              "replace": "});forgeStoryAssertActive();a.signal?.throwIfAborted()}catch($e){forgeStoryAssertActive();a.signal?.throwIfAborted();"
+            },
+            {
+              "find": "function ES(e,t=jc,forgeNode=null){return forgeNormalizeEncounterGuide(e,t,forgeLegacyEncounterGuide,forgeNode)}",
+              "replace": "function ES(e,t=jc,forgeNode=null){return forgeFormationNormalizeGuide(e,forgeNormalizeEncounterGuide(e,t,forgeLegacyEncounterGuide,forgeNode))}"
+            },
+            {
+              "find": "allies:ee,usedIdx:M,",
+              "replace": "allies:ee,combatMode:forgeFormationMode(u),usedIdx:M,"
+            },
+            {
+              "find": "allies:_.allies,enemies:",
+              "replace": "allies:_.allies,combatMode:_.combatMode,enemies:"
+            },
+            {
+              "find": "allies:x.allies,enemies:F,background:U",
+              "replace": "allies:x.allies,combatMode:x.combatMode,enemies:F,background:U"
+            },
+            {
+              "find": "allies:S.allies,enemies:$,background:F",
+              "replace": "allies:S.allies,combatMode:S.combatMode,enemies:$,background:F"
+            },
+            {
+              "find": "cancellation:forgeStoryCancellation,normalizeKit:normalizeForgeFormationKit",
+              "replace": "cancellation:forgeStoryCancellation,retireInactiveFight:runId=>typeof forgeSeasonalEvents!==\"undefined\"?forgeSeasonalEvents.retireInactiveFight(runId):undefined,normalizeKit:normalizeForgeFormationKit"
             }
           ]
         }

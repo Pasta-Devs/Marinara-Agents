@@ -5,6 +5,9 @@ export const forgeAudioEnglish = {
   "audio.group.playback": "Story playback",
   "audio.settings.tts": "Read character dialogue",
   "audio.settings.ttsHint": "Use the current Engine voice connection. Only characters with an assigned voice speak.",
+  "audio.settings.combatVoices": "Combat voice lines",
+  "audio.settings.combatVoicesHint":
+    "Formation combat only. Save and reuse four short battle lines per voiced character. Initial generation uses your model and voice providers; characters without an assigned Engine voice stay silent.",
   "audio.settings.generate": "Generate music and sound effects",
   "audio.settings.generateHint": "Optional provider requests. Otherwise, the game's existing music and effects play.",
   "audio.settings.connection": "Audio connection",
@@ -71,6 +74,16 @@ export function forgeAudioFields() {
       type: "toggle",
       label: forgeAudioEnglish["audio.settings.tts"],
       hint: forgeAudioEnglish["audio.settings.ttsHint"],
+      default: false,
+    },
+    {
+      id: "audio.combatVoices",
+      step: "sources",
+      settings: "sources",
+      group: "audio",
+      type: "toggle",
+      label: forgeAudioEnglish["audio.settings.combatVoices"],
+      hint: forgeAudioEnglish["audio.settings.combatVoicesHint"],
       default: false,
     },
     {
