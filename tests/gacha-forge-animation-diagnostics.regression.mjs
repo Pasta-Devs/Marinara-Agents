@@ -27,6 +27,8 @@ const cases = [
     "providerFailed",
   ],
   ["OpenRouter video generation returned an invalid polling URL", { reason: "invalid-response" }, "responseFailed"],
+  ["OpenRouter video generation returned an invalid content URL", { reason: "invalid-response" }, "responseFailed"],
+  ["OpenRouter video content URL must not contain credentials", { reason: "invalid-response" }, "responseFailed"],
   [
     "OpenRouter video polling URL must use the configured API origin without credentials",
     { reason: "invalid-response" },

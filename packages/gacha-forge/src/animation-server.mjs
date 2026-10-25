@@ -55,7 +55,7 @@ const forgeAnimationFailure = (error) => {
   if (status) return { reason: "provider", providerStatus: Number(status[1]) };
   if (
     error?.code === "ERR_INVALID_URL" ||
-    /Invalid banner animation video|OpenRouter video .*polling URL|video generation returned non-JSON|video generation response did not include a job id/u.test(
+    /Invalid banner animation video|OpenRouter video .*(?:polling|content) URL|video generation returned non-JSON|video generation response did not include a job id/u.test(
       message,
     )
   )
