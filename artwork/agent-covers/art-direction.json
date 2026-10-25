@@ -258,6 +258,12 @@
       "name": "3D Avatars",
       "concept": "Mari waves at a glowing holographic figurine of herself spinning on a small turntable pedestal, drawn flat in the same cel-shaded style.",
       "palette": "cyan, violet, navy, soft white"
+    },
+    {
+      "id": "saucelings",
+      "name": "Saucelings",
+      "concept": "Mari cuddles a happy little rigatoni sauceling up by her cheek in a cosy lamplit nook, with its cracked eggshell in a woven nest and a small bowl of pasta below.",
+      "palette": "Marinara tomato red, warm orange, pasta gold, cream, basil green, deep navy"
     }
   ]
 }
