@@ -299,8 +299,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "72e3302588817af0591a09fd6685576704fdeb06f30ee4d6547539d26923a2ce",
-      "bytes": 1724927
+      "sha256": "11b1dbe5ba1b01ad3984dba85026720dd1a550c250c9e7cd134c30596a3ff45f",
+      "bytes": 1741872
     },
     {
       "path": "farm-asc.webp",
@@ -774,8 +774,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "6ec36c52dc3ce6d39f0e49860a8bb1a0d6ffa91cdb3fcd72eb173182453741e2",
-      "bytes": 835769
+      "sha256": "e84035770f8d776f6a4cf002d3e3cd0aeca410e3fa9462a6c4c0e12e0038c9a0",
+      "bytes": 855552
     },
     {
       "path": "skill-aoe_damage-dark.webp",
@@ -1554,8 +1554,8 @@
     },
     {
       "path": "src/formation-settings-client.mjs",
-      "sha256": "4643636a538cfcf224b461c6150fc2d6770cac798447fbd6ef18e790bc9d9a6c",
-      "bytes": 7802
+      "sha256": "70dac0a5b945dc7d97e3da117d87d71282bc1159ecb795301ce2df8c94e940a6",
+      "bytes": 8301
     },
     {
       "path": "src/formation-settings-en.mjs",
@@ -1581,6 +1581,26 @@
       "path": "src/combat-voices-server.mjs",
       "sha256": "4b677f85aad0cf033c2f699573a76c5dcc2b8bb6d5c86dbbe658b7f7238e9635",
       "bytes": 18271
+    },
+    {
+      "path": "src/proactive-messages-en.mjs",
+      "sha256": "b3267859a9afd60574694848b90b41a3ab91a0f1d089f88f80a95a35c2e3e0e4",
+      "bytes": 885
+    },
+    {
+      "path": "src/proactive-messages-client.mjs",
+      "sha256": "ba4cef01a431147aa5310cbdb8d248a6793c8152b74e32bfc4bcf5a1e0f63b1e",
+      "bytes": 7552
+    },
+    {
+      "path": "src/proactive-messages-server.mjs",
+      "sha256": "2ac0079fc45e446b83c73d787a289b3aa7ec659a3083a3c2a10e4ca056b8f5c1",
+      "bytes": 14954
+    },
+    {
+      "path": "src/proactive-messages-adapter.mjs",
+      "sha256": "f508d2f3b013f8c0ffac15014c16c26a8787f8887cd5db31b25f46ec04838b01",
+      "bytes": 3158
     },
     {
       "path": "src/background-download-client.mjs",

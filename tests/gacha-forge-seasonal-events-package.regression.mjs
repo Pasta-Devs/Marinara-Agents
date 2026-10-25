@@ -64,6 +64,8 @@ const guide = {
   ],
 };
 const f = await createChapterRuntime();
+// Exercise event generation with room for canon and the 8192-token answer floor.
+f.transport.maxContext = 262144;
 try {
   for (const [id] of f.docs)
     if (id.startsWith(`${runId}:chapter:2`) || id.startsWith(`${runId}:beat:2:`) || id.startsWith(`${runId}:summary:2`))
