@@ -14,6 +14,8 @@ type ChatItem = {
   mediaId?: string;
   amount?: number;
   mine?: boolean;
+  /** Her own live reply (already on the stage). */
+  host?: boolean;
 };
 const nameColors = [
   "text-[var(--slurp-violet)]",
@@ -44,7 +46,7 @@ function catchUpLines(
   const said = show.script
     .filter((line) => line.kind === "narration" && line.at <= elapsed)
     .slice(-3)
-    .map((line) => line.text);
+    .map((line) => line.text.replace(/\*/g, ""));
   return [
     t("ui.slurp.live.catchUp.raised", { raised: show.raised, goal: show.goal }),
     ...(top.length ? [t("ui.slurp.live.catchUp.top", { names: top.join(", ") })] : []),
@@ -72,6 +74,7 @@ export function slpLiveChatItems(show: SlpLiveShow, elapsed: number, personaId: 
         text: event.kind === "tip" ? String(event.amount ?? 0) : event.text,
         amount: event.amount,
         mine: !!personaId && event.personaId === personaId,
+        host: event.host,
       })),
     ...show.queue
       .filter((order) => order.at <= elapsed)
@@ -170,7 +173,7 @@ export function SlpLiveChat({
             key={`${line.at}-${index}`}
             src={slpLivePictureUrl(show, line.mediaId, personaId)}
             alt={t("ui.slurp.live.pictureAlt", { name: creatorName })}
-            className="slp-live-fade max-h-80 max-w-full rounded-2xl object-contain ring-1 ring-[var(--border)]"
+            className="slp-live-fade max-h-40 max-w-full rounded-2xl object-contain ring-1 ring-[var(--border)]"
             loading="lazy"
           />
         ) : line.kind === "host" ? (
@@ -247,14 +250,14 @@ export function SlpLiveChatPeek({
 }) {
   // Her lines and the pictures are on the stage itself; the peek is the room around her.
   const lines = slpLiveChatItems(show, elapsed, personaId, creatorName)
-    .filter((line) => line.kind !== "picture" && line.kind !== "host")
+    .filter((line) => line.kind !== "picture" && line.kind !== "host" && !line.host)
     .slice(-5);
   return (
     <button
       type="button"
       onClick={onOpen}
       aria-label={t("ui.slurp.live.openChat")}
-      className="slp-live-chat-fade flex max-h-36 min-h-11 w-full flex-col justify-end gap-0.5 overflow-hidden px-3 pb-1 pt-6 text-left text-white"
+      className="slp-live-chat-fade flex max-h-28 min-h-11 w-full flex-col justify-end gap-0.5 overflow-hidden px-3 pb-1 pt-6 text-left text-white"
     >
       {lines.map((line, index) =>
         line.kind === "tip" ? (
@@ -276,7 +279,7 @@ export function SlpLiveChatPeek({
             key={`${line.at}-${index}`}
             className="slp-live-fade block shrink-0 text-[13px] leading-snug drop-shadow-[0_1px_3px_rgb(0_0_0/0.9)]"
           >
-            <b className={line.mine ? "text-[var(--noodle-accent)]" : nameColor(line.name)}>{line.name}</b>{" "}
+            <b className={line.mine ? "text-[var(--noodle-accent)]" : "text-white/75"}>{line.name}</b>{" "}
             <SlpLiveSpokenText text={line.text} />
           </span>
         ),

@@ -251,7 +251,7 @@ function SlpLiveContent({
             : t("ui.slurp.live.inPrivate")}
         </div>
       )}
-      {(!privateActive || privateViewer) && show.queue.some((order) => !order.served) && (
+      {(wide || host) && (!privateActive || privateViewer) && show.queue.some((order) => !order.served) && (
         <div
           className={`flex items-center gap-2 overflow-x-auto px-3 py-2 ${wide ? "border-b border-[var(--border)]" : ""}`}
         >
@@ -310,7 +310,7 @@ function SlpLiveContent({
       )}
       {canTalk && (
         <footer
-          className={`space-y-2 px-3 pt-2.5 pb-[calc(0.75rem+var(--slp-nav-space),env(safe-area-inset-bottom)))] lg:pb-2.5 ${
+          className={`space-y-2 px-3 pt-2.5 pb-[calc(0.75rem+var(--slp-nav-space,env(safe-area-inset-bottom)))] lg:pb-2.5 ${
             wide ? "border-t border-[var(--border)] bg-transparent" : "bg-gradient-to-t from-black/60 to-transparent"
           }`}
         >

@@ -59,6 +59,7 @@ export function SlpLiveStage({
 }) {
   const seen = show.script.filter((line) => line.at <= elapsed);
   const shots = personaId ? seen.filter((line) => line.kind === "picture" && line.mediaId).slice(-2) : [];
+  const onCamera = shots.length > 0 && !!personaId;
   const act = seen.findLast((line) => line.kind === "act")?.text;
   // Her live replies count as her current line when they are newer than the script.
   const spoken = [
@@ -83,7 +84,7 @@ export function SlpLiveStage({
         aria-hidden="true"
         className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_30%_20%,color-mix(in_srgb,var(--noodle-accent)_55%,transparent),transparent_60%),radial-gradient(circle_at_80%_90%,color-mix(in_srgb,var(--slurp-violet)_50%,transparent),transparent_55%)]"
       />
-      {shots.length > 0 && personaId ? (
+      {onCamera &&
         // Keyed by picture: the old shot stays underneath while the new one fades in over it.
         shots.map((shot, index) => (
           <img
@@ -92,18 +93,7 @@ export function SlpLiveStage({
             alt={index === shots.length - 1 ? t("ui.slurp.live.pictureAlt", { name: creatorName }) : ""}
             className="slp-crop slp-live-shot absolute inset-0 -z-10 h-full w-full object-cover"
           />
-        ))
-      ) : (
-        <div className="absolute inset-0 -z-10 flex items-center justify-center pb-24">
-          <div className="rounded-full p-1 ring-4 ring-[color-mix(in_srgb,var(--noodle-accent)_70%,transparent)] shadow-[0_0_60px_color-mix(in_srgb,var(--noodle-accent)_55%,transparent)]">
-            <Avatar
-              account={{ displayName: creatorName, avatarUrl: avatarUrl ?? null }}
-              size="xl"
-              className="h-28 w-28"
-            />
-          </div>
-        </div>
-      )}
+        ))}
       <div
         aria-hidden="true"
         className="absolute inset-x-0 top-0 -z-10 h-40 bg-gradient-to-b from-black/70 to-transparent"
@@ -177,7 +167,7 @@ export function SlpLiveStage({
         </div>
         {shown.length > 0 && (
           <div className="flex items-center gap-1.5 overflow-hidden" aria-label={t("ui.slurp.live.shownSoFar")}>
-            <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-white/70">
+            <span className="shrink-0 text-[11px] font-bold uppercase tracking-wide drop-shadow-[0_1px_3px_rgb(0_0_0/0.9)]">
               {t("ui.slurp.live.shownSoFar")}
             </span>
             {shown.map((item, index) => (
@@ -216,8 +206,18 @@ export function SlpLiveStage({
           ) : null}
         </div>
       )}
-      <div className="min-h-6 flex-1" />
-      <div className="space-y-2 px-3 pb-3">
+      <div className="flex min-h-0 flex-1 items-center justify-center p-2">
+        {!onCamera && (
+          <div className="aspect-square h-full max-h-32 rounded-full p-1 ring-4 ring-[color-mix(in_srgb,var(--noodle-accent)_70%,transparent)] shadow-[0_0_60px_color-mix(in_srgb,var(--noodle-accent)_55%,transparent)]">
+            <Avatar
+              account={{ displayName: creatorName, avatarUrl: avatarUrl ?? null }}
+              size="xl"
+              className="h-full w-full"
+            />
+          </div>
+        )}
+      </div>
+      <div className="shrink-0 space-y-2 px-3 pb-3">
         {(now || next) && (
           <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
             {now && (
@@ -238,7 +238,7 @@ export function SlpLiveStage({
                 className={
                   index === spoken.length - 1
                     ? "slp-live-fade text-[17px] leading-snug drop-shadow-[0_1px_6px_rgb(0_0_0/0.8)] lg:text-xl"
-                    : "line-clamp-2 text-sm leading-snug text-white/60"
+                    : "line-clamp-1 text-sm leading-snug text-white/60 lg:line-clamp-2"
                 }
               >
                 <SlpLiveSpokenText
