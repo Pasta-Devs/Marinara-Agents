@@ -482,7 +482,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           height: 1.25rem;
           border-radius: 9999px;
           background: var(--marinara-editor-text);
-          box-shadow: 0 1px 2px color-mix(in srgb, #000 25%, transparent);
+          box-shadow: 0 1px 2px var(--marinara-editor-border-strong);
           transform: translateX(0);
           transition: transform 150ms ease;
         }
@@ -496,6 +496,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           outline: 2px solid var(--marinara-editor-focus-ring);
         }
         [data-ltm-surface="detail"] {
+          /* Measured on the status panel in the default Engine themes: at least 10.0:1 light, 9.1:1 dark (WCAG 2.x, 2026-10-25). */
           --ltm-success: color-mix(in oklab, var(--marinara-editor-accent) 40%, var(--marinara-editor-text));
         }
         [data-ltm-accent-border],

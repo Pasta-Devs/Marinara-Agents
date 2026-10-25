@@ -175,7 +175,8 @@ report their result without hiding vault-health warnings. Unsaved edits show a d
 form. A finished identity repair names the backup it saved first (the first eight characters of its id, in the
 `long-term-memory-identity-repairs` backups folder); there is no restore button, so restoring is manual.
 Success messages (`StatusSurface` with the success tone) use the `--ltm-success` token (the accent mixed toward
-the editor text, 4.5:1 or better in both themes) and a check icon, never the bare accent color.
+the editor text, measured at no less than 10.0:1 in the light and 9.1:1 in the dark default theme) and a check
+icon, never the bare accent color.
 
 Debug operation details lead with recorded problems and guidance, then extraction,
 recall, or apply outcomes before diagnostic facts and the timeline. Dropped

@@ -1118,6 +1118,13 @@ assert.match(workspaceScreen, /aria-describedby=\{disabled \? `\$\{labelId\}-loc
 assert.match(workspaceScreen, /if \(availabilityDisabled \|\| disabled\) return;/u);
 assert.doesNotMatch(workspaceScreen, /disabled=\{availabilityDisabled \|\| isLastSelected\}/u);
 
+assert.doesNotMatch(detail, /#000\b/u);
+assert.match(
+  detail,
+  /\[data-ltm-activation-knob\] \{[^}]*box-shadow: 0 1px 2px var\(--marinara-editor-border-strong\);/u,
+);
+assert.match(detail, /Measured on the status panel[^\n]*at least 10\.0:1 light, 9\.1:1 dark/u);
+
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, defaults, and scope loading ok\n",
 );
