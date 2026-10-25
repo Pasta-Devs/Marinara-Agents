@@ -14,7 +14,8 @@ PLAYER AGENCY: the narrator may offer short, reconverging protagonist dialogue/a
   return result;
 }
 
-export function forgeChoiceMessages(messages, { enabled, terminal }) {
+export function forgeChoiceMessages(messages, { enabled, terminal, event }) {
+  if (event) messages = [...messages, { role: "user", content: event }];
   if (!enabled) return messages;
   const result = messages.map((message) => ({ ...message }));
   result[0].content = result[0].content.replace(

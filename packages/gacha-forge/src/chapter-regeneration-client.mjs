@@ -1,5 +1,17 @@
 /* global forgeChapterResetEnglish, stopForgeStoryRequests */
 const forgeChapterVersionPaths = new Set([
+  "/story-events",
+  "/story-event/plan",
+  "/story-event/beat",
+  "/story-event/start",
+  "/story-event/complete",
+  "/story-event/combat-guide",
+  "/story-event/battle",
+  "/story-event/battle/start",
+  "/story-event/choice",
+  "/story-event/cg-art",
+  "/story-event/beat/mark",
+  "/story-event/preforge",
   "/chapter-plan",
   "/bond-chapter/plan",
   "/beat",
@@ -35,7 +47,14 @@ export function forgeChapterRequest(host, path, body) {
   const plan = host._plan;
   const known = host._forgeChapterVersions?.get(body.runId) || 0;
   if (plan && !versions.has(plan)) versions.set(plan, known);
-  const read = ["/chapter-plan", "/bond-chapter/plan", "/chapters", "/continuity"].includes(path);
+  const read = [
+    "/chapter-plan",
+    "/bond-chapter/plan",
+    "/chapters",
+    "/continuity",
+    "/story-events",
+    "/story-event/plan",
+  ].includes(path);
   return {
     ...body,
     storyRevision: Number.isSafeInteger(body.storyRevision)
@@ -51,7 +70,7 @@ export function adoptForgeChapterVersion(host, path, body, result) {
   const versions = (host._forgeChapterVersions ??= new Map());
   if (result.storyRevision < (versions.get(body.runId) || 0)) return false;
   versions.set(body.runId, result.storyRevision);
-  if (["/chapter-plan", "/bond-chapter/plan"].includes(path) && result.ok && result.plan) {
+  if (["/chapter-plan", "/bond-chapter/plan", "/story-event/plan"].includes(path) && result.ok && result.plan) {
     (host._forgeChapterPlanVersions ??= new WeakMap()).set(result.plan, result.storyRevision);
   }
   if (result.error === "story-changed") {

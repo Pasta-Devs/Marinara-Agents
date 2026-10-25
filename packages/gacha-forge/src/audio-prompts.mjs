@@ -39,8 +39,14 @@ export function forgeMusicBriefMessages(run, cue, banner) {
       role: "user",
       content: JSON.stringify({
         world: run.scenario,
-        soundtrackContext: banner ? "a distinctive summon banner theme" : forgeMusicScenes[cue],
-        ...(banner ? { banner: banner.title, identity: banner.cue } : {}),
+        soundtrackContext: banner?.event
+          ? "a distinctive seasonal story event theme"
+          : banner
+            ? "a distinctive summon banner theme"
+            : forgeMusicScenes[cue],
+        ...(banner
+          ? { banner: banner.title, identity: banner.cue, ...(banner.event ? { eventTheme: banner.theme } : {}) }
+          : {}),
       }),
     },
   ];
@@ -59,6 +65,8 @@ export function createForgeMusicPromptService({ readWorld, readSession, updateSe
     const messages = forgeMusicBriefMessages(run, cue, banner);
     const fingerprint = forgeMusicHash("sha256").update(JSON.stringify(messages)).digest("hex");
     const saved = session?.audioPrompts?.[cue];
+    if (banner?.event && saved?.event === true && normalizeForgeMusicPrompt(saved))
+      return { ok: true, prompt: saved.prompt, cached: true };
     if (saved?.fingerprint === fingerprint && normalizeForgeMusicPrompt(saved))
       return { ok: true, prompt: saved.prompt, cached: true };
     const key = JSON.stringify([runId, cue, fingerprint]);

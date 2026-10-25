@@ -1,5 +1,17 @@
 /* global forgeStoryCancelEnglish */
 const forgeStoryRequestPaths = new Set([
+  "/story-events",
+  "/story-event/plan",
+  "/story-event/beat",
+  "/story-event/start",
+  "/story-event/complete",
+  "/story-event/combat-guide",
+  "/story-event/battle",
+  "/story-event/battle/start",
+  "/story-event/choice",
+  "/story-event/cg-art",
+  "/story-event/beat/mark",
+  "/story-event/preforge",
   "/chapter-plan",
   "/bond-chapter/plan",
   "/beat",

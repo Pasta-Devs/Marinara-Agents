@@ -107,11 +107,15 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
         !body ||
         typeof body !== "object" ||
         Array.isArray(body) ||
-        Object.keys(body).some((key) => !["runId", "banner", "retry", "debugMode"].includes(key))
+        Object.keys(body).some((key) => !["runId", "banner", "retry", "debugMode", "timeZone"].includes(key))
       )
         return { ok: false, error: "bad-request" };
       const runId = typeof body.runId === "string" ? body.runId.trim() : "";
-      if (!runId || runId.length > 200 || !forgeAnimationBanners.has(body.banner))
+      if (
+        !runId ||
+        runId.length > 200 ||
+        (!forgeAnimationBanners.has(body.banner) && !/^story-event-[1-9]\d{0,8}$/u.test(body.banner || ""))
+      )
         return { ok: false, error: "bad-request" };
       const epoch = epochFor(runId),
         superseded = () => epoch !== epochFor(runId);

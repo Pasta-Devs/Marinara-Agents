@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.18.0",
+          "date": "2026-10-25",
+          "notes": "- Enable optional Seasonal events beside compact Player choices in setup or Story Continuity.\n- Explore a new, world-specific story and combat adventure every three weeks, with an event banner and optional animation and music. Event themes, familiar cast and rewards are prepared before you start; the chapter is written against current canon when you choose to play.\n- Earn bounded resources, Aether, four-star characters or themed outfits once. Expired events close new progress and rewards; played scenes remain in Chapters. Existing banner minigames stay available.\n- Keep event progress and rewards safe across refresh, restart, opt-out and concurrent requests, using existing chapter, combat and media systems.",
+          "highlight": true
+        },
+        {
           "version": "1.17.0",
           "date": "2026-10-25",
           "notes": "- Regenerate an ongoing chapter or the current open Character Story from its bottom action after a named confirmation. Completed chapters remain protected.\n- Discard only the selected chapter’s story, choices and reading progress, then write a fresh plan with current settings and character cards. Preserve other chapters, conversations, characters, inventory and earned rewards.\n- Stop and drain pending story work before resetting. Replaying cleared progress does not award first-clear rewards again; the usual Vigor cost to play still applies.",
@@ -240,7 +246,7 @@
         {
           "version": "1.12.0",
           "date": "2026-10-24",
-          "notes": "### New\n- World-specific soundtrack briefs generated through the narration connection, cached for each music context and translated into original musical qualities.\n\n### Fixed\n- Audio failures show their HTTP status and, on newer Engine hosts, the provider's safe rejection reason while stock audio continues.\n- Unit and relic achievements count every gained level; capped duplicates do not count as gained facets, and Tower-shop facet gains count.\n- Existing worlds recover proven achievement progress without changing claimed rewards or pass progress.",
+          "notes": "### New\n\n- World-specific soundtrack briefs generated through the narration connection, cached for each music context and translated into original musical qualities.\n\n### Fixed\n\n- Audio failures show their HTTP status and, on newer Engine hosts, the provider's safe rejection reason while stock audio continues.\n- Unit and relic achievements count every gained level; capped duplicates do not count as gained facets, and Tower-shop facet gains count.\n- Existing worlds recover proven achievement progress without changing claimed rewards or pass progress.",
           "highlight": true
         },
         {
@@ -252,7 +258,7 @@
         {
           "version": "1.11.0",
           "date": "2026-10-23",
-          "notes": "### New\n- Optional dialogue using explicitly assigned Engine character voices, with the current speech connection.\n- Stock Game music and effects, plus opt-in generated audio reused per world and cue.\n- A shared mute control, three precise channel volume sliders and configurable autoplay pacing.\n\n### Fixed\n- Home and story portrait frames include their bottom edge.",
+          "notes": "### New\n\n- Optional dialogue using explicitly assigned Engine character voices, with the current speech connection.\n- Stock Game music and effects, plus opt-in generated audio reused per world and cue.\n- A shared mute control, three precise channel volume sliders and configurable autoplay pacing.\n\n### Fixed\n\n- Home and story portrait frames include their bottom edge.",
           "highlight": true
         },
         {
@@ -282,14 +288,8 @@
         {
           "version": "1.9.0",
           "date": "2026-10-22",
-          "notes": "### New\n- The fullscreen control beside Settings expands inside the Engine, hiding Home browser controls while keeping the Engine topbar. Outward/inward arrows show the action, and the button works on iPhone Safari too.\n- Every Forge screen fills the available width and height instead of fitting a fixed 16:9 frame.\n- A floating exit control stays available on screens without the shared toolbar and on the portrait rotation notice. Requires Engine capability API 1.376.",
+          "notes": "### New\n\n- The fullscreen control beside Settings expands inside the Engine, hiding Home browser controls while keeping the Engine topbar. Outward/inward arrows show the action, and the button works on iPhone Safari too.\n- Every Forge screen fills the available width and height instead of fitting a fixed 16:9 frame.\n- A floating exit control stays available on screens without the shared toolbar and on the portrait rotation notice. Requires Engine capability API 1.376.",
           "highlight": true
-        },
-        {
-          "version": "1.8.15",
-          "date": "2026-10-22",
-          "notes": "- Fixed: on iPhone and other Safari-based browsers, ticking a cast member or an outfit theme no longer scrolls the list (and, on a phone turned sideways, the whole world-creation page) back to the top.",
-          "highlight": false
         }
       ]
     },
