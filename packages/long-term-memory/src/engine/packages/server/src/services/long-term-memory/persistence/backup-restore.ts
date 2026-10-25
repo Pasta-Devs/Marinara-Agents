@@ -36,7 +36,7 @@ import { LtmServiceError } from "../service-error.js";
 
 const backupFormat = "marinara-long-term-memory" as const;
 
-async function readConfig<T>(path: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>, fallback: unknown) {
+async function readConfig<T>(path: string, schema: z.ZodType<T, any, any>, fallback: unknown) {
   // A field written by a newer version is left out of the backup instead of failing the export.
   return (await readLtmSettingsFile(path, schema, fallback)).settings;
 }
