@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   PAINT_INSTRUCTIONS_CHARS,
   SAUCELING_BACKGROUND_LIMIT,
+  SAUCELING_PORTRAIT_LIMIT,
   SAUCELING_POST_EGG_STAGES,
   SAUCELING_STAGES,
   SAUCELING_TENDENCIES,
@@ -85,6 +86,12 @@ function petLabel(pet: SaucelingPet): string {
 function refuseWhenLibraryFull(world: SaucelingWorldDocument): void {
   if (world.backgrounds.length >= SAUCELING_BACKGROUND_LIMIT) {
     refuse(409, `The background library holds ${SAUCELING_BACKGROUND_LIMIT}. Delete one to save another.`);
+  }
+}
+
+function refuseWhenAlbumFull(world: SaucelingWorldDocument): void {
+  if (world.portraits.length >= SAUCELING_PORTRAIT_LIMIT) {
+    refuse(409, `The Album holds ${SAUCELING_PORTRAIT_LIMIT} paintings. Delete one to paint another.`);
   }
 }
 
@@ -712,6 +719,7 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     const petId = requiredString(body.petId, "Sauceling", 200);
     const pet = requireActive(current);
     if (pet.stage === "egg") refuse(400, "Paint it once it hatches.");
+    refuseWhenAlbumFull(current);
     const image = parsePortraitImage(body.image);
     if (!image) refuse(400, "A portrait must be a PNG, JPEG or WebP image of at most 4 MB.");
     // What the player asked the painting to show is only a caption, so a bad value is dropped, not refused.
@@ -724,6 +732,7 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     const world = await updateSaucelingWorld((latest) => {
       // The painting was made for the sauceling the page showed; if the nook has swapped it out since, it is not added.
       if (latest.activePet?.id !== petId) refuse(409, "That sauceling changed. Try again.");
+      refuseWhenAlbumFull(latest);
       return {
         ...latest,
         portraits: [

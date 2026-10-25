@@ -20,6 +20,7 @@ import {
 } from "../packages/saucelings/src/engine/packages/shared/src/features/agents/saucelings/vocabulary.ts";
 import {
   PAINT_INSTRUCTIONS_CHARS,
+  SAUCELING_PORTRAIT_LIMIT,
   SAUCELING_BACKGROUND_LIMIT,
   SAUCELING_CARETAKER_OUTCOMES,
   SAUCELING_EGG_START_WARMTH,
@@ -642,7 +643,10 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
   };
   assert.equal(templateCaretakerCareLine(voiced, "Biscotti", "fed-fine", 0), "Eat, Biscotti. Data requires it.");
   assert.equal(templateCaretakerCareLine(voiced, "Biscotti", "fed-fine", 1), "Supper, Biscotti.");
-  assert.equal(templateCaretakerCareLine(voiced, "Shellbini", "kept-warm", 7), "Stay warm, little egg. Steady now.");
+  assert.equal(
+    templateCaretakerCareLine(voiced, "Shellbini", "kept-warm", 7),
+    "Stay warm, little egg. Try not to make a mess of the nook.",
+  );
   // A moment the phrasebook leaves out falls back to the house line
   assert.equal(
     templateCaretakerCareLine(voiced, "Biscotti", "played"),
@@ -656,7 +660,7 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
   // {kind}, {stage} and {nickname} are filled in
   assert.equal(
     templateHatchScene(dottore, "Shellbini", "Bo", 3),
-    "It's hatched! A Shellbini, and a tidy hatch it was too. I'll call you Bo. There we are, all sorted.",
+    "It's hatched! A Shellbini, and a tidy hatch it was too. I'll call you Bo.",
   );
   // "a" before a filled-in word that starts with a vowel becomes "an"; "a little {kind}" stays
   assert.match(templateHatchScene(dottore, "Inkling", "Bo", 3), /^It's hatched! An Inkling, and a tidy hatch/u);
@@ -674,7 +678,7 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
     "Biscotti is on to the juvenile stage now. Well done, specimen.",
   );
 
-  // A sign-off fits the moment's feeling, comes on about half the lines, and the same pick gives the same line
+  // A sign-off fits the moment's feeling, comes on about one line in four, and the same pick gives the same line
   const signedWith = (line: string, base: string, pool: readonly string[]) =>
     line === base || pool.some((tag) => line === `${base} ${tag}`);
   const hungry = { ...fed, stage: "adult" as const, meters: { hunger: 30, mood: 80, bond: 50 } };
@@ -699,12 +703,14 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
   );
   assert.ok(fedLines.some((line) => line.endsWith(" For science.")));
   assert.ok(fedLines.every((line) => !HOUSE_SIGNOFFS.pleased.some((tag) => line.endsWith(tag))));
-  // A voice made before sign-offs uses its catchphrases, and only as neutral ones
+  assert.ok(hungryLines.filter((line) => line.split(". ").length > 2).length <= 8);
+  // A voice the model made before sign-offs gets none, so its catchphrases are not worn out as tags
   const older = { ...voiced, generatedByModel: true };
-  const warmLines = Array.from({ length: 16 }, (_, pick) =>
-    templateCaretakerCareLine(older, "Shellbini", "kept-warm", pick),
+  assert.ok(
+    Array.from({ length: 16 }, (_, pick) => templateCaretakerCareLine(older, "Shellbini", "kept-warm", pick)).every(
+      (line) => line === "Stay warm, little egg.",
+    ),
   );
-  assert.ok(warmLines.some((line) => older.voice.catchphrases.some((tag) => line === `Stay warm, little egg. ${tag}`)));
   assert.ok(
     Array.from({ length: 16 }, (_, pick) => templateCaretakerCareLine(older, "Biscotti", "fed-fine", pick)).every(
       (line) => voiced.voice.phrases.feed!.some((base) => line === base.replace("{pet}", "Biscotti")),
@@ -3034,6 +3040,19 @@ async function testBundledServer() {
   assert.equal(await caption("   "), undefined);
   assert.equal(await caption(42), undefined);
   assert.equal((await portraitsNow()).length, 2);
+  // A full Album refuses another painting before its image is saved
+  const extra: string[] = [];
+  while ((await portraitsNow()).length < SAUCELING_PORTRAIT_LIMIT) {
+    await routes.get("POST /portrait")!({ body: { petId, image: pngOf(10, extra.length) } });
+    extra.push((await portraitsNow())[0]!.id);
+  }
+  const fullDocs = storedDocs.size;
+  await assert.rejects(
+    routes.get("POST /portrait")!({ body: { petId, image: png } }),
+    (error: any) => error.statusCode === 409,
+  );
+  assert.equal(storedDocs.size, fullDocs);
+  for (const id of extra) await routes.get("POST /portrait/:id/delete")!({ params: { id } });
   // Only paintings the Album lists are served, never another of the package's documents
   const notListed = fakeReply();
   await image(String(worldDoc.id), notListed);

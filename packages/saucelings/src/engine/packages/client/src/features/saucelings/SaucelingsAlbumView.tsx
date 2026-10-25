@@ -8,7 +8,10 @@ import type {
   SaucelingStage,
   SaucelingStateResponse,
 } from "../../../../shared/src/features/agents/saucelings/types.js";
-import { PAINT_INSTRUCTIONS_CHARS } from "../../../../shared/src/features/agents/saucelings/types.js";
+import {
+  PAINT_INSTRUCTIONS_CHARS,
+  SAUCELING_PORTRAIT_LIMIT,
+} from "../../../../shared/src/features/agents/saucelings/types.js";
 import {
   sceneAssetPath,
   spriteStateForPet,
@@ -17,7 +20,7 @@ import {
 import { marinaraRequest, packageAssetUrl, saucelingsRequest } from "./api.js";
 import { FormPainter } from "./FormPainter.js";
 import { formQuery, PetSprite } from "./PetSprite.js";
-import { spriteReference } from "./image-canvas.js";
+import { albumPainting, spriteReference } from "./image-canvas.js";
 import { portraitAppearance, portraitNegative } from "./image-prompts.js";
 import { useSaucelingsTranslation } from "./localization.js";
 
@@ -203,9 +206,11 @@ export function SaucelingsAlbumView({
         styleProfileId: "off",
         ...(reference ? { referenceImages: [reference] } : {}),
       });
+      // A painting that will not load into a canvas goes as it came.
+      const image = await albumPainting(generated.image).catch(() => generated.image);
       return saucelingsRequest<SaucelingStateResponse>("/portrait", "POST", {
         petId: target.id,
-        image: generated.image,
+        image,
         instructions: wish,
       });
     },
@@ -266,7 +271,9 @@ export function SaucelingsAlbumView({
       ? t("saucelings.album.noPet")
       : pet.stage === "egg"
         ? t("saucelings.album.egg")
-        : null;
+        : state.portraitCount >= SAUCELING_PORTRAIT_LIMIT
+          ? t("saucelings.album.full", { limit: SAUCELING_PORTRAIT_LIMIT })
+          : null;
 
   return (
     <div style={{ display: "grid", gap: "1rem" }}>

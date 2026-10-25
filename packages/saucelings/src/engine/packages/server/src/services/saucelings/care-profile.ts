@@ -433,7 +433,8 @@ async function modelPhrasebook(
     `The lines are said out loud exactly as written at routine moments, so each must sound like ${name} and make sense on its own.`,
     persona.who ? `Who ${name} is, from their character card:\n${persona.who}` : "",
     voice.speechStyle ? `How ${name} talks: ${voice.speechStyle}` : "",
-    `${name} calls the pet "${voice.petNickname}" and says things like ${JSON.stringify([voice.voiceSample, ...voice.catchphrases])}.`,
+    `${name} calls the pet "${voice.petNickname}". A line in ${name}'s voice: ${JSON.stringify(voice.voiceSample)}.`,
+    `These lines come round again and again, so keep ${name}'s catchphrases out of them: ${JSON.stringify(voice.catchphrases)}.`,
     "For each moment below, write 4 different lines, each under 120 characters, in first person.",
     "Spoken words only: no narration, no actions, no asterisks, no quotation marks.",
     "Make the 4 lines different from each other: don't start two the same way.",
@@ -452,7 +453,7 @@ async function modelPhrasebook(
     "- chatEgg: chatting to the egg about their day, said to the egg",
     "- hatch: the egg is hatching, said to the player; write {kind} for what hatched",
     "- stageUp: the pet has grown into its next life stage, said to the player; write {stage} for the new stage",
-    `signoffs: short tags (under 60 characters) ${name} might add after any line: 3 pleased, 3 worried, 3 neutral.`,
+    `signoffs: short tags (under 60 characters) ${name} might add after any line: 3 pleased, 3 worried, 3 neutral, all different and none of them a catchphrase.`,
     'Return ONLY JSON: {"phrases":{"feed":["..."],...},"signoffs":{"pleased":["..."],"worried":["..."],"neutral":["..."]}}',
   ]
     .filter(Boolean)

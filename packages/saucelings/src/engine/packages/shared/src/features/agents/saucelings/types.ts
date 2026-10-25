@@ -524,6 +524,9 @@ export interface SaucelingPortrait {
 /** The most backgrounds the library keeps; one must be deleted before another is saved. */
 export const SAUCELING_BACKGROUND_LIMIT = 24;
 
+/** The most paintings the Album keeps; one must be deleted before another is painted. */
+export const SAUCELING_PORTRAIT_LIMIT = 24;
+
 /** A saved Nook background any sauceling can show. The image is its own document, found by `id`. */
 export interface SaucelingBackground {
   id: string;

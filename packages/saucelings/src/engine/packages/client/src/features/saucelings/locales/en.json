@@ -117,6 +117,7 @@
   "saucelings.album.off": "Turn on image generation in Settings to paint your sauceling.",
   "saucelings.album.egg": "Paint it once it hatches.",
   "saucelings.album.noPet": "Bring a sauceling into the nook to paint it.",
+  "saucelings.album.full": "The Album is full at {{limit}} paintings. Delete one to paint another.",
   "saucelings.album.empty": "No paintings yet.",
   "saucelings.album.inMenagerie": "(in the Menagerie)",
   "saucelings.album.released": "(released)",

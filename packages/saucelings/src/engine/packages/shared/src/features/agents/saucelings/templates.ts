@@ -53,11 +53,6 @@ function listed(parts: string[]): string {
   return parts.length < 2 ? (parts[0] ?? "") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
 }
 
-/** "a juvenile", "an elder". */
-function aStage(stage: SaucelingStage): string {
-  return `${/^[aeiou]/u.test(stage) ? "an" : "a"} ${stage}`;
-}
-
 const WRAPPED_IN_QUOTES = /^["“”„«»]\s*([^"“”„«»]*?)\s*["“”«»]$/u;
 
 /**
@@ -197,6 +192,31 @@ export const HOUSE_SIGNOFFS: Record<SaucelingSignoffFeeling, string[]> = {
   neutral: ["Steady now.", "Try not to make a mess of the nook.", "One thing at a time."],
 };
 
+/** The house lines for one-off moments, turned by `pick` like the phrasebook's. In egg moments {egg} is "little egg". */
+const SCENE_LINES = {
+  eggFound: ["Look what I found by the nook: an egg, still warm."],
+  eggFoundTalking: ["I found this egg while we were talking, still warm."],
+  eggFoundWhileTalking: ["We were talking and I found an egg. It's waiting in the Menagerie."],
+  eggFoundByOther: ["{finder} found an egg while they were talking with you. It's waiting in the Menagerie."],
+  evolveOffer: [
+    "{pet}'s been so happy lately. I think they're ready to become something new. Have a look when you're ready.",
+  ],
+  evolve: ["{pet}'s evolved! Look at them now, a real {form}."],
+  temperamentShift: ["Have you noticed? {pet}'s gone all {readsAs} lately. A real {name} now."],
+  takesAfter: ["Have you noticed? {pet} has been a bit more {temperament} lately. I think it's picking up my ways."],
+  eggFarewell: ["Into the Menagerie you go, {egg}. Stay warm."],
+  eggReturn: ["The egg's back, and still warm. Into the basket with you."],
+  returnHome: ["Welcome back, {nickname}! Look at you, a {stage} through and through."],
+} satisfies Record<string, string[]>;
+
+/** The line `pick` turns to, with each `{key}` filled from `values` and "a {key}" made "an {key}" before a vowel. */
+function filled(lines: readonly string[], pick: number, values: Record<string, string>): string {
+  return lines[Math.abs(Math.trunc(pick)) % lines.length]!.replace(
+    /\b([Aa]) (?=\{(\w+)\})/gu,
+    (whole, a: string, key: string) => (/^[aeiou]/iu.test(values[key] ?? "") ? `${a}n ` : whole),
+  ).replace(/\{(\w+)\}/gu, (whole, key: string) => values[key] ?? whole);
+}
+
 /** One of the caretaker's lines for a routine moment, turning in order as `pick` grows: their own, else the house's.
  *  `{pet}` and `{nickname}` are filled in, and whatever else `fill` names. */
 function phrase(
@@ -208,11 +228,7 @@ function phrase(
 ): string {
   const own = profile.voice.phrases?.[moment] ?? [];
   const lines = own.length > 0 ? own : HOUSE_PHRASES[moment];
-  const values: Record<string, string> = { pet, nickname: profile.voice.petNickname || pet, ...fill };
-  return lines[Math.abs(Math.trunc(pick)) % lines.length]!.replace(
-    /\b([Aa]) (?=\{(\w+)\})/gu,
-    (whole, a: string, key: string) => (/^[aeiou]/iu.test(values[key] ?? "") ? `${a}n ` : whole),
-  ).replace(/\{(\w+)\}/gu, (whole, key: string) => values[key] ?? whole);
+  return filled(lines, pick, { pet, nickname: profile.voice.petNickname || pet, ...fill });
 }
 
 /** Spreads `pick`, so whether a sign-off comes and which one does not follow the line's turn. */
@@ -221,28 +237,21 @@ function mix(pick: number): number {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-/** `line` with one of the caretaker's sign-offs for `feeling` after it about half the time, the same for the same
- *  `pick`. Theirs, else (a voice made before sign-offs) their catchphrases after a neutral line, else the house's. */
+/** `line` with one of the caretaker's sign-offs for `feeling` after it about one time in four, the same for the same
+ *  `pick`: theirs, else the house's. A voice the model wrote before sign-offs gets none, so its catchphrases are not
+ *  worn out as tags. */
 function signed(line: string, profile: SaucelingCareProfile, feeling: SaucelingSignoffFeeling, pick: number): string {
   const h = mix(pick);
-  if ((h & 1) === 0) return line;
-  const { signoffs, catchphrases } = profile.voice;
-  const pool = signoffs
-    ? (signoffs[feeling] ?? [])
-    : profile.generatedByModel
-      ? feeling === "neutral"
-        ? catchphrases
-        : []
-      : HOUSE_SIGNOFFS[feeling];
-  return pool.length > 0 ? `${line} ${pool[(h >>> 1) % pool.length]}` : line;
+  if ((h & 3) !== 3) return line;
+  const { signoffs } = profile.voice;
+  const pool = signoffs ? (signoffs[feeling] ?? []) : profile.generatedByModel ? [] : HOUSE_SIGNOFFS[feeling];
+  return pool.length > 0 ? `${line} ${pool[(h >>> 2) % pool.length]}` : line;
 }
 
 /** `whileTalking`: the caretaker found it while chatting with the player, not by the nook. */
 export function templateEggFoundScene(profile: SaucelingCareProfile, whileTalking = false, pick = 0): string {
   return signed(
-    whileTalking
-      ? "I found this egg while we were talking, still warm."
-      : "Look what I found by the nook: an egg, still warm.",
+    filled(whileTalking ? SCENE_LINES.eggFoundTalking : SCENE_LINES.eggFound, pick, {}),
     profile,
     "neutral",
     pick,
@@ -251,17 +260,12 @@ export function templateEggFoundScene(profile: SaucelingCareProfile, whileTalkin
 
 /** Said beside the pet in the nook when its caretaker finds another egg while chatting. */
 export function templateEggFoundWhileTalking(profile: SaucelingCareProfile, pick = 0): string {
-  return signed("We were talking and I found an egg. It's waiting in the Menagerie.", profile, "neutral", pick);
+  return signed(filled(SCENE_LINES.eggFoundWhileTalking, pick, {}), profile, "neutral", pick);
 }
 
 /** Said beside the pet in the nook by its caretaker when another character finds an egg while chatting. */
 export function templateEggFoundByOther(profile: SaucelingCareProfile, finderName: string, pick = 0): string {
-  return signed(
-    `${finderName} found an egg while they were talking with you. It's waiting in the Menagerie.`,
-    profile,
-    "neutral",
-    pick,
-  );
+  return signed(filled(SCENE_LINES.eggFoundByOther, pick, { finder: finderName }), profile, "neutral", pick);
 }
 
 /** `kindName` is what hatched: its species name, or the kind its caretaker invented; `name` is the name it was given,
@@ -274,16 +278,11 @@ export function templateHatchScene(profile: SaucelingCareProfile, kindName: stri
 
 /** Said once, when a happy sauceling is ready to evolve; the Nook then shows Evolve…. */
 export function templateEvolveOfferScene(profile: SaucelingCareProfile, petName: string, pick = 0): string {
-  return signed(
-    `${petName}'s been so happy lately. I think they're ready to become something new. Have a look when you're ready.`,
-    profile,
-    "pleased",
-    pick,
-  );
+  return signed(filled(SCENE_LINES.evolveOffer, pick, { pet: petName }), profile, "pleased", pick);
 }
 
 export function templateEvolveScene(profile: SaucelingCareProfile, petName: string, form: string, pick = 0): string {
-  return signed(`${petName}'s evolved! Look at them now, a real ${form}.`, profile, "pleased", pick);
+  return signed(filled(SCENE_LINES.evolve, pick, { pet: petName, form }), profile, "pleased", pick);
 }
 
 /** Which phrasebook moment each caretaker outcome is, how they feel about it, and whether it is said to the egg. */
@@ -359,21 +358,21 @@ export function templateStageUpScene(
   return signed(phrase(profile, "stageUp", petName, pick, { stage }), profile, "pleased", pick);
 }
 
-export function templateTemperamentShiftScene(petName: string, temperament: SaucelingTemperamentId): string {
+export function templateTemperamentShiftScene(petName: string, temperament: SaucelingTemperamentId, pick = 0): string {
   const sauce = TEMPERAMENT_CATALOG[temperament];
-  return `Have you noticed? ${petName}'s gone all ${sauce.readsAs} lately. A real ${sauce.name} now.`;
+  return filled(SCENE_LINES.temperamentShift, pick, { pet: petName, readsAs: sauce.readsAs, name: sauce.name });
 }
 
 /** Said by the caretaker it has started to take after (see `SaucelingOwnTemperament`). */
-export function templateTakesAfterScene(petName: string, temperament: string): string {
-  return `Have you noticed? ${petName} has been a bit more ${temperament.toLowerCase()} lately. I think it's picking up my ways.`;
+export function templateTakesAfterScene(petName: string, temperament: string, pick = 0): string {
+  return filled(SCENE_LINES.takesAfter, pick, { pet: petName, temperament: temperament.toLowerCase() });
 }
 
-const ABSENCE_OPENINGS: Record<SaucelingAbsenceBucket, string> = {
-  day: "You're back!",
-  days: "There you are! It's been a few days.",
-  week: "A whole week! Welcome back.",
-  long: "You've been gone ages! Welcome back.",
+const ABSENCE_OPENINGS: Record<SaucelingAbsenceBucket, string[]> = {
+  day: ["You're back!"],
+  days: ["There you are! It's been a few days."],
+  week: ["A whole week! Welcome back."],
+  long: ["You've been gone ages! Welcome back."],
 };
 
 export function templateAbsenceScene(
@@ -409,19 +408,19 @@ export function templateAbsenceScene(
   }
   const done = parts.filter(Boolean);
   const report = done.length ? `While you were away I ${listed(done)}.` : "It was quiet while you were away.";
-  return signed(`${ABSENCE_OPENINGS[bucket]} ${report}`, profile, "neutral", pick);
+  return signed(`${filled(ABSENCE_OPENINGS[bucket], pick, {})} ${report}`, profile, "neutral", pick);
 }
 
 export function templateFarewellScene(profile: SaucelingCareProfile, petName: string, pick = 0): string {
   return signed(phrase(profile, "farewell", petName, pick), profile, "neutral", pick);
 }
 
-export function templateEggFarewellScene(): string {
-  return `Into the Menagerie you go, ${EGG_CALL}. Stay warm.`;
+export function templateEggFarewellScene(pick = 0): string {
+  return filled(SCENE_LINES.eggFarewell, pick, { egg: EGG_CALL });
 }
 
-export function templateEggReturnScene(): string {
-  return "The egg's back, and still warm. Into the basket with you.";
+export function templateEggReturnScene(pick = 0): string {
+  return filled(SCENE_LINES.eggReturn, pick, { egg: EGG_CALL });
 }
 
 /** A new caretaker's hello on taking over, until the model writes a better one. */
@@ -435,7 +434,7 @@ export function templateCaretakerHello(
 
 export function templateReturnScene(profile: SaucelingCareProfile, lockedStage: SaucelingStage, pick = 0): string {
   return signed(
-    `Welcome back, ${profile.voice.petNickname}! Look at you, ${aStage(lockedStage)} through and through.`,
+    filled(SCENE_LINES.returnHome, pick, { nickname: profile.voice.petNickname, stage: lockedStage }),
     profile,
     "pleased",
     pick,

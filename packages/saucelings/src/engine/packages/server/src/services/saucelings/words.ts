@@ -125,6 +125,9 @@ export async function generateLineWithModel(options: {
     const hello = options.event.kind === "caretaker-change";
     const { meters } = options.pet;
     const { characterName: name, voice } = options.profile;
+    // A catchphrase now and then, not in every line, so it stays theirs instead of a tic.
+    const catchphrase =
+      Math.random() < 0.25 ? voice.catchphrases[Math.floor(Math.random() * voice.catchphrases.length)] : undefined;
     // The card is read fresh, so an edit to it shows in the next line; the house caretaker has none.
     const [record] = await runtime.resources.listCharacters([options.profile.characterId]);
     const persona = record ? cardPersona(record) : { who: "", talk: "" };
@@ -143,7 +146,8 @@ export async function generateLineWithModel(options: {
           persona.who ? `Who ${name} is, from their character card:\n${persona.who}` : "",
           persona.talk ? `How ${name} talks in their card (match the voice, not the situation):\n${persona.talk}` : "",
           voice.speechStyle ? `How ${name} talks: ${voice.speechStyle}` : "",
-          `${name} calls the pet "${voice.petNickname}", at mealtimes ${voice.feedingStyle}, and says things like ${JSON.stringify([voice.voiceSample, ...voice.catchphrases])}.`,
+          `${name} calls the pet "${voice.petNickname}" and at mealtimes ${voice.feedingStyle}. A line in ${name}'s voice: ${JSON.stringify(voice.voiceSample)}.`,
+          catchphrase ? `One of ${name}'s catchphrases, to use only if it fits: ${JSON.stringify(catchphrase)}.` : "",
           options.place
             ? `Where ${name} and the pet are right now, the Nook's background: ${options.place}. Mention it only when it fits.`
             : "",
@@ -175,6 +179,7 @@ export async function generateLineWithModel(options: {
             ? `The player just asked how the pet is doing: tell them how it is right now. Go by its meters (0 to 100, higher is better) but say it in words, never the numbers${egg ? "" : ", and let its temperament, traits and habit show in what it is up to"}. The recent journal says what happened lately.`
             : "",
           "The JSON below is what just happened; its fallbackTemplate says it plainly. Say that in your own words rather than repeating it.",
+          "Make it sound fresh: don't open or close with a catchphrase or stock tag, and don't reuse wording from the recent journal.",
           'Return ONLY JSON: {"text":"..."}',
         ]
           .filter(Boolean)
@@ -193,12 +198,12 @@ export async function generateLineWithModel(options: {
                 meters: egg
                   ? { warmth: meters.warmth, bond: meters.bond }
                   : { fullness: meters.hunger, mood: meters.mood, bond: meters.bond },
-                recentJournal: options.pet.journal
-                  .filter((ev) => ev.id !== options.event.id)
-                  .slice(0, 3)
-                  .map((ev) => ev.text),
               }
             : {}),
+          recentJournal: options.pet.journal
+            .filter((ev) => ev.id !== options.event.id)
+            .slice(0, 3)
+            .map((ev) => ev.text),
         }),
       },
     ];
@@ -430,7 +435,7 @@ async function writeTemperament(
             id: `takes-after-${Date.parse(nowIso)}`,
             kind: "temperament-shift",
             createdAt: nowIso,
-            text: templateTakesAfterScene(live.name, temperament.name),
+            text: templateTakesAfterScene(live.name, temperament.name, Date.parse(nowIso)),
             generated: false,
             speaker: live.careProfile.characterName,
           },
