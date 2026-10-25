@@ -1,3 +1,8 @@
+## 1.20.0 — 2026-10-25
+- Add optional daily messages from randomly selected units with conversations unlocked, configured in setup or Story Continuity and disabled by default.
+- Keep incoming conversations saved, preserve drafts and pace generation within each local day without offline catch-up.
+- Open mobile Writing help above Settings with outside-tap dismissal and compact question-mark controls.
+
 ## 1.19.0 — 2026-10-25
 
 - Choose optional Formation combat: frontline actions, protected elemental supports, shared energy, repositioning and generated tactical kits.

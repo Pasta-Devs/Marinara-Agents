@@ -1,3 +1,9 @@
+## Daily unit messages and mobile Writing help (1.20.0)
+
+Set **Daily unit messages** during setup or in **Settings → Story → Continuity**. The default is **0**, which turns this off. Enter a nonnegative whole number for a daily total across randomly chosen units whose conversations are unlocked. Up to that many message attempts run per local day while this world is open. Messages use the story connection and its provider credits, begin after a short delay, and are spaced through the day without an offline catch-up burst. Failed or interrupted attempts count toward the daily budget so reopening cannot repeat an ambiguous paid request.
+
+Incoming messages stay in each unit’s existing scrollable conversation. A notice lets you read a new message; background delivery preserves drafts and your position in older history. Writing → Advanced help opens above Settings on mobile and stays until you tap outside it or press Escape. The question-mark controls retain their compact size.
+
 ## Optional Formation combat (1.19.0)
 
 Choose **Classic** or **Formation** while creating a playthrough. Existing worlds keep Classic. For a saved world, open **Settings → Story → Continuity → Combat mode**. The confirmation explains the model requests needed to remake every character's kit. Up to three conversions are queued at a time; progress, individual failures, explicit retry and cancellation remain available after reopening. The world stays in its current mode until every current character kit is ready and one atomic transaction activates the change.

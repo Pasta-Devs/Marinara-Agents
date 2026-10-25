@@ -95,6 +95,9 @@ jobs:
           node tests/gacha-forge-formation-voices.regression.mjs
           node tests/gacha-forge-formation-voices-sdk.regression.mjs
           node tests/gacha-forge-formation-voice-file.regression.mjs
+          node tests/gacha-forge-proactive-messages.regression.mjs
+          node tests/gacha-forge-proactive-messages-client.regression.mjs
+          node tests/gacha-forge-proactive-messages-sdk.regression.mjs
           node tests/gacha-forge-seasonal-events.regression.mjs
           node tests/gacha-forge-seasonal-events-client.regression.mjs
           node tests/gacha-forge-seasonal-events-media.regression.mjs

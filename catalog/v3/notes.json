@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.20.0",
+          "date": "2026-10-25",
+          "notes": "- Add optional daily messages from randomly selected units with conversations unlocked, configured in setup or Story Continuity and disabled by default.\n- Keep incoming conversations saved, preserve drafts and pace generation within each local day without offline catch-up.\n- Open mobile Writing help above Settings with outside-tap dismissal and compact question-mark controls.",
+          "highlight": true
+        },
+        {
           "version": "1.19.0",
           "date": "2026-10-25",
           "notes": "- Choose optional Formation combat: frontline actions, protected elemental supports, shared energy, repositioning and generated tactical kits.\n- Convert saved worlds after confirmation with bounded parallel generation, persistent progress and explicit retry, preserving characters and progression.\n- Add creative, validated boss objectives, elemental Ultimate portrait effects and optional fixed, saved combat voice lines for assigned voices.\n- Keep Classic combat, existing boss dialogue and authoritative reward replay.",
@@ -284,12 +290,6 @@
           "date": "2026-10-23",
           "notes": "- Choose your protagonist's dialogue or actions from two to four themed options above the dialogue box. Player choices are on by default in Settings > Story > Continuity.\n- Small choices include every alternative scene in the same generation and return to the shared story. Your first-play choices become canon; replaying another route does not rewrite them.\n- A chapter or Character Story can end with one optional big choice. That fate is permanent, and later story generation waits for it before continuing from the chosen outcome.\n- Choices survive reloads. Existing linear chapters still work; turning choices off affects newly written scenes and keeps existing decisions.",
           "highlight": true
-        },
-        {
-          "version": "1.9.1",
-          "date": "2026-10-23",
-          "notes": "- Chapter fullscreen controls now use a small icon aligned with the top-right header fade, with a usable touch target and visible keyboard focus.\n- Visible unit portraits use eager loading and synchronous decoding on detail updates.\n- Favorite and help icons are centered; unit cards show their existing affinity symbol in the top-right corner.",
-          "highlight": false
         }
       ]
     },
