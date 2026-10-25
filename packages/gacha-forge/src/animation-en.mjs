@@ -13,6 +13,7 @@ export const forgeAnimationEnglish = {
   seedanceSetup:
     'Seedance needs a public HTTPS banner image. In Engine Settings → Connections, edit this video connection and enable "Upload Seedance reference frames temporarily", then retry.',
   retry: "Retry animation",
+  retryCost: "Retrying may use provider credits.",
   playbackFailed: "This animation could not play. The illustration is still shown.",
   pause: "Pause animation",
   play: "Play animation",

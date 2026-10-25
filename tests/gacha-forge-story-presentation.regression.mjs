@@ -22,7 +22,19 @@ test("a speaker change replaces both image buffers and never exposes a previous 
       return this[name];
     },
   }));
-  const figures = [{}, {}];
+  const figures = [0, 1].map(() => ({
+    attributes: new Set(),
+    toggleAttribute(name, force) {
+      if (force) this.attributes.add(name);
+      else this.attributes.delete(name);
+    },
+    removeAttribute(name) {
+      this.attributes.delete(name);
+    },
+    hasAttribute(name) {
+      return this.attributes.has(name);
+    },
+  }));
   const plate = {
     querySelectorAll: () =>
       images.map((image, index) => ({
@@ -31,6 +43,10 @@ test("a speaker change replaces both image buffers and never exposes a previous 
     setAttribute() {},
   };
   setForgeStoryPortrait(plate, { art: "mari.png" });
+  assert.ok(
+    figures.every((figure) => figure.hasAttribute("hidden")),
+    "Both SVG buffers hide their fallback",
+  );
   assert.deepEqual(
     images.map((image) => [image.src, image.hidden]),
     [
@@ -47,7 +63,11 @@ test("a speaker change replaces both image buffers and never exposes a previous 
   assert.equal(images[0].src, "lev.png");
   images[1].onerror();
   assert.equal(images[1].hidden, true);
-  assert.equal(figures[1].hidden, false, "A failed portrait leaves a neutral placeholder instead of a blank card");
+  assert.equal(
+    figures[1].hasAttribute("hidden"),
+    false,
+    "A failed portrait leaves a neutral placeholder instead of a blank card",
+  );
 });
 
 test("choice punctuation keeps existing endings and dialogue quotes intact", () => {

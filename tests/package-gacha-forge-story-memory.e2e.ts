@@ -7,11 +7,16 @@ if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engin
 const appVersion = JSON.parse(readFileSync(resolve(engineRoot, "package.json"), "utf8")).version;
 type Memory = { phase: string; retryable: boolean; reason?: string };
 
-async function openMemory(page: Page, testInfo: TestInfo, initial: Memory) {
+async function openMemory(
+  page: Page,
+  testInfo: TestInfo,
+  initial: Memory,
+  reducedMotion: "reduce" | "no-preference" = "reduce",
+) {
   await page.setViewportSize(
     testInfo.project.name.includes("mobile") ? { width: 874, height: 402 } : { width: 1440, height: 900 },
   );
-  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.emulateMedia({ reducedMotion });
   await page.addInitScript((version) => {
     localStorage.removeItem("marinara-active-chat-id");
     localStorage.setItem("marinara:whats-new:seen-version", version);
@@ -142,6 +147,69 @@ test("Unknown context explains Engine configuration without hiding optional manu
   await check.click();
   await expect(status).toHaveText("Story memory is up to date.");
   expect(fixture.retry).toEqual(["memory-world-one"]);
+});
+
+test("Continuity keeps its original context threshold controls visible across viewport changes", async ({
+  page,
+}, testInfo) => {
+  const { forge } = await openMemory(page, testInfo, { phase: "ready", retryable: false }, "no-preference");
+  await forge.locator(".gf-fs-bar").click();
+  await expect(page.locator(".mari-home-browser-chrome")).toBeHidden();
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 },
+    { width: 874, height: 402 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const controls = forge.locator("[data-warn-custom]");
+    const evidence = await controls.evaluate((input) => {
+      const plate = input.closest(".st-plate")!;
+      const panel = input.closest(".st-pane")!;
+      const bounds = panel.getBoundingClientRect();
+      const heading = [...plate.querySelectorAll("h2,h3,h4")].find((node) => node.textContent === "Model context")!;
+      const visibleIntersection = (node: Element) => {
+        const box = node.getBoundingClientRect();
+        return {
+          width: Math.min(box.right, bounds.right, innerWidth) - Math.max(box.left, bounds.left, 0),
+          height: Math.min(box.bottom, bounds.bottom, innerHeight) - Math.max(box.top, bounds.top, 0),
+        };
+      };
+      return {
+        visible: [input, heading].map(visibleIntersection),
+        input: input.outerHTML,
+        plate: plate.outerHTML,
+        dimensions: [
+          input.getBoundingClientRect().x,
+          input.getBoundingClientRect().y,
+          input.getBoundingClientRect().width,
+          input.getBoundingClientRect().height,
+        ],
+        panel: [
+          panel.getBoundingClientRect().y,
+          panel.getBoundingClientRect().height,
+          panel.scrollTop,
+          panel.scrollHeight,
+        ],
+        styles: [input, plate, panel].map((node) => ({
+          display: getComputedStyle(node).display,
+          visibility: getComputedStyle(node).visibility,
+          opacity: getComputedStyle(node).opacity,
+          overflow: getComputedStyle(node).overflow,
+        })),
+      };
+    });
+    await testInfo.attach(`context-${viewport.width}x${viewport.height}.json`, {
+      body: JSON.stringify(evidence, null, 2),
+      contentType: "application/json",
+    });
+    await page.screenshot({ path: testInfo.outputPath(`context-${viewport.width}x${viewport.height}.png`) });
+    await expect(controls).toBeVisible();
+    await expect(forge.getByRole("heading", { name: "Model context", exact: true })).toBeVisible();
+    for (const intersection of evidence.visible) {
+      expect(intersection.width).toBeGreaterThan(0);
+      expect(intersection.height).toBeGreaterThan(0);
+    }
+  }
 });
 
 test("Explicit retry settles to ready and manual compression and combining remain available", async ({

@@ -860,6 +860,68 @@
               "replace": "Ee(a[_],e.revealFirst===true),()=>{e.choicePlayback"
             }
           ]
+        },
+        {
+          "version": "1.16.1",
+          "edits": [
+            {
+              "find": "\"She did not answer.\"",
+              "replace": "\"They did not answer.\""
+            },
+            {
+              "find": "ds=\"1.16.0\"",
+              "replace": "ds=\"1.16.1\""
+            },
+            {
+              "find": "/* forge-browser-source:start */\n",
+              "replaceFrom": "src/chat-continuity-client.mjs",
+              "sourceId": "chat-continuity"
+            },
+            {
+              "find": "_chatSay(e){let a=this._chat;",
+              "replace": "_chatSay(e){let a=this._chat,forgeChatRunId=this._run?this._run.runId:\"\";"
+            },
+            {
+              "find": "if(!n){this._chatStash={unitId:a.unit.id,error:c,retry:!!(o&&o.retry),draft:l?\"\":r};return}l||(this._chat={...this._chat,messages:(this._chat.messages||[]).filter(h=>!String(h.id||\"\").startsWith(\"local-\"))},r&&(this._chatDraft=r)),this._chat={...this._chat,error:c,retry:!!(o&&o.retry)},this._chatRev+=1,this._renderBrowser()",
+              "replace": "return reconcileForgeChatFailure(this,{runId:forgeChatRunId,unitId:a.unit.id,previous:a.messages||[],text:r,intent:e,optimistic:s,error:c,response:o})"
+            },
+            {
+              "find": "this._chat={...this._chat,error:\"\",retry:!1},this._chatReload();return",
+              "replace": "this._chat={...this._chat,error:\"\",retry:!1,messages:removeForgeChatOptimistic(this._chat.messages,s)},this._chatReload();return"
+            },
+            {
+              "find": "_chatWith(e){let a=String(e||\"\");",
+              "replace": "_chatWith(e){let a=String(e||\"\"),forgeChatRunId=this._run?this._run.runId:\"\";"
+            },
+            {
+              "find": "this._chat={...this._chat,opening:!1,error:\"\",unit:r.unit,channel:r.channel||\"\",messages:r.messages||[],past:r.past||0,cost:r.cost,max:r.max,photos:r.photos!==!1,page:Number(r.page)||1,pages:Number(r.pages)||1};let s=this._chatStash;s&&s.unitId===a&&(this._chatStash=null,this._chat={...this._chat,error:s.error||\"\",retry:!!s.retry},s.draft&&(this._chatDraft=s.draft))",
+              "replace": "adoptForgeChatSnapshot(this,r,{runId:forgeChatRunId,unitId:a,opening:!0})"
+            },
+            {
+              "find": "_chatReload(){let e=this._chat;",
+              "replace": "_chatReload(){let e=this._chat,forgeChatRunId=this._run?this._run.runId:\"\";"
+            },
+            {
+              "find": "this._chat={...this._chat,unit:a.unit,messages:a.messages||[],past:a.past||0,page:Number(a.page)||1,pages:Number(a.pages)||1},this._chatRev+=1",
+              "replace": "adoptForgeChatSnapshot(this,a,{runId:forgeChatRunId,unitId:e.unit.id}),this._chatRev+=1"
+            },
+            {
+              "find": "_chatEarlier(){let e=this._chat;",
+              "replace": "_chatEarlier(){let e=this._chat,forgeChatRunId=this._run?this._run.runId:\"\";"
+            },
+            {
+              "find": "this._chat={...this._chat,messages:[...r.messages||[],...this._chat.messages||[]],page:Number(r.page)||a,pages:Number(r.pages)||1},this._chatRev+=1,this._renderBrowser()",
+              "replace": "prependForgeChatHistory(this,r,{runId:forgeChatRunId,unitId:e.unit.id,page:a})"
+            },
+            {
+              "find": "C||!x.length?\" disabled\":\"\"}>Close and remember",
+              "replace": "C||!forgeChatHasCurrentMessages(x)?\" disabled\":\"\"}>Close and remember"
+            },
+            {
+              "find": "if(!this._chat||!this._chat.unit)return;if(o&&o.ok){if(!n)return;this._adoptFromResponse(o),this._chat={...this._chat,error:\"\",retry:!1,messages:removeForgeChatOptimistic(this._chat.messages,s)},this._chatReload();return}",
+              "replace": "if(o&&o.ok){retainForgeChatSuccess(this,{runId:forgeChatRunId,unitId:a.unit.id,previous:a.messages||[],text:r,intent:e,optimistic:s},o);if(!n)return;this._adoptFromResponse(o),this._chatReload();return}if(!this._chat||!this._chat.unit)return;"
+            }
+          ]
         }
       ]
     },
@@ -1562,6 +1624,83 @@
             {
               "find": "let ee=En(x),j=gt(\"tenet\",m.data.affinity||\"\",Y.tier),J=gt(\"mandate\",\"any\",1),he=[{id:j,need:Y.tenet}];Y.mandate&&he.push({id:J,need:Y.mandate});for(let ge of he)if((Number(ee[ge.id])||0)<ge.need)return{ok:!1,error:\"short-materials\",form:$()};let Z=Math.max(0,Number(x.funds)||0);if(Z<Y.funds)return{ok:!1,error:\"short-funds\",form:$()};for(let ge of he)ee[ge.id]-=ge.need;if(x.materials=ee,x.funds=Z-Y.funds,b.wallet=x,Q.form=Q.form&&typeof Q.form==\"object\"?Q.form:typeof Q.form==\"number\"?{skill:Q.form}:{},Q.form[_.key]=ne+1,Xt(b,o,\"form-up\",1,Date.now()),!await Pe(o,w,b))",
               "replace": "let ee=En(x),Z=Math.max(0,Number(x.funds)||0),forgePlan=forgeTrainingPlan({level:ne,cap:Ql(Ua(S)),materials:ee,funds:Z,costAtLevel:level=>forgeTrainingCost(level,m.data.affinity,ed,gt,Jt),levels:u.levels===void 0?1:u.levels});if(!forgePlan.ok)return{ok:!1,error:forgePlan.error,form:$()};for(let ge of forgePlan.items)ee[ge.id]-=ge.need;if(x.materials=ee,x.funds=Z-forgePlan.funds,b.wallet=x,Q.form=Q.form&&typeof Q.form==\"object\"?Q.form:typeof Q.form==\"number\"?{skill:Q.form}:{},Q.form[_.key]=forgePlan.levelTo,Xt(b,o,\"form-up\",forgePlan.levels,Date.now()),!await Pe(o,w,b))"
+            }
+          ]
+        },
+        {
+          "version": "1.16.1",
+          "edits": [
+            {
+              "find": "query:[g.unit.name,de]",
+              "replace": "query:[g.unit.name,l(($[$.length-1]||{}).text)]"
+            },
+            {
+              "find": "/* forge-audio-settings-source:start */\n",
+              "replaceFrom": "src/chat-continuity-server.mjs",
+              "sourceId": "chat-continuity"
+            },
+            {
+              "find": "s.post(\"/chat/open\",async p=>{let u=p&&p.body||{},o=l(u.runId),i=l(u.unitId);if(!o||!i)return{ok:!1,error:\"bad-request\"};let g=await Pi(o,i);if(!g.ok)return g;let{data:m}=await Za(o,i),w=Array.isArray(m.messages)?m.messages:[],b=Ti(m),S=w.slice(b),M=Math.max(1,Math.ceil(S.length/$f)),_=Math.min(Math.max(1,Math.round(Number(u.page)||1)),M),x=S.length-(_-1)*$f,L=await xi(o,g.run);return{ok:!0,unit:{id:i,name:l(g.unit.name),portrait:sn(g.unit)||\"\",bond:g.level},channel:go(L||\"\"),cost:Qi,max:ld,photos:await jh(g.run),messages:S.slice(Math.max(0,x-$f),x),page:_,pages:M,past:(Array.isArray(m.sessions)?m.sessions:[]).length}})",
+              "replace": "s.post(\"/chat/open\",async p=>{let u=p&&p.body||{},o=l(u.runId),i=l(u.unitId);if(!o||!i)return{ok:!1,error:\"bad-request\"};let g=await Pi(o,i);if(!g.ok)return g;let{data:m}=await Za(o,i),forgePage=forgeChatHistoryPage(m,u.page,$f,forgeChatReplyBusy(o,i)),L=await xi(o,g.run);return{ok:!0,unit:{id:i,name:l(g.unit.name),portrait:sn(g.unit)||\"\",bond:g.level},channel:go(L||\"\"),cost:Qi,max:ld,photos:await jh(g.run),...forgePage}})"
+            },
+            {
+              "find": "s.post(\"/chat/send\",async p=>{let u=p&&p.body||{},o=l(u.runId),i=l(u.unitId);if(!o||!i)return{ok:!1,error:\"bad-request\"};let g=await Pi(o,i);if(!g.ok)return g;let m=await Za(o,i),w=Array.isArray(m.data.messages)?m.data.messages:[],b=w[w.length-1]||null,S=!!b&&b.who===\"player\",M=u.retry===!0;if(M&&!S)return{ok:!1,error:\"nothing-to-retry\"};let _=await jh(g.run);if(l(u.ask)===\"photo\"&&!_)return{ok:!1,error:\"images-off\"};let x=_&&l(u.ask)===\"photo\",L=null;if(!M){let de=l(u.text).trim().slice(0,ld);if(!de&&!x)return{ok:!1,error:\"bad-request\"};let ge=await Xr(o,Qi);if(!ge.ok)return ge;L=ge.wallet;let Fe={id:Fg(),who:\"player\",text:de,at:Date.now(),...x?{ask:\"photo\"}:{}};if(!await os(o,i,Ye=>{Ye.unitId=i,Ye.name=l(g.unit.name),Ye.messages=Array.isArray(Ye.messages)?Ye.messages:[],Ye.messages.some(Re=>Re&&Re.id===Fe.id)||Ye.messages.push(Fe)}))return await xn(o,Ye=>{let Re=Ye.wallet=Ye.wallet||{...Xe};Re.vigor=(Number(Re.vigor)||0)+Qi}),{ok:!1,error:\"write-conflict\"};await xn(o,Ye=>Xt(Ye,o,\"chat-message\",1,Date.now()))}let{data:O}=await Za(o,i),$=(Array.isArray(O.messages)?O.messages:[]).slice(Ti(O)).slice(-K0),F=await xi(o,g.run),U=await _r(o,await Nr(o)+1,0,{query:[g.unit.name,l(($[$.length-1]||{}).text)].filter(Boolean).join(\" \"),job:\"chat\",current:true}),Q=U.length>$g?U.slice(-$g):U,ne=l(g.unit.name),Y=await _t({runtime:r,runId:o,run:g.run,job:\"chat\",label:`chat ${ne}`,messages:forgeComposeMemoryPrompt(cv,[{unit:g.unit,scenario:l(g.run.scenario),channel:go(F||\"\"),channelBlurb:Hp(F||\"\"),protagonist:g.run.protagonist,bond:g.level,story:Q,history:$,memories:await Ei(o,{only:[ne]}),photos:_,asked:x||M&&!!b&&b.ask===\"photo\"}]),options:{temperature:.95,maxTokens:It(700)},parse:de=>{let ge=l(de).trim(),Fe=ne+\":\";return ne&&ge.slice(0,Fe.length).toLowerCase()===Fe.toLowerCase()&&(ge=ge.slice(Fe.length).trim()),ge?{value:ge}:{error:\"empty-answer\"}}});if(!Y.ok)return{ok:!1,error:\"generation-failed\",detail:l(Y.error),wallet:L,retry:!0};let ee=ov(Y.value),j=_?ee.photo:\"\",J=_?ee.wearing:\"\",he=ee.mine!==!1,Z={id:Fg(),who:\"unit\",text:ee.text,at:Date.now(),...j?{photo:{pending:!0}}:{}},ue=await os(o,i,de=>{de.messages=Array.isArray(de.messages)?de.messages:[],de.messages.some(ge=>ge&&ge.id===Z.id)||de.messages.push(Z)});return ue?(j&&$e(o,g.run,i,Z.id,j,J,he),{ok:!0,wallet:L,said:Z,count:ue.messages.length}):{ok:!1,error:\"write-conflict\",wallet:L,retry:!0}})",
+              "replace": "s.post(\"/chat/send\",async p=>withForgeChatSend(p&&p.body&&p.body.runId,p&&p.body&&p.body.unitId,async()=>{let u=p&&p.body||{},o=l(u.runId),i=l(u.unitId);if(!o||!i)return{ok:!1,error:\"bad-request\"};let g=await Pi(o,i);if(!g.ok)return g;let m=await Za(o,i),w=Array.isArray(m.data.messages)?m.data.messages:[],b=w[w.length-1]||null,S=!!b&&b.who===\"player\",M=u.retry===!0;if(M&&!S)return{ok:!1,error:\"nothing-to-retry\"};let _=await jh(g.run);if(l(u.ask)===\"photo\"&&!_)return{ok:!1,error:\"images-off\"};let x=_&&l(u.ask)===\"photo\",L=null;if(!M){let de=l(u.text).trim().slice(0,ld);if(!de&&!x)return{ok:!1,error:\"bad-request\"};let ge=await Xr(o,Qi);if(!ge.ok)return ge;L=ge.wallet;let Fe={id:Fg(),who:\"player\",text:de,at:Date.now(),...x?{ask:\"photo\"}:{}};if(!await os(o,i,Ye=>{Ye.unitId=i,Ye.name=l(g.unit.name),Ye.messages=Array.isArray(Ye.messages)?Ye.messages:[],Ye.messages.some(Re=>Re&&Re.id===Fe.id)||Ye.messages.push(Fe)}))return await xn(o,Ye=>{let Re=Ye.wallet=Ye.wallet||{...Xe};Re.vigor=(Number(Re.vigor)||0)+Qi}),{ok:!1,error:\"write-conflict\"};await xn(o,Ye=>Xt(Ye,o,\"chat-message\",1,Date.now()))}let{data:O}=await Za(o,i),$=(Array.isArray(O.messages)?O.messages:[]).slice(Ti(O)).slice(-K0),F=await xi(o,g.run),U=await _r(o,await Nr(o)+1,0,{query:[g.unit.name,l(($[$.length-1]||{}).text)].filter(Boolean).join(\" \"),job:\"chat\",current:true}),Q=U.length>$g?U.slice(-$g):U,ne=l(g.unit.name),Y=await _t({runtime:r,runId:o,run:g.run,job:\"chat\",label:`chat ${ne}`,messages:forgeComposeMemoryPrompt(cv,[{unit:g.unit,scenario:l(g.run.scenario),channel:go(F||\"\"),channelBlurb:Hp(F||\"\"),protagonist:g.run.protagonist,bond:g.level,story:Q,history:$,memories:await Ei(o,{only:[ne]}),photos:_,asked:x||M&&!!b&&b.ask===\"photo\"}]),options:{temperature:.95,maxTokens:It(700)},parse:de=>{let ge=l(de).trim(),Fe=ne+\":\";return ne&&ge.slice(0,Fe.length).toLowerCase()===Fe.toLowerCase()&&(ge=ge.slice(Fe.length).trim()),ge?{value:ge}:{error:\"empty-answer\"}}});if(!Y.ok)return{ok:!1,error:\"generation-failed\",detail:l(Y.error),wallet:L,retry:!0};let ee=ov(Y.value),j=_?ee.photo:\"\",J=_?ee.wearing:\"\",he=ee.mine!==!1,Z={id:Fg(),who:\"unit\",text:ee.text,at:Date.now(),...j?{photo:{pending:!0}}:{}},ue=await os(o,i,de=>{de.messages=Array.isArray(de.messages)?de.messages:[],de.messages.some(ge=>ge&&ge.id===Z.id)||de.messages.push(Z)});return ue?(j&&$e(o,g.run,i,Z.id,j,J,he),{ok:!0,wallet:L,said:Z,count:ue.messages.length}):{ok:!1,error:\"write-conflict\",wallet:L,retry:!0}}))"
+            },
+            {
+              "find": "s.post(\"/chat/close\",async p=>{let u=p&&p.body||{},o=l(u.runId),i=l(u.unitId);if(!o||!i)return{ok:!1,error:\"bad-request\"};let g=await Pi(o,i);if(!g.ok)return g;let{data:m}=await Za(o,i),b=(Array.isArray(m.messages)?m.messages:[]).slice(Ti(m));if(!b.some($=>$&&l($.text)))return{ok:!1,error:\"nothing-open\"};let S=await nl(o),M=l(g.run.protagonist&&g.run.protagonist.name)||\"They\",_=b.filter($=>$&&(l($.text)||$.who===\"player\"&&$.ask===\"photo\")).map($=>`${$.who===\"player\"?M:l(g.unit.name)}: ${l($.text)||\"(asked for a picture)\"}`).join(`\n`),x=await _t({runtime:r,runId:o,run:g.run,job:\"chat\",label:`chat-memory ${l(g.unit.name)}`,messages:sv({name:l(g.unit.name),player:l(g.run.protagonist&&g.run.protagonist.name),chapter:S,said:_}),options:{temperature:.5,maxTokens:It(500)},parse:Vt(r,$=>iv($))});if(!x.ok)return{ok:!1,error:\"generation-failed\",detail:l(x.error),retry:!0};let L={at:Date.now(),count:b.length,chapter:S,memory:x.value.memory,quote:x.value.quote,memoryName:l(g.unit.name),memoryPosition:await forgeStoryMemory.frontier(o)};return await os(o,i,$=>{$.sessions=Array.isArray($.sessions)?$.sessions:[],Ti($)<(Array.isArray($.messages)?$.messages.length:0)&&$.sessions.push(L)})?(forgeStoryMemory.schedule(o),{ok:!0,closed:L}):{ok:!1,error:\"write-conflict\",retry:!0}})",
+              "replace": "s.post(\"/chat/close\",async p=>{let u=p&&p.body||{},o=l(u.runId),i=l(u.unitId);if(!o||!i)return{ok:!1,error:\"bad-request\"};let g=await Pi(o,i);if(!g.ok)return g;if(forgeChatReplyBusy(o,i))return{ok:!1,error:\"generation-in-progress\",busy:!0,retry:!1};let{data:m}=await Za(o,i),b=(Array.isArray(m.messages)?m.messages:[]).slice(Ti(m));if(!b.some($=>$&&l($.text)))return{ok:!1,error:\"nothing-open\"};let S=await nl(o),M=l(g.run.protagonist&&g.run.protagonist.name)||\"They\",_=b.filter($=>$&&(l($.text)||$.who===\"player\"&&$.ask===\"photo\")).map($=>`${$.who===\"player\"?M:l(g.unit.name)}: ${l($.text)||\"(asked for a picture)\"}`).join(`\n`),x=await _t({runtime:r,runId:o,run:g.run,job:\"chat\",label:`chat-memory ${l(g.unit.name)}`,messages:sv({name:l(g.unit.name),player:l(g.run.protagonist&&g.run.protagonist.name),chapter:S,said:_}),options:{temperature:.5,maxTokens:It(500)},parse:Vt(r,$=>iv($))});if(!x.ok)return{ok:!1,error:\"generation-failed\",detail:l(x.error),retry:!0};let L={at:Date.now(),count:b.length,chapter:S,memory:x.value.memory,quote:x.value.quote,memoryName:l(g.unit.name),memoryPosition:await forgeStoryMemory.frontier(o)};return await os(o,i,$=>{$.sessions=Array.isArray($.sessions)?$.sessions:[],Ti($)<(Array.isArray($.messages)?$.messages.length:0)&&$.sessions.push(L)})?(forgeStoryMemory.schedule(o),{ok:!0,closed:L}):{ok:!1,error:\"write-conflict\",retry:!0}})"
+            },
+            {
+              "find": "function vu(e,t=!1){",
+              "replaceFrom": "src/character-card-context.mjs",
+              "sourceId": "character-card-context",
+              "reason": "Inject the frozen maintained helper before its first caller"
+            },
+            {
+              "find": "function vu(e,t=!1){let n=[],r=(a,f)=>{let h=l(a);return h.length>f?`${h.slice(0,f-1)}\\u2026`:h};for(let a of e||[]){if(!a||a.kind!==\"character\")continue;let f=l(a.name);if(!f)continue;let h=a.rarity===5?\"5\\u2605\":\"4\\u2605\",A=[a.role,a.affinity].filter(Boolean).join(\", \"),T=r(a.description,OA),R=r(a.personality,CA),C=[T,R].filter(Boolean).join(\" \\xB7 \"),I=t?r(l(a.outfitLine).replace(/^wearing\\s+/iu,\"\"),LA):\"\";n.push(`- ${f}${iw(a)} \\u2014 ${h}${A?` ${A}`:\"\"}${C?`: ${C}`:\"\"}${I?` \\xB7 Normally wears: ${I}`:\"\"}`)}return n.join(`\n`)}",
+              "replace": "function forgeLegacyCharacterSummary(e,t=!1){let n=[],r=(a,f)=>{let h=l(a);return h.length>f?`${h.slice(0,f-1)}\\u2026`:h};for(let a of e||[]){if(!a||a.kind!==\"character\")continue;let f=l(a.name);if(!f)continue;let h=a.rarity===5?\"5\\u2605\":\"4\\u2605\",A=[a.role,a.affinity].filter(Boolean).join(\", \"),T=r(a.description,OA),R=r(a.personality,CA),C=[T,R].filter(Boolean).join(\" \\xB7 \"),I=t?r(l(a.outfitLine).replace(/^wearing\\s+/iu,\"\"),LA):\"\";n.push(`- ${f}${iw(a)} \\u2014 ${h}${A?` ${A}`:\"\"}${C?`: ${C}`:\"\"}${I?` \\xB7 Normally wears: ${I}`:\"\"}`)}return n.join(`\n`)}function vu(e,t=false){return forgeFormatStoryCharacters(forgeLegacyCharacterSummary,e,t)}",
+              "reason": "Retain the exact legacy formatter and wrap its characterization with authored canon"
+            },
+            {
+              "find": "vu(E)",
+              "replace": "vu(await forgeHydrateStoryCharacters(E,(id)=>Le().characterCard(id),r.logger))",
+              "reason": "Read full current cards for the selected main chapter focus"
+            },
+            {
+              "find": "async function Lw(s,c,d){let v=await il(s);if(!v.length)return{pool:\"\",index:\"\"};await fh(s,v);let k=v.map(B=>B.data),E=py(k,c),N=k.filter(B=>!E.includes(B)),P=[];for(let B of E){let H=v.find(K=>K.data===B),q=await lh(d,H?H.id:\"\",B,\"\");P.push(q.line?{...B,outfitLine:q.line}:B)}return{pool:vu(P,!0),index:N.map(uy).join(`\n`),names:E.map(B=>l(B&&B.name)).filter(Boolean)}}",
+              "replace": "async function Lw(s,c,d,forgeForcedIds=[]){let v=await il(s);if(!v.length)return{pool:\"\",index:\"\"};await fh(s,v);let k=v.map(B=>B.data),E=forgeIncludeStoryFocusCharacters(v,py(k,c),forgeForcedIds),N=k.filter(B=>!E.includes(B)),P=[];for(let B of E){let H=v.find(K=>K.data===B),q=await lh(d,H?H.id:\"\",B,\"\");P.push(q.line?{...B,outfitLine:q.line}:B)}return{pool:vu(await forgeHydrateStoryCharacters(P,(id)=>Le().characterCard(id),r.logger),true),index:N.map(uy).join(`\n`),names:E.map(B=>l(B&&B.name)).filter(Boolean)}}",
+              "reason": "Keep ordinary guide matches and same-run forced focus, then hydrate selected scene characters"
+            },
+            {
+              "find": "forgeComposeMemoryPrompt(mS,[{scenario:w.scenario,unit:S",
+              "replace": "forgeComposeMemoryPrompt(mS,[{scenario:w.scenario,unit:(await forgeHydrateStoryCharacters([S],(id)=>Le().characterCard(id),r.logger))[0]",
+              "reason": "Hydrate a copy for Character Story planning without mutating S"
+            },
+            {
+              "find": "Lw(p,U,g)",
+              "replace": "Lw(p,U,g,w.bondUnitId?[w.bondUnitId]:[])",
+              "reason": "Always include the Character Story focus when the guide uses only pronouns"
+            },
+            {
+              "find": "function _u(e,t){if(!e)return\"\";let n=f=>f.length>sc?f.slice(0,sc)+\"\\u2026\":f,r=[`\n\nTHE CHARACTER CARD \\u2014 this is who they are, written by the player:\nName: ${e.name}`];e.description&&r.push(`Description: ${n(e.description)}`),e.personality&&r.push(`Personality: ${n(e.personality)}`),e.appearance&&r.push(`Appearance: ${n(e.appearance)}`),e.backstory&&r.push(`Backstory: ${n(e.backstory)}`),e.scenario&&r.push(`Their context: ${n(e.scenario)}`),e.tags&&e.tags.length&&r.push(`Tags: ${e.tags.join(\", \")}`);let a=[];return t&&t.role&&a.push(`their role is ${t.role}`),t&&t.affinity&&a.push(`their affinity is ${t.affinity}`),a.length&&r.push(`HARD RULE: ${a.join(\" and \")} -- the player chose ${a.length===2?\"them\":\"it\"}. Write the kit for exactly that; do not pick another.`),r.join(`\n`)}",
+              "replace": "function _u(e,t){if(!e)return\"\";let r=[\"\\n\\n\"+forgeFormatCharacterCardReference(e)],a=[];return t&&t.role&&a.push(`their role is ${t.role}`),t&&t.affinity&&a.push(`their affinity is ${t.affinity}`),a.length&&r.push(`HARD RULE: ${a.join(\" and \")} -- the player chose ${a.length===2?\"them\":\"it\"}. Write the kit for exactly that; do not pick another.`),r.join(`\n`)}",
+              "reason": "Initial forging uses only the four full authored fields and retains its exact hard-rule tail"
+            },
+            {
+              "find": "\"the game stores one line per field and reads it in every scene, so a card's paragraphs cannot be\"",
+              "replace": "\"the game stores a compact line per field for its interface; story writing separately reads the\"",
+              "reason": "Keep UI summaries compact while acknowledging fresh full-card story references"
+            },
+            {
+              "find": "\"copied in whole \\u2014 but nothing in them may be contradicted, and nothing new may be invented about\"",
+              "replace": "\"current full authored card. Nothing in it may be contradicted, and nothing new may be invented about\"",
+              "reason": "Remove the obsolete prohibition on full-card story context"
+            },
+            {
+              "find": "A.cap=Le||null,le=await $e.chatComplete(C,{...a,...ot,signal:forgeStoryGenerationSignal(),...Le?{maxTokens:Le}:{},temperature:se===1?a.temperature:Math.min(a.temperature??1,rS)})",
+              "replace": "logForgeStoryPrompt(e,h,C,a),A.cap=Le||null,le=await $e.chatComplete(C,{...a,...ot,signal:forgeStoryGenerationSignal(),...Le?{maxTokens:Le}:{},temperature:se===1?a.temperature:Math.min(a.temperature??1,rS)})",
+              "reason": "Log the final fitted messages immediately before the existing provider call"
             }
           ]
         }

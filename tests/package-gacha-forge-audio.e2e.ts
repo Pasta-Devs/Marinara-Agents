@@ -1,7 +1,8 @@
 import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "node:http";
+import { pathToFileURL } from "node:url";
 import { recordForgeSoundtrack } from "../packages/gacha-forge/src/audio-settings.mjs";
 
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
@@ -60,9 +61,14 @@ async function openForge(
     realVideo?: boolean;
     reducedMotion?: "reduce" | "no-preference";
     selectedAnimation?: string;
+    hostTheme?: "dark" | "light";
+    runId?: string;
+    connectionId?: string;
   } = {},
 ) {
   const saved: typeof baseRun & { animationConnectionId?: string } = structuredClone(baseRun);
+  if (options.runId) saved.runId = options.runId;
+  if (options.connectionId) saved.connectionId = options.connectionId;
   saved.audio.tts = options.voice === true;
   if (options.selectedAudio) saved.audio.audioConnectionId = options.selectedAudio;
   if (options.selectedAnimation) saved.animationConnectionId = options.selectedAnimation;
@@ -80,13 +86,19 @@ async function openForge(
   );
   await page.emulateMedia({ reducedMotion: options.reducedMotion ?? "reduce" });
   await page.addInitScript(
-    ({ version, realVideo }) => {
+    ({ version, realVideo, hostTheme }) => {
       localStorage.removeItem("marinara-active-chat-id");
       localStorage.setItem("marinara:whats-new:seen-version", version);
       localStorage.setItem(
         "marinara-engine-ui",
         JSON.stringify({
-          state: { hasCompletedOnboarding: true, sidebarOpen: false, rightPanelOpen: false, appAccentPulseMode: false },
+          state: {
+            theme: hostTheme,
+            hasCompletedOnboarding: true,
+            sidebarOpen: false,
+            rightPanelOpen: false,
+            appAccentPulseMode: false,
+          },
           version: 65,
         }),
       );
@@ -102,7 +114,7 @@ async function openForge(
         return Promise.resolve();
       };
     },
-    { version: appVersion, realVideo: options.realVideo === true },
+    { version: appVersion, realVideo: options.realVideo === true, hostTheme: options.hostTheme ?? "dark" },
   );
   await page.route("**/api/app-settings/ui", (route) =>
     route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
@@ -271,7 +283,11 @@ async function openAnimatedBanner(forge: Locator) {
   await expect(forge.locator('[data-screen="banner"] .show > .art.wide')).toBeVisible();
 }
 
-async function animationProof(page: Page, testInfo: TestInfo, options: { selected?: boolean; reduce?: boolean } = {}) {
+async function animationProof(
+  page: Page,
+  testInfo: TestInfo,
+  options: { selected?: boolean; reduce?: boolean; hostTheme?: "dark" | "light" } = {},
+) {
   const clip = readFileSync(resolve(__dirname, "fixtures/gacha-banner-loop.mp4"));
   const url = `/api/gacha-forge/banner-animation/file/${"a".repeat(64)}/${"b".repeat(64)}.mp4`;
   const state = {
@@ -353,6 +369,7 @@ async function animationProof(page: Page, testInfo: TestInfo, options: { selecte
     realVideo: true,
     reducedMotion: options.reduce ? "reduce" : "no-preference",
     selectedAnimation: options.selected ? "video-fixture" : undefined,
+    hostTheme: options.hostTheme,
   });
   return { ...opened, state };
 }
@@ -512,21 +529,24 @@ for (const orientation of ["landscape", "portrait"]) {
     if (iphone)
       await page.addInitScript(() => {
         let keyboardTop: number | null = null;
+        let keyboardPan = 0;
         const viewport = new EventTarget();
         Object.defineProperties(viewport, {
           height: { get: () => keyboardTop ?? window.innerHeight },
           width: { get: () => window.innerWidth },
-          offsetTop: { get: () => 0 },
-          pageTop: { get: () => 0 },
+          offsetTop: { get: () => keyboardPan },
+          pageTop: { get: () => keyboardPan },
           offsetLeft: { get: () => 0 },
           pageLeft: { get: () => 0 },
           scale: { get: () => 1 },
         });
         Object.defineProperty(window, "visualViewport", { configurable: true, value: viewport });
         Object.defineProperty(window, "__forgeKeyboardTop", {
-          value: (top: number | null) => {
+          value: (top: number | null, pan = 0) => {
             keyboardTop = top;
+            keyboardPan = pan;
             viewport.dispatchEvent(new Event("resize"));
+            viewport.dispatchEvent(new Event("scroll"));
           },
         });
       });
@@ -620,6 +640,10 @@ for (const orientation of ["landscape", "portrait"]) {
         text: `${draft} Ready to send.`,
       });
     await expect(forge.locator(".ch-msg.mine")).toContainText(`${draft} Ready to send.`);
+    if (iphone && orientation === "landscape") {
+      await page.evaluate(() => (window as any).__forgeKeyboardTop(190, 28));
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    }
     if (iphone) await page.evaluate(() => (window as any).__forgeKeyboardTop(null));
     await page.setViewportSize({ width: 874, height: 402 });
     await field.blur();
@@ -631,8 +655,164 @@ for (const orientation of ["landscape", "portrait"]) {
     await expect(forge.locator("[data-chat-past]")).toBeVisible();
     await expect(forge.locator(".ch-who .nm")).toHaveText("Arden");
     await expect(field).toHaveValue("");
+    if (orientation === "landscape") {
+      await field.press("?");
+      await expect(field).toHaveValue("?");
+      await field.blur();
+      await forge.locator("button[data-chat-close]").click();
+      let threshold = 100000;
+      const thresholdWrites: number[] = [];
+      await page.route("**/api/gacha-forge/warn-threshold", async (route) => {
+        threshold = route.request().postDataJSON().warnTokens;
+        thresholdWrites.push(threshold);
+        Object.assign(saved, { warnTokens: threshold });
+        await route.fulfill({ json: { ok: true, warnTokens: threshold } });
+      });
+      await page.route("**/api/gacha-forge/continuity", (route) =>
+        route.fulfill({ json: { ok: true, chapters: [], warnTokens: threshold } }),
+      );
+      await page.route("**/api/gacha-forge/story-memory/status", (route) =>
+        route.fulfill({ json: { ok: true, memory: { phase: "ready", retryable: false } } }),
+      );
+      await forge.evaluate((node) => {
+        const game = node as any;
+        game._run.contextTokens = game._contextTokens = 120000;
+        game._run.warnTokens = game._warnTokens = 100000;
+        game._openSettings("continuity");
+      });
+      await page.emulateMedia({ reducedMotion: "no-preference" });
+      await forge.locator(".gf-stage > .gf-view .st-pane").evaluate((panel) => {
+        panel.scrollTop = panel.scrollHeight;
+      });
+      await forge.locator('.gf-stage > .gf-view [data-view="advanced"]').click();
+      await forge.locator('.gf-stage > .gf-view [data-view="continuity"]').click();
+      let rotation = 0;
+      // Synthetic camera insets use the Engine's explicit testable safe-area variables.
+      // This exercises layout and retained viewport state, not physical iOS compositing.
+      for (const viewport of [
+        { width: 874, height: 402 },
+        { width: 390, height: 844 },
+        { width: 874, height: 402 },
+      ]) {
+        await page.evaluate((landscape) => {
+          document.documentElement.style.setProperty("--mari-safe-area-inset-left", landscape ? "63px" : "0px");
+          document.documentElement.style.setProperty("--mari-safe-area-inset-right", "0px");
+        }, viewport.width > viewport.height);
+        await page.setViewportSize(viewport);
+        const control = forge.locator(".gf-stage > .gf-view [data-warn-custom]");
+        await expect(control).toBeVisible();
+        const geometry = await control.evaluate((input) => {
+          const box = input.getBoundingClientRect();
+          const panel = input.closest(".st-pane")!;
+          const plate = input.closest(".st-plate")!;
+          const visible = panel.getBoundingClientRect();
+          return {
+            input: { x: box.x, y: box.y, width: box.width, height: box.height },
+            panel: {
+              x: visible.x,
+              y: visible.y,
+              width: visible.width,
+              height: visible.height,
+              scrollTop: panel.scrollTop,
+            },
+            visibility: [input, plate, panel].map((node) => ({
+              display: getComputedStyle(node).display,
+              visibility: getComputedStyle(node).visibility,
+              opacity: getComputedStyle(node).opacity,
+            })),
+            keyboard: document.documentElement.hasAttribute("data-mari-software-keyboard-open"),
+            safeLeft: getComputedStyle(document.documentElement).getPropertyValue("--mari-safe-area-inset-left"),
+          };
+        });
+        const label = `context-after-keyboard-${viewport.width}x${viewport.height}-${rotation++}`;
+        writeFileSync(testInfo.outputPath(`${label}.json`), JSON.stringify(geometry, null, 2));
+        await page.screenshot({ path: testInfo.outputPath(`${label}.png`) });
+        if (viewport.width > viewport.height) {
+          expect(geometry.input.y).toBeGreaterThanOrEqual(geometry.panel.y - 1);
+          expect(geometry.input.y + geometry.input.height).toBeLessThanOrEqual(
+            geometry.panel.y + geometry.panel.height + 1,
+          );
+        }
+      }
+      const custom = forge.locator(".gf-stage > .gf-view [data-warn-custom]");
+      await custom.fill("65");
+      await custom.press("Tab");
+      await expect.poll(() => thresholdWrites).toEqual([65000]);
+      await forge.locator('.gf-stage > .gf-view [data-view="advanced"]').click();
+      await forge.locator('.gf-stage > .gf-view [data-view="continuity"]').click();
+      await expect(custom).toHaveValue("65");
+    }
   });
 }
+
+test("A first typed character message gets one SDK reply and archived history remains in the same window", async ({
+  page,
+}, testInfo) => {
+  const { createChatRuntime, chatRunId, chatUnitId, chatConnectionId } = await import(
+    pathToFileURL(resolve(__dirname, "fixtures/gacha-forge-chat-runtime.mjs")).href
+  );
+  const runtime = await createChatRuntime({ archived: 40 });
+  try {
+    await page.route("**/api/gacha-forge/chat/**", async (route) => {
+      const path = new URL(route.request().url()).pathname.replace("/api/gacha-forge", "");
+      const response = await runtime.post(path, route.request().postDataJSON());
+      await route.fulfill({ status: response.status, json: response.body });
+    });
+    const { forge } = await openForge(page, testInfo, { runId: chatRunId, connectionId: chatConnectionId });
+    await forge.evaluate((node, channel) => {
+      const game = node as any;
+      game._run.chatChannel = channel;
+      game._guidesSeen.add("chat");
+      game._renderBrowser();
+    }, runtime.opened.body.channel);
+    await forge.locator("[data-chat-open]").click();
+    await forge.locator(`[data-chat-with="${chatUnitId}"]`).click();
+    const field = forge.locator("[data-chat-text]");
+    const message = "Will you remember this?";
+    await field.pressSequentially(message);
+    await expect(field).toHaveValue(message);
+    const vigorBefore = runtime.session().wallet.vigor;
+    await forge.locator("[data-chat-send]").click();
+    const log = forge.locator("[data-chat-log]");
+    await expect(log).toContainText("I heard your first message.");
+    await expect(forge.locator(".ch-msg.mine").filter({ hasText: message })).toHaveCount(1);
+    const visibleRows = await forge.locator(".ch-msg").allTextContents();
+    const playerPosition = visibleRows.findIndex((text) => text.includes(message));
+    expect(playerPosition).toBeGreaterThanOrEqual(0);
+    expect(playerPosition).toBeLessThan(visibleRows.findIndex((text) => text.includes("I heard your first message.")));
+    await page.screenshot({ path: testInfo.outputPath("chat-first-reply-ordered.png") });
+    await expect(field).toHaveValue("");
+    expect(runtime.calls.filter((call) => call.kind === "reply")).toHaveLength(1);
+    expect(runtime.resolved.every((request) => request.connectionId === chatConnectionId)).toBe(true);
+    expect(runtime.session().wallet.vigor).toBe(vigorBefore - runtime.opened.body.cost);
+    runtime.transport.stage = "memory";
+    const remember = forge.getByRole("button", { name: "Close and remember", exact: true });
+    await remember.click();
+    await expect(remember).toBeDisabled();
+    await expect(log).toContainText(message);
+    await expect(log).toContainText("I heard your first message.");
+    await forge.locator("button[data-chat-close]").click();
+    await forge.locator("[data-chat-open]").click();
+    await forge.locator(`[data-chat-with="${chatUnitId}"]`).click();
+    await expect(log).toContainText(message);
+    await expect(remember).toBeDisabled();
+    await forge.locator("[data-chat-earlier]").click();
+    await expect(log).toContainText("ARCHIVE_RAW_0");
+    expect(await log.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+    await log.evaluate((node) => {
+      node.scrollTop = 0;
+    });
+    await expect(log.getByText("ARCHIVE_RAW_0", { exact: true })).toBeInViewport();
+    await expect(forge.locator(".ch-msg.mine").filter({ hasText: message })).toHaveCount(1);
+    expect(runtime.calls.filter((call) => call.kind === "reply")).toHaveLength(1);
+    expect(runtime.chatDoc().data.messages.filter((row) => row.who === "player" && row.text === message)).toHaveLength(
+      1,
+    );
+    await page.screenshot({ path: testInfo.outputPath("chat-first-reply-and-scrollable-history.png") });
+  } finally {
+    await runtime.close();
+  }
+});
 
 test("Real story navigation selects distinct home, story and bond music after each scene is ready", async ({
   page,
@@ -833,6 +1013,90 @@ test("Banner generation and actual video decode failures retain the still artwor
 });
 
 for (const theme of ["aurora", "bloom"]) {
+  test(`Failed banner playback offers explicit replacement and recovers in ${theme}`, async ({ page }, testInfo) => {
+    const hostTheme = theme === "bloom" ? "light" : "dark";
+    const { forge, state } = await animationProof(page, testInfo, { selected: true, hostTheme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", hostTheme);
+    await forge.evaluate((node, theme) => {
+      const game = node as any;
+      game._run.hudStyle = theme;
+      game._renderBrowser();
+    }, theme);
+    state.playbackFailed = true;
+    await openAnimatedBanner(forge);
+    const status = forge.locator("[data-banner-animation-status]");
+    const retry = forge.locator("[data-animation-retry]");
+    await expect(status).toContainText("could not play");
+    await expect(status).toContainText("provider credits");
+    await expect(retry).toBeVisible();
+    await expect(forge.locator("video[data-banner-animation]")).toHaveCount(0);
+    const still = forge.locator('[data-screen="banner"] .show > .art.wide');
+    await expect(still).toBeVisible();
+    expect(await still.evaluate((node: HTMLElement) => node.style.backgroundImage)).toContain(portrait);
+    await settleBannerCapture(forge);
+    await page.screenshot({ path: testInfo.outputPath(`banner-playback-recovery-${theme}.png`) });
+    expect(state.posts).toHaveLength(1);
+    state.generationFailed = true;
+    await retry.click();
+    await expect(retry).toBeEnabled();
+    await expect(status).toContainText("animation unavailable");
+    await expect(still).toBeVisible();
+    expect(state.posts).toHaveLength(2);
+    expect(state.posts[1].retry).toBe(true);
+    state.generationFailed = false;
+    state.playbackFailed = false;
+    await retry.click();
+    await decodedBannerVideo(forge);
+    await expect(retry).toHaveCount(0);
+    await expect(status).toHaveCount(0);
+    expect(state.posts).toHaveLength(3);
+    expect(state.posts[2].retry).toBe(true);
+    expect(state.browserErrors).toEqual([]);
+    // Distinctive geometric artwork makes a neutral head/torso overlay visually obvious.
+    // These are synthetic fixtures, not a claim about provider-generated image quality.
+    await page.route("**/api/gacha-forge/beat", (route) =>
+      route.fulfill({
+        json: {
+          ...scene,
+          cast: scene.cast.map((character, index) => ({
+            ...character,
+            art: `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="200" height="300" fill="${index ? "#164b69" : "#5c2869"}"/><path d="M100 15 185 145 100 280 15 145Z" fill="${index ? "#3fe0d4" : "#ef8fd8"}"/><path d="m100 65 52 80-52 80-52-80Z" fill="#15243c"/><text x="100" y="154" text-anchor="middle" font-size="32" fill="white">${index ? "B" : "A"}</text></svg>`)}`,
+          })),
+        },
+      }),
+    );
+    await seedScene(forge, theme);
+    await expect(forge.locator("[data-text]")).toHaveText("ASSIGNED_FIRST");
+    await forge.locator("[data-text]").click();
+    await expect(forge.locator("[data-text]")).toHaveText("UNASSIGNED_SECOND");
+    const plate = forge.locator('[data-plate="right"][data-open="true"]');
+    await expect(plate).toBeVisible();
+    await expect
+      .poll(() =>
+        plate
+          .locator("[data-img]")
+          .evaluateAll(
+            (images) =>
+              images.length === 2 &&
+              images.every(
+                (image) => (image as HTMLImageElement).naturalWidth > 0 && !(image as HTMLImageElement).hidden,
+              ),
+          ),
+      )
+      .toBe(true);
+    expect(
+      await plate
+        .locator("[data-figure]")
+        .evaluateAll(
+          (figures) =>
+            figures.length === 2 &&
+            figures.every((figure) => figure.hasAttribute("hidden") && getComputedStyle(figure).display === "none"),
+        ),
+    ).toBe(true);
+    await settleBannerCapture(forge);
+    await page.screenshot({ path: testInfo.outputPath(`story-portrait-no-overlay-${theme}.png`) });
+  });
+
   test(`Animation retry shows setup guidance, pending state and recovery in ${theme}`, async ({ page }, testInfo) => {
     const { forge, state } = await animationProof(page, testInfo, { selected: true });
     await forge.evaluate((node, theme) => {
