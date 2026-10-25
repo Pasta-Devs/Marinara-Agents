@@ -23,6 +23,13 @@ const settingsValueAt = (value: unknown, path: LtmSettingsPath) =>
     (node, key) => (node && typeof node === "object" ? (node as Record<string | number, unknown>)[key] : undefined),
     value,
   );
+// zod 3 names an enum miss `invalid_enum_value`; zod 4 names it `invalid_value`, as it does a literal miss, and also
+// for a value that is not a string (zod 3 calls that `invalid_type`), so only a string counts as a newer option. The
+// top-level `version` literal must still fail the parse.
+const isUnknownEnumValue = (code: string, path: LtmSettingsPath, value: unknown) =>
+  path.length > 0 &&
+  (code === "invalid_enum_value" ||
+    (code === "invalid_value" && typeof value === "string" && !(path.length === 1 && path[0] === "version")));
 /**
  * Splits a stored settings file into the part this version knows and what a newer
  * version wrote: fields this version does not have, at any depth, enum values it does
@@ -59,22 +66,56 @@ export function splitUnknownLtmSettings(schema: z.ZodTypeAny, value: unknown, pa
       newer.push(issuePath);
       changed = true;
     };
+    // A list over its maximum reports only that, not its entries, so an entry this version does not know
+    // is found by checking each one alone.
+    const unknownEntries = (list: LtmSettingsPath) => {
+      const entries = settingsValueAt(known, list);
+      if (!Array.isArray(entries)) return [];
+      return entries.flatMap((entry, index) => {
+        const probe = structuredClone(known);
+        (settingsValueAt(probe, list.slice(0, -1)) as Record<string | number, unknown>)[list[list.length - 1]!] = [
+          entry,
+        ];
+        const alone = schema.safeParse(probe);
+        return !alone.success &&
+          alone.error.issues.some(
+            (issue) =>
+              isUnknownEnumValue(issue.code, issue.path as LtmSettingsPath, entry) &&
+              issue.path.join(".") === [...list, 0].join("."),
+          )
+          ? [index]
+          : [];
+      });
+    };
     const outOfRange: LtmSettingsPath[] = [];
+    // zod 4 also reports a range issue for a value of the wrong type (a string for a list); the type error decides.
+    const wrongType = new Set(
+      result.error.issues.filter((issue) => issue.code === "invalid_type").map((issue) => issue.path.join(".")),
+    );
     for (const issue of result.error.issues) {
-      if (issue.code === "unrecognized_keys") {
-        const parent = settingsValueAt(known, issue.path);
+      const code: string = issue.code;
+      const issuePath = issue.path as LtmSettingsPath;
+      if (code === "unrecognized_keys") {
+        const parent = settingsValueAt(known, issuePath);
         if (!isSettingsRecord(parent)) continue;
-        for (const key of issue.keys) {
-          if (issue.path.length === 0) unknown[key] = parent[key];
-          else newer.push([...issue.path, key]);
+        for (const key of (issue as { keys?: string[] }).keys ?? []) {
+          if (issuePath.length === 0) unknown[key] = parent[key];
+          else newer.push([...issuePath, key]);
           delete parent[key];
           changed = true;
         }
-      } else if (issue.code === "invalid_enum_value" && issue.path.length > 0) remove(issue.path);
-      else if ((issue.code === "too_big" || issue.code === "too_small") && issue.path.length > 0)
-        outOfRange.push(issue.path);
+      } else if (isUnknownEnumValue(code, issuePath, settingsValueAt(known, issuePath))) remove(issuePath);
+      else if (
+        (code === "too_big" || code === "too_small") &&
+        issuePath.length > 0 &&
+        !wrongType.has(issuePath.join("."))
+      )
+        outOfRange.push(issuePath);
     }
-    if (!changed) outOfRange.forEach(remove);
+    if (!changed) {
+      for (const list of outOfRange) for (const index of unknownEntries(list)) remove([...list, index]);
+      if (!changed) outOfRange.forEach(remove);
+    }
     for (const { list, indexes } of dropped.values()) {
       const parent = settingsValueAt(known, list.slice(0, -1)) as Record<string | number, unknown>;
       const key = list[list.length - 1]!;
@@ -119,11 +160,7 @@ export function withNewerLtmSettings(saved: object, read: LtmSettingsRead, reque
   return output;
 }
 /** Reads a settings file leniently; a writer saves through `withNewerLtmSettings`. */
-export async function readLtmSettingsFile<T>(
-  path: string,
-  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
-  fallback: unknown,
-) {
+export async function readLtmSettingsFile<T>(path: string, schema: z.ZodType<T, any, any>, fallback: unknown) {
   const value = await readJsonFile<unknown>(path, fallback);
   const { known, ...read } = splitUnknownLtmSettings(schema, value, path);
   const parsed = schema.safeParse(known);
