@@ -308,10 +308,15 @@ try {
     assert.equal((await shared.generate({ ...request, banner: "wpn-featured", retry: true })).ok, true);
     await assert.rejects(readFile(previous), { code: "ENOENT" }, "the last reference retires the old shared clip");
   }
-  {
-    const request = { ...body, runId: "failed-ready-marker-retains-media" };
+  for (const failure of ["different", "identical", "shared"]) {
+    const request = { ...body, runId: `failed-ready-marker-${failure}` };
     recoveryProvider = async () => video;
     const old = await recovery.generate(request);
+    const nextBytes = failure === "identical" ? bytes : replacement;
+    if (failure === "shared") {
+      recoveryProvider = async () => ({ ...video, base64: nextBytes.toString("base64") });
+      await recovery.generate({ ...request, banner: "wpn-featured" });
+    }
     const folder = join(dataDir, "capability-package-data", "gacha-forge", "banner-animations", digest(request.runId));
     const originalRename = fsPromises.rename;
     fsPromises.rename = async (from, ...args) => {
@@ -324,7 +329,7 @@ try {
       return originalRename(from, ...args);
     };
     syncBuiltinESMExports();
-    recoveryProvider = async () => ({ ...video, base64: replacement.toString("base64") });
+    recoveryProvider = async () => ({ ...video, base64: nextBytes.toString("base64") });
     try {
       assert.equal((await recovery.generate({ ...request, retry: true })).ok, false);
       assert.deepEqual(
@@ -333,6 +338,19 @@ try {
         "failed marker commit retains previous media",
       );
       assert.equal((await recovery.generate(request)).animation.url, old.animation.url);
+      const newFile = join(folder, `${digest(nextBytes)}.mp4`);
+      if (failure === "different")
+        await assert.rejects(
+          readFile(newFile),
+          { code: "ENOENT" },
+          "a rejected ready marker retires only its new unreferenced clip",
+        );
+      else
+        assert.deepEqual(
+          await readFile(newFile),
+          nextBytes,
+          `${failure} media remains referenced after a failed marker commit`,
+        );
     } finally {
       fsPromises.rename = originalRename;
       syncBuiltinESMExports();
