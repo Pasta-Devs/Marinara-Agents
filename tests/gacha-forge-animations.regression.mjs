@@ -392,18 +392,93 @@ try {
       syncBuiltinESMExports();
     }
   }
-  for (const guard of ["malformed-marker", "oversized-marker", "scan-ceiling"]) {
+  for (const format of [
+    "empty",
+    "broken",
+    "null",
+    "array",
+    "primitive",
+    "invalid-key",
+    "missing-file",
+    "empty-file",
+    "existing-file",
+    "symlink-file",
+    "directory-file",
+    "array-key",
+  ]) {
+    for (const legacyReference of [false, true]) {
+      const request = { ...body, runId: `legacy-reference-${format}-${legacyReference}` };
+      recoveryProvider = async () => video;
+      const old = await recovery.generate(request);
+      const folder = join(
+        dataDir,
+        "capability-package-data",
+        "gacha-forge",
+        "banner-animations",
+        digest(request.runId),
+      );
+      const previousKey = old.animation.url.split("/").at(-1).slice(0, -4);
+      const stem = legacyReference ? previousKey : digest("unrelated-legacy-marker");
+      const alternate = digest("alternate-clip");
+      const named = format === "array-key" ? [previousKey] : alternate;
+      const contents = {
+        empty: "",
+        broken: "{broken",
+        null: "null",
+        array: "[]",
+        primitive: "7",
+        "invalid-key": '{"mediaKey":"not-a-key"}',
+      };
+      if (format === "existing-file") await writeFile(join(folder, `${alternate}.mp4`), bytes);
+      if (format === "empty-file") await writeFile(join(folder, `${alternate}.mp4`), "");
+      if (format === "symlink-file")
+        await symlink(join(folder, `${previousKey}.mp4`), join(folder, `${alternate}.mp4`));
+      if (format === "directory-file") await mkdir(join(folder, `${alternate}.mp4`));
+      await writeFile(join(folder, `${stem}.json`), contents[format] ?? JSON.stringify({ mediaKey: named }));
+      recoveryProvider = async () => ({ ...video, base64: replacement.toString("base64") });
+      const fresh = await recovery.generate({ ...request, retry: true });
+      assert.equal(fresh.ok, true);
+      const retained = format === "array-key" || (legacyReference && format !== "existing-file");
+      const previousFile = join(folder, `${previousKey}.mp4`);
+      if (retained)
+        assert.deepEqual(await readFile(previousFile), bytes, `${format} retains the effective legacy/media reference`);
+      else
+        await assert.rejects(readFile(previousFile), { code: "ENOENT" }, `${format} does not retain an unrelated clip`);
+      const [world, filename] = fresh.animation.url.split("/").slice(-2);
+      assert.deepEqual(
+        await collect(await recovery.serve({ params: { world, filename }, headers: {} }, reply())),
+        replacement,
+      );
+    }
+  }
+  {
+    const request = { ...body, runId: "coercible-current-marker" };
+    recoveryProvider = async () => video;
+    const old = await recovery.generate(request);
+    const folder = join(dataDir, "capability-package-data", "gacha-forge", "banner-animations", digest(request.runId));
+    await writeFile(join(folder, `${old.animation.key}.json`), JSON.stringify({ mediaKey: [digest(bytes)] }));
+    assert.equal((await recovery.generate(request)).animation.url, old.animation.url);
+    const identical = await recovery.generate({ ...request, retry: true });
+    assert.equal(identical.animation.url, old.animation.url);
+    assert.deepEqual(
+      await readFile(join(folder, `${digest(bytes)}.mp4`)),
+      bytes,
+      "coercible legacy metadata cannot cause identical replacement to unlink its current clip",
+    );
+  }
+  for (const guard of ["oversized-marker", "scan-ceiling", "directory-marker", "symlink-marker"]) {
     const request = { ...body, runId: `retirement-${guard}` };
     recoveryProvider = async () => video;
     const old = await recovery.generate(request);
     const folder = join(dataDir, "capability-package-data", "gacha-forge", "banner-animations", digest(request.runId));
     if (guard === "scan-ceiling") {
       for (let index = 0; index < 513; index += 1) await writeFile(join(folder, `unrelated-${index}`), "");
-    } else
-      await writeFile(
-        join(folder, `${digest(guard)}.json`),
-        guard === "malformed-marker" ? "{broken" : " ".repeat(4097),
-      );
+    } else if (guard === "directory-marker") await mkdir(join(folder, `${digest(guard)}.json`));
+    else if (guard === "symlink-marker") {
+      const outside = join(directory, "retirement-marker-sentinel.json");
+      await writeFile(outside, "outside sentinel");
+      await symlink(outside, join(folder, `${digest(guard)}.json`));
+    } else await writeFile(join(folder, `${digest(guard)}.json`), " ".repeat(4097));
     recoveryProvider = async () => ({ ...video, base64: replacement.toString("base64") });
     assert.equal((await recovery.generate({ ...request, retry: true })).ok, true);
     assert.deepEqual(
