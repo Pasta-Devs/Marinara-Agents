@@ -652,6 +652,12 @@
     "quartermaster": {
       "versions": [
         {
+          "version": "0.1.30",
+          "date": "2026-10-25",
+          "notes": "- Accepting or keeping a pending item change and then switching chats before it finishes no\n  longer shows that chat's result in the chat you switched to.\n- The \"Only you can change it — becomes shown\" help now says removals are skipped too.",
+          "highlight": false
+        },
+        {
           "version": "0.1.29",
           "date": "2026-10-25",
           "notes": "- Hide items and outfits from their ⋯ menu. Hidden ones get their own Bag tab and are kept from\n  the agent: it only sees a hidden item while you're wearing it.\n- New Hidden Items settings choose what the agent may do to a hidden item, and whether it asks\n  first. Asking shows the change side by side so you can accept it or keep the old details.\n- Lock an item's description from the item editor so the agent can't change it.\n- Feed appearance has seven options, including equipped item names and descriptions. Outfit\n  portraits follow the same setting.\n- Build Wardrobe can use hidden items when you allow it, and always asks you about each one first.\n- Optional Delete button on item and outfit cards (Settings → Display, saved per device).\n- Re-equipping an outfit whose item was deleted now brings the item back with its default slot.",
@@ -764,12 +770,6 @@
           "date": "2026-09-13",
           "notes": "- The tracking agent now targets specific changes instead of re-listing the whole inventory every\n  turn, so nothing gets dropped or cut off.\n- Added a \"Recent Automatic Update\" view showing what the last turn changed, with a per-item\n  Revert button.",
           "highlight": true
-        },
-        {
-          "version": "0.1.10",
-          "date": "2026-09-13",
-          "notes": "- Rewrote the README's Features section for readability and documented several\n  previously-undocumented features.\n- Updated the in-app description to mention saved outfits, AI-generated art, and the tracker\n  agent.",
-          "highlight": false
         }
       ]
     },

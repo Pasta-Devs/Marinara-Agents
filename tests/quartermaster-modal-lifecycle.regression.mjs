@@ -419,6 +419,46 @@ await test("returning to a chat does not accept a mutation from its previous vis
   }
 });
 
+await test("a pending-change answer applies only to the chat visit that sent it", async () => {
+  const answers = {
+    applied: { ok: true, status: 200, body: { items: [{ id: "old" }], pendingHiddenChanges: [] } },
+    stale: { ok: false, status: 409, body: { stale: true, before: {}, current: {}, after: {} } },
+    gone: { ok: false, status: 409, body: { gone: true } },
+    failed: { ok: false, status: 500, body: { error: "Previous visit" } },
+  };
+  for (const [kind, answer] of Object.entries(answers)) {
+    for (const change of ["none", "away", "return"]) {
+      const api = {};
+      vm.runInContext(stateSource, vm.createContext({ QM: api }));
+      const reads = [];
+      api.listItems = () => new Promise((resolve) => reads.push(resolve));
+      api.state.setChat("chat-a");
+      let settle;
+      api.resolvePending = () => new Promise((resolve) => (settle = () => resolve(answer)));
+      const pending = api.state.resolvePending("p1", { decision: "accept" });
+      if (change !== "none") api.state.setChat("chat-b");
+      if (change === "return") api.state.setChat("chat-a");
+      const currentReload = api.state._reloadToken;
+      const pendingBefore = api.state.pendingHiddenChanges;
+      settle();
+      const result = await pending;
+      const label = `${kind}/${change}`;
+      if (change === "none") {
+        if (kind === "applied") assert.equal(api.state.items[0].id, "old", `${label}: applies its answer`);
+        if (kind === "stale") assert.equal(result.stale, true, `${label}: reports stale`);
+        if (kind === "gone") assert.equal(result.gone, true, `${label}: reports gone`);
+        if (kind === "failed") assert.equal(api.state.error, "Previous visit", `${label}: shows its error`);
+        continue;
+      }
+      assert.deepEqual({ ...result }, {}, `${label}: the old card gets nothing to review`);
+      assert.equal(api.state.items, null, `${label}: leaves the current chat's items`);
+      assert.equal(api.state.pendingHiddenChanges, pendingBefore, `${label}: leaves its pending changes`);
+      assert.equal(api.state.error, null, `${label}: leaves its error`);
+      assert.equal(api.state._reloadToken, currentReload, `${label}: keeps the current chat's reload valid`);
+    }
+  }
+});
+
 await test("closing the active chat clears the panel's old error", async () => {
   const api = { state: { chatId: null } };
   vm.runInContext(
@@ -571,6 +611,28 @@ await test("package requests send the saved Admin Secret and the CSRF marker", a
     await withoutSecret.QM.listItems("chat-a", "persona");
     assert.equal(withoutSecret.calls[0].init.headers["X-Admin-Secret"], undefined);
   }
+});
+
+await test("settling a pending change answers stale and deleted items without throwing", async () => {
+  const answers = [
+    { ok: true, status: 200, body: { items: [] } },
+    { ok: false, status: 409, body: { stale: true, current: {} } },
+    { ok: false, status: 409, body: { error: "This item no longer exists", gone: true } },
+    { ok: false, status: 400, body: { error: "decision must be accept or keep" } },
+  ];
+  const api = loadApi({ secret: "s", respond: () => answers.shift() });
+  const settle = () => api.QM.resolvePending("chat-a", "persona", "p 1", { decision: "accept" });
+  const plain = (value) => JSON.parse(JSON.stringify(value));
+  assert.deepEqual(plain(await settle()), { ok: true, status: 200, body: { items: [] } });
+  assert.deepEqual(plain(await settle()), { ok: false, status: 409, body: { stale: true, current: {} } });
+  assert.equal((await settle()).body.gone, true);
+  await assert.rejects(settle(), /^Error: decision must be accept or keep$/);
+  const [first] = api.calls;
+  assert.match(first.url, /\/pending\/p%201\/resolve$/);
+  assert.equal(first.init.headers["X-Admin-Secret"], "s");
+  assert.equal(first.init.headers["x-marinara-csrf"], "1");
+  assert.equal(first.init.headers["Content-Type"], "application/json");
+  assert.equal(first.init.body, JSON.stringify({ decision: "accept" }));
 });
 
 await test("a refused Admin Secret explains how to fix it on this device", async () => {

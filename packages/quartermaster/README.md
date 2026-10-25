@@ -122,12 +122,14 @@ Settings → Hidden Items decides what happens when the agent tries to change a 
   If the item changed in the meantime, you see all three versions and pick which to keep. Accepted
   changes appear in Recent Item Updates and can be reverted.
 - **Hidden item access** (used when not asking; when asking, it only decides whether the popup's
-  "Show item" box starts ticked):
-  - *Only you can change it — stays hidden* (default): the agent's changes are skipped.
-  - *Only you can change it — becomes shown*: details and removals are skipped, but the agent may
-    equip or move it, which shows it.
-  - *Agent can change it — stays hidden*: the agent's changes apply, and it stays hidden.
-  - *Agent can change it — becomes shown*: the agent's changes apply, and it's shown again.
+  "Show (unhide) this item" box starts ticked):
+  - *Only you can change it — stays hidden* (default): the agent's changes are skipped. It can
+    still take a worn hidden item off.
+  - *Only you can change it — becomes shown*: the agent's description, quantity and removal
+    changes are skipped, but it can equip or move the item, which then shows it.
+  - *Agent can change it — stays hidden*: the agent's changes apply. It stays hidden, showing only
+    while worn.
+  - *Agent can change it — becomes shown*: the agent's changes apply and the item becomes shown.
 - **Build Wardrobe can use hidden items** (off by default): see Build Wardrobe below.
 - **Hidden items only in the Hidden tab** (on by default): see the Bag tabs above.
 
@@ -270,6 +272,13 @@ and every bundled icon, and writes `artifacts/quartermaster-<version>.zip` — r
 overwrite an already-released version's artifact file if you forget to bump `VERSION` first.
 
 ## Changelog
+
+### 0.1.30
+- Settling a pending item change (Accept, Keep, or the stale and deleted-item choices) and then
+  switching chats before the answer arrives no longer writes that answer into the chat you
+  switched to. Returning to the original chat shows its own, current state.
+- Hidden item access help, here and in Settings, now describes each mode the same way and matches
+  what the agent is actually allowed to do ("becomes shown" also skips removals).
 
 ### 0.1.29
 - **Hidden items and outfits**: hide anything from its ⋯ menu to keep it from the agent, which

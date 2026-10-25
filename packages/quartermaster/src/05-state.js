@@ -216,7 +216,7 @@ const QM_HIDDEN_ITEM_ACCESS_OPTIONS = [
   {
     value: "userShown",
     label: "Only you can change it — becomes shown",
-    help: "The agent's description and quantity changes are skipped, but it can equip or move the item, which then shows it.",
+    help: "The agent's description, quantity and removal changes are skipped, but it can equip or move the item, which then shows it.",
   },
   {
     value: "agentHidden",
@@ -801,20 +801,23 @@ QM.state = {
   // decision: { decision: "accept" | "keep", show, override }. Returns the
   // server's answer; a stale accept comes back as { stale: true, before,
   // current, after } (status 409) for the caller to show, without an error.
+  // An answer that arrives after the user left the chat changes nothing.
   async resolvePending(pendingId, decision) {
     const chatId = this.chatId;
+    const chatToken = this._chatToken;
     const response = await QM.resolvePending(chatId, QM_OWNER_ID, pendingId, decision).catch((error) => ({
       ok: false,
       status: 0,
       body: { error: error.message },
     }));
+    if (this.chatId !== chatId || chatToken !== this._chatToken) return {};
     if (response.ok) {
       await this._mutate(Promise.resolve(response.body));
     } else if (response.status === 409 && response.body?.stale) {
       return { stale: true, ...response.body };
     } else if (response.body?.gone) {
       return { gone: true };
-    } else if (this.chatId === chatId) {
+    } else {
       this.error = response.body?.error || "Couldn't settle that change";
       this._notify();
     }

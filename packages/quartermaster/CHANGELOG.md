@@ -1,5 +1,10 @@
 # Quartermaster changelog
 
+## 0.1.30 — 2026-10-25
+- Accepting or keeping a pending item change and then switching chats before it finishes no
+  longer shows that chat's result in the chat you switched to.
+- The "Only you can change it — becomes shown" help now says removals are skipped too.
+
 ## 0.1.29 — 2026-10-25 [highlight]
 - Hide items and outfits from their ⋯ menu. Hidden ones get their own Bag tab and are kept from
   the agent: it only sees a hidden item while you're wearing it.
