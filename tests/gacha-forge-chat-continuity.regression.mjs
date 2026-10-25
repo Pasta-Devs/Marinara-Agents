@@ -92,6 +92,33 @@ test("actual client Send adopts canonical success without duplicating its optimi
   assert.equal(requests.filter((request) => request.path === "/chat/send").length, 1);
 });
 
+test("successful canonical adoption replaces the local player in place before the already-visible reply", async () => {
+  const prior = { ...unit("prior", "Earlier history"), at: 9999 };
+  const said = { ...unit("reply", "Hello back"), at: 1 };
+  const saved = { ...player("saved", "Hello"), at: 50 };
+  const { host, requests } = await actualClient((path) =>
+    path === "/chat/send"
+      ? { ok: true, said }
+      : {
+          ok: true,
+          unit: { id: "u" },
+          messages: [prior, saved, { ...said, photo: { url: "fixture://canonical-photo" } }],
+          activeCount: 3,
+          retry: false,
+        },
+  );
+  host._chat.messages = [prior];
+  host._chatSay({ text: "Hello" });
+  await settleClient();
+  assert.deepEqual(
+    host._chat.messages.map((row) => row.id),
+    ["prior", "saved", "reply"],
+  );
+  assert.equal(host._chat.messages[2].photo.url, "fixture://canonical-photo");
+  assert.equal(host._chatStash, null);
+  assert.equal(requests.filter((request) => request.path === "/chat/send").length, 1);
+});
+
 test("actual successful Send retains both rows during a held or failed canonical read, then deduplicates on reopen", async () => {
   const read = deferred();
   let opening = 0;

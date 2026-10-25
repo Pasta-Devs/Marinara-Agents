@@ -73,7 +73,7 @@ export function adoptForgeChatSnapshot(host, snapshot, { runId, unitId, opening 
   const stash = host._chatStash;
   const matches = stash?.unitId === unitId && (!stash.runId || stash.runId === runId);
   const used = new Set();
-  const resolvedLocalIds = new Set();
+  const resolvedLocalRows = new Map();
   const unresolved = [];
   const unknowns = (stash?.unknowns || []).filter((attempt) => {
     if (attempt.runId !== runId || attempt.unitId !== unitId) return true;
@@ -81,13 +81,19 @@ export function adoptForgeChatSnapshot(host, snapshot, { runId, unitId, opening 
     const replied = attempt.reply?.id && snapshot.messages?.some((row) => row.id === attempt.reply.id);
     if (saved || replied) {
       if (saved) used.add(saved.id);
-      for (const row of attempt.optimistic || []) resolvedLocalIds.add(row.id);
+      for (const row of attempt.optimistic || []) {
+        resolvedLocalRows.set(row.id, row.who === "player" ? saved : null);
+      }
       return false;
     }
     unresolved.push(attempt);
     return true;
   });
-  let oldRows = opening ? [] : (host._chat.messages || []).filter((row) => !resolvedLocalIds.has(row?.id));
+  let oldRows = opening
+    ? []
+    : (host._chat.messages || [])
+        .map((row) => (resolvedLocalRows.has(row?.id) ? resolvedLocalRows.get(row.id) : row))
+        .filter(Boolean);
   // Closing a session archives every prior row, including history loaded before the latest page.
   if (snapshot.activeCount === 0) oldRows = oldRows.map((row) => ({ ...row, archived: true }));
   let messages = forgeChatMergeRows(oldRows, snapshot.messages || []);
