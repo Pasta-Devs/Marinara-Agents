@@ -1,4 +1,22 @@
 /* global Ze, forgeAnimationEnglish */
+export function forgeAnimationFailureMessage(result) {
+  if (result?.error === "animation-unavailable") return forgeAnimationEnglish.hostUnavailable;
+  if (result?.error === "banner-image-missing" || result?.reason === "source-image")
+    return forgeAnimationEnglish.sourceImageMissing;
+  if (result?.reason === "seedance-reference-setup") return forgeAnimationEnglish.seedanceSetup;
+  if (result?.reason === "connection") return forgeAnimationEnglish.connectionFailed;
+  if (
+    result?.reason === "provider" &&
+    Number.isInteger(result.providerStatus) &&
+    result.providerStatus >= 400 &&
+    result.providerStatus <= 599
+  )
+    return forgeAnimationEnglish.providerFailed.replace("{status}", String(result.providerStatus));
+  if (result?.reason === "invalid-response") return forgeAnimationEnglish.responseFailed;
+  if (result?.reason === "storage") return forgeAnimationEnglish.storageFailed;
+  return result?.reason === "playback" ? forgeAnimationEnglish.playbackFailed : forgeAnimationEnglish.failed;
+}
+
 export async function loadForgeAnimationConnections(root, values) {
   const select = root.querySelector('[data-input="animationConnectionId"]');
   if (!select || select.dataset.forgeAnimationLoading) return;
@@ -189,14 +207,7 @@ export function wireForgeBannerAnimation(host) {
         result.animation?.url || "",
       )
     ) {
-      const message =
-        forgeAnimationEnglish[
-          result.reason === "seedance-reference-setup"
-            ? "seedanceSetup"
-            : result.reason === "playback"
-              ? "playbackFailed"
-              : "failed"
-        ];
+      const message = forgeAnimationFailureMessage(result);
       if (result.retry || result.ok) offerRetry(message);
       else {
         notice(message);
