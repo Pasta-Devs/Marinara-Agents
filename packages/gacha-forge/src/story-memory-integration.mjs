@@ -330,6 +330,7 @@ export function createForgeStoryMemoryIntegration({
     log: (message) => logger?.warn?.("[gacha-forge] story memory: %s", message),
   });
   const scheduled = new Map();
+  const resumed = new Set();
   const schedule = (runId, options = {}) => {
     const previous = scheduled.get(runId);
     if (previous) {
@@ -360,6 +361,13 @@ export function createForgeStoryMemoryIntegration({
     resolveContext,
     summaryBudget,
     schedule,
+    resume: (runId) => {
+      // Completion schedules new work. Opening an existing world also catches up
+      // chapters finished before this version, or interrupted by a server restart.
+      if (!runId || resumed.has(runId)) return;
+      resumed.add(runId);
+      return schedule(runId);
+    },
     frontier,
     context: async ({
       runId,

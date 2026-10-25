@@ -21,7 +21,7 @@ test("Welcome Gift rewards leave Claim reachable on short touch screens", async 
   await page.route("**/api/app-settings/ui", (route) =>
     route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
   );
-  await page.route("**/api/gacha-forge/state", (route) =>
+  await page.route("**/api/gacha-forge/state*", (route) =>
     route.fulfill({ json: { runs: [], guidesSeen: ["welcome"] } }),
   );
   // Keep the setup draft in the same isolated fixture as the mocked world state.
@@ -35,7 +35,7 @@ test("Welcome Gift rewards leave Claim reachable on short touch screens", async 
   });
   let claims = 0;
   await page.route("**/api/gacha-forge/newworld/claim", (route) => {
-    expect(route.request().postDataJSON()).toEqual({ runId: "welcome-layout" });
+    expect(route.request().postDataJSON()).toEqual({ runId: "welcome-layout", timeZone: expect.any(String) });
     claims += 1;
     return route.fulfill({ json: { ok: true, gained: [{ kind: "aether", qty: 1600, material: "Aether" }] } });
   });
@@ -141,6 +141,45 @@ test("Welcome Gift rewards leave Claim reachable on short touch screens", async 
     else await claim.click();
     await expect.poll(() => claims).toBe(before + 1);
     await expect(forge.locator(".ev-gained")).toContainText("1,600");
+  }
+  // The ordinary daily event uses a different grid from Welcome Gift.
+  for (const ready of [true, false]) {
+    await forge.evaluate((node, ready) => {
+      const game = node as any;
+      game._eventId = "login";
+      game._eventSlots = [{ id: "login", kind: "login", label: "7 Day Login Event", live: true }];
+      game._login = { ...game._newWorld, ready, resetsIn: 1 };
+      game._eventsRev += 1;
+      game._renderBrowser();
+    }, ready);
+    const claim = forge.locator(".gf-stage > .gf-view [data-events-claim]");
+    await claim.scrollIntoViewIfNeeded();
+    const layout = await claim.evaluate((button) => {
+      const pane = button.closest(".ev-pane")!;
+      const grid = pane.querySelector<HTMLElement>(".ev-week")!;
+      const footer = pane.querySelector(".ev-foot")!.getBoundingClientRect();
+      const rewardBottom = () =>
+        Math.max(
+          ...[...grid.querySelectorAll(".ev-slot, .ev-day, .ev-n")].map((item) => item.getBoundingClientRect().bottom),
+        );
+      const currentBottom = rewardBottom();
+      const previous = grid.getAttribute("style");
+      grid.style.flex = "1 1 auto";
+      grid.style.minHeight = "0";
+      const baselineOverlap = rewardBottom() > pane.querySelector(".ev-foot")!.getBoundingClientRect().top + 1;
+      if (previous === null) grid.removeAttribute("style");
+      else grid.setAttribute("style", previous);
+      return { rewardBottom: currentBottom, footerTop: footer.top, baselineOverlap };
+    });
+    if (mobile)
+      expect(
+        layout.baselineOverlap,
+        "The previous shrinking daily grid overlaps its footer on the same short mobile viewport",
+      ).toBe(true);
+    expect(layout.rewardBottom, "The daily reward list ends before its claim status").toBeLessThanOrEqual(
+      layout.footerTop + 1,
+    );
+    await page.screenshot({ path: testInfo.outputPath(`daily-claim-${ready}.png`), animations: "disabled" });
   }
   await forge.evaluate((node) => {
     const game = node as any;

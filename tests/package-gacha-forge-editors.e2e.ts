@@ -56,7 +56,7 @@ async function openEditors(page: Page) {
   await page.route("**/api/connections", (route) =>
     route.fulfill({ json: [{ id: "fixture-model", name: "Fixture", provider: "custom", model: "fixture" }] }),
   );
-  await page.route("**/api/gacha-forge/state", (route) =>
+  await page.route("**/api/gacha-forge/state*", (route) =>
     route.fulfill({
       json: {
         runs: [saved],
@@ -233,4 +233,28 @@ test("Story images start below the header while retaining crossfade layers and t
       }),
     )
     .toEqual({ belowHeader: true, layers: 2, position: "50% 0%", top: "none", bottom: "block" });
+});
+
+test("Writing Advanced field help opens with a tap and stays readable in the mobile panel", async ({
+  page,
+}, testInfo) => {
+  const { forge } = await openEditors(page);
+  await forge.evaluate((node) => (node as any)._openSettings("advanced"));
+  const help = forge.locator(".ob-help").first();
+  await help.click();
+  await expect(help).toHaveAttribute("aria-expanded", "true");
+  const tipId = await help.getAttribute("aria-controls");
+  const tip = forge.locator(`[id="${tipId}"]`);
+  await expect(tip).toBeVisible();
+  await expect(tip).not.toBeEmpty();
+  expect(
+    await tip.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const stage = element.closest(".gf-stage")!.getBoundingClientRect();
+      return bounds.left >= stage.left - 1 && bounds.right <= stage.right + 1 && bounds.height > 0;
+    }),
+  ).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("writing-help-open.png"), animations: "disabled" });
+  await help.click();
+  await expect(help).toHaveAttribute("aria-expanded", "false");
 });
