@@ -1,6 +1,8 @@
+import { slurp2Source } from "./slurp2-source.ts";
 import assert from "node:assert/strict";
 import {
   slurpLiveActLines,
+  slurpLiveSegmentLineAt,
   slurpLiveForViewer,
   slurpLivePicturesFree,
   slurpLivePictureTriggers,
@@ -182,4 +184,12 @@ assert.match(prompt, /\*actions\*/);
 assert.match(prompt, /"double quotes"/);
 for (const key of ["act", "shot", "goalReward"]) assert.ok(prompt.includes(`"${key}"`), key);
 assert.match(prompt, /robe drops/);
+// The service places act/shot lines like any other line: an offset inside the segment, so
+// segment 1's title and shot start when segment 1 starts, not at its last millisecond.
+const [act1] = slurpLiveActLines({ act: "Second act" }, 0);
+assert.equal(slurpLiveSegmentLineAt(1, act1!.at, 200_000), 240_000, "a later segment's act starts with it");
+assert.match(
+  slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/live/slp-live-service.ts"),
+  /slurpLiveActLines\(parsed, 0\)/,
+);
 console.log("slurp2-live-show-first ok");

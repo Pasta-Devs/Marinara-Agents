@@ -24,7 +24,6 @@ import {
   slurpLivePictureTriggers,
   slurpLiveActLines,
   slurpLiveShotText,
-  SLURP_LIVE_SEGMENT_MS,
   type SlurpLiveLine,
   type SlurpLiveShow,
 } from "../../modules/live/slp-live.js";
@@ -440,7 +439,7 @@ async function advanceShowNow(db: DB, show: SlurpLiveShow, settings: any, at: Da
   const lines = creator
     ? await runLiveModel(db, settings, creator.displayName, "main", minutes, prompt, "segment", (parsed) => {
         roomPatch = slurpLiveRoomPatch(parsed);
-        actLines = slurpLiveActLines(parsed, index * SLURP_LIVE_SEGMENT_MS);
+        actLines = slurpLiveActLines(parsed, 0);
       })
     : [];
   const elapsed = at.getTime() + (Date.now() - callStarted) - Date.parse(show.startedAt);
