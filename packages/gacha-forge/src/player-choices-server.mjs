@@ -67,8 +67,10 @@ export function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled,
     const selections = new Set();
     const normalizedOptions = [];
     for (const [optionIndex, option] of choice.options.entries()) {
-      const text = forgeChoiceLabel(typeof option?.text === "string" ? option.text : "");
-      if (!text || text.length > 280 || labels.has(text)) return null;
+      const rawText = typeof option?.text === "string" ? option.text.trim() : "";
+      if (!rawText || rawText.length > 280) return null;
+      const text = forgeChoiceLabel(rawText);
+      if (labels.has(text)) return null;
       labels.add(text);
       const selection = option.selection;
       const selectedText = typeof selection?.text === "string" ? selection.text.trim() : "";

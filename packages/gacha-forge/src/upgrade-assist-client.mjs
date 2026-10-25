@@ -80,7 +80,7 @@ export async function forgeEquipFreeGear(host) {
   const unitId = host._rosterUnitId;
   if (!runId || !unitId || host._equipBusy) return;
   host._equipBusy = true;
-  host._forgeUpgradeError = "";
+  host._forgeUpgradeError = null;
   host._renderBrowser();
   try {
     for (const slot of host._growth?.gear?.slots || []) {
@@ -97,17 +97,19 @@ export async function forgeEquipFreeGear(host) {
       });
       if (host._run?.runId !== runId || host._rosterUnitId !== unitId) break;
       if (!result?.ok) {
-        host._forgeUpgradeError = forgeUpgradeEnglish["gear.autoUnavailable"];
+        host._forgeUpgradeError = { runId, unitId, message: forgeUpgradeEnglish["gear.autoUnavailable"] };
         break;
       }
       host._growth = { ...host._growth, ...result };
       host._growthRev += 1;
     }
   } catch {
-    host._forgeUpgradeError = forgeUpgradeEnglish["gear.autoUnavailable"];
+    if (host._run?.runId === runId && host._rosterUnitId === unitId) {
+      host._forgeUpgradeError = { runId, unitId, message: forgeUpgradeEnglish["gear.autoUnavailable"] };
+    }
   } finally {
     host._equipBusy = false;
-    if (host._run?.runId === runId && host._rosterUnitId === unitId) host._renderBrowser();
+    if (host._run?.runId && host._rosterUnitId) host._renderBrowser();
   }
 }
 
@@ -215,11 +217,12 @@ export function wireForgeUpgradeAssists(host) {
     button.disabled = !!host._equipBusy;
     row.append(button);
     gear.prepend(row);
-    if (host._forgeUpgradeError) {
+    const error = host._forgeUpgradeError;
+    if (error && error.runId === host._run?.runId && error.unitId === host._rosterUnitId) {
       const note = document.createElement("p");
       note.className = "forge-upgrade-preview";
       note.setAttribute("role", "status");
-      note.textContent = host._forgeUpgradeError;
+      note.textContent = error.message;
       row.append(note);
     }
   }

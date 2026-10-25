@@ -55,6 +55,18 @@ test("choice punctuation keeps existing endings and dialogue quotes intact", () 
   assert.equal(forgeChoiceLabel("Ask, “Are they safe?”"), "Ask, “Are they safe?”");
   assert.equal(forgeChoiceLabel("犬を守る"), "犬を守る。");
   assert.equal(forgeChoiceLabel("Wait…"), "Wait…");
+  for (const [label, expected] of [
+    ["「ごめん。」", "「ごめん。」"],
+    ["『ごめん！』", "『ごめん！』"],
+    ["（本当に？）", "（本当に？）"],
+    ["〈ごめん。〉", "〈ごめん。〉"],
+    ["《ごめん。》", "《ごめん。》"],
+    ["「犬を守る」", "「犬を守る」。"],
+    ["犬を守る（笑）", "犬を守る（笑）。"],
+  ]) {
+    assert.equal(forgeChoiceLabel(label), expected);
+    assert.equal(forgeChoiceLabel(forgeChoiceLabel(label)), expected, "Saved labels remain stable at display time");
+  }
 });
 
 test("only a fresh scene consumes a first-line reveal; saved positions, replay and remount retain their line", () => {

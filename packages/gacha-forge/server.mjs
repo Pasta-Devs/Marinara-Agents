@@ -1130,8 +1130,9 @@ ${T}`+r}]}function kv(e){if(!e||typeof e!="object")return null;let t=tn(e.role,e
 // Apply terminal punctuation to both saved new labels and legacy labels at display time.
 function forgeChoiceLabel(value) {
   const text = typeof value === "string" ? value.trim() : "";
-  if (!text || /[.!?。！？…؟।॥][\s\p{Pf}"')\]]*$/u.test(text)) return text;
-  return text + (/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]$/u.test(text) ? "。" : ".");
+  if (!text || /[.!?。！？…؟।॥][\s\p{Pf}\p{Pe}"']*$/u.test(text)) return text;
+  const core = text.replace(/[\s\p{Pf}\p{Pe}"']+$/u, "");
+  return text + (/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]$/u.test(core) ? "。" : ".");
 }
 
 /* global forgeChoiceLabel */
@@ -1203,8 +1204,10 @@ function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled, termin
     const selections = new Set();
     const normalizedOptions = [];
     for (const [optionIndex, option] of choice.options.entries()) {
-      const text = forgeChoiceLabel(typeof option?.text === "string" ? option.text : "");
-      if (!text || text.length > 280 || labels.has(text)) return null;
+      const rawText = typeof option?.text === "string" ? option.text.trim() : "";
+      if (!rawText || rawText.length > 280) return null;
+      const text = forgeChoiceLabel(rawText);
+      if (labels.has(text)) return null;
       labels.add(text);
       const selection = option.selection;
       const selectedText = typeof selection?.text === "string" ? selection.text.trim() : "";

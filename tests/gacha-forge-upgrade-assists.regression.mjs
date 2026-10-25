@@ -6,6 +6,7 @@ import {
   forgeEquipFreeGear,
   forgeInsightAutoSelection,
   forgeSelectedTrainingLevels,
+  wireForgeUpgradeAssists,
 } from "../packages/gacha-forge/src/upgrade-assist-client.mjs";
 import {
   forgeGearIsOccupied,
@@ -216,7 +217,11 @@ test("an equipment race or changed unit stops auto-equip without transferring st
   };
   await forgeEquipFreeGear(host);
   assert.equal(host._growthRev, 0);
-  assert.match(host._forgeUpgradeError, /Equipment changed/u);
+  assert.deepEqual(host._forgeUpgradeError, {
+    runId: "world",
+    unitId: "unit",
+    message: "Equipment changed. Refresh the unit and try again.",
+  });
   host._postJson = async () => {
     host._rosterUnitId = "other";
     return { ok: true, gear: { cp: 999 } };
@@ -226,6 +231,136 @@ test("an equipment race or changed unit stops auto-equip without transferring st
 });
 
 let fixtureSequence = 0;
+
+function errorStateHost(post) {
+  return {
+    _run: { runId: "world-a" },
+    _rosterUnitId: "unit-a",
+    _growthRev: 0,
+    _growth: {
+      gear: {
+        cp: 100,
+        slots: [{ key: "weapon", kind: "weapon" }],
+        options: [{ id: "weapon", cpIf: 130 }],
+      },
+    },
+    _renderBrowser() {},
+    _postJson: post,
+  };
+}
+
+function renderedUpgradeErrors(host, onButton) {
+  const originalDocument = globalThis.document;
+  const originalRoot = host._root;
+  const rows = [];
+  const element = () => ({
+    dataset: {},
+    attributes: {},
+    children: [],
+    append(...children) {
+      this.children.push(...children);
+    },
+    setAttribute(name, value) {
+      this.attributes[name] = value;
+    },
+  });
+  const gear = { querySelector: () => null, prepend: (row) => rows.push(row) };
+  host._root = {
+    querySelector: (selector) =>
+      selector === "[data-forge-upgrade-style]" ? {} : selector === ".cp-panel .gr-root.gear" ? gear : null,
+    querySelectorAll: () => [],
+  };
+  globalThis.document = { createElement: element };
+  try {
+    wireForgeUpgradeAssists(host);
+    onButton?.(rows[0]?.children.find((child) => Object.hasOwn(child.dataset, "forgeAutoEquip")));
+    return rows.flatMap((row) =>
+      row.children.filter((child) => child.attributes.role === "status").map((child) => child.textContent),
+    );
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+    host._root = originalRoot;
+  }
+}
+
+test("auto-equip errors render only for the run and unit where the failure happened", async () => {
+  const closed = errorStateHost();
+  closed._run = null;
+  closed._rosterUnitId = null;
+  assert.deepEqual(renderedUpgradeErrors(closed), [], "a retired view with no error cannot show an error note");
+  for (const next of [
+    { runId: "world-a", unitId: "unit-b" },
+    { runId: "world-b", unitId: "unit-a" },
+  ]) {
+    const host = errorStateHost(async () => ({ ok: false, error: "gear-unavailable" }));
+    await forgeEquipFreeGear(host);
+    assert.equal(renderedUpgradeErrors(host).length, 1, "the failed unit still sees its actionable error");
+    host._run = { runId: next.runId };
+    host._rosterUnitId = next.unitId;
+    assert.deepEqual(renderedUpgradeErrors(host), [], "another unit/world must not inherit the error");
+    host._run = { runId: "world-a" };
+    host._rosterUnitId = "unit-a";
+    assert.equal(renderedUpgradeErrors(host).length, 1, "returning to the initiating unit retains its error");
+  }
+});
+
+test("late auto-equip rejection cannot replace an error belonging to the newly opened view", async () => {
+  for (const next of [
+    { runId: "world-a", unitId: "unit-b" },
+    { runId: "world-b", unitId: "unit-a" },
+  ]) {
+    let reject;
+    const host = errorStateHost(
+      () =>
+        new Promise((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
+    const pending = forgeEquipFreeGear(host);
+    host._run = { runId: next.runId };
+    host._rosterUnitId = next.unitId;
+    const currentError = { ...next, message: "Current view error" };
+    host._forgeUpgradeError = currentError;
+    reject(new Error("The previous request failed late."));
+    await pending;
+    assert.deepEqual(host._forgeUpgradeError, currentError);
+    assert.deepEqual(renderedUpgradeErrors(host), ["Current view error"]);
+    assert.equal(host._equipBusy, false);
+  }
+});
+
+test("settled auto-equip repaints the current unit's button without adopting an older response", async () => {
+  for (const outcome of ["refused", "rejected", "success"]) {
+    let resolvePost, rejectPost, button;
+    const host = errorStateHost(
+      () =>
+        new Promise((resolve, reject) => {
+          resolvePost = resolve;
+          rejectPost = reject;
+        }),
+    );
+    host._renderBrowser = () =>
+      renderedUpgradeErrors(host, (current) => {
+        button = current;
+      });
+    const pending = forgeEquipFreeGear(host);
+    host._rosterUnitId = "unit-b";
+    host._growth = { gear: { cp: 200, slots: [{ key: "weapon", kind: "weapon" }], options: [] } };
+    host._renderBrowser();
+    assert.equal(button.disabled, true);
+    assert.equal(button.textContent, "Equipping…");
+    if (outcome === "rejected") rejectPost(new Error("The earlier request failed."));
+    else resolvePost({ ok: outcome === "success", gear: { cp: 999 } });
+    await pending;
+    assert.equal(host._equipBusy, false);
+    assert.equal(button.disabled, false, "the current button becomes usable when the shared operation ends");
+    assert.equal(button.textContent, "Auto-equip free gear");
+    assert.equal(host._growth.gear.cp, 200, "the previous unit's response stays ignored");
+    assert.equal(host._growthRev, 0);
+  }
+});
+
 async function shippedGrowthRoutes() {
   const runId = "upgrade-route-fixture";
   const unitId = `${runId}:unit:arden`;
