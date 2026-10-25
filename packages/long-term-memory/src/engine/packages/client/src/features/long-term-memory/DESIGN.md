@@ -146,6 +146,7 @@ The palette is inherited from Marinara editor variables and neutral Engine surfa
 - **Label** (600, `0.75rem`, `1.25`): Form labels, tabs, actions, statuses, and operational metadata.
 - **Micro-label** (`micro-label`, 400-600, `0.6875rem`; `micro-label-compact`, 500-600, `0.625rem`; line height inherited): Badges, inherited-setting markers, timestamps, confidence, and compact status counts.
 - **Host-compact** (`host-compact`, 400-500, `0.5625rem`; `host-compact-note`, 400, `0.59375rem`, `1.375`): Chat Settings hints, badges, and notes, beside `micro-label-compact`. They follow the Engine's chat settings drawer, which uses `0.5625rem` for hints and badges; raising them is a design call for the critique, not a defect.
+
 Onboarding uses definition lists for vocabulary, unordered lists for parallel options or consequences, ordered lists for required procedures, and separate paragraphs for caveats or recommendations. This formatting reflows inside the existing `65ch` measure without changing the text box, grid, panel width, or the dense workspace type roles.
 
 **The Truncation Rule.** Long titles and summaries may truncate in navigation rows, but the surrounding control must expose the full subject through its accessible name or the workbench detail view.
@@ -178,7 +179,7 @@ Use borders to define interactive or nested regions without boxing every text bl
 - **Character:** Tactile, compact controls for explicit operations.
 - **Primary:** `mari-editor-action mari-editor-action--primary`; minimum height `2.75rem`, horizontal padding around `0.75rem`, and editor accent treatment. Use for the next constructive action: save, import, accept, apply, or preview.
 - **Default:** `mari-editor-action`; use for navigation, refresh, secondary edits, and dismissal.
-- **Destructive:** `mari-editor-action mari-editor-action--danger`; use for permanent deletion, skip, reset, clear, and abort. Keep the label explicit.
+- **Destructive:** `mari-editor-action mari-editor-action--danger`; use for permanent deletion, skip, clear, abort, and a reset that discards memories. Keep the label explicit.
 - **Reset to defaults (warning):** `mari-editor-action` with the strong editor border set inline and a warning icon; use for a reversible-by-hand reset that discards custom values but no memories, such as Reset settings. It sits beside, never inside, the destructive group.
 - **Icon buttons:** `mari-editor-action` with a fixed `2.75rem` square, a visible accessible label, and a tooltip/title where appropriate.
 - **Hover / Focus:** Use the inherited tab/action state, `var(--ring)` or `var(--marinara-editor-focus-ring)` for visible keyboard focus, and no custom motion beyond the existing transition vocabulary.
