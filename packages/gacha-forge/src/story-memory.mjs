@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-const sourceKinds = new Set(["chapter", "character-story", "chat"]);
+const sourceKinds = new Set(["chapter", "character-story", "story-event", "chat"]);
 const overviewHeading = "# Canon to date\n";
 const stopWords = new Set(
   "a an and are as at be been by for from had has have he her his i in is it its of on or our she that the their them they this to was we were what when where which who will with you your".split(

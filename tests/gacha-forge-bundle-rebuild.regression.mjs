@@ -66,6 +66,10 @@ try {
     ["combat-voices-en", ["client.js"]],
     ["combat-voices-client", ["client.js"]],
     ["combat-ultimate-client", ["client.js"]],
+    ["seasonal-events-server", ["server.mjs"]],
+    ["seasonal-events-adapter", ["server.mjs"]],
+    ["seasonal-events-client", ["client.js"]],
+    ["seasonal-events-en", ["client.js"]],
   ];
   for (const [name, bundles] of sources) {
     const source = new URL(`src/${name}.mjs`, root);

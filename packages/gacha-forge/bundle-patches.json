@@ -990,6 +990,68 @@
         },
         {
           "version": "1.18.0",
+          "notes": "Optional, generated seasonal story events with persisted windows, scoped chapters, media and transactional rewards.",
+          "edits": [
+            {
+              "find": "var pb=48",
+              "replaceFrom": [
+                "src/seasonal-events-en.mjs",
+                "src/seasonal-events-client.mjs"
+              ],
+              "sourceId": "seasonal-events-client"
+            },
+            {
+              "find": "ds=\"1.17.0\"",
+              "replace": "ds=\"1.18.0\""
+            },
+            {
+              "find": "_renderBrowser(){this._syncTypeScale();",
+              "replace": "_renderBrowser(){prepareForgeSeasonalEvents(this);this._syncTypeScale();"
+            },
+            {
+              "find": "wireForgeChapterRegeneration(this),wireForgeHome",
+              "replace": "wireForgeChapterRegeneration(this),wireForgeSeasonalEvents(this),wireForgeHome"
+            },
+            {
+              "find": "a=forgeChapterRequest(this,e,a);let forgeStory=",
+              "replace": "a=forgeChapterRequest(this,e,a);e=forgeSeasonalRequest(e,a);let forgeStory="
+            },
+            {
+              "find": "_chapterLabel(){let e=",
+              "replace": "_chapterLabel(){if(this._forgeEvent?.chapter===this._planChapter)return this._forgeEvent.title||forgeSeasonalEnglish[\"events.title\"];let e="
+            },
+            {
+              "find": "_storyLabel(e){return this._bondUnit?",
+              "replace": "_storyLabel(e){if(this._forgeEvent?.chapter===this._planChapter)return this._forgeEvent.title||forgeSeasonalEnglish[\"events.title\"];return this._bondUnit?"
+            },
+            {
+              "find": "_leaveBond(e){this._bondUnit=\"\"",
+              "replace": "_leaveBond(e){this._forgeEvent=null;this._bondUnit=\"\""
+            },
+            {
+              "find": "{id:\"story.choices\",settings:",
+              "replace": "{id:\"story.choices\",step:\"sources\",settings:"
+            },
+            {
+              "find": "{id:\"story.preforge\",settings:",
+              "replace": "{id:\"story.seasonalEvents\",step:\"sources\",settings:\"continuity\",group:\"playerChoices\",type:\"toggle\",label:forgeSeasonalEnglish[\"events.settings.allow\"],hint:forgeSeasonalEnglish[\"events.settings.hint\"],default:!1},{id:\"story.preforge\",settings:"
+            },
+            {
+              "find": "this._fillFold(a)}_fillFold(e)",
+              "replace": "this._fillFold(a);wireForgeSeasonalEvents(this)}_fillFold(e)"
+            },
+            {
+              "find": "l&&l.addEventListener(\"click\",()=>this._openBondChapter(n.id,n.part))}}_bondName()",
+              "replace": "l&&l.addEventListener(\"click\",()=>this._openBondChapter(n.id,n.part))}wireForgeSeasonalEvents(this)}_bondName()"
+            },
+            {
+              "find": "return(this._adoptFromResponse(n),refreshForgeUnitStep(this,e,a,n)",
+              "replace": "return(this._adoptFromResponse(n),adoptForgeSeasonalResponse(this,e,a,n),refreshForgeUnitStep(this,e,a,n)"
+            }
+          ]
+        },
+        {
+          "version": "1.19.0",
           "edits": [
             {
               "find": "var pb=48",
@@ -1034,8 +1096,8 @@
               "replace": "forgeChoiceSettings(a)+forgeFormationSettings()+"
             },
             {
-              "find": "wireForgeChapterRegeneration(this),wireForgeHome",
-              "replace": "wireForgeChapterRegeneration(this),wireForgeFormationSettings(this),wireForgeFormationPreview(this),wireForgeHome"
+              "find": "wireForgeChapterRegeneration(this),wireForgeSeasonalEvents(this),wireForgeHome",
+              "replace": "wireForgeChapterRegeneration(this),wireForgeSeasonalEvents(this),wireForgeFormationSettings(this),wireForgeFormationPreview(this),wireForgeHome"
             },
             {
               "find": "disposeForgeAudio(this),disposeForgeBannerAnimation(this)",
@@ -1062,12 +1124,12 @@
               "replace": "`<style>${mc}${Dm}${wc}${qc}${ch}${ku}${Nd}${fd}${ca}${km}${An}${forgeFormationCombatStyles}${forgeCombatVoiceStyles}${forgeCombatUltimateStyles}</style>`"
             },
             {
-              "find": "ds=\"1.17.0\"",
-              "replace": "ds=\"1.18.0\""
+              "find": "ds=\"1.18.0\"",
+              "replace": "ds=\"1.19.0\""
             },
             {
-              "find": "a=forgeChapterRequest(this,e,a);let forgeStory=",
-              "replace": "a=forgeChapterRequest(this,e,a);a=forgeFormationStartRequest(this,e,a);let forgeStory="
+              "find": "a=forgeChapterRequest(this,e,a);e=forgeSeasonalRequest(e,a);let forgeStory=",
+              "replace": "a=forgeChapterRequest(this,e,a);e=forgeSeasonalRequest(e,a);a=forgeFormationStartRequest(this,e,a);let forgeStory="
             }
           ]
         }
@@ -1988,6 +2050,86 @@
         },
         {
           "version": "1.18.0",
+          "notes": "Optional, generated seasonal story events with persisted windows, scoped chapters, media and transactional rewards. Retain the active event boundary on main story actions as well as planning. Expire only global event choice holds and retire inaccessible event fights without rewards. Share existing story generation admission and prevent new Character Stories inside an active event while retaining played replay.",
+          "edits": [
+            {
+              "find": "async function _t(",
+              "replaceFrom": "src/seasonal-events-server.mjs",
+              "sourceId": "seasonal-events-server"
+            },
+            {
+              "find": "const forgeBannerAnimations=createForgeBannerAnimations",
+              "replace": "let forgeSeasonalEvents;const forgeBannerAnimations=createForgeBannerAnimations"
+            },
+            {
+              "find": "readBanner:async(runId,bannerId)=>{const rule=Uf(bannerId);",
+              "replace": "readBanner:async(runId,bannerId)=>{if(/^story-event-[1-9]\\d{0,8}$/u.test(bannerId))return forgeSeasonalEvents?.mediaBanner(runId,bannerId);const rule=Uf(bannerId);"
+            },
+            {
+              "find": "const forgeStoryPost=(path,handler)=>forgeChapterRegeneration.post(s,path,handler);",
+              "replaceFrom": "src/seasonal-events-adapter.mjs",
+              "sourceId": "seasonal-events-adapter"
+            },
+            {
+              "find": "const forgeStoryPost=(path,handler)=>forgeChapterRegeneration.post(s,path,handler);",
+              "replace": "const forgeStoryPost=(path,handler)=>forgeChapterRegeneration.post(s,path,handler);forgeSeasonalEvents=createForgeSeasonalLegacyAdapter();"
+            },
+            {
+              "find": "let chapter=Number(body&&body.chapter);return Number.isInteger(chapter)",
+              "replace": "if(forgeSeasonalChapter(body?.chapter))return body.chapter;let chapter=Number(body&&body.chapter);return Number.isInteger(chapter)"
+            },
+            {
+              "find": "w.story={preforge:S,choices:forgeChoicesEnabled({story:forgeStory})}",
+              "replace": "w.story={preforge:S,choices:forgeChoicesEnabled({story:forgeStory}),seasonalEvents:forgeSeasonalEnabled({story:forgeStory})}"
+            },
+            {
+              "find": "O.story={preforge:pd({story:u.story}),choices:forgeChoicesEnabled({story:u.story})}",
+              "replace": "O.story={preforge:pd({story:u.story}),choices:forgeChoicesEnabled({story:u.story}),seasonalEvents:forgeSeasonalEnabled({story:u.story})}"
+            },
+            {
+              "find": "let forgeBlock=await forgeChoices.planGuard(o,i);if(forgeBlock)return forgeBlock;let{data:w}",
+              "replace": "let forgeBlock=await forgeSeasonalEvents.guardMain(o,i)||await forgeChoices.planGuard(o,i);if(forgeBlock)return forgeBlock;let{data:w}"
+            },
+            {
+              "find": "let forgeMemoryBefore=Number.isInteger(c)?c:((Ka((await pe(s)).data).find(row=>T(row.unitId,row.part)===c)?.after)||0)+1;",
+              "replace": "let forgeMemoryBefore=Number.isInteger(c)?c:(Number((await a.getById(n.id,f(s,c)))?.data?.after)||Ka((await pe(s)).data).find(row=>T(row.unitId,row.part)===c)?.after||0)+1;"
+            },
+            {
+              "find": "Hg=[[ia,\":chapter:\"]",
+              "replace": "Hg=[[\"story-event\",\":story-event:\"],[ia,\":chapter:\"]"
+            },
+            {
+              "find": "let body=p&&p.body||{},result=await forgeChoices.select(body);",
+              "replace": "let body=p&&p.body||{};if(forgeSeasonalChapter(body.chapter)){const target=await forgeSeasonalEvents.guardNode(body,\"story\",\"storyIndex\");if(!target.ok)return target;}let result=await forgeChoices.select(body);"
+            },
+            {
+              "find": "),{enabled:forgeChoiceEnabled,terminal:tr(w).at(-1)===M}),options:",
+              "replace": "),{enabled:forgeChoiceEnabled,terminal:tr(w).at(-1)===M,event:await forgeSeasonalEvents.narrationContext(p,w)}),options:"
+            },
+            {
+              "find": "const forgeStoryPost=(path,handler)=>forgeChapterRegeneration.post(s,path,handler);forgeSeasonalEvents=createForgeSeasonalLegacyAdapter();",
+              "replace": "const forgeStoryPost=(path,handler)=>forgeChapterRegeneration.post(s,path,async request=>{if(forgeSeasonalEvents&&[\"/story/start\",\"/battle/start\",\"/complete\"].includes(path)){const body=request?.body||{},blocked=await forgeSeasonalEvents.guardMain(body.runId,Number(body.chapter));if(blocked)return blocked;}return handler(request)});forgeSeasonalEvents=createForgeSeasonalLegacyAdapter();"
+            },
+            {
+              "find": "bondHistory:Ka,readRun:async runId=>Ae((await be()).data,runId),resolveChapter:",
+              "replace": "bondHistory:Ka,readRun:async runId=>Ae((await be()).data,runId),choiceChapterActive:(runId,chapter)=>forgeSeasonalEvents?.choiceActive(runId,chapter)??true,resolveChapter:"
+            },
+            {
+              "find": "return await qt(g,m)?(De(w,o),{ok:!0,run:w}):{ok:!1,error:\"write-conflict\"}}),s.post(\"/run/images\",",
+              "replace": "return await qt(g,m)?(await forgeSeasonalEvents.retireInactiveFight(o).catch(error=>r.logger.warn(error,\"[gacha-forge] Could not retire an inactive event fight\")),De(w,o),{ok:!0,run:w}):{ok:!1,error:\"write-conflict\"}}),s.post(\"/run/images\","
+            },
+            {
+              "find": "let forgeBlock=await forgeChoices.guard(o);if(forgeBlock)return forgeBlock;let Q=await Nr(o)+1",
+              "replace": "let forgeBlock=await forgeSeasonalEvents.guardMain(o,Number.MAX_SAFE_INTEGER)||await forgeChoices.guard(o);if(forgeBlock)return forgeBlock;let Q=await Nr(o)+1"
+            },
+            {
+              "find": "let O=T(i,g),$=async U=>{if(!wo(_[i],g)){let Q=",
+              "replace": "let O=T(i,g),$=async U=>{if(!wo(_[i],g)){let forgeEventBlock=await forgeSeasonalEvents.guardMain(o,Number.MAX_SAFE_INTEGER);if(forgeEventBlock)return forgeEventBlock;let Q="
+            }
+          ]
+        },
+        {
+          "version": "1.19.0",
           "edits": [
             {
               "find": "async function _t(",

@@ -1,9 +1,16 @@
-## 1.18.0 — 2026-10-25
+## 1.19.0 — 2026-10-25
 
 - Choose optional Formation combat: frontline actions, protected elemental supports, shared energy, repositioning and generated tactical kits.
 - Convert saved worlds after confirmation with bounded parallel generation, persistent progress and explicit retry, preserving characters and progression.
 - Add creative, validated boss objectives, elemental Ultimate portrait effects and optional fixed, saved combat voice lines for assigned voices.
 - Keep Classic combat, existing boss dialogue and authoritative reward replay.
+
+## 1.18.0 — 2026-10-25 [highlight]
+
+- Enable optional Seasonal events beside compact Player choices in setup or Story Continuity.
+- Explore a new, world-specific story and combat adventure every three weeks, with an event banner and optional animation and music. Event themes, familiar cast and rewards are prepared before you start; the chapter is written against current canon when you choose to play.
+- Earn bounded resources, Aether, four-star characters or themed outfits once. Expired events close new progress and rewards; played scenes remain in Chapters. Existing banner minigames stay available.
+- Keep event progress and rewards safe across refresh, restart, opt-out and concurrent requests, using existing chapter, combat and media systems.
 
 ## 1.17.0 — 2026-10-25 [highlight]
 
@@ -88,25 +95,30 @@
 ## 1.12.0 — 2026-10-24
 
 ### New
+
 - World-specific soundtrack briefs generated through the narration connection, cached for each music context and translated into original musical qualities.
 
 ### Fixed
+
 - Audio failures show their HTTP status and, on newer Engine hosts, the provider's safe rejection reason while stock audio continues.
 - Unit and relic achievements count every gained level; capped duplicates do not count as gained facets, and Tower-shop facet gains count.
 - Existing worlds recover proven achievement progress without changing claimed rewards or pass progress.
 
 ## 1.11.1 — 2026-10-23
+
 - Fixed generated music and effects for worlds using migrated legacy audio connections.
 - Recorded the merged Engine audio connection baseline.
 
 ## 1.11.0 — 2026-10-23
 
 ### New
+
 - Optional dialogue using explicitly assigned Engine character voices, with the current speech connection.
 - Stock Game music and effects, plus opt-in generated audio reused per world and cue.
 - A shared mute control, three precise channel volume sliders and configurable autoplay pacing.
 
 ### Fixed
+
 - Home and story portrait frames include their bottom edge.
 
 ## 1.10.2 — 2026-10-23
@@ -134,46 +146,57 @@
 ## 1.9.0 — 2026-10-22
 
 ### New
+
 - The fullscreen control beside Settings expands inside the Engine, hiding Home browser controls while keeping the Engine topbar. Outward/inward arrows show the action, and the button works on iPhone Safari too.
 - Every Forge screen fills the available width and height instead of fitting a fixed 16:9 frame.
 - A floating exit control stays available on screens without the shared toolbar and on the portrait rotation notice. Requires Engine capability API 1.376.
 
 ## 1.8.15 — 2026-10-22
+
 - Fixed: on iPhone and other Safari-based browsers, ticking a cast member or an outfit theme no longer scrolls the list (and, on a phone turned sideways, the whole world-creation page) back to the top.
 
 ## 1.8.14 — 2026-10-22
+
 - On a phone turned sideways, creating a world now uses the whole width of the screen and scrolls as one page: the title and the step tabs scroll away with the fields, and a slim Back and Next row stays at the bottom until you start typing.
 - Fixed: tapping a text field in the game no longer makes iPhone zoom in.
 
 ## 1.8.13 — 2026-10-19
+
 - Fixed: places named in Korean, or in any other non-Latin script, get their background painted. Their names used to come out empty, so the background was never made; places whose names mixed Hangul and numbers could also share one background.
 - Backgrounds already painted for a place keep showing; nothing is painted twice.
 - On a phone held sideways the game uses more of the screen, text no longer grows when you turn the phone, and Settings packs its panels tighter. Where the browser has no fullscreen (iPhone Safari), the fullscreen button is hidden instead of doing nothing.
 
 ## 1.8.12 — 2026-10-02
+
 - Fixed: Character Stories can be merged too. In Settings > Continuity a compressed Character Story takes a tick like a chapter, and merges with the chapters next to it or with other Character Stories; the merged entry names each one, and the story never sends a merged one twice.
 - Only chapters played to the end can be merged, and a merge that cannot happen says why.
 
 ## 1.8.11 — 2026-10-01
+
 - Fixed: a Tower boss that heals no longer gets back a quarter of its health with every Ultimate — it heals about as much as one of its escorts would, and the floor 40 boss is fitted to its floor again. In Water months, bosses no longer heal 8% of their health per Ultimate.
 - Fixed: on a slow image connection, art is painted once: a chapter's backgrounds and enemies, banner art, portraits, key images, Bond backgrounds and outfits.
 - Fixed: an outfit rotation keeps every outfit it already painted, even if the rest fails, and a Bond outfit you already have but that never counted as claimed is handed over instead of painted again.
 
 ## 1.8.9 — 2026-09-30
+
 - Fixed: the story now calls each character the man or woman they are. With a vague description it could narrate someone drawn as a woman as “he”, or the other way around.
 - Every character has a sex whether the world has art or not: new ones are created with it, and the ones you already have are filled in once, the first time the story is told.
 
 ## 1.8.8 — 2026-09-29
+
 - Fixed: with a Character Story open, the chapters you already cleared open again — their map, their scenes, and their Hard and Very Hard fights. Only the next chapter of the main story waits for the Character Story to end.
 
 ## 1.8.7 — 2026-09-25
+
 - Fixed: world creation lists your whole character card library. It stopped at 100 cards, so a library larger than that died around the letter M and the cards past it showed in your cast as “No longer in your library”.
 - Fixed: loading a preset no longer leaves out cards it could not see — it reads the whole library before deciding what the Engine still has.
 
 ## 1.8.6 — 2026-09-23
+
 - Fixed: on a phone held upright, the Landscape only notice no longer covers the rest of Marinara. Characters, lorebooks and anything else you open over the game are reachable again.
 
 ## 1.8.5 — 2026-09-21
+
 - The opening story is optional. Forge this world asks if you are sure, then whether to write it now or later; later, the world opens as soon as its cast is ready, with Summon unlocked, and Modes > Story writes it when you ask. If it fails while the world is being created, Skip the story for now keeps the world.
 - World creation keeps what you write and brings it back on any device, and has presets: save, load, rename, replace or delete a whole setup, from the wizard or from a world you already created.
 - Models that think a lot before answering (GLM, DeepSeek) no longer lose the first try of nearly every call to the output limit.
@@ -181,6 +204,7 @@
 - Fixed: a character made from a card or a Cast lorebook entry reads the World lorebook entries that name them.
 
 ## 1.8.2 — 2026-09-17
+
 - Buffs and debuffs name their stat: a buff can raise ATK, DEF, SPD or crit chance, a debuff can drop DEF, ATK or SPD. Characters you already have fight exactly as before.
 - Newly minted characters and enemies stop piling up on ATK up, DEF down and shields: each new one is asked for what the cast still lacks.
 - Fixed: an outfit rotation whose theme came from your Theme library was painted, lost when it was saved and minted again on every visit. It now saves, and a rotation that fails twice in a row stops retrying.
@@ -189,6 +213,7 @@
 - Importing a theme set refuses oversized files and cleans control characters out of titles; creating a world no longer spends a retry on two malformed answers.
 
 ## 1.8.1 — 2026-09-15
+
 - Writing a chapter ahead keeps going on its own: switching tabs, closing Gacha Forge or changing worlds no longer stops it.
 - Coming back to the Gacha Forge tab no longer drops you on "Generating story" or inside a scene you had not reached, and a scene you were reading stays on its line.
 - The character cards you pick can be moved up and down; the game takes them in that order. The Cast lorebook list can be expanded like World lorebooks.
@@ -197,6 +222,7 @@
 - Fixed: in Firefox the top bar no longer runs past the game at large text sizes; the creator's scrollbars keep their distance; the expanded lorebook list in Settings draws its rows again.
 
 ## 1.8.0 — 2026-09-14
+
 - Combat is manual: on each turn you choose what a unit does and who it hits. Auto still plays the fight for you.
 - The Tower opens at Rank 20: a hundred floors, Tower Coin and a Tower shelf in the Shop, monthly floors built from your own story.
 - Bonds: every fight raises a unit's bond, and its levels open a conversation, a story chapter of their own, a Home background and an outfit.
@@ -207,6 +233,7 @@
 - Fixed: passives and skills do what they say, the game keeps your place when you come back, and screens no longer flash while they load.
 
 ## 1.7.0 — 2026-09-05
+
 - A whole chapter's scenes can be written in advance, so they open with no wait.
 - Leave a scene halfway and pick it up where you stopped instead of starting over.
 - Every banner now runs smaller side events alongside it: Tidewalk, Salvage Bingo and Supply Line.

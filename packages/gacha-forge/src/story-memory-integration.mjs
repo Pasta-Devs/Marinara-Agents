@@ -53,6 +53,11 @@ export function createForgeStoryMemoryIntegration({
   const currentTarget = async (runId, chapter, storyIndex) => {
     if (!Number.isInteger(chapter)) {
       const session = await readSession(runId);
+      const eventPlan = await readPlan(runId, chapter);
+      if (eventPlan?.eventId) {
+        const node = allNodes(eventPlan).filter((entry) => entry.type === "story")[storyIndex];
+        return !node || allNodes(eventPlan).indexOf(node) >= normal(session, chapter);
+      }
       const row = bondHistory(session).find((entry) => bondChapterId(entry.unitId, entry.part) === chapter);
       if (!row) return false;
       const suffix = row.part > 1 ? String(row.part) : "";
@@ -79,10 +84,11 @@ export function createForgeStoryMemoryIntegration({
       target && !Number.isInteger(target.chapter)
         ? history.find((row) => bondChapterId(row.unitId, row.part) === target.chapter)
         : null;
+    const eventTarget = target && plans.find((doc) => doc.id === `${runId}:chapter:${target.chapter}`)?.data;
     const ceiling = target
       ? Number.isInteger(target.chapter)
         ? target.chapter
-        : (bondTarget?.after ?? 0) + 1
+        : (eventTarget?.eventId ? eventTarget.after : (bondTarget?.after ?? 0)) + 1
       : Infinity;
     const rows = [];
     const canonical = async (chapter, count) => {
@@ -124,6 +130,23 @@ export function createForgeStoryMemoryIntegration({
         content,
         order: row.after * 10000 + 5000 + (Number(row.opened) || row.part) / 1e13,
       });
+    }
+    for (const doc of plans.filter((row) => row.data.eventId)) {
+      const plan = doc.data,
+        chapter = doc.id.slice(`${runId}:chapter:`.length);
+      if (normal(session, chapter) < allNodes(plan).length || plan.after >= ceiling || chapter === target?.chapter)
+        continue;
+      if (eventTarget?.eventId && plan.after === eventTarget.after && Number(plan.opened) >= Number(eventTarget.opened))
+        continue;
+      const content = await canonical(chapter, storyNodes(plan).length);
+      if (content)
+        rows.push({
+          id: chapter,
+          kind: "story-event",
+          title: `Story event: ${text(plan.title)}`,
+          content,
+          order: Number(plan.after) * 10000 + 6000 + (Number(plan.opened) || 0) / 1e13,
+        });
     }
     const targetPlan = target && Number.isInteger(target.chapter) ? await readPlan(runId, target.chapter) : null;
     const targetNodes = targetPlan ? allNodes(targetPlan) : [];
@@ -180,6 +203,25 @@ export function createForgeStoryMemoryIntegration({
         if (Array.isArray(segments)) beats.push(renderSegments(segments));
       }
       if (beats.length) result.push(`# Character Story so far: ${text(plan?.title) || chapter}\n${beats.join("\n\n")}`);
+    }
+    for (const doc of await listPlans(runId)) {
+      const plan = doc.data,
+        chapter = doc.id.slice(`${runId}:chapter:`.length);
+      if (!plan?.eventId || chapter === excludeChapter) continue;
+      const count = normal(session, chapter),
+        nodes = allNodes(plan);
+      if (!count || count >= nodes.length) continue;
+      const beats = [];
+      let index = 0;
+      for (const [nodeIndex, node] of nodes.entries()) {
+        if (node.type !== "story") continue;
+        if (nodeIndex < count) {
+          const segments = await readSegments(runId, chapter, index);
+          if (Array.isArray(segments)) beats.push(renderSegments(segments));
+        }
+        index += 1;
+      }
+      if (beats.length) result.push(`# Story event so far: ${text(plan.title)}\n${beats.join("\n\n")}`);
     }
     return result.join("\n\n");
   };
@@ -386,7 +428,12 @@ export function createForgeStoryMemoryIntegration({
       let previous = "",
         previousContent = "";
       const legacy = async () => {
-        const history = await fallback();
+        const eventRows = (await sourceRows(runId, { chapter, storyIndex })).filter(
+          (row) => row.kind === "story-event",
+        );
+        const history = [await fallback(), ...eventRows.map((row) => `# ${row.title}\n${row.content}`)]
+          .filter(Boolean)
+          .join("\n\n");
         const currentBody = prefix.replace(/^# Current chapter so far\n/u, "");
         const missingCurrent = current && currentBody && !history.includes(currentBody);
         if (!previous && !missingCurrent) return history;

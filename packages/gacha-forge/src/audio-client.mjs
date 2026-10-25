@@ -532,6 +532,10 @@ export function forgeAudioCue(host) {
       ? "boss"
       : "combat";
   }
+  const eventCue =
+    host._forgeSeasonalBanner?.music?.cue ||
+    (host._forgeEvent?.chapter === host._planChapter ? host._forgeEvent?.music?.cue : null);
+  if (eventCue) return eventCue;
   if (state === "beat")
     return host._beatState === "ready"
       ? host._bondUnit
