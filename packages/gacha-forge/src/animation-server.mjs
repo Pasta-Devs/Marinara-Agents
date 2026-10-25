@@ -211,7 +211,12 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
             } finally {
               await forgeAnimationUnlink(temporary).catch(() => {});
             }
-            await writeStatus({ state: "ready", mediaKey });
+            try {
+              await writeStatus({ state: "ready", mediaKey });
+            } catch (error) {
+              await retirePrevious(folder, mediaKey, previousKey);
+              throw error;
+            }
             await retirePrevious(folder, previousKey, mediaKey);
             return result(false, mediaKey);
           });
