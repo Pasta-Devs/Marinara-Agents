@@ -4,11 +4,12 @@ import {
   adoptForgeChapterVersion,
   confirmForgeChapterReset,
   forgeChapterCurrent,
+  forgeChapterOriginCurrent,
   forgeChapterRequest,
   wireForgeChapterRegeneration,
 } from "../packages/gacha-forge/src/chapter-regeneration-client.mjs";
 import { forgeChapterResetEnglish } from "../packages/gacha-forge/src/chapter-regeneration-en.mjs";
-import { stopForgeStoryRequests } from "../packages/gacha-forge/src/story-cancel-client.mjs";
+import { forgeStoryRequest, stopForgeStoryRequests } from "../packages/gacha-forge/src/story-cancel-client.mjs";
 
 globalThis.forgeChapterResetEnglish = forgeChapterResetEnglish;
 globalThis.stopForgeStoryRequests = stopForgeStoryRequests;
@@ -66,8 +67,21 @@ test("story versions are confined to the route allowlist and preserve an already
     storyRevision: 4,
   });
   assert.equal(forgeChapterRequest(host, "/beat/mark", { runId: "r", chapter: 2, storyRevision: 2 }).storyRevision, 2);
-  adoptForgeChapterVersion(host, "/chapter-plan", { runId: "r" }, { storyRevision: 1 });
+  assert.equal(adoptForgeChapterVersion(host, "/chapter-plan", { runId: "r" }, { storyRevision: 1 }), false);
   assert.equal(host._forgeChapterVersions.get("r"), 4);
+});
+
+test("short story mutations keep originating-world authority before generic state adoption", () => {
+  const { host } = client();
+  for (const path of ["/complete", "/choice", "/beat/mark"]) {
+    host._run = { runId: "r" };
+    const request = forgeStoryRequest(host, path);
+    assert.equal(forgeChapterOriginCurrent(host, path, { runId: "r" }), true);
+    host._run = { runId: "other" };
+    assert.equal(request.current(), false);
+    assert.equal(forgeChapterOriginCurrent(host, path, { runId: "r" }), false);
+  }
+  assert.equal(forgeChapterOriginCurrent(host, "/banner/animation", { runId: "r" }), true);
 });
 
 test("a reset requires the explicit displayed confirmation and ignores a second pending click", async () => {
@@ -102,12 +116,16 @@ test("confirmed reset clears only selected caches and starts fresh generation af
 
 test("failed reset preserves the original plan/progress and offers an honest recoverable message", async () => {
   const { host, request, loads } = client(async () => ({ ok: false, error: "chapter-completed" }));
+  host._storyStarting = true;
+  host._merging = true;
   const old = host._plan;
   await confirmForgeChapterReset(host, request);
   assert.equal(host._plan, old);
   assert.equal(host._planCache.get("r|2"), "old");
   assert.equal(host._chapterProgress.normal, 3);
   assert.equal(request.error, forgeChapterResetEnglish["chapter.reset.completed"]);
+  assert.equal(host._storyStarting, false);
+  assert.equal(host._merging, false);
   assert.deepEqual(loads, []);
 });
 
@@ -122,6 +140,23 @@ test("a late reset response cannot clear another chapter or world", async () => 
   await pending;
   assert.equal(host._plan, another);
   assert.equal(host._planCache.get("r|2"), "old");
+  assert.deepEqual(loads, []);
+});
+
+test("a late reset response cannot clear a freshly loaded same-target plan", async () => {
+  const gate = Promise.withResolvers(),
+    { host, request, loads } = client(() => gate.promise);
+  request.plan = host._plan;
+  const pending = confirmForgeChapterReset(host, request);
+  const fresh = { ...host._plan, title: "Fresh server plan" };
+  host._plan = fresh;
+  host._chapterProgress.normal = 2;
+  adoptForgeChapterVersion(host, "/chapter-plan", { runId: "r" }, { storyRevision: 1 });
+  gate.resolve({ ok: true, storyRevision: 1 });
+  await pending;
+  assert.equal(host._plan, fresh);
+  assert.equal(host._chapterProgress.normal, 2);
+  assert.equal(request.pending, false);
   assert.deepEqual(loads, []);
 });
 
@@ -152,4 +187,15 @@ test("pending completion callbacks lose authority after local reset or target ch
   const beforeNavigation = forgeChapterCurrent(host);
   host._planChapter = 3;
   assert.equal(beforeNavigation(), false);
+});
+
+test("learning a newer server version or reloading the same plan fences older callbacks", () => {
+  const { host } = client();
+  host._forgeChapterVersions = new Map([["r", 0]]);
+  const beforeRemoteReset = forgeChapterCurrent(host);
+  adoptForgeChapterVersion(host, "/chapter-plan", { runId: "r" }, { storyRevision: 1 });
+  assert.equal(beforeRemoteReset(), false);
+  const beforeReload = forgeChapterCurrent(host);
+  host._plan = { ...host._plan, title: "Fresh same-target plan" };
+  assert.equal(beforeReload(), false);
 });

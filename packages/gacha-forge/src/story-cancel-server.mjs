@@ -63,6 +63,17 @@ export function createForgeStoryCancellation() {
     void promise.then(settled, settled);
   };
   return {
+    async mutate(runId, operation) {
+      if (typeof runId !== "string" || !runId.trim()) return { ok: false, error: "bad-request" };
+      if (disposed) return { ok: false, error: "cancelled" };
+      const state = world(runId);
+      if (state.resetting) return { ok: false, error: "reset-in-progress" };
+      // Ordinary Cancel stops generation, not a completion/choice the player already
+      // committed. Reset still joins this actual mutation before checking eligibility.
+      const pending = forgeStoryScope.run(undefined, () => Promise.resolve().then(operation));
+      track(state.operations, pending);
+      return pending;
+    },
     async run(runId, operation) {
       if (typeof runId !== "string" || !runId.trim()) return { ok: false, error: "bad-request" };
       if (disposed) return { ok: false, error: "cancelled" };

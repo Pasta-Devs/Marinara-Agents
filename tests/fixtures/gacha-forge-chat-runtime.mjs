@@ -70,18 +70,20 @@ export async function createChatRuntime({ stored, archived = 0, port = 0 } = {})
         }
         if (transport.mode === "fail") throw new Error("Controlled provider unavailable");
         const content =
-          transport.mode === "empty"
-            ? ""
-            : summary
-              ? JSON.stringify({ summary: "A prior meeting and remembered promise." })
-              : transport.stage === "channel"
-                ? JSON.stringify({ name: "Lantern Line", blurb: "A private lighthouse channel." })
-                : transport.stage === "memory"
-                  ? JSON.stringify({
-                      memory: "Mari and Arden agreed to meet at the lighthouse.",
-                      quote: "Meet me at the lighthouse.",
-                    })
-                  : "Arden: I heard your first message.";
+          typeof transport.reply === "function"
+            ? await transport.reply(body, transport)
+            : transport.mode === "empty"
+              ? ""
+              : summary
+                ? JSON.stringify({ summary: "A prior meeting and remembered promise." })
+                : transport.stage === "channel"
+                  ? JSON.stringify({ name: "Lantern Line", blurb: "A private lighthouse channel." })
+                  : transport.stage === "memory"
+                    ? JSON.stringify({
+                        memory: "Mari and Arden agreed to meet at the lighthouse.",
+                        quote: "Meet me at the lighthouse.",
+                      })
+                    : "Arden: I heard your first message.";
         response = { choices: [{ message: { content }, finish_reason: "stop" }] };
       } else {
         const handler = handlers.get(`${request.method} ${request.url}`);
@@ -131,6 +133,7 @@ export async function createChatRuntime({ stored, archived = 0, port = 0 } = {})
       throw new Error("Chat history must never be deleted");
     },
   };
+  const persistence = { documents };
   let cleanup;
   try {
     const { activate } = await import(pathToFileURL(path).href);
@@ -139,7 +142,7 @@ export async function createChatRuntime({ stored, archived = 0, port = 0 } = {})
       package: { id: "gacha-forge", version: "fixture" },
       api: {
         runtime: {
-          persistence: { documents },
+          persistence,
           json: { parseJsonish: JSON.parse },
           logger: Object.fromEntries(
             ["info", "warn", "error", "debug"].map((level) => [level, (...args) => logs.push({ level, args })]),
@@ -157,7 +160,7 @@ export async function createChatRuntime({ stored, archived = 0, port = 0 } = {})
                     method: "POST",
                     headers: { "content-type": "application/json" },
                     body: JSON.stringify({ model: "controlled-same-main-model", messages }),
-                    signal: options.signal,
+                    signal: transport.ignoreAbort ? undefined : options.signal,
                   });
                   if (!response.ok) throw new Error("Controlled provider unavailable");
                   const data = await response.json();
@@ -212,6 +215,7 @@ export async function createChatRuntime({ stored, archived = 0, port = 0 } = {})
   return {
     origin,
     docs,
+    persistence,
     calls,
     resolved,
     errors,

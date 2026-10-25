@@ -21,8 +21,13 @@ const forgeChapterVersionPaths = new Set([
   "/compress",
   "/compress/merge",
   "/chapters",
+  "/continuity",
   "/chapter/regenerate",
 ]);
+
+export function forgeChapterOriginCurrent(host, path, body) {
+  return !forgeChapterVersionPaths.has(path) || !body?.runId || host._run?.runId === body.runId;
+}
 
 export function forgeChapterRequest(host, path, body) {
   if (!forgeChapterVersionPaths.has(path) || !body?.runId) return body;
@@ -35,9 +40,11 @@ export function forgeChapterRequest(host, path, body) {
 }
 
 export function adoptForgeChapterVersion(host, path, body, result) {
-  if (!forgeChapterVersionPaths.has(path) || !body?.runId || !Number.isSafeInteger(result?.storyRevision)) return;
+  if (!forgeChapterVersionPaths.has(path) || !body?.runId || !Number.isSafeInteger(result?.storyRevision)) return true;
   const versions = (host._forgeChapterVersions ??= new Map());
-  versions.set(body.runId, Math.max(versions.get(body.runId) || 0, result.storyRevision));
+  if (result.storyRevision < (versions.get(body.runId) || 0)) return false;
+  versions.set(body.runId, result.storyRevision);
+  return true;
 }
 
 export function forgeChapterCurrent(host) {
@@ -45,12 +52,16 @@ export function forgeChapterCurrent(host) {
     chapter = host._planChapter,
     unitId = host._bondUnit || "",
     part = host._bondPart,
-    revision = host._forgeStoryRevision || 0;
+    revision = host._forgeStoryRevision || 0,
+    serverVersion = host._forgeChapterVersions?.get(runId) || 0,
+    plan = host._plan;
   return () =>
     host._run?.runId === runId &&
     host._planChapter === chapter &&
     (host._bondUnit || "") === unitId &&
     host._bondPart === part &&
+    host._plan === plan &&
+    (host._forgeChapterVersions?.get(runId) || 0) === serverVersion &&
     (host._forgeStoryRevision || 0) === revision;
 }
 
@@ -119,6 +130,7 @@ export async function confirmForgeChapterReset(host, request) {
   request.pending = true;
   request.asking = false;
   request.error = "";
+  const displayedPlan = host._plan;
   stopForgeStoryRequests(host);
   const revision = host._forgeStoryRevision;
   wireForgeChapterRegeneration(host);
@@ -133,14 +145,20 @@ export async function confirmForgeChapterReset(host, request) {
   } catch {
     result = null;
   }
+  request.pending = false;
   // The user may have switched worlds/chapters while an uncooperative provider drained.
   if (
     host._forgeChapterReset !== request ||
     !forgeResetSameTarget(request, forgeChapterResetTarget(host)) ||
+    host._plan !== displayedPlan ||
     host._forgeStoryRevision !== revision
-  )
+  ) {
+    if (host._forgeChapterReset === request) {
+      host._forgeChapterReset = null;
+      wireForgeChapterRegeneration(host);
+    }
     return;
-  request.pending = false;
+  }
   if (!result?.ok) {
     request.error =
       forgeChapterResetEnglish[
@@ -159,7 +177,11 @@ export async function confirmForgeChapterReset(host, request) {
     wireForgeChapterRegeneration(host);
     return;
   }
-  adoptForgeChapterVersion(host, "/chapter/regenerate", request, result);
+  if (!adoptForgeChapterVersion(host, "/chapter/regenerate", request, result)) {
+    request.error = forgeChapterResetEnglish["chapter.reset.changed"];
+    wireForgeChapterRegeneration(host);
+    return;
+  }
   forgeClearSelectedStoryCache(host, request);
   host._forgeChapterReset = null;
   host._renderBrowser();
@@ -177,9 +199,10 @@ export function wireForgeChapterRegeneration(host) {
   const scroll = root.querySelector(".cap-scroll");
   if (!scroll) return;
   let request = host._forgeChapterReset;
-  if (!forgeResetSameTarget(request, target))
+  if (!forgeResetSameTarget(request, target) || (!request.pending && request.plan !== host._plan))
     request = host._forgeChapterReset = {
       ...target,
+      plan: host._plan,
       title: String(host._plan.title || forgeChapterResetEnglish["chapter.reset.untitled"]),
       storyRevision: host._forgeChapterVersions?.get(target.runId) || 0,
       asking: false,

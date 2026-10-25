@@ -305,3 +305,67 @@ test("a reset invoked inside its own admitted story operation fails promptly ins
   });
   runtime.dispose();
 });
+
+test("ordinary generation Cancel preserves an already admitted canonical completion save", async () => {
+  const f = fixture(),
+    started = deferred(),
+    release = deferred(),
+    routes = new Map();
+  const documents = forgeStoryDocuments(f.documents);
+  f.service.post({ post: (path, handler) => routes.set(path, handler) }, "/complete", async () => {
+    started.resolve();
+    await release.promise;
+    const session = await f.documents.getById(packageId, `${runId}:session`);
+    session.data.progress[2].normal = 4;
+    await documents.update({ ...session, expectedRevision: session.revision });
+    return { ok: true };
+  });
+  const completion = routes.get("/complete")({ body: { runId, chapter: 2 } });
+  await started.promise;
+  f.runtime.cancel(runId);
+  release.resolve();
+  assert.equal((await completion).ok, true);
+  assert.equal(f.docs.get(`${runId}:session`).data.progress[2].normal, 4);
+  f.runtime.dispose();
+});
+
+test("reset drains an admitted completion while rejecting a fresh mutation, then preserves the completed story", async () => {
+  const f = fixture(),
+    started = deferred(),
+    release = deferred(),
+    routes = new Map();
+  let saves = 0;
+  f.service.post({ post: (path, handler) => routes.set(path, handler) }, "/complete", async () => {
+    saves++;
+    started.resolve();
+    await release.promise;
+    const session = await f.documents.getById(packageId, `${runId}:session`);
+    session.data.progress[2].normal = 10;
+    await f.documents.update({ ...session, expectedRevision: session.revision });
+    return { ok: true };
+  });
+  const completion = routes.get("/complete")({ body: { runId, chapter: 2 } });
+  await started.promise;
+  const reset = f.service.reset({ runId, chapter: 2 });
+  await tick();
+  assert.equal((await routes.get("/complete")({ body: { runId, chapter: 2 } })).error, "reset-in-progress");
+  assert.equal(saves, 1);
+  release.resolve();
+  assert.equal((await completion).ok, true);
+  assert.equal((await reset).error, "chapter-completed");
+  assert.equal(f.docs.has(`${runId}:chapter:2`), true);
+  assert.equal(f.docs.has(`${runId}:beat:2:0`), true);
+  f.runtime.dispose();
+});
+
+test("higher-difficulty progress protects contradictory imported completed stories", async () => {
+  for (const difficulty of ["hard", "veryhard"]) {
+    const f = fixture();
+    f.docs.get(`${runId}:session`).data.progress[2][difficulty] = 1;
+    const before = clone(f.docs);
+    assert.equal((await f.service.reset({ runId, chapter: 2 })).ok, false);
+    assert.deepEqual(f.docs, before);
+    assert.deepEqual(f.invalidated, []);
+    f.runtime.dispose();
+  }
+});

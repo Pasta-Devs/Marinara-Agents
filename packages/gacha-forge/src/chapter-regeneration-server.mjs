@@ -2,6 +2,15 @@ const forgeStoryCount = (value) => {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 0;
 };
+const forgeStoryShortMutations = new Set([
+  "/choice",
+  "/complete",
+  "/bond-chapter/complete",
+  "/beat/mark",
+  "/story/start",
+  "/bond-chapter/start",
+  "/preforge/cancel",
+]);
 
 export function forgeStoryVersion(session) {
   return forgeStoryCount(session?.storyRevision);
@@ -79,6 +88,11 @@ export function createForgeChapterRegeneration({
       const count = allNodes(plan.data).length;
       progress = forgeStoryCount(data.progress?.[String(chapter)]?.normal);
       if (!count || progress >= count) return { ok: false, error: "chapter-completed" };
+      if (
+        forgeStoryCount(data.progress?.[String(chapter)]?.hard) ||
+        forgeStoryCount(data.progress?.[String(chapter)]?.veryhard)
+      )
+        return { ok: false, error: "chapter-completed" };
       const current = openBond(data);
       if (current.id) {
         const unit = await documents.getById(packageId, current.id);
@@ -225,9 +239,15 @@ export function createForgeChapterRegeneration({
     return router.post(path, (request) => {
       const body = request?.body || {},
         runId = text(body.runId);
-      return cancellation.run(runId, async () => {
+      const admit = forgeStoryShortMutations.has(path) ? cancellation.mutate : cancellation.run;
+      return admit(runId, async () => {
         const session = await persistence.documents.getById(packageId, sessionId(runId));
-        if (path !== "/chapter-plan" && path !== "/bond-chapter/plan" && path !== "/chapters") {
+        if (
+          path !== "/chapter-plan" &&
+          path !== "/bond-chapter/plan" &&
+          path !== "/chapters" &&
+          path !== "/continuity"
+        ) {
           const stale = changed(session?.data, body);
           if (stale) return stale;
         }

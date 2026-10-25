@@ -9,6 +9,19 @@ const forgeStoryRequestPaths = new Set([
   "/cg-art",
   "/preforge/start",
   "/preforge/retry",
+  "/preforge/cancel",
+  "/preforge",
+  "/choice",
+  "/complete",
+  "/bond-chapter/complete",
+  "/beat/mark",
+  "/story/start",
+  "/bond-chapter/start",
+  "/battle/start",
+  "/compress",
+  "/compress/merge",
+  "/chapters",
+  "/continuity",
 ]);
 
 export function forgeStoryRequest(host, path) {
@@ -34,6 +47,11 @@ export function stopForgeStoryRequests(host) {
   host._preforgeEpoch = (host._preforgeEpoch || 0) + 1;
   host._stopPreforgeWatch?.();
   host._clearBeat?.();
+  host._storyStarting = false;
+  host._combatStarting = false;
+  host._autoStarting = false;
+  host._merging = false;
+  host._compressing = null;
 }
 
 export function cancelForgeStoryGeneration(host) {
