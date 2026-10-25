@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Long-Term Memory loads settings written by a newer version instead of failing to start, on Engines that use zod 4 or check a list's length before its entries.
+
 ## 1.4.93 — 2026-10-25
 
 - Blocked and running controls in Review and Sources stay reachable by keyboard, so the reason beside them can be read.
