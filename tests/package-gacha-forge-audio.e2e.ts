@@ -2,8 +2,8 @@ import { expect, test, type Locator, type Page, type TestInfo } from "@playwrigh
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "node:http";
+import { pathToFileURL } from "node:url";
 import { recordForgeSoundtrack } from "../packages/gacha-forge/src/audio-settings.mjs";
-import { createChatRuntime, chatRunId, chatUnitId, chatConnectionId } from "./fixtures/gacha-forge-chat-runtime.mjs";
 
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engine checkout");
@@ -684,8 +684,8 @@ for (const orientation of ["landscape", "portrait"]) {
       await forge.locator(".gf-stage > .gf-view .st-pane").evaluate((panel) => {
         panel.scrollTop = panel.scrollHeight;
       });
-      await forge.locator('[data-view="advanced"]').click();
-      await forge.locator('[data-view="continuity"]').click();
+      await forge.locator('.gf-stage > .gf-view [data-view="advanced"]').click();
+      await forge.locator('.gf-stage > .gf-view [data-view="continuity"]').click();
       let rotation = 0;
       // Synthetic camera insets use the Engine's explicit testable safe-area variables.
       // This exercises layout and retained viewport state, not physical iOS compositing.
@@ -738,8 +738,8 @@ for (const orientation of ["landscape", "portrait"]) {
       await custom.fill("65");
       await custom.press("Tab");
       await expect.poll(() => thresholdWrites).toEqual([65000]);
-      await forge.locator('[data-view="advanced"]').click();
-      await forge.locator('[data-view="continuity"]').click();
+      await forge.locator('.gf-stage > .gf-view [data-view="advanced"]').click();
+      await forge.locator('.gf-stage > .gf-view [data-view="continuity"]').click();
       await expect(custom).toHaveValue("65");
     }
   });
@@ -748,6 +748,9 @@ for (const orientation of ["landscape", "portrait"]) {
 test("A first typed character message gets one SDK reply and archived history remains in the same window", async ({
   page,
 }, testInfo) => {
+  const { createChatRuntime, chatRunId, chatUnitId, chatConnectionId } = await import(
+    pathToFileURL(resolve(__dirname, "fixtures/gacha-forge-chat-runtime.mjs")).href
+  );
   const runtime = await createChatRuntime({ archived: 40 });
   try {
     await page.route("**/api/gacha-forge/chat/**", async (route) => {
@@ -773,6 +776,11 @@ test("A first typed character message gets one SDK reply and archived history re
     const log = forge.locator("[data-chat-log]");
     await expect(log).toContainText("I heard your first message.");
     await expect(forge.locator(".ch-msg.mine").filter({ hasText: message })).toHaveCount(1);
+    const visibleRows = await forge.locator(".ch-msg").allTextContents();
+    const playerPosition = visibleRows.findIndex((text) => text.includes(message));
+    expect(playerPosition).toBeGreaterThanOrEqual(0);
+    expect(playerPosition).toBeLessThan(visibleRows.findIndex((text) => text.includes("I heard your first message.")));
+    await page.screenshot({ path: testInfo.outputPath("chat-first-reply-ordered.png") });
     await expect(field).toHaveValue("");
     expect(runtime.calls.filter((call) => call.kind === "reply")).toHaveLength(1);
     expect(runtime.resolved.every((request) => request.connectionId === chatConnectionId)).toBe(true);
@@ -1044,6 +1052,19 @@ for (const theme of ["aurora", "bloom"]) {
     expect(state.posts).toHaveLength(3);
     expect(state.posts[2].retry).toBe(true);
     expect(state.browserErrors).toEqual([]);
+    // Distinctive geometric artwork makes a neutral head/torso overlay visually obvious.
+    // These are synthetic fixtures, not a claim about provider-generated image quality.
+    await page.route("**/api/gacha-forge/beat", (route) =>
+      route.fulfill({
+        json: {
+          ...scene,
+          cast: scene.cast.map((character, index) => ({
+            ...character,
+            art: `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="200" height="300" fill="${index ? "#164b69" : "#5c2869"}"/><path d="M100 15 185 145 100 280 15 145Z" fill="${index ? "#3fe0d4" : "#ef8fd8"}"/><path d="m100 65 52 80-52 80-52-80Z" fill="#15243c"/><text x="100" y="154" text-anchor="middle" font-size="32" fill="white">${index ? "B" : "A"}</text></svg>`)}`,
+          })),
+        },
+      }),
+    );
     await seedScene(forge, theme);
     await expect(forge.locator("[data-text]")).toHaveText("ASSIGNED_FIRST");
     await forge.locator("[data-text]").click();

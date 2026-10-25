@@ -246,6 +246,22 @@ try {
     "restart reuses the successfully published replacement",
   );
   assert.equal(recoveryCalls, 3);
+  const recoveryFolder = join(
+    dataDir,
+    "capability-package-data",
+    "gacha-forge",
+    "banner-animations",
+    digest(recoveryBody.runId),
+  );
+  await assert.rejects(
+    readFile(join(recoveryFolder, originalParams[1])),
+    { code: "ENOENT" },
+    "a committed replacement retires its unreferenced previous clip",
+  );
+  recoveryProvider = async () => ({ ...video, base64: replacement.toString("base64") });
+  const identical = await recovery.generate({ ...recoveryBody, retry: true });
+  assert.equal(identical.animation.url, replaced.animation.url, "identical bytes keep the current immutable clip");
+  assert.deepEqual(await readFile(join(recoveryFolder, replacementParams[1])), replacement);
   const legacyBody = { ...recoveryBody, runId: "legacy-clip-world" };
   recoveryProvider = async () => video;
   const legacy = await recovery.generate(legacyBody);
@@ -271,11 +287,113 @@ try {
   assert.equal(recoveryCalls, legacyCalls);
   assert.equal((await recovery.generate({ ...legacyBody, retry: true })).cached, false);
   assert.equal(recoveryCalls, legacyCalls + 1, "legacy clips also support deliberate replacement");
-  assert.deepEqual(
-    await readFile(join(legacyFolder, legacyFilename)),
-    bytes,
-    "publishing the content-addressed replacement does not delete legacy media",
+  await assert.rejects(
+    readFile(join(legacyFolder, legacyFilename)),
+    { code: "ENOENT" },
+    "legacy media is retired only after its replacement is committed",
   );
+  for (const state of ["ready", "pending", "failed"]) {
+    const request = { ...body, runId: `shared-media-${state}` };
+    recoveryProvider = async () => video;
+    const shared = createForgeBannerAnimations(recoveryOptions);
+    const first = await shared.generate(request);
+    const other = await shared.generate({ ...request, banner: "wpn-featured" });
+    const folder = join(dataDir, "capability-package-data", "gacha-forge", "banner-animations", digest(request.runId));
+    const previous = join(folder, first.animation.url.split("/").at(-1));
+    const mediaKey = first.animation.url.split("/").at(-1).slice(0, -4);
+    await writeFile(join(folder, `${other.animation.key}.json`), JSON.stringify({ state, mediaKey }));
+    recoveryProvider = async () => ({ ...video, base64: replacement.toString("base64") });
+    assert.equal((await shared.generate({ ...request, retry: true })).ok, true);
+    assert.deepEqual(await readFile(previous), bytes, `${state} markers retain a shared previous clip`);
+    assert.equal((await shared.generate({ ...request, banner: "wpn-featured", retry: true })).ok, true);
+    await assert.rejects(readFile(previous), { code: "ENOENT" }, "the last reference retires the old shared clip");
+  }
+  {
+    const request = { ...body, runId: "failed-ready-marker-retains-media" };
+    recoveryProvider = async () => video;
+    const old = await recovery.generate(request);
+    const folder = join(dataDir, "capability-package-data", "gacha-forge", "banner-animations", digest(request.runId));
+    const originalRename = fsPromises.rename;
+    fsPromises.rename = async (from, ...args) => {
+      if (
+        String(from).includes(digest(request.runId)) &&
+        String(from).endsWith(".status.tmp") &&
+        JSON.parse(await readFile(from, "utf8")).state === "ready"
+      )
+        throw new Error("fixture ready-marker commit refused");
+      return originalRename(from, ...args);
+    };
+    syncBuiltinESMExports();
+    recoveryProvider = async () => ({ ...video, base64: replacement.toString("base64") });
+    try {
+      assert.equal((await recovery.generate({ ...request, retry: true })).ok, false);
+      assert.deepEqual(
+        await readFile(join(folder, old.animation.url.split("/").at(-1))),
+        bytes,
+        "failed marker commit retains previous media",
+      );
+      assert.equal((await recovery.generate(request)).animation.url, old.animation.url);
+    } finally {
+      fsPromises.rename = originalRename;
+      syncBuiltinESMExports();
+    }
+  }
+  {
+    const request = { ...body, runId: "retire-unlink-is-best-effort" };
+    recoveryProvider = async () => video;
+    const old = await recovery.generate(request);
+    const previous = join(
+      dataDir,
+      "capability-package-data",
+      "gacha-forge",
+      "banner-animations",
+      digest(request.runId),
+      old.animation.url.split("/").at(-1),
+    );
+    const originalUnlink = fsPromises.unlink;
+    fsPromises.unlink = async (path, ...args) => {
+      if (String(path).includes(digest(request.runId)) && String(path).endsWith(old.animation.url.split("/").at(-1)))
+        throw new Error("fixture unlink refused");
+      return originalUnlink(path, ...args);
+    };
+    syncBuiltinESMExports();
+    recoveryProvider = async () => ({ ...video, base64: replacement.toString("base64") });
+    try {
+      const published = await recovery.generate({ ...request, retry: true });
+      assert.equal(
+        published.ok,
+        true,
+        "cleanup failure cannot turn a committed replacement into a retryable provider failure",
+      );
+      assert.deepEqual(await readFile(previous), bytes);
+      const callsBefore = recoveryCalls;
+      assert.equal((await recovery.generate(request)).animation.url, published.animation.url);
+      assert.equal(recoveryCalls, callsBefore, "cleanup failure cannot purchase another generation");
+    } finally {
+      fsPromises.unlink = originalUnlink;
+      syncBuiltinESMExports();
+    }
+  }
+  for (const guard of ["malformed-marker", "oversized-marker", "scan-ceiling"]) {
+    const request = { ...body, runId: `retirement-${guard}` };
+    recoveryProvider = async () => video;
+    const old = await recovery.generate(request);
+    const folder = join(dataDir, "capability-package-data", "gacha-forge", "banner-animations", digest(request.runId));
+    if (guard === "scan-ceiling") {
+      for (let index = 0; index < 513; index += 1) await writeFile(join(folder, `unrelated-${index}`), "");
+    } else
+      await writeFile(
+        join(folder, `${digest(guard)}.json`),
+        guard === "malformed-marker" ? "{broken" : " ".repeat(4097),
+      );
+    recoveryProvider = async () => ({ ...video, base64: replacement.toString("base64") });
+    assert.equal((await recovery.generate({ ...request, retry: true })).ok, true);
+    assert.deepEqual(
+      await readFile(join(folder, old.animation.url.split("/").at(-1))),
+      bytes,
+      `${guard} conservatively retains previous media without failing publication`,
+    );
+  }
   const [world, filename] = result.animation.url.split("/").slice(-2);
   for (const [range, expected] of [
     ["bytes=0-1", bytes.subarray(0, 2)],

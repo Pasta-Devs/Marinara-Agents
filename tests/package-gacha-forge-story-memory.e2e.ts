@@ -165,7 +165,17 @@ test("Continuity keeps its original context threshold controls visible across vi
     const evidence = await controls.evaluate((input) => {
       const plate = input.closest(".st-plate")!;
       const panel = input.closest(".st-pane")!;
+      const bounds = panel.getBoundingClientRect();
+      const heading = [...plate.querySelectorAll("h2,h3,h4")].find((node) => node.textContent === "Model context")!;
+      const visibleIntersection = (node: Element) => {
+        const box = node.getBoundingClientRect();
+        return {
+          width: Math.min(box.right, bounds.right, innerWidth) - Math.max(box.left, bounds.left, 0),
+          height: Math.min(box.bottom, bounds.bottom, innerHeight) - Math.max(box.top, bounds.top, 0),
+        };
+      };
       return {
+        visible: [input, heading].map(visibleIntersection),
         input: input.outerHTML,
         plate: plate.outerHTML,
         dimensions: [
@@ -195,6 +205,10 @@ test("Continuity keeps its original context threshold controls visible across vi
     await page.screenshot({ path: testInfo.outputPath(`context-${viewport.width}x${viewport.height}.png`) });
     await expect(controls).toBeVisible();
     await expect(forge.getByRole("heading", { name: "Model context", exact: true })).toBeVisible();
+    for (const intersection of evidence.visible) {
+      expect(intersection.width).toBeGreaterThan(0);
+      expect(intersection.height).toBeGreaterThan(0);
+    }
   }
 });
 

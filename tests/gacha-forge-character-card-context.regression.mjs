@@ -219,6 +219,59 @@ test("final prompt logging preserves complete canon, excludes forbidden fields, 
   assert.equal(calls[2][0], /^(1|true)$/iu.test(process.env.DEBUG_AGENTS || ""));
 });
 
+test("prompt logging avoids disabled serialization while preserving debug, override and legacy logger paths", () => {
+  const previous = process.env.DEBUG_AGENTS;
+  process.env.DEBUG_AGENTS = "false";
+  try {
+    let serialized = 0;
+    const messages = [{ role: "user", content: "Final fitted text" }];
+    Object.defineProperty(messages, "toJSON", {
+      value: () => {
+        serialized += 1;
+        return ["serialized"];
+      },
+    });
+    const calls = [];
+    let enabled = false;
+    const runtime = {
+      logger: {
+        isLevelEnabled: (level) => {
+          assert.equal(level, "debug");
+          return enabled;
+        },
+        debugOverride: (...args) => calls.push(args),
+      },
+    };
+    logForgeStoryPrompt(runtime, "story-plan", messages);
+    assert.equal(serialized, 0);
+    assert.equal(calls.length, 0);
+    enabled = true;
+    logForgeStoryPrompt(runtime, "story-plan", messages);
+    assert.equal(serialized, 1, "ordinary LOG_LEVEL=debug still serializes and logs");
+    assert.equal(calls[0][0], false);
+    enabled = false;
+    logForgeStoryPrompt(runtime, "story-plan", messages, { debugMode: true });
+    assert.equal(serialized, 2);
+    assert.equal(calls[1][0], true);
+    process.env.DEBUG_AGENTS = "true";
+    logForgeStoryPrompt(runtime, "story-plan", messages);
+    assert.equal(serialized, 3);
+    assert.equal(calls[2][0], true);
+    process.env.DEBUG_AGENTS = "false";
+    enabled = undefined;
+    logForgeStoryPrompt(runtime, "story-plan", messages);
+    assert.equal(serialized, 4, "an unknown level result preserves normal debug logging");
+    assert.equal(calls[3][0], false);
+    delete runtime.logger.isLevelEnabled;
+    logForgeStoryPrompt(runtime, "story-plan", messages);
+    assert.equal(serialized, 5, "legacy hosts without level detection retain their normal debug path");
+    assert.equal(calls[4][0], false);
+  } finally {
+    if (previous === undefined) delete process.env.DEBUG_AGENTS;
+    else process.env.DEBUG_AGENTS = previous;
+  }
+});
+
 test("prompt logging retains the existing debug/info path when a test host lacks debugOverride", () => {
   const calls = [];
   const runtime = {

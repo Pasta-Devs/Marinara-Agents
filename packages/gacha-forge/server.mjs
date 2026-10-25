@@ -398,6 +398,7 @@ import {
   mkdir as forgeAnimationMkdir,
   lstat as forgeAnimationLstat,
   open as forgeAnimationOpen,
+  opendir as forgeAnimationOpendir,
   readFile as forgeAnimationRead,
   writeFile as forgeAnimationWrite,
   rename as forgeAnimationRename,
@@ -444,6 +445,39 @@ function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
       if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("Invalid animation directory");
     }
     return path;
+  };
+  const retirePrevious = async (folder, previousKey, mediaKey) => {
+    if (!previousKey || previousKey === mediaKey) return;
+    try {
+      let inspected = 0;
+      for await (const entry of await forgeAnimationOpendir(folder)) {
+        // ponytail: retain media above 512 entries; explicit cache compaction can handle larger worlds.
+        if (++inspected > 512) return;
+        if (!/^[a-f0-9]{64}\.json$/u.test(entry.name)) continue;
+        const marker = await forgeAnimationOpen(
+          forgeAnimationJoin(folder, entry.name),
+          forgeAnimationFlags.O_RDONLY | forgeAnimationFlags.O_NOFOLLOW,
+        );
+        let saved;
+        try {
+          const stat = await marker.stat();
+          if (!stat.isFile() || stat.size > 4096) return;
+          const buffer = Buffer.alloc(4097);
+          const { bytesRead } = await marker.read(buffer, 0, buffer.length, 0);
+          if (bytesRead !== stat.size) return;
+          saved = JSON.parse(buffer.subarray(0, bytesRead).toString("utf8"));
+        } finally {
+          await marker.close();
+        }
+        if (!saved || typeof saved !== "object" || Array.isArray(saved)) return;
+        if (saved.mediaKey !== undefined && !/^[a-f0-9]{64}$/u.test(saved.mediaKey)) return;
+        // Ready, pending and failed markers may retain a clip; legacy markers use their input key.
+        if ((saved.mediaKey || entry.name.slice(0, -5)) === previousKey) return;
+      }
+      await forgeAnimationUnlink(forgeAnimationJoin(folder, `${previousKey}.mp4`));
+    } catch (error) {
+      runtime.logger?.warn(error, "[gacha-forge] Could not retire a previous banner animation");
+    }
   };
   const remove = async (runId) => {
     if (!dataDir) return;
@@ -572,6 +606,7 @@ function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
               await forgeAnimationUnlink(temporary).catch(() => {});
             }
             await writeStatus({ state: "ready", mediaKey });
+            await retirePrevious(folder, previousKey, mediaKey);
             return result(false, mediaKey);
           });
         } catch (error) {
@@ -1008,6 +1043,7 @@ function logForgeStoryPrompt(runtime, label, messages, options = {}) {
     runtime?.isDebugAgentsEnabled?.() === true ||
     /^(1|true)$/iu.test(process.env.DEBUG_AGENTS || "");
   const logger = runtime?.logger;
+  if (!override && logger?.isLevelEnabled?.("debug") === false) return;
   const format = "[debug/gacha-forge/%s] Messages sent to the provider: %s";
   if (typeof logger?.debugOverride === "function") {
     logger.debugOverride(override, format, label, JSON.stringify(messages));

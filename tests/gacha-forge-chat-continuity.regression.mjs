@@ -92,6 +92,120 @@ test("actual client Send adopts canonical success without duplicating its optimi
   assert.equal(requests.filter((request) => request.path === "/chat/send").length, 1);
 });
 
+test("successful canonical adoption replaces the local player in place before the already-visible reply", async () => {
+  const prior = { ...unit("prior", "Earlier history"), at: 9999 };
+  const said = { ...unit("reply", "Hello back"), at: 1 };
+  const saved = { ...player("saved", "Hello"), at: 50 };
+  const { host, requests } = await actualClient((path) =>
+    path === "/chat/send"
+      ? { ok: true, said }
+      : {
+          ok: true,
+          unit: { id: "u" },
+          messages: [prior, saved, { ...said, photo: { url: "fixture://canonical-photo" } }],
+          activeCount: 3,
+          retry: false,
+        },
+  );
+  host._chat.messages = [prior];
+  host._chatSay({ text: "Hello" });
+  await settleClient();
+  assert.deepEqual(
+    host._chat.messages.map((row) => row.id),
+    ["prior", "saved", "reply"],
+  );
+  assert.equal(host._chat.messages[2].photo.url, "fixture://canonical-photo");
+  assert.equal(host._chatStash, null);
+  assert.equal(requests.filter((request) => request.path === "/chat/send").length, 1);
+});
+
+test("actual successful Send retains both rows during a held or failed canonical read, then deduplicates on reopen", async () => {
+  const read = deferred();
+  let opening = 0;
+  const { host, requests } = await actualClient((path) => {
+    if (path === "/chat/send") return { ok: true, said: unit("reply", "Hello back") };
+    if (++opening === 1) return read.promise;
+    return {
+      ok: true,
+      unit: { id: "u" },
+      messages: [player("saved", "Hello"), { ...unit("reply", "Hello back"), photo: { url: "fixture://fresh-photo" } }],
+      activeCount: 2,
+      retry: false,
+    };
+  });
+  host._chatSay({ text: "Hello" });
+  await settleClient();
+  assert.deepEqual(
+    host._chat.messages.map((row) => row.text),
+    ["Hello", "Hello back"],
+  );
+  assert.equal(host._chat.error, "");
+  read.resolve(null);
+  await settleClient();
+  assert.deepEqual(
+    host._chat.messages.map((row) => row.text),
+    ["Hello", "Hello back"],
+  );
+  assert.equal(host._chatDraft, "");
+  assert.equal(host._chat.retry, false);
+  host._closeChat();
+  host._chatWith("u");
+  await settleClient();
+  assert.deepEqual(
+    host._chat.messages.map((row) => row.id),
+    ["saved", "reply"],
+  );
+  assert.equal(host._chat.messages[1].photo.url, "fixture://fresh-photo");
+  assert.equal(host._chatStash, null);
+  assert.equal(host._chat.error, "");
+  assert.equal(requests.filter((request) => request.path === "/chat/send").length, 1);
+});
+
+test("confirmed reply does not become a false failure when a snapshot is temporarily stale", async () => {
+  const { host, requests } = await actualClient((path) =>
+    path === "/chat/send"
+      ? { ok: true, said: unit("reply", "Hello back") }
+      : { ok: true, unit: { id: "u" }, messages: [], activeCount: 0, retry: false },
+  );
+  host._chatSay({ text: "Hello" });
+  await settleClient();
+  assert.deepEqual(
+    host._chat.messages.map((row) => row.text),
+    ["Hello", "Hello back"],
+  );
+  assert.equal(host._chat.error, "");
+  assert.equal(host._chat.retry, false);
+  host._closeChat();
+  host._chatWith("u");
+  await settleClient();
+  assert.deepEqual(
+    host._chat.messages.map((row) => row.text),
+    ["Hello", "Hello back"],
+  );
+  assert.equal(host._chat.error, "");
+  assert.equal(requests.filter((request) => request.path === "/chat/send").length, 1);
+});
+
+test("a successful reply arriving after Close remains visible when the same contact reopens", async () => {
+  const send = deferred();
+  const { host, requests } = await actualClient((path) =>
+    path === "/chat/send" ? send.promise : { ok: true, unit: { id: "u" }, messages: [], activeCount: 0, retry: false },
+  );
+  host._chatSay({ text: "Hello" });
+  host._closeChat();
+  send.resolve({ ok: true, said: unit("reply", "Hello back") });
+  await settleClient();
+  assert.equal(host._chat, null);
+  host._chatWith("u");
+  await settleClient();
+  assert.deepEqual(
+    host._chat.messages.map((row) => row.text),
+    ["Hello", "Hello back"],
+  );
+  assert.equal(host._chat.error, "");
+  assert.equal(requests.filter((request) => request.path === "/chat/send").length, 1);
+});
+
 test("actual client reopens an unknown delivery without losing text or automatically sending it twice", async () => {
   const { host, requests } = await actualClient((path) =>
     path === "/chat/send" ? null : { ok: true, unit: { id: "u" }, messages: [], activeCount: 0, retry: false },
