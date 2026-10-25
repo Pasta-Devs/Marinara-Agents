@@ -5,11 +5,7 @@
     "format": "png",
     "width": 512,
     "height": 512,
-    "displaySizes": [
-      44,
-      80,
-      96
-    ]
+    "displaySizes": [44, 80, 96]
   },
   "referenceRoles": [
     "chibi-professor-mari.png: compact chibi proportions, mascot silhouette, thick outline language",
