@@ -1,3 +1,13 @@
+## 1.16.0 — 2026-10-25
+
+- Punctuate choice labels. Keep the correct speaker portrait and prevent fullscreen/mute from advancing.
+- Tap Writing help on mobile; keep daily rewards clear of Claim and animate loaded unit art smoothly.
+- Use the current timezone for resets and new banner periods, including clock changes. Catch up automatic chapter memory on world open; retain manual controls and show compressed/combined counts.
+- Auto-select affordable character, weapon, relic and skill upgrades before confirmation. Auto-equip the best free gear and clear stale Units dots.
+- Open farming domains from upgrade materials and show their next rotation; Mandates open their Login Event.
+- Reuse matching dialogue audio; reveal fresh opening lines while preserving saved reading positions.
+- Generate richer music briefs with world motifs, varied arrangements and musical development.
+
 ## 1.15.2 — 2026-10-24 [highlight]
 
 - Show actionable Seedance setup guidance when a banner cannot be animated, and keep Retry visibly busy while generation is pending. Saved clips and the original banner illustration remain available.

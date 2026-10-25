@@ -7,6 +7,7 @@ import {
   wireForgeStoryCancel,
 } from "../packages/gacha-forge/src/story-cancel-client.mjs";
 import { forgeStoryCancelEnglish } from "../packages/gacha-forge/src/story-cancel-en.mjs";
+import { forgeUserTimeZone } from "../packages/gacha-forge/src/browser-presentation.mjs";
 
 const source = await readFile(new URL("../packages/gacha-forge/client.js", import.meta.url), "utf8");
 const method = (name, globals = {}) => {
@@ -16,7 +17,7 @@ const method = (name, globals = {}) => {
   const rest = source.slice(start);
   const end = rest.search(/\}(?:async )?_[A-Za-z0-9]+\([^)]*\)\{/u);
   assert(end >= 0);
-  return vm.runInNewContext(`({${rest.slice(0, end + 1)}})`, globals)[name];
+  return vm.runInNewContext(`({${rest.slice(0, end + 1)}})`, { forgeUserTimeZone, ...globals })[name];
 };
 const deferred = () => Promise.withResolvers();
 const tick = () => new Promise((resolve) => setImmediate(resolve));

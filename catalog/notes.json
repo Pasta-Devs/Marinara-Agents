@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.16.0",
+          "date": "2026-10-25",
+          "notes": "- Punctuate choice labels. Keep the correct speaker portrait and prevent fullscreen/mute from advancing.\n- Tap Writing help on mobile; keep daily rewards clear of Claim and animate loaded unit art smoothly.\n- Use the current timezone for resets and new banner periods, including clock changes. Catch up automatic chapter memory on world open; retain manual controls and show compressed/combined counts.\n- Auto-select affordable character, weapon, relic and skill upgrades before confirmation. Auto-equip the best free gear and clear stale Units dots.\n- Open farming domains from upgrade materials and show their next rotation; Mandates open their Login Event.\n- Reuse matching dialogue audio; reveal fresh opening lines while preserving saved reading positions.\n- Generate richer music briefs with world motifs, varied arrangements and musical development.",
+          "highlight": true
+        },
+        {
           "version": "1.15.2",
           "date": "2026-10-24",
           "notes": "- Show actionable Seedance setup guidance when a banner cannot be animated, and keep Retry visibly busy while generation is pending. Saved clips and the original banner illustration remain available.",
@@ -284,12 +290,6 @@
           "date": "2026-10-19",
           "notes": "- Fixed: places named in Korean, or in any other non-Latin script, get their background painted. Their names used to come out empty, so the background was never made; places whose names mixed Hangul and numbers could also share one background.\n- Backgrounds already painted for a place keep showing; nothing is painted twice.\n- On a phone held sideways the game uses more of the screen, text no longer grows when you turn the phone, and Settings packs its panels tighter. Where the browser has no fullscreen (iPhone Safari), the fullscreen button is hidden instead of doing nothing.",
           "highlight": false
-        },
-        {
-          "version": "1.8.12",
-          "date": "2026-10-02",
-          "notes": "- Fixed: Character Stories can be merged too. In Settings > Continuity a compressed Character Story takes a tick like a chapter, and merges with the chapters next to it or with other Character Stories; the merged entry names each one, and the story never sends a merged one twice.\n- Only chapters played to the end can be merged, and a merge that cannot happen says why.",
-          "highlight": false
         }
       ]
     },
@@ -363,6 +363,12 @@
     },
     "long-term-memory": {
       "versions": [
+        {
+          "version": "1.4.93",
+          "date": "2026-10-25",
+          "notes": "- Blocked and running controls in Review and Sources stay reachable by keyboard, so the reason beside them can be read.\n- Memory Settings, the activation switch and the setup guide now follow the panel's width instead of the window, and the Vault and Debug lists fit a zoomed or short screen.\n- The retry and clear actions in Memory Settings are large enough to tap.\n- Typing in Review and the Memory Vault no longer rebuilds every row's text and the whole search index.\n- The activation switch's shadow follows the theme, and the success colour is documented at its measured contrast.",
+          "highlight": false
+        },
         {
           "version": "1.4.92",
           "date": "2026-10-25",
@@ -476,12 +482,6 @@
           "date": "2026-10-21",
           "notes": "- After a recall index rebuild fails, the integrity check in Maintenance and the package status no longer show the raw error, which could include the vault's file paths. They now say that the latest index rebuild failed and to see the server log, which records the full error. A rebuild that fails while the Engine switches to a new embedding connection is now logged there too.",
           "highlight": false
-        },
-        {
-          "version": "1.4.73",
-          "date": "2026-10-21",
-          "notes": "- An extraction no longer fails as a whole when it leaves out a memory about a note whose id has a digit right after its prefix. This hit older notes with ids such as rel_96dfe1cd8f75, and new characters whose name starts with a digit, such as \"2B\". The left-out suggestion couldn't be saved, so nothing from that source was kept. The left-out memory now appears as a rejected suggestion, like any other.",
-          "highlight": false
         }
       ]
     },
@@ -527,6 +527,12 @@
     },
     "noodle": {
       "versions": [
+        {
+          "version": "1.5.10",
+          "date": "2026-10-25",
+          "notes": "- Posts, replies, and expanded prompt editors keep the text you are typing visible above the mobile landscape keyboard. Noodle hides its mobile navigation while the keyboard is open and restores it when you finish typing.",
+          "highlight": false
+        },
         {
           "version": "1.5.9",
           "date": "2026-10-21",
@@ -639,12 +645,6 @@
           "version": "1.2.20",
           "date": "2026-09-03",
           "notes": "- Added independent image width and height settings to Noodle settings.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.19",
-          "date": "2026-09-03",
-          "notes": "- Fixed automatic timeline refresh when Marinara requires an admin secret on loopback.",
           "highlight": false
         }
       ]

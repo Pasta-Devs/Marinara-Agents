@@ -771,7 +771,7 @@
         },
         "id": "gacha-forge",
         "name": "Gacha Forge",
-        "version": "1.15.2",
+        "version": "1.16.0",
         "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
         "engine": {
           "min": "2.5.1",
@@ -1060,8 +1060,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "f6cf24badc3ffa2db1aa33b0fc8e994a05fa2e58844ee478fe4216409d5937b9",
-            "bytes": 1559394
+            "sha256": "d2c5cef81cbf746cdd69ba527654ee86feaf40913deb4cdd0f6f99dce0bbd1c8",
+            "bytes": 1579904
           },
           {
             "path": "farm-asc.webp",
@@ -1535,8 +1535,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "3ae5e78afb00793495857b44e088451a83701a382c24154f1750647c0e8729b0",
-            "bytes": 649593
+            "sha256": "512bf9341eefe223dfe5a05ffa4c790a300774bd202456e79ef2d46be04155a7",
+            "bytes": 659055
           },
           {
             "path": "skill-aoe_damage-dark.webp",
@@ -2293,9 +2293,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.15.2.zip",
-        "sha256": "735821e5d55bbbb86873cb7a860b61bb1e63a21edabdf71f82af96c70b2a1835",
-        "bytes": 8109146
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.16.0.zip",
+        "sha256": "ae0588a7f48e41e136c08e680a3e8c672b7b70440edefbf6ea6800afbb6c3f4f",
+        "bytes": 8139118
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     },
@@ -2564,7 +2564,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.4.92",
+        "version": "1.4.93",
         "description": "Remembers important things from your chat summaries, characters, and lorebooks, and brings them back when they matter. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.4.1",
@@ -2601,8 +2601,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "fe2e6c90916f0391946a5620f9ff92a96e21478f029808507af4975150498982",
-            "bytes": 693335
+            "sha256": "bedb0d2273dddb82d9379ca1a5479b27ab15648ca1b4391048b213349ced52fd",
+            "bytes": 695848
           }
         ],
         "permissions": [
@@ -2618,9 +2618,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.4.92.zip",
-        "sha256": "798fd46fac7cbf49bd3c4e12a9fa3da9233014d1b35f3d289e28da50f31a27df",
-        "bytes": 1184766
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.4.93.zip",
+        "sha256": "94da58531574b0e5eca5e54e153659d2dd722cdc3941d7d220c509f1431a0387",
+        "bytes": 1187279
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -2828,12 +2828,12 @@
           "minor": 341
         },
         "builtAgainst": {
-          "engineVersion": "2.5.0",
-          "engineCommit": "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed"
+          "engineVersion": "2.5.1",
+          "engineCommit": "42d64368e82340a46e35c0f4489d9f41024d6032"
         },
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.5.9",
+        "version": "1.5.10",
         "description": "A pretend social network where your characters post, share photos, and talk about your chats. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -2862,7 +2862,7 @@
           }
         },
         "engine": {
-          "min": "2.4.6",
+          "min": "2.5.1",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -2921,8 +2921,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "38920a2b2fff2bf6b753949c3c93d182486f9247934c69f1a1c4d732b0cc1f2c",
-            "bytes": 717486
+            "sha256": "127907c85ac32d487ccd46cfc6498e37ff9ad353b09d4b77a95afc9034367835",
+            "bytes": 725722
           },
           {
             "path": "noodle-klusek.png",
@@ -2943,9 +2943,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.9.zip",
-        "sha256": "b4d28f457f025c76161df381c934a74cd0b5ec6ec13976953d43b31359fba835",
-        "bytes": 1294208
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.10.zip",
+        "sha256": "639671101b28fcf8cfc4de6d94937547cdf70da237d44a6ff1e0828674a75fa6",
+        "bytes": 1302445
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },

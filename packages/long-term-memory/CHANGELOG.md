@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.93 — 2026-10-25
 
 - Blocked and running controls in Review and Sources stay reachable by keyboard, so the reason beside them can be read.
 - Memory Settings, the activation switch and the setup guide now follow the panel's width instead of the window, and the Vault and Debug lists fit a zoomed or short screen.

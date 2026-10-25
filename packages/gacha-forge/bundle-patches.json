@@ -11,7 +11,9 @@
       "patches": [
         {
           "version": "1.8.13",
-          "commits": ["a222c867e9737e9dbbc1208a44e6cd1e5ba57435"],
+          "commits": [
+            "a222c867e9737e9dbbc1208a44e6cd1e5ba57435"
+          ],
           "edits": [
             {
               "find": "String(t??\"\").trim().toLowerCase().replace(/[^a-z0-9]+/g,\"-\").replace(/(^-|-$)/g,\"\").slice(0,60",
@@ -49,7 +51,10 @@
         },
         {
           "version": "1.8.14",
-          "commits": ["881c9000c53b85bc5bf719e870b778e8ded00ea6", "9b7d0fb106e72a255db21e4e62f1c4d1524eb2fe"],
+          "commits": [
+            "881c9000c53b85bc5bf719e870b778e8ded00ea6",
+            "9b7d0fb106e72a255db21e4e62f1c4d1524eb2fe"
+          ],
           "edits": [
             {
               "find": "2\";f",
@@ -83,7 +88,9 @@
         },
         {
           "version": "1.8.15",
-          "commits": ["52d72aaf9a1cb440a158714f4928493950c18f22"],
+          "commits": [
+            "52d72aaf9a1cb440a158714f4928493950c18f22"
+          ],
           "edits": [
             {
               "find": "4\";",
@@ -117,7 +124,11 @@
           "edits": [
             {
               "find": "var ac=",
-              "replaceFrom": "src/browser-presentation.mjs"
+              "replaceFrom": [
+                "src/story-entry.mjs",
+                "src/material-navigation.mjs",
+                "src/browser-presentation.mjs"
+              ]
             },
             {
               "find": "_wireFullscreen(){let e=()=>{document.fullscreenElement?document.exitFullscreen?.():this.requestFullscreen?.()},s=typeof this.requestFullscreen==\"function\"&&document.fullscreenEnabled!==!1;for(let a of[\".gf-fs\",\".gf-fs-exit\",\".gf-fs-bar\"]){let r=this._root.querySelector(a);r&&(s?r.addEventListener(\"click\",e):r.remove())}s||Zo(this._root),this._wireLandscape()}",
@@ -177,7 +188,11 @@
             },
             {
               "find": "var ac=`",
-              "replaceFrom": ["src/player-choices-en.mjs", "src/player-choices-client.mjs"],
+              "replaceFrom": [
+                "src/player-choice-text.mjs",
+                "src/player-choices-en.mjs",
+                "src/player-choices-client.mjs"
+              ],
               "sourceId": "choices-client"
             },
             {
@@ -601,7 +616,10 @@
             },
             {
               "find": "var ac=`",
-              "replaceFrom": ["src/story-memory-en.mjs", "src/story-memory-client.mjs"],
+              "replaceFrom": [
+                "src/story-memory-en.mjs",
+                "src/story-memory-client.mjs"
+              ],
               "sourceId": "story-memory-client"
             },
             {
@@ -751,6 +769,97 @@
               "replace": "ds=\"1.15.2\""
             }
           ]
+        },
+        {
+          "version": "1.16.0",
+          "notes": "Repair story and mobile presentation, recover automatic memory, and use the current user timezone.",
+          "edits": [
+            {
+              "find": "function X(W,ce){if(!W)return;let xe=W.getAttribute(\"data-front\")===\"a\"?\"b\":\"a\",Be=W.querySelector('[data-art=\"'+xe+'\"]');if(Be){let Ge=Be.querySelector(\"[data-img]\"),Ke=Be.querySelector(\"[data-figure]\"),St=ce&&ce.art?String(ce.art):\"\";Ge&&(St&&Ge.setAttribute(\"src\",St),Fe(Ge,!St)),Fe(Ke,!!St)}W.setAttribute(\"data-front\",xe)}",
+              "replace": "function X(W,ce){setForgeStoryPortrait(W,ce)}"
+            },
+            {
+              "find": "[data-exit],[data-continue],[data-auto],[data-skip],[data-log],[data-log-box]",
+              "replace": "[data-exit],[data-continue],[data-auto],[data-skip],[data-log],[data-log-box],.gf-fs-exit,.gf-mute"
+            },
+            {
+              "find": "g=!n&&!d&&!m&&!!v&&v.page===c&&f<700",
+              "replace": "g=!n&&!d&&!m&&!!v&&v.page===c&&(v.held||f<700)"
+            },
+            {
+              "find": "_holdScreen(e,a){let r=an(this._root,e),s=setTimeout(()=>{let o=this._tr;!o||!o.held||",
+              "replace": "_holdScreen(e,a){let r=an(this._root,e),s=setTimeout(()=>{let o=this._tr;!o||!o.held||this._lastScreen===\"unit\"&&this._unitState===\"loading\"||"
+            },
+            {
+              "find": "this._postJson(\"/unit\",{runId:this._run.runId,unitId:a}).then(r=>{this._rosterUnitId===a",
+              "replace": "this._postJson(\"/unit\",{runId:this._run.runId,unitId:a}).then(async r=>{if(this._rosterUnitId===a&&r?.ok&&r.unit)await this._decodePicture(ml(r.unit));this._rosterUnitId===a"
+            },
+            {
+              "find": "ds=\"1.15.2\"",
+              "replace": "ds=\"1.16.0\""
+            },
+            {
+              "find": "1,this._renderBrowser()}))}_loadState(){this._boot=\"loading\",this._bootError=\"\",Ze(`${Ia}/state`)",
+              "replace": "1,this._renderBrowser()}))}_loadState(){this._boot=\"loading\",this._bootError=\"\",Ze(`${Ia}/state?timeZone=${encodeURIComponent(forgeUserTimeZone())}`)"
+            },
+            {
+              "find": "nId||!this.isConnected||this._stepRefreshing)return;\nthis._stepRefreshing=true;\nZe(`${Ia}/state`)",
+              "replace": "nId||!this.isConnected||this._stepRefreshing)return;\nthis._stepRefreshing=true;\nZe(`${Ia}/state?timeZone=${encodeURIComponent(forgeUserTimeZone())}`)"
+            },
+            {
+              "find": "_refreshStepData();\n});\n}_refreshState(){this._refreshing||(this._refreshing=!0,Ze(`${Ia}/state`)",
+              "replace": "_refreshStepData();\n});\n}_refreshState(){this._refreshing||(this._refreshing=!0,Ze(`${Ia}/state?timeZone=${encodeURIComponent(forgeUserTimeZone())}`)"
+            },
+            {
+              "find": "headers:{\"Content-Type\":\"application/json\"},body:JSON.stringify(a),...r?{keepalive:!0}:{}",
+              "replace": "headers:{\"Content-Type\":\"application/json\"},body:JSON.stringify({...a,timeZone:forgeUserTimeZone()}),...r?{keepalive:!0}:{}"
+            },
+            {
+              "find": "t.leveled===0&&t.insightXp>=t.levelXpFirst",
+              "replace": "t.leveled===0&&t.canLevel!==false&&t.insightXp>=t.levelXpFirst"
+            },
+            {
+              "find": "t.ascended===0&&t.atAscensionCap>0",
+              "replace": "t.ascended===0&&t.canAscend!==false&&t.atAscensionCap>0"
+            },
+            {
+              "find": "a.facets,this._skillOpen);return}this._unitTab===",
+              "replace": "a.facets,this._skillOpen);wireForgeUnitMaterials(this);wireForgeUpgradeAssists(this);return}this._unitTab==="
+            },
+            {
+              "find": "(e.innerHTML=Ff(this._unit,this._growthView()))}}_loadTokenLog()",
+              "replace": "(e.innerHTML=Ff(this._unit,this._growthView()));wireForgeUnitMaterials(this);wireForgeUpgradeAssists(this)}}_loadTokenLog()"
+            },
+            {
+              "sourceId": "upgrade-assist-client",
+              "find": "function Y0(t,e){",
+              "replaceFrom": "src/upgrade-assist-client.mjs"
+            },
+            {
+              "find": "picked:(this._relics&&this._relics.autoPick||[]).slice(),gained:[]",
+              "replace": "picked:forgeAffordableRelicFood(this._relics,r.targetId),gained:[]"
+            },
+            {
+              "find": "this._postJson(\"/form-up\",{runId:this._run.runId,unitId:this._rosterUnitId,track:e})",
+              "replace": "this._postJson(\"/form-up\",{runId:this._run.runId,unitId:this._rosterUnitId,track:e,levels:forgeSelectedTrainingLevels(this,e)})"
+            },
+            {
+              "find": "wireForgeUnitNotifications(this,od(this._nextStepCtx)),this._wireLandscape()",
+              "replace": "wireForgeUnitNotifications(this,od(this._nextStepCtx)),wireForgeUnitMaterials(this),wireForgeUpgradeAssists(this),revealForgeMaterialDomain(this),this._wireLandscape()"
+            },
+            {
+              "find": "this._beatResumeAsk=!n&&s>0&&s<this._beat.length-1?s:0,this._beatStartAt=n",
+              "replace": "prepareForgeStoryEntry(this,{resumeAt:s,startAt:n,replay:e.replay}),this._beatResumeAsk=!n&&s>0&&s<this._beat.length-1?s:0,this._beatStartAt=n"
+            },
+            {
+              "find": "startAt:Math.max(this._beatStartAt,this._beatAt),onAt:",
+              "replace": "startAt:Math.max(this._beatStartAt,this._beatAt),revealFirst:takeForgeStoryEntry(this),onAt:"
+            },
+            {
+              "find": "Ee(a[_],!1),()=>{e.choicePlayback",
+              "replace": "Ee(a[_],e.revealFirst===true),()=>{e.choicePlayback"
+            }
+          ]
         }
       ]
     },
@@ -764,7 +873,9 @@
       "patches": [
         {
           "version": "1.8.13",
-          "commits": ["a222c867e9737e9dbbc1208a44e6cd1e5ba57435"],
+          "commits": [
+            "a222c867e9737e9dbbc1208a44e6cd1e5ba57435"
+          ],
           "edits": [
             {
               "find": "String(e??\"\").trim().toLowerCase().replace(/[^a-z0-9]+/g,\"-\").replace(/(^-|-$)/g,\"\").slice(0,60)",
@@ -786,7 +897,10 @@
           "edits": [
             {
               "find": "async function lT(e){",
-              "replaceFrom": "src/player-choices-server.mjs",
+              "replaceFrom": [
+                "src/player-choice-text.mjs",
+                "src/player-choices-server.mjs"
+              ],
               "sourceId": "choices-server"
             },
             {
@@ -1344,6 +1458,110 @@
             {
               "find": "async p=>{let u=p&&p.body||{},o=l(u.runId),i=Number(u.chapter),g=Number(u.combatIndex);if(!o||!Number.isInteger(i)||i<1||!Number.isInteger(g)||g<0)return{ok:!1,error:\"bad-request\"};let{data:m}=await be(),w=Ae(m,o),b=await Ph(o,w,i,g);if(b&&b.ok&&w&&b.guide){let S=b.guide;rt(w,o,S.formation||[],{place:l(S.place)?{name:S.place,tags:S.placeTags}:null}).catch(()=>{})}return b}",
               "replace": "async p=>forgeStoryCancellation.run(l(p&&p.body&&p.body.runId),async()=>{let u=p&&p.body||{},o=l(u.runId),i=Number(u.chapter),g=Number(u.combatIndex);if(!o||!Number.isInteger(i)||i<1||!Number.isInteger(g)||g<0)return{ok:!1,error:\"bad-request\"};let{data:m}=await be(),w=Ae(m,o),b=await Ph(o,w,i,g);if(b&&b.ok&&w&&b.guide){let S=b.guide;rt(w,o,S.formation||[],{place:l(S.place)?{name:S.place,tags:S.placeTags}:null}).catch(()=>{})}return b})"
+            }
+          ]
+        },
+        {
+          "version": "1.16.0",
+          "notes": "Repair story and mobile presentation, recover automatic memory, and use the current user timezone.",
+          "edits": [
+            {
+              "find": "let{data:H}=await pe(E);N.decor=",
+              "replace": "forgeStoryMemory.resume(E);let{data:H}=await pe(E);N.decor="
+            },
+            {
+              "find": "function Gg(e){",
+              "replaceFrom": "src/time-zone-server.mjs",
+              "sourceId": "time-zone-server"
+            },
+            {
+              "find": "function Sa(e){return(new Date(Number(e)||Date.now()).getDay()+6)%7}",
+              "replace": "function Sa(e){return forgeWeekday(e)}"
+            },
+            {
+              "find": "function Eo(e){let t=new Date(Number(e)||Date.now());return t.getFullYear()+\"-\"+String(t.getMonth()+1).padStart(2,\"0\")}",
+              "replace": "function Eo(e){return forgeMonthKey(e)}"
+            },
+            {
+              "find": "function rm(e){let t=new Date(Number(e)||Date.now());return mk[t.getMonth()]+\" \"+t.getFullYear()}",
+              "replace": "function rm(e){let t=forgeWallDate(e);return mk[t.getUTCMonth()]+\" \"+t.getUTCFullYear()}"
+            },
+            {
+              "find": "function am(e){let t=Number(e)||Date.now(),n=new Date(t),r=new Date(n.getFullYear(),n.getMonth()+1,1).getTime();return Math.max(1,Math.ceil((r-t)/864e5))}",
+              "replace": "function am(e){return Math.max(1,Math.ceil(forgeResetIn(e,\"month\")/864e5))}"
+            },
+            {
+              "find": "function jn(e){let t=new Date(Number(e)||Date.now());return`${t.getFullYear()}-${Gg(t.getMonth()+1)}-${Gg(t.getDate())}`}",
+              "replace": "function jn(e){return forgeDayKey(e)}"
+            },
+            {
+              "find": "function zy(e){let t=new Date(Number(e)||Date.now());return jn(new Date(t.getFullYear(),t.getMonth(),t.getDate()-Sa(e)).getTime())}",
+              "replace": "function zy(e){return forgeWeekKey(e)}"
+            },
+            {
+              "find": "function ui(e){let t=Number(e)||Date.now(),n=new Date(t);return Math.max(0,new Date(n.getFullYear(),n.getMonth(),n.getDate()+1).getTime()-t)}",
+              "replace": "function ui(e){return forgeResetIn(e)}"
+            },
+            {
+              "find": "function rA(e){let t=Number(e)||Date.now(),n=new Date(t);return Math.max(0,new Date(n.getFullYear(),n.getMonth(),n.getDate()+(Nl-Sa(t))).getTime()-t)}",
+              "replace": "function rA(e){return forgeResetIn(e,\"week\")}"
+            },
+            {
+              "find": "await t.registerPrivilegedRoutes(async s=>{",
+              "replace": "await t.registerPrivilegedRoutes(async s=>{s=forgeTimeZoneRoutes(s);"
+            },
+            {
+              "find": "function NA(e){let t=",
+              "replace": "function NA(e){e=forgeWallDate(e.getTime());let t="
+            },
+            {
+              "find": "endsAt:n+Wu",
+              "replace": "endsAt:forgeAddCalendarDays(n,Math.round(Wu/864e5))"
+            },
+            {
+              "find": "function $n(e,t){let n=Number(e)||0,r=Number(t)||0;return!n||r<n?0:Math.floor((r-n)/(1440*60*1e3))}",
+              "replace": "function $n(e,t){return forgeCalendarDaysBetween(e,t)}"
+            },
+            {
+              "find": "e.leveled===0&&e.insightXp>=e.levelXpFirst",
+              "replace": "e.leveled===0&&e.canLevel!==false&&e.insightXp>=e.levelXpFirst"
+            },
+            {
+              "find": "e.ascended===0&&e.atAscensionCap>0",
+              "replace": "e.ascended===0&&e.canAscend!==false&&e.atAscensionCap>0"
+            },
+            {
+              "find": "let H=0,q=\"\";for(let[De,et]of B)",
+              "replace": "let forgeLevelReady=false,forgeAscendReady=false,H=0,q=\"\";for(let[De,et]of B)"
+            },
+            {
+              "find": "let Ke=E[De]||{};Gc&&Number(Ke.level)>=Pr(Ua(Ke))",
+              "replace": "let Ke=E[De]||{},forgeLevel=Number(Ke.level)||1,forgeXp=Ct.reduce((sum,tier)=>sum+(Number(N[tier.id])||0)*tier.xp,0)+(Number(Ke.xp)||0);if(forgeLevel<Bc(Ke,s,false)&&Number(s.wallet?.funds)>=Su(forgeLevel)&&forgeXp>=mr(forgeLevel))forgeLevelReady=true;if(li(et,Ke,s.wallet).ready)forgeAscendReady=true;Gc&&Number(Ke.level)>=Pr(Ua(Ke))"
+            },
+            {
+              "find": "return{leveled:k(\"level-up\"),equipped:k(\"equip\"),",
+              "replace": "return{canLevel:forgeLevelReady,canAscend:forgeAscendReady,leveled:k(\"level-up\"),equipped:k(\"equip\"),"
+            },
+            {
+              "sourceId": "upgrade-assist-server",
+              "find": "async function to(s,c,d,v){",
+              "replaceFrom": "src/upgrade-assist-server.mjs"
+            },
+            {
+              "find": "form:N?null:Kg(d,k,B,q)",
+              "replace": "form:N?null:forgeTrainingPreviews(Kg(d,k,B,q),En(B),Number(B.funds)||0,level=>forgeTrainingCost(level,d.affinity,ed,gt,Jt))"
+            },
+            {
+              "find": "for(let[j,J]of Object.entries(_.roster))j!==i&&J&&J[m]===F",
+              "replace": "if(u.onlyFree===!0&&forgeGearIsOccupied(_.roster,i,m,F))return{ok:!1,error:\"gear-unavailable\"};for(let[j,J]of Object.entries(_.roster))j!==i&&J&&J[m]===F"
+            },
+            {
+              "find": "for(let[Q,ne]of Object.entries(_.roster))Q!==i&&ne&&ne.weapon===g",
+              "replace": "if(u.onlyFree===!0&&forgeGearIsOccupied(_.roster,i,\"weapon\",g))return{ok:!1,error:\"gear-unavailable\"};for(let[Q,ne]of Object.entries(_.roster))Q!==i&&ne&&ne.weapon===g"
+            },
+            {
+              "find": "let ee=En(x),j=gt(\"tenet\",m.data.affinity||\"\",Y.tier),J=gt(\"mandate\",\"any\",1),he=[{id:j,need:Y.tenet}];Y.mandate&&he.push({id:J,need:Y.mandate});for(let ge of he)if((Number(ee[ge.id])||0)<ge.need)return{ok:!1,error:\"short-materials\",form:$()};let Z=Math.max(0,Number(x.funds)||0);if(Z<Y.funds)return{ok:!1,error:\"short-funds\",form:$()};for(let ge of he)ee[ge.id]-=ge.need;if(x.materials=ee,x.funds=Z-Y.funds,b.wallet=x,Q.form=Q.form&&typeof Q.form==\"object\"?Q.form:typeof Q.form==\"number\"?{skill:Q.form}:{},Q.form[_.key]=ne+1,Xt(b,o,\"form-up\",1,Date.now()),!await Pe(o,w,b))",
+              "replace": "let ee=En(x),Z=Math.max(0,Number(x.funds)||0),forgePlan=forgeTrainingPlan({level:ne,cap:Ql(Ua(S)),materials:ee,funds:Z,costAtLevel:level=>forgeTrainingCost(level,m.data.affinity,ed,gt,Jt),levels:u.levels===void 0?1:u.levels});if(!forgePlan.ok)return{ok:!1,error:forgePlan.error,form:$()};for(let ge of forgePlan.items)ee[ge.id]-=ge.need;if(x.materials=ee,x.funds=Z-forgePlan.funds,b.wallet=x,Q.form=Q.form&&typeof Q.form==\"object\"?Q.form:typeof Q.form==\"number\"?{skill:Q.form}:{},Q.form[_.key]=forgePlan.levelTo,Xt(b,o,\"form-up\",forgePlan.levels,Date.now()),!await Pe(o,w,b))"
             }
           ]
         }

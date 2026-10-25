@@ -1,3 +1,4 @@
+/* global forgeChoiceLabel */
 // Choice graphs stay beside the beat they belong to. The graph is reusable during replay;
 // only the first-play selection map belongs to the story's permanent continuity.
 export function forgeChoicesEnabled(run) {
@@ -28,6 +29,7 @@ PLAYER CHOICES (extend the JSON shape above with an optional "choices" array):
 - Shape: "choices":[{"kind":"small","at":0,"options":[{"text":"Apologize","selection":{"kind":"dialogue","text":"I am sorry I kept you waiting."},"segments":[{"speaker":"","text":"...","place":"..."}]},{"text":"Pull your hoodie up","selection":{"kind":"action","text":"You pull your hoodie up against the cold."},"segments":[...]}]}].
 - Every option has one "selection": {"kind":"dialogue"|"action","text":"..."}. It is the beat performed AFTER the player chooses. Use "dialogue" only for the protagonist's actual spoken words. Use "action" for physical actions, decisions or nonverbal responses; write these as narration in the story's normal voice, NEVER as spoken dialogue. Do not assign a character speaker to an action.
 - "at" is the ZERO-BASED index of the MAINLINE segment after which the options appear. Never put two choices at the same index.
+- End every intent label with appropriate punctuation for the story's language.
 - A SMALL choice has kind "small". Generate ALL its alternative paths together in this one response: 1 to 8 short segments in EVERY option, in the same segment format as the mainline. Do not merely describe what you would write later.
 - After the chosen option and its branch, the story returns to the next mainline segment. Every branch MUST arrive at that same continuation naturally; its local dialogue or route may differ, but it may not change the chapter's required plot, future fights, or settled fate. Later beats may be written before the player chooses, so they must never require a particular small option.
 - The selection text is the protagonist's performed line/action, separate from the button label. Do not repeat it as the first branch segment. Do not place unselected alternatives in mainline prose. Do not nest choices inside branches.
@@ -65,8 +67,10 @@ export function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled,
     const selections = new Set();
     const normalizedOptions = [];
     for (const [optionIndex, option] of choice.options.entries()) {
-      const text = typeof option?.text === "string" ? option.text.trim() : "";
-      if (!text || text.length > 280 || labels.has(text)) return null;
+      const rawText = typeof option?.text === "string" ? option.text.trim() : "";
+      if (!rawText || rawText.length > 280) return null;
+      const text = forgeChoiceLabel(rawText);
+      if (labels.has(text)) return null;
       labels.add(text);
       const selection = option.selection;
       const selectedText = typeof selection?.text === "string" ? selection.text.trim() : "";

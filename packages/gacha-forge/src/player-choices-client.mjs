@@ -1,5 +1,5 @@
 // Maintained package source, inlined after player-choices-en.mjs by the bundle builder.
-/* global forgeChoiceEnglish */
+/* global forgeChoiceEnglish, forgeChoiceLabel */
 const forgeChoiceSettingsLayout = `
 .st-pane .gf-choice-settings-toggle {
   grid-template-columns: 44px minmax(0, 1fr); gap: 0.75rem; align-items: center; padding: 0.4rem 0.6rem;
@@ -181,7 +181,7 @@ export function prepareForgeChoices(host, response) {
     panel.dataset.choiceId = choice.id;
     panel.setAttribute("role", "group");
     panel.setAttribute("aria-label", forgeChoiceEnglish["story.choices.prompt"]);
-    panel.innerHTML = `<p class="vn-choice-heading">${forgeChoiceEnglish["story.choices.prompt"]}</p>${choice.kind === "big" ? `<p class="vn-choice-heading">${forgeChoiceEnglish["story.choices.majorWarning"]}</p>` : ""}<div class="vn-choice-options">${choice.options.map((option) => `<button class="vn-choice-option" type="button" data-forge-choice-option="${forgeChoiceEscape(option.id)}">${forgeChoiceEscape(option.text)}</button>`).join("")}</div><p class="vn-choice-status" data-forge-choice-error role="status" aria-live="polite" hidden></p>`;
+    panel.innerHTML = `<p class="vn-choice-heading">${forgeChoiceEnglish["story.choices.prompt"]}</p>${choice.kind === "big" ? `<p class="vn-choice-heading">${forgeChoiceEnglish["story.choices.majorWarning"]}</p>` : ""}<div class="vn-choice-options">${choice.options.map((option) => `<button class="vn-choice-option" type="button" data-forge-choice-option="${forgeChoiceEscape(option.id)}">${forgeChoiceEscape(forgeChoiceLabel(option.text))}</button>`).join("")}</div><p class="vn-choice-status" data-forge-choice-error role="status" aria-live="polite" hidden></p>`;
     root.querySelector(".vn-dock")?.prepend(panel);
     const currentPanel = panel;
     const status = currentPanel.querySelector(".vn-choice-status");

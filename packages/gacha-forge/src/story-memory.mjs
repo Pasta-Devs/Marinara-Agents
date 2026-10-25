@@ -454,6 +454,9 @@ export function createForgeStoryMemory({
       ...state,
       phase: "ready",
       retryable: false,
+      chapters: records.filter((record) => record.kind === "chapter").length,
+      characterMemories: records.filter((record) => record.kind !== "chapter").length,
+      combinedRecords: overview.sources.length,
       overviewTokens: overview.content ? estimateTokens(`${overviewHeading}${overview.content}`) : 0,
     });
     return { overview: overview.content, overviewSources: stamps, records, status: ready, budget, maxContext };

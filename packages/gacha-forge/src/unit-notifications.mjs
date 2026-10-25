@@ -29,6 +29,13 @@ export function wireForgeUnitNotifications(host, step) {
   const recommendation = forgeUnitRecommendation(step);
   const home = view.querySelector('.hm-screen [data-go="roster"]');
   if (home) {
+    let dot = home.querySelector(".hm-dot");
+    if (recommendation && !dot) {
+      dot = document.createElement("span");
+      dot.className = "hm-dot";
+      dot.setAttribute("aria-hidden", "true");
+      home.append(dot);
+    } else if (!recommendation) dot?.remove();
     if (recommendation) {
       home.setAttribute("title", recommendation.home);
       home.dataset.forgeUnitRecommendation = "";

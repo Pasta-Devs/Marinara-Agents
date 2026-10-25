@@ -69,6 +69,26 @@ export function forgeExplicitVoice(config, characterId) {
   return voices.length === 1 ? voices[0] : null;
 }
 
+export function forgeVoiceCacheKey(runId, segment, character, config, voice) {
+  const profile = (config.connectionId && config.connectionProfiles?.[config.connectionId]) || config;
+  const identity = JSON.stringify([
+    character.characterId,
+    segment.speaker,
+    segment.text,
+    voice,
+    config.connectionId || "",
+    config.source,
+    config.baseUrl,
+    config.model,
+    profile.audioFormat,
+    profile.speed,
+    profile.elevenLabsStability,
+    profile.elevenLabsLanguageCode,
+  ]);
+  // Reuse the package's stable world hash; playback IDs remain unique for cancellation.
+  return `gacha-voice-v1:${forgeSoundtrackContextKey(runId, identity, "line")}`;
+}
+
 export class ForgeAudioController {
   constructor(host, services = globalThis.__MARINARA_HOST__?.services) {
     this.host = host;
@@ -457,7 +477,15 @@ export class ForgeAudioController {
       const voice = forgeExplicitVoice(config, character.characterId);
       if (!voice || abort.signal.aborted || this.disposed) return;
       await this.tts.speakSequence(
-        [{ text: segment.text, speaker: segment.speaker, voice, characterId: character.characterId }],
+        [
+          {
+            text: segment.text,
+            speaker: segment.speaker,
+            voice,
+            characterId: character.characterId,
+            cacheKey: forgeVoiceCacheKey(this.runId, segment, character, config, voice),
+          },
+        ],
         `gacha-forge:${this.runId}:${this.voiceSession}:${++this.voiceIndex}`,
         {
           signal: abort.signal,
