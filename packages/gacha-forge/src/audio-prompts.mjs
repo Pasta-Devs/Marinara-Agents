@@ -39,8 +39,14 @@ export function forgeMusicBriefMessages(run, cue, banner) {
       role: "user",
       content: JSON.stringify({
         world: run.scenario,
-        soundtrackContext: banner ? "a distinctive summon banner theme" : forgeMusicScenes[cue],
-        ...(banner ? { banner: banner.title, identity: banner.cue } : {}),
+        soundtrackContext: banner?.event
+          ? "a distinctive seasonal story event theme"
+          : banner
+            ? "a distinctive summon banner theme"
+            : forgeMusicScenes[cue],
+        ...(banner
+          ? { banner: banner.title, identity: banner.cue, ...(banner.event ? { eventTheme: banner.theme } : {}) }
+          : {}),
       }),
     },
   ];
@@ -59,6 +65,12 @@ export function createForgeMusicPromptService({ readWorld, readSession, updateSe
     const messages = forgeMusicBriefMessages(run, cue, banner);
     const fingerprint = forgeMusicHash("sha256").update(JSON.stringify(messages)).digest("hex");
     const saved = session?.audioPrompts?.[cue];
+    // Older prepared event themes could exceed the brief limit; reuse their bounded text without another paid request.
+    const eventBrief =
+      banner?.event && saved?.event === true && typeof saved.prompt === "string"
+        ? normalizeForgeMusicPrompt({ prompt: saved.prompt.trim().slice(0, 1000) })
+        : null;
+    if (eventBrief) return { ok: true, prompt: eventBrief.prompt, cached: true };
     if (saved?.fingerprint === fingerprint && normalizeForgeMusicPrompt(saved))
       return { ok: true, prompt: saved.prompt, cached: true };
     const key = JSON.stringify([runId, cue, fingerprint]);

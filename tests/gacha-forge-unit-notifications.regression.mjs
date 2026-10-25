@@ -5,6 +5,11 @@ import { test } from "node:test";
 import vm from "node:vm";
 import { forgeUserTimeZone } from "../packages/gacha-forge/src/browser-presentation.mjs";
 import { forgeStoryRequest } from "../packages/gacha-forge/src/story-cancel-client.mjs";
+import { forgeFormationStartRequest } from "../packages/gacha-forge/src/formation-combat-client.mjs";
+import {
+  forgeSeasonalRequest,
+  adoptForgeSeasonalResponse,
+} from "../packages/gacha-forge/src/seasonal-events-client.mjs";
 import {
   adoptForgeChapterVersion,
   forgeChapterOriginCurrent,
@@ -71,6 +76,9 @@ function method(name, following, globals) {
     adoptForgeChapterVersion,
     forgeChapterOriginCurrent,
     forgeChapterRequest,
+    forgeFormationStartRequest,
+    forgeSeasonalRequest,
+    adoptForgeSeasonalResponse,
     ...globals,
   });
 }

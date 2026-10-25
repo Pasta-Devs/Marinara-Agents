@@ -36,8 +36,8 @@ export const freshBondPlan = {
 
 // Reuse the actual package SDK/HTTP/model transport. Only the disposable document
 // store's public transaction contract is controlled; real Engine rollback has separate proof.
-export async function createChapterRuntime({ bond = false } = {}) {
-  const fixture = await createChatRuntime();
+export async function createChapterRuntime({ bond = false, allowWorldDelete = false, port = 0 } = {}) {
+  const fixture = await createChatRuntime({ allowWorldDelete, port });
   const { docs, persistence } = fixture;
   // This story fixture already knows its cast; planning must not spend a model
   // request inferring an unrelated missing identity field.

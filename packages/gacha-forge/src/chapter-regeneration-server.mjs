@@ -3,6 +3,11 @@ const forgeStoryCount = (value) => {
   return Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 0;
 };
 const forgeStoryShortMutations = new Set([
+  "/story-event/complete",
+  "/story-event/start",
+  "/story-event/choice",
+  "/story-event/beat/mark",
+  "/story-event/battle/start",
   "/choice",
   "/complete",
   "/bond-chapter/complete",
@@ -246,7 +251,9 @@ export function createForgeChapterRegeneration({
           path !== "/chapter-plan" &&
           path !== "/bond-chapter/plan" &&
           path !== "/chapters" &&
-          path !== "/continuity"
+          path !== "/continuity" &&
+          path !== "/story-events" &&
+          path !== "/story-event/plan"
         ) {
           const stale = changed(session?.data, body);
           if (stale) return stale;

@@ -55,6 +55,21 @@ try {
     ["audio-en", ["client.js"]],
     ["audio-client", ["client.js"]],
     ["audio-story", ["client.js"]],
+    ["formation-combat-shared", ["client.js", "server.mjs"]],
+    ["formation-combat-server", ["server.mjs"]],
+    ["formation-migration-server", ["server.mjs"]],
+    ["formation-combat-en", ["client.js"]],
+    ["formation-combat-client", ["client.js"]],
+    ["formation-settings-en", ["client.js"]],
+    ["formation-settings-client", ["client.js"]],
+    ["combat-voices-server", ["server.mjs"]],
+    ["combat-voices-en", ["client.js"]],
+    ["combat-voices-client", ["client.js"]],
+    ["combat-ultimate-client", ["client.js"]],
+    ["seasonal-events-server", ["server.mjs"]],
+    ["seasonal-events-adapter", ["server.mjs"]],
+    ["seasonal-events-client", ["client.js"]],
+    ["seasonal-events-en", ["client.js"]],
   ];
   for (const [name, bundles] of sources) {
     const source = new URL(`src/${name}.mjs`, root);

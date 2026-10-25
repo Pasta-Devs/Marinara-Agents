@@ -88,6 +88,20 @@ jobs:
           node tests/gacha-forge-chapter-regeneration.regression.mjs
           node tests/gacha-forge-chapter-regeneration-client.regression.mjs
           node tests/gacha-forge-chapter-regeneration-package.regression.mjs
+          node tests/gacha-forge-formation-combat.regression.mjs
+          node tests/gacha-forge-formation-routes.regression.mjs
+          node tests/gacha-forge-formation-migration.regression.mjs
+          node tests/gacha-forge-formation-package.regression.mjs
+          node tests/gacha-forge-formation-voices.regression.mjs
+          node tests/gacha-forge-formation-voices-sdk.regression.mjs
+          node tests/gacha-forge-formation-voice-file.regression.mjs
+          node tests/gacha-forge-seasonal-events.regression.mjs
+          node tests/gacha-forge-seasonal-events-client.regression.mjs
+          node tests/gacha-forge-seasonal-events-media.regression.mjs
+          node tests/gacha-forge-seasonal-events-package.regression.mjs
+          node tests/gacha-forge-seasonal-admission.regression.mjs
+          node tests/gacha-forge-seasonal-formation.regression.mjs
+          node tests/gacha-forge-seasonal-replay-package.regression.mjs
           node tests/gacha-forge-story-memory-fit.regression.mjs
           node tests/gacha-forge-story-memory-client.regression.mjs
           node tests/gacha-forge-story-memory-package.regression.mjs
