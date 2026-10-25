@@ -359,8 +359,8 @@ export function createForgeCombatVoices({ dataDir, runtime, readUnit, generateLi
         forgeCombatVoiceFlags.O_RDONLY | forgeCombatVoiceFlags.O_NOFOLLOW,
       ).catch(() => null);
       if (!file) return reply.code(404).send();
-      const stat = await file.stat();
-      if (!stat.isFile() || stat.size < 12 || stat.size > forgeCombatVoiceBytes) {
+      const stat = await file.stat().catch(() => null);
+      if (!stat || !stat.isFile() || stat.size < 12 || stat.size > forgeCombatVoiceBytes) {
         await file.close();
         return reply.code(404).send();
       }

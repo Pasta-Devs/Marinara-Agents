@@ -2297,12 +2297,17 @@ function forgeFormationTeamError(actors, enemy = false) {
 
 // Compatibility for old generated enemies; heroes must have an authored generated kit.
 function forgeFormationEnemyKit(enemy) {
+  const legacyPower = (skill) => {
+    const raw = skill?.power;
+    const value = typeof raw === "number" || (typeof raw === "string" && raw.trim() !== "") ? Number(raw) : NaN;
+    return Number.isFinite(value) ? value : 100;
+  };
   const normalize = (skill, cost) => ({
     name: skill?.name || "Strike",
     description: skill?.description || "",
     effect: forgeFormationEffects.includes(skill?.effect) ? skill.effect : "damage",
     target: forgeFormationTargets.includes(skill?.target) ? skill.target : "enemy",
-    power: Math.max(0, Math.min(300, Math.round(Number(skill?.power) || 100))),
+    power: Math.max(0, Math.min(300, Math.round(legacyPower(skill)))),
     duration: 2,
     cost,
     ...(["buff", "debuff"].includes(skill?.effect) ? { stat: skill.stat || "atk" } : {}),
@@ -2311,7 +2316,7 @@ function forgeFormationEnemyKit(enemy) {
   delete passive.cost;
   return normalizeForgeFormationKit({
     preferredRow: enemy.position === "back" ? "back" : "front",
-    standard: normalize({ ...enemy.skill, power: Math.round((enemy.skill?.power || 100) * 0.6) }, 0),
+    standard: normalize({ ...enemy.skill, power: Math.round(legacyPower(enemy.skill) * 0.6) }, 0),
     ultimate: { ...normalize(enemy.skill, 3), elementCost: 1 },
     passive: {
       ...passive,
@@ -2981,7 +2986,7 @@ function forgeFormationAvailableElements(session, documents) {
 function forgeFormationEncounterMessages(messages, run, elements) {
   if (forgeFormationMode(run) !== "formation") return messages;
   const result = messages.map((message) => ({ ...message }));
-  result[0].content += `\nFORMATION COMBAT: this encounter uses Front Row fighters and Back Row elemental supports, a shared12-point bank, one support energy each team turn and one action per frontline fighter. Front collapse defeats a team; supports are protected from direct attacks. At most3 per row, at most6 enemies. Give each enemy an optional executable formationKit using the supplied grammar. STANDARD uses any energy(cost0..4), ULTIMATE uses native energy(cost2..8,elementCost0..cost); Light/Dark substitute2:1. Passive trigger once per team turn, row-gated. Make bosses creative and telegraphed with existing mechs and at most2 optional formationRules: {kind:'element_barrier',elements:['fire'],description:'Only Fire damage breaks the ward.'} or {kind:'defeat_order',order:[0,1,2],description:'Defeat left sentinel, right sentinel, then captain.'}. The order contains 2–3 distinct ZERO-BASED indices into this encounter's full formation array; ordered enemies are placed in the Front Row. Other ordered enemies are protected until earlier ones fall. Element barriers may use ONLY an element the player already owns: ${(elements || []).join(",") || "no element barrier allowed"}. Require actual counterplay available now; do not demand unowned units, spend currency, impossible row access or hidden rules. These rules must be clearly explained in objective/opening and description. Existing enemies-talking dialogueCues remain required where appropriate. The formationKit shape is {version:1,preferredRow:'front|back|hybrid',standard:{name,description,effect,target,power,cost,duration},ultimate:{name,description,effect,target,power,cost,elementCost,duration},passive:{name,description,effect,target,power,duration,trigger,row},traits:[]}. Effects damage,aoe_damage,heal,shield,buff,debuff,dot,stun,cleanse,revive,energy,drain,execute,regen,immune,silence,taunt,swap,summon. Targets enemy,all_enemies,ally,allies,self,front_row,back_row. Power0..300,duration1..3; buff/debuff needs stat atk/def/spd/crit. Passive trigger turn_start,on_attack,on_hit,on_ult,on_death,on_kill,enter_front,enter_back; row front/back/both. Up to2 traits with kind solo_front,advance_ult,retreat_echo,front_tokens and power10..75. No code or extra actions. Omit optional mechanics rather than invent unsupported fields.`;
+  result[0].content += `\nFORMATION COMBAT: this encounter uses Front Row fighters and Back Row elemental supports, a shared 12-point bank, one support energy each team turn and one action per frontline fighter. Front collapse defeats a team; supports are protected from direct attacks. At most 3 per row, at most 6 enemies. Give each enemy an optional executable formationKit using the supplied grammar. STANDARD uses any energy (cost 0..4), ULTIMATE uses native energy (cost 2..8, elementCost 0..cost); Light/Dark substitute 2:1. Passive trigger once per team turn, row-gated. Make bosses creative and telegraphed with existing mechs and at most 2 optional formationRules: {kind:'element_barrier',elements:['fire'],description:'Only Fire damage breaks the ward.'} or {kind:'defeat_order',order:[0,1,2],description:'Defeat left sentinel, right sentinel, then captain.'}. The order contains 2–3 distinct ZERO-BASED indices into this encounter's full formation array; ordered enemies are placed in the Front Row. Other ordered enemies are protected until earlier ones fall. Element barriers may use ONLY an element the player already owns: ${(elements || []).join(",") || "no element barrier allowed"}. Require actual counterplay available now; do not demand unowned units, spend currency, impossible row access or hidden rules. These rules must be clearly explained in objective/opening and description. Existing enemies-talking dialogueCues remain required where appropriate. The formationKit shape is {version:1,preferredRow:'front|back|hybrid',standard:{name,description,effect,target,power,cost,duration},ultimate:{name,description,effect,target,power,cost,elementCost,duration},passive:{name,description,effect,target,power,duration,trigger,row},traits:[]}. Effects damage,aoe_damage,heal,shield,buff,debuff,dot,stun,cleanse,revive,energy,drain,execute,regen,immune,silence,taunt,swap,summon. Targets enemy,all_enemies,ally,allies,self,front_row,back_row. Power 0..300, duration 1..3; buff/debuff needs stat atk/def/spd/crit. Passive trigger turn_start,on_attack,on_hit,on_ult,on_death,on_kill,enter_front,enter_back; row front/back/both. Up to 2 traits with kind solo_front,advance_ult,retreat_echo,front_tokens and power 10..75. No code or extra actions. Omit optional mechanics rather than invent unsupported fields.`;
   return result;
 }
 
@@ -3848,8 +3853,8 @@ function createForgeCombatVoices({ dataDir, runtime, readUnit, generateLines }) 
         forgeCombatVoiceFlags.O_RDONLY | forgeCombatVoiceFlags.O_NOFOLLOW,
       ).catch(() => null);
       if (!file) return reply.code(404).send();
-      const stat = await file.stat();
-      if (!stat.isFile() || stat.size < 12 || stat.size > forgeCombatVoiceBytes) {
+      const stat = await file.stat().catch(() => null);
+      if (!stat || !stat.isFile() || stat.size < 12 || stat.size > forgeCombatVoiceBytes) {
         await file.close();
         return reply.code(404).send();
       }

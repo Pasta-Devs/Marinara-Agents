@@ -4473,7 +4473,7 @@ const forgeAudioEnglish = {
   "audio.settings.ttsHint": "Use the current Engine voice connection. Only characters with an assigned voice speak.",
   "audio.settings.combatVoices": "Combat voice lines",
   "audio.settings.combatVoicesHint":
-    "Save and reuse four short battle lines per voiced character. Initial generation uses your model and voice providers; characters without an assigned Engine voice stay silent.",
+    "Formation combat only. Save and reuse four short battle lines per voiced character. Initial generation uses your model and voice providers; characters without an assigned Engine voice stay silent.",
   "audio.settings.generate": "Generate music and sound effects",
   "audio.settings.generateHint": "Optional provider requests. Otherwise, the game's existing music and effects play.",
   "audio.settings.connection": "Audio connection",
@@ -6698,12 +6698,17 @@ function forgeFormationTeamError(actors, enemy = false) {
 
 // Compatibility for old generated enemies; heroes must have an authored generated kit.
 function forgeFormationEnemyKit(enemy) {
+  const legacyPower = (skill) => {
+    const raw = skill?.power;
+    const value = typeof raw === "number" || (typeof raw === "string" && raw.trim() !== "") ? Number(raw) : NaN;
+    return Number.isFinite(value) ? value : 100;
+  };
   const normalize = (skill, cost) => ({
     name: skill?.name || "Strike",
     description: skill?.description || "",
     effect: forgeFormationEffects.includes(skill?.effect) ? skill.effect : "damage",
     target: forgeFormationTargets.includes(skill?.target) ? skill.target : "enemy",
-    power: Math.max(0, Math.min(300, Math.round(Number(skill?.power) || 100))),
+    power: Math.max(0, Math.min(300, Math.round(legacyPower(skill)))),
     duration: 2,
     cost,
     ...(["buff", "debuff"].includes(skill?.effect) ? { stat: skill.stat || "atk" } : {}),
@@ -6712,7 +6717,7 @@ function forgeFormationEnemyKit(enemy) {
   delete passive.cost;
   return normalizeForgeFormationKit({
     preferredRow: enemy.position === "back" ? "back" : "front",
-    standard: normalize({ ...enemy.skill, power: Math.round((enemy.skill?.power || 100) * 0.6) }, 0),
+    standard: normalize({ ...enemy.skill, power: Math.round(legacyPower(enemy.skill) * 0.6) }, 0),
     ultimate: { ...normalize(enemy.skill, 3), elementCost: 1 },
     passive: {
       ...passive,

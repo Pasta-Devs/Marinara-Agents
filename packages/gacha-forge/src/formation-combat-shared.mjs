@@ -202,12 +202,17 @@ export function forgeFormationTeamError(actors, enemy = false) {
 
 // Compatibility for old generated enemies; heroes must have an authored generated kit.
 export function forgeFormationEnemyKit(enemy) {
+  const legacyPower = (skill) => {
+    const raw = skill?.power;
+    const value = typeof raw === "number" || (typeof raw === "string" && raw.trim() !== "") ? Number(raw) : NaN;
+    return Number.isFinite(value) ? value : 100;
+  };
   const normalize = (skill, cost) => ({
     name: skill?.name || "Strike",
     description: skill?.description || "",
     effect: forgeFormationEffects.includes(skill?.effect) ? skill.effect : "damage",
     target: forgeFormationTargets.includes(skill?.target) ? skill.target : "enemy",
-    power: Math.max(0, Math.min(300, Math.round(Number(skill?.power) || 100))),
+    power: Math.max(0, Math.min(300, Math.round(legacyPower(skill)))),
     duration: 2,
     cost,
     ...(["buff", "debuff"].includes(skill?.effect) ? { stat: skill.stat || "atk" } : {}),
@@ -216,7 +221,7 @@ export function forgeFormationEnemyKit(enemy) {
   delete passive.cost;
   return normalizeForgeFormationKit({
     preferredRow: enemy.position === "back" ? "back" : "front",
-    standard: normalize({ ...enemy.skill, power: Math.round((enemy.skill?.power || 100) * 0.6) }, 0),
+    standard: normalize({ ...enemy.skill, power: Math.round(legacyPower(enemy.skill) * 0.6) }, 0),
     ultimate: { ...normalize(enemy.skill, 3), elementCost: 1 },
     passive: {
       ...passive,

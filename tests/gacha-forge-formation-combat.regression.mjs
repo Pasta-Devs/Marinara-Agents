@@ -86,6 +86,55 @@ test("kits reject unsupported model code, invented effects, bad costs and recurs
   );
 });
 
+test("legacy enemy fallback keeps zero power and defaults missing or malformed power consistently", () => {
+  assert.equal(forgeFormationEnemyKit({ skill: ability() }).passive.power, 0);
+  for (const [label, power, standard, ultimate] of [
+    ["zero", 0, 0, 0],
+    ["numeric zero", "0", 0, 0],
+    ["positive", 250, 150, 250],
+    ["numeric positive", "250", 150, 250],
+    ["raw power before clamp", 400, 240, 300],
+    ["missing", undefined, 60, 100],
+    ["null", null, 60, 100],
+    ["invalid text", "invalid", 60, 100],
+    ["empty text", "", 60, 100],
+    ["blank text", "   ", 60, 100],
+    ["boolean", false, 60, 100],
+    ["array", [], 60, 100],
+    ["non-finite", Infinity, 60, 100],
+    ["NaN", NaN, 60, 100],
+    ["negative", -10, 0, 0],
+  ]) {
+    const skill = ability({ power }),
+      passive = { ...kit().passive, power };
+    if (power === undefined) {
+      delete skill.power;
+      delete passive.power;
+    }
+    const result = forgeFormationEnemyKit({ skill, passive });
+    assert.equal(result.standard.power, standard, `${label} Standard`);
+    assert.equal(result.ultimate.power, ultimate, `${label} Ultimate`);
+    assert.equal(result.passive.power, ultimate, `${label} passive`);
+  }
+});
+
+test("an enemy without a passive gains no shield that can absorb later attacks", () => {
+  const hero = unit("hero", { stats: { hp: 1000, atk: 100, def: 100, spd: 100, crit: 0 } }),
+    foe = unit("foe", {
+      formationKit: null,
+      skill: ability(),
+      stats: { hp: 1000, atk: 10, def: 50, spd: 10, crit: 0 },
+    });
+  const expectedKit = forgeFormationEnemyKit(foe);
+  expectedKit.passive.power = 0;
+  const damage = (enemy) =>
+    events(drive({ allies: [hero], enemies: [enemy], seed: 1 }, () => ({ action: "attack" })))
+      .filter((event) => event.op === "hit" && event.id === "foe")
+      .slice(0, 3)
+      .map((event) => event.amount);
+  assert.deepEqual(damage(foe), damage({ ...foe, formationKit: expectedKit }));
+});
+
 test("native payment is efficient and wildcard elemental substitution costs two points", () => {
   const bank = { fire: 1, water: 1, wind: 0, earth: 0, light: 2, dark: 0 },
     skill = { cost: 2, elementCost: 1 };
