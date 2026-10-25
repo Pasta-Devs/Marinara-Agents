@@ -724,6 +724,22 @@ for (const file of sourceFiles) {
   }
 }
 assert.deepEqual([...usedKeys].filter((key) => !(key in locale)).sort(), []);
+// #1673: every underlined text button anywhere in the package meets the 2.75rem floor, whatever its markup.
+// The floor is `min-h-11` or an inline `minHeight: 44` on the same element. LastInjectionSummary keeps a
+// smaller target in its compact strip only (it predates #1673).
+const underlinedBelowFloor = sourceFiles.flatMap((file) => {
+  const text = readFileSync(file, "utf8");
+  return [...text.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/gu)]
+    .map((match) => ({ classes: match[1] ?? match[2], after: text.slice(match.index, match.index + 240) }))
+    .filter(({ classes }) => /(?:^|\s)underline(?:\s|$)/u.test(classes))
+    .filter(({ classes, after }) => !/(?:^|\s)min-h-11(?:\s|$)/u.test(classes) && !/minHeight: 44/u.test(after))
+    .filter(
+      ({ classes }) =>
+        !(basename(file) === "LastInjectionSummary.tsx" && /compact \? "min-h-6" : "min-h-11"/u.test(classes)),
+    )
+    .map(({ classes }) => `${basename(file)}: ${classes}`);
+});
+assert.deepEqual(underlinedBelowFloor, []);
 const vaultLocaleValues = Object.entries(locale)
   .filter(([key]) => key.startsWith("ui.longTermMemory.memoryvault."))
   .map(([, value]) => value)

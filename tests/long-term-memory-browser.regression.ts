@@ -4994,6 +4994,43 @@ async function main() {
         );
         await failPage.close();
       }
+      // #1673: the connections-load Retry and every active-template "Reset to default" meet the 2.75rem floor.
+      {
+        const touchPage = await browserContext.newPage();
+        await touchPage.route("**/api/connections", (route) =>
+          route.fulfill({ status: 500, json: { error: "Fixture connections read failed." } }),
+        );
+        await touchPage.goto(`http://127.0.0.1:${address.port}/`);
+        await touchPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await touchPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await touchPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+        await touchPage.locator("#settings-tab-extraction").click();
+        const connectionsError = touchPage
+          .locator('[data-ltm-status="danger"]')
+          .filter({ hasText: "Could not load language connections." });
+        await connectionsError.waitFor({ timeout: 10000 });
+        assert.ok(
+          (await connectionsError
+            .getByRole("button", { name: "Retry" })
+            .evaluate((element) => element.getBoundingClientRect().height)) >= 44,
+          "the connections retry meets 2.75rem",
+        );
+        const resets = touchPage.getByRole("button", { name: "Reset to default", exact: true });
+        const resetCount = await resets.count();
+        assert.ok(resetCount > 0, "the active-template pickers render their Reset to default buttons");
+        for (let index = 0; index < resetCount; index += 1) {
+          assert.ok(
+            (await resets.nth(index).evaluate((element) => element.getBoundingClientRect().height)) >= 44,
+            `Reset to default ${index + 1} meets 2.75rem`,
+          );
+        }
+        await touchPage.close();
+      }
       // Settings that remount after a failed reload wait for a successful read instead of filling
       // the forms from the settings cached before the Reset, which the next Save would write back.
       {
