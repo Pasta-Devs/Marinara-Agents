@@ -13,7 +13,7 @@ const kit = { version: 1, standard: { name: "New skill" } };
 const normalizeKit = (value) => (value?.version === 1 ? clone(value) : null);
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-function fixture({ count = 5, generate = async () => kit, cancellationOptions } = {}) {
+function fixture({ count = 5, generate = async () => kit, cancellationOptions, retireInactiveFight } = {}) {
   const docs = new Map();
   const seed = (id, kind, data) =>
     docs.set(id, {
@@ -88,6 +88,7 @@ function fixture({ count = 5, generate = async () => kit, cancellationOptions } 
       cancellation,
       normalizeKit,
       generateKit: generate,
+      retireInactiveFight,
     });
   const service = create();
   return {
@@ -474,6 +475,26 @@ test("retry regenerates an invalid staged ready kit instead of trapping conversi
   await f.service.retry({ runId, jobId: failed.conversion.id, confirmed: true });
   await f.service.settled(runId);
   assert.equal(calls, 2);
+  assert.equal((await f.service.status({ runId })).mode, "formation");
+  f.dispose();
+});
+
+test("optional inactive-event cleanup runs before confirmed admission, never before confirmation", async () => {
+  let retired = 0;
+  const f = fixture({
+    count: 1,
+    retireInactiveFight: async () => {
+      retired++;
+      delete f.docs.get(`${runId}:session`).data.combatPending;
+    },
+  });
+  f.docs.get(`${runId}:session`).data.combatPending = { chapter: "event-1", expired: true };
+  assert.equal((await f.service.start({ runId, targetMode: "formation" })).error, "confirmation-required");
+  assert.equal(retired, 0);
+  assert.ok(f.docs.get(`${runId}:session`).data.combatPending);
+  assert.equal((await f.service.start({ runId, targetMode: "formation", confirmed: true })).ok, true);
+  await f.service.settled(runId);
+  assert.ok(retired >= 1);
   assert.equal((await f.service.status({ runId })).mode, "formation");
   f.dispose();
 });

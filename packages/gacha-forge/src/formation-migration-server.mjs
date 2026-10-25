@@ -18,6 +18,7 @@ export function createForgeFormationMigration({
   normalizeKit,
   logger,
   concurrency = 3,
+  retireInactiveFight = async () => {},
 }) {
   const documents = persistence.documents;
   const boot = forgeFormationUuid();
@@ -110,6 +111,7 @@ export function createForgeFormationMigration({
   }
   async function commit(runId, id) {
     const eligibility = async () => {
+      await retireInactiveFight(runId);
       const state = await readWorld(documents, runId);
       if (!state.run || state.job?.data?.id !== id || !forgeFormationJobActive(state.job.data))
         return { ok: false, error: "conversion-changed" };
@@ -266,6 +268,7 @@ export function createForgeFormationMigration({
       return { ok: false, error: "confirmation-required" };
     if (disposed) return { ok: false, error: "cancelled" };
     if (typeof persistence.transaction !== "function") return { ok: false, error: "host-feature-unavailable" };
+    await retireInactiveFight(runId);
     const answer = await transaction(async ({ documents: store }) => {
       const { run, job, session } = await readWorld(store, runId);
       if (!run) return { ok: false, error: "not-found" };
@@ -301,6 +304,7 @@ export function createForgeFormationMigration({
     const runId = body?.runId;
     if (!validRunId(runId) || !body.jobId || body.confirmed !== true)
       return { ok: false, error: "confirmation-required" };
+    await retireInactiveFight(runId);
     const changed = await updateJob(runId, body.jobId, async (job, store) => {
       if (job.status !== "failed") return false;
       const { run } = await readWorld(store, runId);
@@ -342,6 +346,7 @@ export function createForgeFormationMigration({
     return status(body);
   }
   async function guard(runId) {
+    await retireInactiveFight(runId);
     const job = await documents.getById(packageId, jobId(runId));
     return forgeFormationJobActive(job?.data)
       ? { ok: false, error: "combat-conversion-in-progress", conversion: summary(job.data) }

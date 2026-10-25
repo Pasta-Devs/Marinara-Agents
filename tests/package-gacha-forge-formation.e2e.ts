@@ -223,6 +223,43 @@ async function readable(item: Locator) {
 }
 
 for (const theme of ["dark", "light"]) {
+  test(`new playthrough setup retains the explicitly chosen combat mode · ${theme}`, async ({ page }, testInfo) => {
+    const { runtime, forge, requests } = await openForge(page, testInfo, theme);
+    try {
+      await forge.evaluate((node) => {
+        const game = node as any;
+        game._creatingNew = true;
+        game._showRuns = false;
+        game._setupDraftAsked = true;
+        game._setupDraftSettled = true;
+        game._setupDraft = {
+          values: { combatMode: "classic", scenario: "A lighthouse garden.", name: "New keepers" },
+          step: 1,
+          furthest: 1,
+          hudStyle: "vanguard",
+        };
+        game._renderKey = null;
+        game._renderBrowser();
+      });
+      const classic = forge.locator('[data-forge-combat-mode][value="classic"]');
+      const formation = forge.locator('[data-forge-combat-mode][value="formation"]');
+      await expect(classic).toBeChecked();
+      await formation.check();
+      await expect(formation).toBeChecked();
+      await readable(formation.locator(".."));
+      await forge.locator("[data-cancel]").click();
+      await expect
+        .poll(() =>
+          requests
+            .filter((request) => request.path === "/setup/draft")
+            .some((request) => request.body.snapshot?.values?.combatMode === "formation"),
+        )
+        .toBe(true);
+      expect(runtime.docs.get("index").data.runs[0].combat.mode).toBe("classic");
+    } finally {
+      await runtime.close();
+    }
+  });
   test(`Formation warning preserves Cancel and converts only on Confirm · ${theme}`, async ({ page }, testInfo) => {
     const { runtime, forge, requests } = await openForge(page, testInfo, theme);
     try {
@@ -237,6 +274,7 @@ for (const theme of ["dark", "light"]) {
       for (const paragraph of await section.locator("h4,p").all()) geometry.push(await readable(paragraph));
       writeFileSync(testInfo.outputPath(`formation-warning-${theme}.json`), JSON.stringify(geometry, null, 2));
       await section.locator("[data-forge-combat-keep]").click();
+      await expect(section.locator("[data-forge-combat-switch]")).toBeFocused();
       expect(requests.filter((request) => request.path === "/combat-mode/switch")).toEqual([]);
       expect(runtime.docs).toEqual(before);
       await section.locator("[data-forge-combat-switch]").click();

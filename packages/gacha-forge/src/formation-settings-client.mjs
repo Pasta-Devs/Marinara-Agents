@@ -114,6 +114,7 @@ export function wireForgeFormationSettings(host) {
       button("combat.mode.keep", () => {
         state.asking = false;
         render();
+        section.querySelector("[data-forge-combat-switch]")?.focus();
       }).dataset.forgeCombatKeep = "";
       button("combat.mode.confirm", () => {
         state.asking = false;
