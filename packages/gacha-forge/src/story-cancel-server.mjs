@@ -67,9 +67,11 @@ export function createForgeStoryCancellation() {
       if (typeof runId !== "string" || !runId.trim()) return { ok: false, error: "bad-request" };
       if (disposed) return { ok: false, error: "cancelled" };
       const state = world(runId);
-      if (state.resetting) return { ok: false, error: "reset-in-progress" };
       // A detached child must not turn its canceled parent's epoch into a fresh request.
       const parent = forgeStoryScope.getStore();
+      const admittedChild = parent?.runId === runId && parent.current();
+      if (state.resetting && !(state.resetting === "checking" && admittedChild))
+        return { ok: false, error: "reset-in-progress" };
       if (parent?.runId === runId && !parent.current()) return { ok: false, error: "cancelled" };
       if (state.controller.signal.aborted) state.controller = new AbortController();
       const { signal } = state.controller,
@@ -120,13 +122,14 @@ export function createForgeStoryCancellation() {
       if (forgeStoryScope.getStore()?.runId === runId) return { ok: false, error: "reset-in-progress" };
       const state = world(runId);
       if (state.resetting) return { ok: false, error: "reset-in-progress" };
-      state.resetting = true;
+      state.resetting = "checking";
       try {
         // Another reset may have committed after the caller's initial precheck.
         // Deny that stale request before it can cancel the newly generated story.
         const permitted = await beforeCancel?.();
         if (permitted?.ok === false) return permitted;
         if (disposed) return { ok: false, error: "cancelled" };
+        state.resetting = "draining";
         state.epoch++;
         state.controller.abort(forgeStoryCancelled());
         // Cancel replies promptly; destructive reset joins the actual work, including writes

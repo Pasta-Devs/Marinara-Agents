@@ -194,3 +194,67 @@ test("a reset that became stale after precheck leaves the newly active provider 
   assert.equal(await generation, "fresh result");
   runtime.dispose();
 });
+
+test("denied asynchronous eligibility preserves an admitted story's nested operation", async () => {
+  const runtime = createForgeStoryCancellation(),
+    started = deferred(),
+    release = deferred(),
+    childDone = deferred();
+  const story = runtime.run("world", async () => {
+    started.resolve();
+    await release.promise;
+    const result = await runtime.run("world", async () => "nested result");
+    childDone.resolve(result);
+    return result;
+  });
+  await started.promise;
+  const reset = runtime.reset(
+    "world",
+    async () => {
+      throw new Error("must not clean up");
+    },
+    async () => {
+      release.resolve();
+      assert.equal(await childDone.promise, "nested result");
+      return { ok: false, error: "story-changed" };
+    },
+  );
+  assert.equal(await story, "nested result");
+  assert.deepEqual(await reset, { ok: false, error: "story-changed" });
+  runtime.dispose();
+});
+
+test("accepted eligibility aborts and drains a child admitted during validation", async () => {
+  const runtime = createForgeStoryCancellation(),
+    startChild = deferred(),
+    childStarted = deferred(),
+    release = deferred();
+  let signal,
+    cleaned = false;
+  const story = runtime.run("world", async () => {
+    await startChild.promise;
+    return runtime.run("world", async (current) => {
+      signal = current;
+      childStarted.resolve();
+      await release.promise;
+    });
+  });
+  const reset = runtime.reset(
+    "world",
+    async () => {
+      cleaned = true;
+    },
+    async () => {
+      startChild.resolve();
+      await childStarted.promise;
+      return { ok: true };
+    },
+  );
+  assert.deepEqual(await story, { ok: false, error: "cancelled" });
+  assert.equal(signal.aborted, true);
+  assert.equal(cleaned, false);
+  release.resolve();
+  await reset;
+  assert.equal(cleaned, true);
+  runtime.dispose();
+});
