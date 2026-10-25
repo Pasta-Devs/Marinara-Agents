@@ -684,8 +684,8 @@ for (const orientation of ["landscape", "portrait"]) {
       await forge.locator(".gf-stage > .gf-view .st-pane").evaluate((panel) => {
         panel.scrollTop = panel.scrollHeight;
       });
-      await forge.locator('[data-view="advanced"]').click();
-      await forge.locator('[data-view="continuity"]').click();
+      await forge.locator('.gf-stage > .gf-view [data-view="advanced"]').click();
+      await forge.locator('.gf-stage > .gf-view [data-view="continuity"]').click();
       let rotation = 0;
       // Synthetic camera insets use the Engine's explicit testable safe-area variables.
       // This exercises layout and retained viewport state, not physical iOS compositing.
@@ -738,8 +738,8 @@ for (const orientation of ["landscape", "portrait"]) {
       await custom.fill("65");
       await custom.press("Tab");
       await expect.poll(() => thresholdWrites).toEqual([65000]);
-      await forge.locator('[data-view="advanced"]').click();
-      await forge.locator('[data-view="continuity"]').click();
+      await forge.locator('.gf-stage > .gf-view [data-view="advanced"]').click();
+      await forge.locator('.gf-stage > .gf-view [data-view="continuity"]').click();
       await expect(custom).toHaveValue("65");
     }
   });
