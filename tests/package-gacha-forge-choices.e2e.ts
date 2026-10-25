@@ -71,7 +71,7 @@ const scene = {
   places: [],
 };
 
-async function openForge(page: Page, testInfo: TestInfo, activeRun?: typeof run) {
+async function openForge(page: Page, testInfo: TestInfo, activeRun?: typeof run, hostTheme: "dark" | "light" = "dark") {
   await page.setViewportSize(
     testInfo.project.name.includes("mobile") ? { width: 874, height: 402 } : { width: 1440, height: 900 },
   );
@@ -79,17 +79,26 @@ async function openForge(page: Page, testInfo: TestInfo, activeRun?: typeof run)
   await page.route("**/api/app-settings/ui", (route) =>
     route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
   );
-  await page.addInitScript((version) => {
-    localStorage.removeItem("marinara-active-chat-id");
-    localStorage.setItem("marinara:whats-new:seen-version", version);
-    localStorage.setItem(
-      "marinara-engine-ui",
-      JSON.stringify({
-        state: { hasCompletedOnboarding: true, sidebarOpen: false, rightPanelOpen: false, appAccentPulseMode: false },
-        version: 65,
-      }),
-    );
-  }, appVersion);
+  await page.addInitScript(
+    ({ version, hostTheme }) => {
+      localStorage.removeItem("marinara-active-chat-id");
+      localStorage.setItem("marinara:whats-new:seen-version", version);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            theme: hostTheme,
+            hasCompletedOnboarding: true,
+            sidebarOpen: false,
+            rightPanelOpen: false,
+            appAccentPulseMode: false,
+          },
+          version: 65,
+        }),
+      );
+    },
+    { version: appVersion, hostTheme },
+  );
   await page.route("**/api/gacha-forge/state*", (route) =>
     route.fulfill({
       json: activeRun
@@ -265,7 +274,8 @@ test("Choices preserve an intentional final em dash and controls do not advance 
       },
     }),
   );
-  const forge = await openForge(page, testInfo);
+  const forge = await openForge(page, testInfo, undefined, "light");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   for (const theme of ["aurora", "bloom"]) {
     currentTheme = theme;
     await forge.evaluate((node) => (node as any)._beatLineWrite(0));
