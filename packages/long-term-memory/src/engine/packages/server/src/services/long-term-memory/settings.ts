@@ -23,11 +23,13 @@ const settingsValueAt = (value: unknown, path: LtmSettingsPath) =>
     (node, key) => (node && typeof node === "object" ? (node as Record<string | number, unknown>)[key] : undefined),
     value,
   );
-// zod 3 names an enum miss `invalid_enum_value`; zod 4 names it `invalid_value`, as it does a literal miss. The
+// zod 3 names an enum miss `invalid_enum_value`; zod 4 names it `invalid_value`, as it does a literal miss, and also
+// for a value that is not a string (zod 3 calls that `invalid_type`), so only a string counts as a newer option. The
 // top-level `version` literal must still fail the parse.
-const isUnknownEnumValue = (code: string, path: LtmSettingsPath) =>
+const isUnknownEnumValue = (code: string, path: LtmSettingsPath, value: unknown) =>
   path.length > 0 &&
-  (code === "invalid_enum_value" || (code === "invalid_value" && !(path.length === 1 && path[0] === "version")));
+  (code === "invalid_enum_value" ||
+    (code === "invalid_value" && typeof value === "string" && !(path.length === 1 && path[0] === "version")));
 /**
  * Splits a stored settings file into the part this version knows and what a newer
  * version wrote: fields this version does not have, at any depth, enum values it does
@@ -78,7 +80,7 @@ export function splitUnknownLtmSettings(schema: z.ZodTypeAny, value: unknown, pa
         return !alone.success &&
           alone.error.issues.some(
             (issue) =>
-              isUnknownEnumValue(issue.code, issue.path as LtmSettingsPath) &&
+              isUnknownEnumValue(issue.code, issue.path as LtmSettingsPath, entry) &&
               issue.path.join(".") === [...list, 0].join("."),
           )
           ? [index]
@@ -102,7 +104,7 @@ export function splitUnknownLtmSettings(schema: z.ZodTypeAny, value: unknown, pa
           delete parent[key];
           changed = true;
         }
-      } else if (isUnknownEnumValue(code, issuePath)) remove(issuePath);
+      } else if (isUnknownEnumValue(code, issuePath, settingsValueAt(known, issuePath))) remove(issuePath);
       else if (
         (code === "too_big" || code === "too_small") &&
         issuePath.length > 0 &&

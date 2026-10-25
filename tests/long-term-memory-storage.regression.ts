@@ -594,6 +594,21 @@ async function main() {
         "a wrong-typed list is kept so the parse fails",
       );
       assert.deepEqual(z4WrongType.newer, []);
+      // zod 4 reports any enum non-member as `invalid_value`; only a string is a newer option, the rest a wrong type.
+      for (const stored of [{ mode: null }, { modes: ["a", 5] }]) {
+        const wrong = splitUnknownLtmSettings(
+          z4Schema,
+          { version: 1, ...stored },
+          join(tmpdir(), `ltm-zod4-${randomUUID()}.json`),
+        );
+        assert.deepEqual(
+          wrong.known,
+          { version: 1, ...stored },
+          `${JSON.stringify(stored)} is kept so the parse fails`,
+        );
+        assert.deepEqual(wrong.newer, []);
+        assert.equal(z4Schema.safeParse(wrong.known).success, false);
+      }
       const tooLongPrompt = await rollbackRoot({
         extraction: { version: 1, promptTemplates: [{ id: "t", name: "T", prompt: "x".repeat(20_001) }] },
       });
