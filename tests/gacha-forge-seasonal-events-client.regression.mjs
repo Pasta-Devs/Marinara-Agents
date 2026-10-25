@@ -39,6 +39,20 @@ assert.equal(requests, 1, "A previously live cached window crossing expiry needs
 wireForgeSeasonalEvents(host);
 await new Promise((resolve) => setImmediate(resolve));
 assert.equal(requests, 1, "The consumed expiry edge must not start a paid retry loop");
+let chapterRefreshes = 0;
+host._hudView = "chapters";
+host._fillChapters = () => {
+  chapterRefreshes++;
+};
+host._forgeSeasonalState = null;
+wireForgeSeasonalEvents(host);
+await new Promise((resolve) => setImmediate(resolve));
+assert.equal(
+  chapterRefreshes,
+  1,
+  "Async event state must refresh the existing Chapters list even if the main render key is unchanged",
+);
+requests = 1;
 // Failed overview preparation stays an explicit retry rather than a paid render loop.
 host._forgeSeasonalState = { events: [{ seq: 2, endsAt: Date.now() - 1, live: true }] };
 host._postJson = async () => {

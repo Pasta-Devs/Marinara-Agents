@@ -6316,6 +6316,7 @@ async function loadForgeSeasonalEvents(host, retry = false) {
   host._eventsRev = (host._eventsRev || 0) + 1;
   prepareForgeSeasonalEvents(host);
   host._renderBrowser();
+  if (host._hudView === "chapters") host._fillChapters?.();
 }
 function openForgeSeasonalEvent(host, event) {
   stopForgeStoryRequests(host);

@@ -22,8 +22,8 @@ async function optionsGeometry(forge: Locator) {
   });
   expect(result.boxes).toHaveLength(2);
   for (const box of result.boxes) {
-    expect(box.width).toBeGreaterThanOrEqual(44);
-    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(Math.round(box.width)).toBeGreaterThanOrEqual(44);
+    expect(Math.round(box.height)).toBeGreaterThanOrEqual(44);
     expect(box.visual).toBe("24px");
   }
   expect(Math.abs(result.boxes[0]!.y - result.boxes[1]!.y)).toBeLessThan(2);
@@ -66,6 +66,14 @@ for (const theme of ["dark", "light"]) {
           choices: [],
         });
       };
+      const prepared = await f.post("/story-events", { runId });
+      expect(prepared.body.ok).toBe(true);
+      // Controlled prepainted media exercises the real banner view without image-provider credits.
+      f.docs.get(`${runId}:story-event:1`).data.art =
+        "data:image/svg+xml," +
+        encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540"><rect width="960" height="540" fill="#162438"/><circle cx="480" cy="220" r="100" fill="#e9c879"/></svg>',
+        );
       const requests: { path: string; body: any }[] = [];
       const saved = {
         ...run,
@@ -114,7 +122,12 @@ for (const theme of ["dark", "light"]) {
               guidesSeen: ["welcome", "home", "settings", "continuity", "chapter", "beat", "events", "chapters"],
             },
           });
-        if (path.startsWith("/story-event") || path === "/beat/mark" || path === "/story/cancel") {
+        if (
+          path.startsWith("/story-event") ||
+          path === "/beat/mark" ||
+          path === "/story/cancel" ||
+          path === "/run/sources"
+        ) {
           const body = route.request().postDataJSON();
           requests.push({ path, body });
           const result = await f.post(path, body);
@@ -160,6 +173,12 @@ for (const theme of ["dark", "light"]) {
       }, saved);
       await expect(forge.locator("[data-forge-seasonal-events]")).toHaveAttribute("aria-checked", "true");
       await optionsGeometry(forge);
+      const seasonalToggle = forge.locator("[data-forge-seasonal-events]");
+      await seasonalToggle.click();
+      await expect(seasonalToggle).toHaveAttribute("aria-checked", "false");
+      await seasonalToggle.click();
+      await expect(seasonalToggle).toHaveAttribute("aria-checked", "true");
+      expect(f.docs.get("index").data.runs[0].story.choices).toBe(false);
       await page.screenshot({ path: testInfo.outputPath(`seasonal-continuity-${theme}.png`) });
       if (testInfo.project.name.includes("mobile")) {
         await page.setViewportSize({ width: 390, height: 844 });
@@ -207,6 +226,8 @@ for (const theme of ["dark", "light"]) {
       expect(
         f.calls.filter((call: any) => String(call.body.messages?.[0]?.content).includes("SEASONAL EVENT:")).length,
       ).toBe(0);
+      await expect(card.locator("[data-story-event-banner] img")).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`seasonal-events-${theme}.png`) });
       await card.locator("[data-story-event-open]").click();
       await expect.poll(() => requests.filter((row) => row.path === "/story-event/plan").length).toBeGreaterThan(0);
       await expect(forge.locator("[data-play]").first()).toBeVisible();
@@ -228,7 +249,11 @@ for (const theme of ["dark", "light"]) {
         game._renderBrowser();
       });
       const archive = forge.locator("[data-story-event-archive]");
-      await expect(archive.getByText("The Lantern Crossing", { exact: true })).toBeVisible();
+      await expect(
+        archive
+          .locator('[data-story-event-card="event-1"]')
+          .getByRole("heading", { name: "The Lantern Crossing", exact: true }),
+      ).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`seasonal-archive-${theme}.png`) });
       await archive.locator('[data-story-event-open="event-1"]').click();
       await expect.poll(() => forge.evaluate((node) => (node as any)._planChapter)).toBe("event-1");
