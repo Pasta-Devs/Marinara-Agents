@@ -276,11 +276,16 @@ test("the real turn form offers only bonuses from entered payment and preserves 
     new URL("../packages/gacha-forge/src/formation-combat-client.mjs", import.meta.url),
     "utf8",
   );
-  const renderTurn = vm.runInNewContext(source.replace(/export /gu, "") + ";forgeRenderFormationTurn", {
-    forgeFormationElements,
-    forgeFormationPayment,
-    forgeFormationCombatEnglish,
-  });
+  const { renderTurn, presentation } = vm.runInNewContext(
+    source.replace(/export /gu, "") +
+      ";({renderTurn:forgeRenderFormationTurn,presentation:createForgeFormationPresentation})",
+    {
+      forgeFormationElements,
+      forgeFormationPayment,
+      forgeFormationCombatEnglish,
+      document: { createElement: () => ({ remove() {} }) },
+    },
+  );
   const fields = new Map();
   const field = (name) => {
     if (!fields.has(name))
@@ -331,6 +336,23 @@ test("the real turn form offers only bonuses from entered payment and preserves 
     },
     onChoice: (choice) => selected.push(choice),
   });
+  const bank = parts.get("[data-formation-bank]");
+  assert.equal([...bank.innerHTML.matchAll(/data-formation-energy=/gu)].length, 6);
+  assert.ok(bank.innerHTML.includes(">dark 1</span>"));
+  const view = presentation(
+    {
+      append() {},
+      querySelector(selector) {
+        assert.notEqual(selector, ".cbar", "energy counters no longer crowd the battle header");
+        return null;
+      },
+      querySelectorAll: () => [bank],
+    },
+    { combatMode: "formation" },
+  );
+  view.event({ op: "formation-bank", side: "ally", bank: { light: 3, dark: 2 } });
+  assert.ok(bank.innerHTML.includes(">light 3</span>") && bank.innerHTML.includes(">dark 2</span>"));
+  view.dispose();
   field("action").value = "weapon";
   field("action").onchange();
   const bonus = (element) => field("bonus").options.find((option) => option.value === element);

@@ -327,8 +327,35 @@ for (const theme of ["dark", "light"]) {
       );
       const turn = forge.locator("[data-formation-turn]");
       await expect(turn).toBeVisible();
+      const bank = turn.locator("[data-formation-bank]");
+      await expect(bank).toBeVisible();
+      await expect(bank.locator("span")).toHaveCount(6);
+      const bankGeometry = await bank.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        const parent = node.closest("form")!.getBoundingClientRect();
+        return {
+          top: box.top,
+          bottom: box.bottom,
+          left: box.left,
+          right: box.right,
+          parentTop: parent.top,
+          parentBottom: parent.bottom,
+          parentLeft: parent.left,
+          parentRight: parent.right,
+          scrollWidth: node.scrollWidth,
+          clientWidth: node.clientWidth,
+        };
+      });
+      expect(bankGeometry.top).toBeGreaterThanOrEqual(bankGeometry.parentTop - 1);
+      expect(bankGeometry.bottom).toBeLessThanOrEqual(bankGeometry.parentBottom + 1);
+      expect(bankGeometry.left).toBeGreaterThanOrEqual(bankGeometry.parentLeft - 1);
+      expect(bankGeometry.right).toBeLessThanOrEqual(bankGeometry.parentRight + 1);
+      expect(bankGeometry.scrollWidth).toBeLessThanOrEqual(bankGeometry.clientWidth + 1);
+      writeFileSync(testInfo.outputPath(`formation-bank-${theme}.json`), JSON.stringify(bankGeometry, null, 2));
       await expect(turn.locator('select[name="action"] option[value="ultimate"]')).toBeEnabled();
       await turn.locator('select[name="action"]').selectOption("ultimate");
+      await expect(turn.locator("[data-formation-mover-label]")).toBeHidden();
+      await expect(turn.locator("[data-formation-swap-label]")).toBeHidden();
       await expect(turn.locator("[data-formation-payment]")).toBeVisible();
       await readable(turn.getByRole("button", { name: "Confirm action" }));
       await turn.getByRole("button", { name: "Confirm action" }).click();

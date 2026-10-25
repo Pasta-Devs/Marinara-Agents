@@ -76,7 +76,7 @@ export function wireForgeFormationSettings(host) {
     const button = (key, action) => {
       const item = document.createElement("button");
       item.type = "button";
-      item.className = "diff-pill";
+      item.className = `st-compress${["combat.mode.keep", "combat.mode.cancel"].includes(key) ? " -ghost" : ""}`;
       item.textContent = text(key);
       item.disabled = state.pending;
       item.addEventListener("click", action);

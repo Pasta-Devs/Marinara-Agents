@@ -7092,11 +7092,19 @@ function forgeFormationStartRequest(host, path, body) {
 }
 const forgeFormationCombatStyles = `
 .gf-formation-turn{display:flex;flex-wrap:wrap;gap:.45rem;align-items:end;max-height:min(45dvh,22rem);overflow:auto;padding:.5rem;width:100%;box-sizing:border-box;background:var(--ink-2);color:var(--text);border-top:1px solid var(--steel-dark)}
-.gf-formation-turn label{display:flex;flex-direction:column;gap:.2rem;font:500 max(12px,var(--t-xs))/1.3 var(--body);min-width:7rem;flex:1}.gf-formation-turn select,.gf-formation-turn input,.gf-formation-turn button{font:500 max(14px,var(--t-sm))/1.3 var(--body);background:var(--ink);color:var(--text);border:1px solid var(--steel);border-radius:var(--radius-sm);padding:.4rem;min-height:36px;box-sizing:border-box;max-width:100%}.gf-formation-turn button{cursor:pointer;background:var(--gold);color:var(--ink)}
+.gf-formation-turn label{display:flex;flex-direction:column;gap:.2rem;font:500 max(12px,var(--t-xs))/1.3 var(--body);min-width:7rem;flex:1}.gf-formation-turn [hidden]{display:none}.gf-formation-turn select,.gf-formation-turn input,.gf-formation-turn button{font:500 max(14px,var(--t-sm))/1.3 var(--body);background:var(--ink);color:var(--text);border:1px solid var(--steel);border-radius:var(--radius-sm);padding:.4rem;min-height:36px;box-sizing:border-box;max-width:100%}.gf-formation-turn button{cursor:pointer;background:var(--gold);color:var(--ink)}
 .gf-formation-turn details{flex-basis:100%;font:500 max(12px,var(--t-xs))/1.4 var(--body)}.gf-formation-payment{display:flex;gap:.35rem;flex-wrap:wrap}.gf-formation-payment label{min-width:3.3rem;flex:1}.gf-formation-payment input{width:100%;color:var(--text)}
-.gf-formation-bank{display:flex;flex-wrap:wrap;gap:.35rem;font:600 max(12px,var(--t-xs))/1.4 var(--body);padding:.35rem .5rem;color:var(--text)}.gf-formation-bank span{padding:.1rem .35rem;border:1px solid var(--steel-dark);border-radius:var(--radius-sm)}.gf-formation-kit{padding:.7rem;margin:.5rem 0;border:1px solid var(--steel-dark);border-radius:var(--radius-sm);font:400 max(12px,var(--t-sm))/1.45 var(--body);color:var(--text)}.gf-formation-kit h3,.gf-formation-kit p{margin:.35rem 0}.gf-formation-error{color:var(--coral);flex-basis:100%}.gf-formation-encounter{margin:.5rem;padding:.5rem;border:1px solid var(--gold);font:400 max(12px,var(--t-sm))/1.4 var(--body);color:var(--text)}
+.gf-formation-bank{display:flex;flex-wrap:wrap;align-items:center;flex:0 0 100%;gap:.35rem;font:600 max(12px,var(--t-xs))/1.4 var(--body);padding:.15rem 0;color:var(--text);box-sizing:border-box}.gf-formation-bank span{white-space:nowrap;padding:.1rem .35rem;border:1px solid var(--steel-dark);border-radius:var(--radius-sm)}.gf-formation-kit{padding:.7rem;margin:.5rem 0;border:1px solid var(--steel-dark);border-radius:var(--radius-sm);font:400 max(12px,var(--t-sm))/1.45 var(--body);color:var(--text)}.gf-formation-kit h3,.gf-formation-kit p{margin:.35rem 0}.gf-formation-error{color:var(--coral);flex-basis:100%}.gf-formation-encounter{margin:.5rem;padding:.5rem;border:1px solid var(--gold);font:400 max(12px,var(--t-sm))/1.4 var(--body);color:var(--text)}
 @media(pointer:coarse){.gf-formation-turn select,.gf-formation-turn input{font-size:16px}}@media(max-height:500px){.gf-formation-turn{max-height:45dvh}.gf-formation-turn label{min-width:5rem}}
 `;
+const forgeFormationBankHtml = (bank) =>
+  `<b>${forgeFormationLabel("energy")}</b>` +
+  forgeFormationElements
+    .map(
+      (element) =>
+        `<span data-formation-energy="${element}" style="border-color:var(--${element})">${forgeFormationEscape(element)} ${bank?.[element] || 0}</span>`,
+    )
+    .join("");
 
 function forgeRenderFormationTurn({ root, container, choice, payload, onChoice }) {
   if (!container) return;
@@ -7107,7 +7115,7 @@ function forgeRenderFormationTurn({ root, container, choice, payload, onChoice }
   const actor = () => actors.find((unit) => unit.id === actorId) || {};
   const optionHtml = (value, text) =>
     `<option value="${forgeFormationEscape(value)}">${forgeFormationEscape(text)}</option>`;
-  container.innerHTML = `<style>${forgeFormationCombatStyles}</style><form class="gf-formation-turn" data-formation-turn><label>${forgeFormationLabel("actor")}<select name="actor">${actorIds.map((unit) => optionHtml(unit.id, unit.name)).join("")}</select></label><label>${forgeFormationLabel("action")}<select name="action"></select></label><label data-formation-target-label>${forgeFormationLabel("target")}<select name="target"></select></label><label data-formation-mover-label hidden>${forgeFormationLabel("mover")}<select name="mover"></select></label><label data-formation-swap-label hidden>${forgeFormationLabel("swap")}<select name="swap"></select></label><details data-formation-payment><summary>${forgeFormationLabel("payment")}</summary><p>${forgeFormationLabel("paymentHint")}</p><div class="gf-formation-payment">${forgeFormationElements.map((element) => `<label>${forgeFormationEscape(element)}<input name="pay-${element}" type="number" min="0" step="1" inputmode="numeric"></label>`).join("")}</div><label>${forgeFormationLabel("bonus")}<select name="bonus"></select></label></details><span data-formation-cost></span><p class="gf-formation-error" role="status" data-formation-error></p><button type="submit">${forgeFormationLabel("confirm")}</button></form>`;
+  container.innerHTML = `<style>${forgeFormationCombatStyles}</style><form class="gf-formation-turn" data-formation-turn><div class="gf-formation-bank" data-formation-bank aria-label="${forgeFormationLabel("energy")}"></div><label>${forgeFormationLabel("actor")}<select name="actor">${actorIds.map((unit) => optionHtml(unit.id, unit.name)).join("")}</select></label><label>${forgeFormationLabel("action")}<select name="action"></select></label><label data-formation-target-label>${forgeFormationLabel("target")}<select name="target"></select></label><label data-formation-mover-label hidden>${forgeFormationLabel("mover")}<select name="mover"></select></label><label data-formation-swap-label hidden>${forgeFormationLabel("swap")}<select name="swap"></select></label><details data-formation-payment><summary>${forgeFormationLabel("payment")}</summary><p>${forgeFormationLabel("paymentHint")}</p><div class="gf-formation-payment">${forgeFormationElements.map((element) => `<label>${forgeFormationEscape(element)}<input name="pay-${element}" type="number" min="0" step="1" inputmode="numeric"></label>`).join("")}</div><label>${forgeFormationLabel("bonus")}<select name="bonus"></select></label></details><span data-formation-cost></span><p class="gf-formation-error" role="status" data-formation-error></p><button type="submit">${forgeFormationLabel("confirm")}</button></form>`;
   const form = container.querySelector("form"),
     field = (name) => form.elements.namedItem(name),
     error = form.querySelector("[data-formation-error]");
@@ -7168,6 +7176,7 @@ function forgeRenderFormationTurn({ root, container, choice, payload, onChoice }
   };
   const render = () => {
     const data = options();
+    form.querySelector("[data-formation-bank]").innerHTML = forgeFormationBankHtml(data.formation.bank);
     field("action").innerHTML = [
       ["attack", forgeFormationLabel("attack")],
       ["weapon", data.formation.standard?.name || forgeFormationLabel("standard")],
@@ -7215,13 +7224,8 @@ function forgeRenderFormationTurn({ root, container, choice, payload, onChoice }
 
 function createForgeFormationPresentation(root, payload) {
   if (payload?.combatMode !== "formation") return { event() {}, dispose() {} };
-  const target = root.querySelector(".cbar");
-  const bank = document.createElement("div");
-  bank.className = "gf-formation-bank";
-  bank.setAttribute("aria-label", forgeFormationLabel("energy"));
   const style = document.createElement("style");
   style.textContent = forgeFormationCombatStyles;
-  target?.append(bank);
   root.append(style);
   const rules = document.createElement("div");
   rules.className = "gf-formation-encounter";
@@ -7230,17 +7234,10 @@ function createForgeFormationPresentation(root, payload) {
   return {
     event(event) {
       if (event.op === "formation-bank" && event.side === "ally")
-        bank.innerHTML =
-          `<b>${forgeFormationLabel("energy")}</b>` +
-          forgeFormationElements
-            .map(
-              (element) =>
-                `<span style="border-color:var(--${element})">${forgeFormationEscape(element)} ${event.bank?.[element] || 0}</span>`,
-            )
-            .join("");
+        for (const bank of root.querySelectorAll("[data-formation-bank]"))
+          bank.innerHTML = forgeFormationBankHtml(event.bank);
     },
     dispose() {
-      bank.remove();
       style.remove();
       rules.remove();
     },
@@ -7423,7 +7420,7 @@ function wireForgeFormationSettings(host) {
     const button = (key, action) => {
       const item = document.createElement("button");
       item.type = "button";
-      item.className = "diff-pill";
+      item.className = `st-compress${["combat.mode.keep", "combat.mode.cancel"].includes(key) ? " -ghost" : ""}`;
       item.textContent = text(key);
       item.disabled = state.pending;
       item.addEventListener("click", action);
