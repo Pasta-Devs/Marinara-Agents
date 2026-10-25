@@ -259,7 +259,7 @@ export function wireForgeChapterRegeneration(host) {
       request.asking = false;
       wireForgeChapterRegeneration(host);
       root.querySelector("[data-forge-reset-ask]")?.focus();
-    });
+    }).dataset.forgeResetCancel = "";
     button("chapter.reset.action", () => {
       void confirmForgeChapterReset(host, request);
     }).dataset.forgeResetConfirm = "";
@@ -277,7 +277,7 @@ export function wireForgeChapterRegeneration(host) {
       request.asking = true;
       request.error = "";
       wireForgeChapterRegeneration(host);
-      root.querySelector("[data-forge-reset-confirm]")?.focus();
+      root.querySelector("[data-forge-reset-cancel]")?.focus();
     });
     ask.dataset.forgeResetAsk = "";
     if (request.heldById) {
