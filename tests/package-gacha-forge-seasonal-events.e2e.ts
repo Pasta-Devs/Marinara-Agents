@@ -194,9 +194,18 @@ for (const theme of ["dark", "light"]) {
           style.textContent = ".gf-story-options h3 {font-family:Arial,sans-serif;font-stretch:normal;}";
           (node as any)._root.append(style);
         });
+        const headingText = await forge.locator(".gf-story-options .hd h3").evaluateAll((nodes) =>
+          nodes.map((node) => {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            return { height: range.getBoundingClientRect().height, lines: range.getClientRects().length };
+          }),
+        );
+        expect(headingText[1]!.height).toBeGreaterThan(headingText[0]!.height);
+        expect(headingText[1]!.lines).toBeGreaterThan(headingText[0]!.lines);
         const fallbackGeometry = await optionsGeometry(forge);
         const geometryPath = testInfo.outputPath("paired-settings-portrait-geometry.json");
-        writeFileSync(geometryPath, JSON.stringify({ portraitGeometry, fallbackGeometry }, null, 2));
+        writeFileSync(geometryPath, JSON.stringify({ portraitGeometry, headingText, fallbackGeometry }, null, 2));
         await testInfo.attach("paired-settings-portrait-geometry", {
           path: geometryPath,
           contentType: "application/json",
