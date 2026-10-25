@@ -7,6 +7,7 @@ import {
   forgeFormationElements,
   forgeFormationEnemyKit,
   forgeFormationKitMessages,
+  forgeFormationMode,
   forgeFormationPayment,
   forgeFormationTeamError,
   normalizeForgeFormationKit,
@@ -222,6 +223,49 @@ test("ordered bosses protect later targets and element barriers execute as state
   );
   assert.equal(blocked.result, "lose");
   assert.ok(!events(blocked).some((event) => event.op === "hit" && event.id === "left"));
+});
+
+test("the generated defeat-order contract indexes the full formation before placing ordered enemies in Front", async () => {
+  const source = await readFile(
+    new URL("../packages/gacha-forge/src/formation-combat-server.mjs", import.meta.url),
+    "utf8",
+  );
+  const adapter = vm.runInNewContext(
+    source.replace(/^export /gmu, "") + ";({messages:forgeFormationEncounterMessages,enemies:forgeFormationEnemies})",
+    { forgeFormationMode, normalizeForgeFormationKit, forgeFormationEnemyKit },
+  );
+  const prompt = adapter.messages(
+    [{ role: "system", content: "Write an encounter." }],
+    { combat: { mode: "formation" } },
+    ["fire"],
+  );
+  assert.match(prompt[0].content, /ZERO-BASED indices into this encounter's full formation array/u);
+  assert.match(prompt[0].content, /ordered enemies are placed in the Front Row/u);
+  const foes = [
+    unit("reserve", { position: "back" }),
+    unit("first", { stats: { hp: 1, atk: 1, def: 1 } }),
+    unit("captain", { position: "back", stats: { hp: 1, atk: 1, def: 1 } }),
+  ];
+  const rules = normalizeForgeFormationRules(
+    [{ kind: "defeat_order", description: "Captain, then first.", order: [2, 1] }],
+    foes,
+  );
+  const enemies = adapter.enemies(foes, rules);
+  assert.deepEqual(
+    Array.from(enemies, (enemy) => enemy.position),
+    ["back", "front", "front"],
+  );
+  const result = drive(
+    { allies: [unit("hero", { stats: { hp: 1000, atk: 1000, def: 1000, spd: 1000 } })], enemies, rules },
+    () => ({ action: "weapon", targetId: "first" }),
+  );
+  assert.equal(result.result, "win");
+  assert.deepEqual(
+    events(result)
+      .filter((event) => event.op === "death")
+      .map((event) => event.id),
+    ["captain", "first"],
+  );
 });
 
 test("free actions remain available without supports or energy, and unknown/missing kits fail closed", () => {
