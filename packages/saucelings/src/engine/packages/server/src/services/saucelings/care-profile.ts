@@ -243,14 +243,13 @@ export function normalizeCareProfile(
   const obj = parseRecord(raw);
   const tendenciesObj = parseRecord(obj.tendencies);
   const voiceObj = parseRecord(obj.voice);
-  const rawPhrases = Array.isArray(voiceObj.catchphrases)
-    ? voiceObj.catchphrases.map((c) => spoken(c, characterName, 120)).filter(Boolean)
+  // Only their own words: the house's would read as theirs in every line the model writes.
+  const catchphrases = Array.isArray(voiceObj.catchphrases)
+    ? voiceObj.catchphrases
+        .map((c) => spoken(c, characterName, 120))
+        .filter(Boolean)
+        .slice(0, 3)
     : [];
-  const catchphrases: [string, string, string] = [
-    rawPhrases[0] || base.voice.catchphrases[0],
-    rawPhrases[1] || base.voice.catchphrases[1],
-    rawPhrases[2] || base.voice.catchphrases[2],
-  ];
   const rawWorry = typeof voiceObj.worryLevel === "number" ? Math.round(voiceObj.worryLevel) : 1;
   const worryLevel = Math.max(0, Math.min(3, rawWorry)) as 0 | 1 | 2 | 3;
 
@@ -268,10 +267,10 @@ export function normalizeCareProfile(
       consistency: clampUnit(tendenciesObj.consistency, base.tendencies.consistency),
     },
     voice: {
-      petNickname: cleanText(voiceObj.petNickname, 40, base.voice.petNickname),
-      feedingStyle: cleanText(voiceObj.feedingStyle, 90, base.voice.feedingStyle),
+      petNickname: cleanText(voiceObj.petNickname, 40),
+      feedingStyle: cleanText(voiceObj.feedingStyle, 90),
       catchphrases,
-      voiceSample: spoken(voiceObj.voiceSample, characterName, 160) || base.voice.voiceSample,
+      voiceSample: spoken(voiceObj.voiceSample, characterName, 160),
       worryLevel,
       speechStyle: cleanText(voiceObj.speechStyle, 400),
       phrases: {},
@@ -302,10 +301,8 @@ export const MOMENT_BRIEFS: Record<SaucelingPhraseMoment, string> = {
   checkInContent: "the player asks how the pet is, and it is fed and happy",
   checkInHungry: "the player asks how the pet is, and it is hungry",
   checkInSad: "the player asks how the pet is, and it is unhappy",
-  backSoon:
-    "greeting the player, back after a day or a few days away; what you did meanwhile is said after it, so only the greeting",
-  backLong:
-    "greeting the player, back after a week or more away; what you did meanwhile is said after it, so only the greeting",
+  backSoon: "greeting the player, back after a day or a few days away",
+  backLong: "greeting the player, back after a week or more away",
   returnHome: "welcoming the pet back to the nook from the Menagerie, said to the pet",
   eggFound: "telling the player you found an egg by the nook",
   eggFoundTalking: "telling the player you found an egg while chatting with them",
@@ -492,8 +489,11 @@ async function modelPhrasebook(
       : `The lines are said out loud exactly as written at one-off moments, so each must sound like ${name} and make sense on its own.`,
     persona.who ? `Who ${name} is, from their character card:\n${persona.who}` : "",
     voice.speechStyle ? `How ${name} talks: ${voice.speechStyle}` : "",
-    `${name} calls the pet "${voice.petNickname}". A line in ${name}'s voice: ${JSON.stringify(voice.voiceSample)}.`,
-    `These lines come round again and again, so keep ${name}'s catchphrases out of them: ${JSON.stringify(voice.catchphrases)}.`,
+    voice.petNickname ? `${name} calls the pet "${voice.petNickname}".` : "",
+    voice.voiceSample ? `A line in ${name}'s voice: ${JSON.stringify(voice.voiceSample)}.` : "",
+    voice.catchphrases.length > 0
+      ? `These lines come round again and again, so keep ${name}'s catchphrases out of them: ${JSON.stringify(voice.catchphrases)}.`
+      : "",
     `For each moment below, write ${count} different lines, each under 120 characters, in first person.`,
     "Spoken words only: no narration, no actions, no asterisks, no quotation marks.",
     `Make the ${count} lines different from each other: don't start two the same way.`,
@@ -504,6 +504,9 @@ async function modelPhrasebook(
       [
         `- ${moment}: ${MOMENT_BRIEFS[moment]}`,
         ...Object.entries(PHRASE_FILLS[moment] ?? {}).map(([key, meaning]) => `write {${key}} for ${meaning}`),
+        ...(moment === "backSoon" || moment === "backLong"
+          ? ["only the greeting: what you did meanwhile is said after it"]
+          : []),
       ].join("; "),
     ),
     routine

@@ -107,6 +107,7 @@ async function saveFind(
           : templateEggFoundByOther(teller, nook, profile.characterName, Date.parse(nowIso)),
       generated: false,
       speaker: teller.characterName,
+      ...(nook.caretakerId === finderId ? {} : { finder: profile.characterName }),
     };
     const told = { ...nook, journal: [line, ...nook.journal].slice(0, MAX_JOURNAL_ENTRIES) };
     return { world: { ...current, activePet: told, menagerie }, pet: told, events: [line] };

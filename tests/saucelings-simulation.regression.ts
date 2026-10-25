@@ -823,7 +823,8 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
   assert.match(persona.who, /Backstory: Second of the Fatui/u);
   assert.match(persona.talk, /^Example dialogue: .*Hold still/u);
 
-  // The profile keeps a speech style and short, spoken catchphrases; the phrasebook is its own call
+  // The profile keeps a speech style and short, spoken catchphrases, only its own: what the model leaves out stays
+  // empty rather than taking the house's words; the phrasebook is its own call
   const normal = normalizeCareProfile(
     {
       voice: {
@@ -839,8 +840,9 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
   );
   assert.equal(normal.voice.speechStyle, "Clipped and clinical.");
   assert.deepEqual(normal.voice.phrases, {});
-  const fallback = neutralCareProfile("x", "x").voice.catchphrases;
-  assert.deepEqual(normal.voice.catchphrases, ["Fascinating.", fallback[1], fallback[2]]);
+  assert.deepEqual(normal.voice.catchphrases, ["Fascinating."]);
+  assert.equal(normal.voice.petNickname, "");
+  assert.equal(normal.voice.voiceSample, "");
 
   // The phrasebook keeps at most four short, spoken lines for each of its moments, using only the {...} that moment
   // fills in, and three short sign-offs per feeling with none; a moment with no line is left out
@@ -3422,6 +3424,9 @@ async function testBundledServer() {
   const greeted = await linesLanded();
   assert.equal(greeted.world.activePet.journal[0].text, "Hello there, little one.");
   assert.match(helloPrompt, /Nahida has just become this pet's caretaker/u);
+  // A caretaker with no voice of their own is not given the house's nickname, sayings or lines to copy
+  assert.match(helloPrompt, /"moment":"taking over as the pet's caretaker from someone else, said to the pet"/u);
+  assert.doesNotMatch(helloPrompt, /little dumpling|There we are, all sorted|tidy bowl|Steady now|fallbackTemplate/u);
   assert.equal(greeted.world.budget.used, usedBeforeSwitch);
   assert.equal(modelCalls, callsBeforeSwitch + 1);
   const nahidaVoice = await routes.get("POST /voice")!({ body: { characterId: "nahida-2" } });
@@ -3492,7 +3497,13 @@ async function testBundledServer() {
   assert.ok(
     checkInPrompt.includes(`Il Dottore and the pet are right now, the Nook's background: ${NEST_SCENE_PROMPT}.`),
   );
-  assert.match(checkInPrompt, /its fallbackTemplate says it plainly\. Say that in your own words/u);
+  // The model is told what the moment is, never shown the house's line for it, and the journal's house lines come as
+  // what they were about
+  assert.match(checkInPrompt, /"moment":"the player asks how the egg is, and it is doing fine"/u);
+  assert.doesNotMatch(checkInPrompt, /fallbackTemplate/u);
+  for (const ev of checked.world.activePet.journal.slice(1, 4)) {
+    if (!ev.generated && ev.speaker) assert.equal(checkInPrompt.includes(ev.text), false, ev.text);
+  }
   await routes.get("PATCH /settings")!({ body: { dailyGenerationBudget: usedBefore } });
   const callsAtLimit = modelCalls;
   const atLimit = await routes.get("POST /check-in")!({ body: {} });
@@ -3540,6 +3551,7 @@ async function testBundledServer() {
     const toldOther = worldNow().activePet.journal[0];
     assert.deepEqual([toldOther.kind, toldOther.speaker], ["egg-found", "Il Dottore"]);
     assert.match(toldOther.text, /Nahida.* an egg .*Menagerie/u);
+    assert.equal(toldOther.finder, "Nahida");
     worldNow().lastEggFindDay = null;
     const kept = (await menagerieNow()).length;
     // With no writing connection the find is an ordinary egg
@@ -3555,6 +3567,7 @@ async function testBundledServer() {
     assert.deepEqual([told.kind, told.speaker], ["egg-found", "Il Dottore"]);
     assert.match(told.text, /egg\b.*Menagerie/u);
     assert.equal(told.text.includes("Nahida"), false);
+    assert.equal(told.finder, undefined);
     assert.equal(worldNow().lastEggFindDay, new Date().toISOString().slice(0, 10));
     // One find a day
     reply(["dottore-1"]);
@@ -3584,6 +3597,8 @@ async function testBundledServer() {
     assert.match(designPrompt, /quirk: one short sentence on a habit that shows the character's ways/u);
     // The caretaker's line says the egg is a new one, not the pet beside them
     assert.match(foundLinePrompt, /It is not this pet: it waits in the Menagerie\./u);
+    assert.match(foundLinePrompt, /found by Il Dottore while talking with the player/u);
+    assert.match(foundLinePrompt, /"moment":"telling the player you found another egg while chatting with them;/u);
     // Egg hunting can be turned off
     await routes.get("PATCH /settings")!({ body: { eggHunting: false } });
     worldNow().lastEggFindDay = null;

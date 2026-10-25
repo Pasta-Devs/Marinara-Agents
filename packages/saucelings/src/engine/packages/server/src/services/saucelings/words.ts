@@ -1,4 +1,7 @@
 import {
+  absenceMoment,
+  checkInMoment,
+  OUTCOME_LINES,
   spokenLine,
   templateHatchScene,
   templateTakesAfterScene,
@@ -14,10 +17,11 @@ import type {
   SaucelingCareProfile,
   SaucelingEvent,
   SaucelingPet,
+  SaucelingPhraseMoment,
   SaucelingSettings,
   SaucelingWorldDocument,
 } from "../../../../shared/src/features/agents/saucelings/types.js";
-import { askJson, cardPersona } from "./care-profile.js";
+import { askJson, cardPersona, MOMENT_BRIEFS } from "./care-profile.js";
 import { generateNature } from "./design.js";
 import { getSaucelingsRuntime } from "./package-runtime.js";
 import { MAX_JOURNAL_ENTRIES } from "./simulation.js";
@@ -33,6 +37,8 @@ const EVERY_LINE_MAX_PER_SAVE = 6;
 
 /** Starts the id of a caretaker's "I found an egg while we were talking" line, which sits in another pet's journal. */
 export const FOUND_LINE_PREFIX = "found-";
+/** Starts the id of a caretaker's "it is picking up my ways" line. */
+const TAKES_AFTER_PREFIX = "takes-after-";
 
 export function currentDayKey(nowIso: string): string {
   return nowIso.slice(0, 10);
@@ -95,6 +101,43 @@ function isSceneEvent(ev: SaucelingEvent): boolean {
   );
 }
 
+/** Which phrasebook moment a caretaker's line is, or null for a line that is not theirs. */
+function lineMoment(
+  ev: SaucelingEvent,
+  pet: Pick<SaucelingPet, "stage" | "meters" | "foundBy">,
+): SaucelingPhraseMoment | null {
+  const egg = pet.stage === "egg";
+  switch (ev.kind) {
+    case "caretaker-care":
+      return ev.outcome ? OUTCOME_LINES[ev.outcome][0] : null;
+    case "check-in":
+      return checkInMoment(pet);
+    case "caretaker-change":
+      return "hello";
+    case "farewell":
+      return egg ? "eggFarewell" : "farewell";
+    case "return-from-album":
+      return egg ? "eggReturn" : "returnHome";
+    case "absence":
+      return ev.absenceBucket ? absenceMoment(ev.absenceBucket) : null;
+    case "egg-found":
+      if (ev.id.startsWith(FOUND_LINE_PREFIX)) return ev.finder ? "eggFoundByOther" : "anotherEgg";
+      return pet.foundBy ? "eggFoundTalking" : "eggFound";
+    case "hatch":
+      return "hatch";
+    case "stage-up":
+      return "stageUp";
+    case "evolve-offer":
+      return "evolveOffer";
+    case "evolve":
+      return "evolve";
+    case "temperament-shift":
+      return ev.id.startsWith(TAKES_AFTER_PREFIX) ? "takesAfter" : "temperamentShift";
+    default:
+      return null;
+  }
+}
+
 export async function generateLineWithModel(options: {
   profile: SaucelingCareProfile;
   pet: Pick<
@@ -109,6 +152,8 @@ export async function generateLineWithModel(options: {
     | "traits"
     | "meters"
     | "journal"
+    | "foundBy"
+    | "evolution"
   >;
   event: SaucelingEvent;
   settings: SaucelingSettings;
@@ -124,10 +169,16 @@ export async function generateLineWithModel(options: {
     const checkIn = options.event.kind === "check-in";
     const hello = options.event.kind === "caretaker-change";
     const { meters } = options.pet;
-    const { characterName: name, voice } = options.profile;
+    const { characterName: name, voice, generatedByModel: voiced } = options.profile;
+    const moment = lineMoment(options.event, options.pet);
+    const foundElsewhere = options.event.kind === "egg-found" && options.event.id.startsWith(FOUND_LINE_PREFIX);
+    // Only a voice read from their card: the house's nickname and sayings would make every caretaker sound alike.
+    const own = (text: string) => (voiced ? text : "");
     // A catchphrase now and then, not in every line, so it stays theirs instead of a tic.
     const catchphrase =
-      Math.random() < 0.25 ? voice.catchphrases[Math.floor(Math.random() * voice.catchphrases.length)] : undefined;
+      voiced && voice.catchphrases.length > 0 && Math.random() < 0.25
+        ? voice.catchphrases[Math.floor(Math.random() * voice.catchphrases.length)]
+        : undefined;
     // The card is read fresh, so an edit to it shows in the next line; the house caretaker has none.
     const [record] = await runtime.resources.listCharacters([options.profile.characterId]);
     const persona = record ? cardPersona(record) : { who: "", talk: "" };
@@ -146,7 +197,9 @@ export async function generateLineWithModel(options: {
           persona.who ? `Who ${name} is, from their character card:\n${persona.who}` : "",
           persona.talk ? `How ${name} talks in their card (match the voice, not the situation):\n${persona.talk}` : "",
           voice.speechStyle ? `How ${name} talks: ${voice.speechStyle}` : "",
-          `${name} calls the pet "${voice.petNickname}" and at mealtimes ${voice.feedingStyle}. A line in ${name}'s voice: ${JSON.stringify(voice.voiceSample)}.`,
+          voice.petNickname && own(`${name} calls the pet "${voice.petNickname}".`),
+          voice.feedingStyle && own(`At mealtimes ${name} ${voice.feedingStyle}.`),
+          voice.voiceSample && own(`A line in ${name}'s voice: ${JSON.stringify(voice.voiceSample)}.`),
           catchphrase ? `One of ${name}'s catchphrases, to use only if it fits: ${JSON.stringify(catchphrase)}.` : "",
           options.place
             ? `Where ${name} and the pet are right now, the Nook's background: ${options.place}. Mention it only when it fits.`
@@ -169,8 +222,8 @@ export async function generateLineWithModel(options: {
                   ? `Its temperament: ${temper.name}, ${temper.readsAs}. That is how it behaves, not its name: never call it that or put it before its name or kind. Let it show in what you say: how it is acting, what it wants, and how you handle a pet like that.`
                   : "",
               ]),
-          options.event.kind === "egg-found" && options.event.id.startsWith(FOUND_LINE_PREFIX)
-            ? `A new egg was just found while someone talked with the player: the fallbackTemplate says whether ${name} found it or another character did, so keep to that. It is not this pet: it waits in the Menagerie. Say so, and never name or describe what is inside it.`
+          foundElsewhere
+            ? `A new egg was just found by ${options.event.finder ?? name} while talking with the player. It is not this pet: it waits in the Menagerie. Say so, and never name or describe what is inside it.`
             : "",
           hello
             ? `${name} has just become this pet's caretaker, taking over from someone else: say hello to the pet and the player.`
@@ -178,7 +231,10 @@ export async function generateLineWithModel(options: {
           checkIn
             ? `The player just asked how the pet is doing: tell them how it is right now. Go by its meters (0 to 100, higher is better) but say it in words, never the numbers${egg ? "" : ", and let its temperament, traits and habit show in what it is up to"}. The recent journal says what happened lately.`
             : "",
-          "The JSON below is what just happened; its fallbackTemplate says it plainly. Say that in your own words rather than repeating it.",
+          options.event.kind === "absence"
+            ? "Greet the player, then tell them what you did while they were away, going by the tallies: say it in words, never as a list."
+            : "",
+          "The JSON below is what just happened: its moment says what this line is for.",
           "Make it sound fresh: don't open or close with a catchphrase or stock tag, and don't reuse wording from the recent journal.",
           'Return ONLY JSON: {"text":"..."}',
         ]
@@ -192,7 +248,12 @@ export async function generateLineWithModel(options: {
           outcome: options.event.outcome,
           absenceBucket: options.event.absenceBucket,
           tallies: options.event.tallies,
-          fallbackTemplate: options.event.text,
+          ...(moment ? { moment: MOMENT_BRIEFS[moment] } : {}),
+          ...(moment === "stageUp" || moment === "returnHome"
+            ? { stage: options.event.stage ?? options.pet.stage }
+            : {}),
+          ...(moment === "evolve" && options.pet.evolution?.look ? { form: options.pet.evolution.look.form } : {}),
+          ...(options.event.finder ? { finder: options.event.finder } : {}),
           ...(checkIn
             ? {
                 meters: egg
@@ -203,7 +264,7 @@ export async function generateLineWithModel(options: {
           recentJournal: options.pet.journal
             .filter((ev) => ev.id !== options.event.id)
             .slice(0, 3)
-            .map((ev) => ev.text),
+            .map((ev) => recalled(ev, options.pet)),
         }),
       },
     ];
@@ -220,6 +281,18 @@ export async function generateLineWithModel(options: {
     // Model unavailable or failed: keep template line
   }
   return null;
+}
+
+/** A journal entry as the model is shown it: a line the model wrote as it is, and a template line as what it was
+ *  about, so the house's wording never finds its way into the caretaker's mouth. */
+function recalled(ev: SaucelingEvent, pet: Pick<SaucelingPet, "stage" | "meters" | "foundBy">): string {
+  if (ev.generated) return ev.text;
+  if (ev.kind === "user-care" && ev.action) return `The player: ${ev.action}.`;
+  // How the pet was then is in the line, not in the pet now.
+  if (ev.kind === "check-in")
+    return `The player asked how the pet was, and ${ev.speaker ?? "the caretaker"} told them.`;
+  const moment = ev.speaker ? lineMoment(ev, pet) : null;
+  return moment ? `${ev.speaker}, ${MOMENT_BRIEFS[moment]}.` : ev.text;
 }
 
 /** Words the model is asked for after a save, and the budget day the charged ones came out of. */
@@ -432,7 +505,7 @@ async function writeTemperament(
     const events: SaucelingEvent[] = own
       ? [
           {
-            id: `takes-after-${Date.parse(nowIso)}`,
+            id: `${TAKES_AFTER_PREFIX}${Date.parse(nowIso)}`,
             kind: "temperament-shift",
             createdAt: nowIso,
             text: templateTakesAfterScene(live.careProfile, live.name, temperament.name, Date.parse(nowIso)),

@@ -339,7 +339,7 @@ export function templateEggFoundByOther(
  *  once it has one. */
 export function templateHatchScene(profile: SaucelingCareProfile, kindName: string, name?: string, pick = 0): string {
   const line = phrase(profile, "hatch", name ?? kindName, pick, { kind: kindName });
-  const greeting = name ? `I'll call you ${name}.` : `Hello there, ${profile.voice.petNickname}.`;
+  const greeting = name ? `I'll call you ${name}.` : `Hello there, ${profile.voice.petNickname || kindName}.`;
   return signed(`${line} ${greeting}`, profile, "pleased", pick);
 }
 

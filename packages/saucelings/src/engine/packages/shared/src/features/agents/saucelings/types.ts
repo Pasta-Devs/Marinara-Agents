@@ -169,7 +169,8 @@ export type SaucelingSignoffFeeling = (typeof SAUCELING_SIGNOFF_FEELINGS)[number
 export interface SaucelingCareVoice {
   petNickname: string;
   feedingStyle: string;
-  catchphrases: [string, string, string];
+  /** Their own, up to three; the house voice has its own. */
+  catchphrases: string[];
   voiceSample: string;
   worryLevel: 0 | 1 | 2 | 3;
   /** How they talk, read from their card; it steers the model's lines. Profiles made before it have none. */
@@ -236,6 +237,8 @@ export interface SaucelingEvent {
   absenceBucket?: SaucelingAbsenceBucket;
   windowsElapsed?: number;
   tallies?: Partial<Record<SaucelingCaretakerOutcome, number>>;
+  /** Who found the egg, on a caretaker's line about an egg another character found while chatting. */
+  finder?: string;
 }
 
 /** One UTC day of a caretaker's meal turns: `given` meals of `total` turns. */
