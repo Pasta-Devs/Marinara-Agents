@@ -70,7 +70,7 @@ function fixture({ count = 2, view = "browser", field = false } = {}) {
     input.setCustomValidity = (value) => (input.validationMessage = value);
     input.reportValidity = () => (input.reported = true);
   }
-  let log = { scrollTop: 200, scrollHeight: 300, clientHeight: 100 };
+  let log = { scrollTop: 200, scrollHeight: 300, clientHeight: 100, style: {} };
   const root = {
     activeElement: null,
     querySelector(selector) {
@@ -296,6 +296,7 @@ test("passive incoming rows deduplicate, use quiet rendering and preserve histor
     assert.equal(f.renders[0].quiet, true);
     assert.equal(f.host._forgeChatQuietRefresh, false);
     assert.equal(f.log().scrollTop, top === 20 ? top : f.log().scrollHeight);
+    assert.equal(f.log().style.overflowAnchor, top === 20 ? "none" : undefined);
     assert.equal(f.adopt(incoming()), true);
     assert.equal(f.host._chat.messages.length, 1);
     assert.equal(f.renders.length, 1);

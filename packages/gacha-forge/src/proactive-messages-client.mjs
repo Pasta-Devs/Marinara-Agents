@@ -63,7 +63,11 @@ export function adoptForgeUnitMessage(host, delivery) {
     host._forgeChatQuietRefresh = false;
   }
   const updated = root.querySelector("[data-chat-log]");
-  if (updated) updated.scrollTop = atBottom ? updated.scrollHeight : top;
+  if (updated) {
+    // WebKit otherwise adjusts this restored position again when the rebuilt rows finish layout.
+    if (!atBottom) updated.style.overflowAnchor = "none";
+    updated.scrollTop = atBottom ? updated.scrollHeight : top;
+  }
   return true;
 }
 

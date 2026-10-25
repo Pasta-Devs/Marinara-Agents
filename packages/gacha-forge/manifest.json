@@ -299,8 +299,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "a44dd14c1ab94fb7d89d6994469a36abed5dfe70ab62c854ead4e6202ae4d06b",
-      "bytes": 1726026
+      "sha256": "894eeca622307eeb114830654c225ba3cd1086309882aa0288a56f90d02595d0",
+      "bytes": 1726192
     },
     {
       "path": "farm-asc.webp",
@@ -1589,8 +1589,8 @@
     },
     {
       "path": "src/proactive-messages-client.mjs",
-      "sha256": "0b647011f523c7136de596c076b8ba5af23b85387b1ca69d9c4a91782c7cc805",
-      "bytes": 7224
+      "sha256": "b541f1ad5d6c7e92c2cfc3d9ffe9b1ef0be1bf063fe349f3aecb2d9e7809739b",
+      "bytes": 7390
     },
     {
       "path": "src/proactive-messages-server.mjs",
