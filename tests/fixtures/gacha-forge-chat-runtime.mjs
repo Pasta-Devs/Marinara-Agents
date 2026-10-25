@@ -112,7 +112,12 @@ export async function createChatRuntime({ stored, archived = 0, port = 0, allowW
     }
     if (url.pathname === "/api/connections")
       return Response.json([
-        { id: chatConnectionId, provider: "custom", model: "controlled-same-main-model", maxContext: 10000 },
+        {
+          id: chatConnectionId,
+          provider: "custom",
+          model: "controlled-same-main-model",
+          maxContext: transport.maxContext ?? 10000,
+        },
       ]);
     assert.equal(url.origin, origin, "No remote provider or user data may be contacted");
     return nativeFetch(input, options);
@@ -170,8 +175,10 @@ export async function createChatRuntime({ stored, archived = 0, port = 0, allowW
               return {
                 connectionId: chatConnectionId,
                 model: "controlled-same-main-model",
-                maxContext: 10000,
+                maxContext: transport.maxContext ?? 10000,
+                maxOutputTokens: transport.maxOutputTokens ?? null,
                 chatComplete: async (messages, options) => {
+                  transport.completionOptions?.push({ ...options });
                   const response = await nativeFetch(`${origin}/v1/chat/completions`, {
                     method: "POST",
                     headers: { "content-type": "application/json" },

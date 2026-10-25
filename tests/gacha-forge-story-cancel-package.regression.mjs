@@ -62,6 +62,8 @@ const plan = {
       : { type: "story", title: "Scene", goal: "Meet the keeper.", guide: "Continue." },
   ),
 };
+// Cancellation must reach its held provider; small-capacity rejection has separate coverage.
+const fixtureMaxContext = 262144;
 const completion = { content: JSON.stringify(plan), finishReason: "stop" };
 let cleanup;
 try {
@@ -69,7 +71,9 @@ try {
     const url = new URL(input);
     assert.equal(url.hostname, "127.0.0.1");
     assert.equal(url.pathname, "/api/connections");
-    return Response.json([{ id: "fixture-story", provider: "custom", model: "fixture-only", maxContext: 10000 }]);
+    return Response.json([
+      { id: "fixture-story", provider: "custom", model: "fixture-only", maxContext: fixtureMaxContext },
+    ]);
   };
   const modulePath = join(directory, "server.mjs");
   await writeFile(modulePath, await readFile(new URL("../packages/gacha-forge/server.mjs", import.meta.url)));
@@ -107,7 +111,7 @@ try {
             return {
               connectionId,
               model: "fixture-only",
-              maxContext: 10000,
+              maxContext: fixtureMaxContext,
               chatComplete: async (_messages, options) => {
                 requests.push(options);
                 assert.ok(options.signal instanceof AbortSignal, "the shipped common LLM helper forwards its scope");

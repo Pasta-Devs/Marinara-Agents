@@ -243,10 +243,29 @@ for (const theme of ["dark", "light"]) {
       });
       const classic = forge.locator('[data-forge-combat-mode][value="classic"]');
       const formation = forge.locator('[data-forge-combat-mode][value="formation"]');
+      const picker = forge.locator(".gf-combat-mode-setup");
+      await expect(picker.getByRole("radio", { name: "Classic", exact: true })).toHaveCount(1);
+      await expect(picker.getByRole("radio", { name: "Formation", exact: true })).toHaveCount(1);
+      await expect(forge.locator(".gf-combat-mode-setup + .ob-help")).toHaveCount(0);
+      for (const [radio, description] of [
+        [classic, "The existing turn-based combat system."],
+        [formation, "Frontline fighters act while back-row supports supply shared elemental energy."],
+      ] as const) {
+        const hintId = await radio.getAttribute("aria-describedby");
+        expect(hintId).toBeTruthy();
+        const hint = picker.locator(`[id=${JSON.stringify(hintId)}]`);
+        await expect(hint).toContainText(description);
+        await readable(hint);
+        expect((await hint.boundingBox())!.width).toBeGreaterThan(150);
+        expect((await radio.locator("..").boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      }
       await expect(classic).toBeChecked();
+      await expect(formation).not.toBeChecked();
       await formation.check();
       await expect(formation).toBeChecked();
+      await expect(classic).not.toBeChecked();
       await readable(formation.locator(".."));
+      await page.screenshot({ path: testInfo.outputPath(`formation-setup-${theme}.png`) });
       await forge.locator("[data-cancel]").click();
       await expect
         .poll(() =>
