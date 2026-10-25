@@ -916,6 +916,10 @@
             {
               "find": "C||!x.length?\" disabled\":\"\"}>Close and remember",
               "replace": "C||!forgeChatHasCurrentMessages(x)?\" disabled\":\"\"}>Close and remember"
+            },
+            {
+              "find": "if(!this._chat||!this._chat.unit)return;if(o&&o.ok){if(!n)return;this._adoptFromResponse(o),this._chat={...this._chat,error:\"\",retry:!1,messages:removeForgeChatOptimistic(this._chat.messages,s)},this._chatReload();return}",
+              "replace": "if(o&&o.ok){retainForgeChatSuccess(this,{runId:forgeChatRunId,unitId:a.unit.id,previous:a.messages||[],text:r,intent:e,optimistic:s},o);if(!n)return;this._adoptFromResponse(o),this._chatReload();return}if(!this._chat||!this._chat.unit)return;"
             }
           ]
         }

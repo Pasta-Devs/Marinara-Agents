@@ -2,8 +2,8 @@ import { expect, test, type Locator, type Page, type TestInfo } from "@playwrigh
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "node:http";
+import { pathToFileURL } from "node:url";
 import { recordForgeSoundtrack } from "../packages/gacha-forge/src/audio-settings.mjs";
-import { createChatRuntime, chatRunId, chatUnitId, chatConnectionId } from "./fixtures/gacha-forge-chat-runtime.mjs";
 
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engine checkout");
@@ -748,6 +748,9 @@ for (const orientation of ["landscape", "portrait"]) {
 test("A first typed character message gets one SDK reply and archived history remains in the same window", async ({
   page,
 }, testInfo) => {
+  const { createChatRuntime, chatRunId, chatUnitId, chatConnectionId } = await import(
+    pathToFileURL(resolve(__dirname, "fixtures/gacha-forge-chat-runtime.mjs")).href
+  );
   const runtime = await createChatRuntime({ archived: 40 });
   try {
     await page.route("**/api/gacha-forge/chat/**", async (route) => {

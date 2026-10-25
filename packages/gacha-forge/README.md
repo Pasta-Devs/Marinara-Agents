@@ -18,7 +18,7 @@ The Engine handles video provider settings, credentials, queues and fallback con
 
 Character conversations keep saved messages in the same window after **Close and remember**. Use **Earlier messages** to scroll back through older sessions. Closing still prepares a memory of the current session. A failed reply retains the sent message, and an explicit retry reuses it.
 
-Story writing reads the current linked character card’s complete Description, Personality, Backstory and Appearance. Card Scenario, greetings and example dialogue are excluded. Existing saved scenes stay as written.
+Initial forging and later story writing read the current linked character card’s complete Description, Personality, Backstory and Appearance. Card Scenario, greetings and example dialogue are excluded. Existing saved scenes stay as written.
 
 Writing’s question mark controls keep their compact size. Tap to read an explanation below its label, then tap again to close it.
 

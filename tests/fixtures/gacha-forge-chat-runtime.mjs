@@ -132,6 +132,16 @@ export async function createChatRuntime({ stored, archived = 0, port = 0 } = {})
     },
   };
   let cleanup;
+  const close = async () => {
+    try {
+      await cleanup?.();
+    } finally {
+      globalThis.fetch = nativeFetch;
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+      await rm(directory, { recursive: true, force: true });
+    }
+  };
   try {
     const { activate } = await import(pathToFileURL(path).href);
     cleanup = await activate({
@@ -175,10 +185,7 @@ export async function createChatRuntime({ stored, archived = 0, port = 0 } = {})
       },
     });
   } catch (error) {
-    globalThis.fetch = nativeFetch;
-    server.closeAllConnections();
-    await new Promise((resolve) => server.close(resolve));
-    await rm(directory, { recursive: true, force: true });
+    await close();
     throw error;
   }
   const post = async (name, extra = {}) => {
@@ -189,26 +196,32 @@ export async function createChatRuntime({ stored, archived = 0, port = 0 } = {})
     });
     return { status: response.status, body: await response.json() };
   };
-  const opened = await post("/chat/open");
-  assert.equal(opened.body.ok, true, JSON.stringify(opened));
   const chatDoc = () =>
     [...docs.values()].find((doc) => doc.data?.unitId === chatUnitId && Array.isArray(doc.data?.messages));
-  if (archived) {
-    // Discover the actual chat document id by one player persist, then reset only isolated fixture documents.
+  let opened;
+  try {
+    opened = await post("/chat/open");
+    assert.equal(opened.body.ok, true, JSON.stringify(opened));
+    if (archived) {
+      // Discover the actual chat document id by one player persist, then reset only isolated fixture documents.
+      transport.stage = "reply";
+      await post("/chat/send", { text: "Discover fixture chat document." });
+      const document = chatDoc();
+      document.data.messages = Array.from({ length: archived }, (_, index) => ({
+        id: `archived-${index}`,
+        who: index % 2 ? "unit" : "player",
+        text: `ARCHIVE_RAW_${index}`,
+        at: index,
+        ...(index === 1 ? { photo: { url: "fixture://archived-picture" } } : {}),
+      }));
+      document.data.sessions = [{ count: archived, at: 1, memory: "A prior meeting.", quote: "A remembered promise." }];
+      calls.length = 0;
+    }
     transport.stage = "reply";
-    await post("/chat/send", { text: "Discover fixture chat document." });
-    const document = chatDoc();
-    document.data.messages = Array.from({ length: archived }, (_, index) => ({
-      id: `archived-${index}`,
-      who: index % 2 ? "unit" : "player",
-      text: `ARCHIVE_RAW_${index}`,
-      at: index,
-      ...(index === 1 ? { photo: { url: "fixture://archived-picture" } } : {}),
-    }));
-    document.data.sessions = [{ count: archived, at: 1, memory: "A prior meeting.", quote: "A remembered promise." }];
-    calls.length = 0;
+  } catch (error) {
+    await close();
+    throw error;
   }
-  transport.stage = "reply";
   return {
     origin,
     docs,
@@ -221,12 +234,6 @@ export async function createChatRuntime({ stored, archived = 0, port = 0 } = {})
     opened,
     chatDoc,
     session: () => docs.get(`${chatRunId}:session`).data,
-    close: async () => {
-      await cleanup?.();
-      globalThis.fetch = nativeFetch;
-      server.closeAllConnections();
-      await new Promise((resolve) => server.close(resolve));
-      await rm(directory, { recursive: true, force: true });
-    },
+    close,
   };
 }

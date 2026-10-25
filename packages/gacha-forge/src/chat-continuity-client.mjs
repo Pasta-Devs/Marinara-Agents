@@ -43,6 +43,31 @@ export function forgeChatHasCurrentMessages(messages) {
   );
 }
 
+export function retainForgeChatSuccess(host, attempt, response) {
+  if (host._run?.runId !== attempt.runId) return;
+  const reply = response?.said?.id && response.said.who === "unit" ? response.said : null;
+  // Success is known, but the canonical player ID may still be unavailable. Keep the
+  // existing local text until a later snapshot can replace it, including after reopening.
+  const pending = { ...attempt, confirmed: true, ...(reply ? { reply } : {}) };
+  host._chatStash = {
+    ...host._chatStash,
+    runId: attempt.runId,
+    unitId: attempt.unitId,
+    error: "",
+    draft: "",
+    unknowns: [...(host._chatStash?.unknowns || []), pending],
+  };
+  if (!forgeChatIsCurrent(host, attempt.runId, attempt.unitId)) return;
+  host._chat = {
+    ...host._chat,
+    messages: forgeChatMergeRows(host._chat.messages || [], reply ? [reply] : []),
+    error: "",
+    retry: false,
+  };
+  host._chatRev += 1;
+  host._renderBrowser();
+}
+
 export function adoptForgeChatSnapshot(host, snapshot, { runId, unitId, opening = false } = {}) {
   if (!snapshot?.ok || !forgeChatIsCurrent(host, runId, unitId)) return false;
   const stash = host._chatStash;
@@ -53,8 +78,9 @@ export function adoptForgeChatSnapshot(host, snapshot, { runId, unitId, opening 
   const unknowns = (stash?.unknowns || []).filter((attempt) => {
     if (attempt.runId !== runId || attempt.unitId !== unitId) return true;
     const saved = forgeChatFindSaved(snapshot, attempt, used);
-    if (saved) {
-      used.add(saved.id);
+    const replied = attempt.reply?.id && snapshot.messages?.some((row) => row.id === attempt.reply.id);
+    if (saved || replied) {
+      if (saved) used.add(saved.id);
       for (const row of attempt.optimistic || []) resolvedLocalIds.add(row.id);
       return false;
     }
@@ -67,7 +93,7 @@ export function adoptForgeChatSnapshot(host, snapshot, { runId, unitId, opening 
   let messages = forgeChatMergeRows(oldRows, snapshot.messages || []);
   messages = forgeChatMergeRows(
     messages,
-    unresolved.flatMap((attempt) => attempt.optimistic || []),
+    unresolved.flatMap((attempt) => [...(attempt.optimistic || []), ...(attempt.reply ? [attempt.reply] : [])]),
   );
   const retry = unresolved.length === 0 && snapshot.retry === true;
   host._chat = {
@@ -76,7 +102,7 @@ export function adoptForgeChatSnapshot(host, snapshot, { runId, unitId, opening 
     open: true,
     opening: false,
     messages,
-    error: unresolved.length
+    error: unresolved.some((attempt) => !attempt.confirmed)
       ? (matches && stash.error) || forgeChatEnglish["chat.noAnswer"]
       : retry
         ? forgeChatEnglish["chat.noAnswer"]
@@ -85,7 +111,7 @@ export function adoptForgeChatSnapshot(host, snapshot, { runId, unitId, opening 
     page: opening ? Number(snapshot.page) || 1 : Math.max(Number(host._chat.page) || 1, Number(snapshot.page) || 1),
   };
   if (matches && stash.draft) host._chatDraft = stash.draft;
-  // Extend the existing cross-window stash only with unconfirmed text. It never sends a request itself.
+  // Keep attempts until their canonical row IDs are known. This stash never sends a request itself.
   host._chatStash = unknowns.length ? { ...(matches ? {} : stash), unknowns } : matches ? null : stash;
   return true;
 }
