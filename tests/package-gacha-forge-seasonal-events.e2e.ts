@@ -7,7 +7,10 @@ if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to the validated Engi
 const version = JSON.parse(readFileSync(resolve(engineRoot, "package.json"), "utf8")).version;
 const nativeImport = new Function("url", "return import(url)");
 async function optionsGeometry(forge: Locator) {
-  const result = await forge.locator(".gf-story-options").evaluate((group) => {
+  // A state refresh can replace the inner group; resolve it in the same browser task as its layout read.
+  const result = await forge.evaluate((node) => {
+    const group = (node as any)._root.querySelector(".gf-story-options") as HTMLElement | null;
+    if (!group?.isConnected) throw new Error("Paired story settings are not attached");
     const boxes = [...group.querySelectorAll(".ob-bx")].map((button) => {
       const box = button.getBoundingClientRect();
       return {
