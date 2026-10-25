@@ -144,8 +144,8 @@ export const HOUSE_PHRASES: Record<SaucelingPhraseMoment, string[]> = {
   stageUp: [
     "Look at {pet}! A proper {stage} now.",
     "{pet} is on to the {stage} stage now. Well done, {nickname}.",
-    "Would you look at that. {pet}'s a proper {stage}.",
-    "Another stage done. {pet} is a proper {stage} now.",
+    "Would you look at that. {pet}'s grown into a {stage}.",
+    "Another stage done. {pet} is a {stage} now, and doing well.",
   ],
   checkInEgg: [
     "The egg's doing fine.",
@@ -194,19 +194,65 @@ export const HOUSE_SIGNOFFS: Record<SaucelingSignoffFeeling, string[]> = {
 
 /** The house lines for one-off moments, turned by `pick` like the phrasebook's. In egg moments {egg} is "little egg". */
 const SCENE_LINES = {
-  eggFound: ["Look what I found by the nook: an egg, still warm."],
-  eggFoundTalking: ["I found this egg while we were talking, still warm."],
-  eggFoundWhileTalking: ["We were talking and I found an egg. It's waiting in the Menagerie."],
-  eggFoundByOther: ["{finder} found an egg while they were talking with you. It's waiting in the Menagerie."],
+  eggFound: [
+    "Look what I found by the nook: an egg, still warm.",
+    "There was an egg tucked beside the nook. Still warm, too.",
+    "Someone left an egg by the nook. I've wrapped it up.",
+    "An egg, right by the nook! Warm as toast.",
+  ],
+  eggFoundTalking: [
+    "I found this egg while we were talking, still warm.",
+    "Funny thing: while we were talking, I found an egg.",
+    "Before I forget, an egg turned up while we were chatting.",
+    "Look what turned up while we were talking. An egg, still warm!",
+  ],
+  eggFoundWhileTalking: [
+    "We were talking and I found an egg. It's waiting in the Menagerie.",
+    "I found another egg while we were chatting. It's in the Menagerie now.",
+    "Another egg turned up while we talked. I've tucked it away in the Menagerie.",
+  ],
+  eggFoundByOther: [
+    "{finder} found an egg while they were talking with you. It's waiting in the Menagerie.",
+    "{finder} turned up an egg while you two were chatting. It's in the Menagerie.",
+    "News from {finder}: they found an egg while talking with you. It's waiting in the Menagerie.",
+  ],
   evolveOffer: [
     "{pet}'s been so happy lately. I think they're ready to become something new. Have a look when you're ready.",
+    "{pet} has been glowing lately. I think a change is coming. Have a look when you can.",
+    "Something's stirring in {pet}. They seem ready to become something new. Take a look when you're ready.",
   ],
-  evolve: ["{pet}'s evolved! Look at them now, a real {form}."],
-  temperamentShift: ["Have you noticed? {pet}'s gone all {readsAs} lately. A real {name} now."],
-  takesAfter: ["Have you noticed? {pet} has been a bit more {temperament} lately. I think it's picking up my ways."],
-  eggFarewell: ["Into the Menagerie you go, {egg}. Stay warm."],
-  eggReturn: ["The egg's back, and still warm. Into the basket with you."],
-  returnHome: ["Welcome back, {nickname}! Look at you, a {stage} through and through."],
+  evolve: [
+    "{pet}'s evolved! Look at them now, a real {form}.",
+    "Would you look at that. {pet} is a {form} now!",
+    "{pet} has changed! Say hello to the new {form}.",
+    "Well I never. {pet}'s become a {form}.",
+  ],
+  temperamentShift: [
+    "Have you noticed? {pet}'s gone all {readsAs} lately. A real {name} now.",
+    "{pet} has been so {readsAs} lately. Quite the {name}, if you ask me.",
+    "Something's changed in {pet}: all {readsAs} these days. Pure {name}.",
+  ],
+  takesAfter: [
+    "Have you noticed? {pet} has been a bit more {temperament} lately. I think it's picking up my ways.",
+    "{pet} gets a little more {temperament} every day. I wonder where they got that from.",
+    "Is it me, or is {pet} turning {temperament}? They must get it from me.",
+  ],
+  eggFarewell: [
+    "Into the Menagerie you go, {egg}. Stay warm.",
+    "Off to the Menagerie, {egg}. Someone there will keep you cosy.",
+    "The Menagerie will look after you, {egg}. See you soon.",
+  ],
+  eggReturn: [
+    "The egg's back, and still warm. Into the basket with you.",
+    "Welcome home, {egg}. Your basket's ready.",
+    "The egg's back with us. Under the towel you go.",
+  ],
+  returnHome: [
+    "Welcome back, {nickname}! Still a fine {stage}, I see.",
+    "There you are, {nickname}. Back in the nook where you belong.",
+    "Look who's home! Hello again, {nickname}.",
+    "Welcome back, {nickname}! The nook missed its {stage}.",
+  ],
 } satisfies Record<string, string[]>;
 
 /** The line `pick` turns to, with each `{key}` filled from `values` and "a {key}" made "an {key}" before a vowel. */
@@ -369,10 +415,18 @@ export function templateTakesAfterScene(petName: string, temperament: string, pi
 }
 
 const ABSENCE_OPENINGS: Record<SaucelingAbsenceBucket, string[]> = {
-  day: ["You're back!"],
-  days: ["There you are! It's been a few days."],
-  week: ["A whole week! Welcome back."],
-  long: ["You've been gone ages! Welcome back."],
+  day: ["You're back!", "Oh, hello again!", "Good to see you again."],
+  days: [
+    "There you are! It's been a few days.",
+    "A few days already! Welcome back.",
+    "Back at last. It's been a few days.",
+  ],
+  week: ["A whole week! Welcome back.", "It's been a week! We missed you.", "Look who's back after a whole week."],
+  long: [
+    "You've been gone ages! Welcome back.",
+    "It's been so long! Welcome back.",
+    "Well, look who it is, after all this time.",
+  ],
 };
 
 export function templateAbsenceScene(

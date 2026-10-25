@@ -613,10 +613,7 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
     for (const species of SAUCELING_SPECIES) assert.equal(line.toLowerCase().includes(species), false, line);
     assert.equal(line.includes("Biscotti"), false, line);
   }
-  assert.equal(
-    templateReturnScene(dottore, "elder"),
-    "Welcome back, little dumpling! Look at you, an elder through and through.",
-  );
+  assert.equal(templateReturnScene(dottore, "elder"), "Welcome back, little dumpling! Still a fine elder, I see.");
   assert.equal(
     templateAbsenceScene(
       dottore,
@@ -627,6 +624,19 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
     ),
     "You're back! While you were away I fed Biscotti 3 times but forgot 1 meal, played with them twice and gave 1 cuddle.",
   );
+
+  // One-off scenes turn through their lines, so the same moment does not read the same every time
+  const varies = (line: (pick: number) => string) =>
+    assert.ok(new Set(Array.from({ length: 12 }, (_, pick) => line(pick))).size >= 3, line(0));
+  varies((pick) => templateEggFoundScene(dottore, false, pick));
+  varies((pick) => templateEggFoundScene(dottore, true, pick));
+  varies((pick) => templateEvolveScene(dottore, "Biscotti", "Ember Lentino", pick));
+  varies((pick) => templateTemperamentShiftScene("Biscotti", "zesto", pick));
+  varies((pick) => templateTakesAfterScene("Biscotti", "Quietly Curious", pick));
+  varies((pick) => templateAbsenceScene(dottore, "Biscotti", "week", { played: 1 }, false, pick));
+  varies((pick) => templateEggFarewellScene(pick));
+  varies((pick) => templateEggReturnScene(pick));
+  varies((pick) => templateReturnScene(dottore, "elder", pick));
 
   // A model's line keeps only what is said
   assert.equal(spokenLine("“Il Dottore: Still warm, still quiet.”", "Il Dottore"), "Still warm, still quiet.");
@@ -3496,10 +3506,7 @@ async function testBundledServer() {
     );
     const toldOther = worldNow().activePet.journal[0];
     assert.deepEqual([toldOther.kind, toldOther.speaker], ["egg-found", "Il Dottore"]);
-    assert.match(
-      toldOther.text,
-      /Nahida found an egg while they were talking with you\. It's waiting in the Menagerie\./u,
-    );
+    assert.match(toldOther.text, /Nahida.* an egg .*Menagerie/u);
     worldNow().lastEggFindDay = null;
     const kept = (await menagerieNow()).length;
     // With no writing connection the find is an ordinary egg
@@ -3513,7 +3520,8 @@ async function testBundledServer() {
     assert.equal(plainEgg.name, SPECIES_CATALOG[plainEgg.species as keyof typeof SPECIES_CATALOG].name);
     const told = worldNow().activePet.journal[0];
     assert.deepEqual([told.kind, told.speaker], ["egg-found", "Il Dottore"]);
-    assert.match(told.text, /We were talking and I found an egg\. It's waiting in the Menagerie\./u);
+    assert.match(told.text, /egg\b.*Menagerie/u);
+    assert.equal(told.text.includes("Nahida"), false);
     assert.equal(worldNow().lastEggFindDay, new Date().toISOString().slice(0, 10));
     // One find a day
     reply(["dottore-1"]);
@@ -3591,10 +3599,8 @@ async function testBundledServer() {
     assert.deepEqual(chosen.evolution.look, choices[0]);
     assert.equal(typeof chosen.evolution.at, "string");
     assert.deepEqual([chosen.journal[0].kind, chosen.journal[0].speaker], ["evolve", "Il Dottore"]);
-    assert.equal(
-      chosen.journal[0].text.startsWith(`Biscotti's evolved! Look at them now, a real ${choices[0].form}.`),
-      true,
-    );
+    assert.ok(chosen.journal[0].text.includes("Biscotti"));
+    assert.ok(chosen.journal[0].text.includes(choices[0].form));
     await evolveRefused("choose", 409, { index: 1 });
     await evolveRefused("decline", 409);
     const undone = (await evolveRoute("undo")).world.activePet.evolution;
