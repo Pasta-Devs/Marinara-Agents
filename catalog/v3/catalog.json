@@ -771,7 +771,7 @@
         },
         "id": "gacha-forge",
         "name": "Gacha Forge",
-        "version": "1.16.1",
+        "version": "1.17.0",
         "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
         "engine": {
           "min": "2.5.1",
@@ -1060,8 +1060,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "e4c2454eaf2dfe4a9ff48450733f9d623e7ca3dcad736fdab5010fef77aa1afc",
-            "bytes": 1588960
+            "sha256": "4135a3dddc03c711df4900dfeceb8f921c05c86530819cf5c480aa866ca19546",
+            "bytes": 1604559
           },
           {
             "path": "farm-asc.webp",
@@ -1535,8 +1535,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "43fe77eb622b044d755cac7f31c319cc92f418eea37072fc83713d6e537c8dbc",
-            "bytes": 667339
+            "sha256": "ec07bd968385f146f30f1bd41e9b2e2cfd2b23654d877d6f895a9ad839ce8178",
+            "bytes": 683345
           },
           {
             "path": "skill-aoe_damage-dark.webp",
@@ -2293,9 +2293,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.16.1.zip",
-        "sha256": "3bbadc2c9f2cc7bb1fde91e76f306d41f0c46cc4f52ba75f2fc26463f341bcbf",
-        "bytes": 8156458
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.17.0.zip",
+        "sha256": "fb3c7533a67b786643eb21f71f8a3225c6835dc94944c41fafe9b2c7170ee7e0",
+        "bytes": 8188063
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     },

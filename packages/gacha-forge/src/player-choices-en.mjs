@@ -8,6 +8,7 @@ export const forgeChoiceEnglish = Object.freeze({
   "story.choices.majorWarning": "This decision shapes the next chapter and cannot be changed.",
   "story.choices.saving": "Saving your choice…",
   "story.choices.saveFailed": "Your choice could not be saved. Choose again to retry.",
+  "story.choices.changed": "This story changed. Return to Chapter and choose Reopen chapter before continuing.",
   "story.choices.savedFate": "This decision has already been made. Your saved choice is kept.",
   "story.choices.protagonist": "You",
 });

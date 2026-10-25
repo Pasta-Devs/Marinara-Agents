@@ -8,8 +8,15 @@ import {
   createChapterRuntime,
   freshMainPlan,
   freshBondPlan,
+  currentCardCanon,
 } from "./fixtures/gacha-forge-chapter-runtime.mjs";
 import { createForgeStoryCancellation, forgeStoryWork } from "../packages/gacha-forge/src/story-cancel-server.mjs";
+import {
+  adoptForgeChapterVersion,
+  forgeChapterRequest,
+} from "../packages/gacha-forge/src/chapter-regeneration-client.mjs";
+import { forgeChapterResetEnglish } from "../packages/gacha-forge/src/chapter-regeneration-en.mjs";
+globalThis.forgeChapterResetEnglish = forgeChapterResetEnglish;
 
 const source = await readFile(new URL("../packages/gacha-forge/server.mjs", import.meta.url), "utf8");
 const start = source.indexOf('var cb="(default)"'),
@@ -29,6 +36,73 @@ const enteredBeforeReturn = (entered, request) =>
       throw new Error(`Expected provider entry before response: ${JSON.stringify(result)}`);
     }),
   ]);
+
+test("actual SDK rejects positional choices and mutations from an old displayed plan until explicit reopening", async () => {
+  const f = await createChapterRuntime();
+  try {
+    f.session().progress[2].normal = 0;
+    f.docs.get("index").data.runs[0].story.choices = true;
+    const oldPlan = f.docs.get(`${chapterRunId}:chapter:2`).data;
+    const host = { _run: { runId: chapterRunId }, _plan: oldPlan };
+    adoptForgeChapterVersion(
+      host,
+      "/chapter-plan",
+      { runId: chapterRunId },
+      { ok: true, plan: oldPlan, storyRevision: 0 },
+    );
+    assert.equal((await f.post("/chapter/regenerate", { chapter: 2 })).body.ok, true);
+    assert.equal((await f.post("/chapter-plan", { chapter: 2, storyRevision: 1 })).body.ok, true);
+    const beatId = `${chapterRunId}:beat:2:0`;
+    f.seed(beatId, "beat", {
+      chapter: 2,
+      storyIndex: 0,
+      segments: [{ text: "NEW_GENERATION_STORY" }],
+      choiceCanon: {},
+      choices: [
+        {
+          id: "choice-1",
+          kind: "big",
+          at: 0,
+          options: [
+            { id: "option-1", text: "Destroy the map.", segments: [] },
+            { id: "option-2", text: "Keep the map.", segments: [] },
+          ],
+        },
+      ],
+    });
+    const body = { runId: chapterRunId, chapter: 2, storyIndex: 0, choiceId: "choice-1", optionId: "option-1" };
+    const first = forgeChapterRequest(host, "/choice", body);
+    const rejected = await f.post("/choice", first);
+    assert.equal(rejected.body.error, "story-changed");
+    adoptForgeChapterVersion(host, "/choice", first, rejected.body);
+    const retry = forgeChapterRequest(host, "/choice", body);
+    assert.equal(retry.storyRevision, 0, "Protect the lighthouse must never silently become Destroy the map");
+    assert.equal((await f.post("/choice", retry)).body.error, "story-changed");
+    const vigor = f.session().wallet.vigor;
+    for (const path of ["/complete", "/story/start", "/beat/mark"]) {
+      const stale = forgeChapterRequest(host, path, {
+        runId: chapterRunId,
+        chapter: 2,
+        nodeIndex: 0,
+        storyIndex: 0,
+        at: 7,
+      });
+      assert.equal(stale.storyRevision, 0);
+      assert.equal((await f.post(path, stale)).body.error, "story-changed", path);
+    }
+    assert.deepEqual(f.docs.get(beatId).data.choiceCanon, {});
+    assert.equal(f.session().wallet.vigor, vigor);
+    const fresh = await f.post("/chapter-plan", { chapter: 2, storyRevision: 1 });
+    adoptForgeChapterVersion(host, "/chapter-plan", { runId: chapterRunId }, fresh.body);
+    host._plan = fresh.body.plan;
+    const current = forgeChapterRequest(host, "/choice", body);
+    assert.equal(current.storyRevision, 1);
+    assert.equal((await f.post("/choice", current)).body.ok, true);
+    assert.deepEqual(f.docs.get(beatId).data.choiceCanon, { "choice-1": "option-1" });
+  } finally {
+    await f.close();
+  }
+});
 
 test("the actual detached generation queue stays in the story drain after its route returned", async (context) => {
   const runtime = createForgeStoryCancellation(),
@@ -123,12 +197,14 @@ test("actual SDK reset writes a fresh main plan and retains first-clear rewards 
     const fresh = await f.post("/chapter-plan", { chapter: 2, storyRevision: 1 });
     assert.equal(fresh.status, 200);
     assert.equal(fresh.body.ok, true, JSON.stringify(fresh));
-    assert.equal(fresh.body.cached, false);
+    assert.equal(fresh.body.cached, undefined, "the existing fresh-plan response omits cached");
     assert.equal(fresh.body.plan.title, freshMainPlan.title);
     const planners = f.calls.filter((call) => call.kind !== "summary");
     assert.equal(planners.length, 1, "fresh main plan calls the controlled model once");
     assert.doesNotMatch(JSON.stringify(planners[0].body), /DISCARDED_CURRENT_ONLY/);
     assert.match(JSON.stringify(planners[0].body), /PRESERVED_COMPLETED_CANON/);
+    assert.ok(JSON.stringify(planners[0].body).includes(currentCardCanon));
+    assert.doesNotMatch(JSON.stringify(planners[0].body), /DISALLOWED_CARD_SCENARIO/);
     f.seed(`${chapterRunId}:beat:2:0`, "beat", {
       chapter: 2,
       storyIndex: 0,
@@ -183,6 +259,7 @@ test("actual SDK current Character Story reset preserves completed parts and reg
     const plans = f.calls.filter((call) => call.kind !== "summary");
     assert.equal(plans.length, 1);
     assert.doesNotMatch(JSON.stringify(plans[0].body), /DISCARDED_BOND_ONLY/);
+    assert.ok(JSON.stringify(plans[0].body).includes(currentCardCanon));
     f.seed(`${chapterRunId}:beat:${chapter}:0`, "beat", {
       chapter,
       storyIndex: 0,

@@ -105,6 +105,11 @@ export async function createChatRuntime({ stored, archived = 0, port = 0 } = {})
   const origin = `http://127.0.0.1:${server.address().port}`;
   globalThis.fetch = async (input, options) => {
     const url = new URL(input);
+    if (url.pathname.startsWith("/api/characters/") && transport.cards instanceof Map) {
+      const id = decodeURIComponent(url.pathname.slice("/api/characters/".length));
+      const card = transport.cards.get(id);
+      return Response.json(card ?? { error: "not found" }, { status: card ? 200 : 404 });
+    }
     if (url.pathname === "/api/connections")
       return Response.json([
         { id: chatConnectionId, provider: "custom", model: "controlled-same-main-model", maxContext: 10000 },

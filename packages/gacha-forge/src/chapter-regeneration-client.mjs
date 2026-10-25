@@ -31,11 +31,18 @@ export function forgeChapterOriginCurrent(host, path, body) {
 
 export function forgeChapterRequest(host, path, body) {
   if (!forgeChapterVersionPaths.has(path) || !body?.runId) return body;
+  const versions = (host._forgeChapterPlanVersions ??= new WeakMap());
+  const plan = host._plan;
+  const known = host._forgeChapterVersions?.get(body.runId) || 0;
+  if (plan && !versions.has(plan)) versions.set(plan, known);
+  const read = ["/chapter-plan", "/bond-chapter/plan", "/chapters", "/continuity"].includes(path);
   return {
     ...body,
     storyRevision: Number.isSafeInteger(body.storyRevision)
       ? body.storyRevision
-      : host._forgeChapterVersions?.get(body.runId) || 0,
+      : read
+        ? known
+        : ((plan && versions.get(plan)) ?? known),
   };
 }
 
@@ -44,6 +51,13 @@ export function adoptForgeChapterVersion(host, path, body, result) {
   const versions = (host._forgeChapterVersions ??= new Map());
   if (result.storyRevision < (versions.get(body.runId) || 0)) return false;
   versions.set(body.runId, result.storyRevision);
+  if (["/chapter-plan", "/bond-chapter/plan"].includes(path) && result.ok && result.plan) {
+    (host._forgeChapterPlanVersions ??= new WeakMap()).set(result.plan, result.storyRevision);
+  }
+  if (result.error === "story-changed") {
+    host._storyNotice = forgeChapterResetEnglish["chapter.reset.changed"];
+    host._renderBrowser?.();
+  }
   return true;
 }
 
@@ -184,7 +198,6 @@ export async function confirmForgeChapterReset(host, request) {
   }
   forgeClearSelectedStoryCache(host, request);
   host._forgeChapterReset = null;
-  host._renderBrowser();
   host._loadChapterPlan();
 }
 
@@ -192,23 +205,17 @@ export function wireForgeChapterRegeneration(host) {
   const root = host._root,
     target = forgeChapterResetTarget(host);
   const old = root?.querySelector("[data-forge-chapter-reset]");
-  if (!target) {
+  const stale =
+    host._hudView === "chapter" &&
+    host._plan &&
+    host._forgeChapterPlanVersions?.has(host._plan) &&
+    host._forgeChapterPlanVersions.get(host._plan) !== (host._forgeChapterVersions?.get(host._run?.runId) || 0);
+  if (!target && !stale) {
     old?.remove();
     return;
   }
-  const scroll = root.querySelector(".cap-scroll");
+  const scroll = root.querySelector(".cap-scroll .node-list");
   if (!scroll) return;
-  let request = host._forgeChapterReset;
-  if (!forgeResetSameTarget(request, target) || (!request.pending && request.plan !== host._plan))
-    request = host._forgeChapterReset = {
-      ...target,
-      plan: host._plan,
-      title: String(host._plan.title || forgeChapterResetEnglish["chapter.reset.untitled"]),
-      storyRevision: host._forgeChapterVersions?.get(target.runId) || 0,
-      asking: false,
-      pending: false,
-      error: "",
-    };
   let section = old;
   if (!section) {
     section = document.createElement("section");
@@ -242,6 +249,30 @@ export function wireForgeChapterRegeneration(host) {
     actions.append(item);
     return item;
   };
+  if (stale) {
+    copy("p", "chapter.reset.changed").setAttribute("role", "alert");
+    button("chapter.reset.reopen", () => {
+      stopForgeStoryRequests(host);
+      host._planCache?.delete(`${host._run.runId}|${host._planChapter}`);
+      host._plan = null;
+      host._planState = "idle";
+      host._forgeChapterReset = null;
+      host._loadChapterPlan();
+    });
+    section.append(actions);
+    return;
+  }
+  let request = host._forgeChapterReset;
+  if (!forgeResetSameTarget(request, target) || (!request.pending && request.plan !== host._plan))
+    request = host._forgeChapterReset = {
+      ...target,
+      plan: host._plan,
+      title: String(host._plan.title || forgeChapterResetEnglish["chapter.reset.untitled"]),
+      storyRevision: host._forgeChapterVersions?.get(target.runId) || 0,
+      asking: false,
+      pending: false,
+      error: "",
+    };
   if (request.pending) {
     copy("p", "chapter.reset.pending").setAttribute("role", "status");
   } else if (request.asking) {

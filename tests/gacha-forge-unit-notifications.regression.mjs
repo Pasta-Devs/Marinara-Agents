@@ -6,6 +6,11 @@ import vm from "node:vm";
 import { forgeUserTimeZone } from "../packages/gacha-forge/src/browser-presentation.mjs";
 import { forgeStoryRequest } from "../packages/gacha-forge/src/story-cancel-client.mjs";
 import {
+  adoptForgeChapterVersion,
+  forgeChapterOriginCurrent,
+  forgeChapterRequest,
+} from "../packages/gacha-forge/src/chapter-regeneration-client.mjs";
+import {
   forgeUnitRecommendation,
   forgeUnitStepIsCurrent,
   refreshForgeUnitStep,
@@ -63,6 +68,9 @@ function method(name, following, globals) {
   return vm.runInNewContext(`({${source.slice(start, end)}}).${name}`, {
     forgeUserTimeZone,
     forgeStoryRequest,
+    adoptForgeChapterVersion,
+    forgeChapterOriginCurrent,
+    forgeChapterRequest,
     ...globals,
   });
 }

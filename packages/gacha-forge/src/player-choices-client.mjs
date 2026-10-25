@@ -90,6 +90,8 @@ export function prepareForgeChoices(host, response) {
   if (!choices.length) return;
   const node = host._activeStoryNode;
   const runId = host._run?.runId;
+  const plan = host._plan;
+  const storyRevision = host._forgeChapterPlanVersions?.get(plan) ?? host._forgeChapterVersions?.get(runId) ?? 0;
   const bondUnit = host._bondUnit;
   const bondPart = host._bondPart;
   const canon = { ...(response.choiceCanon || {}) };
@@ -106,7 +108,7 @@ export function prepareForgeChoices(host, response) {
   let active = true;
   let busy = false;
   let resumePlayback = null;
-  const isCurrent = () => active && host._activeStoryNode === node && host._run?.runId === runId;
+  const isCurrent = () => active && host._activeStoryNode === node && host._run?.runId === runId && host._plan === plan;
   const rebuild = () => {
     timeline.length = 0;
     mainIndexes.length = 0;
@@ -203,12 +205,17 @@ export function prepareForgeChoices(host, response) {
           ...(node.replay ? { replay: true } : {}),
           choiceId: choice.id,
           optionId: button.dataset.forgeChoiceOption,
+          storyRevision,
         });
       } catch {
         result = null;
       }
       if (!isCurrent()) return;
       busy = false;
+      if (result?.error === "story-changed") {
+        status.textContent = forgeChoiceEnglish["story.choices.changed"];
+        return;
+      }
       const optionId = result?.ok
         ? result.optionId
         : result?.error === "choice-locked"

@@ -84,6 +84,21 @@ test("short story mutations keep originating-world authority before generic stat
   assert.equal(forgeChapterOriginCurrent(host, "/banner/animation", { runId: "r" }), true);
 });
 
+test("old displayed plans never inherit a newer mutation revision; only explicit fresh-plan adoption changes authority", () => {
+  const { host } = client();
+  const oldPlan = host._plan;
+  adoptForgeChapterVersion(host, "/chapter-plan", { runId: "r" }, { ok: true, plan: oldPlan, storyRevision: 0 });
+  adoptForgeChapterVersion(host, "/choice", { runId: "r" }, { error: "story-changed", storyRevision: 1 });
+  for (const path of ["/choice", "/complete", "/story/start", "/beat/mark"])
+    assert.equal(forgeChapterRequest(host, path, { runId: "r", chapter: 2 }).storyRevision, 0, path);
+  assert.equal(forgeChapterRequest(host, "/chapter-plan", { runId: "r", chapter: 2 }).storyRevision, 1);
+  const fresh = { nodes: [] };
+  adoptForgeChapterVersion(host, "/chapter-plan", { runId: "r" }, { ok: true, plan: fresh, storyRevision: 1 });
+  host._plan = fresh;
+  for (const path of ["/choice", "/complete", "/story/start", "/beat/mark"])
+    assert.equal(forgeChapterRequest(host, path, { runId: "r", chapter: 2 }).storyRevision, 1, path);
+});
+
 test("a reset requires the explicit displayed confirmation and ignores a second pending click", async () => {
   const { host, request, requests } = client();
   request.asking = false;

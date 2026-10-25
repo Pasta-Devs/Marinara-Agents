@@ -15,4 +15,5 @@ export const forgeChapterResetEnglish = {
   "chapter.reset.busy": "Another story reset is already in progress. Wait for it to finish.",
   "chapter.reset.bondOpen": "Finish the open Character Story before regenerating this chapter.",
   "chapter.reset.openBond": "Open Character Story",
+  "chapter.reset.reopen": "Reopen chapter",
 };

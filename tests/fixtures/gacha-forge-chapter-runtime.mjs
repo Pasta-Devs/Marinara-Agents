@@ -3,6 +3,7 @@ import { chatRunId, chatUnitId, createChatRuntime } from "./gacha-forge-chat-run
 
 export const chapterRunId = chatRunId;
 export const chapterUnitId = chatUnitId;
+export const currentCardCanon = "CURRENT_AUTHORED_CARD_CANON: Arden guards the lighthouse and honors their friendship.";
 export const freshMainPlan = {
   title: "Fresh lighthouse chapter",
   premise: "Keep the established friendship.",
@@ -38,6 +39,25 @@ export const freshBondPlan = {
 export async function createChapterRuntime({ bond = false } = {}) {
   const fixture = await createChatRuntime();
   const { docs, persistence } = fixture;
+  // This story fixture already knows its cast; planning must not spend a model
+  // request inferring an unrelated missing identity field.
+  docs.get(chapterUnitId).data.identitySex = "male";
+  docs.get(chapterUnitId).data.cardId = "chapter-proof-arden-card";
+  fixture.transport.cards = new Map([
+    [
+      "chapter-proof-arden-card",
+      {
+        id: "chapter-proof-arden-card",
+        data: {
+          name: "Arden",
+          description: currentCardCanon,
+          personality: "Patient and careful.",
+          extensions: { backstory: "They grew up near the lighthouse.", appearance: "A blue lighthouse coat." },
+          scenario: "DISALLOWED_CARD_SCENARIO",
+        },
+      },
+    ],
+  ]);
   const seed = (id, kind, data) =>
     docs.set(id, {
       id,
