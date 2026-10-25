@@ -30,6 +30,13 @@ export function forgeRenderFormationTurn({ root, container, choice, payload, onC
   const form = container.querySelector("form"),
     field = (name) => form.elements.namedItem(name),
     error = form.querySelector("[data-formation-error]");
+  const updateBonuses = () => {
+    const select = field("bonus");
+    for (const option of select.options)
+      option.disabled = !!option.value && !(Number(field(`pay-${option.value}`).value) > 0);
+    if (select.selectedOptions[0]?.disabled) select.value = "";
+  };
+  for (const element of forgeFormationElements) field(`pay-${element}`).oninput = updateBonuses;
   const setTargets = () => {
     const data = options().formation,
       action = field("action").value,
@@ -75,6 +82,7 @@ export function forgeRenderFormationTurn({ root, container, choice, payload, onC
       optionHtml("", forgeFormationLabel("none")) +
       forgeFormationElements.map((element) => optionHtml(element, forgeFormationLabel(element))).join("");
     field("bonus").value = forgeFormationElements.find((element) => payment?.[element] > 0) || "";
+    updateBonuses();
     error.textContent = "";
   };
   const render = () => {

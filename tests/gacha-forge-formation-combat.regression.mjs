@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
+import vm from "node:vm";
 import {
   forgeFormationBattle,
+  forgeFormationElements,
   forgeFormationEnemyKit,
   forgeFormationKitMessages,
   forgeFormationPayment,
@@ -10,6 +13,7 @@ import {
   normalizeForgeFormationRules,
   replayForgeFormationBattle,
 } from "../packages/gacha-forge/src/formation-combat-shared.mjs";
+import { forgeFormationCombatEnglish } from "../packages/gacha-forge/src/formation-combat-en.mjs";
 
 const ability = (overrides = {}) => ({
   name: "Strike",
@@ -265,6 +269,87 @@ test("an explicit None spending bonus is retained in authoritative replay", () =
   const played = drive(snapshot, () => ({ action: "weapon", payment: { dark: 1 }, bonus: "" }));
   assert.equal(played.log[0].bonus, "");
   assert.deepEqual(replayForgeFormationBattle(snapshot, played.log), played);
+});
+
+test("the real turn form offers only bonuses from entered payment and preserves None", async () => {
+  const source = await readFile(
+    new URL("../packages/gacha-forge/src/formation-combat-client.mjs", import.meta.url),
+    "utf8",
+  );
+  const renderTurn = vm.runInNewContext(source.replace(/export /gu, "") + ";forgeRenderFormationTurn", {
+    forgeFormationElements,
+    forgeFormationPayment,
+    forgeFormationCombatEnglish,
+  });
+  const fields = new Map();
+  const field = (name) => {
+    if (!fields.has(name))
+      fields.set(name, {
+        value: "",
+        options: [],
+        get selectedOptions() {
+          return this.options.filter((option) => option.value === this.value);
+        },
+        set innerHTML(markup) {
+          this.options = [...markup.matchAll(/<option value="([^"]*)"([^>]*)>/gu)].map((match) => ({
+            value: match[1],
+            disabled: match[2].includes("disabled"),
+          }));
+          this.value = this.options.find((option) => !option.disabled)?.value || "";
+        },
+      });
+    return fields.get(name);
+  };
+  const parts = new Map();
+  const form = {
+    elements: { namedItem: field },
+    querySelector(selector) {
+      if (!parts.has(selector)) parts.set(selector, {});
+      return parts.get(selector);
+    },
+  };
+  const hero = unit("hero"),
+    foe = unit("foe"),
+    standard = ability({ cost: 1 });
+  const selected = [];
+  renderTurn({
+    root: { querySelectorAll: () => [] },
+    container: { querySelector: () => form },
+    payload: { allies: [hero], enemies: [foe] },
+    choice: {
+      actor: hero.id,
+      formationActors: [
+        {
+          ...hero,
+          options: {
+            attack: true,
+            weapon: true,
+            formation: { bank: { fire: 1, dark: 1 }, standard, allies: [hero], foes: [{ ...foe, targetable: true }] },
+          },
+        },
+      ],
+    },
+    onChoice: (choice) => selected.push(choice),
+  });
+  field("action").value = "weapon";
+  field("action").onchange();
+  const bonus = (element) => field("bonus").options.find((option) => option.value === element);
+  assert.equal(field("bonus").value, "fire");
+  assert.equal(bonus("fire").disabled, false);
+  assert.equal(bonus("dark").disabled, true, "unspent energy is unavailable even when present in the bank");
+  field("pay-fire").value = "0";
+  field("pay-dark").value = "1";
+  field("pay-dark").oninput();
+  assert.equal(bonus("fire").disabled, true);
+  assert.equal(bonus("dark").disabled, false);
+  assert.equal(field("bonus").value, "", "an unavailable selection becomes explicit None");
+  assert.equal(bonus("").disabled, false);
+  form.onsubmit({ preventDefault() {}, stopPropagation() {} });
+  assert.equal(selected[0].bonus, "");
+  assert.equal(selected[0].payment.dark, 1);
+  field("bonus").value = "dark";
+  form.onsubmit({ preventDefault() {}, stopPropagation() {} });
+  assert.equal(selected[1].bonus, "dark");
 });
 
 test("row-gated passives and token traits are executable and tokens do not acquire actions", () => {

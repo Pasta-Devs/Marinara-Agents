@@ -123,6 +123,37 @@ async function fixture(mode = "formation") {
 }
 const request = { chapter: 2, combatIndex: 1, difficulty: "normal" };
 
+test("actual new-world creation preserves Formation and defaults to Classic without converting units", async () => {
+  const f = await fixture();
+  try {
+    for (const mode of ["formation", undefined]) {
+      const created = await f.post("/run", {
+        name: "New combat world",
+        scenario: "A lighthouse garden.",
+        connectionId: f.run.connectionId,
+        protagonist: { name: "Mari" },
+        storyNow: false,
+        ...(mode ? { combat: { mode } } : {}),
+      });
+      assert.equal(created.status, 200);
+      assert.equal(created.body.ok, true, JSON.stringify(created.body));
+      assert.deepEqual(created.body.run.combat, { mode: mode || "classic", revision: 0 });
+      const saved = f.docs.get("index").data.runs.find((run) => run.runId === created.body.run.runId);
+      assert.deepEqual(saved.combat, created.body.run.combat);
+    }
+    assert.ok(
+      !f.calls.some((call) =>
+        call.body.messages.some((message) =>
+          message.content.includes("Design a distinctive, balanced kit for Formation combat"),
+        ),
+      ),
+      "selecting a new world's mode does not launch the existing-world unit conversion",
+    );
+  } finally {
+    await f.close();
+  }
+});
+
 test("actual battle view/start and completion replay Formation with existing boss dialogue and one reward", async () => {
   const f = await fixture();
   try {
