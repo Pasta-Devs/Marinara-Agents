@@ -1,4 +1,4 @@
-// Canonical English copy for package-owned chat recovery states.
+// Canonical English copy for package-owned generation and chat recovery states.
 const forgeChatEnglish = {
   "chat.noAnswer": "They did not answer.",
   "chat.waitingForReply": "Waiting for a reply…",
@@ -6,6 +6,9 @@ const forgeChatEnglish = {
     "This reply needs at least {minimum} output tokens. Increase the connection's context size or Max Output Tokens Override in Connections, then retry.",
   "chat.capacityContext": "Available context: {available} tokens.",
   "chat.capacityOverride": "Configured output override: {configured} tokens.",
+  "generation.capacityStatus": "Generation needs more output space.",
+  "generation.outputCapacity":
+    "This generation needs at least {minimum} output tokens. Increase the connection's context size or Max Output Tokens Override in Connections, then retry.",
 };
 
 export function forgeChatGenerationError(response, fallback, template = forgeChatEnglish["chat.outputCapacity"]) {
@@ -22,6 +25,24 @@ export function forgeChatGenerationError(response, fallback, template = forgeCha
       parts.push(forgeChatEnglish[key].replace(placeholder, String(value)));
   }
   return parts.join(" ");
+}
+
+export function forgeGenerationCapacityFailure(response) {
+  if (response?.detail !== "generation-output-capacity" && response?.error !== "generation-output-capacity")
+    return null;
+  let capacity = response.capacity;
+  if (!capacity && typeof response.detail === "string" && response.detail.length <= 4096) {
+    try {
+      capacity = JSON.parse(response.detail);
+    } catch {
+      // An error code or an older host's non-JSON detail still receives the generic settings guidance.
+    }
+  }
+  return {
+    status: forgeChatEnglish["generation.capacityStatus"],
+    head: forgeChatGenerationError({ ...response, capacity }, "", forgeChatEnglish["generation.outputCapacity"]),
+    why: "",
+  };
 }
 
 function forgeChatIsCurrent(host, runId, unitId) {

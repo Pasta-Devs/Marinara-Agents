@@ -1207,6 +1207,18 @@
             {
               "find": "<h3>Pre-forging</h3></div><p>A forged chapter can write all of its beats at once, so every scene opens with no wait.</p>'+yi(\"story\").map(i=>Ga({...i,label:\"\"},",
               "replace": "<h3>'+u(forgeUnitMessagesEnglish[\"messages.settings.storyGroup\"])+'</h3></div>'+yi(\"story\").map(i=>Ga(i,"
+            },
+            {
+              "find": "function hp(t,e){let a=typeof t==\"string\"?t:\"\",r=typeof e==\"string\"?e.trim():\"\";",
+              "replace": "function hp(t,e){const forgeCapacity=forgeGenerationCapacityFailure({error:t,detail:e});if(forgeCapacity)return forgeCapacity;let a=typeof t==\"string\"?t:\"\",r=typeof e==\"string\"?e.trim():\"\";"
+            },
+            {
+              "find": "w=hp(n&&n.error,n&&n.detail);return`",
+              "replace": "w=hp(n&&n.error,n&&n.detail);e&&w.status&&(f=w.status);return`"
+            },
+            {
+              "find": "f=hp(n&&n.error,n&&n.detail);return`",
+              "replace": "f=hp(n&&n.error,n&&n.detail);e&&f.status&&(m=f.status);return`"
             }
           ]
         }
