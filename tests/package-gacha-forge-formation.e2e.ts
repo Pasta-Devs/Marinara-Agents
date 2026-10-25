@@ -51,7 +51,7 @@ async function openForge(page: Page, testInfo: TestInfo, theme: string, mode = "
   const { createChapterRuntime, chapterRunId, chapterUnitId, freshMainPlan } = await nativeImport(
     pathToFileURL(resolve(__dirname, "fixtures/gacha-forge-chapter-runtime.mjs")).href,
   );
-  const runtime = await createChapterRuntime({ port: 7856 });
+  const runtime = await createChapterRuntime({ port: 7856 + testInfo.parallelIndex });
   const transact = runtime.persistence.transaction;
   let tail = Promise.resolve();
   runtime.persistence.transaction = (operation: any) => {
