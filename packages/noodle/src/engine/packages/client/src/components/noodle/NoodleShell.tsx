@@ -631,7 +631,10 @@ export function NoodleShell({
               </div>
             </aside>
 
-            <main className="flex min-h-0 w-full flex-1 flex-col pb-[calc(56px+var(--noodle-safe-bottom))] @min-[1024px]:max-w-[640px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)] @min-[1024px]:pb-0">
+            <main
+              data-component="NoodleView.Main"
+              className="flex min-h-0 w-full flex-1 flex-col pb-[calc(56px+var(--noodle-safe-bottom))] @min-[1024px]:max-w-[640px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)] @min-[1024px]:pb-0"
+            >
               {children}
             </main>
             {rightRail}

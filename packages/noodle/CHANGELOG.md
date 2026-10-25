@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.5.10 — 2026-10-25
+
+- Posts, replies, and expanded prompt editors keep the text you are typing visible above the mobile landscape keyboard. Noodle hides its mobile navigation while the keyboard is open and restores it when you finish typing.
+
 ## 1.5.9 — 2026-10-21
 
 - Image failures marked nonretryable by the Engine no longer start automatic replacement requests.

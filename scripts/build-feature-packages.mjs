@@ -361,10 +361,10 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.5.9",
-    minEngineVersion: "2.4.6",
+    version: "1.5.10",
+    minEngineVersion: "2.5.1",
     capabilityApi: PACKAGE_CAPABILITY_API,
-    builtAgainst: PACKAGE_BUILT_AGAINST,
+    builtAgainst: { engineVersion: "2.5.1", engineCommit: "42d64368e82340a46e35c0f4489d9f41024d6032" },
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
     description: "A pretend social network where your characters post, share photos, and talk about your chats.",
@@ -516,7 +516,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.4.92",
+    version: "1.4.93",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -1127,6 +1127,7 @@ async function buildPackageStyles(buildRoot, temporary, capabilityId) {
 import tailwindcss from ${JSON.stringify(tailwindModule)};
 export default defineConfig({
   root: ${JSON.stringify(join(engineRoot, "packages/client"))},
+  publicDir: false,
   plugins: [tailwindcss()],
   build: {
     emptyOutDir: true,
