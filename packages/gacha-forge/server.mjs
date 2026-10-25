@@ -432,6 +432,11 @@ function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
     const stat = await forgeAnimationLstat(path).catch(() => null);
     return !!stat?.isFile() && !stat.isSymbolicLink() && stat.size > 0;
   };
+  const storedMediaKey = async (folder, legacyKey, saved) => {
+    const named = String(saved?.mediaKey || "");
+    if (/^[a-f0-9]{64}$/u.test(named) && (await exists(forgeAnimationJoin(folder, `${named}.mp4`)))) return named;
+    return (await exists(forgeAnimationJoin(folder, `${legacyKey}.mp4`))) ? legacyKey : null;
+  };
   const directory = async (world, create = false) => {
     // DATA_DIR may deliberately be a symlink. Package-owned descendants may never be one.
     let path = await forgeAnimationRealpath(dataDir);
@@ -446,8 +451,8 @@ function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
     }
     return path;
   };
-  const retirePrevious = async (folder, previousKey, mediaKey) => {
-    if (!previousKey || previousKey === mediaKey) return;
+  const retireUnreferenced = async (folder, candidateKey, retainedKey) => {
+    if (!candidateKey || candidateKey === retainedKey) return;
     try {
       let inspected = 0;
       for await (const entry of await forgeAnimationOpendir(folder)) {
@@ -465,18 +470,20 @@ function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
           const buffer = Buffer.alloc(4097);
           const { bytesRead } = await marker.read(buffer, 0, buffer.length, 0);
           if (bytesRead !== stat.size) return;
-          saved = JSON.parse(buffer.subarray(0, bytesRead).toString("utf8"));
+          try {
+            saved = JSON.parse(buffer.subarray(0, bytesRead).toString("utf8"));
+          } catch {
+            // Pre-upgrade and malformed markers use their own input-key filename.
+          }
         } finally {
           await marker.close();
         }
-        if (!saved || typeof saved !== "object" || Array.isArray(saved)) return;
-        if (saved.mediaKey !== undefined && !/^[a-f0-9]{64}$/u.test(saved.mediaKey)) return;
-        // Ready, pending and failed markers may retain a clip; legacy markers use their input key.
-        if ((saved.mediaKey || entry.name.slice(0, -5)) === previousKey) return;
+        // Use the same effective filename as generate, including missing named-file fallback.
+        if ((await storedMediaKey(folder, entry.name.slice(0, -5), saved)) === candidateKey) return;
       }
-      await forgeAnimationUnlink(forgeAnimationJoin(folder, `${previousKey}.mp4`));
+      await forgeAnimationUnlink(forgeAnimationJoin(folder, `${candidateKey}.mp4`));
     } catch (error) {
-      runtime.logger?.warn(error, "[gacha-forge] Could not retire a previous banner animation");
+      runtime.logger?.warn(error, "[gacha-forge] Could not retire a banner animation");
     }
   };
   const remove = async (runId) => {
@@ -551,12 +558,7 @@ function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
           } catch {
             // Older pending markers remain explicit-retry only.
           }
-          if (
-            /^[a-f0-9]{64}$/u.test(saved?.mediaKey || "") &&
-            (await exists(forgeAnimationJoin(folder, `${saved.mediaKey}.mp4`)))
-          )
-            previousKey = saved.mediaKey;
-          else if (await exists(file)) previousKey = key; // Clips saved before content-addressed replacements.
+          previousKey = await storedMediaKey(folder, key, saved);
           if (previousKey && body.retry !== true) return result(true, previousKey);
           if (prior !== null && body.retry !== true) {
             const reason =
@@ -608,10 +610,10 @@ function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
             try {
               await writeStatus({ state: "ready", mediaKey });
             } catch (error) {
-              await retirePrevious(folder, mediaKey, previousKey);
+              await retireUnreferenced(folder, mediaKey, previousKey);
               throw error;
             }
-            await retirePrevious(folder, previousKey, mediaKey);
+            await retireUnreferenced(folder, previousKey, mediaKey);
             return result(false, mediaKey);
           });
         } catch (error) {
@@ -1107,7 +1109,7 @@ function forgeStoryDocuments(documents) {
   };
 }
 
-function createForgeStoryCancellation() {
+function createForgeStoryCancellation({ resetDrainTimeoutMs = 30_000 } = {}) {
   const worlds = new Map();
   let disposed = false;
   const world = (runId) => {
@@ -1213,8 +1215,20 @@ function createForgeStoryCancellation() {
         state.controller.abort(forgeStoryCancelled());
         // Cancel replies promptly; destructive reset joins the actual work, including writes
         // that entered persistence before their epoch lost permission to start another one.
-        while (state.operations.size || state.writes.size) {
-          await Promise.allSettled([...state.operations, ...state.writes]);
+        let deadline;
+        try {
+          const expired = new Promise((resolve) => {
+            deadline = setTimeout(() => resolve(false), resetDrainTimeoutMs);
+          });
+          while (state.operations.size || state.writes.size) {
+            const drained = await Promise.race([
+              Promise.allSettled([...state.operations, ...state.writes]).then(() => true),
+              expired,
+            ]);
+            if (!drained) return { ok: false, error: "reset-drain-timeout", retryable: true };
+          }
+        } finally {
+          clearTimeout(deadline);
         }
         if (disposed) return { ok: false, error: "cancelled" };
         return await forgeStoryScope.run(undefined, operation);

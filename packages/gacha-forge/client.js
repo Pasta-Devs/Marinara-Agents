@@ -5810,6 +5810,7 @@ const forgeChapterResetEnglish = {
   "chapter.reset.completed": "This chapter is complete and cannot be regenerated.",
   "chapter.reset.changed": "The story changed while this page was open. Reopen the chapter before trying again.",
   "chapter.reset.busy": "Another story reset is already in progress. Wait for it to finish.",
+  "chapter.reset.drainTimeout": "Generation is still stopping. The chapter was not reset. Wait a moment and try again.",
   "chapter.reset.bondOpen": "Finish the open Character Story before regenerating this chapter.",
   "chapter.reset.openBond": "Open Character Story",
   "chapter.reset.reopen": "Reopen chapter",
@@ -5997,11 +5998,13 @@ async function confirmForgeChapterReset(host, request) {
           ? "chapter.reset.completed"
           : result?.error === "story-changed"
             ? "chapter.reset.changed"
-            : result?.error === "reset-in-progress"
-              ? "chapter.reset.busy"
-              : result?.error === "bond-chapter-open"
-                ? "chapter.reset.bondOpen"
-                : "chapter.reset.failed"
+            : result?.error === "reset-drain-timeout"
+              ? "chapter.reset.drainTimeout"
+              : result?.error === "reset-in-progress"
+                ? "chapter.reset.busy"
+                : result?.error === "bond-chapter-open"
+                  ? "chapter.reset.bondOpen"
+                  : "chapter.reset.failed"
       ];
     request.heldById = result?.error === "bond-chapter-open" ? result.heldById : "";
     request.heldPart = result?.heldPart;
