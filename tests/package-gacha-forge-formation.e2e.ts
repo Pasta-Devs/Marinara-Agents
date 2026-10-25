@@ -352,12 +352,37 @@ for (const theme of ["dark", "light"]) {
       expect(bankGeometry.right).toBeLessThanOrEqual(bankGeometry.parentRight + 1);
       expect(bankGeometry.scrollWidth).toBeLessThanOrEqual(bankGeometry.clientWidth + 1);
       writeFileSync(testInfo.outputPath(`formation-bank-${theme}.json`), JSON.stringify(bankGeometry, null, 2));
+      const contrast = await turn.getByRole("button", { name: "Confirm action" }).evaluate((node) => {
+        const style = getComputedStyle(node);
+        const luminance = (color: string) => {
+          const rgb = color
+            .match(/[\d.]+/g)!
+            .slice(0, 3)
+            .map(Number)
+            .map((value) => {
+              const channel = value / 255;
+              return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+            });
+          return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+        };
+        const foreground = luminance(style.color),
+          background = luminance(style.backgroundColor);
+        return {
+          foreground: style.color,
+          background: style.backgroundColor,
+          ratio: (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05),
+        };
+      });
+      expect(contrast.background).not.toBe("rgba(0, 0, 0, 0)");
+      expect(contrast.ratio).toBeGreaterThanOrEqual(4.5);
+      writeFileSync(testInfo.outputPath(`formation-confirm-contrast-${theme}.json`), JSON.stringify(contrast, null, 2));
       await expect(turn.locator('select[name="action"] option[value="ultimate"]')).toBeEnabled();
       await turn.locator('select[name="action"]').selectOption("ultimate");
       await expect(turn.locator("[data-formation-mover-label]")).toBeHidden();
       await expect(turn.locator("[data-formation-swap-label]")).toBeHidden();
       await expect(turn.locator("[data-formation-payment]")).toBeVisible();
       await readable(turn.getByRole("button", { name: "Confirm action" }));
+      await page.screenshot({ path: testInfo.outputPath(`formation-actions-${theme}.png`) });
       await turn.getByRole("button", { name: "Confirm action" }).click();
       const cutin = forge.locator(".gf-ultimate-portrait");
       await expect(cutin).toBeVisible();
