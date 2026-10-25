@@ -287,6 +287,18 @@ export default function MemorySettings({
   const debugDirty = Boolean(
     globalForm && savedGlobal && globalForm.longTermMemoryDebug !== savedGlobal.longTermMemoryDebug,
   );
+  // Save and Discard sit in a sticky header, but the tab holding the edit still needs its own cue: Debug owns
+  // only the debug toggle, Extraction owns the extraction form, and Recall owns every other global field.
+  const recallDirty = Boolean(
+    globalForm &&
+    savedGlobal &&
+    !same({ ...globalForm, longTermMemoryDebug: false }, { ...savedGlobal, longTermMemoryDebug: false }),
+  );
+  const dirtyTabs: Partial<Record<SettingsTab, boolean>> = {
+    recall: recallDirty,
+    extraction: extractionDirty,
+    debug: debugDirty,
+  };
   useEffect(() => {
     onDirtyChange?.(dirty);
     return () => onDirtyChange?.(false);
@@ -476,6 +488,14 @@ export default function MemorySettings({
         [data-ltm-surface="memory-settings"] [role="tablist"] > .mari-editor-tab {
           min-height: 2.75rem;
         }
+        /* The Engine's muted tab text is 4.46:1 in the light theme; inactive tabs read from the editor text. */
+        [data-ltm-surface="memory-settings"] [role="tablist"] > .mari-editor-tab[data-active="false"]:not(:hover) {
+          color: color-mix(in srgb, var(--marinara-editor-text) 78%, transparent);
+        }
+        /* Keep a control focused by keyboard clear of the sticky Save bar. */
+        .mari-editor-content:has([data-ltm-surface="memory-settings"]) {
+          scroll-padding-top: 4rem;
+        }
         [data-ltm-extraction-grid] {
           display: grid;
           gap: 0.5rem;
@@ -500,7 +520,10 @@ export default function MemorySettings({
           }
         }
       `}</style>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div
+        data-ltm-settings-header
+        className={`flex flex-wrap items-center justify-between gap-2 py-1 ${dirty ? "sticky top-0 z-10 bg-[var(--marinara-editor-bg)]" : ""}`}
+      >
         <div>
           <h2 id={memorySettingsTitleId} className="text-sm font-semibold">
             {localizeUi("ui.longTermMemory.memorysettings.memorySettings")}
@@ -560,6 +583,16 @@ export default function MemorySettings({
             className="mari-editor-tab min-h-11 rounded-md px-2 text-xs font-semibold transition-colors"
           >
             {localizeUi(tab.labelKey)}
+            {dirtyTabs[tab.id] ? (
+              <>
+                <span
+                  aria-hidden="true"
+                  data-ltm-tab-dirty
+                  className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[var(--marinara-editor-accent)] align-middle"
+                />
+                <span className="sr-only"> {localizeUi("ui.longTermMemory.memorysettings.tabUnsavedChanges")}</span>
+              </>
+            ) : null}
           </button>
         ))}
       </div>

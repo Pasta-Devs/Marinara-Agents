@@ -334,6 +334,7 @@ export function MaintenancePanel({
       setMessage(
         localizeUi("ui.longTermMemory.memorysettings.appliedIdentityRepairs", {
           count: result.repairs.length,
+          backup: result.backup.id.slice(0, 8),
         }),
       );
       setIdentityPreview(null);

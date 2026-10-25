@@ -4628,6 +4628,173 @@ async function main() {
         assert.match(await note.innerText(), /returns to Balanced\./u, "the discarded pick is not remembered");
         await customPage.close();
       }
+      // #1659: success text reads at 4.5:1 in both themes and carries a check icon, an unsaved tab shows a dot,
+      // Save stays reachable while the form scrolls, and an identity repair names the backup it made.
+      {
+        const critiquePage = await browserContext.newPage();
+        await critiquePage.setViewportSize({ width: 1280, height: 520 });
+        const candidateId = "a".repeat(64);
+        const repairNote = (noteId: string, title: string) => ({
+          noteId,
+          title,
+          basis: "exact_name",
+          alreadyBound: false,
+          exactFullName: true,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        });
+        const repairPreview = {
+          generatedAt: "2026-01-01T00:00:00.000Z",
+          scope: { kind: "global" },
+          counts: { analyzedNotes: 2, candidateCount: 1, bindableNotes: 2, duplicateNotes: 1, unresolvedNotes: 0 },
+          candidates: [
+            {
+              id: candidateId,
+              subjectNames: ["Mira"],
+              noteType: "character",
+              matchBasis: ["exact_name"],
+              blockingReasons: [],
+              notes: [repairNote("note-canonical", "Mira"), repairNote("note-duplicate", "Mira (copy)")],
+              canonicalNoteId: "note-canonical",
+              duplicateNoteIds: ["note-duplicate"],
+              additiveContent: [],
+              supersedingConflicts: [],
+            },
+          ],
+          unresolved: [],
+        };
+        await critiquePage.route("**/api/long-term-memory/identity-repair/preview", (route) =>
+          route.fulfill({ json: repairPreview }),
+        );
+        await critiquePage.route("**/api/long-term-memory/identity-repair/apply", (route) =>
+          route.fulfill({
+            json: {
+              repairedAt: "2026-01-01T00:00:00.000Z",
+              backup: { id: "0123abcd-4567-89ef-0123-456789abcdef", createdAt: "2026-01-01T00:00:00.000Z" },
+              repairs: [{ candidateId }],
+            },
+          }),
+        );
+        await critiquePage.goto(`http://127.0.0.1:${address.port}/`);
+        await critiquePage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await critiquePage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await critiquePage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+        // Contrast of an element's text against its composited ancestor backgrounds, drawn on a canvas so
+        // every CSS color syntax (color-mix, oklab) is resolved by the browser itself.
+        const contrastOf = (selector: string) =>
+          critiquePage.evaluate(`(() => {
+            const element = document.querySelector(${JSON.stringify(selector)});
+            const context = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+            context.canvas.width = 1;
+            context.canvas.height = 1;
+            const paint = (css) => {
+              context.fillStyle = css;
+              context.fillRect(0, 0, 1, 1);
+            };
+            const read = () => [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+            const chain = [];
+            for (let node = element; node; node = node.parentElement) {
+              chain.unshift(getComputedStyle(node).backgroundColor);
+            }
+            paint("#fff");
+            for (const color of chain) paint(color);
+            const background = read();
+            paint("rgb(" + background.join(",") + ")");
+            paint(getComputedStyle(element).color);
+            const text = read();
+            const luminance = (rgb) => {
+              const [r, g, b] = rgb.map((value) => {
+                const channel = value / 255;
+                return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+              });
+              return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            };
+            const [light, dark] = [luminance(text), luminance(background)].sort((a, b) => b - a);
+            return (light + 0.05) / (dark + 0.05);
+          })()`) as Promise<number>;
+        const maintenance = critiquePage.locator("#settings-panel-maintenance");
+        await critiquePage.locator("#settings-tab-maintenance").click();
+        const integrityOk = maintenance
+          .locator('[data-ltm-status="success"]')
+          .filter({ hasText: "Integrity check passed" });
+        await integrityOk.waitFor();
+        assert.equal(await integrityOk.locator("[data-ltm-status-icon]").count(), 1, "success carries a check icon");
+        for (const theme of ["light", "dark"]) {
+          await critiquePage.evaluate((value) => {
+            document.documentElement.dataset.theme = value;
+          }, theme);
+          // The tabs use transition-colors, so measure after the theme change has finished fading.
+          await critiquePage.evaluate(
+            "Promise.all(document.getAnimations().filter((animation) => animation.effect.getComputedTiming().endTime !== Infinity).map((animation) => animation.finished))",
+          );
+          const ratios = {
+            success: await contrastOf('#settings-panel-maintenance [data-ltm-status="success"]'),
+            selectedTab: await contrastOf('#settings-tab-maintenance[data-active="true"]'),
+            inactiveTab: await contrastOf('#settings-tab-recall[data-active="false"]'),
+          };
+          for (const [name, ratio] of Object.entries(ratios)) {
+            assert.equal(
+              ratio >= 4.5,
+              true,
+              `${name} text is at least 4.5:1 in the ${theme} theme (${ratio.toFixed(2)})`,
+            );
+          }
+        }
+        // The identity repair says which backup it made.
+        await maintenance.getByRole("button", { name: "Preview identity repairs" }).click();
+        await maintenance.getByRole("button", { name: /Apply selected repairs/u }).click();
+        const repairResult = maintenance.locator('[data-ltm-maintenance-result="identity"]');
+        await repairResult.waitFor();
+        assert.match(
+          await repairResult.innerText(),
+          /Applied 1 identity repair\(s\)\. Backup 0123abcd was saved first/u,
+        );
+        // Unsaved edits: a dot on the tab that holds them, Save and Discard sticky while the form scrolls.
+        await critiquePage.locator("#settings-tab-recall").click();
+        const recallTab = critiquePage.locator("#settings-tab-recall");
+        assert.equal(await critiquePage.locator("[data-ltm-tab-dirty]").count(), 0, "a clean form shows no dot");
+        const chunks = critiquePage.getByRole("spinbutton", { name: "Maximum recalled memories", exact: true });
+        const chunksBefore = Number(await chunks.inputValue());
+        await chunks.fill(String(chunksBefore === 37 ? 38 : 37));
+        await chunks.blur();
+        await critiquePage.getByRole("button", { name: "Save settings" }).waitFor();
+        assert.equal(await recallTab.locator("[data-ltm-tab-dirty]").count(), 1, "the Recall tab shows the dot");
+        assert.equal(await critiquePage.locator("#settings-tab-extraction [data-ltm-tab-dirty]").count(), 0);
+        assert.equal(
+          await critiquePage.getByRole("tab", { name: /^Recall\s+Unsaved changes$/u }).count(),
+          1,
+          "the dot is spoken, not only drawn",
+        );
+        // The Engine shell bounds .mari-editor-content and scrolls it; this host does not, so bound it here.
+        await critiquePage.addStyleTag({ content: ".mari-editor-content { max-height: 520px; }" });
+        await critiquePage
+          .locator("#settings-panel-recall")
+          .getByText("Memory context instructions", { exact: false })
+          .first()
+          .scrollIntoViewIfNeeded();
+        assert.deepEqual(
+          await critiquePage.evaluate(
+            "(() => { const scroller = document.querySelector('.mari-editor-content'); const header = document.querySelector('[data-ltm-settings-header]'); return { scrolled: scroller.scrollTop > 0, sticky: getComputedStyle(header).position }; })()",
+          ),
+          { scrolled: true, sticky: "sticky" },
+          "the form scrolled under a sticky header",
+        );
+        const saveBox = await critiquePage.getByRole("button", { name: "Save settings" }).boundingBox();
+        assert.ok(saveBox);
+        assert.equal(
+          saveBox.y >= 0 && saveBox.y + saveBox.height <= 520,
+          true,
+          "Save settings stays in view after scrolling the form",
+        );
+        await critiquePage.getByRole("button", { name: "Discard changes" }).click();
+        await critiquePage.getByRole("button", { name: "Discard changes" }).waitFor({ state: "detached" });
+        assert.equal(await critiquePage.locator("[data-ltm-tab-dirty]").count(), 0, "Discard clears the dot");
+        await critiquePage.close();
+      }
       // #1452: when the settings read after Reset or Import fails, Retry on the error surface loads the
       // new settings instead of the cached ones the action replaced. An import whose integrity read
       // alone fails still shows the settings it refetched (and says the backup was imported).
