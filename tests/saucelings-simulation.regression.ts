@@ -1877,6 +1877,16 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
     assert.equal(bottom, 99, `frame ${f}`);
   }
   assert.equal(formFromPainting(make(64, 64, BG), "adult"), null);
+  // A background that is not one flat colour is refused, so the painting fails instead of saving a bad cut-out: a
+  // gradient keys only near its top corners, and a busy pattern keys into scattered scraps.
+  const gradient = make(64, 64, BG);
+  for (let y = 0; y < 64; y++) paint(gradient, 0, y, 64, 1, [100 + y * 2, 180, 240 - y * 2]);
+  paint(gradient, 22, 20, 20, 30, RED);
+  assert.equal(formFromPainting(gradient, "adult"), null);
+  const scraps = make(64, 64, BG);
+  for (let y = 2; y < 62; y += 2) for (let x = 2; x < 62; x += 2) paint(scraps, x, y, 1, 1, [30, 90, 40]);
+  paint(scraps, 22, 20, 20, 30, RED);
+  assert.equal(formFromPainting(scraps, "adult"), null);
 }
 
 // 6n. Strip frames, the shared palette and the sheet reader, all on small synthetic pictures

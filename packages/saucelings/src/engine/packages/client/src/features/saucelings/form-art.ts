@@ -1098,10 +1098,47 @@ export function breathingFigure(strip: Rgba): { body: Rgba; blink: Rgba | null }
   return { body: stacked(strip, squashed(strip)), blink: blink ? stacked(blink, squashed(blink)) : null };
 }
 
-/** The one-picture fallback: key out, fit to the stage's size in a 52×52 frame, reduce the palette, and make the three-frame strip at 2× (312 × 104). Returns null when nothing is left after keying or speck removal (a blank or all-background picture). */
+// ponytail: both limits come from seven test paintings (flat backgrounds: at most 8% of the edge left and an outline
+// ratio of 4-6; gradient and paper: 56%; a forest scene: ratio 44). Tune them from real failures if a good painting
+// is refused.
+/** The most of a keyed picture's edge pixels that may stay: more means its background was not one flat colour. */
+const MAX_EDGE_LEFT = 0.25;
+/** The most outline pixels a keyed picture may have per square root of its kept pixels: more means the cut-out is
+ *  ragged scraps of a busy background. */
+const MAX_OUTLINE_RATIO = 20;
+
+/** Whether keying left one clean creature, not a background that was only partly taken away. */
+function cleanCutout(keyed: Rgba): boolean {
+  const { width, height, data } = keyed;
+  const kept = (p: number) => data[p * 4 + 3]! > 0;
+  let edge = 0;
+  let edgeKept = 0;
+  let area = 0;
+  let outline = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const p = y * width + x;
+      const onEdge = x === 0 || y === 0 || x === width - 1 || y === height - 1;
+      if (onEdge) edge++;
+      if (!kept(p)) continue;
+      area++;
+      if (onEdge) edgeKept++;
+      if (
+        (x > 0 && !kept(p - 1)) ||
+        (x < width - 1 && !kept(p + 1)) ||
+        (y > 0 && !kept(p - width)) ||
+        (y < height - 1 && !kept(p + width))
+      )
+        outline++;
+    }
+  }
+  return edgeKept <= edge * MAX_EDGE_LEFT && outline <= Math.sqrt(area) * MAX_OUTLINE_RATIO;
+}
+
+/** The one-picture fallback: key out, fit to the stage's size in a 52×52 frame, reduce the palette, and make the three-frame strip at 2× (312 × 104). Returns null when nothing is left after keying or speck removal (a blank or all-background picture), or when the background was not cleanly taken away (see cleanCutout). */
 export function formFromPainting(image: Rgba, stage: SaucelingStage): Rgba | null {
   const keyed = keyOutBackground(image);
-  if (!contentBounds(keyed)) return null;
+  if (!contentBounds(keyed) || !cleanCutout(keyed)) return null;
   const frame = reducePalette([fitToFrame(keyed, FORM_SIZES[stage])])[0]!;
   // Speck removal can leave nothing of a picture that was only specks.
   if (!contentBounds(frame)) return null;
