@@ -25,6 +25,7 @@ export const LIMITS = {
   chapterWords: { min: 100, max: 20_000 },
   targetWords: { min: 1_000, max: 2_000_000 },
   keepFullChapters: { min: 0, max: 50 },
+  authorNoteDepth: { min: 0, max: 100 },
   fontSize: { min: 12, max: 36 },
   chaptersPerStory: 2_000,
 } as const;
@@ -85,6 +86,11 @@ export interface StorySettings {
   continueMessage: string;
   /** The sticky note: the author's instructions for the next chapter. */
   authorNote: string;
+  /**
+   * Where the note goes, as a user message, like Roleplay's Author's Notes: 0 = right before the continue message,
+   * 1 = before the latest chapter, and so on. It never moves above the system prompt.
+   */
+  authorNoteDepth: number;
   clearNoteAfterChapter: boolean;
   /** Ask the model to open each chapter with a "# Title" heading. */
   chapterTitles: boolean;
@@ -219,6 +225,7 @@ export function defaultStorySettings(): StorySettings {
     notes: "",
     continueMessage: DEFAULT_CONTINUE_MESSAGE,
     authorNote: "",
+    authorNoteDepth: 0,
     clearNoteAfterChapter: false,
     chapterTitles: true,
     timeline: [],
@@ -324,6 +331,7 @@ export function normalizeStorySettings(patch: unknown, base: StorySettings = def
     notes: text(input.notes, LIMITS.longText, base.notes),
     continueMessage: text(input.continueMessage, LIMITS.longText, base.continueMessage),
     authorNote: text(input.authorNote, LIMITS.longText, base.authorNote),
+    authorNoteDepth: integer(input.authorNoteDepth, LIMITS.authorNoteDepth, base.authorNoteDepth),
     clearNoteAfterChapter:
       typeof input.clearNoteAfterChapter === "boolean" ? input.clearNoteAfterChapter : base.clearNoteAfterChapter,
     chapterTitles: typeof input.chapterTitles === "boolean" ? input.chapterTitles : base.chapterTitles,

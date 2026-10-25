@@ -187,6 +187,12 @@ jobs:
           npx tsx tests/long-term-memory-source-pagination.regression.ts
           npx tsx tests/long-term-memory-debug-activity.regression.ts
 
+          # Story Writer storage, prompt assembly, Markdown round trips and the reader's page geometry.
+          npx tsx tests/story-writer-store.regression.ts
+          npx tsx tests/story-writer-prompt.regression.ts
+          npx tsx tests/story-writer-markdown.regression.ts
+          npx tsx tests/story-writer-reader-layout.regression.ts
+
           # Pull request gate topology and the owner approval evaluator.
           node scripts/validate-pr-triage.mjs
           node scripts/test-owner-approval.mjs

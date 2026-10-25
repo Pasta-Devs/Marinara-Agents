@@ -3728,6 +3728,111 @@
     },
     {
       "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 386
+        },
+        "builtAgainst": {
+          "engineVersion": "2.5.1",
+          "engineCommit": "1bf5a7dc477bddce8e7def36fbf24e4a44f7c06f"
+        },
+        "id": "story-writer",
+        "name": "Story Writer",
+        "version": "0.1.0",
+        "description": "A co-writing book. Pick a connection, your characters, personas and lorebooks, describe the story, and the model writes it chapter by chapter while you guide it with an author's note and edit anything on the page. Install it, restart Marinara Engine when prompted, then open Home → Story Writer.",
+        "engine": {
+          "min": "2.5.1",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "home-browser-tab"
+          ],
+          "homeBrowserTab": {
+            "label": "Story Writer",
+            "ariaLabel": "Open Story Writer",
+            "iconPaths": [
+              "story-writer-icon.png"
+            ]
+          },
+          "assets": {
+            "paths": [
+              "story-writer-mari.webp",
+              "wood-desk.webp",
+              "paper-light.webp",
+              "paper-dark.webp"
+            ]
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "498b13d0c7f04f59546aab5d16d4c6806335bcb4b7eef9e9bcf46008b0e7a3a3",
+            "bytes": 666
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "9a2f8604e13b25a5a51d231f4699ebcb5401616d731a368006d827964c7c9be0",
+            "bytes": 13511
+          },
+          {
+            "path": "client.js",
+            "sha256": "20a2e1e094f9ff43cf346b34defb3314dcb5d092e938f211d6c16d16c3958aa3",
+            "bytes": 207275
+          },
+          {
+            "path": "story-writer-icon.png",
+            "sha256": "fdf24e26aaea6611faf1038b92fe95762abb240c2861c13496930a015d1cce9c",
+            "bytes": 61634
+          },
+          {
+            "path": "story-writer-mari.webp",
+            "sha256": "97dd7fe0c5609602e1abcdb628d38e59ad30077945346900035d6cb89c302da7",
+            "bytes": 174988
+          },
+          {
+            "path": "wood-desk.webp",
+            "sha256": "6a5b8a51f584c5062999eea3dfe90fb74facb1cc4a3b55ecdb119f5b5a89d913",
+            "bytes": 91530
+          },
+          {
+            "path": "paper-light.webp",
+            "sha256": "61b26fa8903d0213eeea702b02d34a2853356b7f60932ab0e789ef50a6064350",
+            "bytes": 43156
+          },
+          {
+            "path": "paper-dark.webp",
+            "sha256": "3889e55f4c6513a1cf0424344eb17d10d8fd4142a0288398c06bf610d984cecb",
+            "bytes": 14878
+          }
+        ],
+        "permissions": [
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/story-writer.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/story-writer-0.1.0.zip",
+        "sha256": "69e4946c5e0dfaae3bb7119275ebd94eef4b33aa0f0551eb8e03a6c8241f0287",
+        "bytes": 611110
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/story-writer/README.md"
+    },
+    {
+      "manifest": {
         "schemaVersion": 1,
         "id": "storyboard",
         "name": "Storyboard",
