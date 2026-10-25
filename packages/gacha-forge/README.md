@@ -54,7 +54,7 @@ Character conversations keep saved messages in the same window after **Close and
 
 Initial forging and later story writing read the current linked character card’s complete Description, Personality, Backstory and Appearance. Card Scenario, greetings and example dialogue are excluded. Existing saved scenes stay as written.
 
-Writing’s question mark controls keep their compact size. Tap to read an explanation below its label, then tap again to close it.
+Writing’s question mark controls keep their compact size. On mobile, tap to read the explanation in a separate overlay above Settings, then tap outside it to dismiss it.
 
 ## Automatic continuity (1.14.0)
 
