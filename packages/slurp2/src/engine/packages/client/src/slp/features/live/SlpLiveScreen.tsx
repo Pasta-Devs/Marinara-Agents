@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { newRequestId } from "../../base/state/slp-request-id";
 import { useTranslation } from "react-i18next";
 import { SlpCoinText } from "../../modules/coin/SlpCoin";
-import { Avatar } from "../../base/chrome/SlpChrome";
+import { Avatar, useSlpMediaQuery } from "../../base/chrome/SlpChrome";
+import { SlpSheet } from "../../modules/chrome/SlpSheet";
 import { useSlpLiveActions, useSlpLiveShow } from "./slp-live-hooks";
 import type { SlpLiveMenuItem, SlpLiveShow } from "./slp-live-contract";
-import { SlpLiveChat } from "./SlpLiveChat";
+import { SlpLiveChat, SlpLiveChatPeek } from "./SlpLiveChat";
 import { SlpLiveMenuSheet } from "./SlpLiveMenuSheet";
 import { SlpLiveStage } from "./SlpLiveStage";
 
@@ -77,6 +78,8 @@ function SlpLiveContent({
   const [customAmount, setCustomAmount] = useState("");
   const [narration, setNarration] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const wide = useSlpMediaQuery("(min-width: 1024px)");
   const [customOpen, setCustomOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -206,8 +209,243 @@ function SlpLiveContent({
       ))}
     </div>
   ) : null;
+  // Phone: everything below rides over the show as glass; wide screens keep the chat column.
+  const surface = wide
+    ? "bg-[var(--card)] ring-[var(--border)]"
+    : "bg-black/35 text-white ring-white/20 backdrop-blur-md placeholder:text-white/60";
+  const chatForm = (
+    <form onSubmit={sendChat} className="flex gap-2">
+      <input
+        aria-label={t("ui.slurp.live.chatLabel")}
+        value={message}
+        onChange={(event) => setMessage(event.target.value)}
+        maxLength={1000}
+        disabled={chat.isPending}
+        placeholder={t("ui.slurp.live.chatPlaceholder")}
+        className={`min-h-11 min-w-0 flex-1 rounded-full px-4 text-sm ring-1 ${surface}`}
+      />
+      <button
+        disabled={!message.trim() || chat.isPending}
+        className="min-h-11 rounded-full bg-[var(--noodle-accent)] px-5 text-sm font-semibold text-[var(--noodle-accent-foreground)] disabled:opacity-50"
+      >
+        {t("ui.slurp.live.send")}
+      </button>
+    </form>
+  );
+  const canTalk = !!personaId && (!privateActive || privateViewer);
+  const side = (
+    <>
+      {host && personaId && privateActive && (
+        <div
+          role="status"
+          className={`px-4 py-2 text-sm font-semibold text-[var(--slurp-violet)] ${
+            wide
+              ? "border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--slurp-violet)_14%,transparent)]"
+              : "mx-3 rounded-2xl bg-black/45 backdrop-blur-md"
+          }`}
+        >
+          {privateViewer
+            ? t("ui.slurp.live.privateTimer", {
+                count: Math.max(0, Math.ceil((Date.parse(show.private!.until) - now) / 1000)),
+              })
+            : t("ui.slurp.live.inPrivate")}
+        </div>
+      )}
+      {(!privateActive || privateViewer) && show.queue.some((order) => !order.served) && (
+        <div
+          className={`flex items-center gap-2 overflow-x-auto px-3 py-2 ${wide ? "border-b border-[var(--border)]" : ""}`}
+        >
+          <b
+            className={`shrink-0 text-xs uppercase tracking-wide ${wide ? "text-[var(--muted-foreground)]" : "text-white/70"}`}
+          >
+            {t("ui.slurp.live.nextUp")}
+          </b>
+          {show.queue
+            .filter((order) => !order.served)
+            .map((order) => (
+              <div
+                key={order.requestId}
+                className="flex shrink-0 items-center gap-2 rounded-full bg-[color-mix(in_srgb,var(--slurp-violet)_16%,transparent)] px-3 py-1 text-xs font-semibold text-[var(--slurp-violet)]"
+              >
+                <span>{order.label}</span>
+                {host && personaId && (
+                  <button
+                    type="button"
+                    disabled={done.isPending}
+                    onClick={() => done.mutate({ personaId, requestId: order.requestId })}
+                    className="min-h-8 rounded-full bg-[var(--slurp-violet)] px-2 font-bold text-white"
+                  >
+                    {t("ui.slurp.live.done")}
+                  </button>
+                )}
+              </div>
+            ))}
+        </div>
+      )}
+      {wide ? (
+        <SlpLiveChat
+          show={show}
+          creatorName={creatorName}
+          avatarUrl={avatarUrl}
+          elapsed={elapsed}
+          t={t}
+          personaId={personaId}
+        />
+      ) : (
+        <SlpLiveChatPeek
+          show={show}
+          elapsed={elapsed}
+          personaId={personaId}
+          creatorName={creatorName}
+          onOpen={() => setChatOpen(true)}
+          t={t}
+        />
+      )}
+      {!personaId && (
+        <p
+          className={`px-3 py-2 text-sm ${wide ? "border-t border-[var(--border)] text-[var(--muted-foreground)]" : "text-white/80"}`}
+        >
+          {t("ui.noodleshell.pickAPersona")}
+        </p>
+      )}
+      {canTalk && (
+        <footer
+          className={`space-y-2 px-3 pt-2.5 pb-[calc(0.75rem+var(--slp-nav-space),env(safe-area-inset-bottom)))] lg:pb-2.5 ${
+            wide ? "border-t border-[var(--border)] bg-transparent" : "bg-gradient-to-t from-black/60 to-transparent"
+          }`}
+        >
+          {host ? (
+            <form onSubmit={sendNarration} className="flex gap-2">
+              <input
+                aria-label={t("ui.slurp.live.narrationLabel")}
+                value={narration}
+                onChange={(event) => setNarration(event.target.value)}
+                maxLength={500}
+                disabled={!personaId || narrate.isPending}
+                placeholder={t("ui.slurp.live.narrationPlaceholder")}
+                className={`min-h-11 min-w-0 flex-1 rounded-full px-4 text-sm ring-1 ${surface}`}
+              />
+              <button
+                disabled={!personaId || !narration.trim() || narrate.isPending}
+                className="min-h-11 rounded-full bg-[var(--noodle-accent)] px-5 text-sm font-semibold text-[var(--noodle-accent-foreground)] disabled:opacity-50"
+              >
+                {t("ui.slurp.live.send")}
+              </button>
+            </form>
+          ) : (
+            <>
+              {!privateViewer && (
+                <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-0.5">
+                  <button
+                    type="button"
+                    disabled={tip.isPending}
+                    onClick={() => tipLive(topTip?.amount ?? prices[0]!)}
+                    className={`${chip} bg-[linear-gradient(135deg,var(--noodle-accent),var(--slurp-violet))] text-white ring-transparent`}
+                  >
+                    <SlpCoinText>
+                      {topTip
+                        ? t("ui.slurp.live.matchTop", { amount: topTip.amount ?? prices[0] })
+                        : t("ui.slurp.live.firstTipper", { amount: prices[0] })}
+                    </SlpCoinText>
+                  </button>
+                  {prices.map((amount) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      disabled={tip.isPending}
+                      onClick={() => tipLive(amount)}
+                      className={`${chip} ${
+                        wide
+                          ? "bg-[color-mix(in_srgb,var(--slurp-warning)_16%,transparent)] text-[var(--foreground)]"
+                          : "bg-black/35 text-white backdrop-blur-md"
+                      } ring-[color-mix(in_srgb,var(--slurp-warning)_45%,transparent)]`}
+                    >
+                      <SlpCoinText>{`${amount} <coin/>`}</SlpCoinText>
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    aria-expanded={customOpen}
+                    onClick={() => setCustomOpen((open) => !open)}
+                    className={`${chip} ${surface}`}
+                  >
+                    {t("ui.slurp.live.customTip")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMenuOpen(true)}
+                    className={`${chip} ${
+                      wide
+                        ? "bg-[color-mix(in_srgb,var(--slurp-violet)_16%,transparent)] text-[var(--slurp-violet)]"
+                        : "bg-[color-mix(in_srgb,var(--slurp-violet)_55%,transparent)] text-white backdrop-blur-md"
+                    } ring-[color-mix(in_srgb,var(--slurp-violet)_40%,transparent)]`}
+                  >
+                    {t("ui.slurp.live.openMenu")}
+                  </button>
+                  {!privateActive && (
+                    <button
+                      type="button"
+                      disabled={privateShow.isPending}
+                      onClick={() => {
+                        const requestId = privateRequestId ?? newRequestId();
+                        setPrivateRequestId(requestId);
+                        privateShow.mutate({ personaId, requestId }, { onSuccess: () => setPrivateRequestId(null) });
+                      }}
+                      className={`${chip} ${surface}`}
+                    >
+                      <SlpCoinText>{t("ui.slurp.live.goPrivate", { price: show.privatePrice ?? 0 })}</SlpCoinText>
+                    </button>
+                  )}
+                </div>
+              )}
+              {privateViewer && (
+                <button
+                  type="button"
+                  disabled={privateShow.isPending}
+                  onClick={() => {
+                    const requestId = privateRequestId ?? newRequestId();
+                    setPrivateRequestId(requestId);
+                    privateShow.mutate({ personaId, requestId }, { onSuccess: () => setPrivateRequestId(null) });
+                  }}
+                  className={`${chip} w-full bg-[color-mix(in_srgb,var(--slurp-violet)_16%,transparent)] text-[var(--slurp-violet)] ring-[color-mix(in_srgb,var(--slurp-violet)_40%,transparent)]`}
+                >
+                  {t("ui.slurp.live.extend")}
+                </button>
+              )}
+              {customOpen && !privateViewer && (
+                <div className="flex gap-2">
+                  <label className="sr-only" htmlFor="live-custom-tip">
+                    {t("ui.slurp.live.customTip")}
+                  </label>
+                  <input
+                    id="live-custom-tip"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={customAmount}
+                    onChange={(event) => setCustomAmount(event.target.value)}
+                    placeholder={t("ui.slurp.live.customTip")}
+                    className={`min-h-11 min-w-0 flex-1 rounded-full px-4 text-sm ring-1 ${surface}`}
+                  />
+                  <button
+                    type="button"
+                    disabled={tip.isPending || !Number.isInteger(Number(customAmount)) || Number(customAmount) < 1}
+                    onClick={() => tipLive(Number(customAmount))}
+                    className="min-h-11 rounded-full bg-[var(--slurp-warning)] px-5 text-sm font-bold text-neutral-950 disabled:opacity-50"
+                  >
+                    {t("ui.slurp.live.tipCustom")}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+          {chatForm}
+        </footer>
+      )}
+    </>
+  );
   return (
-    <main className="mx-auto flex h-full w-full max-w-lg flex-col lg:max-w-6xl lg:flex-row lg:gap-4 lg:p-4">
+    <main className="relative mx-auto flex h-full w-full max-w-lg flex-col lg:max-w-6xl lg:flex-row lg:gap-4 lg:p-4">
       <SlpLiveStage
         show={show}
         elapsed={elapsed}
@@ -220,199 +458,33 @@ function SlpLiveContent({
         onBack={onBack}
         actions={stageActions}
         t={t}
-      />
-      <div className="flex min-h-0 flex-1 flex-col lg:w-[400px] lg:flex-none lg:overflow-hidden lg:rounded-3xl lg:bg-[var(--card)] lg:ring-1 lg:ring-[var(--border)]">
-        {!host && personaId && privateActive && (
-          <div
-            role="status"
-            className="border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--slurp-violet)_14%,transparent)] px-4 py-2 text-sm font-semibold text-[var(--slurp-violet)]"
-          >
-            {privateViewer
-              ? t("ui.slurp.live.privateTimer", {
-                  count: Math.max(0, Math.ceil((Date.parse(show.private!.until) - now) / 1000)),
-                })
-              : t("ui.slurp.live.inPrivate")}
+      >
+        {!wide && side}
+      </SlpLiveStage>
+      {wide && (
+        <div className="flex min-h-0 w-[400px] flex-none flex-col overflow-hidden rounded-3xl bg-[var(--card)] ring-1 ring-[var(--border)]">
+          {side}
+        </div>
+      )}
+      {chatOpen && !wide && (
+        <SlpSheet
+          open
+          onClose={() => setChatOpen(false)}
+          title={t("ui.slurp.live.chatTitle")}
+          footer={canTalk ? chatForm : undefined}
+        >
+          <div className="flex h-[60dvh] min-h-0 flex-col">
+            <SlpLiveChat
+              show={show}
+              creatorName={creatorName}
+              avatarUrl={avatarUrl}
+              elapsed={elapsed}
+              t={t}
+              personaId={personaId}
+            />
           </div>
-        )}
-        {(!privateActive || privateViewer) && show.queue.some((order) => !order.served) && (
-          <div className="flex items-center gap-2 overflow-x-auto border-b border-[var(--border)] px-3 py-2">
-            <b className="shrink-0 text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
-              {t("ui.slurp.live.nextUp")}
-            </b>
-            {show.queue
-              .filter((order) => !order.served)
-              .map((order) => (
-                <div
-                  key={order.requestId}
-                  className="flex shrink-0 items-center gap-2 rounded-full bg-[color-mix(in_srgb,var(--slurp-violet)_16%,transparent)] px-3 py-1 text-xs font-semibold text-[var(--slurp-violet)]"
-                >
-                  <span>{order.label}</span>
-                  {host && personaId && (
-                    <button
-                      type="button"
-                      disabled={done.isPending}
-                      onClick={() => done.mutate({ personaId, requestId: order.requestId })}
-                      className="min-h-8 rounded-full bg-[var(--slurp-violet)] px-2 font-bold text-white"
-                    >
-                      {t("ui.slurp.live.done")}
-                    </button>
-                  )}
-                </div>
-              ))}
-          </div>
-        )}
-        <SlpLiveChat
-          show={show}
-          creatorName={creatorName}
-          avatarUrl={avatarUrl}
-          elapsed={elapsed}
-          t={t}
-          personaId={personaId}
-        />
-        {!personaId && (
-          <p className="border-t border-[var(--border)] px-3 py-2 text-sm text-[var(--muted-foreground)]">
-            {t("ui.noodle.noodleshell.pickAPersona")}
-          </p>
-        )}
-        {personaId && (!privateActive || privateViewer) && (
-          <footer className="space-y-2 border-t border-[var(--border)] bg-[var(--background)] px-3 pt-2.5 pb-[calc(0.75rem+var(--slp-nav-space,env(safe-area-inset-bottom)))] lg:bg-transparent">
-            {host ? (
-              <form onSubmit={sendNarration} className="flex gap-2">
-                <input
-                  aria-label={t("ui.slurp.live.narrationLabel")}
-                  value={narration}
-                  onChange={(event) => setNarration(event.target.value)}
-                  maxLength={500}
-                  disabled={!personaId || narrate.isPending}
-                  placeholder={t("ui.slurp.live.narrationPlaceholder")}
-                  className="min-h-11 min-w-0 flex-1 rounded-full bg-[var(--card)] px-4 text-sm ring-1 ring-[var(--border)]"
-                />
-                <button
-                  disabled={!personaId || !narration.trim() || narrate.isPending}
-                  className="min-h-11 rounded-full bg-[var(--noodle-accent)] px-5 text-sm font-semibold text-[var(--noodle-accent-foreground)] disabled:opacity-50"
-                >
-                  {t("ui.slurp.live.send")}
-                </button>
-              </form>
-            ) : (
-              <>
-                {!privateViewer && (
-                  <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-0.5">
-                    <button
-                      type="button"
-                      disabled={tip.isPending}
-                      onClick={() => tipLive(topTip?.amount ?? prices[0]!)}
-                      className={`${chip} bg-[linear-gradient(135deg,var(--noodle-accent),var(--slurp-violet))] text-white ring-transparent`}
-                    >
-                      <SlpCoinText>
-                        {topTip
-                          ? t("ui.slurp.live.matchTop", { amount: topTip.amount ?? prices[0] })
-                          : t("ui.slurp.live.firstTipper", { amount: prices[0] })}
-                      </SlpCoinText>
-                    </button>
-                    {prices.map((amount) => (
-                      <button
-                        key={amount}
-                        type="button"
-                        disabled={tip.isPending}
-                        onClick={() => tipLive(amount)}
-                        className={`${chip} bg-[color-mix(in_srgb,var(--slurp-warning)_16%,transparent)] text-[var(--foreground)] ring-[color-mix(in_srgb,var(--slurp-warning)_45%,transparent)]`}
-                      >
-                        <SlpCoinText>{`${amount} <coin/>`}</SlpCoinText>
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      aria-expanded={customOpen}
-                      onClick={() => setCustomOpen((open) => !open)}
-                      className={`${chip} bg-[var(--card)] ring-[var(--border)]`}
-                    >
-                      {t("ui.slurp.live.customTip")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMenuOpen(true)}
-                      className={`${chip} bg-[color-mix(in_srgb,var(--slurp-violet)_16%,transparent)] text-[var(--slurp-violet)] ring-[color-mix(in_srgb,var(--slurp-violet)_40%,transparent)]`}
-                    >
-                      {t("ui.slurp.live.openMenu")}
-                    </button>
-                    {!privateActive && (
-                      <button
-                        type="button"
-                        disabled={privateShow.isPending}
-                        onClick={() => {
-                          const requestId = privateRequestId ?? newRequestId();
-                          setPrivateRequestId(requestId);
-                          privateShow.mutate({ personaId, requestId }, { onSuccess: () => setPrivateRequestId(null) });
-                        }}
-                        className={`${chip} bg-[var(--card)] ring-[var(--border)]`}
-                      >
-                        <SlpCoinText>{t("ui.slurp.live.goPrivate", { price: show.privatePrice ?? 0 })}</SlpCoinText>
-                      </button>
-                    )}
-                  </div>
-                )}
-                {privateViewer && (
-                  <button
-                    type="button"
-                    disabled={privateShow.isPending}
-                    onClick={() => {
-                      const requestId = privateRequestId ?? newRequestId();
-                      setPrivateRequestId(requestId);
-                      privateShow.mutate({ personaId, requestId }, { onSuccess: () => setPrivateRequestId(null) });
-                    }}
-                    className={`${chip} w-full bg-[color-mix(in_srgb,var(--slurp-violet)_16%,transparent)] text-[var(--slurp-violet)] ring-[color-mix(in_srgb,var(--slurp-violet)_40%,transparent)]`}
-                  >
-                    {t("ui.slurp.live.extend")}
-                  </button>
-                )}
-                {customOpen && !privateViewer && (
-                  <div className="flex gap-2">
-                    <label className="sr-only" htmlFor="live-custom-tip">
-                      {t("ui.slurp.live.customTip")}
-                    </label>
-                    <input
-                      id="live-custom-tip"
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={customAmount}
-                      onChange={(event) => setCustomAmount(event.target.value)}
-                      placeholder={t("ui.slurp.live.customTip")}
-                      className="min-h-11 min-w-0 flex-1 rounded-full bg-[var(--card)] px-4 text-sm ring-1 ring-[var(--border)]"
-                    />
-                    <button
-                      type="button"
-                      disabled={tip.isPending || !Number.isInteger(Number(customAmount)) || Number(customAmount) < 1}
-                      onClick={() => tipLive(Number(customAmount))}
-                      className="min-h-11 rounded-full bg-[var(--slurp-warning)] px-5 text-sm font-bold text-neutral-950 disabled:opacity-50"
-                    >
-                      {t("ui.slurp.live.tipCustom")}
-                    </button>
-                  </div>
-                )}
-                <form onSubmit={sendChat} className="flex gap-2">
-                  <input
-                    aria-label={t("ui.slurp.live.chatLabel")}
-                    value={message}
-                    onChange={(event) => setMessage(event.target.value)}
-                    maxLength={1000}
-                    disabled={chat.isPending}
-                    placeholder={t("ui.slurp.live.chatPlaceholder")}
-                    className="min-h-11 min-w-0 flex-1 rounded-full bg-[var(--card)] px-4 text-sm ring-1 ring-[var(--border)]"
-                  />
-                  <button
-                    disabled={!message.trim() || chat.isPending}
-                    className="min-h-11 rounded-full bg-[var(--noodle-accent)] px-5 text-sm font-semibold text-[var(--noodle-accent-foreground)] disabled:opacity-50"
-                  >
-                    {t("ui.slurp.live.send")}
-                  </button>
-                </form>
-              </>
-            )}
-          </footer>
-        )}
-      </div>
+        </SlpSheet>
+      )}
       {menuOpen && (
         <SlpLiveMenuSheet
           items={show.menu}

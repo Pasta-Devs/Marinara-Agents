@@ -24,6 +24,8 @@ export type SlpLiveOrder = {
   personaId?: string;
   at: number;
   served: boolean;
+  /** The segment that performs it once `served`. */
+  servedIn?: number;
   requestId: string;
   status?: "pending" | "paid";
 };

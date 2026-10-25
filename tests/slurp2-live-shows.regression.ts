@@ -244,4 +244,12 @@ assert.match(liveScreen, /!personaId && \(/);
 assert.match(liveChat, /filter\(\(order\) => order\.at <= elapsed\)/);
 const postCard = slurp2Source("packages/slurp2/src/engine/packages/client/src/slp/modules/post/SlpPostCard.tsx");
 assert.match(postCard, /ctx\.liveHostId === post\.authorAccountId/);
+// Show-first stage: the act title, her lines and the Now/Next order sit on the show; act lines stay out of chat.
+const liveStage = slurp2Source("packages/slurp2/src/engine/packages/client/src/slp/features/live/SlpLiveStage.tsx");
+assert.match(liveStage, /line\.kind === "act"/);
+assert.match(liveStage, /order\.served && order\.servedIn === segment/);
+assert.match(liveStage, /event\.host && !event\.join/, "her live replies show on stage");
+assert.match(liveChat, /line\.kind !== "act"/, "act titles never show as chat lines");
+assert.match(liveScreen, /<SlpLiveChatPeek/);
+assert.match(liveScreen, /<SlpSheet\s+open/, "the full chat opens as a sheet on phones");
 console.log("slurp2 live shows: ok");

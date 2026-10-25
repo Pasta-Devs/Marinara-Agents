@@ -4,6 +4,7 @@ import { SlpCoinText } from "../../modules/coin/SlpCoin";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { slpLiveBigTip, slpLivePictureUrl } from "./SlpLiveStage";
 import { slpLiveReplyPending } from "./slp-live-hooks";
+import { SlpLiveSpokenText } from "../../modules/live/SlpLiveSpokenText";
 
 type ChatItem = {
   at: number;
@@ -51,6 +52,33 @@ function catchUpLines(
   ];
 }
 
+export function slpLiveChatItems(show: SlpLiveShow, elapsed: number, personaId: string | null, creatorName: string) {
+  return [
+    ...show.script
+      .filter((line) => line.at <= elapsed && line.kind !== "act")
+      .map((line): ChatItem => ({
+        at: line.at,
+        kind: line.kind === "picture" ? "picture" : line.kind === "narration" ? "host" : "crowd",
+        name: line.name ?? creatorName,
+        text: line.text,
+        mediaId: line.mediaId,
+      })),
+    ...show.events
+      .filter((event) => event.at <= elapsed && !event.join)
+      .map((event): ChatItem => ({
+        at: event.at,
+        kind: event.kind === "tip" ? "tip" : "crowd",
+        name: event.name,
+        text: event.kind === "tip" ? String(event.amount ?? 0) : event.text,
+        amount: event.amount,
+        mine: !!personaId && event.personaId === personaId,
+      })),
+    ...show.queue
+      .filter((order) => order.at <= elapsed)
+      .map((order): ChatItem => ({ at: order.at, kind: "menu", name: order.name, text: order.label })),
+  ].sort((a, b) => a.at - b.at);
+}
+
 export function SlpLiveChat({
   show,
   creatorName,
@@ -75,30 +103,7 @@ export function SlpLiveChat({
   // Only a viewer who opens the show after its first 2 minutes gets the catch-up.
   const [joinedLate] = useState(() => !show.endedAt && elapsed > 120_000);
   const catchUp = joinedLate ? catchUpLines(show, elapsed, t) : [];
-  const lines: ChatItem[] = [
-    ...show.script
-      .filter((line) => line.at <= elapsed)
-      .map((line): ChatItem => ({
-        at: line.at,
-        kind: line.kind === "picture" ? "picture" : line.kind === "narration" ? "host" : "crowd",
-        name: line.name ?? creatorName,
-        text: line.text,
-        mediaId: line.mediaId,
-      })),
-    ...show.events
-      .filter((event) => event.at <= elapsed && !event.join)
-      .map((event): ChatItem => ({
-        at: event.at,
-        kind: event.kind === "tip" ? "tip" : "crowd",
-        name: event.name,
-        text: event.kind === "tip" ? String(event.amount ?? 0) : event.text,
-        amount: event.amount,
-        mine: !!personaId && event.personaId === personaId,
-      })),
-    ...show.queue
-      .filter((order) => order.at <= elapsed)
-      .map((order): ChatItem => ({ at: order.at, kind: "menu", name: order.name, text: order.label })),
-  ].sort((a, b) => a.at - b.at);
+  const lines = slpLiveChatItems(show, elapsed, personaId, creatorName);
   const lineKeys = JSON.stringify(lines.map((line) => [line.at, line.kind, line.name, line.text]));
   useEffect(() => {
     const currentKeys = (JSON.parse(lineKeys) as [number, string, string, string][]).map((line) =>
@@ -173,7 +178,7 @@ export function SlpLiveChat({
             <Avatar account={{ displayName: creatorName, avatarUrl: avatarUrl ?? null }} size="sm" />
             <div className="min-w-0 rounded-2xl rounded-tl-md bg-[color-mix(in_srgb,var(--noodle-accent)_14%,var(--card))] px-3 py-2 text-sm ring-1 ring-[color-mix(in_srgb,var(--noodle-accent)_30%,transparent)]">
               <strong className="mb-0.5 block text-xs text-[var(--noodle-accent)]">{creatorName}</strong>
-              {line.text}
+              <SlpLiveSpokenText text={line.text} />
             </div>
           </article>
         ) : line.kind === "tip" ? (
@@ -200,7 +205,9 @@ export function SlpLiveChat({
             className={`text-[13px] leading-snug ${line.mine ? "-mx-1.5 rounded-lg bg-[color-mix(in_srgb,var(--noodle-accent)_10%,transparent)] px-1.5 py-0.5" : ""}`}
           >
             <b className={line.mine ? "text-[var(--noodle-accent)]" : nameColor(line.name)}>{line.name}</b>{" "}
-            <span>{line.text}</span>
+            <span>
+              <SlpLiveSpokenText text={line.text} />
+            </span>
           </p>
         ),
       )}
@@ -219,5 +226,61 @@ export function SlpLiveChat({
         </button>
       )}
     </section>
+  );
+}
+
+/** Phone: the last few chat lines see-through over the show, fading out at the top; a tap opens the full chat. */
+export function SlpLiveChatPeek({
+  show,
+  elapsed,
+  personaId,
+  creatorName,
+  onOpen,
+  t,
+}: {
+  show: SlpLiveShow;
+  elapsed: number;
+  personaId: string | null;
+  creatorName: string;
+  onOpen: () => void;
+  t: (key: string, values?: Record<string, unknown>) => string;
+}) {
+  // Her lines and the pictures are on the stage itself; the peek is the room around her.
+  const lines = slpLiveChatItems(show, elapsed, personaId, creatorName)
+    .filter((line) => line.kind !== "picture" && line.kind !== "host")
+    .slice(-5);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={t("ui.slurp.live.openChat")}
+      className="slp-live-chat-fade flex max-h-36 min-h-11 w-full flex-col justify-end gap-0.5 overflow-hidden px-3 pb-1 pt-6 text-left text-white"
+    >
+      {lines.map((line, index) =>
+        line.kind === "tip" ? (
+          <span
+            key={`${line.at}-${index}`}
+            className="slp-live-fade w-fit shrink-0 rounded-full bg-[color-mix(in_srgb,var(--slurp-warning)_85%,transparent)] px-2.5 py-0.5 text-xs font-bold text-neutral-950"
+          >
+            <SlpCoinText>{t("ui.slurp.live.tipEvent", { name: line.name, amount: line.text })}</SlpCoinText>
+          </span>
+        ) : line.kind === "menu" ? (
+          <span
+            key={`${line.at}-${index}`}
+            className="slp-live-fade w-fit shrink-0 rounded-full bg-[color-mix(in_srgb,var(--slurp-violet)_70%,transparent)] px-2.5 py-0.5 text-xs font-semibold"
+          >
+            {t("ui.slurp.live.menuEvent", { name: line.name, item: line.text })}
+          </span>
+        ) : (
+          <span
+            key={`${line.at}-${index}`}
+            className="slp-live-fade block shrink-0 text-[13px] leading-snug drop-shadow-[0_1px_3px_rgb(0_0_0/0.9)]"
+          >
+            <b className={line.mine ? "text-[var(--noodle-accent)]" : nameColor(line.name)}>{line.name}</b>{" "}
+            <SlpLiveSpokenText text={line.text} />
+          </span>
+        ),
+      )}
+    </button>
   );
 }
