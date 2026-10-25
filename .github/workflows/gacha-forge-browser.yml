@@ -69,15 +69,19 @@ jobs:
           MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
         shell: bash
         run: |
-          mapfile -t suites < <(rg --files tests | rg '^tests/package-gacha-forge-(seasonal-events|formation[^/]*)\.e2e\.ts$')
+          shopt -s nullglob
+          suites=()
+          for suite in tests/package-gacha-forge-seasonal-events.e2e.ts tests/package-gacha-forge-formation*.e2e.ts; do
+            if [[ -f "$suite" ]]; then suites+=("$suite"); fi
+          done
           test "${#suites[@]}" -gt 0
           node scripts/run-package-browser-tests.mjs gacha-forge "${suites[@]}" --workers=2
 
-      - name: Upload Playwright trace on failure
-        if: failure()
+      - name: Upload Gacha Forge browser proof
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: gacha-forge-browser-playwright-${{ github.run_attempt }}
+          name: gacha-forge-browser-proof-${{ github.run_attempt }}
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
