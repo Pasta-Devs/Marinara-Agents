@@ -100,9 +100,11 @@ export function useStageDirector({
   /** Freeze where the sprite is, even halfway through a move. */
   const freeze = useCallback(() => {
     const here = live.current.measureX();
+    // A stage hidden to no width cannot place it; it keeps where it was.
+    const width = live.current.stageArtWidth;
     setActor((current) => ({
       ...current,
-      x: here === null ? current.x : clampTarget(here, live.current.stageArtWidth),
+      x: here === null || width <= 0 ? current.x : clampTarget(here, width),
       moveMs: 0,
       steps: 1,
       pose: null,
@@ -241,10 +243,12 @@ export function useStageDirector({
     };
   }, [running, begin, stop, freeze]);
 
-  // The first measure puts the sprite in the middle; a resized stage keeps it on the stage.
+  // The first measure puts the sprite in the middle; a resized stage keeps it on the stage. A stage with no width (not
+  // measured yet, or hidden) leaves it where it is.
   const placed = useRef(false);
   useEffect(() => {
-    const first = !placed.current && stageArtWidth > 0;
+    if (stageArtWidth <= 0) return;
+    const first = !placed.current;
     if (first) placed.current = true;
     setActor((current) => {
       const x = enabled && !first ? clampTarget(current.x, stageArtWidth) : centreX(stageArtWidth);
