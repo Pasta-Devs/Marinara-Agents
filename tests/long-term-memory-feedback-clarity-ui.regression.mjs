@@ -464,6 +464,63 @@ assert.match(
   settings,
   /@container ltm-memory-settings \(min-width: 40rem\) \{[^}]*\}\s*\[data-ltm-prompt-template-grid\] \{\s*grid-template-columns: 12rem minmax\(0, 1fr\);/u,
 );
+// #1673: the panel's width decides these, so a narrow panel on a wide window keeps the compact layout.
+assert.doesNotMatch(settings, /sm:grid-cols-4/u);
+assert.match(settings, /\[data-ltm-settings-tab-rail\] \{\s*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/u);
+assert.equal((settings.match(/<div\s+data-ltm-recall-grid\s+className="grid gap-2"\s*>/gu) ?? []).length, 2);
+assert.match(settings, /\[data-ltm-recall-grid\] \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/u);
+assert.doesNotMatch(detail, /sm:min-h-9|sm:min-w-0|hidden sm:inline|md:flex/u);
+assert.match(detail, /\[data-ltm-add-label\] \{\s*display: inline;/u);
+assert.match(detail, /\[data-ltm-surface="vault-health-pill"\] \{\s*display: flex;/u);
+assert.match(detail, /\[data-ltm-health-detail\] \{\s*display: inline;/u);
+assert.doesNotMatch(activity, /sm:grid-cols-2/u);
+assert.match(activity, /<dl data-ltm-debug-settings-grid className=/u);
+assert.match(activity, /<div data-ltm-debug-facts-grid className=/u);
+assert.match(
+  activity,
+  /@container ltm-memory-settings \(min-width: 40rem\) \{\s*\[data-ltm-debug-settings-grid\],\s*\[data-ltm-debug-facts-grid\] \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/u,
+);
+const onboarding = readFileSync(join(dirname(ltmSourcePaths.detail), "Onboarding.tsx"), "utf8");
+assert.match(onboarding, /@container ltm-onboarding \(min-width: 48rem\)/u);
+assert.doesNotMatch(onboarding, /@media \(min-width: 768px\)/u);
+// The scrollers fit a short or zoomed viewport: no 20rem floor, and dvh so mobile chrome cannot inflate the cap.
+// A vh line above it covers browsers without dvh; a 10rem floor stops a very short window collapsing the list.
+const dvhCap = /max-height: calc\(100vh - 12rem\);\s*max-height: max\(10rem, calc\(100dvh - 12rem\)\);/u;
+assert.match(vault, dvhCap);
+assert.doesNotMatch(vault, /max\(20rem, calc\(100vh/u);
+assert.match(activity, new RegExp(`\\[data-ltm-debug-list\\] \\{\\s*${dvhCap.source}`, "u"));
+assert.doesNotMatch(activity, /maxHeight: "calc\(/u);
+// The last two window breakpoints in the settings and setup guide follow their containers too.
+assert.doesNotMatch(onboarding, /sm:p-6/u);
+assert.match(
+  onboarding,
+  /@container ltm-onboarding \(min-width: 40rem\) \{\s*\[data-ltm-onboarding-body\] \{\s*padding: 1\.5rem;/u,
+);
+const promptTemplates = readFileSync(
+  join(dirname(ltmSourcePaths.detail), "settings", "ExtractionPromptTemplates.tsx"),
+  "utf8",
+);
+assert.doesNotMatch(promptTemplates, /sm:grid-cols-3/u);
+assert.match(promptTemplates, /<div\s+data-ltm-active-template-grid\s+className="grid gap-2"\s*>/u);
+assert.match(settings, /\[data-ltm-active-template-grid\] \{\s*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/u);
+// #1673: the last raw text-style buttons meet the 2.75rem floor instead of a ~20px target.
+assert.match(
+  maintenance,
+  /<button\s+type="button"\s+className="inline-flex min-h-11 items-center underline"\s+onClick=\{\(\) => void integrity\.refetch\(\)\}/u,
+);
+assert.match(
+  settings,
+  /className="inline-flex min-h-11 items-center underline"\s+onClick=\{\(\) => void connections\.refetch\(\)\}/u,
+);
+assert.match(
+  settings,
+  /className="inline-flex min-h-11 items-center underline"\s+onClick=\{\(\) => \{\s*void global\.refetch\(\);/u,
+);
+assert.match(
+  settingsScreen,
+  /className="inline-flex min-h-11 items-center text-\[0\.6875rem\] underline"\s+onClick=\{\(\) => setActive\(mode, null\)\}/u,
+);
+assert.doesNotMatch(settingsScreen, /className="(?:text-\[0\.6875rem\] )?underline"/u);
 assert.match(detail, /health !== "healthy" && !needsHealthAttention/u);
 assert.match(detail, /howToRepairVaultHealth[\s\S]*compact/u);
 assert.match(detail, /tone=\{healthNeedsDangerTone \? "danger" : "warning"\}/u);
@@ -667,6 +724,22 @@ for (const file of sourceFiles) {
   }
 }
 assert.deepEqual([...usedKeys].filter((key) => !(key in locale)).sort(), []);
+// #1673: every underlined text button anywhere in the package meets the 2.75rem floor, whatever its markup.
+// The floor is `min-h-11` or an inline `minHeight: 44` on the same element. LastInjectionSummary keeps a
+// smaller target in its compact strip only (it predates #1673).
+const underlinedBelowFloor = sourceFiles.flatMap((file) => {
+  const text = readFileSync(file, "utf8");
+  return [...text.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/gu)]
+    .map((match) => ({ classes: match[1] ?? match[2], after: text.slice(match.index, match.index + 240) }))
+    .filter(({ classes }) => /(?:^|\s)underline(?:\s|$)/u.test(classes))
+    .filter(({ classes, after }) => !/(?:^|\s)min-h-11(?:\s|$)/u.test(classes) && !/minHeight: 44/u.test(after))
+    .filter(
+      ({ classes }) =>
+        !(basename(file) === "LastInjectionSummary.tsx" && /compact \? "min-h-6" : "min-h-11"/u.test(classes)),
+    )
+    .map(({ classes }) => `${basename(file)}: ${classes}`);
+});
+assert.deepEqual(underlinedBelowFloor, []);
 const vaultLocaleValues = Object.entries(locale)
   .filter(([key]) => key.startsWith("ui.longTermMemory.memoryvault."))
   .map(([, value]) => value)
@@ -712,7 +785,22 @@ assert.match(
 );
 assert.match(workspace, /availabilitySavingRef\.current/u);
 assert.match(workspace, /availabilityDisabled=\{availabilitySaving \|\| !availabilityReady\}/u);
-assert.match(workspace, /disabled=\{importDisabled\}/u);
+assert.match(
+  workspace,
+  /const importActionProps = importDisabled\s+\? \{[\s\S]*?"aria-disabled": true,[\s\S]*?importLockId/u,
+);
+assert.match(workspace, /id=\{importLockId\}/u);
+// The lock note is empty unless a run is active, so only a run may reference it: not loading or saving, and
+// Refresh stays tied to import/refresh runs (`importing`), not to a re-extract or an availability save.
+assert.match(workspace, /\.\.\.\(importRunning \? \{ "aria-describedby": importLockId \} : \{\}\)/u);
+assert.match(workspace, /"aria-describedby": importRunning \? `\$\{importLockId\} \$\{reasonId\}` : reasonId/u);
+assert.match(workspace, /\$\{importing \? ` \$\{importLockId\}` : ""\}/u);
+assert.doesNotMatch(workspace, /importDisabled \? `[^`]*importLockId/u);
+assert.equal((workspace.match(/disabled=\{importDisabled\}/gu) ?? []).length, 0);
+assert.doesNotMatch(workspace, /disabled=\{importing\}/u);
+assert.match(workspace, /disabled=\{selectedBookImportIds\.length === 0\}/u);
+assert.match(workspace, /disabled=\{selectedBookRefreshIds\.length === 0\}/u);
+assert.match(workspace, /\.\.\.importActionProps/u);
 assert.match(workspace, /settingsQuery\.refetch\(\)/u);
 assert.equal(
   locale["ui.longTermMemory.sourcesworkspace.availabilitySettingsCouldNotLoad"],
@@ -780,6 +868,17 @@ assert.doesNotMatch(reviewQueue, /label\.replace\("\{\{value\}\}"/u);
 assert.match(reviewQueue, /preflightBlocked/u);
 assert.match(reviewQueue, /preflightSummary/u);
 assert.match(reviewQueue, /applyPreflighted/u);
+assert.match(
+  reviewQueue,
+  /const acceptDisabled = !eligibleIds\.has\(row\.mutation\.id\) \|\| !valid \|\| preflightBlocked/u,
+);
+assert.match(reviewQueue, /aria-disabled=\{acceptDisabled \|\| runBusy \|\| undefined\}/u);
+assert.match(reviewQueue, /if \(!runBusy && !acceptDisabled\) void runBatch\("accept", \[row\]\)/u);
+assert.match(reviewQueue, /const batchAcceptDisabled =/u);
+assert.match(reviewQueue, /aria-disabled=\{batchAcceptDisabled \|\| runBusy \|\| undefined\}/u);
+assert.match(reviewQueue, /if \(!runBusy && !batchAcceptDisabled\) void runBatch\("accept"\)/u);
+assert.doesNotMatch(reviewQueue, /disabled=\{!eligibleIds\.has\(row\.mutation\.id\)/u);
+assert.doesNotMatch(reviewQueue, /disabled=\{!eligibleSelectedRows\.length \|\| invalidSelectedEdits/u);
 assert.match(reviewQueue, /data-ltm-review-action/u);
 assert.match(reviewQueue, /reviewChangeForTitle/u);
 assert.match(reviewQueue, /applyChangeForTitle/u);
@@ -1013,6 +1112,18 @@ assert.doesNotMatch(sourceScopeCombobox, /\bdisabled=\{disabled\}/u);
 assert.match(availabilityTabRail, /aria-disabled=\{disabled \|\| undefined\}/u);
 assert.match(sourceScopeCombobox, /aria-disabled=\{disabled \|\| undefined\}/u);
 assert.match(sourceScopeCombobox, /const choose = \(id: string\) => \{\s+if \(disabled\) return;/u);
+assert.match(workspaceScreen, /disabled=\{isLastSelected\}/u);
+assert.match(workspaceScreen, /aria-disabled=\{availabilityDisabled \|\| disabled \|\| undefined\}/u);
+assert.match(workspaceScreen, /aria-describedby=\{disabled \? `\$\{labelId\}-lock` : undefined\}/u);
+assert.match(workspaceScreen, /if \(availabilityDisabled \|\| disabled\) return;/u);
+assert.doesNotMatch(workspaceScreen, /disabled=\{availabilityDisabled \|\| isLastSelected\}/u);
+
+assert.doesNotMatch(detail, /#000\b/u);
+assert.match(
+  detail,
+  /\[data-ltm-activation-knob\] \{[^}]*box-shadow: 0 1px 2px var\(--marinara-editor-border-strong\);/u,
+);
+assert.match(detail, /Measured on the status panel[^\n]*at least 10\.0:1 light, 9\.1:1 dark/u);
 
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, defaults, and scope loading ok\n",

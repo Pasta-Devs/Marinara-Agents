@@ -836,6 +836,13 @@ export default function ReviewQueue({
       localizeUi("ui.longTermMemory.reviewqueue.sourcePrefix"),
       missingContextTitle,
     );
+  // Row text depends on the mutation, the notes, the language and the row's projection state, not on the
+  // keystroke being typed into another row, so a row keeps its text until one of those changes.
+  const rowTextCache = useMemo(
+    () => new Map<string, { mutation: LtmDraftMutation; variant: string; changeSummary: string; evidence: string }>(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- replacementEntries and missingContextTitle stand for humanizeText's inputs
+    [localizeUi, noteById, replacementEntries, missingContextTitle, rows],
+  );
   const reviewDraftTitle = (item: LtmDraftReviewDraft) => draftDisplayTitle(item, localizeUi);
   useEffect(
     () =>
@@ -956,6 +963,7 @@ export default function ReviewQueue({
     ),
   };
   const preflightApplyDisabled = result?.phase === "preflight" && result.ready === 0;
+  const batchAcceptDisabled = !eligibleSelectedRows.length || invalidSelectedEdits.length > 0 || preflightApplyDisabled;
   const runBusy = !reviewContextReady || running !== null;
 
   const clearPreflight = () => {
@@ -1641,6 +1649,7 @@ export default function ReviewQueue({
       ? preflight
       : undefined;
     const preflightBlocked = rowPreflight?.status === "blocked";
+    const acceptDisabled = !eligibleIds.has(row.mutation.id) || !valid || preflightBlocked;
     // The request key walks every row and serialises the edits, so it is built only for a row whose preflight
     // came back ready, not for every row on every keystroke.
     // ponytail: rows with a ready preflight still cost rows x rows per render; past a few hundred ready rows,
@@ -1668,20 +1677,32 @@ export default function ReviewQueue({
     const previewChange = previewChanges[0];
     const proposedText = mutationProposedText(mutation, noteById);
     const collapsedBody = edited || projectionStale ? proposedText : targetBody;
-    const changeSummary = edited
-      ? localizeUi("ui.longTermMemory.reviewqueue.editedProposalSummary", {
-          value: proposedText || localizeUi("ui.longTermMemory.reviewqueue.editedChange"),
-        })
-      : projectionStale
-        ? localizeUi("ui.longTermMemory.reviewqueue.editedProjectionSummary")
-        : previewChange
-          ? localizeUi("ui.longTermMemory.reviewqueue.changeSummary", {
-              before: previewChange.before || localizeUi("ui.longTermMemory.reviewqueue.newValue"),
-              after: previewChange.after,
-            })
-          : localizeUi("ui.longTermMemory.reviewqueue.proposedSummary", {
-              value: proposedText || mutation.summary,
-            });
+    const variant = `${edited}:${projectionStale}`;
+    let rowText = rowTextCache.get(row.mutation.id);
+    if (rowText?.mutation !== mutation || rowText.variant !== variant) {
+      const changeSummary = edited
+        ? localizeUi("ui.longTermMemory.reviewqueue.editedProposalSummary", {
+            value: proposedText || localizeUi("ui.longTermMemory.reviewqueue.editedChange"),
+          })
+        : projectionStale
+          ? localizeUi("ui.longTermMemory.reviewqueue.editedProjectionSummary")
+          : previewChange
+            ? localizeUi("ui.longTermMemory.reviewqueue.changeSummary", {
+                before: previewChange.before || localizeUi("ui.longTermMemory.reviewqueue.newValue"),
+                after: previewChange.after,
+              })
+            : localizeUi("ui.longTermMemory.reviewqueue.proposedSummary", {
+                value: proposedText || mutation.summary,
+              });
+      const evidence = `${humanizeText(row.mutation.evidence[0] ?? localizeUi("ui.longTermMemory.reviewqueue.noEvidence"))}${
+        row.mutation.evidence.length > 1
+          ? ` ${localizeUi("ui.longTermMemory.reviewqueue.moreEvidence", { count: row.mutation.evidence.length - 1 })}`
+          : ""
+      }`;
+      rowText = { mutation, variant, changeSummary, evidence };
+      rowTextCache.set(row.mutation.id, rowText);
+    }
+    const { changeSummary } = rowText;
     // Only the rows the run covers change their verb, and the run's phase names it.
     const rowRunning = running === "accept" && runMutationIds.has(row.mutation.id);
     const rowActionLabel = rowRunning
@@ -1811,12 +1832,7 @@ export default function ReviewQueue({
               <span className="block font-semibold text-[var(--foreground)]">
                 {localizeUi("ui.longTermMemory.reviewqueue.evidenceLabel")}
               </span>
-              <span className="block line-clamp-2 break-words text-[var(--foreground)]">
-                {humanizeText(row.mutation.evidence[0] ?? localizeUi("ui.longTermMemory.reviewqueue.noEvidence"))}
-                {row.mutation.evidence.length > 1
-                  ? ` ${localizeUi("ui.longTermMemory.reviewqueue.moreEvidence", { count: row.mutation.evidence.length - 1 })}`
-                  : ""}
-              </span>
+              <span className="block line-clamp-2 break-words text-[var(--foreground)]">{rowText.evidence}</span>
             </span>
             <ChevronRight
               aria-hidden="true"
@@ -1836,13 +1852,12 @@ export default function ReviewQueue({
                 data-ltm-review-action={preflightReady ? "apply" : preflightBlocked ? "blocked" : "review"}
                 aria-label={rowActionLabel}
                 title={rowActionLabel}
-                className={`mari-editor-action ${preflightReady ? "mari-editor-action--primary" : ""} ${runBusy ? "opacity-50" : ""}`}
+                className={`mari-editor-action ${preflightReady ? "mari-editor-action--primary" : ""} ${acceptDisabled || runBusy ? "opacity-50" : ""}`}
                 style={{ minHeight: 44, minWidth: 44 }}
-                disabled={!eligibleIds.has(row.mutation.id) || !valid || preflightBlocked}
-                aria-disabled={runBusy || undefined}
+                aria-disabled={acceptDisabled || runBusy || undefined}
                 aria-describedby={acceptReason ? acceptReasonId : undefined}
                 onClick={() => {
-                  if (!runBusy) void runBatch("accept", [row]);
+                  if (!runBusy && !acceptDisabled) void runBatch("accept", [row]);
                 }}
               >
                 <Check data-ltm-review-action-icon aria-hidden="true" size="1rem" />
@@ -2727,12 +2742,11 @@ export default function ReviewQueue({
                 >
                   <Button
                     primary
-                    className={runBusy ? "opacity-50" : ""}
-                    disabled={!eligibleSelectedRows.length || invalidSelectedEdits.length > 0 || preflightApplyDisabled}
-                    aria-disabled={runBusy || undefined}
+                    className={batchAcceptDisabled || runBusy ? "opacity-50" : ""}
+                    aria-disabled={batchAcceptDisabled || runBusy || undefined}
                     aria-describedby={batchAcceptReason ? "ltm-review-batch-accept-reason" : undefined}
                     onClick={() => {
-                      if (!runBusy) void runBatch("accept");
+                      if (!runBusy && !batchAcceptDisabled) void runBatch("accept");
                     }}
                   >
                     {running === "accept"
