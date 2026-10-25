@@ -4,6 +4,8 @@ Set **Daily unit messages** during setup or in **Settings → Story → Continui
 
 Incoming messages stay in each unit’s existing scrollable conversation. A notice lets you read a new message; background delivery preserves drafts and your position in older history. Writing → Advanced help opens above Settings on mobile and stays until you tap outside it or press Escape. The question-mark controls retain their compact size.
 
+All text generation, including character messages and retries, requests at least **8,192 output tokens**. Additional reasoning headroom is retained when the selected connection has room. If its configured context or hard output override cannot fit that minimum, generation reports the capacity problem before making a model request instead of silently using a smaller cap.
+
 ## Optional Formation combat (1.19.0)
 
 Choose **Classic** or **Formation** while creating a playthrough. Existing worlds keep Classic. For a saved world, open **Settings → Story → Continuity → Combat mode**. The confirmation explains the model requests needed to remake every character's kit. Up to three conversions are queued at a time; progress, individual failures, explicit retry and cancellation remain available after reopening. The world stays in its current mode until every current character kit is ready and one atomic transaction activates the change.

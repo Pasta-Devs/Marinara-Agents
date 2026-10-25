@@ -2,8 +2,9 @@
 - Add optional daily messages from randomly selected units with conversations unlocked, configured in setup or Story Continuity and disabled by default.
 - Keep incoming conversations saved, preserve drafts and pace generation within each local day without offline catch-up.
 - Open mobile Writing help above Settings with outside-tap dismissal and compact question-mark controls.
-- Reserve at least 8,192 answer tokens plus existing reasoning headroom for Formation kit creation and retries.
+- Request at least 8,192 output tokens for every text generation, including character messages and Formation kits, while retaining reasoning headroom. Report insufficient connection capacity instead of silently using a smaller output cap.
 - Keep Classic and Formation descriptions readable beside their setup choices.
+- Preserve the paced message deadline when reopening a world or updating its settings.
 
 ## 1.19.0 — 2026-10-25
 

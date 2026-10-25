@@ -1,4 +1,4 @@
-/* global forgeUnitMessagesEnglish */
+/* global forgeUnitMessagesEnglish, forgeChatGenerationError */
 const forgeUnitMessageStyle = `
 .gf-unit-message-notice{position:absolute;inset:8px 8px auto auto;z-index:12;max-inline-size:min(42ch,calc(100% - 16px));max-block-size:45%;overflow:auto;box-sizing:border-box;padding:8px 12px;background:var(--ink);color:var(--text);border:1px solid var(--steel-dark);font:var(--t-sm)/1.4 var(--body)}
 .gf-unit-message-notice p{margin:0 0 4px;overflow-wrap:anywhere}
@@ -132,7 +132,11 @@ export function wireForgeUnitMessages(host) {
     text.setAttribute("role", "status");
     const name = pending.unitName || forgeUnitMessagesEnglish["messages.someone"];
     text.textContent = pending.failed
-      ? forgeUnitMessagesEnglish["messages.failed"]
+      ? forgeChatGenerationError(
+          pending,
+          forgeUnitMessagesEnglish["messages.failed"],
+          forgeUnitMessagesEnglish["messages.capacity"],
+        )
       : forgeUnitMessagesEnglish["messages.incoming"].replace("{name}", name);
     notice.append(style, text);
     const button = (key, action) => {
@@ -175,7 +179,7 @@ export function wireForgeUnitMessages(host) {
         if (current() && ((response?.ok && response.status === "sent") || response?.error === "generation-failed")) {
           notice?.remove();
           notice = null;
-          pending = response.ok ? response : { failed: true };
+          pending = response.ok ? response : { ...response, failed: true };
           renderNotice();
         }
       } catch {

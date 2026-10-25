@@ -7,6 +7,8 @@ export const forgeUnitMessagesEnglish = {
   "messages.incoming": "{name} sent you a message.",
   "messages.someone": "One of your units",
   "messages.failed": "A unit message could not be prepared. Check this world's story connection.",
+  "messages.capacity":
+    "A unit message needs at least {minimum} output tokens. Increase the connection's context size or Max Output Tokens Override in Connections.",
   "messages.read": "Read message",
   "messages.dismiss": "Dismiss",
 };

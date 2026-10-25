@@ -3,7 +3,27 @@
 const forgeChatEnglish = {
   "chat.noAnswer": "They did not answer.",
   "chat.waitingForReply": "Waiting for a reply…",
+  "chat.outputCapacity":
+    "This reply needs at least {minimum} output tokens. Increase the connection's context size or Max Output Tokens Override in Connections, then retry.",
+  "chat.capacityContext": "Available context: {available} tokens.",
+  "chat.capacityOverride": "Configured output override: {configured} tokens.",
 };
+
+function forgeChatGenerationError(response, fallback, template = forgeChatEnglish["chat.outputCapacity"]) {
+  if (response?.detail !== "generation-output-capacity" && response?.error !== "generation-output-capacity")
+    return fallback;
+  const parts = [template.replace("{minimum}", "8192")];
+  const capacity = response.capacity;
+  for (const [field, key, placeholder] of [
+    ["availableContextTokens", "chat.capacityContext", "{available}"],
+    ["configuredMaxOutputTokens", "chat.capacityOverride", "{configured}"],
+  ]) {
+    const value = capacity?.[field];
+    if (Number.isSafeInteger(value) && value >= 0)
+      parts.push(forgeChatEnglish[key].replace(placeholder, String(value)));
+  }
+  return parts.join(" ");
+}
 
 function forgeChatIsCurrent(host, runId, unitId) {
   return host._run?.runId === runId && host._chat?.unit?.id === unitId;
@@ -125,6 +145,7 @@ function adoptForgeChatSnapshot(host, snapshot, { runId, unitId, opening = false
 
 async function reconcileForgeChatFailure(host, attempt) {
   const { runId, unitId } = attempt;
+  const failure = forgeChatGenerationError(attempt.response, attempt.error);
   let snapshot = null;
   try {
     snapshot = await host._postJson("/chat/open", { runId, unitId });
@@ -155,7 +176,7 @@ async function reconcileForgeChatFailure(host, attempt) {
   host._chatStash = {
     runId,
     unitId,
-    error: attempt.error,
+    error: failure,
     draft: definitelyRejected ? attempt.text : "",
     unknowns: unknown ? [...unknowns, attempt] : unknowns,
   };
@@ -164,10 +185,10 @@ async function reconcileForgeChatFailure(host, attempt) {
     host._chat = { ...host._chat, messages: removeForgeChatOptimistic(host._chat.messages, attempt.optimistic) };
   }
   if (snapshot?.ok) adoptForgeChatSnapshot(host, snapshot, { runId, unitId });
-  else host._chat = { ...host._chat, error: attempt.error, retry: false };
+  else host._chat = { ...host._chat, error: failure, retry: false };
   host._chatDraft = definitelyRejected ? attempt.text : "";
   const replied = saved && snapshot.messages?.at(-1)?.who === "unit";
-  host._chat.error = replied ? "" : snapshot?.busy ? forgeChatEnglish["chat.waitingForReply"] : attempt.error;
+  host._chat.error = replied ? "" : snapshot?.busy ? forgeChatEnglish["chat.waitingForReply"] : failure;
   host._chatRev += 1;
   host._renderBrowser();
 }
@@ -8442,11 +8463,13 @@ const forgeUnitMessagesEnglish = {
   "messages.incoming": "{name} sent you a message.",
   "messages.someone": "One of your units",
   "messages.failed": "A unit message could not be prepared. Check this world's story connection.",
+  "messages.capacity":
+    "A unit message needs at least {minimum} output tokens. Increase the connection's context size or Max Output Tokens Override in Connections.",
   "messages.read": "Read message",
   "messages.dismiss": "Dismiss",
 };
 
-/* global forgeUnitMessagesEnglish */
+/* global forgeUnitMessagesEnglish, forgeChatGenerationError */
 const forgeUnitMessageStyle = `
 .gf-unit-message-notice{position:absolute;inset:8px 8px auto auto;z-index:12;max-inline-size:min(42ch,calc(100% - 16px));max-block-size:45%;overflow:auto;box-sizing:border-box;padding:8px 12px;background:var(--ink);color:var(--text);border:1px solid var(--steel-dark);font:var(--t-sm)/1.4 var(--body)}
 .gf-unit-message-notice p{margin:0 0 4px;overflow-wrap:anywhere}
@@ -8580,7 +8603,11 @@ function wireForgeUnitMessages(host) {
     text.setAttribute("role", "status");
     const name = pending.unitName || forgeUnitMessagesEnglish["messages.someone"];
     text.textContent = pending.failed
-      ? forgeUnitMessagesEnglish["messages.failed"]
+      ? forgeChatGenerationError(
+          pending,
+          forgeUnitMessagesEnglish["messages.failed"],
+          forgeUnitMessagesEnglish["messages.capacity"],
+        )
       : forgeUnitMessagesEnglish["messages.incoming"].replace("{name}", name);
     notice.append(style, text);
     const button = (key, action) => {
@@ -8623,7 +8650,7 @@ function wireForgeUnitMessages(host) {
         if (current() && ((response?.ok && response.status === "sent") || response?.error === "generation-failed")) {
           notice?.remove();
           notice = null;
-          pending = response.ok ? response : { failed: true };
+          pending = response.ok ? response : { ...response, failed: true };
           renderNotice();
         }
       } catch {

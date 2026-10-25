@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as chatContinuity from "../packages/gacha-forge/src/chat-continuity-client.mjs";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import vm from "node:vm";
@@ -107,6 +108,7 @@ function fixture({ count = 2, view = "browser", field = false } = {}) {
     _chatWith: (id) => navigation.push(id),
   };
   const context = vm.createContext({
+    forgeChatGenerationError: chatContinuity.forgeChatGenerationError,
     Intl: { DateTimeFormat: () => ({ resolvedOptions: () => ({ timeZone: zone }) }) },
     document: { createElement: (tag) => new Element(tag) },
     getComputedStyle: () => ({ visibility: "visible" }),
@@ -403,6 +405,32 @@ test("a failed paid attempt offers a dismissible explanation without a misleadin
   assert.equal(f.host._chat.messages.length, 0);
   buttons[0].click();
   assert.equal(f.notice(), undefined);
+  f.dispose();
+});
+
+test("a proactive capacity notice explains settings and preserves the draft without a Read or retry action", async () => {
+  const f = fixture();
+  f.host._chatDraft = "Keep my draft.";
+  f.transport(async () => ({
+    ok: false,
+    error: "generation-failed",
+    detail: "generation-output-capacity",
+    capacity: { minimumOutputTokens: 8192, availableContextTokens: 7000, configuredMaxOutputTokens: 4096 },
+    retry: false,
+  }));
+  f.wire();
+  await f.advance(60_000);
+  const notice = f.notice();
+  const text = notice.children.find((item) => item.tag === "p").textContent;
+  for (const expected of ["8192", "7000", "4096", "context", "Max Output Tokens Override"])
+    assert.ok(text.includes(expected), expected);
+  assert.deepEqual(
+    notice.children.filter((item) => item.tag === "button").map((item) => item.textContent),
+    ["Dismiss"],
+  );
+  assert.equal(f.host._chatDraft, "Keep my draft.");
+  assert.equal(f.host._chat.messages.length, 0);
+  assert.equal(f.requests.length, 1);
   f.dispose();
 });
 

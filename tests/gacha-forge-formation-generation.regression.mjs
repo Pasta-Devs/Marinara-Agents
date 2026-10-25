@@ -49,6 +49,8 @@ const expectedBudget = baseAnswerTokens + existingReasoningReserve;
 
 async function fixture(mode = "classic") {
   const f = await createChapterRuntime();
+  // Align the resolved SDK ceiling with this suite's existing explicit HTTP capacity.
+  f.transport.maxContext = 262144;
   const originalFetch = globalThis.fetch;
   const parameters = {
     reasoningEffort: "max",

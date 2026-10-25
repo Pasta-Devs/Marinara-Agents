@@ -5,6 +5,20 @@ export function normalizeForgeDailyUnitMessages(value) {
   return typeof number === "number" && Number.isSafeInteger(number) && number >= 0 ? number : 0;
 }
 
+/** Only numeric budget diagnostics cross the public failure boundary. */
+export function forgeGenerationCapacityDetail(value) {
+  let data;
+  try {
+    data = typeof value === "string" ? JSON.parse(value) : value;
+  } catch {
+    data = null;
+  }
+  const detail = { minimumOutputTokens: 8192 };
+  for (const key of ["requestedMaxTokens", "availableContextTokens", "configuredMaxOutputTokens"])
+    if (Number.isSafeInteger(data?.[key]) && data[key] >= 0) detail[key] = data[key];
+  return detail;
+}
+
 /** Reuse the normal chat prompt, adding an instruction rather than inventing a player's message. */
 export function forgeProactiveChatMessages(buildChatMessages, context) {
   const unit = { ...context.unit };
@@ -179,7 +193,8 @@ export function createForgeProactiveMessages({
         at < state.lastSeenAt ||
         at - state.lastSeenAt > 120_000
       ) {
-        quota.nextAt = at + 60_000;
+        // Re-arming the visible-world delay must never shorten an already-paid interval.
+        quota.nextAt = Math.max(at + 60_000, Number.isFinite(quota.nextAt) ? quota.nextAt : at);
         status = "scheduled";
       } else if (at < quota.nextAt) status = "waiting";
       state.lastSeenAt = at;
@@ -223,6 +238,10 @@ export function createForgeProactiveMessages({
       if (!before || key !== forgeProactiveContextKey(before)) throw new Error("context-changed");
       const answer = await generate({ ...input, context, messages: context.messages });
       signal.throwIfAborted();
+      if (answer?.ok !== true && answer?.error === "generation-output-capacity")
+        throw Object.assign(new Error("generation-output-capacity"), {
+          capacity: forgeGenerationCapacityDetail(answer.detail),
+        });
       const text = answer?.ok === true && typeof answer.value === "string" ? answer.value.trim() : "";
       if (!text) throw new Error("generation-failed");
       if (!(await contextStillCurrent({ ...input, context }))) throw new Error("context-changed");
@@ -265,6 +284,9 @@ export function createForgeProactiveMessages({
           : error.message === "context-changed"
             ? "context-changed"
             : "generation-failed",
+        ...(!signal.aborted && error.message === "generation-output-capacity"
+          ? { detail: "generation-output-capacity", capacity: error.capacity }
+          : {}),
         retry: false,
       };
     }

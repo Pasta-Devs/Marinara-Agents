@@ -209,6 +209,34 @@ test("failed and ambiguous paid attempts are consumed rather than retried on pol
   }
 });
 
+test("capacity failures preserve safe configuration detail without resending the reserved attempt", async () => {
+  const f = fixture({
+    limit: 1,
+    reply: async () => ({
+      ok: false,
+      error: "generation-output-capacity",
+      detail: JSON.stringify({
+        minimumOutputTokens: 8192,
+        availableContextTokens: 7000,
+        configuredMaxOutputTokens: 4096,
+        rawProviderText: "DO_NOT_EXPOSE_PROVIDER_CONTENT",
+        requestedMaxTokens: Infinity,
+      }),
+    }),
+  });
+  await ready(f);
+  assert.deepEqual(await f.due(), {
+    ok: false,
+    error: "generation-failed",
+    detail: "generation-output-capacity",
+    capacity: { minimumOutputTokens: 8192, availableContextTokens: 7000, configuredMaxOutputTokens: 4096 },
+    retry: false,
+  });
+  assert.equal((await f.due()).status, "quota");
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.docs.get(chatId).data.messages.length, 1);
+});
+
 test("an interrupted durable reservation is never reissued by a new process", async () => {
   const f = fixture({ limit: 1 });
   f.session().proactiveMessages = {
@@ -243,6 +271,90 @@ test("a settings save re-arms pacing without resetting consumed daily attempts",
   assert.equal((await f.due()).status, "scheduled");
   assert.equal(f.calls.length, 1);
   assert.equal(f.session().proactiveMessages.days[f.day()].attempts, 1);
+});
+
+test("paid pacing survives a poll gap without shortening its full interval", async () => {
+  const f = fixture({ limit: 10 });
+  await ready(f);
+  const paid = await f.due();
+  assert.equal(paid.status, "sent");
+  assert.equal(paid.nextAt, f.time() + 86_400_000 / 10);
+  f.advance(120_001);
+  const resumed = await f.due();
+  assert.equal(resumed.status, "scheduled");
+  assert.equal(resumed.nextAt, paid.nextAt, "inactivity must not shorten the reserved interval");
+  f.advance(60_000);
+  assert.equal((await f.due()).status, "waiting");
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.session().proactiveMessages.days[f.day()].attempts, 1);
+});
+
+test("paid pacing survives unrelated wallet and index revision updates", async () => {
+  const f = fixture({ limit: 10 });
+  await ready(f);
+  const paid = await f.due();
+  assert.equal(paid.status, "sent");
+  f.advance(60_000);
+  f.session().wallet = { funds: 200 };
+  f.docs.get("index").revision++;
+  const refreshed = await f.due();
+  assert.equal(refreshed.status, "scheduled");
+  assert.equal(refreshed.nextAt, paid.nextAt, "an index write must not shorten the reserved interval");
+  f.advance(60_000);
+  assert.equal((await f.due()).status, "waiting");
+  assert.equal(f.calls.length, 1);
+  assert.deepEqual(f.session().wallet, { funds: 200 });
+});
+
+test("paid pacing remains durable in a fresh service even without last-seen metadata", async () => {
+  for (const missingLastSeen of [false, true]) {
+    const f = fixture({ limit: 10 });
+    await ready(f);
+    const paid = await f.due();
+    assert.equal(paid.status, "sent");
+    f.manager.dispose();
+    if (missingLastSeen) delete f.session().proactiveMessages.lastSeenAt;
+    const reopened = f.create();
+    const resumed = await reopened.due({ runId });
+    assert.equal(resumed.status, missingLastSeen ? "scheduled" : "waiting");
+    assert.equal(resumed.nextAt, paid.nextAt, "the durable deadline outlives a service instance");
+    f.advance(60_000);
+    assert.equal((await reopened.due({ runId })).status, "waiting");
+    assert.equal(f.calls.length, 1);
+    assert.equal(f.session().proactiveMessages.days[f.day()].attempts, 1);
+    reopened.dispose();
+  }
+});
+
+test("paid pacing cannot be shortened by a backwards clock adjustment", async () => {
+  const f = fixture({ limit: 10 });
+  await ready(f);
+  const paid = await f.due();
+  assert.equal(paid.status, "sent");
+  f.advance(-60_000);
+  const adjusted = await f.due();
+  assert.equal(adjusted.status, "scheduled");
+  assert.equal(adjusted.nextAt, paid.nextAt, "moving the clock back must not advance a paid deadline");
+  f.advance(60_000);
+  assert.equal((await f.due()).status, "waiting");
+  assert.equal(f.calls.length, 1);
+});
+
+test("an overdue paid interval resumes after one minute without catching up missed messages", async () => {
+  const f = fixture({ limit: 10 });
+  await ready(f);
+  const paid = await f.due();
+  f.advance(paid.nextAt - f.time() + 1);
+  const resumed = await f.due();
+  assert.equal(resumed.status, "scheduled");
+  assert.equal(resumed.nextAt, f.time() + 60_000);
+  assert.equal(f.calls.length, 1);
+  assert.equal((await f.due()).status, "waiting");
+  f.advance(60_000);
+  assert.equal((await f.due()).status, "sent");
+  assert.equal(f.calls.length, 2);
+  assert.equal(f.session().proactiveMessages.days[f.day()].attempts, 2);
+  assert.equal((await f.due()).status, "waiting");
 });
 
 test("player send and close share the same lock; unresolved player rows keep their retry path", async () => {

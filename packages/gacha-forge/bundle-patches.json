@@ -2412,6 +2412,26 @@
             {
               "find": "options:{temperature:.8,maxTokens:It(2000),signal}",
               "replace": "options:{temperature:.8,maxTokens:It(8192),signal}"
+            },
+            {
+              "find": "var Vo=16e3,VA=6e3,It=e=>e+Vo;",
+              "replace": "var Vo=16e3,VA=6e3,It=e=>Math.max(8192,Number(e)||0)+Vo;"
+            },
+            {
+              "find": "async function dS({runtime:e,runId:t,connectionId:n,messages:r,options:a,parse:f,label:h,requestBudget:forgeRequestBudget})",
+              "replace": "async function dS({runtime:e,runId:t,connectionId:n,messages:r,options:a={},parse:f,label:h,requestBudget:forgeRequestBudget})"
+            },
+            {
+              "find": "G=Number(a.maxTokens)||0,W=G",
+              "replace": "G=Math.max(It(8192),Number(a.maxTokens)||0),W=G"
+            },
+            {
+              "find": "C=forgeFitted.messages;Le=forgeFitted.maxTokens;logForgeStoryPrompt(e,h,C,a),",
+              "replace": "C=forgeFitted.messages;Le=forgeFitted.maxTokens;let forgeWindows=[Number(lw.get(A.connectionId)),Number($e.maxContext)].filter(value=>Number.isFinite(value)&&value>0),forgeWindow=forgeWindows.length?Math.min(...forgeWindows):0,forgeAvailable=forgeWindow?Math.floor(forgeWindow-512-C.reduce((sum,message)=>sum+forgeMemoryShared.estimateTextTokens(typeof message?.content===\"string\"?message.content:JSON.stringify(message?.content||\"\"))+4,0)):Infinity,forgeOutputLimit=Number($e.maxOutputTokens);Le=Math.floor(Math.min(Number(Le)||G,forgeAvailable,Number.isFinite(forgeOutputLimit)&&forgeOutputLimit>0?forgeOutputLimit:Infinity));if(!(Le>=8192))return{ok:false,error:\"generation-output-capacity\",detail:JSON.stringify({minimumOutputTokens:8192,requestedMaxTokens:G,availableContextTokens:Number.isFinite(forgeAvailable)?forgeAvailable:null,configuredMaxOutputTokens:Number.isFinite(forgeOutputLimit)&&forgeOutputLimit>0?forgeOutputLimit:null})};logForgeStoryPrompt(e,h,C,a),"
+            },
+            {
+              "find": "if(!Y.ok)return{ok:!1,error:\"generation-failed\",detail:l(Y.error),wallet:L,retry:!0};",
+              "replace": "if(!Y.ok)return{ok:!1,error:\"generation-failed\",detail:l(Y.error),...(Y.error===\"generation-output-capacity\"?{capacity:forgeGenerationCapacityDetail(Y.detail)}:{}),wallet:L,retry:!0};"
             }
           ]
         }
