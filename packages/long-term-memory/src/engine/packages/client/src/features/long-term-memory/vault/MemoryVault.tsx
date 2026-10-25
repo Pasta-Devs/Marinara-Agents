@@ -741,6 +741,22 @@ export default function MemoryVault({
     () => new Map((notes.data?.linkContext ?? []).map((note) => [note.id, note])),
     [notes.data],
   );
+  // The link suggestions list every memory the host knows, so they are rebuilt only when the list, the open
+  // memory or its links change, not on each edit of its text.
+  const linkOptions = useMemo(
+    () =>
+      draft
+        ? linkContextNotes
+            .filter((note) => note.id !== draft.id && !draft.links.some((link) => link.target === note.id))
+            .map((note) => (
+              <option key={note.id} value={note.id}>
+                {memoryLabel(note)}
+              </option>
+            ))
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- linkContextNotes derives from notes.data
+    [draft?.id, draft?.links, notes.data?.linkContext, memoryLabel],
+  );
   const subjectSearchLabel = useCallback(
     (subject: LtmSubject) => {
       if (!subject.ref) return localizeUi("ui.longTermMemory.memoryvault.unresolvedSubject");
@@ -759,6 +775,12 @@ export default function MemoryVault({
   // The list filters with a deferred copy of the search, so the field updates at once and React
   // renders the filtered rows in the background, dropping that render when another key arrives.
   const deferredSearch = useDeferredValue(search);
+  // The haystack of every note is built once per notes list, not once per keystroke.
+  const searchIndex = useMemo(
+    () =>
+      new Map((notes.data?.displayed ?? []).map((note) => [note.id, searchable(note, notesById, subjectSearchLabel)])),
+    [notes.data?.displayed, notesById, subjectSearchLabel],
+  );
   const visible = useMemo(() => {
     const query = deferredSearch.trim().toLocaleLowerCase();
     return (notes.data?.displayed ?? [])
@@ -767,7 +789,7 @@ export default function MemoryVault({
           (statusFilter === "all" || note.status === statusFilter) &&
           (sourceFilter ? note.type === "source" : note.type !== "source") &&
           (!filterModes.length || filterModes.some((mode) => note.modes.includes(mode))) &&
-          (!query || searchable(note, notesById, subjectSearchLabel).includes(query)),
+          (!query || searchIndex.get(note.id)?.includes(query)),
       )
       .sort((left, right) =>
         sort === "title"
@@ -776,17 +798,7 @@ export default function MemoryVault({
             ? right.createdAt.localeCompare(left.createdAt)
             : right.updatedAt.localeCompare(left.updatedAt),
       );
-  }, [
-    deferredSearch,
-    filterModes,
-    memoryLabel,
-    notes.data?.displayed,
-    notesById,
-    sort,
-    sourceFilter,
-    statusFilter,
-    subjectSearchLabel,
-  ]);
+  }, [deferredSearch, filterModes, memoryLabel, notes.data?.displayed, searchIndex, sort, sourceFilter, statusFilter]);
   // "Show more" counts apply to one list: a new search, filter, sort or place starts again at the limit.
   const shownRowsKey = JSON.stringify([
     contextKey,
@@ -3506,19 +3518,7 @@ export default function MemoryVault({
                                       placeholder={localizeUi("ui.longTermMemory.memoryvault.searchOrEnterAMemory")}
                                       list="ltm-linked-memories"
                                     />
-                                    <datalist id="ltm-linked-memories">
-                                      {linkContextNotes
-                                        .filter(
-                                          (note) =>
-                                            note.id !== draft.id &&
-                                            !draft.links.some((link) => link.target === note.id),
-                                        )
-                                        .map((note) => (
-                                          <option key={note.id} value={note.id}>
-                                            {memoryLabel(note)}
-                                          </option>
-                                        ))}
-                                    </datalist>
+                                    <datalist id="ltm-linked-memories">{linkOptions}</datalist>
                                     <select
                                       className={inputClass}
                                       value={linkRelation}
