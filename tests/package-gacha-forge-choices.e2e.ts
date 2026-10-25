@@ -243,6 +243,73 @@ test("Fresh chapter entry types its first line while a saved reading position st
   await expect(forge.locator("[data-text]")).toHaveText(resumed);
 });
 
+test("Speaker changes open the correct portrait without exposing an earlier character's buffer", async ({
+  page,
+}, testInfo) => {
+  const cast = [
+    { name: "Arden", art: "https://forge.test/arden.svg" },
+    { name: "Brin", art: "https://forge.test/brin.svg" },
+    { name: "Mari", art: "https://forge.test/mari.svg", prota: true },
+  ];
+  await page.route("https://forge.test/*.svg", (route) =>
+    route.fulfill({
+      contentType: "image/svg+xml",
+      body: `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="260"><rect width="180" height="260" fill="${route.request().url().includes("arden") ? "#bf3333" : route.request().url().includes("brin") ? "#338f55" : "#3355bf"}"/></svg>`,
+    }),
+  );
+  const segments = ["Arden", "Brin", "Mari", "Arden"].map((speaker) => ({ speaker, text: `${speaker} speaks.` }));
+  await page.route("**/api/gacha-forge/beat", (route) =>
+    route.fulfill({ json: { ok: true, cast, segments, places: [] } }),
+  );
+  const forge = await openForge(page, testInfo);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await seedScene(forge);
+  await expect(forge.locator("[data-text]")).toHaveText(segments[0].text);
+  await forge.evaluate((node, cast) => {
+    const root = node.shadowRoot!;
+    const sample = { changes: 0, wrong: [] as string[] };
+    (window as any).forgePortraitProof = sample;
+    const observer = new MutationObserver(() => {
+      const speaker = root.querySelector("[data-who]")?.textContent;
+      const current = cast.find((entry) => entry.name === speaker);
+      if (!current) return;
+      sample.changes += 1;
+      for (const image of root.querySelectorAll<HTMLImageElement>('.vn-plate[data-open="true"] [data-img]'))
+        if (!image.hidden && image.getAttribute("src") && image.getAttribute("src") !== current.art)
+          sample.wrong.push(`${speaker}:${image.getAttribute("src")}`);
+    });
+    observer.observe(root.querySelector("[data-vn]")!, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ["src", "data-open", "data-front", "hidden"],
+    });
+    (window as any).stopForgePortraitProof = () => observer.disconnect();
+  }, cast);
+  for (const segment of segments.slice(1)) {
+    await forge.locator("[data-box]").click();
+    await expect(forge.locator("[data-who]")).toHaveText(segment.speaker);
+    const url = cast.find((entry) => entry.name === segment.speaker)!.art;
+    await expect
+      .poll(() =>
+        forge
+          .locator('.vn-plate[data-open="true"] [data-img]')
+          .evaluateAll((images) => images.map((image) => image.getAttribute("src"))),
+      )
+      .toEqual([url, url]);
+    await expect(forge.locator("[data-text]")).toHaveText(segment.text);
+  }
+  const sample = await page.evaluate(() => {
+    (window as any).stopForgePortraitProof();
+    return (window as any).forgePortraitProof;
+  });
+  expect(sample.changes).toBeGreaterThan(0);
+  expect(sample.wrong).toEqual([]);
+  await testInfo.attach("speaker-portrait-buffers.json", {
+    body: JSON.stringify(sample),
+    contentType: "application/json",
+  });
+});
+
 test("Choices preserve an intentional final em dash and controls do not advance in either theme", async ({
   page,
 }, testInfo) => {

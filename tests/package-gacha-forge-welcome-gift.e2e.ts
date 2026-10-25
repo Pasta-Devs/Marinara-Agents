@@ -179,6 +179,15 @@ test("Welcome Gift rewards leave Claim reachable on short touch screens", async 
     expect(layout.rewardBottom, "The daily reward list ends before its claim status").toBeLessThanOrEqual(
       layout.footerTop + 1,
     );
+    // Restoring the baseline's grid height can adjust native scroll anchoring.
+    await claim.scrollIntoViewIfNeeded();
+    expect(
+      await claim.evaluate((button) => {
+        const box = button.getBoundingClientRect();
+        const pane = button.closest(".ev-pane")!.getBoundingClientRect();
+        return box.top >= pane.top - 1 && box.bottom <= pane.bottom + 1;
+      }),
+    ).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`daily-claim-${ready}.png`), animations: "disabled" });
   }
   await forge.evaluate((node) => {

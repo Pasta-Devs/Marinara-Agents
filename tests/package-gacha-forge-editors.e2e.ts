@@ -6,36 +6,45 @@ const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engine checkout");
 const appVersion = JSON.parse(readFileSync(resolve(engineRoot, "package.json"), "utf8")).version;
 
-async function openEditors(page: Page) {
+async function openEditors(page: Page, hostTheme: "dark" | "light" = "dark") {
   await page.setViewportSize({ width: 874, height: 402 });
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.addInitScript((version) => {
-    localStorage.removeItem("marinara-active-chat-id");
-    localStorage.setItem("marinara:whats-new:seen-version", version);
-    localStorage.setItem(
-      "marinara-engine-ui",
-      JSON.stringify({
-        state: { hasCompletedOnboarding: true, sidebarOpen: false, rightPanelOpen: false, appAccentPulseMode: false },
-        version: 65,
-      }),
-    );
-    let top: number | null = null;
-    const viewport = new EventTarget();
-    Object.defineProperties(viewport, {
-      height: { get: () => top ?? window.innerHeight },
-      width: { get: () => window.innerWidth },
-      offsetTop: { get: () => 0 },
-      pageTop: { get: () => 0 },
-      offsetLeft: { get: () => 0 },
-      pageLeft: { get: () => 0 },
-      scale: { get: () => 1 },
-    });
-    Object.defineProperty(window, "visualViewport", { configurable: true, value: viewport });
-    (window as any).__forgeKeyboardTop = (value: number | null) => {
-      top = value;
-      viewport.dispatchEvent(new Event("resize"));
-    };
-  }, appVersion);
+  await page.addInitScript(
+    ({ version, hostTheme }) => {
+      localStorage.removeItem("marinara-active-chat-id");
+      localStorage.setItem("marinara:whats-new:seen-version", version);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            theme: hostTheme,
+            hasCompletedOnboarding: true,
+            sidebarOpen: false,
+            rightPanelOpen: false,
+            appAccentPulseMode: false,
+          },
+          version: 65,
+        }),
+      );
+      let top: number | null = null;
+      const viewport = new EventTarget();
+      Object.defineProperties(viewport, {
+        height: { get: () => top ?? window.innerHeight },
+        width: { get: () => window.innerWidth },
+        offsetTop: { get: () => 0 },
+        pageTop: { get: () => 0 },
+        offsetLeft: { get: () => 0 },
+        pageLeft: { get: () => 0 },
+        scale: { get: () => 1 },
+      });
+      Object.defineProperty(window, "visualViewport", { configurable: true, value: viewport });
+      (window as any).__forgeKeyboardTop = (value: number | null) => {
+        top = value;
+        viewport.dispatchEvent(new Event("resize"));
+      };
+    },
+    { version: appVersion, hostTheme },
+  );
   const saved = {
     runId: "editor-proof",
     name: "Editor proof",
@@ -238,7 +247,9 @@ test("Story images start below the header while retaining crossfade layers and t
 test("Writing Advanced field help opens with a tap and stays readable in the mobile panel", async ({
   page,
 }, testInfo) => {
-  const { forge } = await openEditors(page);
+  const { forge } = await openEditors(page, "light");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await forge.locator(".gf-fs-bar").click();
   await forge.evaluate((node) => (node as any)._openSettings("advanced"));
   const help = forge.locator(".ob-help").first();
   await help.click();
@@ -254,6 +265,15 @@ test("Writing Advanced field help opens with a tap and stays readable in the mob
       return bounds.left >= stage.left - 1 && bounds.right <= stage.right + 1 && bounds.height > 0;
     }),
   ).toBe(true);
+  await expect
+    .poll(() =>
+      forge.evaluate((node) => {
+        for (let element: Element | null = node; element; element = element.parentElement)
+          if (Number(getComputedStyle(element).opacity) < 0.999) return false;
+        return true;
+      }),
+    )
+    .toBe(true);
   await page.screenshot({ path: testInfo.outputPath("writing-help-open.png"), animations: "disabled" });
   await help.click();
   await expect(help).toHaveAttribute("aria-expanded", "false");
