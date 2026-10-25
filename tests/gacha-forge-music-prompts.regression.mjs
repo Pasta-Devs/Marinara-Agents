@@ -1,5 +1,7 @@
 // The soundtrack model and package storage are isolated; this never contacts a provider.
 import assert from "node:assert/strict";
+import { test } from "node:test";
+import { normalizeForgeSeasonalOverview } from "../packages/gacha-forge/src/seasonal-events-server.mjs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -241,3 +243,33 @@ try {
 process.stdout.write(
   "Music brief regression passed: seven cues, cache/reload, invalid/stale/failure paths and actual narration route.\n",
 );
+
+test("seasonal music fallback is bounded after empty or non-string input", () => {
+  const theme = "t".repeat(1500);
+  for (const musicPrompt of [undefined, "", "   ", null, {}, 42]) {
+    const event = normalizeForgeSeasonalOverview(
+      { title: "Festival", theme, premise: "Friends gather.", musicPrompt },
+      [],
+    );
+    assert.equal(event.musicPrompt.length, 1000);
+    assert.ok(normalizeForgeMusicPrompt({ prompt: event.musicPrompt }));
+    assert.equal(event.bannerPrompt, theme, "The existing banner fallback remains below its2000character limit");
+  }
+});
+test("an already saved overlong event brief is reused without another model request", async () => {
+  const f = makeFixture(),
+    cue = "banner-story-event-1",
+    prompt = "t".repeat(1500);
+  await f.options.updateSession("world", (data) => {
+    data.audioBanners = { [cue]: { cue, title: "Festival", event: true, theme: "Lantern crossing" } };
+    data.audioPrompts = { [cue]: { event: true, prompt } };
+  });
+  for (let i = 0; i < 2; i++) {
+    const result = await f.service({ runId: "world", cue });
+    assert.equal(result.ok, true);
+    assert.equal(result.cached, true);
+    assert.equal(result.prompt.length, 1000);
+  }
+  assert.equal(f.calls.length, 0);
+  assert.equal(f.session().audioPrompts[cue].event, true);
+});

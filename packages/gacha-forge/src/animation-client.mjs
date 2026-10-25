@@ -63,16 +63,20 @@ export function wireForgeBannerAnimation(host) {
     host._forgeBannerAnimation = state;
   }
   const state = host._forgeBannerAnimation;
-  const banner = host._summonBanner?.banner;
+  const eventBanner = host._forgeSeasonalBanner,
+    activeBanner = () => (eventBanner ? host._forgeSeasonalBanner : host._summonBanner?.banner),
+    banner = activeBanner();
   const runId = run?.runId,
     connectionId = run?.animationConnectionId,
     art = banner?.art,
     bannerId = banner?.id,
     rotation = banner?.music?.cue || "";
   const target =
-    host._hudView === "summon" && host._summonPhase === "banner" && host._summonBannerState === "ready"
-      ? host._root.querySelector('[data-screen="banner"] .show > .art.wide')
-      : null;
+    eventBanner && host._hudView === "events" && host._eventId === "story-events"
+      ? host._root.querySelector("[data-story-event-banner]")
+      : host._hudView === "summon" && host._summonPhase === "banner" && host._summonBannerState === "ready"
+        ? host._root.querySelector('[data-screen="banner"] .show > .art.wide')
+        : null;
   const identity = JSON.stringify([runId, connectionId, bannerId, rotation, art]);
   if (state.target === target && state.identity === identity && state.banner === banner) return;
   state.cleanup?.();
@@ -108,9 +112,9 @@ export function wireForgeBannerAnimation(host) {
     !disposed &&
     host._run?.runId === runId &&
     host._run?.animationConnectionId === connectionId &&
-    host._summonBanner?.banner?.art === art &&
-    host._summonBanner?.banner?.id === bannerId &&
-    (host._summonBanner?.banner?.music?.cue || "") === rotation &&
+    activeBanner()?.art === art &&
+    activeBanner()?.id === bannerId &&
+    (activeBanner()?.music?.cue || "") === rotation &&
     target.isConnected;
   const update = () => {
     if (!current()) return;

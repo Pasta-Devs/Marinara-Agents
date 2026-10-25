@@ -14,7 +14,8 @@ PLAYER AGENCY: the narrator may offer short, reconverging protagonist dialogue/a
   return result;
 }
 
-export function forgeChoiceMessages(messages, { enabled, terminal }) {
+export function forgeChoiceMessages(messages, { enabled, terminal, event }) {
+  if (event) messages = [...messages, { role: "user", content: event }];
   if (!enabled) return messages;
   const result = messages.map((message) => ({ ...message }));
   result[0].content = result[0].content.replace(
@@ -161,6 +162,7 @@ export function forgeCreateChoiceRuntime({
   bondHistory,
   readRun,
   resolveChapter,
+  choiceChapterActive = async () => true,
 }) {
   const generationQueues = new Map();
 
@@ -205,6 +207,9 @@ export function forgeCreateChoiceRuntime({
     for (const row of rows) {
       if (!row?.id?.startsWith(prefix) || !row.data) continue;
       const data = row.data;
+      // Expired/disabled event choices cannot hold unrelated main-story generation.
+      // A chapter-scoped operation still checks its own unresolved choices normally.
+      if (chapter == null && !(await choiceChapterActive(runId, data.chapter))) continue;
       if (beforeChapter != null) {
         const numeric = Number(data.chapter);
         if (Number.isInteger(numeric)) {
