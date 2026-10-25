@@ -1,5 +1,17 @@
 # Quartermaster changelog
 
+## 0.1.29 — 2026-10-25 [highlight]
+- Hide items and outfits from their ⋯ menu. Hidden ones get their own Bag tab and are kept from
+  the agent: it only sees a hidden item while you're wearing it.
+- New Hidden Items settings choose what the agent may do to a hidden item, and whether it asks
+  first. Asking shows the change side by side so you can accept it or keep the old details.
+- Lock an item's description from the item editor so the agent can't change it.
+- Feed appearance has seven options, including equipped item names and descriptions. Outfit
+  portraits follow the same setting.
+- Build Wardrobe can use hidden items when you allow it, and always asks you about each one first.
+- Optional Delete button on item and outfit cards (Settings → Display, saved per device).
+- Re-equipping an outfit whose item was deleted now brings the item back with its default slot.
+
 ## 0.1.28 — 2026-10-17
 - Build Wardrobe layers clothing properly: when two pieces of an outfit share a layer (tights and a
   skirt over them), the outer one moves up a layer instead of being left out.

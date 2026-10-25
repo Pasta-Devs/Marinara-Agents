@@ -31,11 +31,13 @@ Everything else is optional, for when you want more:
 Opened from the chevron above the Engine's native Tracker Panel. A floating, resizable window with
 its own UI Size and Thumbnail Size controls, split into two top-level tabs:
 
-- **Inventory** — Recent Agent Update (see below) above three sections: **Outfits**, **Equipped
+- **Inventory** — Pending Item Changes (only while the agent is waiting on you, see Hidden Items
+  below) and Recent Item Updates (see below) above three sections: **Outfits**, **Equipped
   items** (around your portrait), and **Bag**. Each section can be collapsed to a narrow strip to
   save space, and they stack vertically instead of side-by-side once the dock (or your screen) gets
   narrow.
-- **Settings** — grouped under Appearance, Display, Image Generation, and Data, with a small `?`
+- **Settings** — grouped under Appearance, Hidden Items, Display, Image Generation, and Data, with a
+  small `?`
   next to anything that needs more explaining than its label alone — tap or hover it for details,
   rather than a permanent paragraph taking up space whether you need it or not.
 
@@ -69,6 +71,7 @@ Build Wardrobe):
 - Give an outfit its own portrait (uploaded or generated) and the dock shows that in place of
   your persona's usual avatar whenever it's equipped. An opt-in setting can push this to your
   persona's *real* Marinara avatar too — see "Before enabling..." below before turning it on.
+- **Hide** an outfit from its ⋯ menu to keep it from the agent (see Hidden Items below).
 
 ## Inventory (the Bag)
 
@@ -79,15 +82,19 @@ leaving an add form always open and eating space above the list:
 - Give an item a **default slot**, so it always knows which slot it belongs to when equipped using
   the "Equip" buttons.
 
-Each item's card shows Edit and Delete behind a small **⋯** menu — only Equip stays a visible
-button — so the description gets more room instead of clipping. Slot and stash info only shows on
+Each item's card shows Hide, Edit and Delete behind a small **⋯** menu — only Equip stays a
+visible button — so the description gets more room instead of clipping. Turn on **Quick delete**
+in Settings → Display to also get a Delete button on every item and outfit card (it still asks
+first). Quick delete is saved in this browser, so it applies to every chat on this device. Slot and stash info only shows on
 the card when there's actually something to say (a default slot set, or a named stash) — a plain
 bag item with no default slot shows neither line at all.
 
-The Bag is split into three tabs so a busy inventory stays easy to scan:
+The Bag is split into four tabs so a busy inventory stays easy to scan:
 - **Items** — everything else.
 - **Wearables** — anything with a default slot set.
 - **Stored** — anything tucked away in a named stash (this wins over "wearable" if both apply).
+- **Hidden** — items you've hidden. By default they show only here; turn off "Hidden items only in
+  the Hidden tab" to also see them, marked Hidden, in their usual tab.
 
 Other conveniences:
 - **Quantity** adjusts right on the item's card — no need to open the full editor for the one
@@ -99,6 +106,38 @@ Other conveniences:
   actually fill it — including stashed items, not just what's sitting loose in the bag.
 - **Export/Import** your whole setup (items, outfits, settings) as a JSON file — carry your setup
   between chats, or back it up before reinstalling Marinara Engine.
+
+## Hidden Items & Locked Descriptions
+
+**Hide** an item or outfit from its ⋯ menu when the agent shouldn't know about it (a surprise
+gift, a disguise, something stashed away). The agent never sees a hidden item, except while you're
+wearing it: putting one on shows it for as long as it's worn, and taking it off hides it again.
+Hiding something you're wearing takes it off. Equipping an outfit always puts on and takes off its
+hidden pieces, whoever equips it. The agent can always take off a hidden item you're wearing.
+
+Settings → Hidden Items decides what happens when the agent tries to change a hidden item anyway:
+- **Ask before agent changes to hidden items** (on by default): the change waits for you. A popup
+  shows what would change, side by side, with **Accept changes** and **Keep old item details**.
+  Closing the popup leaves the change under **Pending Item Changes** in the dock until you decide.
+  If the item changed in the meantime, you see all three versions and pick which to keep. Accepted
+  changes appear in Recent Item Updates and can be reverted.
+- **Hidden item access** (used when not asking; when asking, it only decides whether the popup's
+  "Show item" box starts ticked):
+  - *Only you can change it — stays hidden* (default): the agent's changes are skipped.
+  - *Only you can change it — becomes shown*: details and removals are skipped, but the agent may
+    equip or move it, which shows it.
+  - *Agent can change it — stays hidden*: the agent's changes apply, and it stays hidden.
+  - *Agent can change it — becomes shown*: the agent's changes apply, and it's shown again.
+- **Build Wardrobe can use hidden items** (off by default): see Build Wardrobe below.
+- **Hidden items only in the Hidden tab** (on by default): see the Bag tabs above.
+
+**Lock** an item's description with the lock button at the top of the description in its editor.
+The agent then never changes that description, hidden or not; the card shows a small lock. Your
+own edits still work, and so do changes you choose yourself (accepting a pending change, Revert,
+Restore Inventory, or overwriting it in Build Wardrobe).
+
+These settings are per chat, are included in Export/Import, and leave pending changes out of the
+export.
 
 ## Item Images & Generated Art
 
@@ -130,8 +169,12 @@ large your inventory gets.
 - **Build Wardrobe**: describe a style in plain language and get back a proposed set of new items
   and outfits to review before anything's added — it'll reuse wearable items you already have
   instead of always inventing new ones. Uses the *same* connection as the tracking agent (set once
-  in the Agents menu — switch it there and both move together).
-- **Recent Agent Update**: a collapsible section on the Inventory tab (right next to Restore
+  in the Agents menu — switch it there and both move together). Hidden items are left out unless
+  you turn on "Build Wardrobe can use hidden items". Whenever a proposal uses a hidden item, you
+  see its details beside the new ones and choose **Overwrite with new details**, **Keep hidden
+  item's details**, or **Skip** (the default, which leaves it out of those outfits), and whether to
+  show it again.
+- **Recent Item Updates**: a collapsible section on the Inventory tab (right next to Restore
   Inventory below) showing what the last turn actually added, changed, or removed — colored rows
   (green/yellow/red) with a Revert button beside each one, for undoing one specific mistake without
   touching anything else the turn got right. Reverting refuses rather than overwrites if that item
@@ -152,9 +195,18 @@ large your inventory gets.
 
 Drop `{{getvar::quartermaster_appearance_persona}}` into your persona's Appearance field once, and
 Quartermaster keeps it updated automatically from then on — feeding your current outfit or
-equipped items to anything that reads the persona's appearance, like Illustrator. Pick whether it
-feeds outfit descriptions or a plain list of equipped item names in Settings. Leave the macro out,
-and it does nothing — no forced changes to your persona.
+equipped items to anything that reads the persona's appearance, like Illustrator. Pick what it
+feeds in Settings → Appearance:
+- **Off**, **Outfit Name**, **Outfit Description**, or **Outfit Name + Description** — for the
+  saved outfit you're wearing. With no matching outfit (or a hidden one, or one without that text),
+  it uses the matching equipped-item option instead.
+- **Equipped Item Names**, **Equipped Item Descriptions**, or **Equipped Item Names +
+  Descriptions** — every item you're wearing, outermost layers first. An item with no description
+  uses its name.
+
+Names and descriptions are written as "Red baseball hat, A weathered red baseball hat. Black
+sneakers, A pair of sporty black sneakers." Outfit portrait prompts use the same choice. Leave the
+macro out, and it does nothing — no forced changes to your persona.
 
 ## Tracker Panel
 
@@ -166,6 +218,8 @@ other tracker sections — click it to expand three independently-collapsible su
 - **Outfits** — with equip/unequip buttons.
 - **Inventory** — everything not currently equipped, grouped by where it's kept (Bag first, then
   each named stash as its own labeled group), so you're never seeing an item listed twice.
+
+Hidden items and outfits are marked Hidden here too.
 
 ## Before enabling "replace persona's real avatar on equip"
 
@@ -216,6 +270,24 @@ and every bundled icon, and writes `artifacts/quartermaster-<version>.zip` — r
 overwrite an already-released version's artifact file if you forget to bump `VERSION` first.
 
 ## Changelog
+
+### 0.1.29
+- **Hidden items and outfits**: hide anything from its ⋯ menu to keep it from the agent, which
+  only sees a hidden item while you're wearing it. Hidden items get their own Bag tab, a dimmed
+  card and a Hidden label, here and in the Tracker Panel.
+- **Hidden Items settings**: ask before agent changes to hidden items (a side-by-side popup, with
+  undecided changes kept under Pending Item Changes in the dock), choose what the agent may do to
+  them when not asking, let Build Wardrobe use them, and show them outside the Hidden tab.
+- **Description lock**: lock an item's description from its editor so the agent can't change it.
+- **Feed appearance** has seven options, from outfit name to every equipped item's name and
+  description. Outfit portrait prompts follow it, without the doubled period they could have.
+- **Build Wardrobe** asks what to do with each hidden item a proposal uses: overwrite, keep its
+  details, or skip it.
+- **Quick delete**: an optional Delete button on item and outfit cards, saved per device.
+- "Recent Agent Update" is now **Recent Item Updates**, since accepted changes show there too.
+- Re-equipping an outfit whose item you'd deleted now brings it back with its own default slot
+  (and lock), instead of the slot it was equipped in. Reverting an agent's removal restores the
+  item's default slot, hidden state and lock too.
 
 ### 0.1.28
 - **Build Wardrobe layering**: the model now just gives each garment its usual slot and lists an

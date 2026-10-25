@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import vm from "node:vm";
 
@@ -892,80 +894,6 @@ await test("clothing layers stack as cards: outermost worn in front, arrows and 
   }
 });
 
-await test("Build Wardrobe moves a later piece sharing a clothing slot up a layer instead of dropping it", () => {
-  // server.mjs only exports activate(), so run the two functions this needs from its source.
-  const serverPart = (start) => {
-    const from = serverSource.indexOf(start);
-    return serverSource.slice(from, serverSource.indexOf("\n}\n", from) + 2);
-  };
-  let ids = 0;
-  const wardrobeContext = vm.createContext({ randomUUID: () => `id-${++ids}` });
-  vm.runInContext(
-    `${serverPart("function qmNormalizeMatchKey(")}\n${serverPart("const CLOTHING_LAYERS_INSIDE_OUT")}`,
-    wardrobeContext,
-  );
-  const applyGeneratedWardrobe = vm.runInContext("applyGeneratedWardrobe", wardrobeContext);
-  const apply = (items, itemNames) => {
-    const state = { items: [], outfits: [] };
-    const result = applyGeneratedWardrobe(state, {
-      items: items.map(([name, defaultSlot]) => ({ name, defaultSlot, quantity: 1 })),
-      outfits: [{ name: "Look", description: "", itemNames }],
-    });
-    return {
-      slots: Object.fromEntries(Object.entries(state.outfits[0].slots).map(([slot, member]) => [slot, member.name])),
-      skipped: [...result.skipped].map((entry) => entry.itemName),
-      items: state.items,
-    };
-  };
-
-  let look = apply(
-    [
-      ["Black Tights", "clothing_legs"],
-      ["Pencil Skirt", "clothing_legs"],
-    ],
-    ["Black Tights", "Pencil Skirt"],
-  );
-  assert.deepEqual(look.slots, { clothing_legs: "Black Tights", midlayer_legs: "Pencil Skirt" });
-  assert.deepEqual(look.skipped, []);
-  assert.equal(
-    look.items.find((item) => item.name === "Pencil Skirt").defaultSlot,
-    "clothing_legs",
-    "worn on its own, the skirt still goes to the inner layer",
-  );
-
-  look = apply(
-    [
-      ["Shirt", "clothing_torso"],
-      ["Waistcoat", "clothing_torso"],
-      ["Blazer", "clothing_torso"],
-      ["Overcoat", "clothing_torso"],
-    ],
-    ["Shirt", "Waistcoat", "Blazer", "Overcoat"],
-  );
-  assert.deepEqual(look.slots, { clothing_torso: "Shirt", midlayer_torso: "Waistcoat", outerwear_torso: "Blazer" });
-  assert.deepEqual(look.skipped, ["Overcoat"], "a fourth layer has nowhere to go");
-
-  look = apply(
-    [
-      ["Shirt", "clothing_torso"],
-      ["Waistcoat", "midlayer_torso"],
-      ["Jacket", "clothing_torso"],
-    ],
-    ["Shirt", "Waistcoat", "Jacket"],
-  );
-  assert.deepEqual(look.slots, { clothing_torso: "Shirt", midlayer_torso: "Waistcoat", outerwear_torso: "Jacket" });
-
-  look = apply(
-    [
-      ["Boots", "feet"],
-      ["Sandals", "feet"],
-    ],
-    ["Boots", "Sandals"],
-  );
-  assert.deepEqual(look.slots, { feet: "Boots" });
-  assert.deepEqual(look.skipped, ["Sandals"], "other slots still collide as before");
-});
-
 await test("every slot has bundled icon art that exists", async () => {
   const iconFiles = Object.fromEntries(
     [...serverSource.match(/const SLOT_ICON_FILES = \{([\s\S]*?)\};/)[1].matchAll(/(\w+): "([^"]+)"/g)].map((match) => [
@@ -978,4 +906,732 @@ await test("every slot has bundled icon art that exists", async () => {
   for (const [slot, file] of Object.entries(iconFiles)) {
     assert.ok(bundled.has(`${file}.webp`), `${slot} -> icons/${file}.webp`);
   }
+});
+
+// ── server.mjs through its real entry point ─────────────────────────────────
+// activate() against a stand-in Engine: in-memory documents, chats and one
+// persona, with the routes, agent service and narrator feed it registers
+// captured so tests drive exactly what the Engine would.
+async function startServer({ proposal = { items: [], outfits: [] } } = {}) {
+  const { activate } = await import(new URL("../packages/quartermaster/server.mjs", import.meta.url));
+  const docs = new Map();
+  const chats = new Map();
+  const chatFor = (id) => {
+    if (!chats.has(id)) chats.set(id, { id, personaId: "persona-1", metadata: {}, connectionId: null });
+    return chats.get(id);
+  };
+  const handlers = new Map();
+  const llmCalls = [];
+  let agent;
+  let narrator;
+  const persistence = {
+    documents: {
+      async getById(_packageId, id) {
+        return docs.has(id) ? structuredClone(docs.get(id)) : null;
+      },
+      async create(doc) {
+        docs.set(doc.id, { ...structuredClone(doc), revision: 1 });
+      },
+      async update(doc) {
+        const current = docs.get(doc.id);
+        docs.set(doc.id, { ...current, ...structuredClone(doc), revision: current.revision + 1 });
+      },
+    },
+    async getChat(id) {
+      return chatFor(id);
+    },
+    async withChatLock(_id, fn) {
+      return fn();
+    },
+    async updateChatMetadata({ chatId, metadata }) {
+      chatFor(chatId).metadata = metadata;
+    },
+  };
+  const api = {
+    runtime: {
+      persistence,
+      resources: {
+        async listPersonas() {
+          return [{ data: { name: "Aria", appearance: "", avatarPath: null } }];
+        },
+        async updatePersona() {},
+      },
+      logger: { warn() {}, info() {}, debug() {}, error() {}, debugOverride() {} },
+      isDebugAgentsEnabled: () => false,
+      getAgentConfig: async () => null,
+      json: { parseJsonish: (text) => JSON.parse(text) },
+      languageModels: {
+        resolveForRequest: async () => ({
+          chatComplete: async (messages) => {
+            llmCalls.push(messages);
+            return { content: JSON.stringify(proposal), finishReason: "stop" };
+          },
+        }),
+      },
+    },
+    registerService(_key, service) {
+      agent = service;
+      return () => {};
+    },
+    registerPromptContext(fn) {
+      narrator = fn;
+      return () => {};
+    },
+    async registerPrivilegedRoutes(register) {
+      const routes = {};
+      for (const method of ["get", "post", "patch", "put", "delete"]) {
+        routes[method] = (path, handler) => handlers.set(`${method.toUpperCase()} ${path}`, handler);
+      }
+      await register(routes);
+      return () => {};
+    },
+  };
+  const dataDir = await mkdtemp(join(tmpdir(), "qm-server-"));
+  await activate({ api, dataDir });
+
+  const call = async (method, path, { params = {}, body } = {}) => {
+    const reply = {
+      statusCode: 200,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      send(payload) {
+        return { statusCode: this.statusCode, body: payload };
+      },
+      header() {
+        return this;
+      },
+      type() {
+        return this;
+      },
+    };
+    const result = await handlers.get(`${method} ${path}`)({ params, body }, reply);
+    return result && "statusCode" in result && "body" in result ? result : { statusCode: 200, body: result };
+  };
+  const inv = (chatId) => ({ chatId, ownerId: "persona" });
+  const server = {
+    llmCalls,
+    get: async (chatId) => (await call("GET", "/inventory/:chatId/:ownerId", { params: inv(chatId) })).body,
+    addItem: (chatId, body) => call("POST", "/inventory/:chatId/:ownerId/items", { params: inv(chatId), body }),
+    patchItem: (chatId, itemId, body) =>
+      call("PATCH", "/inventory/:chatId/:ownerId/items/:itemId", { params: { ...inv(chatId), itemId }, body }),
+    deleteItem: (chatId, itemId) =>
+      call("DELETE", "/inventory/:chatId/:ownerId/items/:itemId", { params: { ...inv(chatId), itemId } }),
+    settings: (chatId, body) => call("PATCH", "/inventory/:chatId/:ownerId/settings", { params: inv(chatId), body }),
+    saveOutfit: (chatId, body) => call("POST", "/inventory/:chatId/:ownerId/outfits", { params: inv(chatId), body }),
+    patchOutfit: (chatId, outfitId, body) =>
+      call("PATCH", "/inventory/:chatId/:ownerId/outfits/:outfitId", { params: { ...inv(chatId), outfitId }, body }),
+    equipOutfit: (chatId, outfitId) =>
+      call("POST", "/inventory/:chatId/:ownerId/outfits/:outfitId/equip", { params: { ...inv(chatId), outfitId } }),
+    portraitPrompt: (chatId, outfitId) =>
+      call("POST", "/inventory/:chatId/:ownerId/outfits/:outfitId/portrait/prompt-preview", {
+        params: { ...inv(chatId), outfitId },
+      }),
+    unequipAll: (chatId) => call("POST", "/inventory/:chatId/:ownerId/unequip-all", { params: inv(chatId) }),
+    resolvePending: (chatId, pendingId, body) =>
+      call("POST", "/inventory/:chatId/:ownerId/pending/:pendingId/resolve", {
+        params: { ...inv(chatId), pendingId },
+        body,
+      }),
+    markSeen: (chatId, ids) =>
+      call("POST", "/inventory/:chatId/:ownerId/pending/seen", { params: inv(chatId), body: { ids } }),
+    revert: (chatId, itemId) =>
+      call("POST", "/inventory/:chatId/:ownerId/revert-item", { params: inv(chatId), body: { itemId } }),
+    generateWardrobe: (chatId) =>
+      call("POST", "/inventory/:chatId/:ownerId/wardrobe/generate", {
+        params: inv(chatId),
+        body: { direction: "office wear", includePersonaContext: false },
+      }),
+    confirmWardrobe: (chatId, body) =>
+      call("POST", "/inventory/:chatId/:ownerId/wardrobe/confirm", { params: inv(chatId), body }),
+    exportSheet: async (chatId) =>
+      (await call("GET", "/inventory/:chatId/:ownerId/export", { params: inv(chatId) })).body,
+    importSheet: (chatId, body) => call("POST", "/inventory/:chatId/:ownerId/import", { params: inv(chatId), body }),
+    agentContext: (chatId) => agent.prepareContext({ context: { chatId, chatMode: "roleplay" } }),
+    agentTurn: (chatId, data) =>
+      agent.finalizeResult({
+        context: { chatId, chatMode: "roleplay" },
+        result: { success: true, data: { addItem: [], updateItem: [], removeItem: [], equipOutfit: null, ...data } },
+      }),
+    narratorText: async (chatId) =>
+      (
+        await narrator({
+          chatId,
+          mode: "roleplay",
+          chatMeta: { enableAgents: true, activeAgentIds: ["quartermaster"] },
+        })
+      )?.text ?? "",
+    appearance: (chatId) => chatFor(chatId).metadata.macroVariables?.quartermaster_appearance_persona ?? "",
+  };
+  server.item = async (chatId, name) => (await server.get(chatId)).items.find((item) => item.name === name);
+  server.seed = async (chatId, items) => {
+    for (const item of items) await server.addItem(chatId, item);
+    return Object.fromEntries((await server.get(chatId)).items.map((item) => [item.name, item]));
+  };
+  return server;
+}
+
+await test("hidden items stay out of what the model sees, except while worn", async () => {
+  const server = await startServer();
+  const items = await server.seed("chat-1", [
+    { name: "Red Amulet", description: "a secret", defaultSlot: "neck" },
+    { name: "Sword", description: "steel" },
+    { name: "Hat", location: "equipped:head", defaultSlot: "head" },
+  ]);
+  await server.patchItem("chat-1", items["Red Amulet"].id, { hidden: true });
+  await server.saveOutfit("chat-1", { name: "Secret Look", description: "x" });
+  const [secretLook] = (await server.get("chat-1")).outfits;
+  await server.patchOutfit("chat-1", secretLook.id, { hidden: true });
+
+  let context = await server.agentContext("chat-1");
+  assert.match(context, /\[1\] Sword -- steel/);
+  assert.match(context, /\[2\] Hat/);
+  assert.doesNotMatch(context, /Red Amulet|Secret Look/);
+  assert.doesNotMatch(await server.narratorText("chat-1"), /Red Amulet/);
+
+  // Tags skip hidden items on both sides: [2] is still the hat.
+  await server.agentTurn("chat-1", { updateItem: [{ target: 2, description: "a straw hat" }] });
+  assert.equal((await server.item("chat-1", "Hat")).description, "a straw hat");
+  assert.equal((await server.item("chat-1", "Red Amulet")).description, "a secret");
+
+  // Wearing a hidden item shows it; taking it off hides it again.
+  await server.settings("chat-1", { appearanceFeedMode: "equippedNames" });
+  await server.patchItem("chat-1", items["Red Amulet"].id, { location: "equipped:neck" });
+  assert.match(await server.agentContext("chat-1"), /Red Amulet/);
+  assert.match(await server.narratorText("chat-1"), /Red Amulet/);
+  assert.equal(server.appearance("chat-1"), "Hat, Red Amulet");
+  await server.patchItem("chat-1", items["Red Amulet"].id, { location: "bag" });
+  assert.doesNotMatch(await server.agentContext("chat-1"), /Red Amulet/);
+
+  // Hiding a worn item takes it off.
+  await server.patchItem("chat-1", items.Hat.id, { hidden: true });
+  const hat = await server.item("chat-1", "Hat");
+  assert.equal(hat.location, "bag");
+  assert.equal(hat.hidden, true);
+  assert.equal(server.appearance("chat-1"), "");
+});
+
+await test("without asking, the agent's changes to hidden items follow the access mode", async () => {
+  const server = await startServer();
+  const tryChange = async (mode) => {
+    const chat = `access-${mode}`;
+    const { "Red Amulet": amulet } = await server.seed(chat, [
+      { name: "Red Amulet", description: "old", defaultSlot: "neck" },
+    ]);
+    await server.patchItem(chat, amulet.id, { hidden: true });
+    await server.settings(chat, { askBeforeHiddenChanges: false, hiddenItemAccess: mode });
+    await server.agentTurn(chat, {
+      addItem: [{ name: "Red Amulet", description: "new", quantity: 2, location: "equipped:neck" }],
+    });
+    const after = await server.item(chat, "Red Amulet");
+    const outcome = (await server.get(chat)).lastTrackerChange.hiddenOutcomes.map((entry) => entry.outcome);
+    return [after.description, after.quantity, after.location, after.hidden, outcome.join()];
+  };
+  assert.deepEqual(await tryChange("userHidden"), ["old", 1, "bag", true, "skipped"]);
+  assert.deepEqual(await tryChange("userShown"), ["old", 1, "equipped:neck", false, "shown"]);
+  assert.deepEqual(await tryChange("agentHidden"), ["new", 2, "equipped:neck", true, "applied"]);
+  assert.deepEqual(await tryChange("agentShown"), ["new", 2, "equipped:neck", false, "appliedShown"]);
+
+  const items = (await server.get("access-userHidden")).items;
+  assert.equal(items.length, 1, "no duplicate item is created for a hidden name");
+
+  // A lone removal attempt (only possible while it's worn) is skipped and
+  // doesn't show the item, even in "userShown".
+  const { Locket: locket } = await server.seed("access-removal", [{ name: "Locket", defaultSlot: "neck" }]);
+  await server.patchItem("access-removal", locket.id, { hidden: true });
+  await server.patchItem("access-removal", locket.id, { location: "equipped:neck" });
+  await server.settings("access-removal", { askBeforeHiddenChanges: false, hiddenItemAccess: "userShown" });
+  await server.agentTurn("access-removal", { removeItem: [1] });
+  const kept = await server.item("access-removal", "Locket");
+  assert.deepEqual([Boolean(kept), kept.hidden], [true, true]);
+  assert.equal((await server.get("access-removal")).lastTrackerChange.hiddenOutcomes[0].outcome, "skipped");
+});
+
+await test("a worn hidden item can be taken off by the agent, but not otherwise changed", async () => {
+  const server = await startServer();
+  const { Cloak: cloak } = await server.seed("chat-2", [{ name: "Cloak", description: "grey", defaultSlot: "back" }]);
+  await server.patchItem("chat-2", cloak.id, { hidden: true });
+  await server.patchItem("chat-2", cloak.id, { location: "equipped:back" });
+  await server.settings("chat-2", { askBeforeHiddenChanges: false, hiddenItemAccess: "userHidden" });
+  await server.agentTurn("chat-2", { updateItem: [{ target: 1, description: "torn" }] });
+  assert.equal((await server.item("chat-2", "Cloak")).description, "grey");
+  await server.agentTurn("chat-2", { updateItem: [{ target: 1, location: "bag" }] });
+  const after = await server.item("chat-2", "Cloak");
+  assert.equal(after.location, "bag");
+  assert.equal(after.hidden, true);
+  assert.doesNotMatch(await server.agentContext("chat-2"), /Cloak/);
+});
+
+await test("an outfit equips its hidden pieces, whoever equips it, and swapping it takes them off", async () => {
+  const server = await startServer();
+  const items = await server.seed("chat-3", [
+    { name: "Reversible Jacket (Blue Out)", defaultSlot: "outerwear_torso", location: "equipped:outerwear_torso" },
+    { name: "Shirt", defaultSlot: "clothing_torso", location: "equipped:clothing_torso" },
+  ]);
+  await server.saveOutfit("chat-3", { name: "Blue Look" });
+  await server.patchItem("chat-3", items["Reversible Jacket (Blue Out)"].id, { hidden: true });
+  await server.unequipAll("chat-3");
+  await server.agentTurn("chat-3", { equipOutfit: "A" });
+  const jacket = await server.item("chat-3", "Reversible Jacket (Blue Out)");
+  assert.equal(jacket.location, "equipped:outerwear_torso");
+  assert.equal(jacket.hidden, true, "still hidden underneath, just shown while worn");
+  assert.match(await server.agentContext("chat-3"), /Reversible Jacket/);
+});
+
+await test("the description lock stops the agent on every path", async () => {
+  const server = await startServer();
+  const { Ring: ring } = await server.seed("chat-4", [
+    { name: "Ring", description: "mine", defaultSlot: "extra_wearable_1" },
+  ]);
+  await server.patchItem("chat-4", ring.id, { descriptionLocked: true });
+  await server.agentTurn("chat-4", { updateItem: [{ target: 1, description: "changed", quantity: 3 }] });
+  await server.agentTurn("chat-4", { addItem: [{ name: "Ring", description: "changed again" }] });
+  const after = await server.item("chat-4", "Ring");
+  assert.equal(after.description, "mine");
+  assert.equal(after.quantity, 3, "other fields still change");
+
+  await server.patchItem("chat-4", ring.id, { hidden: true });
+  await server.settings("chat-4", { askBeforeHiddenChanges: false, hiddenItemAccess: "agentHidden" });
+  await server.agentTurn("chat-4", { addItem: [{ name: "Ring", description: "agent mode", location: "bag" }] });
+  assert.equal((await server.item("chat-4", "Ring")).description, "mine");
+});
+
+await test("asking first holds the agent's change until the user settles it", async () => {
+  const server = await startServer();
+  const { Amulet: amulet } = await server.seed("chat-5", [{ name: "Amulet", description: "old", defaultSlot: "neck" }]);
+  await server.patchItem("chat-5", amulet.id, { hidden: true, descriptionLocked: true });
+  await server.agentTurn("chat-5", { addItem: [{ name: "Amulet", description: "first", location: "bag" }] });
+  await server.agentTurn("chat-5", { addItem: [{ name: "Amulet", description: "second", location: "equipped:neck" }] });
+  let state = await server.get("chat-5");
+  assert.equal(state.items[0].description, "old", "nothing applies while it waits");
+  assert.equal(state.pendingHiddenChanges.length, 1, "a newer change replaces the older one");
+  const [pending] = state.pendingHiddenChanges;
+  assert.deepEqual(
+    [pending.after.description, pending.after.location, pending.seen, pending.descriptionLocked],
+    ["second", "equipped:neck", false, true],
+  );
+  assert.equal(state.lastTrackerChange.hiddenOutcomes[0].outcome, "pending");
+
+  await server.markSeen("chat-5", [pending.id]);
+  assert.equal((await server.get("chat-5")).pendingHiddenChanges[0].seen, true);
+
+  const accepted = await server.resolvePending("chat-5", pending.id, { decision: "accept", show: false });
+  assert.equal(accepted.statusCode, 200);
+  state = await server.get("chat-5");
+  assert.deepEqual(
+    [state.items[0].description, state.items[0].location, state.items[0].hidden, state.pendingHiddenChanges.length],
+    ["second", "equipped:neck", true, 0],
+    "accepting applies it, even over the lock",
+  );
+  assert.equal((await server.revert("chat-5", amulet.id)).statusCode, 200, "an accepted change can be reverted");
+  assert.equal((await server.item("chat-5", "Amulet")).description, "old");
+
+  // The item changed after the agent's change: accepting shows all three
+  // versions first, then applies only what the agent changed on top of now.
+  await server.agentTurn("chat-5", { addItem: [{ name: "Amulet", description: "third", location: "bag" }] });
+  let pendingId = (await server.get("chat-5")).pendingHiddenChanges[0].id;
+  await server.patchItem("chat-5", amulet.id, { quantity: 4 });
+  const stale = await server.resolvePending("chat-5", pendingId, { decision: "accept" });
+  assert.equal(stale.statusCode, 409, "nothing applies without seeing what changed");
+  assert.deepEqual(
+    [stale.body.stale, stale.body.before.quantity, stale.body.current.quantity, stale.body.after.description],
+    [true, 1, 4, "third"],
+  );
+  await server.resolvePending("chat-5", pendingId, { decision: "accept", override: true });
+  state = await server.get("chat-5");
+  assert.deepEqual(
+    [state.items[0].description, state.items[0].quantity, state.pendingHiddenChanges.length],
+    ["third", 4, 0],
+    "the agent's description lands; the user's newer quantity stays",
+  );
+
+  await server.agentTurn("chat-5", { addItem: [{ name: "Amulet", description: "fifth", location: "bag" }] });
+  pendingId = (await server.get("chat-5")).pendingHiddenChanges[0].id;
+  await server.patchItem("chat-5", amulet.id, { description: "edited meanwhile" });
+  await server.resolvePending("chat-5", pendingId, { decision: "keep", show: true });
+  state = await server.get("chat-5");
+  assert.deepEqual([state.items[0].description, state.items[0].hidden], ["edited meanwhile", false]);
+
+  await server.patchItem("chat-5", amulet.id, { hidden: true });
+  await server.agentTurn("chat-5", { addItem: [{ name: "Amulet", description: "fourth", location: "bag" }] });
+  const deleted = await server.deleteItem("chat-5", amulet.id);
+  assert.equal(deleted.body.pendingHiddenChanges.length, 0, "the dock sees the cleared change at once");
+  assert.equal((await server.get("chat-5")).pendingHiddenChanges.length, 0, "deleting the item clears its change");
+});
+
+await test("Build Wardrobe asks before using hidden items, and layers what it uses", async () => {
+  const proposal = {
+    items: [
+      { name: "Black Tights", description: "sheer black tights", quantity: 1, defaultSlot: "clothing_legs" },
+      { name: "Pencil Skirt", description: "a grey pencil skirt", quantity: 1, defaultSlot: "clothing_legs" },
+    ],
+    outfits: [{ name: "Office", description: "smart office wear", itemNames: ["Black Tights", "Pencil Skirt"] }],
+  };
+  const server = await startServer({ proposal });
+  const setup = async (chat, { usesHidden = false } = {}) => {
+    const { "Black Tights": tights } = await server.seed(chat, [
+      { name: "Black Tights", description: "my old tights", defaultSlot: "clothing_legs" },
+    ]);
+    await server.patchItem(chat, tights.id, { hidden: true });
+    if (usesHidden) await server.settings(chat, { wardrobeUsesHidden: true });
+    return tights;
+  };
+  const officeSlots = async (chat) => {
+    const office = (await server.get(chat)).outfits.find((outfit) => outfit.name === "Office");
+    return Object.fromEntries(Object.entries(office.slots).map(([slot, piece]) => [slot, piece.name]));
+  };
+
+  const tights = await setup("wardrobe-1");
+  const generated = await server.generateWardrobe("wardrobe-1");
+  assert.doesNotMatch(JSON.stringify(server.llmCalls.at(-1)), /my old tights/, "hidden items aren't offered");
+  assert.deepEqual(
+    generated.body.hiddenMatches.map((match) => [match.itemId, match.proposed?.description]),
+    [[tights.id, "sheer black tights"]],
+  );
+  let confirmed = await server.confirmWardrobe("wardrobe-1", { proposal });
+  assert.deepEqual(await officeSlots("wardrobe-1"), { clothing_legs: "Pencil Skirt" }, "no choice means skip");
+  assert.deepEqual(
+    confirmed.body.summary.skipped.map((entry) => entry.reason),
+    ["hidden"],
+  );
+  assert.deepEqual(
+    [
+      (await server.item("wardrobe-1", "Black Tights")).description,
+      (await server.item("wardrobe-1", "Black Tights")).hidden,
+    ],
+    ["my old tights", true],
+  );
+
+  const tights2 = await setup("wardrobe-2", { usesHidden: true });
+  await server.generateWardrobe("wardrobe-2");
+  assert.match(JSON.stringify(server.llmCalls.at(-1)), /my old tights/, "offered when allowed");
+  await server.confirmWardrobe("wardrobe-2", {
+    proposal,
+    hiddenChoices: { [tights2.id]: { action: "overwrite", show: true } },
+  });
+  assert.deepEqual(await officeSlots("wardrobe-2"), { clothing_legs: "Black Tights", midlayer_legs: "Pencil Skirt" });
+  const overwritten = await server.item("wardrobe-2", "Black Tights");
+  assert.deepEqual([overwritten.description, overwritten.hidden], ["sheer black tights", false]);
+
+  const tights3 = await setup("wardrobe-3");
+  await server.confirmWardrobe("wardrobe-3", { proposal, hiddenChoices: { [tights3.id]: { action: "keep" } } });
+  const kept = await server.item("wardrobe-3", "Black Tights");
+  assert.deepEqual([kept.description, kept.hidden], ["my old tights", true]);
+  assert.deepEqual(await officeSlots("wardrobe-3"), { clothing_legs: "Black Tights", midlayer_legs: "Pencil Skirt" });
+
+  const layered = async (chat, items, itemNames) => {
+    const result = await server.confirmWardrobe(chat, {
+      proposal: {
+        items: items.map(([name, defaultSlot]) => ({ name, description: "", quantity: 1, defaultSlot })),
+        outfits: [{ name: "Office", description: "x", itemNames }],
+      },
+    });
+    return { slots: await officeSlots(chat), skipped: result.body.summary.skipped.map((entry) => entry.itemName) };
+  };
+  let look = await layered(
+    "wardrobe-4",
+    [
+      ["Shirt", "clothing_torso"],
+      ["Waistcoat", "clothing_torso"],
+      ["Blazer", "clothing_torso"],
+      ["Overcoat", "clothing_torso"],
+    ],
+    ["Shirt", "Waistcoat", "Blazer", "Overcoat"],
+  );
+  assert.deepEqual(look.slots, { clothing_torso: "Shirt", midlayer_torso: "Waistcoat", outerwear_torso: "Blazer" });
+  assert.deepEqual(look.skipped, ["Overcoat"], "a fourth layer has nowhere to go");
+  look = await layered(
+    "wardrobe-5",
+    [
+      ["Shirt", "clothing_torso"],
+      ["Waistcoat", "midlayer_torso"],
+      ["Jacket", "clothing_torso"],
+    ],
+    ["Shirt", "Waistcoat", "Jacket"],
+  );
+  assert.deepEqual(look.slots, { clothing_torso: "Shirt", midlayer_torso: "Waistcoat", outerwear_torso: "Jacket" });
+  look = await layered(
+    "wardrobe-6",
+    [
+      ["Boots", "feet"],
+      ["Sandals", "feet"],
+    ],
+    ["Boots", "Sandals"],
+  );
+  assert.deepEqual([look.slots, look.skipped], [{ feet: "Boots" }, ["Sandals"]], "other slots still collide");
+});
+
+await test("feed appearance writes outfit and item names and descriptions", async () => {
+  const server = await startServer();
+  const items = await server.seed("feed-1", [
+    { name: "Red baseball hat", description: "A weathered red velcro back baseball hat", location: "equipped:head" },
+    { name: "White Shirt", location: "equipped:clothing_torso" },
+    {
+      name: "Black Sneakers",
+      description: "A pair of sporty black sneakers with orange laces.",
+      location: "equipped:feet",
+    },
+  ]);
+  await server.saveOutfit("feed-1", { name: "Casual", description: "A relaxed weekend look" });
+  const [casual] = (await server.get("feed-1")).outfits;
+  const feed = async (mode) => {
+    await server.settings("feed-1", { appearanceFeedMode: mode });
+    return server.appearance("feed-1");
+  };
+  assert.equal(await feed("equippedNames"), "Red baseball hat, White Shirt, Black Sneakers");
+  assert.equal(
+    await feed("equippedDescriptions"),
+    "A weathered red velcro back baseball hat. White Shirt. A pair of sporty black sneakers with orange laces.",
+  );
+  assert.equal(
+    await feed("equippedNamesDescriptions"),
+    "Red baseball hat, A weathered red velcro back baseball hat. White Shirt. Black Sneakers, A pair of sporty black sneakers with orange laces.",
+  );
+  assert.equal(await feed("outfitName"), "Casual");
+  assert.equal(await feed("outfitDescription"), "A relaxed weekend look");
+  assert.equal(await feed("outfitNameDescription"), "Casual, A relaxed weekend look.");
+  assert.equal(await feed("off"), "");
+
+  await server.addItem("feed-1", { name: "Watch", location: "equipped:extra_wearable_1" });
+  assert.equal(await feed("outfitName"), "Casual. Also wearing Watch.", "extras worn alongside the outfit");
+  await server.patchOutfit("feed-1", casual.id, { hidden: true });
+  assert.equal(
+    await feed("outfitName"),
+    "Red baseball hat, White Shirt, Black Sneakers, Watch",
+    "a hidden outfit falls back to its item equivalent",
+  );
+  await server.patchOutfit("feed-1", casual.id, { hidden: false });
+
+  await server.settings("feed-1", { appearanceFeedMode: "off" });
+  assert.match((await server.portraitPrompt("feed-1", casual.id)).body.prompt, /wearing A relaxed weekend look/);
+  await server.settings("feed-1", { appearanceFeedMode: "equippedNamesDescriptions" });
+  assert.match(
+    (await server.portraitPrompt("feed-1", casual.id)).body.prompt,
+    /wearing Red baseball hat, A weathered red velcro back baseball hat\. White Shirt\./,
+  );
+  assert.doesNotMatch(
+    (await server.portraitPrompt("feed-1", casual.id)).body.prompt,
+    /\.\./,
+    "the template's own period isn't doubled",
+  );
+  assert.ok(items["White Shirt"]);
+});
+
+await test("outfits and reverts rebuild deleted items with their default slot, hidden state and lock", async () => {
+  const server = await startServer();
+  const { Waistcoat: waistcoat } = await server.seed("rebuild-1", [
+    { name: "Waistcoat", description: "plaid", defaultSlot: "clothing_torso", location: "equipped:midlayer_torso" },
+  ]);
+  await server.patchItem("rebuild-1", waistcoat.id, { descriptionLocked: true });
+  await server.saveOutfit("rebuild-1", { name: "Suit" });
+  const [suit] = (await server.get("rebuild-1")).outfits;
+  await server.deleteItem("rebuild-1", waistcoat.id);
+  await server.equipOutfit("rebuild-1", suit.id);
+  const rebuilt = await server.item("rebuild-1", "Waistcoat");
+  assert.deepEqual(
+    [rebuilt.defaultSlot, rebuilt.location, rebuilt.descriptionLocked],
+    ["clothing_torso", "equipped:midlayer_torso", true],
+  );
+
+  await server.importSheet("rebuild-2", {
+    items: [],
+    outfits: [{ name: "Old", slots: { feet: { itemId: "gone", name: "Old Boots", description: "" } } }],
+  });
+  const [old] = (await server.get("rebuild-2")).outfits;
+  await server.equipOutfit("rebuild-2", old.id);
+  assert.equal((await server.item("rebuild-2", "Old Boots")).defaultSlot, "feet", "older outfits use the slot");
+
+  const { Cloak: cloak } = await server.seed("rebuild-3", [{ name: "Cloak", defaultSlot: "back" }]);
+  await server.patchItem("rebuild-3", cloak.id, { hidden: true });
+  await server.patchItem("rebuild-3", cloak.id, { location: "equipped:back" });
+  await server.settings("rebuild-3", { askBeforeHiddenChanges: false, hiddenItemAccess: "agentHidden" });
+  await server.agentTurn("rebuild-3", { removeItem: [1] });
+  assert.equal(await server.item("rebuild-3", "Cloak"), undefined);
+  await server.revert("rebuild-3", cloak.id);
+  const restored = await server.item("rebuild-3", "Cloak");
+  assert.deepEqual([restored.hidden, restored.defaultSlot], [true, "back"]);
+});
+
+await test("export and import carry hidden items, locks and the new settings", async () => {
+  const server = await startServer();
+  const { Locket: locket } = await server.seed("export-1", [{ name: "Locket", description: "x", defaultSlot: "neck" }]);
+  await server.patchItem("export-1", locket.id, { hidden: true, descriptionLocked: true });
+  await server.saveOutfit("export-1", { name: "Plain" });
+  const [plain] = (await server.get("export-1")).outfits;
+  await server.patchOutfit("export-1", plain.id, { hidden: true });
+  await server.settings("export-1", {
+    appearanceFeedMode: "equippedNamesDescriptions",
+    askBeforeHiddenChanges: false,
+    hiddenItemAccess: "agentShown",
+    wardrobeUsesHidden: true,
+    hiddenOnlyInHiddenTab: false,
+  });
+  const sheet = await server.exportSheet("export-1");
+  assert.equal("pendingHiddenChanges" in sheet, false);
+  await server.importSheet("export-2", JSON.parse(JSON.stringify(sheet)));
+  const imported = await server.get("export-2");
+  assert.deepEqual(
+    [imported.items[0].hidden, imported.items[0].descriptionLocked, imported.outfits[0].hidden],
+    [true, true, true],
+  );
+  assert.deepEqual(
+    [
+      imported.appearanceFeedMode,
+      imported.askBeforeHiddenChanges,
+      imported.hiddenItemAccess,
+      imported.wardrobeUsesHidden,
+      imported.hiddenOnlyInHiddenTab,
+    ],
+    ["equippedNamesDescriptions", false, "agentShown", true, false],
+  );
+
+  await server.importSheet("export-3", { items: [{ name: "Old" }], outfits: [] });
+  const fresh = await server.get("export-3");
+  assert.deepEqual(
+    [fresh.items[0].hidden, fresh.askBeforeHiddenChanges, fresh.hiddenItemAccess, fresh.hiddenOnlyInHiddenTab],
+    [false, true, "userHidden", true],
+    "older files get the defaults",
+  );
+});
+
+await test("the Bag's Hidden tab holds hidden items, and other tabs only when the setting allows", () => {
+  const matches = vm.runInContext("qmItemMatchesBagTab", context);
+  const hiddenHat = { location: "bag", defaultSlot: "head", hidden: true };
+  const hat = { location: "bag", defaultSlot: "head", hidden: false };
+  const tabs = (item, hiddenOnly) =>
+    ["items", "wearables", "stored", "hidden"].filter((tab) => matches(item, tab, hiddenOnly));
+  assert.deepEqual(tabs(hiddenHat, true), ["hidden"]);
+  assert.deepEqual(tabs(hiddenHat, false), ["wearables", "hidden"]);
+  assert.deepEqual(tabs(hat, true), ["wearables"]);
+});
+
+await test("the pending popup opens for new changes, stays shut once deferred, and reviews a stale accept", async () => {
+  const buttons = [];
+  const node = (text = "") => {
+    const el = {
+      textContent: text,
+      style: {},
+      listeners: {},
+      children: [],
+      append(...nodes) {
+        this.children.push(...nodes);
+      },
+      appendChild(child) {
+        this.children.push(child);
+        return child;
+      },
+      replaceChildren(...nodes) {
+        this.children = nodes;
+      },
+      remove() {
+        this.removed = true;
+      },
+      setAttribute() {},
+      addEventListener(name, handler) {
+        this.listeners[name] = handler;
+      },
+    };
+    return el;
+  };
+  const listeners = new Set();
+  const seenCalls = [];
+  const resolveCalls = [];
+  const resolveAnswers = [];
+  const api = {
+    textNode: node,
+    button(label) {
+      const button = node(label);
+      buttons.push(button);
+      return button;
+    },
+    state: {
+      chatId: "chat-a",
+      hiddenItemAccess: "userHidden",
+      pendingHiddenChanges: [],
+      subscribe: (fn) => listeners.add(fn),
+      _notify() {
+        for (const fn of listeners) fn();
+      },
+      markPendingSeen: (ids) => seenCalls.push(ids),
+      resolvePending: async (id, decision) => {
+        resolveCalls.push([id, decision]);
+        return resolveAnswers.shift() ?? { items: [] };
+      },
+    },
+  };
+  const body = node();
+  const popupContext = vm.createContext({
+    QM: api,
+    QM_COLOR_WARNING: "orange",
+    qmLocationLabel: (location) => location,
+    qmAccessModeShows: (mode) => mode === "userShown" || mode === "agentShown",
+    document: { createElement: () => node(), body, addEventListener() {}, removeEventListener() {} },
+  });
+  vm.runInContext(
+    await readFile(new URL("../packages/quartermaster/src/13-pending.js", import.meta.url), "utf8"),
+    popupContext,
+  );
+  const popup = api.pendingPopup;
+  const fields = { name: "Amulet", description: "old", quantity: 1, location: "bag" };
+  const entry = (id, seen = false) => ({
+    id,
+    itemId: `item-${id}`,
+    seen,
+    remove: false,
+    before: { ...fields },
+    after: { ...fields, description: "new" },
+  });
+  const shownIds = () => popup.list.children.length;
+
+  api.state.pendingHiddenChanges = [entry("p1", true)];
+  api.state._notify();
+  assert.equal(popup.backdrop, null, "already-seen changes wait in the dock");
+
+  api.state.pendingHiddenChanges = [entry("p1", true), entry("p2")];
+  api.state._notify();
+  assert.ok(popup.backdrop, "an unseen change opens the popup");
+  assert.equal(shownIds(), 1);
+
+  popup.close();
+  assert.deepEqual([...seenCalls[0]], ["p2"]);
+  api.state._notify();
+  assert.equal(popup.backdrop, null, "a deferred change can't reopen it while marking seen is in flight");
+
+  api.state.pendingHiddenChanges = [entry("p1", true), entry("p2", true), entry("p3")];
+  api.state._notify();
+  assert.equal(shownIds(), 1, "only the newer change shows");
+  api.state.pendingHiddenChanges = [entry("p1", true), entry("p2", true)];
+  api.state._notify();
+  assert.equal(popup.backdrop, null, "settling everything it showed closes it");
+  assert.equal(seenCalls.length, 1, "without marking anything");
+
+  buttons.length = 0;
+  const card = () => vm.runInContext("qmBuildPendingEntry", popupContext)(entry("p4"));
+  card();
+  const click = async (label) => {
+    const button = buttons.findLast((candidate) => candidate.textContent === label);
+    assert.ok(button, `${label} is offered`);
+    await button.listeners.click();
+  };
+  resolveAnswers.push({
+    stale: true,
+    before: fields,
+    current: { ...fields, quantity: 4 },
+    after: { ...fields, description: "new" },
+  });
+  await click("Accept changes");
+  card();
+  await click("Apply the agent's change");
+  assert.deepEqual(
+    resolveCalls.map(([id, decision]) => [id, { ...decision }]),
+    [
+      ["p4", { decision: "accept", show: false }],
+      ["p4", { decision: "accept", show: false, override: true }],
+    ],
+  );
+  api.state.chatId = "chat-b";
+  api.state.pendingHiddenChanges = [];
+  api.state._notify();
+  assert.equal(popup.backdrop, null);
 });

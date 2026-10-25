@@ -1,5 +1,5 @@
-// Quartermaster 0.1.28 — Marinara Engine roleplay-tracker capability (single-file client bundle)
-// Built from packages/quartermaster/src (10 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
+// Quartermaster 0.1.29 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Built from packages/quartermaster/src (11 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
 // ===== 00-api.js =====
@@ -135,10 +135,12 @@ QM.generateWardrobe = (chatId, ownerId, direction, includePersonaContext) =>
   });
 
 // The separate confirm step that actually persists a previously-generated proposal.
-QM.confirmWardrobe = (chatId, ownerId, proposal) =>
+// hiddenChoices: { [itemId]: { action: "overwrite" | "keep" | "skip", show } }
+// for the hidden items the proposal uses; any it leaves out are skipped.
+QM.confirmWardrobe = (chatId, ownerId, proposal, hiddenChoices) =>
   qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/wardrobe/confirm`, {
     method: "POST",
-    body: JSON.stringify({ proposal }),
+    body: JSON.stringify({ proposal, hiddenChoices }),
   });
 
 QM.updateSettings = (chatId, ownerId, settings) =>
@@ -160,6 +162,29 @@ QM.restoreInventory = (chatId, ownerId) =>
   qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/restore`, {
     method: "POST",
     body: "{}",
+  });
+
+// Settles one pending agent change to a hidden item. Unlike qmRequest this
+// resolves (never throws) on a 409, since a stale change answers with the
+// item's before/current/after for the user to compare: { ok, status, body }.
+QM.resolvePending = async (chatId, ownerId, pendingId, decision) => {
+  const path = `/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/pending/${encodeURIComponent(pendingId)}/resolve`;
+  const response = await fetch(`/api/quartermaster${path}`, {
+    method: "POST",
+    headers: { ...qmAuthHeaders("POST"), "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(decision),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok && response.status !== 409) throw new Error(qmResponseError(response, body));
+  return { ok: response.ok, status: response.status, body };
+};
+
+// Pending changes the user has already been shown, so the popup only opens for new ones.
+QM.markPendingSeen = (chatId, ownerId, ids) =>
+  qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/pending/seen`, {
+    method: "POST",
+    body: JSON.stringify({ ids }),
   });
 
 // Per-item undo from the Recent Changes view — see server.mjs's
@@ -683,11 +708,56 @@ const QM_OVERLAY_SLOT_LABEL_LINES = {
   extra_wearable_2: ["Extra", "Wearable 2"],
   extra_wearable_3: ["Extra", "Wearable 3"],
 };
+// Mirrors server.mjs's APPEARANCE_FEED_MODES; `help` is the line the Settings
+// popover shows for each.
 const QM_APPEARANCE_FEED_OPTIONS = [
-  { value: "off", label: "Off" },
-  { value: "outfitDescription", label: "Outfit description" },
-  { value: "equippedNames", label: "Equipped item names" },
+  { value: "off", label: "Off", help: "Nothing is written." },
+  { value: "outfitName", label: "Outfit name", help: "The saved outfit you're wearing, by name." },
+  { value: "outfitDescription", label: "Outfit description", help: "That outfit's description." },
+  {
+    value: "outfitNameDescription",
+    label: "Outfit name + description",
+    help: "Both, e.g. “Casual, A relaxed weekend look.”",
+  },
+  { value: "equippedNames", label: "Equipped item names", help: "Every worn item by name." },
+  {
+    value: "equippedDescriptions",
+    label: "Equipped item descriptions",
+    help: "Every worn item's description (its name if it has none).",
+  },
+  {
+    value: "equippedNamesDescriptions",
+    label: "Equipped item names + descriptions",
+    help: "Both, e.g. “Red hat, A weathered red hat. Black boots, …”",
+  },
 ];
+// Mirrors server.mjs's HIDDEN_ITEM_ACCESS_MODES.
+const QM_HIDDEN_ITEM_ACCESS_OPTIONS = [
+  {
+    value: "userHidden",
+    label: "Only you can change it — stays hidden",
+    help: "The agent's changes are skipped. It can still take a worn hidden item off.",
+  },
+  {
+    value: "userShown",
+    label: "Only you can change it — becomes shown",
+    help: "The agent's description and quantity changes are skipped, but it can equip or move the item, which then shows it.",
+  },
+  {
+    value: "agentHidden",
+    label: "Agent can change it — stays hidden",
+    help: "The agent's changes apply. It stays hidden, showing only while worn.",
+  },
+  {
+    value: "agentShown",
+    label: "Agent can change it — becomes shown",
+    help: "The agent's changes apply and the item becomes shown.",
+  },
+];
+// Whether the pending-change "Show item" box starts ticked for this mode.
+function qmAccessModeShows(mode) {
+  return mode === "userShown" || mode === "agentShown";
+}
 const QM_COLOR_DANGER = "#dc2626";
 const QM_COLOR_DANGER_FG = "#fff";
 const QM_COLOR_SUCCESS = "#16a34a";
@@ -793,6 +863,18 @@ function qmDescribeTrackerChangeForToast(change) {
   if (change.equippedOutfitName) {
     lines.push({ text: `Outfit "${change.equippedOutfitName}" equipped`, color: "inherit" });
   }
+  // What the agent's change did to a hidden item (server.mjs's
+  // applyAgentItemChange). "pending" gets the review popup instead.
+  const hiddenText = {
+    skipped: (name) => `${name} is hidden — agent change skipped`,
+    shown: (name) => `${name} is now shown — its details were kept`,
+    applied: (name) => `${name} updated — still hidden`,
+    appliedShown: (name) => `${name} updated and now shown`,
+  };
+  for (const entry of change.hiddenOutcomes ?? []) {
+    const describe = hiddenText[entry.outcome];
+    if (describe) lines.push({ text: describe(entry.name), color: "inherit" });
+  }
   return lines;
 }
 
@@ -852,6 +934,7 @@ function qmStateSnapshotForChangeDetection() {
     replaceRealAvatarOnEquip: QM.state.replaceRealAvatarOnEquip,
     previousSnapshot: QM.state.previousSnapshot,
     lastTrackerChange: QM.state.lastTrackerChange,
+    pendingHiddenChanges: QM.state.pendingHiddenChanges,
   });
 }
 
@@ -937,6 +1020,13 @@ QM.state = {
   imageConnectionId: null,
   itemImagePromptTemplate: "",
   outfitPortraitPromptTemplate: "",
+  // Hidden items (per chat; see server.mjs's loadInventoryState for each).
+  askBeforeHiddenChanges: true,
+  hiddenItemAccess: "userHidden",
+  wardrobeUsesHidden: false,
+  hiddenOnlyInHiddenTab: true,
+  // Agent changes to hidden items waiting for the user (QM.pending shows them).
+  pendingHiddenChanges: [],
   error: null,
   _chatToken: 0,
   _reloadToken: 0,
@@ -969,6 +1059,11 @@ QM.state = {
     this.imageConnectionId = null;
     this.itemImagePromptTemplate = "";
     this.outfitPortraitPromptTemplate = "";
+    this.askBeforeHiddenChanges = true;
+    this.hiddenItemAccess = "userHidden";
+    this.wardrobeUsesHidden = false;
+    this.hiddenOnlyInHiddenTab = true;
+    this.pendingHiddenChanges = [];
     this.error = null;
     // A selected equip-slot picker (QM.dock's own UI state, not this
     // object's) doesn't carry any meaning across a chat switch — the slot
@@ -1028,6 +1123,11 @@ QM.state = {
         imageConnectionId: result.imageConnectionId ?? null,
         itemImagePromptTemplate: result.itemImagePromptTemplate || "",
         outfitPortraitPromptTemplate: result.outfitPortraitPromptTemplate || "",
+        askBeforeHiddenChanges: result.askBeforeHiddenChanges !== false,
+        hiddenItemAccess: result.hiddenItemAccess || "userHidden",
+        wardrobeUsesHidden: result.wardrobeUsesHidden === true,
+        hiddenOnlyInHiddenTab: result.hiddenOnlyInHiddenTab !== false,
+        pendingHiddenChanges: result.pendingHiddenChanges ?? [],
       };
       // A repaint rebuilds every card's DOM wholesale (there's no cheap way
       // to patch just the one thing that changed) — item images in
@@ -1051,6 +1151,11 @@ QM.state = {
         imageConnectionId: this.imageConnectionId,
         itemImagePromptTemplate: this.itemImagePromptTemplate,
         outfitPortraitPromptTemplate: this.outfitPortraitPromptTemplate,
+        askBeforeHiddenChanges: this.askBeforeHiddenChanges,
+        hiddenItemAccess: this.hiddenItemAccess,
+        wardrobeUsesHidden: this.wardrobeUsesHidden,
+        hiddenOnlyInHiddenTab: this.hiddenOnlyInHiddenTab,
+        pendingHiddenChanges: this.pendingHiddenChanges,
       };
       // "Item Acquired!" toasts: only for a genuinely NEW tracker turn, not the
       // first load of a chat that already has history (previousChange starts
@@ -1067,6 +1172,7 @@ QM.state = {
         (incomingChange.addedItems.length > 0 ||
           incomingChange.updatedItems.length > 0 ||
           incomingChange.removedItems.length > 0 ||
+          (incomingChange.hiddenOutcomes ?? []).length > 0 ||
           incomingChange.equippedOutfitName)
       ) {
         qmEnqueueChangeToasts(incomingChange);
@@ -1105,6 +1211,15 @@ QM.state = {
       if (result.itemImagePromptTemplate !== undefined) this.itemImagePromptTemplate = result.itemImagePromptTemplate;
       if (result.outfitPortraitPromptTemplate !== undefined)
         this.outfitPortraitPromptTemplate = result.outfitPortraitPromptTemplate;
+      for (const key of [
+        "askBeforeHiddenChanges",
+        "hiddenItemAccess",
+        "wardrobeUsesHidden",
+        "hiddenOnlyInHiddenTab",
+        "pendingHiddenChanges",
+      ]) {
+        if (result[key] !== undefined) this[key] = result[key];
+      }
       this.error = null;
       outcome = { ok: true, result };
     } catch (error) {
@@ -1189,10 +1304,50 @@ QM.state = {
   // same (already-settled) request lets the caller read `summary` too,
   // without a second network round trip; a caller doing so must wrap it in
   // its own try/catch, since a rejection is still a rejection on re-await.
-  async confirmWardrobe(proposal) {
-    const request = QM.confirmWardrobe(this.chatId, QM_OWNER_ID, proposal);
+  async confirmWardrobe(proposal, hiddenChoices) {
+    const request = QM.confirmWardrobe(this.chatId, QM_OWNER_ID, proposal, hiddenChoices);
     await this._mutate(request);
     return request;
+  },
+  // Hiding a worn item takes it off (server.mjs's item PATCH route).
+  setItemHidden(itemId, hidden) {
+    return this.updateItem(itemId, { hidden });
+  },
+  setDescriptionLocked(itemId, locked) {
+    return this.updateItem(itemId, { descriptionLocked: locked });
+  },
+  setOutfitHidden(outfitId, hidden) {
+    return this.updateOutfit(outfitId, { hidden });
+  },
+  // askBeforeHiddenChanges, hiddenItemAccess, wardrobeUsesHidden, hiddenOnlyInHiddenTab.
+  updateHiddenSetting(key, value) {
+    return this._mutate(QM.updateSettings(this.chatId, QM_OWNER_ID, { [key]: value }));
+  },
+  // decision: { decision: "accept" | "keep", show, override }. Returns the
+  // server's answer; a stale accept comes back as { stale: true, before,
+  // current, after } (status 409) for the caller to show, without an error.
+  async resolvePending(pendingId, decision) {
+    const chatId = this.chatId;
+    const response = await QM.resolvePending(chatId, QM_OWNER_ID, pendingId, decision).catch((error) => ({
+      ok: false,
+      status: 0,
+      body: { error: error.message },
+    }));
+    if (response.ok) {
+      await this._mutate(Promise.resolve(response.body));
+    } else if (response.status === 409 && response.body?.stale) {
+      return { stale: true, ...response.body };
+    } else if (response.body?.gone) {
+      return { gone: true };
+    } else if (this.chatId === chatId) {
+      this.error = response.body?.error || "Couldn't settle that change";
+      this._notify();
+    }
+    return response.body ?? {};
+  },
+  markPendingSeen(ids) {
+    if (ids.length === 0) return Promise.resolve();
+    return this._mutate(QM.markPendingSeen(this.chatId, QM_OWNER_ID, ids));
   },
   uploadOutfitPortrait(outfitId, imageDataUrl) {
     const chatId = this.chatId;
@@ -1302,6 +1457,10 @@ QM.state = {
 
   itemInSlot(slot) {
     return (this.items ?? []).find((item) => item.location === `equipped:${slot}`) ?? null;
+  },
+
+  itemById(itemId) {
+    return (this.items ?? []).find((item) => item.id === itemId) ?? null;
   },
 
   sortedOutfits() {
@@ -1630,6 +1789,9 @@ const QM_UI_SIZES = { S: 0.85, M: 1, L: 1.2 };
 // those cards already get rebuilt on every repaint anyway.
 const QM_THUMBNAIL_SIZE_KEY = "marinara.quartermaster.thumbnailSize";
 const QM_THUMBNAIL_SIZES = { S: 48, M: 72, L: 100 };
+// Per-device like UI Size: shows a Delete button straight on item and
+// outfit cards (still behind a confirm) instead of only in the "⋯" menu.
+const QM_QUICK_DELETE_KEY = "marinara.quartermaster.quickDelete";
 // Independent from QM_THUMBNAIL_SIZES above (which still governs item/
 // outfit thumbnails, unchanged) — the portrait needs to scale far more
 // aggressively per size, since 5 equip-slot-box pairs beside it need real
@@ -1777,6 +1939,13 @@ const QM_ITEM_CARD_FRAME_STYLE = {
 // button's own success color instead of the theme accent — a visually
 // distinct "this is the create-new form, not one more item" cue, without
 // needing a different shape or extra ornamentation to say it.
+// A hidden item/outfit's card: a dimmed dashed border with no glow, so it
+// reads as set aside even when shown outside the Hidden tab.
+const QM_HIDDEN_CARD_FRAME_STYLE = {
+  border: "1px dashed color-mix(in srgb, var(--muted-foreground, #888) 70%, transparent)",
+  boxShadow: "none",
+};
+
 const QM_ADD_ITEM_FRAME_STYLE = {
   border: `1px solid ${QM_COLOR_SUCCESS}`,
   borderRadius: "var(--radius, 4px)",
@@ -1800,6 +1969,43 @@ const QM_DESC_LINE_HEIGHT_PX = 14;
 const QM_LAYER_SPINE_WIDTH = 26;
 const QM_LAYER_SPINE_OVERLAP = 6;
 const QM_CARD_DESC_MAX_HEIGHT_PX = QM_DESC_LINE_HEIGHT_PX * 5;
+
+// Small stroke icons for card chrome (24x24 viewBox, currentColor).
+const QM_LOCK_ICON_MARKUP =
+  '<rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/>' +
+  '<path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2"/>';
+const QM_UNLOCK_ICON_MARKUP =
+  '<rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/>' +
+  '<path d="M8 11V7a4 4 0 0 1 7.7-1.5" fill="none" stroke="currentColor" stroke-width="2"/>';
+const QM_TRASH_ICON_MARKUP =
+  '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+
+function qmBuildSmallIcon(markup, sizePx) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", String(sizePx));
+  svg.setAttribute("height", String(sizePx));
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = markup;
+  svg.style.flexShrink = "0";
+  return svg;
+}
+
+// The small uppercase tag beside a card's name ("Equipped", "Hidden").
+function qmBuildCardBadge(text, color) {
+  const badge = document.createElement("span");
+  badge.textContent = text;
+  Object.assign(badge.style, {
+    fontSize: "10px",
+    fontWeight: "600",
+    color,
+    textTransform: "uppercase",
+    letterSpacing: "0.02em",
+    whiteSpace: "nowrap",
+  });
+  return badge;
+}
 
 function qmBuildCardCornerDot(corner) {
   const dot = document.createElement("span");
@@ -1854,6 +2060,22 @@ function qmWriteUiSize(size) {
   }
 }
 
+function qmReadQuickDelete() {
+  try {
+    return window.localStorage.getItem(QM_QUICK_DELETE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function qmWriteQuickDelete(enabled) {
+  try {
+    window.localStorage.setItem(QM_QUICK_DELETE_KEY, enabled ? "1" : "0");
+  } catch {
+    // Persisting is a convenience; the session still works without it.
+  }
+}
+
 function qmReadThumbnailSize() {
   try {
     const stored = window.localStorage.getItem(QM_THUMBNAIL_SIZE_KEY);
@@ -1894,8 +2116,13 @@ const QM_BAG_TABS = [
   { key: "items", label: "Items" },
   { key: "wearables", label: "Wearables" },
   { key: "stored", label: "Stored" },
+  { key: "hidden", label: "Hidden" },
 ];
-function qmItemMatchesBagTab(item, tab) {
+// A hidden item lists under Hidden, and also under its usual tab when the
+// chat's "Hidden items only in the Hidden tab" setting is off.
+function qmItemMatchesBagTab(item, tab, hiddenOnlyInHiddenTab = true) {
+  if (tab === "hidden") return item.hidden === true;
+  if (item.hidden === true && hiddenOnlyInHiddenTab) return false;
   const stored = item.location.startsWith("stored:");
   if (tab === "stored") return stored;
   if (stored) return false;
@@ -2032,8 +2259,12 @@ QM.dock = {
   armorToggle: null,
   weaponsToggle: null,
   replaceRealAvatarToggle: null,
+  hiddenSettingControls: null,
   restoreInventoryButton: null,
   recentChangesContainer: null,
+  pendingSection: null,
+  pendingList: null,
+  _pendingLabel: null,
   recentUpdateContainer: null,
   recentUpdateChevron: null,
   recentUpdateCountBadge: null,
@@ -2056,6 +2287,7 @@ QM.dock = {
   bodyWidth: QM_WINDOW_DEFAULT_WIDTH,
   uiSize: qmReadUiSize(),
   thumbnailSize: qmReadThumbnailSize(),
+  quickDelete: qmReadQuickDelete(),
   // Top-level dock view: the 3-column inventory grid (plus Recent Agent
   // Update above it) or the restructured Settings groups. A session-only UI
   // preference, same as bagTab/recentUpdateExpanded below — not reset on
@@ -2129,8 +2361,12 @@ QM.dock = {
     this.armorToggle = null;
     this.weaponsToggle = null;
     this.replaceRealAvatarToggle = null;
+    this.hiddenSettingControls = null;
     this.restoreInventoryButton = null;
     this.recentChangesContainer = null;
+    this.pendingSection = null;
+    this.pendingList = null;
+    this._pendingLabel = null;
     this.equippedContainer = null;
     this.outfitsContainer = null;
     this.listContainer = null;
@@ -2649,12 +2885,12 @@ QM.dock = {
 
       columns.append(outfitsColumn, equippedColumn, bagColumn);
 
-      // Inventory view: Recent Agent Update (moved into the slot the old
+      // Inventory view: Pending Item Changes and Recent Item Updates (moved into the slot the old
       // Settings accordion used to occupy) above the 3-column grid. Settings
       // view: the regrouped settings content. Visibility toggled by
       // _applyActiveView, not rebuilt on every tab switch.
       this.inventoryView = document.createElement("div");
-      this.inventoryView.append(this._buildRecentUpdateSection(), columns);
+      this.inventoryView.append(this._buildPendingSection(), this._buildRecentUpdateSection(), columns);
       this.settingsView = this.settingsSection;
 
       this.zoomWrapper.append(this.errorNode, viewTabRow, this.inventoryView, this.settingsView);
@@ -2676,11 +2912,16 @@ QM.dock = {
     this._applyOutfitSearch();
     this._applySectionHeaders();
     this._applyRecentUpdateHeader();
+    this._applyPendingSection();
     this.feedSelect.value = QM.state.appearanceFeedMode;
     this.underwearToggle.checked = QM.state.showUnderwear;
     this.armorToggle.checked = QM.state.showArmor;
     this.weaponsToggle.checked = QM.state.showWeapons;
     this.replaceRealAvatarToggle.checked = QM.state.replaceRealAvatarOnEquip;
+    for (const [key, control] of Object.entries(this.hiddenSettingControls)) {
+      if (control.type === "checkbox") control.checked = QM.state[key];
+      else control.value = QM.state[key];
+    }
     this.restoreInventoryButton.disabled = !QM.state.previousSnapshot;
     this.recentChangesContainer.replaceChildren(this._buildRecentChangesList());
     if (this.imageConnectionSelect && !this.imageConnectionSelect.disabled) {
@@ -2769,10 +3010,11 @@ QM.dock = {
     const tooltip = this._buildInfoTooltip(
       "Writes the chosen text into a per-chat variable so a {{getvar::quartermaster_appearance_persona}} " +
         "token in the persona's own Appearance field resolves to it — letting image generation (e.g. " +
-        "Illustrator) pick up what's actually equipped. Off writes nothing; Outfit description uses the " +
-        "saved outfit that exactly matches the current equip state (falling back to a plain list of " +
-        "equipped item names when nothing matches, e.g. after equipping something outside any saved " +
-        "outfit); Equipped item names always lists what's equipped, regardless of outfit.",
+        "Illustrator) pick up what's actually equipped. Outfit portraits follow it too.\n\n" +
+        QM_APPEARANCE_FEED_OPTIONS.map((option) => `${option.label}: ${option.help}`).join("\n") +
+        "\n\nThe outfit options use the saved outfit that exactly matches what's equipped, and fall back " +
+        "to the matching item option when none matches, it's hidden, or it has no text for that option. " +
+        "Hidden items only count while worn.",
     );
 
     row.append(label, select, tooltip);
@@ -3059,6 +3301,7 @@ QM.dock = {
     popover.className = "qm-tooltip-popover";
     popover.textContent = text;
     Object.assign(popover.style, {
+      whiteSpace: "pre-line",
       position: "absolute",
       top: "18px",
       left: "0",
@@ -3172,7 +3415,7 @@ QM.dock = {
   },
 
   // Small caps-label divider used to break Settings' controls into named
-  // groups — Appearance/Display/Image Generation/Data — instead of one flat
+  // groups — Appearance/Hidden Items/Display/Image Generation/Data — instead of one flat
   // run of unrelated rows.
   _buildSettingsGroupHeader(label) {
     const wrapper = document.createElement("div");
@@ -3203,8 +3446,11 @@ QM.dock = {
       this._buildSettingsGroupHeader("Appearance"),
       this._buildAppearanceFeedRow(),
       this._buildRealAvatarToggleRow(),
+      this._buildSettingsGroupHeader("Hidden Items"),
+      ...this._buildHiddenItemSettingsRows(),
       this._buildSettingsGroupHeader("Display"),
       this._buildSlotVisibilityRow(),
+      this._buildQuickDeleteRow(),
       this._buildSettingsGroupHeader("Image Generation"),
       this._buildImageGenerationSettingsRow(),
       this._buildRefreshImagesRow(),
@@ -3351,10 +3597,47 @@ QM.dock = {
     return row;
   },
 
+  // Agent changes to hidden items waiting on the user (13-pending.js's
+  // qmBuildPendingEntry cards) -- above Recent Item Updates, and only there
+  // at all while something is waiting. Always expanded: each needs a choice.
+  _buildPendingSection() {
+    const section = document.createElement("div");
+    Object.assign(section.style, {
+      border: `1px solid ${QM_COLOR_WARNING}`,
+      borderRadius: "var(--radius, 4px)",
+      marginBottom: "8px",
+      padding: "6px 8px 8px",
+      flexDirection: "column",
+      gap: "6px",
+    });
+    const label = document.createElement("span");
+    Object.assign(label.style, {
+      fontWeight: "600",
+      fontSize: "11px",
+      textTransform: "uppercase",
+      letterSpacing: "0.04em",
+      color: QM_COLOR_WARNING,
+    });
+    const list = document.createElement("div");
+    Object.assign(list.style, { display: "flex", flexDirection: "column", gap: "6px" });
+    section.append(label, list);
+    this.pendingSection = section;
+    this.pendingList = list;
+    this._pendingLabel = label;
+    return section;
+  },
+
+  _applyPendingSection() {
+    const entries = QM.state.pendingHiddenChanges ?? [];
+    this.pendingSection.style.display = entries.length > 0 ? "flex" : "none";
+    this._pendingLabel.textContent = `Pending Item Changes (${entries.length})`;
+    this.pendingList.replaceChildren(...entries.map((entry) => qmBuildPendingEntry(entry)));
+  },
+
   // The collapsible accordion that replaced Settings in this same visual
   // slot (see _paint()'s top-level view split) — everything about reviewing
   // and recovering from what the tracker agent just did, in one place:
-  // Restore Inventory (whole-state) above the per-item Recent Agent Update
+  // Restore Inventory (whole-state) above the per-item Recent Item Updates
   // list. Collapsed by default; the header itself always shows a compact
   // +N/↑N/−N count (see _applyRecentUpdateHeader) so there's something to
   // glance at without expanding.
@@ -3393,7 +3676,7 @@ QM.dock = {
     this.recentUpdateChevron = chevron;
 
     const label = document.createElement("span");
-    label.textContent = "Recent Agent Update";
+    label.textContent = "Recent Item Updates";
     Object.assign(label.style, {
       fontWeight: "600",
       fontSize: "11px",
@@ -3594,7 +3877,14 @@ QM.dock = {
     const weapons = build("Weapons", (value) => QM.state.updateShowWeapons(value));
     this.weaponsToggle = weapons.checkbox;
 
-    row.append(underwear.label, armor.label, weapons.label);
+    row.append(
+      underwear.label,
+      armor.label,
+      weapons.label,
+      this._buildInfoTooltip(
+        "Unticked groups drop out of the portrait ring and the slot pickers. Items stay in your Bag.",
+      ),
+    );
     return row;
   },
 
@@ -3609,27 +3899,113 @@ QM.dock = {
   // behavior — generation-time reads (e.g. "send avatar as reference") are
   // unaffected, this dock's own portrait display is unaffected either way.
   _buildRealAvatarToggleRow() {
-    const wrapper = document.createElement("div");
-    Object.assign(wrapper.style, { display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" });
+    const { row, checkbox } = this._buildSettingsCheckboxRow(
+      "Replace persona's real avatar on equip",
+      "Reverts automatically when unequipped. Each change adds a permanent entry to the persona's " +
+        "version history (can't be turned off), and other Marinara screens showing this avatar may take " +
+        "a bit to catch up visually — image generation itself isn't affected.",
+      (checked) => QM.state.updateReplaceRealAvatarOnEquip(checked),
+    );
+    this.replaceRealAvatarToggle = checkbox;
+    return row;
+  },
+
+  // [ ] label [?] -- one Settings checkbox with its help popover.
+  _buildSettingsCheckboxRow(labelText, help, onChange) {
+    const row = document.createElement("div");
+    Object.assign(row.style, { display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" });
 
     const checkboxLabel = document.createElement("label");
     Object.assign(checkboxLabel.style, { display: "flex", alignItems: "center", gap: "4px", cursor: "pointer" });
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
-    checkbox.addEventListener("change", () => QM.state.updateReplaceRealAvatarOnEquip(checkbox.checked));
+    checkbox.addEventListener("change", () => onChange(checkbox.checked));
     const text = document.createElement("span");
-    text.textContent = "Replace persona's real avatar on equip";
+    text.textContent = labelText;
     checkboxLabel.append(checkbox, text);
-    this.replaceRealAvatarToggle = checkbox;
 
-    const tooltip = this._buildInfoTooltip(
-      "Reverts automatically when unequipped. Each change adds a permanent entry to the persona's " +
-        "version history (can't be turned off), and other Marinara screens showing this avatar may take " +
-        "a bit to catch up visually — image generation itself isn't affected.",
+    row.append(checkboxLabel, this._buildInfoTooltip(help));
+    return { row, checkbox };
+  },
+
+  // Settings → Hidden Items. All four are per chat and synced every _paint
+  // from QM.state via this.hiddenSettingControls (keyed by setting name).
+  _buildHiddenItemSettingsRows() {
+    const controls = {};
+    const toggle = (key, labelText, help) => {
+      const { row, checkbox } = this._buildSettingsCheckboxRow(labelText, help, (checked) =>
+        QM.state.updateHiddenSetting(key, checked),
+      );
+      controls[key] = checkbox;
+      return row;
+    };
+
+    const accessRow = document.createElement("div");
+    Object.assign(accessRow.style, { display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" });
+    const accessLabel = document.createElement("span");
+    accessLabel.textContent = "Hidden item access:";
+    accessLabel.style.color = "var(--muted-foreground, currentcolor)";
+    const accessSelect = QM.smallInput("select");
+    accessSelect.style.flex = "1";
+    accessSelect.style.minWidth = "0";
+    for (const option of QM_HIDDEN_ITEM_ACCESS_OPTIONS) {
+      const optionEl = document.createElement("option");
+      optionEl.value = option.value;
+      optionEl.textContent = option.label;
+      accessSelect.appendChild(optionEl);
+    }
+    accessSelect.addEventListener("change", () => QM.state.updateHiddenSetting("hiddenItemAccess", accessSelect.value));
+    controls.hiddenItemAccess = accessSelect;
+    accessRow.append(
+      accessLabel,
+      accessSelect,
+      this._buildInfoTooltip(
+        "What the agent may do to a hidden item while Ask before is off (while it's on, every change " +
+          "waits for you and this only presets its Show box):\n\n" +
+          QM_HIDDEN_ITEM_ACCESS_OPTIONS.map((option) => `${option.label}: ${option.help}`).join("\n\n") +
+          "\n\nThe agent never changes a locked description, whichever you pick.",
+      ),
     );
 
-    wrapper.append(checkboxLabel, tooltip);
-    return wrapper;
+    const rows = [
+      toggle(
+        "askBeforeHiddenChanges",
+        "Ask before agent changes to hidden items",
+        "On: every agent change to a hidden item waits for you under Pending Item Changes, showing what " +
+          "would change. Off: Hidden item access decides, and a notice says what happened.",
+      ),
+      accessRow,
+      toggle(
+        "wardrobeUsesHidden",
+        "Build Wardrobe can use hidden items",
+        "Off: Build Wardrobe never sees hidden items. On: it may use them, and you choose per item what " +
+          "happens before anything is saved. A new piece named like a hidden item always asks first.",
+      ),
+      toggle(
+        "hiddenOnlyInHiddenTab",
+        "Hidden items only in the Hidden tab",
+        "On: hidden items list only under the Bag's Hidden tab. Off: they also show in their usual tab, " +
+          "marked Hidden.",
+      ),
+    ];
+    this.hiddenSettingControls = controls;
+    return rows;
+  },
+
+  // Per device (localStorage), unlike the per-chat settings around it.
+  _buildQuickDeleteRow() {
+    const { row, checkbox } = this._buildSettingsCheckboxRow(
+      "Quick delete (this device only)",
+      "Adds a Delete button straight on item and outfit cards, instead of only in the ⋯ menu. It still " +
+        "asks before deleting. Saved in this browser, so it applies to every chat here.",
+      (checked) => {
+        this.quickDelete = checked;
+        qmWriteQuickDelete(checked);
+        this._paint();
+      },
+    );
+    checkbox.checked = this.quickDelete;
+    return row;
   },
 
   // Built once (like the forms) and cached on this.portraitImage/
@@ -4750,6 +5126,7 @@ QM.dock = {
   // its neighbors.
   _buildOutfitRow(outfit) {
     const equipped = QM.state.outfitMatchesCurrent(outfit);
+    const hidden = outfit.hidden === true;
     const thumbnailPx = QM_THUMBNAIL_SIZES[this.thumbnailSize];
     const row = document.createElement("li");
     Object.assign(row.style, {
@@ -4758,6 +5135,7 @@ QM.dock = {
       alignItems: "stretch",
       position: "relative",
       ...QM_ITEM_CARD_FRAME_STYLE,
+      ...(hidden ? QM_HIDDEN_CARD_FRAME_STYLE : {}),
       ...(equipped
         ? {
             border: `2px solid ${QM_COLOR_SUCCESS}`,
@@ -4794,36 +5172,28 @@ QM.dock = {
       whiteSpace: "nowrap",
     });
     nameLine.appendChild(nameLabel);
-    if (equipped) {
-      const badge = document.createElement("span");
-      badge.textContent = "Equipped";
-      Object.assign(badge.style, {
-        fontSize: "10px",
-        fontWeight: "600",
-        color: QM_COLOR_SUCCESS,
-        textTransform: "uppercase",
-        letterSpacing: "0.02em",
-        whiteSpace: "nowrap",
-      });
-      nameLine.appendChild(badge);
+    if (hidden) {
+      nameLabel.style.color = "var(--muted-foreground, currentcolor)";
+      nameLine.appendChild(qmBuildCardBadge("Hidden", "var(--muted-foreground, currentcolor)"));
     }
+    if (equipped) nameLine.appendChild(qmBuildCardBadge("Equipped", QM_COLOR_SUCCESS));
 
-    // [Name] [Equipped?] [⋯] [Equip] -- Edit/Update/Delete collapsed into
-    // the overflow menu, Equip promoted up here so the description below
-    // (no more actionColumn beside it) gets the full card width.
+    // [Name] [Hidden?] [Equipped?] [⋯] [Equip] -- Hide/Edit/Update/Delete
+    // collapsed into the overflow menu, Equip promoted up here so the
+    // description below (no more actionColumn beside it) gets the full card
+    // width.
+    const deleteOutfit = () => this._confirmDelete(outfit.name, () => QM.state.deleteOutfit(outfit.id));
     const overflowMenu = this._buildCardOverflowMenu([
+      {
+        label: hidden ? "Show Outfit" : "Hide Outfit",
+        onClick: () => QM.state.setOutfitHidden(outfit.id, !hidden),
+      },
       { label: "Edit", onClick: () => this._openOutfitEditor(outfit) },
       {
         label: "Update",
         onClick: () => QM.state.updateOutfit(outfit.id, { resnapshot: true }),
       },
-      {
-        label: "Delete",
-        danger: true,
-        onClick: () => {
-          if (window.confirm(`Delete "${outfit.name}"? This can't be undone.`)) QM.state.deleteOutfit(outfit.id);
-        },
-      },
+      { label: "Delete", danger: true, onClick: deleteOutfit },
     ]);
     nameLine.appendChild(overflowMenu);
     const equipButton = QM.button("Equip");
@@ -4831,6 +5201,7 @@ QM.dock = {
     equipButton.style.opacity = equipped ? "0.5" : "1";
     equipButton.addEventListener("click", () => QM.state.equipOutfit(outfit.id));
     nameLine.appendChild(equipButton);
+    if (this.quickDelete) nameLine.appendChild(this._buildQuickDeleteButton(deleteOutfit));
 
     const descriptionRow = document.createElement("div");
     descriptionRow.className = "qm-card-desc-row";
@@ -5006,7 +5377,7 @@ QM.dock = {
     for (const { key, label } of QM_BAG_TABS) {
       const button = this.bagTabButtons[key];
       if (!button) continue;
-      const count = items.filter((item) => qmItemMatchesBagTab(item, key)).length;
+      const count = items.filter((item) => qmItemMatchesBagTab(item, key, QM.state.hiddenOnlyInHiddenTab)).length;
       button.textContent = `${label} (${count})`;
       const active = this.bagTab === key;
       button.style.background = active ? "var(--primary, #444)" : "var(--secondary, transparent)";
@@ -5251,7 +5622,7 @@ QM.dock = {
     const slotSearchActive = this.bagSearchMode === "slot" && query;
     let items = slotSearchActive
       ? QM.state.bagItems()
-      : QM.state.bagItems().filter((item) => qmItemMatchesBagTab(item, this.bagTab));
+      : QM.state.bagItems().filter((item) => qmItemMatchesBagTab(item, this.bagTab, QM.state.hiddenOnlyInHiddenTab));
     if (query) {
       items = items.filter((item) => {
         if (this.bagSearchMode === "slot") {
@@ -5263,7 +5634,11 @@ QM.dock = {
     }
     if (items.length === 0) {
       const emptyLabel =
-        this.bagTab === "wearables" ? "No wearables." : this.bagTab === "stored" ? "Nothing stored." : "No items.";
+        {
+          wearables: "No wearables.",
+          stored: "Nothing stored.",
+          hidden: "No hidden items.",
+        }[this.bagTab] ?? "No items.";
       const empty = QM.textNode(query ? "No matching items." : emptyLabel);
       empty.style.color = "var(--muted-foreground, currentcolor)";
       empty.style.margin = "0";
@@ -5286,6 +5661,7 @@ QM.dock = {
   // carries real info, see below) / description, full width.
   _buildItemRow(item) {
     const thumbnailPx = QM_THUMBNAIL_SIZES[this.thumbnailSize];
+    const hidden = item.hidden === true;
     const row = document.createElement("li");
     Object.assign(row.style, {
       display: "flex",
@@ -5293,6 +5669,7 @@ QM.dock = {
       alignItems: "stretch",
       position: "relative",
       ...QM_ITEM_CARD_FRAME_STYLE,
+      ...(hidden ? QM_HIDDEN_CARD_FRAME_STYLE : {}),
     });
     for (const corner of ["top left", "top right", "bottom left", "bottom right"]) {
       row.appendChild(qmBuildCardCornerDot(corner));
@@ -5348,20 +5725,21 @@ QM.dock = {
     favoriteButton.title = item.favorite ? "Remove from favorites" : "Add to favorites";
     favoriteButton.addEventListener("click", () => QM.state.updateItem(item.id, { favorite: !item.favorite }));
 
-    nameLine.append(favoriteButton, nameLabel, quantityInput);
+    nameLine.append(favoriteButton, nameLabel);
+    if (hidden) {
+      nameLabel.style.color = "var(--muted-foreground, currentcolor)";
+      nameLine.appendChild(qmBuildCardBadge("Hidden", "var(--muted-foreground, currentcolor)"));
+    }
+    nameLine.appendChild(quantityInput);
 
-    // [⋯] [Equip] -- Edit/Delete collapsed into the overflow menu, Equip
+    // [⋯] [Equip] -- Hide/Edit/Delete collapsed into the overflow menu, Equip
     // promoted up here so the description below (no more actionColumn
     // beside it) gets the full card width.
+    const deleteItem = () => this._confirmDelete(item.name, () => QM.state.deleteItem(item.id));
     const overflowMenu = this._buildCardOverflowMenu([
+      { label: hidden ? "Show Item" : "Hide Item", onClick: () => QM.state.setItemHidden(item.id, !hidden) },
       { label: "Edit", onClick: () => this._openItemEditor(item) },
-      {
-        label: "Delete",
-        danger: true,
-        onClick: () => {
-          if (window.confirm(`Delete "${item.name}"? This can't be undone.`)) QM.state.deleteItem(item.id);
-        },
-      },
+      { label: "Delete", danger: true, onClick: deleteItem },
     ]);
     nameLine.appendChild(overflowMenu);
     const equipButton = QM.button("Equip");
@@ -5376,6 +5754,7 @@ QM.dock = {
       if (canEquip) QM.state.updateItem(item.id, { location: `equipped:${item.defaultSlot}` });
     });
     nameLine.appendChild(equipButton);
+    if (this.quickDelete) nameLine.appendChild(this._buildQuickDeleteButton(deleteItem));
 
     // Slot/stored-at info only takes a row at all when it actually carries
     // information -- "Default Slot" (no slot set) and "Stored at: Bag"
@@ -5425,12 +5804,48 @@ QM.dock = {
       color: "var(--muted-foreground, currentcolor)",
       fontStyle: item.description ? "normal" : "italic",
     });
+    if (item.descriptionLocked) {
+      // Set in the item editor: the agent can't change this description.
+      const lockIcon = qmBuildSmallIcon(QM_LOCK_ICON_MARKUP, 11);
+      lockIcon.style.marginTop = "1px";
+      lockIcon.style.color = "var(--muted-foreground, currentcolor)";
+      lockIcon.removeAttribute("aria-hidden");
+      lockIcon.setAttribute("role", "img");
+      lockIcon.setAttribute("aria-label", "Description locked");
+      Object.assign(descriptionLine.style, { display: "flex", gap: "4px", alignItems: "flex-start" });
+      descriptionPreview.style.flex = "1";
+      descriptionPreview.style.minWidth = "0";
+      descriptionLine.appendChild(lockIcon);
+    }
     descriptionLine.appendChild(descriptionPreview);
     detailRows.push(descriptionLine);
 
     detailsColumn.append(...detailRows);
     row.append(imageControl, detailsColumn);
     return row;
+  },
+
+  _confirmDelete(name, run) {
+    if (window.confirm(`Delete "${name}"? This can't be undone.`)) run();
+  },
+
+  // The card's own Delete shortcut when Settings → Display → Quick delete is
+  // on; onDelete still asks for confirmation (_confirmDelete).
+  _buildQuickDeleteButton(onDelete) {
+    const button = QM.button("", { bg: "transparent", fg: QM_COLOR_DANGER, border: true });
+    Object.assign(button.style, {
+      width: "24px",
+      padding: "2px 0",
+      flexShrink: "0",
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+    });
+    button.title = "Delete";
+    button.setAttribute("aria-label", "Delete");
+    button.appendChild(qmBuildSmallIcon(QM_TRASH_ICON_MARKUP, 14));
+    button.addEventListener("click", onDelete);
+    return button;
   },
 
   // Shared by all three modals below (item editor, outfit editor,
@@ -5559,7 +5974,39 @@ QM.dock = {
     );
     description.rows = 4;
 
-    panel.append(header, imageRow, nameInput, slotSelect, storedLine, description);
+    // Sits at the description's top-left: locked, no automatic agent change
+    // reaches this description (server.mjs's applyAgentItemChange). Tracks
+    // its own state since `item` is the snapshot this editor opened with.
+    let locked = item.descriptionLocked === true;
+    const lockLine = document.createElement("div");
+    Object.assign(lockLine.style, { display: "flex", alignItems: "center", gap: "6px", marginBottom: "-4px" });
+    const lockButton = QM.button("", { bg: "transparent", border: true, fg: "inherit" });
+    Object.assign(lockButton.style, {
+      width: "24px",
+      padding: "2px 0",
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+    });
+    const lockHint = document.createElement("span");
+    Object.assign(lockHint.style, { fontSize: "11px", color: "var(--muted-foreground, currentcolor)" });
+    const paintLock = () => {
+      lockButton.replaceChildren(qmBuildSmallIcon(locked ? QM_LOCK_ICON_MARKUP : QM_UNLOCK_ICON_MARKUP, 13));
+      lockButton.style.color = locked ? QM_COLOR_WARNING : "inherit";
+      lockButton.title = locked ? "Unlock description" : "Lock description";
+      lockButton.setAttribute("aria-label", lockButton.title);
+      lockButton.setAttribute("aria-pressed", String(locked));
+      lockHint.textContent = locked ? "Locked: the agent can't change this description" : "Description";
+    };
+    lockButton.addEventListener("click", () => {
+      locked = !locked;
+      paintLock();
+      QM.state.setDescriptionLocked(item.id, locked);
+    });
+    paintLock();
+    lockLine.append(lockButton, lockHint);
+
+    panel.append(header, imageRow, nameInput, slotSelect, storedLine, lockLine, description);
     backdrop.appendChild(panel);
     this.itemEditorBackdrop = backdrop;
     (this.root || this.body).appendChild(backdrop);
@@ -5914,8 +6361,12 @@ const QM_WARDROBE_ERROR_MESSAGES = {
 Object.assign(QM.dock, {
   _wardrobeDirection: "",
   _wardrobeIncludePersonaContext: true,
-  _wardrobeViewState: "form", // "form" | "loading" | "preview" | "error"
+  _wardrobeViewState: "form", // "form" | "loading" | "preview" | "hidden" | "error"
   _wardrobeProposal: null,
+  // Hidden items the proposal would use (server.mjs's wardrobeHiddenMatches)
+  // and what the user picked for each: { [itemId]: { action, show } }.
+  _wardrobeHiddenMatches: [],
+  _wardrobeHiddenChoices: {},
   _wardrobeError: null,
   _wardrobeSummary: null,
   _wardrobeContentContainer: null,
@@ -5930,6 +6381,8 @@ Object.assign(QM.dock, {
     this._closeWardrobeBuilder();
     this._wardrobeViewState = "form";
     this._wardrobeProposal = null;
+    this._wardrobeHiddenMatches = [];
+    this._wardrobeHiddenChoices = {};
     this._wardrobeError = null;
     this._wardrobeSummary = null;
 
@@ -6005,9 +6458,11 @@ Object.assign(QM.dock, {
         ? this._renderWardrobeBuilderLoading()
         : this._wardrobeViewState === "preview"
           ? this._renderWardrobeBuilderPreview()
-          : this._wardrobeViewState === "error"
-            ? this._renderWardrobeBuilderError()
-            : this._renderWardrobeBuilderForm();
+          : this._wardrobeViewState === "hidden"
+            ? this._renderWardrobeHiddenChoices()
+            : this._wardrobeViewState === "error"
+              ? this._renderWardrobeBuilderError()
+              : this._renderWardrobeBuilderForm();
     this._wardrobeContentContainer.replaceChildren(node);
   },
 
@@ -6072,6 +6527,14 @@ Object.assign(QM.dock, {
       const result = await QM.state.generateWardrobe(this._wardrobeDirection, this._wardrobeIncludePersonaContext);
       if (token !== this._wardrobeSessionToken) return; // modal closed/reopened while this was in flight
       this._wardrobeProposal = result.proposal;
+      this._wardrobeHiddenMatches = result.hiddenMatches ?? [];
+      // Skip by default; Show starts from the chat's access setting.
+      this._wardrobeHiddenChoices = Object.fromEntries(
+        this._wardrobeHiddenMatches.map((match) => [
+          match.itemId,
+          { action: "skip", show: qmAccessModeShows(QM.state.hiddenItemAccess) },
+        ]),
+      );
       this._wardrobeSummary = null;
       this._wardrobeViewState = "preview";
     } catch (error) {
@@ -6123,7 +6586,9 @@ Object.assign(QM.dock, {
       summary.skipped.map((entry) =>
         entry.reason === "duplicate-name"
           ? `"${entry.name}" — an outfit with that name already exists`
-          : `"${entry.itemName}" in "${entry.outfitName}" — that slot was already used`,
+          : entry.reason === "hidden"
+            ? `"${entry.itemName}" in "${entry.outfitName}" — a hidden item you skipped`
+            : `"${entry.itemName}" in "${entry.outfitName}" — that slot was already used`,
       ),
     );
 
@@ -6182,7 +6647,15 @@ Object.assign(QM.dock, {
     Object.assign(buttonRow.style, { display: "flex", gap: "6px" });
     const confirmButton = QM.button("Confirm and Add to Inventory", { bg: QM_COLOR_SUCCESS, fg: QM_COLOR_SUCCESS_FG });
     confirmButton.style.flex = "1";
-    confirmButton.addEventListener("click", () => this._submitWardrobeConfirm(confirmButton));
+    if (this._wardrobeHiddenMatches.length > 0) {
+      confirmButton.textContent = "Next: Hidden Items";
+      confirmButton.addEventListener("click", () => {
+        this._wardrobeViewState = "hidden";
+        this._renderWardrobeBuilderContent();
+      });
+    } else {
+      confirmButton.addEventListener("click", () => this._submitWardrobeConfirm(confirmButton));
+    }
     const retryButton = QM.button("Retry", { border: true });
     retryButton.addEventListener("click", () => this._submitWardrobeGeneration());
     const cancelButton = QM.button("Cancel", { border: true });
@@ -6193,14 +6666,146 @@ Object.assign(QM.dock, {
     return fragment;
   },
 
+  // The step before committing whenever the proposal uses hidden items:
+  // each one's details beside the new ones, then Overwrite / Keep / Skip
+  // (skipping drops it from its outfits) and whether to show it again.
+  _renderWardrobeHiddenChoices() {
+    const fragment = document.createDocumentFragment();
+    const intro = document.createElement("div");
+    intro.textContent = "This wardrobe uses hidden items. Choose what happens to each one.";
+    Object.assign(intro.style, { fontSize: "12px" });
+
+    const list = document.createElement("div");
+    Object.assign(list.style, {
+      display: "flex",
+      flexDirection: "column",
+      gap: "6px",
+      fontSize: "12px",
+      maxHeight: "300px",
+      overflowY: "auto",
+    });
+    for (const match of this._wardrobeHiddenMatches) list.appendChild(this._buildWardrobeHiddenMatchRow(match));
+
+    const buttonRow = document.createElement("div");
+    Object.assign(buttonRow.style, { display: "flex", gap: "6px" });
+    const confirmButton = QM.button("Confirm and Add to Inventory", { bg: QM_COLOR_SUCCESS, fg: QM_COLOR_SUCCESS_FG });
+    confirmButton.style.flex = "1";
+    confirmButton.addEventListener("click", () => this._submitWardrobeConfirm(confirmButton));
+    const backButton = QM.button("Back", { border: true });
+    backButton.addEventListener("click", () => {
+      this._wardrobeViewState = "preview";
+      this._renderWardrobeBuilderContent();
+    });
+    buttonRow.append(confirmButton, backButton);
+
+    fragment.append(intro, list, buttonRow);
+    return fragment;
+  },
+
+  _buildWardrobeHiddenMatchRow(match) {
+    const choice = this._wardrobeHiddenChoices[match.itemId];
+    const row = document.createElement("div");
+    Object.assign(row.style, {
+      border: "1px solid var(--border, rgba(128,128,128,0.3))",
+      borderRadius: "var(--radius, 4px)",
+      padding: "6px",
+      display: "flex",
+      flexDirection: "column",
+      gap: "6px",
+    });
+    const name = document.createElement("strong");
+    name.textContent = match.name;
+    row.appendChild(name);
+
+    const sides = document.createElement("div");
+    Object.assign(sides.style, { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "8px" });
+    const side = (title, description) => {
+      const column = document.createElement("div");
+      const heading = document.createElement("div");
+      heading.textContent = title;
+      Object.assign(heading.style, { fontSize: "11px", fontWeight: "600" });
+      const body = document.createElement("div");
+      body.textContent = description || "(no description)";
+      Object.assign(body.style, {
+        fontSize: "11px",
+        opacity: "0.85",
+        maxHeight: "84px",
+        overflowY: "auto",
+        wordBreak: "break-word",
+        fontStyle: description ? "normal" : "italic",
+      });
+      column.append(heading, body);
+      return column;
+    };
+    sides.append(
+      side(match.descriptionLocked ? "Hidden item (locked)" : "Hidden item", match.description),
+      match.proposed
+        ? side("New", match.proposed.description)
+        : side("New", "Only named in an outfit — no new details."),
+    );
+    row.appendChild(sides);
+
+    const showLabel = document.createElement("label");
+    const showBox = document.createElement("input");
+    const options = [
+      { value: "overwrite", label: "Overwrite with new details", disabled: !match.proposed },
+      { value: "keep", label: "Keep hidden item's details" },
+      { value: "skip", label: "Skip (leave it out of these outfits)" },
+    ];
+    const optionsColumn = document.createElement("div");
+    Object.assign(optionsColumn.style, { display: "flex", flexDirection: "column", gap: "2px", fontSize: "11px" });
+    for (const option of options) {
+      const label = document.createElement("label");
+      Object.assign(label.style, {
+        display: "flex",
+        alignItems: "center",
+        gap: "4px",
+        cursor: option.disabled ? "default" : "pointer",
+        opacity: option.disabled ? "0.5" : "1",
+      });
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = `qm-wardrobe-hidden-${match.itemId}`;
+      radio.value = option.value;
+      radio.checked = choice.action === option.value;
+      radio.disabled = Boolean(option.disabled);
+      radio.addEventListener("change", () => {
+        if (!radio.checked) return;
+        choice.action = option.value;
+        showBox.disabled = option.value === "skip";
+        showLabel.style.opacity = showBox.disabled ? "0.5" : "1";
+      });
+      const text = document.createElement("span");
+      text.textContent = option.label;
+      label.append(radio, text);
+      optionsColumn.appendChild(label);
+    }
+    row.appendChild(optionsColumn);
+
+    Object.assign(showLabel.style, { display: "flex", alignItems: "center", gap: "4px", fontSize: "11px" });
+    showBox.type = "checkbox";
+    showBox.checked = choice.show;
+    showBox.disabled = choice.action === "skip";
+    showLabel.style.opacity = showBox.disabled ? "0.5" : "1";
+    showBox.addEventListener("change", () => {
+      choice.show = showBox.checked;
+    });
+    const showText = document.createElement("span");
+    showText.textContent = "Show (unhide) this item";
+    showLabel.append(showBox, showText);
+    row.appendChild(showLabel);
+    return row;
+  },
+
   async _submitWardrobeConfirm(confirmButton) {
     const token = this._wardrobeSessionToken;
     const chatId = QM.state.chatId;
     confirmButton.disabled = true;
     try {
-      const result = await QM.state.confirmWardrobe(this._wardrobeProposal);
+      const result = await QM.state.confirmWardrobe(this._wardrobeProposal, this._wardrobeHiddenChoices);
       if (token !== this._wardrobeSessionToken || chatId !== QM.state.chatId) return;
       this._wardrobeSummary = result.summary;
+      this._wardrobeViewState = "preview";
       this._renderWardrobeBuilderContent();
     } catch (error) {
       if (token !== this._wardrobeSessionToken || chatId !== QM.state.chatId) return;
@@ -6572,6 +7177,311 @@ Object.assign(QM.dock, {
   },
 });
 
+// ===== 13-pending.js =====
+// Pending Item Changes: an agent change to a hidden item waiting on the user
+// (server.mjs's queuePendingHiddenChange, while "Ask before agent changes to
+// hidden items" is on). qmBuildPendingEntry is one entry's review card,
+// shared by the popup below and the dock's own Pending Item Changes section.
+// Only Accept or Keep settles an entry; closing the popup just leaves the
+// rest waiting in the dock.
+
+// pendingId -> the server's { stale, before, current, after } answer to an
+// accept, or { gone: true } once the item turned out deleted; and pendingId
+// -> the "Show item" box's state. Both live outside the DOM so a repaint
+// (the dock and popup rebuild their cards on every state change) keeps them.
+const qmPendingReviews = new Map();
+const qmPendingShowChoices = new Map();
+
+const QM_PENDING_FIELDS = [
+  { key: "description", label: "Description", format: (value) => value || "(none)" },
+  { key: "quantity", label: "Quantity", format: (value) => String(value) },
+  { key: "location", label: "Location", format: (value) => qmLocationLabel(value) },
+];
+
+// [Field | column 1 | column 2 ...], listing only fields that differ
+// between the columns. columns: [{ title, fields }].
+function qmBuildPendingComparison(columns) {
+  const changed = QM_PENDING_FIELDS.filter(({ key }) =>
+    columns.some((column) => column.fields[key] !== columns[0].fields[key]),
+  );
+  if (changed.length === 0) {
+    const same = QM.textNode("Nothing would change.");
+    Object.assign(same.style, { margin: "0", fontSize: "11px", color: "var(--muted-foreground, currentcolor)" });
+    return same;
+  }
+  const grid = document.createElement("div");
+  Object.assign(grid.style, {
+    display: "grid",
+    gridTemplateColumns: `auto repeat(${columns.length}, minmax(0, 1fr))`,
+    gap: "4px 8px",
+    fontSize: "11px",
+  });
+  const cell = (text, style) => {
+    const el = document.createElement("div");
+    el.textContent = text;
+    Object.assign(el.style, { wordBreak: "break-word", minWidth: "0", ...style });
+    return el;
+  };
+  grid.appendChild(cell("", {}));
+  for (const column of columns) grid.appendChild(cell(column.title, { fontWeight: "600" }));
+  for (const field of changed) {
+    grid.appendChild(cell(field.label, { color: "var(--muted-foreground, currentcolor)" }));
+    for (const column of columns) {
+      grid.appendChild(cell(field.format(column.fields[field.key]), { maxHeight: "84px", overflowY: "auto" }));
+    }
+  }
+  return grid;
+}
+
+function qmBuildPendingEntry(entry) {
+  const card = document.createElement("div");
+  Object.assign(card.style, {
+    border: "1px solid var(--border, rgba(128,128,128,0.4))",
+    borderRadius: "var(--radius, 4px)",
+    padding: "8px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+  });
+
+  const title = document.createElement("div");
+  title.textContent = entry.before.name;
+  title.style.fontWeight = "600";
+  card.appendChild(title);
+
+  const note = (text) => {
+    const line = QM.textNode(text);
+    Object.assign(line.style, { margin: "0", fontSize: "11px", color: "var(--muted-foreground, currentcolor)" });
+    card.appendChild(line);
+  };
+  const buttons = [];
+  const actionButton = (label, primary, onClick) => {
+    const button = primary
+      ? QM.button(label)
+      : QM.button(label, {
+          bg: "var(--secondary, transparent)",
+          fg: "var(--secondary-foreground, inherit)",
+          border: true,
+        });
+    Object.assign(button.style, { padding: "3px 10px", fontSize: "11px" });
+    button.addEventListener("click", onClick);
+    buttons.push(button);
+    return button;
+  };
+
+  // Ticked: the item is shown again once this is settled, whichever way.
+  // Starts from the access setting, but unticked for a removal-only change.
+  const showLabel = document.createElement("label");
+  Object.assign(showLabel.style, {
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+    fontSize: "11px",
+    cursor: "pointer",
+  });
+  const showBox = document.createElement("input");
+  showBox.type = "checkbox";
+  showBox.checked =
+    qmPendingShowChoices.get(entry.id) ?? (!entry.remove && qmAccessModeShows(QM.state.hiddenItemAccess));
+  showBox.addEventListener("change", () => qmPendingShowChoices.set(entry.id, showBox.checked));
+  const showText = document.createElement("span");
+  showText.textContent = "Show (unhide) this item";
+  showLabel.append(showBox, showText);
+
+  const settle = async (decision, extra = {}) => {
+    for (const button of buttons) button.disabled = true;
+    const result = await QM.state.resolvePending(entry.id, { decision, show: showBox.checked, ...extra });
+    if (result.stale || result.gone) {
+      qmPendingReviews.set(entry.id, result);
+      QM.state._notify();
+    } else if (result.error) {
+      for (const button of buttons) button.disabled = false;
+    } else {
+      qmPendingReviews.delete(entry.id);
+      qmPendingShowChoices.delete(entry.id);
+    }
+  };
+
+  const review = qmPendingReviews.get(entry.id);
+  const actions = document.createElement("div");
+  Object.assign(actions.style, { display: "flex", flexWrap: "wrap", gap: "6px" });
+
+  if (review?.gone) {
+    note("This item was deleted, so the agent's change can't be applied.");
+    actions.append(actionButton("Dismiss", true, () => settle("keep", { show: false })));
+    card.appendChild(actions);
+    return card;
+  }
+
+  if (review?.stale) {
+    // What "Apply" would really produce: only the fields the agent changed,
+    // laid over the item as it is now (the resolve route's override).
+    const applied = { ...review.current };
+    for (const { key } of QM_PENDING_FIELDS) {
+      if (review.after[key] !== review.before[key]) applied[key] = review.after[key];
+    }
+    note("This item changed after the agent suggested this. Compare, then choose.");
+    card.appendChild(
+      qmBuildPendingComparison([
+        { title: "When suggested", fields: review.before },
+        { title: "Now", fields: review.current },
+        { title: "With agent's change", fields: applied },
+      ]),
+    );
+    card.appendChild(showLabel);
+    actions.append(
+      actionButton("Apply the agent's change", true, () => settle("accept", { override: true })),
+      actionButton("Keep current", false, () => settle("keep")),
+    );
+    card.appendChild(actions);
+    return card;
+  }
+
+  if (entry.remove) {
+    note("The agent wants to remove this hidden item.");
+  } else {
+    card.appendChild(
+      qmBuildPendingComparison([
+        { title: "Now", fields: entry.before },
+        { title: "Agent's change", fields: entry.after },
+      ]),
+    );
+  }
+  if (entry.descriptionLocked && !entry.remove && entry.after.description !== entry.before.description) {
+    note("Its description is locked; accepting changes it anyway.");
+  }
+  card.appendChild(showLabel);
+  actions.append(
+    actionButton("Accept changes", true, () => settle("accept")),
+    actionButton("Keep old item details", false, () => settle("keep")),
+  );
+  card.appendChild(actions);
+  return card;
+}
+
+// Opens by itself (on document.body, so it shows with the dock closed) when
+// unseen pending changes arrive. Closing it marks what's left as seen, so it
+// won't reopen for them; they stay in the dock's Pending Item Changes.
+QM.pendingPopup = {
+  backdrop: null,
+  list: null,
+  chatId: null,
+  // Entries this popup is showing; grows if more arrive while it's open.
+  ids: new Set(),
+  // Closed-on entries, so the popup can't reopen for them while the
+  // markPendingSeen request is still in flight.
+  deferred: new Set(),
+  _escapeHandler: null,
+
+  sync() {
+    if (this.chatId !== QM.state.chatId) {
+      this._remove();
+      this.deferred.clear();
+      this.chatId = QM.state.chatId;
+    }
+    const entries = QM.state.pendingHiddenChanges ?? [];
+    const unseen = entries.filter((entry) => !entry.seen && !this.deferred.has(entry.id));
+    if (!this.backdrop && unseen.length === 0) return;
+    if (!this.backdrop) this._open();
+    for (const entry of unseen) this.ids.add(entry.id);
+    const shown = entries.filter((entry) => this.ids.has(entry.id));
+    if (shown.length === 0) {
+      this._remove();
+      return;
+    }
+    this.list.replaceChildren(...shown.map((entry) => qmBuildPendingEntry(entry)));
+  },
+
+  close() {
+    const remaining = (QM.state.pendingHiddenChanges ?? [])
+      .filter((entry) => this.ids.has(entry.id) && !entry.seen)
+      .map((entry) => entry.id);
+    for (const id of remaining) this.deferred.add(id);
+    this._remove();
+    QM.state.markPendingSeen(remaining);
+  },
+
+  _open() {
+    const backdrop = document.createElement("div");
+    Object.assign(backdrop.style, {
+      position: "fixed",
+      inset: "0",
+      background: "rgba(0, 0, 0, 0.55)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "16px",
+      boxSizing: "border-box",
+      zIndex: "10000",
+    });
+    backdrop.addEventListener("pointerdown", (event) => {
+      if (event.target === backdrop) this.close();
+    });
+
+    const panel = document.createElement("div");
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Pending Item Changes");
+    Object.assign(panel.style, {
+      background: "var(--card, #1c1c1c)",
+      color: "var(--card-foreground, inherit)",
+      border: "1px solid var(--border, rgba(128,128,128,0.3))",
+      borderRadius: "var(--radius, 6px)",
+      padding: "12px",
+      width: "min(440px, 100%)",
+      maxHeight: "100%",
+      overflowY: "auto",
+      boxSizing: "border-box",
+      boxShadow: "0 8px 24px rgba(0, 0, 0, 0.45)",
+      display: "flex",
+      flexDirection: "column",
+      gap: "8px",
+      fontSize: "12px",
+    });
+
+    const header = document.createElement("div");
+    Object.assign(header.style, { display: "flex", alignItems: "center", gap: "8px" });
+    const title = document.createElement("div");
+    title.textContent = "Pending Item Changes";
+    Object.assign(title.style, { fontWeight: "600", flex: "1" });
+    const closeButton = QM.button("×", { bg: "transparent", border: true, fg: "inherit" });
+    closeButton.style.padding = "0 6px";
+    closeButton.setAttribute("aria-label", "Decide later");
+    closeButton.title = "Decide later";
+    closeButton.addEventListener("click", () => this.close());
+    header.append(title, closeButton);
+
+    const intro = QM.textNode(
+      "The agent tried to change hidden items. Closing this keeps them waiting under Pending Item Changes " +
+        "in Quartermaster.",
+    );
+    Object.assign(intro.style, { margin: "0", fontSize: "11px", color: "var(--muted-foreground, currentcolor)" });
+
+    const list = document.createElement("div");
+    Object.assign(list.style, { display: "flex", flexDirection: "column", gap: "8px" });
+
+    panel.append(header, intro, list);
+    backdrop.appendChild(panel);
+    document.body.appendChild(backdrop);
+    this.backdrop = backdrop;
+    this.list = list;
+    this._escapeHandler = (event) => {
+      if (event.key === "Escape") this.close();
+    };
+    document.addEventListener("keydown", this._escapeHandler);
+  },
+
+  _remove() {
+    this.backdrop?.remove();
+    this.backdrop = null;
+    this.list = null;
+    this.ids = new Set();
+    if (this._escapeHandler) document.removeEventListener("keydown", this._escapeHandler);
+    this._escapeHandler = null;
+  },
+};
+
+QM.state.subscribe(() => QM.pendingPopup.sync());
+
 // ===== 15-panel.js =====
 // Quartermaster — inline tracker-panel accordion. Renders directly into the
 // tracker-panel slot's element (unlike the toolbar slot, which is just a
@@ -6824,6 +7734,15 @@ QM.panel = {
     return row;
   },
 
+  // Marks a hidden item/outfit, same as the dock's "Hidden" card badge.
+  _hiddenTag() {
+    const tag = document.createElement("span");
+    tag.textContent = "Hidden";
+    tag.className = "uppercase " + QM_TRACKER_MUTED_CLASS;
+    tag.style.fontSize = "10px";
+    return tag;
+  },
+
   _empty(text) {
     const node = document.createElement("div");
     node.className = QM_TRACKER_EMPTY_CLASS;
@@ -6854,7 +7773,9 @@ QM.panel = {
       });
       unequipButton.addEventListener("click", () => QM.state.updateItem(item.id, { location: "bag" }));
 
-      list.appendChild(this._row([name, slotLabel, unequipButton]));
+      list.appendChild(
+        this._row(item.hidden ? [name, this._hiddenTag(), slotLabel, unequipButton] : [name, slotLabel, unequipButton]),
+      );
     }
     return list;
   },
@@ -6890,7 +7811,9 @@ QM.panel = {
         equipped ? QM.state.unequipAll() : QM.state.equipOutfit(outfit.id),
       );
 
-      topLine.append(name, toggleButton);
+      topLine.append(name);
+      if (outfit.hidden) topLine.appendChild(this._hiddenTag());
+      topLine.appendChild(toggleButton);
 
       const itemNames = QM.state.outfitItemNames(outfit);
       const itemsLine = document.createElement("div");
@@ -6922,7 +7845,7 @@ QM.panel = {
         const qty = document.createElement("span");
         qty.textContent = `×${item.quantity}`;
         qty.className = QM_TRACKER_MUTED_CLASS;
-        list.appendChild(this._row([name, qty]));
+        list.appendChild(this._row(item.hidden ? [name, this._hiddenTag(), qty] : [name, qty]));
       }
     }
     return list;

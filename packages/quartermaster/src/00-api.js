@@ -130,10 +130,12 @@ QM.generateWardrobe = (chatId, ownerId, direction, includePersonaContext) =>
   });
 
 // The separate confirm step that actually persists a previously-generated proposal.
-QM.confirmWardrobe = (chatId, ownerId, proposal) =>
+// hiddenChoices: { [itemId]: { action: "overwrite" | "keep" | "skip", show } }
+// for the hidden items the proposal uses; any it leaves out are skipped.
+QM.confirmWardrobe = (chatId, ownerId, proposal, hiddenChoices) =>
   qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/wardrobe/confirm`, {
     method: "POST",
-    body: JSON.stringify({ proposal }),
+    body: JSON.stringify({ proposal, hiddenChoices }),
   });
 
 QM.updateSettings = (chatId, ownerId, settings) =>
@@ -155,6 +157,29 @@ QM.restoreInventory = (chatId, ownerId) =>
   qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/restore`, {
     method: "POST",
     body: "{}",
+  });
+
+// Settles one pending agent change to a hidden item. Unlike qmRequest this
+// resolves (never throws) on a 409, since a stale change answers with the
+// item's before/current/after for the user to compare: { ok, status, body }.
+QM.resolvePending = async (chatId, ownerId, pendingId, decision) => {
+  const path = `/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/pending/${encodeURIComponent(pendingId)}/resolve`;
+  const response = await fetch(`/api/quartermaster${path}`, {
+    method: "POST",
+    headers: { ...qmAuthHeaders("POST"), "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(decision),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok && response.status !== 409) throw new Error(qmResponseError(response, body));
+  return { ok: response.ok, status: response.status, body };
+};
+
+// Pending changes the user has already been shown, so the popup only opens for new ones.
+QM.markPendingSeen = (chatId, ownerId, ids) =>
+  qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/pending/seen`, {
+    method: "POST",
+    body: JSON.stringify({ ids }),
   });
 
 // Per-item undo from the Recent Changes view — see server.mjs's
