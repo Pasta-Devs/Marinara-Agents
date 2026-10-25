@@ -460,11 +460,13 @@ function FlipButton({
 
 /** Flips the sauceling in the nook; the switch is saved on it, so it keeps its way through every stage. */
 export function PetFlip({ state }: { state: SaucelingStateResponse }) {
+  const { t } = useSaucelingsTranslation();
   const pet = state.world.activePet;
   if (!pet) return null;
   return (
     <FlipButton
-      name={pet.name}
+      // An egg still has its kind's name, which would give away what hatches.
+      name={pet.stage === "egg" ? t("saucelings.egg.name") : pet.name}
       flipped={pet.flipped}
       request={(flipped) => saucelingsRequest<SaucelingStateResponse>("/pet", "PATCH", { flipped })}
     />
