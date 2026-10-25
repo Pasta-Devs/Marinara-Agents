@@ -33,6 +33,7 @@ export function slurpLivePrivatePrompt(input: {
 const PICTURE_MOMENT: Record<string, string> = {
   goal: "the moment the tip goal is hit: excited, celebrating the room, the outfit a little more undone than at the start",
   finale: "the finale of her show: the peak of the show, the most she shows tonight",
+  shot: "what her camera shows right now",
   menu: "her doing the menu item a fan just bought",
   private: "a private-show moment just for one fan: closer to the camera, intimate",
 };
@@ -44,9 +45,12 @@ export function slurpLivePictureBrief(input: {
   level: number;
   spiceLines: readonly string[];
   menuLabel?: string;
+  shot?: string;
 }): string {
   const kind = input.trigger.split(":")[0];
-  const moment = PICTURE_MOMENT[kind] ?? "a moment from her live show";
+  const moment =
+    (kind === "shot" && input.shot ? `what her camera shows right now: ${input.shot}` : PICTURE_MOMENT[kind]) ??
+    "a moment from her live show";
   return [
     `${input.hostName} live on webcam in her room, a screenshot of her stream: ${moment}${kind === "menu" && input.menuLabel ? ` (${input.menuLabel})` : ""}.`,
     // How much she shows is the picture level the caller passes to the image pipeline, not these words.

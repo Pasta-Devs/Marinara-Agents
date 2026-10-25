@@ -105,7 +105,7 @@ const slots = {
   queue: [
     { itemId: "item", label: "Kiss", name: "Fan", at: 0, served: true, servedIn: 0, requestId: "r", status: "paid" },
   ],
-  pictures: Array.from({ length: 6 }, (_, index) => ({
+  pictures: Array.from({ length: 12 }, (_, index) => ({
     personaId: "p",
     trigger: index ? `menu:old-${index}` : "goal",
     status: "ready",

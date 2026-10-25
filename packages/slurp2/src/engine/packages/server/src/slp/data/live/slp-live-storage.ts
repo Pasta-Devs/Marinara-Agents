@@ -21,6 +21,7 @@ import {
   type SlurpLiveShow,
   type SlurpLiveMenuItem,
   type SlurpLiveOrder,
+  slurpLivePicturesFree,
 } from "../../modules/live/slp-live.js";
 
 const parse = <T>(value: string, fallback: T): T => {
@@ -423,21 +424,26 @@ export function createSlurpLiveStorage(db: DB) {
         .where(eq(slurpLiveShows.id, id));
       return this.get(id);
     },
-    async seen(id: string, at: Date, viewerId?: string) {
+    async seen(id: string, at: Date, viewerId?: string): Promise<SlurpLiveShow | null> {
       const current = viewerId ? await this.get(id) : null;
-      const pictureViewer = current?.pictureViewers.find((viewer) => viewer.personaId === viewerId);
+      const viewers = current?.pictureViewers ?? [];
+      const pictureViewer = viewers.find((viewer) => viewer.personaId === viewerId);
+      // First look: a viewer starts in pictures mode when the show allows it and nobody else holds it.
+      const first = !!viewerId && !!current && !pictureViewer && slurpLivePicturesFree(current, viewerId);
+      const seenAt = at.toISOString();
       await db
         .update(slurpLiveShows)
         .set({
-          lastSeenAt: at.toISOString(),
-          ...(viewerId && pictureViewer?.mode === "pictures"
+          lastSeenAt: seenAt,
+          ...(viewerId && (first || pictureViewer?.mode === "pictures")
             ? {
-                pictureSeenAt: at.toISOString(),
+                pictureSeenAt: seenAt,
                 pictureViewers: JSON.stringify(
-                  current!.pictureViewers.map((viewer) =>
-                    viewer.personaId === viewerId ? { ...viewer, seenAt: at.toISOString() } : viewer,
-                  ),
+                  first
+                    ? [...viewers, { personaId: viewerId, mode: "pictures", seenAt }]
+                    : viewers.map((viewer) => (viewer.personaId === viewerId ? { ...viewer, seenAt } : viewer)),
                 ),
+                ...(first ? { mode: "pictures", pictureViewerId: viewerId } : {}),
               }
             : {}),
         })
