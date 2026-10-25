@@ -4484,6 +4484,150 @@ async function main() {
         assert.equal(await prompt.count(), 0, "the export offer closes once the delete runs");
         await groupPage.close();
       }
+      // #1659: Recall settings are grouped (Budget, Ranking, Text filters, Sharing), the four weights use
+      // plain names with the old term in their help, and editing a weight shows the Custom note with a
+      // button that restores the preset the weights came from.
+      for (const width of [1280, 390]) {
+        const recallPage = await browserContext.newPage();
+        await recallPage.setViewportSize({ width, height: 900 });
+        await recallPage.goto(`http://127.0.0.1:${address.port}/`);
+        await recallPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await recallPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => false };
+          document.body.append(element);
+        })()`);
+        await recallPage.locator('[data-ltm-destination="settings"]:visible').first().click();
+        const recall = recallPage.locator("#settings-panel-recall");
+        await recall.waitFor();
+        const groups = await recall.locator("[data-ltm-recall-group]").evaluateAll((nodes) =>
+          nodes.map((node) => ({
+            group: node.getAttribute("data-ltm-recall-group"),
+            heading: node.querySelector("h4")?.textContent?.trim(),
+            labelled: node.getAttribute("aria-labelledby") === node.querySelector("h4")?.id,
+          })),
+        );
+        assert.deepEqual(
+          groups,
+          [
+            { group: "budget", heading: "Budget", labelled: true },
+            { group: "ranking", heading: "Ranking", labelled: true },
+            { group: "text", heading: "Text filters", labelled: true },
+            { group: "sharing", heading: "Sharing", labelled: true },
+          ],
+          `Recall groups at ${width}px`,
+        );
+        const inGroup = (group: string) => recall.locator(`[data-ltm-recall-group="${group}"]`);
+        for (const [group, label] of [
+          ["budget", "Recall budget tokens"],
+          ["budget", "Maximum recalled memories"],
+          ["budget", "Recent messages for recall"],
+          ["ranking", "Recall style"],
+          ["ranking", "Score threshold"],
+          ["ranking", "Meaning match"],
+          ["ranking", "Exact words match"],
+          ["ranking", "Linked memories match"],
+          ["ranking", "Stored keywords match"],
+          ["text", "Memory context instructions"],
+          ["text", "Memory stop words"],
+          ["sharing", "Other Agents can read memories"],
+        ] as const) {
+          assert.equal(await inGroup(group).getByLabel(label, { exact: true }).count(), 1, `${label} is in ${group}`);
+        }
+        assert.equal(await recall.getByText("Graph weight", { exact: true }).count(), 0, "the old graph label is gone");
+        assert.equal(
+          await recall.getByText("Keyword weight", { exact: true }).count(),
+          0,
+          "the old keyword label is gone",
+        );
+        await recall.locator('[data-ltm-info="Linked memories match"]').click();
+        assert.match(
+          await recallPage.locator('[data-ltm-info-panel="Linked memories match"]').innerText(),
+          /Also called graph weight/u,
+          "the help names the old term",
+        );
+        await recallPage.keyboard.press("Escape");
+
+        const style = recall.getByLabel("Recall style", { exact: true });
+        const note = recall.locator("[data-ltm-recall-custom]");
+        assert.equal((await note.innerText()).trim(), "", "no Custom note while a preset is in use");
+        assert.equal(await recall.getByRole("button", { name: "Reset to preset" }).count(), 0);
+        await style.selectOption("exact");
+        const exactWeight = await recall.getByLabel("Meaning match", { exact: true }).inputValue();
+        await recall.getByLabel("Meaning match", { exact: true }).fill("0.91");
+        await recall.getByLabel("Meaning match", { exact: true }).press("Enter");
+        assert.equal(await style.inputValue(), "custom", "editing a weight flips the style to Custom");
+        assert.match(await note.innerText(), /^Custom \(edited weights\)\. Reset to preset returns to Exact\./u);
+        assert.equal(await note.getAttribute("role"), "status");
+        const reset = recall.getByRole("button", { name: "Reset to preset" });
+        assert.equal(
+          await reset.evaluate((button) => button.getBoundingClientRect().height >= 44),
+          true,
+          "Reset to preset is a 2.75rem target",
+        );
+        await reset.click();
+        assert.equal(await style.inputValue(), "exact", "Reset to preset restores the preset it came from");
+        // NumberField copies the new value into its text in an effect, so give it a frame or two.
+        for (let attempt = 0; attempt < 40; attempt += 1) {
+          if ((await recall.getByLabel("Meaning match", { exact: true }).inputValue()) === exactWeight) break;
+          await recallPage.waitForTimeout(50);
+        }
+        assert.equal(await recall.getByLabel("Meaning match", { exact: true }).inputValue(), exactWeight);
+        assert.equal((await note.innerText()).trim(), "", "the note clears once the preset is back");
+        // Choosing Custom by hand, with no edit, still resets to the last preset. Balanced is the saved style,
+        // so the form is clean again and the Save bar goes away.
+        await style.selectOption("balanced");
+        await style.selectOption("custom");
+        await recall.getByRole("button", { name: "Reset to preset" }).click();
+        assert.equal(await style.inputValue(), "balanced", "choosing Custom by hand still resets to the last preset");
+        for (let attempt = 0; attempt < 40; attempt += 1) {
+          if ((await recallPage.getByRole("button", { name: "Save settings" }).count()) === 0) break;
+          await recallPage.waitForTimeout(50);
+        }
+        assert.equal(
+          await recallPage.getByRole("button", { name: "Save settings" }).count(),
+          0,
+          "Reset to preset back to the saved preset leaves the form clean",
+        );
+        assert.equal(
+          await recallPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+          true,
+          `Recall has no horizontal overflow at ${width}px`,
+        );
+        await recallPage.close();
+      }
+      // #1659: a form saved as Custom has no preset history. Picking Exact and discarding must not leave
+      // "returns to Exact" behind: the note falls back to Balanced.
+      {
+        const customPage = await browserContext.newPage();
+        await customPage.setViewportSize({ width: 1280, height: 900 });
+        await customPage.route("**/api/long-term-memory/settings", (route) =>
+          route.request().method() === "GET"
+            ? route.fulfill({ json: { longTermMemoryRecallStyle: "custom", longTermMemorySemanticWeight: 0.7 } })
+            : route.continue(),
+        );
+        await customPage.goto(`http://127.0.0.1:${address.port}/`);
+        await customPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await customPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = { confirmAction: () => true };
+          document.body.append(element);
+        })()`);
+        await customPage.locator('[data-ltm-destination="settings"]:visible').first().click();
+        const recall = customPage.locator("#settings-panel-recall");
+        const note = recall.locator("[data-ltm-recall-custom]");
+        await recall.getByText("Reset to preset returns to Balanced.", { exact: false }).waitFor();
+        const style = recall.getByLabel("Recall style", { exact: true });
+        assert.equal(await style.inputValue(), "custom");
+        await style.selectOption("exact");
+        await customPage.getByRole("button", { name: "Discard changes" }).click();
+        await customPage.getByRole("button", { name: "Discard changes" }).waitFor({ state: "detached" });
+        assert.equal(await style.inputValue(), "custom", "Discard returns to the saved Custom style");
+        assert.match(await note.innerText(), /returns to Balanced\./u, "the discarded pick is not remembered");
+        await customPage.close();
+      }
       // #1452: when the settings read after Reset or Import fails, Retry on the error surface loads the
       // new settings instead of the cached ones the action replaced. An import whose integrity read
       // alone fails still shows the settings it refetched (and says the backup was imported).
