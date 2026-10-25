@@ -121,6 +121,7 @@ export function wireForgeBannerAnimation(host) {
       if (playing)
         clip.play().catch((error) => {
           if (!current() || video !== clip || error?.name === "AbortError") return;
+          if (error?.name !== "NotAllowedError") return failPlayback(clip);
           state.paused = true;
           video.style.opacity = "0";
           notice(forgeAnimationEnglish.playbackFailed);
@@ -159,6 +160,16 @@ export function wireForgeBannerAnimation(host) {
       });
     };
     chips?.append(retry);
+  };
+  const failPlayback = (clip) => {
+    if (!current() || video !== clip) return;
+    clip.pause();
+    clip.remove();
+    video = null;
+    pause?.remove();
+    pause = null;
+    state.requests.set(identity, Promise.resolve({ ok: false, retry: true, reason: "playback" }));
+    offerRetry(forgeAnimationEnglish.playbackFailed);
   };
   const mount = (result) => {
     if (!current()) return;
@@ -218,16 +229,7 @@ export function wireForgeBannerAnimation(host) {
         status.remove();
       }
     });
-    video.addEventListener("error", () => {
-      if (!current() || video !== clip) return;
-      clip.pause();
-      clip.remove();
-      video = null;
-      pause?.remove();
-      pause = null;
-      state.requests.set(identity, Promise.resolve({ ok: false, retry: true, reason: "playback" }));
-      offerRetry(forgeAnimationEnglish.playbackFailed);
-    });
+    video.addEventListener("error", () => failPlayback(clip));
     video.src = result.animation.url;
     target.append(video);
     pause = document.createElement("button");

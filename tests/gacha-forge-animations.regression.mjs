@@ -900,7 +900,7 @@ try {
       }
       if (Element.rejectNextPlay) {
         Element.rejectNextPlay = false;
-        return Promise.reject(new Error("NotAllowedError"));
+        return Promise.reject(new DOMException("A user gesture is required.", "NotAllowedError"));
       }
       this.paused = false;
       return Promise.resolve();
@@ -1035,6 +1035,25 @@ try {
     assert.equal(playback.chips.querySelector("[data-animation-retry]"), undefined);
     assert.equal(playback.requests.length, 3);
     disposeForgeBannerAnimation(playback.host);
+
+    const unsupported = client(),
+      unsupportedPlay = deferred();
+    wireForgeBannerAnimation(unsupported.host);
+    Element.pendingNextPlay = unsupportedPlay;
+    unsupported.requests[0].resolve(response);
+    await wait();
+    unsupportedPlay.reject(new DOMException("No supported media source.", "NotSupportedError"));
+    await wait();
+    const unsupportedRetry = unsupported.chips.querySelector("[data-animation-retry]");
+    assert.ok(unsupportedRetry, "promise-only decoder rejection still offers deliberate regeneration");
+    assert.equal(unsupported.target.children.length, 0, "the unsupported clip cannot block mounting its replacement");
+    assert.equal(unsupported.requests.length, 1, "promise-only failures never repurchase automatically");
+    unsupportedRetry.onclick();
+    unsupported.requests[1].resolve(response);
+    await wait();
+    assert.equal(unsupported.target.children[0]?.tagName, "video");
+    assert.equal(unsupported.requests.length, 2);
+    disposeForgeBannerAnimation(unsupported.host);
 
     const stale = client();
     wireForgeBannerAnimation(stale.host);

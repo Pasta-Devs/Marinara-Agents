@@ -1,5 +1,9 @@
 ## 1.16.1 — 2026-10-25 [highlight]
 
+- Restore first-send character replies and keep sent and remembered messages scrollable in the same chat window, without automatic resends.
+- Use current linked character cards’ full Description, Personality, Backstory and Appearance in story prompts, excluding card Scenario, greetings and example dialogue.
+- Keep Writing help buttons compact and preserve tapped explanations through viewport updates.
+- Use “They did not answer.” as the neutral direct-message failure fallback.
 - Hide the neutral story portrait silhouette when the current artwork is loaded, retaining safe loading and missing-art fallbacks.
 - Restore explicit banner animation recovery after playback or stale-clip errors. Failed replacement attempts keep previous saved media; successful replacements receive a fresh immutable URL.
 
