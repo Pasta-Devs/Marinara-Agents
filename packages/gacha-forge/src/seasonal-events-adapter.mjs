@@ -426,7 +426,7 @@ function createForgeSeasonalLegacyAdapter() {
   });
   const post = (path, handler) => forgeStoryPost(path, (request) => handler(request?.body || {}));
   post("/story-events", (body) => events.list(body));
-  post("/story-event/plan", (body) => events.plan(body));
+  post("/story-event/plan", (body) => forgeChoices.generate(body.runId, () => events.plan(body)));
   post("/story-event/preforge", () => ({
     ok: true,
     allowed: false,
