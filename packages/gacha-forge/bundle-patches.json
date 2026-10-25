@@ -1132,6 +1132,33 @@
               "replace": "a=forgeChapterRequest(this,e,a);e=forgeSeasonalRequest(e,a);a=forgeFormationStartRequest(this,e,a);let forgeStory="
             }
           ]
+        },
+        {
+          "version": "1.20.2",
+          "commits": [],
+          "edits": [
+            {
+              "sourceId": "unit-art-client",
+              "replaceFrom": "src/unit-art-client.mjs",
+              "find": "function Df("
+            },
+            {
+              "find": "const forgeExpandedEditor=captureForgeExpandedEditor(this,e),forgeMemoryStatus=captureForgeStoryMemoryStatus(this,e);",
+              "replace": "const forgeExpandedEditor=captureForgeExpandedEditor(this,e),forgeMemoryStatus=captureForgeStoryMemoryStatus(this,e),forgeUnitPortrait=captureForgeUnitPortrait(this,e);"
+            },
+            {
+              "find": "this._wireFullscreen(),restoreForgeExpandedEditor(this,forgeExpandedEditor)",
+              "replace": "restoreForgeUnitPortrait(this,forgeUnitPortrait),this._wireFullscreen(),restoreForgeExpandedEditor(this,forgeExpandedEditor)"
+            },
+            {
+              "find": "this._roster=e.cards,this._rosterRev+=1,this._rosterCount=e.cards.length",
+              "replace": "JSON.stringify(this._roster)!==JSON.stringify(e.cards)&&(this._roster=e.cards,this._rosterRev+=1),this._rosterCount=e.cards.length"
+            },
+            {
+              "find": "ds=\"1.19.0\"",
+              "replace": "ds=\"1.20.2\""
+            }
+          ]
         }
       ]
     },

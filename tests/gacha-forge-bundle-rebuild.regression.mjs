@@ -38,6 +38,7 @@ try {
     ["player-choice-text", ["client.js", "server.mjs"]],
     ["home-presentation", ["client.js"]],
     ["unit-notifications", ["client.js"]],
+    ["unit-art-client", ["client.js"]],
     ["image-avatar-references", ["server.mjs"]],
     ["story-memory", ["server.mjs"]],
     ["story-memory-integration", ["server.mjs"]],

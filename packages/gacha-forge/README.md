@@ -1,3 +1,7 @@
+## Stable unit artwork (1.20.2)
+
+Unit tab changes reuse the current successfully decoded portrait when the unit and artwork URL stay the same. Opening another unit or changing its artwork still replaces the portrait. Returning to Units keeps cached cards in place when the refresh returns the same data.
+
 ## Optional Formation combat (1.19.0)
 
 Choose **Classic** or **Formation** while creating a playthrough. Existing worlds keep Classic. For a saved world, open **Settings → Story → Continuity → Combat mode**. The confirmation explains the model requests needed to remake every character's kit. Up to three conversions are queued at a time; progress, individual failures, explicit retry and cancellation remain available after reopening. The world stays in its current mode until every current character kit is ready and one atomic transaction activates the change.

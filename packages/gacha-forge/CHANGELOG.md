@@ -1,3 +1,8 @@
+## 1.20.2 — 2026-10-26
+
+- Keep an unchanged, decoded unit portrait mounted while switching unit tabs. Replace it normally when the unit or artwork changes.
+- Preserve cached Units cards when a background refresh returns identical data, while keeping real card updates and loading status current.
+
 ## 1.19.0 — 2026-10-25
 
 - Choose optional Formation combat: frontline actions, protected elemental supports, shared energy, repositioning and generated tactical kits.
