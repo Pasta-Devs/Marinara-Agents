@@ -24,7 +24,7 @@ const forgeSeasonalLayout = `
 .gf-event-action:focus-visible { outline:2px solid var(--text); outline-offset:3px; }
 .gf-event-card .chips { display:flex; flex-wrap:wrap; gap:.4rem; margin:.4rem 0; }
 .gf-event-archive { margin-top:var(--sp-3); padding:var(--sp-3); border-top:1px solid var(--steel-dark); }
-@container (max-width:420px) { .gf-story-options { grid-template-columns:minmax(0,1fr); } }
+@container (max-width:300px) { .gf-story-options { grid-template-columns:minmax(0,1fr); } }
 `;
 const forgeEventEscape = (value) =>
   String(value ?? "").replace(
@@ -164,6 +164,19 @@ export function wireForgeSeasonalEvents(host) {
     void loadForgeSeasonalEvents(host);
   const state = host._forgeSeasonalState,
     events = state?.events || [];
+  if (
+    !host._forgeSeasonalLoading &&
+    host._run.story?.seasonalEvents === true &&
+    events.some((event) => event.live && Date.now() >= event.endsAt)
+  ) {
+    // Consume this expiry edge once. A failed preparation remains an explicit retry.
+    for (const event of events)
+      if (Date.now() >= event.endsAt) {
+        event.live = false;
+        event.archived = true;
+      }
+    void loadForgeSeasonalEvents(host);
+  }
   if (host._hudView === "events" && host._eventId === "story-events") {
     const pane = root.querySelector('[data-screen="events"] .ev-pane');
     if (pane && !pane.dataset.forgeStoryEvents) {

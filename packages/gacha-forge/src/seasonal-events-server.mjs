@@ -260,6 +260,7 @@ export function createForgeSeasonalEvents({
     const runId = forgeEventText(body?.runId, 200),
       run = await readRun(runId);
     if (!run) return { ok: false, error: "not-found" };
+    await retireInactiveFight(runId);
     if (forgeSeasonalEnabled(run)) await ensure(runId, body?.retry === true);
     const session = await readSession(runId),
       boundary = await frontier(runId, session),
@@ -309,6 +310,7 @@ export function createForgeSeasonalEvents({
 
   async function plan(body) {
     return serial(`${body?.runId}:plan`, async () => {
+      await retireInactiveFight(body?.runId);
       let target = await selected(body);
       if (!target.ok) return target;
       const { runId, chapter } = target;
@@ -377,6 +379,7 @@ export function createForgeSeasonalEvents({
   }
 
   async function complete(body) {
+    await retireInactiveFight(body?.runId);
     const initial = await selected(body, { live: true });
     if (!initial.ok) return initial;
     const planDoc = await documents.getById(packageId, planId(initial.runId, initial.chapter));
@@ -426,6 +429,29 @@ export function createForgeSeasonalEvents({
     return response;
   }
 
+  async function retireInactiveFight(runId) {
+    const pendingFight = (await readSession(runId))?.combatPending;
+    if (!forgeSeasonalChapter(pendingFight?.chapter)) return false;
+    return persistence.transaction(async ({ documents: store }) => {
+      const index = await store.getById(packageId, "index"),
+        run = index?.data?.runs?.find((entry) => entry.runId === runId),
+        session = await store.getById(packageId, sessionId(runId)),
+        chapter = session?.data?.combatPending?.chapter;
+      if (!run || !forgeSeasonalChapter(chapter)) return false;
+      const event = await store.getById(packageId, eventId(runId, Number(chapter.slice(6))));
+      if (
+        !event ||
+        event.data?.chapter !== chapter ||
+        (forgeSeasonalEnabled(run) && !(Number.isFinite(event.data.endsAt) && now() >= event.data.endsAt))
+      )
+        return false;
+      const data = structuredClone(session.data);
+      delete data.combatPending;
+      await save(store, session, data);
+      return true;
+    });
+  }
+
   return {
     ensure,
     list,
@@ -433,6 +459,17 @@ export function createForgeSeasonalEvents({
     selected,
     guardNode,
     complete,
+    retireInactiveFight,
+    async choiceActive(runId, chapter) {
+      if (!forgeSeasonalChapter(chapter)) return true;
+      const event = await documents.getById(packageId, eventId(runId, Number(chapter.slice(6))));
+      return (
+        !!event &&
+        event.data?.chapter === chapter &&
+        now() < event.data.endsAt &&
+        forgeSeasonalEnabled(await readRun(runId))
+      );
+    },
     async startStory(body) {
       const target = await guardNode(body, "story", "storyIndex");
       if (!target.ok) return target;
@@ -452,6 +489,7 @@ export function createForgeSeasonalEvents({
       });
     },
     async guardMain(runId, chapter) {
+      await retireInactiveFight(runId);
       const run = await readRun(runId);
       if (!forgeSeasonalEnabled(run)) return null;
       const session = await readSession(runId);
@@ -464,7 +502,7 @@ export function createForgeSeasonalEvents({
       return null;
     },
     async runBattle(body, start = false) {
-      const target = await guardNode(body, "combat", "combatIndex");
+      const target = await guardNode(body, "combat", "combatIndex", !start);
       return target.ok ? battle({ body, target, start }) : target;
     },
     async mediaBanner(runId, bannerId) {
@@ -472,7 +510,8 @@ export function createForgeSeasonalEvents({
       const doc = await documents.getById(packageId, eventId(runId, Number(bannerId.slice(12))));
       const run = await readRun(runId);
       const event = doc?.data;
-      if (event && now() >= event.endsAt && !progress(await readSession(runId), event.chapter)) return null;
+      const generateAllowed = forgeSeasonalEnabled(run) && !!event && now() < event.endsAt;
+      if (event && !generateAllowed && !progress(await readSession(runId), event.chapter)) return null;
       const match = /^global-gallery:([A-Za-z0-9_-]{1,100})$/u.exec(event?.artRef || "");
       return run && event
         ? {
@@ -480,6 +519,7 @@ export function createForgeSeasonalEvents({
             identity: doc.id,
             art: event.art || "",
             galleryImageId: match?.[1] || "",
+            generateAllowed,
           }
         : null;
     },

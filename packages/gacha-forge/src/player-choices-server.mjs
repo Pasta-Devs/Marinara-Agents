@@ -162,6 +162,7 @@ export function forgeCreateChoiceRuntime({
   bondHistory,
   readRun,
   resolveChapter,
+  choiceChapterActive = async () => true,
 }) {
   const generationQueues = new Map();
 
@@ -206,6 +207,9 @@ export function forgeCreateChoiceRuntime({
     for (const row of rows) {
       if (!row?.id?.startsWith(prefix) || !row.data) continue;
       const data = row.data;
+      // Expired/disabled event choices cannot hold unrelated main-story generation.
+      // A chapter-scoped operation still checks its own unresolved choices normally.
+      if (chapter == null && !(await choiceChapterActive(runId, data.chapter))) continue;
       if (beforeChapter != null) {
         const numeric = Number(data.chapter);
         if (Number.isInteger(numeric)) {

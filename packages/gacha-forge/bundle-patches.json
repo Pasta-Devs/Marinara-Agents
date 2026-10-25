@@ -2034,6 +2034,20 @@
               "replace": "const forgeStoryPost=(path,handler)=>forgeChapterRegeneration.post(s,path,async request=>{if(forgeSeasonalEvents&&[\"/story/start\",\"/battle/start\",\"/complete\"].includes(path)){const body=request?.body||{},blocked=await forgeSeasonalEvents.guardMain(body.runId,Number(body.chapter));if(blocked)return blocked;}return handler(request)});forgeSeasonalEvents=createForgeSeasonalLegacyAdapter();"
             }
           ]
+        },
+        {
+          "version": "1.18.0",
+          "notes": "Expire only global event choice holds and retire inaccessible event fights without rewards.",
+          "edits": [
+            {
+              "find": "bondHistory:Ka,readRun:async runId=>Ae((await be()).data,runId),resolveChapter:",
+              "replace": "bondHistory:Ka,readRun:async runId=>Ae((await be()).data,runId),choiceChapterActive:(runId,chapter)=>forgeSeasonalEvents?.choiceActive(runId,chapter)??true,resolveChapter:"
+            },
+            {
+              "find": "return await qt(g,m)?(De(w,o),{ok:!0,run:w}):{ok:!1,error:\"write-conflict\"}}),s.post(\"/run/images\",",
+              "replace": "return await qt(g,m)?(await forgeSeasonalEvents.retireInactiveFight(o).catch(error=>r.logger.warn(error,\"[gacha-forge] Could not retire an inactive event fight\")),De(w,o),{ok:!0,run:w}):{ok:!1,error:\"write-conflict\"}}),s.post(\"/run/images\","
+            }
+          ]
         }
       ]
     }

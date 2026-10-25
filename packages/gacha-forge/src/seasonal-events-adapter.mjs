@@ -4,7 +4,7 @@ a, n, r, be, Ae, pe, Gn, Le, _t, It, Vt, uh, gS, yS, Uo, _r, fu, Ei, tr, wy, Ur,
 nt, nn, vn, ch, P0, Ph, vS, ES, U0, rt, Vr, gc, H0, zo, yu, I, forgeEnemyCombatMetadata,
 forgeEncounterPresentation, dh, W, Gs, ro, Bo, Wf, at, ie, forgeChoices, forgeStoryMemory, forgeStoryCancellation,
 forgeStoryPost, B, k, q, bgSlug, l, Xt, vf, jg, Qn, forgeBannerAnimations, xn */
-/* global forgeFormationEncounterMessages, forgeCanonicalSegments */
+/* global forgeFormationEncounterMessages, forgeCanonicalSegments, forgeSeasonalEnabled */
 
 // ponytail: this is the narrow adapter for the contributed bundle; move its aliases to imports when that source lands.
 function createForgeSeasonalLegacyAdapter() {
@@ -69,17 +69,21 @@ function createForgeSeasonalLegacyAdapter() {
       options: { temperature: 0.8, maxTokens: It(maxTokens) },
       parse: Vt(r, parse),
     });
-  const prepareMedia = async ({ runId, run, event }) => {
+  const prepareMedia = async ({ runId, event }) => {
     const media = {},
       units = [];
-    for (const id of event.cast) {
-      const unit = await Gn(id);
-      if (unit) units.push(await ch(run, id, unit));
-    }
-    if (event.newCharacter) units.push({ ...event.newCharacter, kind: "character", imageTags: [] });
-    const connection = !nt(run).off ? await nn(run) : null;
+    const canPaint = (run) => !!run && forgeSeasonalEnabled(run) && Date.now() < event.endsAt && !nt(run).off;
+    const run = await readRun(runId),
+      connection = canPaint(run) ? await nn(run) : null;
     if (connection) {
       try {
+        for (const id of event.cast) {
+          const unit = await Gn(id);
+          if (unit && canPaint(await readRun(runId))) units.push(await ch(run, id, unit));
+        }
+        if (event.newCharacter) units.push({ ...event.newCharacter, kind: "character", imageTags: [] });
+        const current = await readRun(runId);
+        if (!canPaint(current)) throw new Error("story-event-media-disabled");
         const image = await Le().generateBannerArt({
           connectionId: connection.id,
           name: event.title,
@@ -105,7 +109,9 @@ function createForgeSeasonalLegacyAdapter() {
     }
     const outfit = event.rewards.find((reward) => reward.kind === "outfit");
     if (outfit) {
-      if (!connection)
+      const current = await readRun(runId),
+        outfitConnection = canPaint(current) ? await nn(current) : null;
+      if (!outfitConnection)
         media.rewards = event.rewards.map((reward) =>
           reward === outfit ? { nodeIndex: 9, kind: "aether", qty: 320 } : reward,
         );
@@ -113,20 +119,21 @@ function createForgeSeasonalLegacyAdapter() {
         const unit = await Gn(outfit.unitId);
         if (unit) {
           try {
+            if (!canPaint(await readRun(runId))) throw new Error("story-event-media-disabled");
             const image = await Le().generateOutfit({
-              connectionId: connection.id,
+              connectionId: outfitConnection.id,
               name: unit.name,
               unit,
               outfit: { name: outfit.name, prompt: outfit.prompt, tags: [] },
-              styleProfileId: nt(run).styleProfileId,
-              size: nt(run),
+              styleProfileId: nt(current).styleProfileId,
+              size: nt(current),
             });
             const filed = await Le().uploadToGallery({
               image,
               name: outfit.name,
               prompt: image.prompt,
-              provider: connection.provider,
-              model: connection.model,
+              provider: outfitConnection.provider,
+              model: outfitConnection.model,
             });
             media.rewards = event.rewards.map((reward) =>
               reward === outfit

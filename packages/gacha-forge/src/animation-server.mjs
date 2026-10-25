@@ -170,6 +170,7 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
           }
           previousKey = await storedMediaKey(folder, key, saved);
           if (previousKey && body.retry !== true) return result(true, previousKey);
+          if (banner.generateAllowed === false) return { ok: false, error: "animations-off" };
           if (prior !== null && body.retry !== true) {
             const reason =
               saved?.state === "failed" && saved.reason === "seedance-reference-setup" ? saved.reason : null;

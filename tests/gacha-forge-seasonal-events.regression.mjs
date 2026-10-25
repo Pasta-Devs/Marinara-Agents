@@ -9,6 +9,11 @@ import {
   forgeTimeZoneRoutes,
   forgeWallDate,
 } from "../packages/gacha-forge/src/time-zone-server.mjs";
+import { forgeCreateChoiceRuntime } from "../packages/gacha-forge/src/player-choices-server.mjs";
+import { createForgeBannerAnimations } from "../packages/gacha-forge/src/animation-server.mjs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const runId = "season-proof",
   packageId = "gacha-forge";
@@ -127,6 +132,8 @@ function fixture({ enabled = true } = {}) {
     docs,
     put,
     service,
+    documents,
+    persistence,
     session,
     body,
     seedBeats,
@@ -141,6 +148,21 @@ function fixture({ enabled = true } = {}) {
     counts: () => ({ overviewCalls, planCalls, grants, mediaCalls }),
   };
 }
+
+const choicesFor = (f) =>
+  forgeCreateChoiceRuntime({
+    documents: f.documents,
+    packageId,
+    readSession: async () => ({ data: structuredClone(f.session()) }),
+    readRun: f.readRun,
+    beatId: (run, chapter, index) => `${run}:beat:${chapter}:${index}`,
+    planId: (run, chapter) => `${run}:chapter:${chapter}`,
+    storyNodes: (plan) => (plan?.nodes || []).filter((node) => node.type === "story"),
+    allNodes: (plan) => plan?.nodes || [],
+    bondHistory: () => [],
+    resolveChapter: (body) => body.chapter,
+    choiceChapterActive: (run, chapter) => f.service.choiceActive(run, chapter),
+  });
 
 assert.equal(forgeSeasonalEnabled({}), false, "Old worlds must opt in");
 assert.equal(
@@ -281,6 +303,135 @@ assert.equal(
   assert.equal(state.events.find((event) => event.seq === 1).archived, true);
   assert.equal(state.events.find((event) => event.seq === 1).played, 1);
   assert.equal(state.events.find((event) => event.seq === 2).live, true);
+}
+for (const inactive of ["expiry", "opt-out"]) {
+  const f = fixture();
+  await f.service.list({ runId });
+  await f.service.plan(f.body);
+  f.session().progress["event-1"] = { normal: 9 };
+  f.put(`${runId}:beat:event-1:6`, "beat", {
+    chapter: "event-1",
+    storyIndex: 6,
+    segments: [{ text: "Choose the festival's final promise." }],
+    choices: [
+      {
+        id: "final",
+        kind: "big",
+        at: 0,
+        options: [
+          {
+            id: "accept",
+            text: "Keep the promise.",
+            selection: { kind: "dialogue", text: "I will keep the promise." },
+            segments: [],
+          },
+          {
+            id: "decline",
+            text: "Decline gently.",
+            selection: { kind: "dialogue", text: "I cannot promise that." },
+            segments: [],
+          },
+        ],
+      },
+    ],
+    choiceCanon: {},
+  });
+  const choices = choicesFor(f);
+  assert.equal(
+    (await choices.planGuard(runId, 2)).error,
+    "choice-required",
+    "Live event big choices retain their authority",
+  );
+  if (inactive === "expiry") f.setTime(f.docs.get(`${runId}:story-event:1`).data.endsAt);
+  else f.docs.get("index").data.runs[0].story.seasonalEvents = false;
+  assert.equal(await f.service.guardMain(runId, 2), null);
+  assert.equal(await choices.planGuard(runId, 2), null, `${inactive} must release global main-story generation`);
+  assert.equal(
+    (await choices.guard(runId, { chapter: "event-1" })).error,
+    "choice-required",
+    "Chapter-scoped guards stay strict",
+  );
+  assert.equal(
+    (await f.service.guardNode({ ...f.body, storyIndex: 6 }, "story", "storyIndex")).error,
+    inactive === "expiry" ? "event-expired" : "events-off",
+  );
+  f.docs.get(`${runId}:beat:event-1:6`).data.choiceCanon.final = "accept";
+  assert.match(
+    await choices.continuity(runId, 2, 0),
+    /I will keep the promise/u,
+    "Previously selected event fate remains canon",
+  );
+}
+for (const inactive of ["expiry", "opt-out"]) {
+  const f = fixture();
+  await f.service.list({ runId });
+  await f.service.plan(f.body);
+  f.session().progress["event-1"] = { normal: 2 };
+  f.session().combatPending = { chapter: "event-1", nodeIndex: 2, fight: { seed: 8 } };
+  const wallet = structuredClone(f.session().wallet);
+  if (inactive === "expiry") f.setTime(f.docs.get(`${runId}:story-event:1`).data.endsAt);
+  else f.docs.get("index").data.runs[0].story.seasonalEvents = false;
+  assert.equal(
+    (await f.service.complete({ ...f.body, nodeIndex: 2, log: { valid: true } })).error,
+    inactive === "expiry" ? "event-expired" : "events-off",
+  );
+  assert.equal(f.session().combatPending, undefined, "An inaccessible event fight is retired");
+  assert.deepEqual(f.session().wallet, wallet, "Retirement pays nothing");
+  assert.equal(f.session().progress["event-1"].normal, 2);
+  f.session().combatPending = { chapter: 2, fight: { seed: 9 } };
+  assert.equal(await f.service.retireInactiveFight(runId), false);
+  assert.equal(f.session().combatPending.chapter, 2, "An ordinary chapter's fight is never retired");
+}
+{
+  const f = fixture();
+  await f.service.list({ runId });
+  const run = f.docs.get("index").data.runs[0];
+  run.animationConnectionId = "fixture-video";
+  Object.assign(f.docs.get(`${runId}:story-event:1`).data, {
+    art: "fixture://poster",
+    artRef: "global-gallery:event-poster",
+  });
+  const dataDir = await mkdtemp(join(tmpdir(), "seasonal-animation-proof-"));
+  let paidCalls = 0;
+  const bytes = Buffer.alloc(20);
+  bytes.write("ftyp", 4, "ascii");
+  const animations = createForgeBannerAnimations({
+    dataDir,
+    runtime: {
+      logger: { warn() {} },
+      integrations: {
+        videos: {
+          animateGalleryImage: async () => {
+            paidCalls++;
+            return { mimeType: "video/mp4", base64: bytes.toString("base64") };
+          },
+        },
+      },
+    },
+    readBanner: (id, banner) => f.service.mediaBanner(id, banner),
+  });
+  try {
+    assert.equal((await animations.generate({ runId, banner: "story-event-1" })).ok, true);
+    assert.equal(paidCalls, 1);
+    run.story.seasonalEvents = false;
+    assert.equal(
+      await f.service.mediaBanner(runId, "story-event-1"),
+      null,
+      "Disabled unplayed events cannot authorize a video",
+    );
+    assert.equal((await animations.generate({ runId, banner: "story-event-1" })).error, "animations-off");
+    f.session().progress["event-1"] = { normal: 1 };
+    assert.equal(
+      (await animations.generate({ runId, banner: "story-event-1" })).cached,
+      true,
+      "Played archive reuses existing bytes",
+    );
+    assert.equal((await animations.generate({ runId, banner: "story-event-1", retry: true })).error, "animations-off");
+    assert.equal(paidCalls, 1, "Opt-out cannot start a replacement paid request");
+  } finally {
+    animations.dispose();
+    await rm(dataDir, { recursive: true, force: true });
+  }
 }
 console.log(
   "Seasonal story event windows, deferred generation, boundary races, opt-out, replay, rewards and expiry regressions passed.",
