@@ -30,6 +30,12 @@ export function forgeValidateSeasonalReward(reward) {
   return reward;
 }
 
+// Failed optional artwork uses the same advertised fallback on read and at claim time.
+const forgePreparedSeasonalReward = (reward) =>
+  forgeValidateSeasonalReward(reward)?.kind === "outfit" && !reward.outfit?.url
+    ? { nodeIndex: reward.nodeIndex, kind: "aether", qty: 320 }
+    : reward;
+
 // A model chooses the brief and a bounded reward schedule, never storage keys or executable rules.
 export function normalizeForgeSeasonalOverview(value, cast) {
   const title = forgeEventText(value?.title, 100),
@@ -241,6 +247,7 @@ export function createForgeSeasonalEvents({
           const latest = await documents.getById(packageId, current.id);
           if (latest && (await indexExists(runId))) {
             data = { ...latest.data, ...media };
+            data.rewards = data.rewards.map(forgePreparedSeasonalReward);
             await save(documents, latest, data);
           }
         } catch (error) {
@@ -272,6 +279,7 @@ export function createForgeSeasonalEvents({
       if ((!live || !forgeSeasonalEnabled(run)) && !played) continue;
       events.push({
         ...event,
+        rewards: event.rewards?.map(forgePreparedSeasonalReward),
         played,
         live,
         canStart: live && forgeSeasonalEnabled(run) && boundary.ready,
@@ -413,7 +421,9 @@ export function createForgeSeasonalEvents({
         delete data.combatPending;
       }
       const gained = [];
-      for (const reward of current.event.rewards.filter((entry) => entry.nodeIndex === nodeIndex)) {
+      for (const reward of current.event.rewards
+        .map(forgePreparedSeasonalReward)
+        .filter((entry) => entry.nodeIndex === nodeIndex)) {
         if (!forgeValidateSeasonalReward(reward)) throw new Error("story-event-invalid-reward");
         gained.push(
           ...(await grantReward({ documents: store, runId: current.runId, event: current.event, data, reward })),

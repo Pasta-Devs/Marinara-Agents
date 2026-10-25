@@ -43,7 +43,7 @@ assert.equal(requests, 1, "The consumed expiry edge must not start a paid retry 
 host._forgeSeasonalState = { events: [{ seq: 2, endsAt: Date.now() - 1, live: true }] };
 host._postJson = async () => {
   requests++;
-  return { ok: false, error: "generation-failed" };
+  throw new Error("Controlled transport rejection");
 };
 wireForgeSeasonalEvents(host);
 await new Promise((resolve) => setImmediate(resolve));
@@ -71,3 +71,29 @@ assert.equal(host._forgeSeasonalLoading, false);
 assert.equal(forgeSeasonalRequest("/battle/start", { chapter: "event-1" }), "/story-event/battle/start");
 assert.equal(forgeSeasonalRequest("/beat", { chapter: 2 }), "/beat");
 console.info(JSON.stringify({ pass: true, requests, staleWorldIgnored: true, explicitRetry: true }));
+// Setup has no active run; its two options must still be styled and grouped.
+let grouped = false;
+const parent = {};
+const choice = { parentElement: parent, closest: () => null, before: () => {} };
+const seasonal = { parentElement: parent };
+globalThis.document = {
+  createElement: () => ({
+    append: (...fields) => {
+      grouped = fields[0] === choice && fields[1] === seasonal;
+    },
+  }),
+};
+wireForgeSeasonalEvents({
+  _root: {
+    querySelector: (selector) =>
+      selector === "[data-forge-seasonal-layout]"
+        ? {}
+        : selector === '[data-field="story.choices"]'
+          ? choice
+          : selector === '[data-field="story.seasonalEvents"]'
+            ? seasonal
+            : null,
+  },
+  _run: null,
+});
+assert.equal(grouped, true, "Setup options group before an active world exists");

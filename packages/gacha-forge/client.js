@@ -6303,7 +6303,12 @@ async function loadForgeSeasonalEvents(host, retry = false) {
   if (!runId || host._forgeSeasonalLoading) return;
   host._forgeSeasonalLoading = true;
   const revision = host._forgeSeasonalRevision;
-  const result = await host._postJson("/story-events", { runId, retry });
+  let result;
+  try {
+    result = await host._postJson("/story-events", { runId, retry });
+  } catch {
+    result = { ok: false, error: "story-event-load-failed" };
+  }
   if (host._run?.runId !== runId || host._forgeSeasonalRevision !== revision) return;
   host._forgeSeasonalLoading = false;
   host._forgeSeasonalLoadedAt = Date.now();
@@ -6361,7 +6366,6 @@ function forgeSeasonalCards(events, { archive = false } = {}) {
 }
 function wireForgeSeasonalEvents(host) {
   prepareForgeSeasonalEvents(host);
-  if (!host._run?.runId) return;
   const root = host._root;
   if (!root.querySelector("[data-forge-seasonal-layout]")) {
     const style = document.createElement("style");
@@ -6382,6 +6386,7 @@ function wireForgeSeasonalEvents(host) {
     choiceField.before(group);
     group.append(choiceField, seasonalField);
   }
+  if (!host._run?.runId) return;
   if (
     !host._forgeSeasonalState &&
     !host._forgeSeasonalLoading &&

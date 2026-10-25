@@ -436,3 +436,24 @@ for (const inactive of ["expiry", "opt-out"]) {
 console.log(
   "Seasonal story event windows, deferred generation, boundary races, opt-out, replay, rewards and expiry regressions passed.",
 );
+
+// An interrupted/failed optional outfit painting cannot strand the terminal node.
+{
+  const f = fixture();
+  await f.service.list({ runId });
+  await f.service.plan(f.body);
+  f.seedBeats();
+  const event = f.docs.get(`${runId}:story-event:1`);
+  event.data.rewards = [
+    { nodeIndex: 9, kind: "outfit", qty: 1, unitId: `${runId}:unit:arden`, name: "Unprepared festival coat" },
+  ];
+  f.session().progress["event-1"] = { normal: 9 };
+  const shown = (await f.service.list({ runId })).events[0].rewards[0];
+  assert.deepEqual(shown, { nodeIndex: 9, kind: "aether", qty: 320 });
+  const result = await f.service.complete({ ...f.body, nodeIndex: 9 });
+  assert.equal(result.ok, true);
+  assert.equal(f.session().wallet.aether, 320);
+  assert.equal(f.session().progress["event-1"].normal, 10);
+  assert.equal((await f.service.complete({ ...f.body, nodeIndex: 9 })).cached, true);
+  assert.equal(f.session().wallet.aether, 320);
+}
