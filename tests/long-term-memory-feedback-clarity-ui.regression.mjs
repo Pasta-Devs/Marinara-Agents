@@ -774,6 +774,12 @@ assert.match(
   /const importActionProps = importDisabled\s+\? \{[\s\S]*?"aria-disabled": true,[\s\S]*?importLockId/u,
 );
 assert.match(workspace, /id=\{importLockId\}/u);
+// The lock note is empty unless a run is active, so only a run may reference it: not loading or saving, and
+// Refresh stays tied to import/refresh runs (`importing`), not to a re-extract or an availability save.
+assert.match(workspace, /\.\.\.\(importRunning \? \{ "aria-describedby": importLockId \} : \{\}\)/u);
+assert.match(workspace, /"aria-describedby": importRunning \? `\$\{importLockId\} \$\{reasonId\}` : reasonId/u);
+assert.match(workspace, /\$\{importing \? ` \$\{importLockId\}` : ""\}/u);
+assert.doesNotMatch(workspace, /importDisabled \? `[^`]*importLockId/u);
 assert.equal((workspace.match(/disabled=\{importDisabled\}/gu) ?? []).length, 0);
 assert.doesNotMatch(workspace, /disabled=\{importing\}/u);
 assert.match(workspace, /disabled=\{selectedBookImportIds\.length === 0\}/u);

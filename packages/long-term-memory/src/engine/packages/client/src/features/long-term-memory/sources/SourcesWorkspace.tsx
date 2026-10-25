@@ -450,11 +450,13 @@ export default function SourcesWorkspace({
       ? settingsQuery.data.sourcesAvailabilityModes
       : [defaultAvailabilityMode]);
   const availabilityReady = settingsQuery.isSuccess && effectiveAvailabilityModes.length > 0;
-  const importDisabled = !availabilityReady || availabilitySaving || sourceTask.active?.status === "running";
+  // The lock note is only filled while a run is active, so only a run points `aria-describedby` at it.
+  const importRunning = sourceTask.active?.status === "running";
+  const importDisabled = !availabilityReady || availabilitySaving || importRunning;
   const importActionProps = importDisabled
     ? {
         "aria-disabled": true,
-        ...(sourceTask.active?.status === "running" ? { "aria-describedby": importLockId } : {}),
+        ...(importRunning ? { "aria-describedby": importLockId } : {}),
         className: "opacity-50",
       }
     : {};
@@ -581,7 +583,7 @@ export default function SourcesWorkspace({
       ? {}
       : ({
           "aria-disabled": true,
-          "aria-describedby": importDisabled ? `${importLockId} ${reasonId}` : reasonId,
+          "aria-describedby": importRunning ? `${importLockId} ${reasonId}` : reasonId,
           className: "opacity-50",
         } as const);
   // The destination panel sits in another pane below 72rem and starts collapsed: show its pane, open it and
@@ -2722,13 +2724,13 @@ export default function SourcesWorkspace({
                         ) : (
                           <>
                             <Button
-                              {...importActionProps}
+                              {...(importing ? { "aria-disabled": true, className: "opacity-50" } : {})}
                               {...destinationWait(importReasonId)}
                               aria-describedby={`${
                                 currentDestinationScope
                                   ? reimportDescriptionId
                                   : `${reimportDescriptionId} ${importReasonId}`
-                              }${importDisabled ? ` ${importLockId}` : ""}`}
+                              }${importing ? ` ${importLockId}` : ""}`}
                               onClick={() => {
                                 if (currentDestinationScope) void runImport([focusedFlatRow.sourceId], "refresh");
                               }}
