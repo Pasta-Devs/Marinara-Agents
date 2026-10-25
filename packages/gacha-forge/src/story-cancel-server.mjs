@@ -109,6 +109,7 @@ export function createForgeStoryCancellation() {
     async reset(runId, operation) {
       if (typeof runId !== "string" || !runId.trim()) return { ok: false, error: "bad-request" };
       if (disposed) return { ok: false, error: "cancelled" };
+      if (forgeStoryScope.getStore()?.runId === runId) return { ok: false, error: "reset-in-progress" };
       const state = world(runId);
       if (state.resetting) return { ok: false, error: "reset-in-progress" };
       state.resetting = true;
