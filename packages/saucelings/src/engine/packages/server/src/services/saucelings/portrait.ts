@@ -160,7 +160,10 @@ export async function readSaucelingForm(
 ): Promise<(SaucelingFormStrips & { frames: 1 | 3 }) | null> {
   const data = await readImageData(FORM_KIND, id);
   const image = data?.image;
-  const frames = typeof image === "string" && image.startsWith(PNG_PREFIX) ? stripFrames(headerOf(image), FORM_SIDE, FORM_FRAMES) : null;
+  const frames =
+    typeof image === "string" && image.startsWith(PNG_PREFIX)
+      ? stripFrames(headerOf(image), FORM_SIDE, FORM_FRAMES)
+      : null;
   if (!data || !frames) return null;
   const form: SaucelingFormStrips & { frames: 1 | 3 } = { image: image as string, frames };
   if (frontOnly) return form;
