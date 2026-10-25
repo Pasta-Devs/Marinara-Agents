@@ -401,6 +401,15 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
     assert.equal(gone.pet.lastTickAt, hoursLater(24 * 30));
   }
 
+  // A clock set back leaves lastTickAt ahead of now; it is clamped to now, so care still moves the meters later
+  {
+    const ahead = { ...hatchling({ feedReliability: 0 }, { hunger: 70, mood: 70 }), lastTickAt: hoursLater(1) };
+    const clamped = advance(ahead, t0, { careWindowHours: 6 });
+    assert.equal(clamped.pet.lastTickAt, t0);
+    assert.deepEqual(clamped.events, []);
+    assert.ok(advance(clamped.pet, hoursLater(7), { careWindowHours: 6 }).pet.meters.hunger < 70);
+  }
+
   // The pace is per hour: one-hour turns give the same day as six-hour turns, on average (started well below the 85 cap, which clips lifts differently when they come one at a time)
   {
     const stats = (windowHours: number) => {
@@ -2710,22 +2719,21 @@ async function testBundledServer() {
         },
       },
       resources: {
-        listCharacters: async (ids?: string[]) =>
-          ids?.includes("nahida-2")
-            ? [{ id: "nahida-2", comment: "", data: { name: "Nahida", personality: "gentle and curious" } }]
-            : [
-                {
-                  id: "dottore-1",
-                  comment: "",
-                  data: {
-                    name: "Il Dottore",
-                    personality: "cold genius scientist, analytic and calculating",
-                    description: "Harbinger scholar",
-                    mes_example: "{{char}}: Hold still. This will only sting a little.",
-                    extensions: { backstory: "Second of the Fatui Harbingers." },
-                  },
-                },
-              ],
+        listCharacters: async (ids?: string[]) => {
+          const nahida = { id: "nahida-2", comment: "", data: { name: "Nahida", personality: "gentle and curious" } };
+          const dottore = {
+            id: "dottore-1",
+            comment: "",
+            data: {
+              name: "Il Dottore",
+              personality: "cold genius scientist, analytic and calculating",
+              description: "Harbinger scholar",
+              mes_example: "{{char}}: Hold still. This will only sting a little.",
+              extensions: { backstory: "Second of the Fatui Harbingers." },
+            },
+          };
+          return !ids ? [dottore, nahida] : ids.includes("nahida-2") ? [nahida] : [dottore];
+        },
       },
       persistence: {
         documents: {
@@ -2896,6 +2904,7 @@ async function testBundledServer() {
   const named = await routes.get("PATCH /pet")!({ body: { name: "Noodletto" } });
   assert.equal(named.world.activePet.name, "Noodletto");
   await badRequest("PATCH /pet", { eggSpot: { x: 0.5, y: 0.5 } }, /Only an egg can be moved/u);
+  await badRequest("PATCH /pet", { caretakerId: "nobody" }, /Only one of your characters can be a caretaker/u);
   // Once renamed, the model is told the new name, and the temperament is how it behaves, not a name
   await routes.get("POST /check-in")!({ body: {} });
   assert.match(prompts.at(-1)!, /Pet's name: Noodletto\./u);
@@ -2968,18 +2977,32 @@ async function testBundledServer() {
     `data:image/png;base64,${Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...bytes]).toString("base64")}`;
   const png = pngOf(1, 2, 3);
   const rejects = (body: Record<string, unknown>) =>
-    assert.rejects(routes.get("POST /portrait")!({ body }), (error: any) => error.statusCode === 400);
+    assert.rejects(
+      routes.get("POST /portrait")!({ body: { petId, ...body } }),
+      (error: any) => error.statusCode === 400,
+    );
   await rejects({ image: png });
+  await assert.rejects(
+    routes.get("POST /portrait")!({ body: { image: png } }),
+    (error: any) => error.statusCode === 400,
+  );
   await routes.get("PATCH /settings")!({ body: { portraitEnabled: true, portraitConnectionId: "img-1" } });
   await rejects({ image: "https://image.example/cat.png" });
   await rejects({ image: png.replace("image/png", "image/jpeg") });
   await rejects({ image: `data:image/png;base64,${"A".repeat(6 * 1024 * 1024)}` });
-  const painted = await routes.get("POST /portrait")!({ body: { image: png } });
+  // A painting for a sauceling that has since been swapped out is refused, and leaves no file behind
+  const docsBefore = storedDocs.size;
+  await assert.rejects(
+    routes.get("POST /portrait")!({ body: { petId: "someone-else", image: png } }),
+    (error: any) => error.statusCode === 409,
+  );
+  assert.equal(storedDocs.size, docsBefore);
+  const painted = await routes.get("POST /portrait")!({ body: { petId, image: png } });
   assert.equal(painted.portraitCount, 1);
   assert.equal(painted.world.settings.portraitConnectionId, "img-1");
   assert.equal(JSON.stringify(painted).includes(png), false);
   // A second painting is added, not swapped in
-  await routes.get("POST /portrait")!({ body: { image: pngOf(4, 5, 6) } });
+  await routes.get("POST /portrait")!({ body: { petId, image: pngOf(4, 5, 6) } });
   const [second, first] = await portraitsNow();
   assert.deepEqual(
     [first.petId, first.petName, first.stage, first.home, second.home],
@@ -2990,7 +3013,7 @@ async function testBundledServer() {
   assert.deepEqual(await image(second.id), { image: pngOf(4, 5, 6) });
   // Instructions are a caption: trimmed, spaces collapsed, capped, and left out when empty or not text
   const caption = async (instructions: unknown) => {
-    const added = await routes.get("POST /portrait")!({ body: { image: pngOf(7, 8, 9), instructions } });
+    const added = await routes.get("POST /portrait")!({ body: { petId, image: pngOf(7, 8, 9), instructions } });
     const [newest] = await portraitsNow();
     await routes.get("POST /portrait/:id/delete")!({ params: { id: newest!.id } });
     assert.equal(added.portraitCount, 3);
@@ -3227,7 +3250,7 @@ async function testBundledServer() {
     (await menagerieNow()).map((e) => e.id),
     [biscottiId, gnoccoId],
   );
-  await badRequest("POST /portrait", { image: png }, /once it hatches/u);
+  await badRequest("POST /portrait", { petId: farfallinaId, image: png }, /once it hatches/u);
   const zitiId = (await routes.get("POST /adopt")!({ body: { characterId: "dottore-1", swap: true } })).world.activePet
     .id as string;
   const released = await routes.get("POST /menagerie/:id/release")!({ params: { id: farfallinaId } });

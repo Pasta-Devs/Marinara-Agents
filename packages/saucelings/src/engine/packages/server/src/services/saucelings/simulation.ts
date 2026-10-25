@@ -222,9 +222,10 @@ export function advance(
 ): { pet: SaucelingPet; events: SaucelingEvent[] } {
   const nowMs = Date.parse(nowIso);
   const lastMs = Date.parse(pet.lastTickAt);
-  if (!Number.isFinite(nowMs) || !Number.isFinite(lastMs) || nowMs <= lastMs) {
-    return { pet, events: [] };
-  }
+  if (!Number.isFinite(nowMs) || !Number.isFinite(lastMs)) return { pet, events: [] };
+  // A clock set back leaves the last tick in the future; bring it to now so care counts from here.
+  if (nowMs < lastMs) return { pet: { ...pet, lastTickAt: nowIso }, events: [] };
+  if (nowMs === lastMs) return { pet, events: [] };
 
   const windowHours = Math.max(1, settings.careWindowHours || 6);
   const windowMs = windowHours * 3600 * 1000;

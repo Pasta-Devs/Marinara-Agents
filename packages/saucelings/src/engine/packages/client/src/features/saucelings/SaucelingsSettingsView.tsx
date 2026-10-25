@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   SaucelingSettings,
   SaucelingStateResponse,
@@ -11,6 +11,45 @@ type ConnectionSummary = { id: string; name: string; provider: string };
 
 /** Providers that cannot write a line of text. */
 const NON_TEXT_PROVIDERS = new Set(["image_generation", "video_generation", "audio", "decision"]);
+
+/** A whole-number field that keeps what is being typed and saves it once, when the player leaves it or presses Enter;
+ *  an empty or invalid entry goes back to the saved number. */
+function NumberField({
+  value,
+  min,
+  max,
+  onSave,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onSave: (next: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const commit = () => {
+    const typed = draft.trim() === "" ? Number.NaN : Number(draft);
+    if (!Number.isFinite(typed)) return setDraft(String(value));
+    const next = Math.min(max, Math.max(min, Math.round(typed)));
+    setDraft(String(next));
+    if (next !== value) onSave(next);
+  };
+  return (
+    <input
+      type="number"
+      className="sl-input"
+      min={min}
+      max={max}
+      style={{ width: "5rem" }}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+      }}
+    />
+  );
+}
 
 export function SaucelingsSettingsView({ state }: { state: SaucelingStateResponse }) {
   const { t } = useSaucelingsTranslation();
@@ -46,14 +85,11 @@ export function SaucelingsSettingsView({ state }: { state: SaucelingStateRespons
           <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>{t("saucelings.settings.careWindow")}</div>
           <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.settings.careWindowNote")}</div>
         </div>
-        <input
-          type="number"
-          className="sl-input"
+        <NumberField
+          value={settings.careWindowHours}
           min={1}
           max={24}
-          style={{ width: "5rem" }}
-          value={settings.careWindowHours}
-          onChange={(e) => patchMutation.mutate({ careWindowHours: Number(e.target.value) || 6 })}
+          onSave={(careWindowHours) => patchMutation.mutate({ careWindowHours })}
         />
       </label>
 
@@ -68,14 +104,11 @@ export function SaucelingsSettingsView({ state }: { state: SaucelingStateRespons
             — {t("saucelings.settings.budgetNote")}
           </div>
         </div>
-        <input
-          type="number"
-          className="sl-input"
+        <NumberField
+          value={settings.dailyGenerationBudget}
           min={0}
           max={30}
-          style={{ width: "5rem" }}
-          value={settings.dailyGenerationBudget}
-          onChange={(e) => patchMutation.mutate({ dailyGenerationBudget: Number(e.target.value) })}
+          onSave={(dailyGenerationBudget) => patchMutation.mutate({ dailyGenerationBudget })}
         />
       </label>
 
@@ -172,6 +205,12 @@ export function SaucelingsSettingsView({ state }: { state: SaucelingStateRespons
             onChange={(e) => patchMutation.mutate({ threeDrawingFallback: e.target.checked })}
           />
         </label>
+      ) : null}
+
+      {(patchMutation.error ?? resetMutation.error) ? (
+        <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
+          {(patchMutation.error ?? resetMutation.error)?.message}
+        </span>
       ) : null}
 
       <div

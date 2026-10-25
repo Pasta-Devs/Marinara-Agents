@@ -204,6 +204,7 @@ export function SaucelingsAlbumView({
         ...(reference ? { referenceImages: [reference] } : {}),
       });
       return saucelingsRequest<SaucelingStateResponse>("/portrait", "POST", {
+        petId: target.id,
         image: generated.image,
         instructions: wish,
       });

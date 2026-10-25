@@ -96,6 +96,9 @@ function SaucelingsBrowserApp({ props }: { props: CapabilityProps }) {
     refetchInterval: (query) => (query.state.data?.writing.length ? 2_000 : false),
   });
 
+  // The server routes are only there after a restart, so a package installed a moment ago answers 404.
+  const restartNeeded = (stateQuery.error as { status?: number } | null)?.status === 404;
+
   return (
     <div className="sl-shell">
       <header className="sl-header">
@@ -109,6 +112,7 @@ function SaucelingsBrowserApp({ props }: { props: CapabilityProps }) {
               key={item}
               type="button"
               className={`sl-tab-btn ${tab === item ? "sl-tab-btn--active" : ""}`}
+              aria-current={tab === item ? "page" : undefined}
               onClick={() => setTab(item)}
             >
               {t(`saucelings.tab.${item}`)}
@@ -125,15 +129,25 @@ function SaucelingsBrowserApp({ props }: { props: CapabilityProps }) {
 
       <main className="sl-body">
         <div className="sl-container">
+          {/* A refresh that fails leaves the Nook up with what it last had. */}
+          {stateQuery.isError && stateQuery.data ? (
+            <div role="alert" style={{ fontSize: "0.8rem", color: "#f87171", marginBottom: "0.5rem" }}>
+              {t("saucelings.error.load")}
+            </div>
+          ) : null}
           {stateQuery.isLoading ? (
             <div className="sl-card" style={{ textAlign: "center", padding: "2rem", opacity: 0.75 }}>
               {t("saucelings.loading")}
             </div>
-          ) : stateQuery.isError || !stateQuery.data ? (
+          ) : !stateQuery.data ? (
             <div className="sl-card" style={{ display: "grid", gap: "0.75rem" }} role="alert">
               <strong>{t("saucelings.error.load")}</strong>
               <span style={{ fontSize: "0.8rem", opacity: 0.8 }}>
-                {stateQuery.error instanceof Error ? stateQuery.error.message : t("saucelings.error.request")}
+                {restartNeeded
+                  ? t("saucelings.error.restart")
+                  : stateQuery.error instanceof Error
+                    ? stateQuery.error.message
+                    : t("saucelings.error.request")}
               </span>
               <div>
                 <button type="button" className="sl-btn" onClick={() => void stateQuery.refetch()}>

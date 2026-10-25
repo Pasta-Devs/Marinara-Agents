@@ -48,7 +48,7 @@ export async function marinaraRequest<TResponse, TBody = unknown>(
         : typeof payload?.message === "string"
           ? payload.message
           : response.statusText;
-    throw new Error(message || "Saucelings request failed");
+    throw Object.assign(new Error(message || "Saucelings request failed"), { status: response.status });
   }
   return response.json() as Promise<TResponse>;
 }

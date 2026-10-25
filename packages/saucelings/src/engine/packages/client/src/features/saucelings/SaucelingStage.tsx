@@ -210,11 +210,22 @@ export function SaucelingStage({
   const pointOf = (at: Spot) => ({ px: box.left + at.x * box.width, py: box.top + at.y * box.height });
 
   const saveTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(saveTimer.current), []);
+  // A move waiting on its timer when the stage goes away (a tab switch) is saved then, not lost.
+  const pendingSpot = useRef<Spot | null>(null);
+  useEffect(
+    () => () => {
+      window.clearTimeout(saveTimer.current);
+      if (pendingSpot.current) void onMoveEgg?.(pendingSpot.current).catch(() => undefined);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
   const moveTo = (next: Spot, delayMs: number) => {
     setDraft(next);
+    pendingSpot.current = next;
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
+      pendingSpot.current = null;
       // Until it is saved the egg stays where it was put; a failed save puts it back.
       void onMoveEgg?.(next)
         .catch(() => undefined)

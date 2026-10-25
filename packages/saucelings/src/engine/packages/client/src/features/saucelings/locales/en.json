@@ -212,6 +212,7 @@
   "saucelings.error.load": "Could not load Saucelings Nook.",
   "saucelings.error.request": "Request failed",
   "saucelings.error.retry": "Try again",
+  "saucelings.error.restart": "Restart Marinara Engine to finish installing Saucelings.",
   "saucelings.common.cancel": "Cancel",
   "saucelings.common.save": "Save",
   "saucelings.nook.background": "Background",

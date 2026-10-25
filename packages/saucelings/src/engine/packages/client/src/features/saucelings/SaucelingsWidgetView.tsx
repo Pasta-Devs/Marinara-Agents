@@ -137,6 +137,24 @@ export function SaucelingsWidgetView({
   });
   const backgroundSrc = backgroundId ? (backgroundQuery.data?.image ?? null) : null;
 
+  // Until the first answer there is no telling an empty nook from one that has not loaded.
+  if (!state) {
+    return (
+      <div className="sl-widget" style={{ display: "grid", gap: "0.5rem", fontSize: "0.8rem" }}>
+        <span style={{ opacity: 0.75 }}>
+          {stateQuery.isError ? t("saucelings.error.load") : t("saucelings.loading")}
+        </span>
+        {stateQuery.isError ? (
+          <div>
+            <button type="button" className="sl-btn" onClick={() => void stateQuery.refetch()}>
+              {t("saucelings.error.retry")}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   if (!pet) {
     return (
       <div
@@ -347,6 +365,11 @@ export function SaucelingsWidgetView({
                   </button>
                 );
               })}
+            {actionMutation.error ? (
+              <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
+                {actionMutation.error.message}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>

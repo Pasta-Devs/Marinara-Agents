@@ -103,6 +103,13 @@ function requiredString(value: unknown, label: string, maxLen = 120): string {
   return value.trim();
 }
 
+/** 400 unless `id` is one of the player's characters, the only ones that can be a caretaker, painted or flipped. */
+async function requireCaretaker(id: string, what = "a caretaker"): Promise<void> {
+  if (!(await listCaretakerCandidates()).some((character) => character.id === id)) {
+    refuse(400, `Only one of your characters can be ${what}.`);
+  }
+}
+
 const FORM_REFUSAL = "A form must be PNG strips 104 high and 104 or 312 wide, each at most 48 KB, 160 KB together.";
 
 /** Where the player put the egg, as shares of its background picture (see `SaucelingEggSpot`); null puts it back. */
@@ -170,7 +177,7 @@ async function attachForms(petId: string, forms: Partial<Record<SaucelingStage, 
     for (const id of Object.values(forms)) await deleteSaucelingForm(id).catch(() => undefined);
     throw error;
   });
-  for (const id of replaced) await deleteSaucelingForm(id);
+  for (const id of replaced) await deleteSaucelingForm(id).catch(() => undefined);
   return world;
 }
 
@@ -234,7 +241,13 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     let world = await readSaucelingWorld();
     const pet = world.activePet;
     const preview = pet ? advance(pet, nowIso, world.settings) : null;
-    if (pet && preview && (preview.events.length > 0 || preview.pet.retireReady !== pet.retireReady)) {
+    if (
+      pet &&
+      preview &&
+      (preview.events.length > 0 ||
+        preview.pet.retireReady !== pet.retireReady ||
+        preview.pet.lastTickAt !== pet.lastTickAt)
+    ) {
       world = await saveWithLines(nowIso, (current) => {
         if (!current.activePet) return { world: current, pet: null, events: [] };
         const ticked = advance(current.activePet, nowIso, current.settings);
@@ -243,6 +256,8 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     } else {
       // Nothing to save, but a sauceling that is not pasta may still need its own temperament written.
       settleTemperament(world);
+      // Without a save the page still sees the meters as they are now.
+      if (pet && preview) world = { ...world, activePet: preview.pet };
     }
     return buildStateResponse(world, nowIso);
   });
@@ -256,7 +271,8 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
   // The egg has no name yet: the player names it once it hatches.
   app.post("/adopt", async (request) => {
     const body = requestBody(request.body);
-    const characterId = requiredString(body.characterId, "Caretaker character");
+    const characterId = requiredString(body.characterId, "Caretaker character", 200);
+    await requireCaretaker(characterId);
     const swap = body.swap === true;
     const nowIso = new Date().toISOString();
     const before = await readSaucelingWorld();
@@ -359,7 +375,10 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     requireActive(before);
     const eggSpot = body.eggSpot === undefined ? undefined : eggSpotFrom(body.eggSpot);
     const caretakerId =
-      typeof body.caretakerId === "string" && body.caretakerId.trim() ? body.caretakerId.trim() : null;
+      typeof body.caretakerId === "string" && body.caretakerId.trim()
+        ? requiredString(body.caretakerId, "Caretaker character", 200)
+        : null;
+    if (caretakerId && caretakerId !== before.activePet?.caretakerId) await requireCaretaker(caretakerId);
     // A switch never waits for the model: a caretaker with no voice of their own starts with one guessed from their
     // card, and the page offers to make theirs.
     const profile = caretakerId ? await careProfileNow(caretakerId, before.profileCache[caretakerId]) : null;
@@ -531,9 +550,12 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     // that comes back to the caretaker it had takes their voice if they have been given one since.
     const before = await readSaucelingWorld();
     const caretakerId =
-      typeof body.caretakerId === "string" && body.caretakerId.trim() ? body.caretakerId.trim() : null;
+      typeof body.caretakerId === "string" && body.caretakerId.trim()
+        ? requiredString(body.caretakerId, "Caretaker character", 200)
+        : null;
     const had = before.menagerie.find((e) => e.id === entryId)?.caretakerId;
     const handover = caretakerId && caretakerId !== had ? caretakerId : null;
+    if (handover) await requireCaretaker(handover);
     const keeper = handover ?? had;
     const profile = keeper ? await careProfileNow(keeper, before.profileCache[keeper]) : null;
 
@@ -582,7 +604,7 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
       forms = [...Object.values(entry.forms), ...Object.values(entry.savedForms)];
       return { ...current, menagerie: current.menagerie.filter((e) => e.id !== entryId) };
     });
-    for (const id of forms) await deleteSaucelingForm(id);
+    for (const id of forms) await deleteSaucelingForm(id).catch(() => undefined);
     return buildStateResponse(world);
   });
 
@@ -661,7 +683,7 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
       };
     });
     // The index goes first, so nothing points at a background whose image is gone.
-    await deleteSaucelingBackground(id);
+    await deleteSaucelingBackground(id).catch(() => undefined);
     return buildStateResponse(world);
   });
 
@@ -687,6 +709,7 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     const nowIso = new Date().toISOString();
     const current = await readSaucelingWorld();
     if (!current.settings.portraitEnabled) refuse(400, "Portraits are turned off in Saucelings settings.");
+    const petId = requiredString(body.petId, "Sauceling", 200);
     const pet = requireActive(current);
     if (pet.stage === "egg") refuse(400, "Paint it once it hatches.");
     const image = parsePortraitImage(body.image);
@@ -698,21 +721,29 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
         : "";
     // The image is saved first, so the Album never lists a painting that is not there.
     const id = await saveSaucelingPortrait(pet.id, image, nowIso);
-    const world = await updateSaucelingWorld((latest) => ({
-      ...latest,
-      portraits: [
-        {
-          id,
-          petId: pet.id,
-          petName: pet.name,
-          species: pet.species,
-          stage: pet.lockedStage ?? pet.stage,
-          savedAt: nowIso,
-          ...(instructions ? { instructions } : {}),
-        },
-        ...latest.portraits,
-      ],
-    }));
+    const world = await updateSaucelingWorld((latest) => {
+      // The painting was made for the sauceling the page showed; if the nook has swapped it out since, it is not added.
+      if (latest.activePet?.id !== petId) refuse(409, "That sauceling changed. Try again.");
+      return {
+        ...latest,
+        portraits: [
+          {
+            id,
+            petId: pet.id,
+            petName: pet.name,
+            species: pet.species,
+            stage: pet.lockedStage ?? pet.stage,
+            savedAt: nowIso,
+            ...(instructions ? { instructions } : {}),
+          },
+          ...latest.portraits,
+        ],
+      };
+    }).catch(async (error: unknown) => {
+      // Nothing lists the image, so it goes.
+      await deleteSaucelingPortrait(id).catch(() => undefined);
+      throw error;
+    });
     return buildStateResponse(world, nowIso);
   });
 
@@ -751,7 +782,7 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
       return { ...current, portraits: current.portraits.filter((portrait) => portrait.id !== id) };
     });
     // The index goes first, so the Album never lists a painting whose image is gone.
-    await deleteSaucelingPortrait(id);
+    await deleteSaucelingPortrait(id).catch(() => undefined);
     return buildStateResponse(world);
   });
 
@@ -882,9 +913,7 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     if (!(await readSaucelingWorld()).settings.portraitEnabled) {
       refuse(400, "Portraits are turned off in Saucelings settings.");
     }
-    if (!(await listCaretakerCandidates()).some((character) => character.id === characterId)) {
-      refuse(400, "Only one of your characters can be painted.");
-    }
+    await requireCaretaker(characterId, "painted");
     const image = parseFigureImage(body.image);
     if (!image) refuse(400, "A caretaker figure must be a PNG strip 768 wide and 96 high, at most 128 KB.");
     const id = await saveSaucelingFigure(characterId, image, nowIso);
@@ -903,7 +932,7 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
       await deleteSaucelingFigure(id).catch(() => undefined);
       throw error;
     });
-    for (const figure of dropped) await deleteSaucelingFigure(figure);
+    for (const figure of dropped) await deleteSaucelingFigure(figure).catch(() => undefined);
     return buildStateResponse(world, nowIso);
   });
 
@@ -913,9 +942,7 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     const body = requestBody(request.body);
     const characterId = requiredString(body.characterId, "Caretaker character", 200);
     if (typeof body.flipped !== "boolean") refuse(400, "Say whether the caretaker faces the other way.");
-    if (!(await listCaretakerCandidates()).some((character) => character.id === characterId)) {
-      refuse(400, "Only one of your characters can be flipped.");
-    }
+    await requireCaretaker(characterId, "flipped");
     const world = await updateSaucelingWorld((current) => ({
       ...current,
       flippedCaretakers: [
