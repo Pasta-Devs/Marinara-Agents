@@ -464,6 +464,29 @@ assert.match(
   settings,
   /@container ltm-memory-settings \(min-width: 40rem\) \{[^}]*\}\s*\[data-ltm-prompt-template-grid\] \{\s*grid-template-columns: 12rem minmax\(0, 1fr\);/u,
 );
+// #1673: the panel's width decides these, so a narrow panel on a wide window keeps the compact layout.
+assert.doesNotMatch(settings, /sm:grid-cols-4/u);
+assert.match(settings, /\[data-ltm-settings-tab-rail\] \{\s*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/u);
+assert.equal((settings.match(/<div data-ltm-recall-grid className="grid gap-2">/gu) ?? []).length, 2);
+assert.match(settings, /\[data-ltm-recall-grid\] \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/u);
+assert.doesNotMatch(detail, /sm:min-h-9|sm:min-w-0|hidden sm:inline|md:flex/u);
+assert.match(detail, /\[data-ltm-add-label\] \{\s*display: inline;/u);
+assert.match(detail, /\[data-ltm-surface="vault-health-pill"\] \{\s*display: flex;/u);
+assert.match(detail, /\[data-ltm-health-detail\] \{\s*display: inline;/u);
+assert.doesNotMatch(activity, /sm:grid-cols-2/u);
+assert.match(activity, /<dl data-ltm-debug-settings-grid className=/u);
+assert.match(activity, /<div data-ltm-debug-facts-grid className=/u);
+assert.match(
+  activity,
+  /@container ltm-memory-settings \(min-width: 40rem\) \{\s*\[data-ltm-debug-settings-grid\],\s*\[data-ltm-debug-facts-grid\] \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/u,
+);
+const onboarding = readFileSync(join(dirname(ltmSourcePaths.detail), "Onboarding.tsx"), "utf8");
+assert.match(onboarding, /@container ltm-onboarding \(min-width: 48rem\)/u);
+assert.doesNotMatch(onboarding, /@media \(min-width: 768px\)/u);
+// The scrollers fit a short or zoomed viewport: no 20rem floor, and dvh so mobile chrome cannot inflate the cap.
+assert.match(vault, /max-height: calc\(100dvh - 12rem\);/u);
+assert.doesNotMatch(vault, /max\(20rem, calc\(100vh/u);
+assert.match(activity, /maxHeight: "calc\(100dvh - 12rem\)"/u);
 assert.match(detail, /health !== "healthy" && !needsHealthAttention/u);
 assert.match(detail, /howToRepairVaultHealth[\s\S]*compact/u);
 assert.match(detail, /tone=\{healthNeedsDangerTone \? "danger" : "warning"\}/u);

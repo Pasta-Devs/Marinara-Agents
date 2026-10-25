@@ -518,6 +518,12 @@ export default function MemorySettings({
           [data-ltm-prompt-template-grid] {
             grid-template-columns: 12rem minmax(0, 1fr);
           }
+          [data-ltm-settings-tab-rail] {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+          }
+          [data-ltm-recall-grid] {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
         }
       `}</style>
       <div
@@ -558,7 +564,8 @@ export default function MemorySettings({
       <div
         role="tablist"
         aria-label={localizeUi("ui.longTermMemory.memorysettings.memorySettingsSections")}
-        className="mari-editor-tab-rail grid grid-cols-2 gap-1 rounded-lg border p-1 sm:grid-cols-4"
+        data-ltm-settings-tab-rail
+        className="mari-editor-tab-rail grid grid-cols-2 gap-1 rounded-lg border p-1"
         style={{ display: "grid" }}
       >
         {settingsTabs.map((tab, index) => (
@@ -627,7 +634,7 @@ export default function MemorySettings({
           <h4 id={`${recallGroupId}-budget`} className="text-xs font-semibold">
             {localizeUi("ui.longTermMemory.memorysettings.recallBudgetGroup")}
           </h4>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div data-ltm-recall-grid className="grid gap-2">
             <NumberField
               label={localizeUi("ui.longTermMemory.memorysettings.recallBudgetTokens")}
               help={localizeUi("ui.longTermMemory.memorysettings.maximumTokenBudgetAvailableForMemoriesAddedToA")}
@@ -674,7 +681,7 @@ export default function MemorySettings({
           <h4 id={`${recallGroupId}-ranking`} className="text-xs font-semibold">
             {localizeUi("ui.longTermMemory.memorysettings.recallRankingGroup")}
           </h4>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div data-ltm-recall-grid className="grid gap-2">
             <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
               <span id={recallStyleLabelId} className="flex items-center gap-1">
                 {localizeUi("ui.longTermMemory.chatsettings.recallStyle")}

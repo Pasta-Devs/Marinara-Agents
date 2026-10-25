@@ -84,6 +84,10 @@ workbench while rows are listed (above the pane tabs once the queue is empty), a
 change is ready to apply. The Sources scope row stacks until
 its destination container reaches `40rem`. Vault note title and status share a
 row from a `28rem` workbench, and the Vault list scrolls on its own from `48rem`.
+Memory Settings puts its four section tabs, its recall field pairs, and its
+activity detail pairs in one row from a `40rem` settings container; the header's
+add action keeps its `2.75rem` target and drops its label below `48rem` of the
+detail surface.
 
 ## Workflow Contracts
 

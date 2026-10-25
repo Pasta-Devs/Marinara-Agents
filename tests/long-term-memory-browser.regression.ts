@@ -2037,6 +2037,15 @@ async function main() {
       await setupGuide.click();
       // #1611: Help from another screen goes to the Vault first, where the full guide shows.
       await page.locator('[data-ltm-surface="onboarding"]').waitFor();
+      // #1673: the guide's two-column body follows its own container, not the window.
+      const onboardingColumns = () =>
+        page
+          .locator("[data-ltm-onboarding-body]")
+          .evaluate((body) => getComputedStyle(body).gridTemplateColumns.split(/\s+/u).length);
+      assert.equal(await onboardingColumns(), 2);
+      await dockDetailPanel(page, "24rem");
+      assert.equal(await onboardingColumns(), 1);
+      await dockDetailPanel(page, null);
       const onboardingTitle = page.locator("#ltm-onboarding-title");
       assert.equal(
         await page.locator('[data-ltm-surface="onboarding"]').getByText("Step 1 of 7 · Overview").count(),
@@ -2977,6 +2986,44 @@ async function main() {
       );
       assert.deepEqual(desktopExtractionLayout.selectHeights, [44, 44]);
       assert.equal(desktopExtractionLayout.infoSize, 14);
+      // #1673: a 420px window stands in for 200% zoom (Playwright has no zoom API); both scrollers must fit it.
+      const fitsWindow = (list: ReturnType<typeof page.locator>) =>
+        list.evaluate((element) => parseFloat(getComputedStyle(element).maxHeight) + 12 * 16 <= innerHeight + 1);
+      await page.setViewportSize({ width: 1280, height: 420 });
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+      assert.equal(
+        await fitsWindow(page.locator("[data-ltm-memory-list]")),
+        true,
+        "the Vault list cap fits a short window",
+      );
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+      await page.locator("#settings-tab-debug").click();
+      assert.equal(
+        await fitsWindow(page.locator("[data-ltm-debug-list]")),
+        true,
+        "the Debug log cap fits a short window",
+      );
+      await page.setViewportSize({ width: 1280, height: 900 });
+      // #1673: a narrow panel on a wide window keeps the phone layout inside the panel, not at a window breakpoint.
+      await dockDetailPanel(page, "24rem");
+      await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="vault"]').click();
+      const narrowAdd = page.locator('[aria-label="Add memories"]');
+      await narrowAdd.waitFor();
+      assert.equal(await touchTargetSize(narrowAdd), "fits", "a 24rem panel keeps the add control at 2.75rem");
+      assert.equal(await page.locator("[data-ltm-add-label]").isVisible(), false, "a 24rem panel shows the icon only");
+      await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="settings"]').click();
+      assert.equal(
+        await page
+          .locator("[data-ltm-settings-tab-rail]")
+          .evaluate((rail) => getComputedStyle(rail).gridTemplateColumns.split(/\s+/u).length),
+        2,
+        "a 24rem Settings container keeps two tab columns",
+      );
+      if (visualOutputDir)
+        await page.screenshot({ path: join(visualOutputDir, "long-term-memory-settings-docked.png") });
+      await dockDetailPanel(page, null);
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+      await page.locator("#settings-tab-extraction").click();
       const debugEvent = (operationId: string, action: string, status: string, fields = {}) => ({
         id: `${operationId}-${action}-${status}`,
         operationId,

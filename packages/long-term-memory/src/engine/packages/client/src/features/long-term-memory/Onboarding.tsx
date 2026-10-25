@@ -260,6 +260,7 @@ export function Onboarding({
       aria-describedby="ltm-onboarding-description"
       data-ltm-surface="onboarding"
       className="mari-editor-panel mari-editor-panel--soft overflow-hidden"
+      style={{ containerName: "ltm-onboarding", containerType: "inline-size" }}
     >
       <style>{`
                 [data-ltm-onboarding-body] {
@@ -323,7 +324,7 @@ export function Onboarding({
                   padding: 0.375rem 0.625rem;
                   font-size: 0.75rem;
                 }
-                @media (min-width: 768px) {
+                @container ltm-onboarding (min-width: 48rem) {
                   [data-ltm-onboarding-body] {
                     grid-template-columns: minmax(0, 1fr) 12rem;
                   }

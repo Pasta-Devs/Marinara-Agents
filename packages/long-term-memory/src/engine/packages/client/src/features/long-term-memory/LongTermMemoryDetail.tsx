@@ -517,6 +517,20 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             min-width: 3rem;
           }
         }
+        /* Panel width decides these, so a narrow panel on a wide window keeps the compact header. */
+        @container ltm-detail (min-width: 40rem) {
+          [data-ltm-health-detail] {
+            display: inline;
+          }
+        }
+        @container ltm-detail (min-width: 48rem) {
+          [data-ltm-add-label] {
+            display: inline;
+          }
+          [data-ltm-surface="vault-health-pill"] {
+            display: flex;
+          }
+        }
         @container ltm-detail (max-width: 47.99rem) {
           [data-ltm-surface="detail"] > .mari-editor-header {
             flex-wrap: nowrap;
@@ -680,7 +694,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
               <Button
                 ref={addTriggerRef}
                 primary
-                className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-0"
+                className="min-h-11 min-w-11"
                 onClick={() => setAddOpen((value) => !value)}
                 aria-expanded={addOpen}
                 aria-controls={addOpen ? "ltm-add-menu" : undefined}
@@ -688,7 +702,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 title={addMemoriesLabel}
               >
                 <Plus aria-hidden="true" size="0.75rem" />
-                <span className="hidden sm:inline">{addMemoriesLabel}</span>
+                <span data-ltm-add-label className="hidden">
+                  {addMemoriesLabel}
+                </span>
               </Button>
               {addOpen ? (
                 <div
@@ -787,7 +803,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   <div
                     aria-busy={status.isFetching}
                     data-ltm-surface="vault-health-pill"
-                    className="mari-editor-panel mari-editor-panel--soft hidden min-h-11 shrink-0 items-center gap-2 px-3 text-xs text-[var(--marinara-editor-muted)] md:flex"
+                    className="mari-editor-panel mari-editor-panel--soft hidden min-h-11 shrink-0 items-center gap-2 px-3 text-xs text-[var(--marinara-editor-muted)]"
                   >
                     <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${healthTone}`} />
                     <span aria-live="polite" aria-atomic="true">
@@ -814,7 +830,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                       <TriangleAlert aria-hidden="true" size="1rem" className="shrink-0" />
                     ) : null}
                     <span className="font-semibold">{healthLabel}</span>
-                    <span className="hidden truncate sm:inline">
+                    <span data-ltm-health-detail className="hidden truncate">
                       {localizeUi("ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData")}
                     </span>
                   </span>

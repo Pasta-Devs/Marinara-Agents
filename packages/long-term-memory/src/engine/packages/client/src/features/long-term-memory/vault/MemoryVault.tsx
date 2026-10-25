@@ -2355,7 +2355,7 @@ export default function MemoryVault({
         }
         @container ltm-workspace (min-width: 48rem) {
           [data-ltm-surface="vault"] [data-ltm-memory-list] {
-            max-height: max(20rem, calc(100vh - 12rem));
+            max-height: calc(100dvh - 12rem);
             overflow-y: auto;
           }
         }
