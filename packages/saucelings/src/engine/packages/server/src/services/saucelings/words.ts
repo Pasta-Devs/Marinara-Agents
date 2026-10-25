@@ -17,7 +17,7 @@ import type {
   SaucelingSettings,
   SaucelingWorldDocument,
 } from "../../../../shared/src/features/agents/saucelings/types.js";
-import { cardPersona } from "./care-profile.js";
+import { askJson, cardPersona } from "./care-profile.js";
 import { generateNature } from "./design.js";
 import { getSaucelingsRuntime } from "./package-runtime.js";
 import { MAX_JOURNAL_ENTRIES } from "./simulation.js";
@@ -117,10 +117,6 @@ export async function generateLineWithModel(options: {
 }): Promise<string | null> {
   const runtime = getSaucelingsRuntime();
   try {
-    const agentConfig = await runtime.getAgentConfig();
-    const model = await runtime.languageModels.resolveForRequest({
-      connectionId: options.settings.connectionId ?? agentConfig?.connectionId ?? null,
-    });
     const sp = petKind(options.pet);
     const temper = temperamentOf(options.pet);
     const scene = isSceneEvent(options.event);
@@ -206,17 +202,11 @@ export async function generateLineWithModel(options: {
         }),
       },
     ];
-    const maxTokens = scene ? 220 : 110;
-    const fitted = model.fitContext(prompt, { maxTokens });
-    const completion = await model.chatComplete(fitted.messages, {
-      maxTokens: fitted.maxTokens ?? maxTokens,
+    const parsed = (await askJson(prompt, options.settings.connectionId, {
+      maxTokens: scene ? 220 : 110,
       temperature: 0.7,
-      reasoningEffort: "none",
-      debugMode: runtime.isDebugAgentsEnabled(),
-      responseFormat: { type: "json_object" },
-      signal: AbortSignal.timeout(LINE_TIMEOUT_MS),
-    });
-    const parsed = runtime.json.parseJsonish(completion.content ?? "") as { text?: unknown } | null;
+      timeoutMs: LINE_TIMEOUT_MS,
+    })) as { text?: unknown } | null;
     if (parsed && typeof parsed === "object" && typeof parsed.text === "string") {
       const line = spokenLine(parsed.text, name).slice(0, 420);
       if (line) return line;

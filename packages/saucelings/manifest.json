@@ -119,13 +119,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "7b3fe43f869c0b69bec33153762ed3c613428ec688a3a7bad18b4cb5750166df",
-      "bytes": 104935
+      "sha256": "71b1c34ec317e9c76cdd1926ffa18bebc6c55ba2d3cc4ef93359c921f1fce173",
+      "bytes": 98892
     },
     {
       "path": "client.js",
-      "sha256": "c01ead56a09fac9aa625b8281c913b9b33dce34a19b3d3c4b27dfe8045fa8891",
-      "bytes": 229132
+      "sha256": "cc87f54d7d4d14b0fec26d52a28b33be1a4c7e53398943ed0df24a7e0d42d334",
+      "bytes": 229023
     },
     {
       "path": "saucelings-icon.png",

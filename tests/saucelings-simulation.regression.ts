@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import {
   CARETAKER_SPEECH_KINDS,
@@ -953,41 +952,7 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
   assert.equal(entry.journal[1].id, "care-0");
 }
 
-// 6e. A world saved before the painting Album: its `album` becomes the Menagerie, and each pet's one
-// portrait is listed in the Album under the document id it was saved with; doing it twice changes nothing
-{
-  const { pet } = createEggFromCaretaker({ profile, nowIso: t0, seed: 7 });
-  const beep = { ...pet, stage: "hatchling" as const, name: "Beep", portraitSavedAt: "2026-10-20T01:00:00.000Z" };
-  const { entry } = retirePetToMenagerie({ ...pet, id: "old-1", name: "Old", stage: "adult" }, t0);
-  const legacy = {
-    schemaVersion: 1,
-    activePet: beep,
-    album: [{ ...entry, portraitSavedAt: "2026-10-19T00:00:00.000Z" }],
-  };
-  const world = normalizeSaucelingWorld(JSON.parse(JSON.stringify(legacy)));
-  assert.deepEqual(
-    world.menagerie.map((e) => e.id),
-    ["old-1"],
-  );
-  assert.equal("portraitSavedAt" in world.activePet!, false);
-  assert.equal("portraitSavedAt" in world.menagerie[0], false);
-  // A pet saved before custom backgrounds shows the built-in one
-  assert.equal(world.activePet!.backgroundId, null);
-  assert.equal(world.menagerie[0].backgroundId, null);
-  const oldPortraitId = (petId: string) =>
-    createHash("sha256").update(`saucelings\0saucelings-portrait\0${petId}`).digest("hex");
-  assert.deepEqual(
-    world.portraits.map((p) => [p.id, p.petName, p.stage, p.savedAt]),
-    [
-      [oldPortraitId(beep.id), "Beep", "hatchling", "2026-10-20T01:00:00.000Z"],
-      [oldPortraitId("old-1"), "Old", "adult", "2026-10-19T00:00:00.000Z"],
-    ],
-  );
-  assert.deepEqual(normalizeSaucelingWorld(JSON.parse(JSON.stringify(world))), world);
-}
-
-// 6e. A background a pet showed before the library kept every one is listed in it, so it can be picked again and
-// deleted; a broken or repeated library entry is dropped, and the list is newest first
+// 6e. A broken or repeated background library entry is dropped, and the list is newest first
 {
   const { pet } = createEggFromCaretaker({ profile, nowIso: t0, seed: 9 });
   const { entry } = retirePetToMenagerie({ ...pet, id: "old-2", createdAt: "2026-10-18T00:00:00.000Z" }, t0);
@@ -1008,10 +973,7 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
   );
   assert.deepEqual(
     world.backgrounds.map((b) => [b.id, b.label, b.source, b.savedAt]),
-    [
-      ["bg-kept", "sunny", "generated", "2026-10-21T00:00:00.000Z"],
-      ["bg-pet", "", "upload", t0],
-    ],
+    [["bg-kept", "sunny", "generated", "2026-10-21T00:00:00.000Z"]],
   );
   assert.deepEqual(normalizeSaucelingWorld(JSON.parse(JSON.stringify(world))), world);
 }
@@ -1645,10 +1607,10 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
   const kind = petKind(adult).name;
   const plain = fallbackEvolutions(adult, 2, ["ember"], () => 0);
   assert.deepEqual(
-    plain.map((look) => [look.form, look.colour, look.glow, look.extra, look.move]),
+    plain.map((look) => [look.form, look.colour, look.extra, look.move]),
     [
-      [`Frost ${kind}`, "frost", "glow", "snowflake", "icicles"],
-      [`Moss ${kind}`, "moss", "glow", "leaf", "leafwhirl"],
+      [`Frost ${kind}`, "frost", "snowflake", "icicles"],
+      [`Moss ${kind}`, "moss", "leaf", "leafwhirl"],
     ],
   );
   assert.equal(
@@ -1674,14 +1636,13 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
     description: "Its fur has gone a soft violet.",
     from: "From: Dottore's long nights.",
     colour: "dusk",
-    glow: "motes",
     extra: "moon",
     ...patch,
   });
   const otherSpecies = Object.entries(SPECIES_CATALOG).find(([id]) => id !== adult.species)![1].name;
-  // The model picks no glow (the aura follows the colour), and its move defaults to its path's first
+  // The aura follows the colour, and the move defaults to its path's first
   assert.deepEqual(normalizeEvolutions({ evolutions: [look()] }, moth), [
-    { ...look(), glow: "glow", from: "Dottore's long nights.", move: "starburst" },
+    { ...look(), from: "Dottore's long nights.", move: "starburst" },
   ]);
   // A move off its colour's path, or unknown, becomes the path's first
   assert.deepEqual(
@@ -1697,15 +1658,13 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
     ),
     ["moon", "moon", "orb"],
   );
-  // A 0.16 look keeps its glow, move and an extra off today's path when loaded
-  const oldLook = look({ glow: "sparkles", move: "twirl", extra: "flame" });
-  assert.deepEqual(evolutionLookOf(oldLook), oldLook);
-  // Its move: one from the list, else (missing, unknown, or saved before moves) the one its glow suggests
+  // A saved look keeps its move and an extra off today's path when loaded; a saved "glow" is ignored
+  const oldLook = look({ move: "twirl", extra: "flame" });
+  assert.deepEqual(evolutionLookOf({ ...oldLook, glow: "sparkles" }), oldLook);
+  // Its move: one from the list, else (missing or unknown) its colour's first
   assert.deepEqual(
-    [look({ move: "roar" }), look({ move: "backflip" }), look({ glow: "glow" }), look({ glow: "sparkles" })].map(
-      (item) => evolutionLookOf(item)?.move,
-    ),
-    ["roar", "float", "shine", "sparkle"],
+    [look({ move: "roar" }), look({ move: "backflip" }), look()].map((item) => evolutionLookOf(item)?.move),
+    ["roar", "starburst", "starburst"],
   );
   assert.deepEqual(
     normalizeEvolutions(

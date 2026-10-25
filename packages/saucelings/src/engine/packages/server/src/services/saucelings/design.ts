@@ -1,14 +1,11 @@
 import {
   SAUCELING_EVOLVE_COLOURS,
   SAUCELING_EVOLVE_EXTRAS,
-  SAUCELING_EVOLVE_GLOWS,
   SAUCELING_EVOLVE_MOVES,
   SAUCELING_EVOLVE_PATHS,
   SAUCELING_STAGES,
   type SaucelingDesign,
   type SaucelingEvolution,
-  type SaucelingEvolveGlow,
-  type SaucelingEvolveMove,
   type SaucelingEvolveColour,
   type SaucelingFinder,
   type SaucelingOwnTemperament,
@@ -23,7 +20,7 @@ import {
   temperamentOf,
   withArticle,
 } from "../../../../shared/src/features/agents/saucelings/vocabulary.js";
-import { cardPersona, cleanText, extractReducedCard, parseRecord } from "./care-profile.js";
+import { askJson, cardPersona, cleanText, extractReducedCard, parseRecord } from "./care-profile.js";
 import { getSaucelingsRuntime } from "./package-runtime.js";
 
 /** Past this the design call is abandoned and nothing is invented. */
@@ -68,11 +65,14 @@ const FOOD_WORDS = [
 ];
 const FOOD_PATTERNS = FOOD_WORDS.map((word) => new RegExp(`\\b${word}(?:e?s)?\\b`, "iu"));
 
+/** Matches `name` as a whole word, whatever characters it holds. */
+const wordPattern = (name: string) => new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\b`, "iu");
+
 /** The built-in species and sauce names, which a design must not borrow. */
 const RESERVED_PATTERNS = [
   ...Object.values(SPECIES_CATALOG).map((species) => species.name),
   ...Object.values(TEMPERAMENT_CATALOG).map((temperament) => temperament.name),
-].map((name) => new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\b`, "iu"));
+].map(wordPattern);
 
 function firstThree(value: unknown): [string, string, string] | null {
   if (!Array.isArray(value)) return null;
@@ -119,10 +119,6 @@ export async function generateDesign(options: {
     const record = (await runtime.resources.listCharacters([options.characterId]))[0];
     if (!record) return null;
     const card = extractReducedCard(record);
-    const agentConfig = await runtime.getAgentConfig();
-    const model = await runtime.languageModels.resolveForRequest({
-      connectionId: options.connectionId ?? agentConfig?.connectionId ?? null,
-    });
     const stageExample =
       '"egg":"what its egg looks like","hatchling":"tiny and round","juvenile":"...","adult":"...","elder":"..."';
     const prompt = [
@@ -142,20 +138,24 @@ export async function generateDesign(options: {
       },
       { role: "user" as const, content: card.summaryText },
     ];
-    const fitted = model.fitContext(prompt, { maxTokens: DESIGN_MAX_TOKENS });
-    const completion = await model.chatComplete(fitted.messages, {
-      maxTokens: fitted.maxTokens ?? DESIGN_MAX_TOKENS,
-      temperature: 0.8,
-      reasoningEffort: "none",
-      debugMode: runtime.isDebugAgentsEnabled(),
-      responseFormat: { type: "json_object" },
-      signal: AbortSignal.timeout(DESIGN_TIMEOUT_MS),
-    });
-    return normalizeDesign(runtime.json.parseJsonish(completion.content ?? ""), "found");
+    return normalizeDesign(
+      await askJson(prompt, options.connectionId, {
+        maxTokens: DESIGN_MAX_TOKENS,
+        temperature: 0.8,
+        timeoutMs: DESIGN_TIMEOUT_MS,
+      }),
+      "found",
+    );
   } catch {
     // No connection, a failed or slow call, or an unreadable answer: nothing is invented.
     return null;
   }
+}
+
+/** What the caretaker's card says about who they are, cut to size; empty when the card is gone. */
+async function caretakerWho(pet: SaucelingPet): Promise<string> {
+  const [record] = await getSaucelingsRuntime().resources.listCharacters([pet.caretakerId]);
+  return record ? cardPersona(record).who.slice(0, 600) : "";
 }
 
 /** Asks the writing connection for a place that suits the nook's sauceling, as the start of a prompt for a
@@ -163,14 +163,8 @@ export async function generateDesign(options: {
  *  such as one that names what an egg will hatch into. Never throws. */
 export async function suggestScene(pet: SaucelingPet, connectionId: string | null): Promise<string | null> {
   try {
-    const runtime = getSaucelingsRuntime();
-    const agentConfig = await runtime.getAgentConfig();
-    const model = await runtime.languageModels.resolveForRequest({
-      connectionId: connectionId ?? agentConfig?.connectionId ?? null,
-    });
     const kind = petKind(pet);
-    const [record] = await runtime.resources.listCharacters([pet.caretakerId]);
-    const who = record ? cardPersona(record).who.slice(0, 600) : "";
+    const who = await caretakerWho(pet);
     const caretaker = `Its caretaker is ${pet.careProfile.characterName}.${who ? `\nWho they are:\n${who}` : ""}`;
     const facts =
       pet.stage === "egg"
@@ -198,21 +192,13 @@ export async function suggestScene(pet: SaucelingPet, connectionId: string | nul
       },
       { role: "user" as const, content: facts },
     ];
-    const fitted = model.fitContext(prompt, { maxTokens: SCENE_MAX_TOKENS });
-    const completion = await model.chatComplete(fitted.messages, {
-      maxTokens: fitted.maxTokens ?? SCENE_MAX_TOKENS,
+    const answer = await askJson(prompt, connectionId, {
+      maxTokens: SCENE_MAX_TOKENS,
       temperature: 0.9,
-      reasoningEffort: "none",
-      debugMode: runtime.isDebugAgentsEnabled(),
-      responseFormat: { type: "json_object" },
-      signal: AbortSignal.timeout(DESIGN_TIMEOUT_MS),
+      timeoutMs: DESIGN_TIMEOUT_MS,
     });
-    const scene = cleanText(parseRecord(runtime.json.parseJsonish(completion.content ?? "")).scene, 400).replace(
-      /[.\s]+$/u,
-      "",
-    );
-    const named = new RegExp(`\\b${kind.name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\b`, "iu");
-    return scene && !(pet.stage === "egg" && named.test(scene)) ? scene : null;
+    const scene = cleanText(parseRecord(answer).scene, 400).replace(/[.\s]+$/u, "");
+    return scene && !(pet.stage === "egg" && wordPattern(kind.name).test(scene)) ? scene : null;
   } catch {
     // No connection, a failed or slow call, or an unreadable answer: the client starts from its own prompt.
     return null;
@@ -236,31 +222,23 @@ const EVOLVE_COLOURS: Record<SaucelingEvolveColour, { name: string; words: strin
 const oneOf = <T extends string>(list: readonly T[], value: unknown): T | null =>
   list.includes(value as T) ? (value as T) : null;
 
-/** The move a look saved before moves takes: the one its glow suggests. */
-const GLOW_MOVES: Record<SaucelingEvolveGlow, SaucelingEvolveMove> = {
-  glow: "shine",
-  sparkles: "sparkle",
-  motes: "float",
-};
-
-/** A saved look, checked for shape only (the model's words were checked when it was written); null when malformed. */
+/** A saved look, checked for shape only (the model's words were checked when it was written); null when malformed.
+ *  A move that is missing or unknown becomes its colour's first; a saved "glow" is ignored. */
 export function evolutionLookOf(value: unknown): SaucelingEvolution | null {
   const obj = parseRecord(value);
   const form = cleanText(obj.form, 48);
   const description = cleanText(obj.description, 240);
   const from = cleanText(obj.from, 160);
   const colour = oneOf(SAUCELING_EVOLVE_COLOURS, obj.colour);
-  const glow = oneOf(SAUCELING_EVOLVE_GLOWS, obj.glow);
   const extra = oneOf(SAUCELING_EVOLVE_EXTRAS, obj.extra);
-  return form && description && from && colour && glow && extra
+  return form && description && from && colour && extra
     ? {
         form,
         description,
         from,
         colour,
-        glow,
         extra,
-        move: oneOf(SAUCELING_EVOLVE_MOVES, obj.move) ?? GLOW_MOVES[glow],
+        move: oneOf(SAUCELING_EVOLVE_MOVES, obj.move) ?? SAUCELING_EVOLVE_PATHS[colour].moves[0]!,
       }
     : null;
 }
@@ -291,7 +269,6 @@ export function fallbackEvolutions(
       description: `Its colours have turned to ${words}, ${aura}, and a little ${extra} floats above its head.`,
       from: ways ? `${caretaker}'s care and its ${ways} ways.` : `${caretaker}'s care.`,
       colour,
-      glow: "glow",
       extra,
       move: pickFrom(moves),
     });
@@ -313,7 +290,6 @@ export function normalizeEvolutions(value: unknown, pet: SaucelingPet): Saucelin
     const look = evolutionLookOf({
       ...raw,
       from: cleanText(raw.from, 160).replace(/^from:\s*/iu, ""),
-      glow: "glow",
       extra: oneOf(path.extras, raw.extra) ?? path.extras[0],
       move: oneOf(path.moves, raw.move) ?? path.moves[0],
     });
@@ -334,16 +310,10 @@ export async function generateEvolutions(
 ): Promise<[SaucelingEvolution, SaucelingEvolution]> {
   let looks: SaucelingEvolution[] = [];
   try {
-    const runtime = getSaucelingsRuntime();
-    const agentConfig = await runtime.getAgentConfig();
-    const model = await runtime.languageModels.resolveForRequest({
-      connectionId: connectionId ?? agentConfig?.connectionId ?? null,
-    });
     const kind = petKind(pet);
     const temper = temperamentOf(pet);
     const caretaker = pet.careProfile.characterName;
-    const [record] = await runtime.resources.listCharacters([pet.caretakerId]);
-    const who = record ? cardPersona(record).who.slice(0, 600) : "";
+    const who = await caretakerWho(pet);
     const prompt = [
       {
         role: "system" as const,
@@ -374,16 +344,14 @@ export async function generateEvolutions(
           .join("\n"),
       },
     ];
-    const fitted = model.fitContext(prompt, { maxTokens: EVOLVE_MAX_TOKENS });
-    const completion = await model.chatComplete(fitted.messages, {
-      maxTokens: fitted.maxTokens ?? EVOLVE_MAX_TOKENS,
-      temperature: 0.9,
-      reasoningEffort: "none",
-      debugMode: runtime.isDebugAgentsEnabled(),
-      responseFormat: { type: "json_object" },
-      signal: AbortSignal.timeout(DESIGN_TIMEOUT_MS),
-    });
-    looks = normalizeEvolutions(runtime.json.parseJsonish(completion.content ?? ""), pet);
+    looks = normalizeEvolutions(
+      await askJson(prompt, connectionId, {
+        maxTokens: EVOLVE_MAX_TOKENS,
+        temperature: 0.9,
+        timeoutMs: DESIGN_TIMEOUT_MS,
+      }),
+      pet,
+    );
   } catch {
     // No connection, a failed or slow call, or an unreadable answer: the plain looks stand in.
   }
@@ -451,10 +419,6 @@ export async function generateNature(options: {
     const { pet, temperament } = options;
     const kind = petKind(pet);
     const record = temperament ? (await runtime.resources.listCharacters([temperament.after.id]))[0] : undefined;
-    const agentConfig = await runtime.getAgentConfig();
-    const model = await runtime.languageModels.resolveForRequest({
-      connectionId: options.connectionId ?? agentConfig?.connectionId ?? null,
-    });
     const after = temperament?.after.name ?? "";
     const previous = temperament?.previous;
     const shape = [
@@ -497,16 +461,14 @@ export async function generateNature(options: {
           .join("\n"),
       },
     ];
-    const fitted = model.fitContext(prompt, { maxTokens: NATURE_MAX_TOKENS });
-    const completion = await model.chatComplete(fitted.messages, {
-      maxTokens: fitted.maxTokens ?? NATURE_MAX_TOKENS,
-      temperature: 0.9,
-      reasoningEffort: "none",
-      debugMode: runtime.isDebugAgentsEnabled(),
-      responseFormat: { type: "json_object" },
-      signal: AbortSignal.timeout(DESIGN_TIMEOUT_MS),
-    });
-    return normalizeNature(runtime.json.parseJsonish(completion.content ?? ""), kind.name);
+    return normalizeNature(
+      await askJson(prompt, options.connectionId, {
+        maxTokens: NATURE_MAX_TOKENS,
+        temperature: 0.9,
+        timeoutMs: DESIGN_TIMEOUT_MS,
+      }),
+      kind.name,
+    );
   } catch {
     // No connection, a failed or slow call, or an unreadable answer: nothing is given this time.
     return null;

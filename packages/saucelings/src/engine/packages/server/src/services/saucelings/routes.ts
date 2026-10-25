@@ -60,10 +60,20 @@ import { emptySaucelingWorld, normalizeSaucelingSettings, readSaucelingWorld, up
 import { availableSpecies, countCare, unlocksOf } from "./unlocks.js";
 import { currentDayKey, linesBeingWritten, normalizeBudgetForDay, saveWithLines, settleTemperament } from "./words.js";
 
+/** Refuses a request: throws an error that carries the response's status code. */
+function refuse(statusCode: number, message: string): never {
+  throw Object.assign(new Error(message), { statusCode });
+}
+
+const NO_ACTIVE_PET = "No active sauceling in the nook.";
+
+/** The nook's sauceling; 400 when there is none. */
+function requireActive(world: SaucelingWorldDocument): SaucelingPet {
+  return world.activePet ?? refuse(400, NO_ACTIVE_PET);
+}
+
 function requestBody(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw Object.assign(new Error("A JSON request body is required."), { statusCode: 400 });
-  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) refuse(400, "A JSON request body is required.");
   return value as Record<string, unknown>;
 }
 
@@ -74,10 +84,7 @@ function petLabel(pet: SaucelingPet): string {
 
 function refuseWhenLibraryFull(world: SaucelingWorldDocument): void {
   if (world.backgrounds.length >= SAUCELING_BACKGROUND_LIMIT) {
-    throw Object.assign(
-      new Error(`The background library holds ${SAUCELING_BACKGROUND_LIMIT}. Delete one to save another.`),
-      { statusCode: 409 },
-    );
+    refuse(409, `The background library holds ${SAUCELING_BACKGROUND_LIMIT}. Delete one to save another.`);
   }
 }
 
@@ -85,22 +92,19 @@ function refuseWhenLibraryFull(world: SaucelingWorldDocument): void {
 function refuseUnlessSwap(world: SaucelingWorldDocument, swap: boolean): void {
   if (world.activePet && !swap) {
     const label = world.activePet.stage === "egg" ? "The egg" : world.activePet.name;
-    throw Object.assign(new Error(`${label} is still in the nook. Swap it to bring another sauceling in.`), {
-      statusCode: 409,
-    });
+    refuse(409, `${label} is still in the nook. Swap it to bring another sauceling in.`);
   }
 }
 
 function requiredString(value: unknown, label: string, maxLen = 120): string {
   if (typeof value !== "string" || !value.trim() || value.trim().length > maxLen) {
-    throw Object.assign(new Error(`${label} is required.`), { statusCode: 400 });
+    refuse(400, `${label} is required.`);
   }
   return value.trim();
 }
 
 const FORM_REFUSAL = "A form must be PNG strips 104 high and 104 or 312 wide, each at most 48 KB, 160 KB together.";
 
-/** The sauceling a form is for: the one `petId` names in the nook or the Menagerie, or the one in the nook. */
 /** Where the player put the egg, as shares of its background picture (see `SaucelingEggSpot`); null puts it back. */
 function eggSpotFrom(value: unknown): { x: number; y: number } | null {
   if (value === null) return null;
@@ -108,23 +112,16 @@ function eggSpotFrom(value: unknown): { x: number; y: number } | null {
   const share = (part: unknown) => (typeof part === "number" && part >= 0 && part <= 1 ? part : null);
   const x = share(spot.x);
   const y = share(spot.y);
-  if (x === null || y === null) {
-    throw Object.assign(new Error("Put the egg somewhere on its background."), { statusCode: 400 });
-  }
+  if (x === null || y === null) refuse(400, "Put the egg somewhere on its background.");
   return { x, y };
 }
 
+/** The sauceling a form is for: the one `petId` names in the nook or the Menagerie, or the one in the nook. */
 function formTarget(world: SaucelingWorldDocument, petIdValue: unknown): SaucelingPet | SaucelingMenagerieEntry {
-  if (!world.settings.portraitEnabled) {
-    throw Object.assign(new Error("Portraits are turned off in Saucelings settings."), { statusCode: 400 });
-  }
+  if (!world.settings.portraitEnabled) refuse(400, "Portraits are turned off in Saucelings settings.");
   const petId = petIdValue === undefined ? null : requiredString(petIdValue, "Sauceling id", 200);
   const pet = petId ? [world.activePet, ...world.menagerie].find((each) => each?.id === petId) : world.activePet;
-  if (!pet) {
-    throw Object.assign(new Error(petId ? "No such sauceling." : "No active sauceling in the nook."), {
-      statusCode: 400,
-    });
-  }
+  if (!pet) refuse(400, petId ? "No such sauceling." : NO_ACTIVE_PET);
   return pet;
 }
 
@@ -144,16 +141,14 @@ function changePet(
   change: <T extends AnyPet>(each: T) => T,
 ): SaucelingWorldDocument {
   if (fits(world.activePet)) return { ...world, activePet: change(world.activePet!) };
-  if (!world.menagerie.some(fits)) {
-    throw Object.assign(new Error("That sauceling changed. Try again."), { statusCode: 409 });
-  }
+  if (!world.menagerie.some(fits)) refuse(409, "That sauceling changed. Try again.");
   return { ...world, menagerie: world.menagerie.map((entry) => (fits(entry) ? change(entry) : entry)) };
 }
 
 /** Lists saved form documents on a sauceling for their stages. The ones they replace are kept as the set Undo
- *  repaint goes back to, and the set kept before goes; its paintings in progress end and their tries start again. The forms follow the sauceling, so one that moved between the nook and the
- *  Menagerie meanwhile still gets them; one that is gone or no longer has those stages gets none (409), and the new
- *  documents are deleted. */
+ *  repaint goes back to, and the set kept before goes; its paintings in progress end and their tries start again.
+ *  The forms follow the sauceling, so one that moved between the nook and the Menagerie meanwhile still gets them;
+ *  one that is gone or no longer has those stages gets none (409), and the new documents are deleted. */
 async function attachForms(petId: string, forms: Partial<Record<SaucelingStage, string>>) {
   const stages = Object.keys(forms) as SaucelingStage[];
   const replaced: string[] = [];
@@ -181,15 +176,15 @@ async function attachForms(petId: string, forms: Partial<Record<SaucelingStage, 
 
 /** The nook's sauceling while it has an evolution on offer; 409 when there is none (declined, or it changed). */
 function offeredPet(world: SaucelingWorldDocument): SaucelingPet {
-  const pet = world.activePet;
-  if (!pet) throw Object.assign(new Error("No active sauceling in the nook."), { statusCode: 400 });
-  if (pet.evolution.offer !== "offered") {
-    throw Object.assign(new Error("It has no evolution on offer."), { statusCode: 409 });
-  }
+  const pet = requireActive(world);
+  if (pet.evolution.offer !== "offered") refuse(409, "It has no evolution on offer.");
   return pet;
 }
 
-async function buildStateResponse(world: SaucelingWorldDocument, nowIso: string): Promise<SaucelingStateResponse> {
+async function buildStateResponse(
+  world: SaucelingWorldDocument,
+  nowIso = new Date().toISOString(),
+): Promise<SaucelingStateResponse> {
   // Whether each character has their own voice yet, so the page can offer to make one.
   const characters = (await listCaretakerCandidates()).map((ch) => ({
     ...ch,
@@ -296,16 +291,11 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
   app.post("/action", async (request) => {
     const body = requestBody(request.body);
     const action = requiredString(body.action, "Care action") as SaucelingUserAction;
-    if (!SAUCELING_USER_ACTIONS.includes(action)) {
-      throw Object.assign(new Error("Invalid care action."), { statusCode: 400 });
-    }
+    if (!SAUCELING_USER_ACTIONS.includes(action)) refuse(400, "Invalid care action.");
     const nowIso = new Date().toISOString();
 
     const world = await saveWithLines(nowIso, (current) => {
-      if (!current.activePet) {
-        throw Object.assign(new Error("No active sauceling in the nook."), { statusCode: 400 });
-      }
-      const ticked = advance(current.activePet, nowIso, current.settings);
+      const ticked = advance(requireActive(current), nowIso, current.settings);
       const acted = performUserAction(ticked.pet, action, nowIso);
       // Only care the player gave counts towards special eggs; a refused action (too soon) counts nothing.
       const cared = acted.pet.careActionCount > ticked.pet.careActionCount;
@@ -329,10 +319,7 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     const world = await saveWithLines(
       nowIso,
       (current) => {
-        if (!current.activePet) {
-          throw Object.assign(new Error("No active sauceling in the nook."), { statusCode: 400 });
-        }
-        const ticked = advance(current.activePet, nowIso, current.settings);
+        const ticked = advance(requireActive(current), nowIso, current.settings);
         const checked = checkIn(ticked.pet, nowIso);
         return {
           world: { ...current, activePet: checked.pet },
@@ -350,16 +337,11 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
   app.post("/nudge", async (request) => {
     const body = requestBody(request.body);
     const tendency = requiredString(body.tendency, "Tendency") as SaucelingTendencyKey;
-    if (!SAUCELING_TENDENCIES.includes(tendency)) {
-      throw Object.assign(new Error("Invalid tendency key."), { statusCode: 400 });
-    }
+    if (!SAUCELING_TENDENCIES.includes(tendency)) refuse(400, "Invalid tendency key.");
     const nowIso = new Date().toISOString();
 
     const world = await updateSaucelingWorld(async (current) => {
-      if (!current.activePet) {
-        throw Object.assign(new Error("No active sauceling in the nook."), { statusCode: 400 });
-      }
-      const nudged = applyCaretakerNudge(current.activePet, tendency, nowIso);
+      const nudged = applyCaretakerNudge(requireActive(current), tendency, nowIso);
       return {
         ...current,
         activePet: nudged.pet,
@@ -374,9 +356,7 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     const body = requestBody(request.body);
     const nowIso = new Date().toISOString();
     const before = await readSaucelingWorld();
-    if (!before.activePet) {
-      throw Object.assign(new Error("No active sauceling in the nook."), { statusCode: 400 });
-    }
+    requireActive(before);
     const eggSpot = body.eggSpot === undefined ? undefined : eggSpotFrom(body.eggSpot);
     const caretakerId =
       typeof body.caretakerId === "string" && body.caretakerId.trim() ? body.caretakerId.trim() : null;
@@ -385,20 +365,13 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     const profile = caretakerId ? await careProfileNow(caretakerId, before.profileCache[caretakerId]) : null;
 
     const world = await saveWithLines(nowIso, (current) => {
-      if (!current.activePet) {
-        throw Object.assign(new Error("No active sauceling in the nook."), { statusCode: 400 });
-      }
-      const nextPet = { ...current.activePet };
+      const nextPet = { ...requireActive(current) };
       if (typeof body.name === "string" && body.name.trim()) {
-        if (nextPet.stage === "egg") {
-          throw Object.assign(new Error("Name it once it hatches."), { statusCode: 400 });
-        }
+        if (nextPet.stage === "egg") refuse(400, "Name it once it hatches.");
         nextPet.name = body.name.trim().slice(0, 40);
       }
       if (eggSpot !== undefined) {
-        if (nextPet.stage !== "egg") {
-          throw Object.assign(new Error("Only an egg can be moved."), { statusCode: 400 });
-        }
+        if (nextPet.stage !== "egg") refuse(400, "Only an egg can be moved.");
         // It belongs to the background it was put on.
         nextPet.eggSpot = eggSpot && { ...eggSpot, backgroundId: nextPet.backgroundId };
       }
@@ -441,9 +414,7 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     const characterId = requiredString(body.characterId, "Caretaker character");
     const nowIso = new Date().toISOString();
     const made = await makeCareVoice(characterId, (await readSaucelingWorld()).settings.connectionId);
-    if (!made) {
-      throw Object.assign(new Error("The writing connection didn't answer."), { statusCode: 502 });
-    }
+    if (!made) refuse(502, "The writing connection didn't answer.");
     const world = await updateSaucelingWorld((current) => ({
       ...current,
       activePet:
@@ -480,16 +451,12 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
   app.post("/evolve/choose", async (request) => {
     const body = requestBody(request.body);
     const index = body.index;
-    if (index !== 0 && index !== 1) {
-      throw Object.assign(new Error("Pick one of the two looks."), { statusCode: 400 });
-    }
+    if (index !== 0 && index !== 1) refuse(400, "Pick one of the two looks.");
     const nowIso = new Date().toISOString();
     const world = await saveWithLines(nowIso, (current) => {
       const pet = offeredPet(current);
       const look = pet.evolution.choices?.[index];
-      if (!look || pet.evolution.look) {
-        throw Object.assign(new Error("That evolution changed. Try again."), { statusCode: 409 });
-      }
+      if (!look || pet.evolution.look) refuse(409, "That evolution changed. Try again.");
       const event: SaucelingEvent = {
         id: `evolve-${Date.parse(nowIso)}`,
         kind: "evolve",
@@ -511,37 +478,29 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
 
   // POST /api/saucelings/evolve/undo — back to how it looked; Evolve… comes back with the same two choices
   app.post("/evolve/undo", async () => {
-    const nowIso = new Date().toISOString();
     const world = await updateSaucelingWorld((current) => {
       const pet = current.activePet;
-      if (!pet?.evolution.look) {
-        throw Object.assign(new Error("It has no evolution to undo."), { statusCode: 409 });
-      }
+      if (!pet?.evolution.look) refuse(409, "It has no evolution to undo.");
       return { ...current, activePet: { ...pet, evolution: { ...pet.evolution, look: null, at: null } } };
     });
-    return buildStateResponse(world, nowIso);
+    return buildStateResponse(world);
   });
 
   // POST /api/saucelings/evolve/decline — Not interested: it is never offered an evolution again
   app.post("/evolve/decline", async () => {
-    const nowIso = new Date().toISOString();
     const world = await updateSaucelingWorld((current) => {
       const pet = offeredPet(current);
-      if (pet.evolution.look) {
-        throw Object.assign(new Error("It has already evolved."), { statusCode: 409 });
-      }
+      if (pet.evolution.look) refuse(409, "It has already evolved.");
       return { ...current, activePet: { ...pet, evolution: { ...pet.evolution, offer: "declined" } } };
     });
-    return buildStateResponse(world, nowIso);
+    return buildStateResponse(world);
   });
 
   // POST /api/saucelings/retire — send current pet to the Menagerie
   app.post("/retire", async () => {
     const nowIso = new Date().toISOString();
     const world = await saveWithLines(nowIso, (current) => {
-      if (!current.activePet) {
-        throw Object.assign(new Error("No active sauceling to retire."), { statusCode: 400 });
-      }
+      if (!current.activePet) refuse(400, "No active sauceling to retire.");
       const retired = retirePetToMenagerie(current.activePet, nowIso);
       return {
         world: {
@@ -580,9 +539,7 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
 
     const world = await saveWithLines(nowIso, (current) => {
       const target = current.menagerie.find((e) => e.id === entryId);
-      if (!target) {
-        throw Object.assign(new Error("Sauceling not found in the Menagerie."), { statusCode: 404 });
-      }
+      if (!target) refuse(404, "Sauceling not found in the Menagerie.");
       refuseUnlessSwap(current, swap);
       let remaining = current.menagerie.filter((e) => e.id !== entryId);
       if (current.activePet) {
@@ -618,18 +575,15 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
   // and its background in the library, and its forms go with it
   app.post<{ Params: { id: string } }>("/menagerie/:id/release", async (request) => {
     const entryId = requiredString(request.params.id, "Menagerie pet ID");
-    const nowIso = new Date().toISOString();
     let forms: string[] = [];
     const world = await updateSaucelingWorld((current) => {
       const entry = current.menagerie.find((e) => e.id === entryId);
-      if (!entry) {
-        throw Object.assign(new Error("Sauceling not found in the Menagerie."), { statusCode: 404 });
-      }
+      if (!entry) refuse(404, "Sauceling not found in the Menagerie.");
       forms = [...Object.values(entry.forms), ...Object.values(entry.savedForms)];
       return { ...current, menagerie: current.menagerie.filter((e) => e.id !== entryId) };
     });
     for (const id of forms) await deleteSaucelingForm(id);
-    return buildStateResponse(world, nowIso);
+    return buildStateResponse(world);
   });
 
   // POST /api/saucelings/background — the client's picture (uploaded, or made with the user's image connection) joins
@@ -638,29 +592,21 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     const body = requestBody(request.body);
     const nowIso = new Date().toISOString();
     const before = await readSaucelingWorld();
-    if (!before.activePet) {
-      throw Object.assign(new Error("No active sauceling in the nook."), { statusCode: 400 });
-    }
+    requireActive(before);
     refuseWhenLibraryFull(before);
     const image = parsePortraitImage(body.image);
-    if (!image) {
-      throw Object.assign(new Error("A background must be a PNG, JPEG or WebP image of at most 4 MB."), {
-        statusCode: 400,
-      });
-    }
+    if (!image) refuse(400, "A background must be a PNG, JPEG or WebP image of at most 4 MB.");
     const label = typeof body.label === "string" ? body.label.trim().slice(0, 120) : "";
     const source = body.source === "generated" ? "generated" : "upload";
     // The image is saved first, so the library never lists a background that is not there.
     const id = await saveSaucelingBackground(image, nowIso);
     const world = await updateSaucelingWorld((latest) => {
-      if (!latest.activePet) {
-        throw Object.assign(new Error("No active sauceling in the nook."), { statusCode: 400 });
-      }
+      const pet = requireActive(latest);
       refuseWhenLibraryFull(latest);
       return {
         ...latest,
         backgrounds: [{ id, label, source, savedAt: nowIso }, ...latest.backgrounds],
-        activePet: { ...latest.activePet, backgroundId: id },
+        activePet: { ...pet, backgroundId: id },
       };
     }).catch(async (error: unknown) => {
       // Nothing lists the image, so it goes.
@@ -687,29 +633,25 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
   // POST /api/saucelings/background/:id/select — the nook shows a background from the library
   app.post<{ Params: { id: string } }>("/background/:id/select", async (request) => {
     const id = requiredString(request.params.id, "Background id", 200);
-    const nowIso = new Date().toISOString();
     const world = await updateSaucelingWorld((current) => {
-      if (!current.activePet) {
-        throw Object.assign(new Error("No active sauceling in the nook."), { statusCode: 400 });
-      }
+      const pet = requireActive(current);
       if (!current.backgrounds.some((background) => background.id === id)) {
-        throw Object.assign(new Error("That background is not in the library."), { statusCode: 404 });
+        refuse(404, "That background is not in the library.");
       }
-      return { ...current, activePet: { ...current.activePet, backgroundId: id } };
+      return { ...current, activePet: { ...pet, backgroundId: id } };
     });
-    return buildStateResponse(world, nowIso);
+    return buildStateResponse(world);
   });
 
   // POST /api/saucelings/background/:id/delete — take a background out of the library for good; any sauceling
   // showing it goes back to its built-in one
   app.post<{ Params: { id: string } }>("/background/:id/delete", async (request) => {
     const id = requiredString(request.params.id, "Background id", 200);
-    const nowIso = new Date().toISOString();
     const unset = <T extends { backgroundId: string | null }>(item: T): T =>
       item.backgroundId === id ? { ...item, backgroundId: null } : item;
     const world = await updateSaucelingWorld((current) => {
       if (!current.backgrounds.some((background) => background.id === id)) {
-        throw Object.assign(new Error("That background is not in the library."), { statusCode: 404 });
+        refuse(404, "That background is not in the library.");
       }
       return {
         ...current,
@@ -720,29 +662,23 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     });
     // The index goes first, so nothing points at a background whose image is gone.
     await deleteSaucelingBackground(id);
-    return buildStateResponse(world, nowIso);
+    return buildStateResponse(world);
   });
 
   // POST /api/saucelings/background/clear — back to the built-in background; the library keeps the old one
   app.post("/background/clear", async () => {
-    const nowIso = new Date().toISOString();
-    const world = await updateSaucelingWorld((current) => {
-      if (!current.activePet) {
-        throw Object.assign(new Error("No active sauceling in the nook."), { statusCode: 400 });
-      }
-      return { ...current, activePet: { ...current.activePet, backgroundId: null } };
-    });
-    return buildStateResponse(world, nowIso);
+    const world = await updateSaucelingWorld((current) => ({
+      ...current,
+      activePet: { ...requireActive(current), backgroundId: null },
+    }));
+    return buildStateResponse(world);
   });
 
   // POST /api/saucelings/background/suggest — the writing connection describes a place that suits the nook's
   // sauceling, as a starting prompt for a generated background; { scene: null } when it could not
   app.post("/background/suggest", async () => {
     const world = await readSaucelingWorld();
-    if (!world.activePet) {
-      throw Object.assign(new Error("No active sauceling in the nook."), { statusCode: 400 });
-    }
-    return { scene: await suggestScene(world.activePet, world.settings.connectionId) };
+    return { scene: await suggestScene(requireActive(world), world.settings.connectionId) };
   });
 
   // POST /api/saucelings/portrait — add a painting the client generated with the user's image connection to the Album
@@ -750,22 +686,11 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     const body = requestBody(request.body);
     const nowIso = new Date().toISOString();
     const current = await readSaucelingWorld();
-    if (!current.settings.portraitEnabled) {
-      throw Object.assign(new Error("Portraits are turned off in Saucelings settings."), { statusCode: 400 });
-    }
-    const pet = current.activePet;
-    if (!pet) {
-      throw Object.assign(new Error("No active sauceling in the nook."), { statusCode: 400 });
-    }
-    if (pet.stage === "egg") {
-      throw Object.assign(new Error("Paint it once it hatches."), { statusCode: 400 });
-    }
+    if (!current.settings.portraitEnabled) refuse(400, "Portraits are turned off in Saucelings settings.");
+    const pet = requireActive(current);
+    if (pet.stage === "egg") refuse(400, "Paint it once it hatches.");
     const image = parsePortraitImage(body.image);
-    if (!image) {
-      throw Object.assign(new Error("A portrait must be a PNG, JPEG or WebP image of at most 4 MB."), {
-        statusCode: 400,
-      });
-    }
+    if (!image) refuse(400, "A portrait must be a PNG, JPEG or WebP image of at most 4 MB.");
     // What the player asked the painting to show is only a caption, so a bad value is dropped, not refused.
     const instructions =
       typeof body.instructions === "string"
@@ -819,16 +744,15 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
   // POST /api/saucelings/portrait/:id/delete — take a painting out of the Album for good
   app.post<{ Params: { id: string } }>("/portrait/:id/delete", async (request) => {
     const id = requiredString(request.params.id, "Painting id", 200);
-    const nowIso = new Date().toISOString();
     const world = await updateSaucelingWorld((current) => {
       if (!current.portraits.some((portrait) => portrait.id === id)) {
-        throw Object.assign(new Error("That painting is not in the Album."), { statusCode: 404 });
+        refuse(404, "That painting is not in the Album.");
       }
       return { ...current, portraits: current.portraits.filter((portrait) => portrait.id !== id) };
     });
     // The index goes first, so the Album never lists a painting whose image is gone.
     await deleteSaucelingPortrait(id);
-    return buildStateResponse(world, nowIso);
+    return buildStateResponse(world);
   });
 
   // POST /api/saucelings/form/start — a page is about to paint { key } (a stage, or "sheet" for every stage) of
@@ -838,12 +762,12 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
   app.post("/form/start", async (request) => {
     const body = requestBody(request.body);
     const key = body.key as SaucelingPaintKey;
-    if (!PAINT_KEYS.includes(key)) throw Object.assign(new Error("Invalid painting."), { statusCode: 400 });
+    if (!PAINT_KEYS.includes(key)) refuse(400, "Invalid painting.");
     const token = requiredString(body.token, "Page token", 100);
     const nowIso = new Date().toISOString();
     const pet = formTarget(await readSaucelingWorld(), body.petId);
     if (key === "sheet" ? !pet.design : !pet.design?.stages[key]) {
-      throw Object.assign(new Error("Only an invented sauceling has a form for that stage."), { statusCode: 400 });
+      refuse(400, "Only an invented sauceling has a form for that stage.");
     }
     const claimKey = `${pet.id}:${key}`;
     // ponytail: a painting that fails keeps its claim until it expires, so another page's Paint waits up to three
@@ -855,9 +779,7 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
         Object.entries(latest.painting).filter(([, claim]) => now - Date.parse(claim.at) < PAINT_CLAIM_MS),
       );
       if (painting[claimKey] && painting[claimKey].token !== token) {
-        throw Object.assign(new Error("Another open page is painting this. It shows here when it is done."), {
-          statusCode: 409,
-        });
+        refuse(409, "Another open page is painting this. It shows here when it is done.");
       }
       painting[claimKey] = { token, at: nowIso };
       return changePet(
@@ -865,9 +787,7 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
         (each) => each?.id === pet.id,
         (each) => {
           const tries = each.paintTries[key] ?? 0;
-          if (body.auto === true && tries >= AUTO_PAINT_TRIES) {
-            throw Object.assign(new Error("Painting it by itself failed twice."), { statusCode: 400 });
-          }
+          if (body.auto === true && tries >= AUTO_PAINT_TRIES) refuse(400, "Painting it by itself failed twice.");
           return { ...each, paintTries: { ...each.paintTries, [key]: tries + 1 } };
         },
       );
@@ -882,16 +802,12 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
   app.post("/form", async (request) => {
     const body = requestBody(request.body);
     const stage = body.stage as SaucelingStage;
-    if (!SAUCELING_STAGES.includes(stage)) {
-      throw Object.assign(new Error("Invalid stage."), { statusCode: 400 });
-    }
+    if (!SAUCELING_STAGES.includes(stage)) refuse(400, "Invalid stage.");
     const nowIso = new Date().toISOString();
     const pet = formTarget(await readSaucelingWorld(), body.petId);
-    if (!pet.design?.stages[stage]) {
-      throw Object.assign(new Error("Only an invented sauceling has a form for that stage."), { statusCode: 400 });
-    }
+    if (!pet.design?.stages[stage]) refuse(400, "Only an invented sauceling has a form for that stage.");
     const parsed = parseFormStrips(body);
-    if (!parsed) throw Object.assign(new Error(FORM_REFUSAL), { statusCode: 400 });
+    if (!parsed) refuse(400, FORM_REFUSAL);
     // The image is saved first, so a pet never lists a form that is not there.
     const id = await saveSaucelingForm(pet.id, parsed.strips, nowIso);
     return buildStateResponse(await attachForms(pet.id, { [stage]: id }), nowIso);
@@ -906,15 +822,13 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     const raw = body.forms && typeof body.forms === "object" && !Array.isArray(body.forms) ? body.forms : {};
     const entries = Object.entries(raw as Record<string, unknown>);
     if (entries.length === 0 || entries.some(([stage]) => !pet.design?.stages[stage as SaucelingStage])) {
-      throw Object.assign(new Error("Only an invented sauceling has a form for each of those stages."), {
-        statusCode: 400,
-      });
+      refuse(400, "Only an invented sauceling has a form for each of those stages.");
     }
     // ponytail: no total body cap of our own; five stages of at most 160 KB each bound it. Upgrade path: check
     // the content length here if a sheet ever carries more.
     const parsed = entries.map(([stage, strips]) => {
       const form = strips && typeof strips === "object" ? parseFormStrips(strips as Record<string, unknown>) : null;
-      if (!form) throw Object.assign(new Error(FORM_REFUSAL), { statusCode: 400 });
+      if (!form) refuse(400, FORM_REFUSAL);
       return [stage as SaucelingStage, form.strips] as const;
     });
     const forms: Partial<Record<SaucelingStage, string>> = {};
@@ -931,7 +845,6 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
   // so pressing it again brings the repaint back
   app.post("/form/undo", async (request) => {
     const body = requestBody(request.body);
-    const nowIso = new Date().toISOString();
     const pet = formTarget(await readSaucelingWorld(), body.petId);
     const world = await updateSaucelingWorld((latest) =>
       changePet(
@@ -939,12 +852,12 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
         (each) => each?.id === pet.id,
         (each) => {
           const swapped = swapForms(each.forms, each.savedForms);
-          if (!swapped) throw Object.assign(new Error("There is no repaint to undo."), { statusCode: 400 });
+          if (!swapped) refuse(400, "There is no repaint to undo.");
           return { ...each, forms: swapped.forms, savedForms: swapped.saved };
         },
       ),
     );
-    return buildStateResponse(world, nowIso);
+    return buildStateResponse(world);
   });
 
   // GET /api/saucelings/form/:id — one form's strips as data URLs, or with ?strips=front its front strip only (for
@@ -960,7 +873,6 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     return form;
   });
 
-  // PATCH /api/saucelings/settings — update settings
   // POST /api/saucelings/figure — a caretaker's painted pixel figure for the Nook, in place of any they had; the one
   // it replaces is kept for Undo repaint
   app.post("/figure", async (request) => {
@@ -968,17 +880,13 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     const nowIso = new Date().toISOString();
     const characterId = requiredString(body.characterId, "Caretaker character", 200);
     if (!(await readSaucelingWorld()).settings.portraitEnabled) {
-      throw Object.assign(new Error("Portraits are turned off in Saucelings settings."), { statusCode: 400 });
+      refuse(400, "Portraits are turned off in Saucelings settings.");
     }
     if (!(await listCaretakerCandidates()).some((character) => character.id === characterId)) {
-      throw Object.assign(new Error("Only one of your characters can be painted."), { statusCode: 400 });
+      refuse(400, "Only one of your characters can be painted.");
     }
     const image = parseFigureImage(body.image);
-    if (!image) {
-      throw Object.assign(new Error("A caretaker figure must be a PNG strip 768 wide and 96 high, at most 128 KB."), {
-        statusCode: 400,
-      });
-    }
+    if (!image) refuse(400, "A caretaker figure must be a PNG strip 768 wide and 96 high, at most 128 KB.");
     const id = await saveSaucelingFigure(characterId, image, nowIso);
     const dropped: string[] = [];
     const world = await updateSaucelingWorld((current) => {
@@ -1003,13 +911,10 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
   // Nook, whatever their art
   app.patch("/caretaker/flip", async (request) => {
     const body = requestBody(request.body);
-    const nowIso = new Date().toISOString();
     const characterId = requiredString(body.characterId, "Caretaker character", 200);
-    if (typeof body.flipped !== "boolean") {
-      throw Object.assign(new Error("Say whether the caretaker faces the other way."), { statusCode: 400 });
-    }
+    if (typeof body.flipped !== "boolean") refuse(400, "Say whether the caretaker faces the other way.");
     if (!(await listCaretakerCandidates()).some((character) => character.id === characterId)) {
-      throw Object.assign(new Error("Only one of your characters can be flipped."), { statusCode: 400 });
+      refuse(400, "Only one of your characters can be flipped.");
     }
     const world = await updateSaucelingWorld((current) => ({
       ...current,
@@ -1018,24 +923,23 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
         ...(body.flipped === true ? [characterId] : []),
       ],
     }));
-    return buildStateResponse(world, nowIso);
+    return buildStateResponse(world);
   });
 
   // POST /api/saucelings/figure/undo — { characterId } swaps their figure with the one their last repaint replaced
   app.post("/figure/undo", async (request) => {
     const characterId = requiredString(requestBody(request.body).characterId, "Caretaker character", 200);
-    const nowIso = new Date().toISOString();
     const world = await updateSaucelingWorld((current) => {
       const now = current.caretakerFigures[characterId];
       const saved = current.savedFigures[characterId];
-      if (!now || !saved) throw Object.assign(new Error("There is no repaint to undo."), { statusCode: 400 });
+      if (!now || !saved) refuse(400, "There is no repaint to undo.");
       return {
         ...current,
         caretakerFigures: { ...current.caretakerFigures, [characterId]: saved },
         savedFigures: { ...current.savedFigures, [characterId]: now },
       };
     });
-    return buildStateResponse(world, nowIso);
+    return buildStateResponse(world);
   });
 
   // GET /api/saucelings/figure/:id — one caretaker's figure strip and its frame count, when it is listed (saved for
@@ -1050,22 +954,20 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch("/settings", async (request) => {
     const body = requestBody(request.body);
-    const nowIso = new Date().toISOString();
     const world = await updateSaucelingWorld((current) => ({
       ...current,
       settings: normalizeSaucelingSettings({ ...current.settings, ...body }),
     }));
-    return buildStateResponse(world, nowIso);
+    return buildStateResponse(world);
   });
 
   // POST /api/saucelings/reset — clear the nook, the Menagerie, the Album and the background library
   app.post("/reset", async () => {
-    const nowIso = new Date().toISOString();
     const world = await updateSaucelingWorld((current) => ({
       ...emptySaucelingWorld(),
       settings: current.settings,
     }));
     await removeAllSaucelingPortraits();
-    return buildStateResponse(world, nowIso);
+    return buildStateResponse(world);
   });
 };

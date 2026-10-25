@@ -291,32 +291,6 @@ function withEvolution<T extends SaucelingPet | SaucelingMenagerieEntry>(item: T
   return { ...item, evolution };
 }
 
-/** The document id portrait.ts gave a pet's one portrait before the Album kept every painting. */
-function legacyPortraitId(petId: string): string {
-  return createHash("sha256").update(`${PACKAGE_ID}\0saucelings-portrait\0${petId}`).digest("hex");
-}
-
-type LegacyPortraitMark = { portraitSavedAt?: unknown };
-
-/**
- * Lists a portrait saved the old way, one per pet and marked by `portraitSavedAt`, in the Album index,
- * and drops the mark. Running it again changes nothing; the next save keeps the result.
- */
-function adoptLegacyPortrait<T extends SaucelingPet | SaucelingMenagerieEntry>(
-  pet: T,
-  stage: SaucelingPortrait["stage"],
-  portraits: SaucelingPortrait[],
-): T {
-  const { portraitSavedAt, ...rest } = pet as T & LegacyPortraitMark;
-  if (typeof portraitSavedAt === "string") {
-    const id = legacyPortraitId(pet.id);
-    if (!portraits.some((portrait) => portrait.id === id)) {
-      portraits.push({ id, petId: pet.id, petName: pet.name, species: pet.species, stage, savedAt: portraitSavedAt });
-    }
-  }
-  return rest as T;
-}
-
 export function normalizeSaucelingWorld(value: unknown): SaucelingWorldDocument {
   const empty = emptySaucelingWorld();
   if (!value || typeof value !== "object" || Array.isArray(value)) return empty;
@@ -333,10 +307,7 @@ export function normalizeSaucelingWorld(value: unknown): SaucelingWorldDocument 
     : [];
   const pet =
     src.activePet && typeof src.activePet === "object" ? (src.activePet as SaucelingWorldDocument["activePet"]) : null;
-  // The Menagerie was saved as `album` before the Album held paintings.
-  const menagerie = (
-    Array.isArray(src.menagerie) ? src.menagerie : Array.isArray(src.album) ? src.album : []
-  ) as SaucelingMenagerieEntry[];
+  const menagerie = (Array.isArray(src.menagerie) ? src.menagerie : []) as SaucelingMenagerieEntry[];
   // A pet saved before custom backgrounds shows its species' built-in one.
   const withBackground = <T extends { backgroundId?: unknown }>(item: T): T & { backgroundId: string | null } => ({
     ...item,
@@ -345,37 +316,13 @@ export function normalizeSaucelingWorld(value: unknown): SaucelingWorldDocument 
   const profiles = recordOf(src.profileCache) as Record<string, SaucelingCareProfile>;
   const activePet = pet
     ? withEvolution(
-        withMealRecord(
-          withCaretakerSince(
-            withGrowth(
-              withFinder(
-                withDesign(withBackground(adoptLegacyPortrait(pet, pet.lockedStage ?? pet.stage, portraits))),
-                profiles,
-              ),
-            ),
-          ),
-        ),
+        withMealRecord(withCaretakerSince(withGrowth(withFinder(withDesign(withBackground(pet)), profiles)))),
       )
     : null;
   const entries = menagerie.map((entry) =>
-    withEvolution(
-      withGrowth(
-        withFinder(
-          withDesign(
-            withBackground(adoptLegacyPortrait(entry, entry.lockedStage ?? entry.stageAtRetirement, portraits)),
-          ),
-          profiles,
-        ),
-      ),
-    ),
+    withEvolution(withGrowth(withFinder(withDesign(withBackground(entry)), profiles))),
   );
-  // A background chosen before the library kept every one is listed in it, so it can be picked and deleted.
   const backgrounds = normalizeBackgrounds(src.backgrounds);
-  for (const item of activePet ? [activePet, ...entries] : entries) {
-    if (item.backgroundId && !backgrounds.some((background) => background.id === item.backgroundId)) {
-      backgrounds.push({ id: item.backgroundId, label: "", source: "upload", savedAt: item.createdAt });
-    }
-  }
   const world: SaucelingWorldDocument = {
     schemaVersion: 1,
     settings: normalizeSaucelingSettings(src.settings),

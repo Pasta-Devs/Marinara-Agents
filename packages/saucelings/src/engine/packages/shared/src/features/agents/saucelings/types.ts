@@ -49,15 +49,6 @@ export const PASTA_SPECIES = [
   "tortellump",
 ] as const satisfies readonly SaucelingSpeciesId[];
 
-export const SAUCELING_BENCH_SPECIES = [
-  "twizzlini",
-  "earlini",
-  "stellino",
-  "lumachino",
-  "pennywig",
-  "tortellump",
-] as const;
-
 export const SAUCELING_TEMPERAMENTS = [
   "marinara",
   "zesto",
@@ -286,9 +277,6 @@ export const SAUCELING_EVOLVE_COLOURS = [
   "tide",
 ] as const;
 export type SaucelingEvolveColour = (typeof SAUCELING_EVOLVE_COLOURS)[number];
-/** The light a 0.16 look chose. Looks now save "glow": the colour's aura replaced sparkles and motes. */
-export const SAUCELING_EVOLVE_GLOWS = ["glow", "sparkles", "motes"] as const;
-export type SaucelingEvolveGlow = (typeof SAUCELING_EVOLVE_GLOWS)[number];
 /** The little pixel drawing that floats above its head, in the row order of sprites/fx-extras.webp. */
 export const SAUCELING_EVOLVE_EXTRAS = [
   "halo",
@@ -373,7 +361,6 @@ export interface SaucelingEvolution {
   /** "From: …", what in its life led here. */
   from: string;
   colour: SaucelingEvolveColour;
-  glow: SaucelingEvolveGlow;
   extra: SaucelingEvolveExtra;
   move: SaucelingEvolveMove;
 }

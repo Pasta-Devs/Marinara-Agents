@@ -606,7 +606,6 @@ html[data-marinara-effects-paused="true"] .sl-stage-actor { transition-duration:
   .sl-stage-actor { transition: none; }
 }
 
-.sl-badge--plain { border-color: var(--border, rgba(255,255,255,0.2)); background: rgba(255,255,255,0.06); }
 
 .sl-badge {
   display: inline-flex;

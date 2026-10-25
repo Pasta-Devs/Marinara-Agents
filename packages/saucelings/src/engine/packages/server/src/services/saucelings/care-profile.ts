@@ -349,34 +349,47 @@ export async function careProfileNow(
   };
 }
 
-/** The writing connection's JSON answer to a system prompt about the card, or null when there is no connection, the
- *  call fails or the answer is not JSON. */
-async function askJson(
+/** The writing connection's parsed JSON answer to a prompt. Throws when there is no connection, the call fails or
+ *  times out, or the answer cannot be parsed; callers decide what a failure means. */
+export async function askJson(
+  prompt: Array<{ role: "system" | "user"; content: string }>,
+  connectionId: string | null,
+  options: { maxTokens: number; temperature: number; timeoutMs: number },
+): Promise<unknown> {
+  const runtime = getSaucelingsRuntime();
+  const agentConfig = await runtime.getAgentConfig();
+  const model = await runtime.languageModels.resolveForRequest({
+    connectionId: connectionId ?? agentConfig?.connectionId ?? null,
+  });
+  const fitted = model.fitContext(prompt, { maxTokens: options.maxTokens });
+  const completion = await model.chatComplete(fitted.messages, {
+    maxTokens: fitted.maxTokens ?? options.maxTokens,
+    temperature: options.temperature,
+    reasoningEffort: "none",
+    debugMode: runtime.isDebugAgentsEnabled(),
+    responseFormat: { type: "json_object" },
+    signal: AbortSignal.timeout(options.timeoutMs),
+  });
+  return runtime.json.parseJsonish(completion.content ?? "");
+}
+
+/** The writing connection's JSON object answer to a system prompt about the card, or null when there is no
+ *  connection, the call fails or the answer is not a JSON object. */
+async function askCardJson(
   system: string,
   card: CareCard,
   connectionId: string | null,
   options: { maxTokens: number; temperature: number; timeoutMs: number },
 ): Promise<object | null> {
-  const runtime = getSaucelingsRuntime();
   try {
-    const agentConfig = await runtime.getAgentConfig();
-    const model = await runtime.languageModels.resolveForRequest({
-      connectionId: connectionId ?? agentConfig?.connectionId ?? null,
-    });
-    const prompt = [
-      { role: "system" as const, content: system },
-      { role: "user" as const, content: card.summaryText },
-    ];
-    const fitted = model.fitContext(prompt, { maxTokens: options.maxTokens });
-    const completion = await model.chatComplete(fitted.messages, {
-      maxTokens: fitted.maxTokens ?? options.maxTokens,
-      temperature: options.temperature,
-      reasoningEffort: "none",
-      debugMode: runtime.isDebugAgentsEnabled(),
-      responseFormat: { type: "json_object" },
-      signal: AbortSignal.timeout(options.timeoutMs),
-    });
-    const parsed = runtime.json.parseJsonish(completion.content ?? "");
+    const parsed = await askJson(
+      [
+        { role: "system", content: system },
+        { role: "user", content: card.summaryText },
+      ],
+      connectionId,
+      options,
+    );
     if (parsed && typeof parsed === "object") return parsed;
   } catch {
     // No model connection, or the call failed
@@ -398,7 +411,7 @@ async function modelCareProfile(card: CareCard, connectionId: string | null): Pr
     "Return ONLY JSON matching:",
     '{"tendencies":{"feedReliability":0.5,"overfeeding":0.5,"playfulness":0.5,"affection":0.5,"attentiveness":0.5,"consistency":0.5},"voice":{"petNickname":"string","feedingStyle":"short verb phrase","catchphrases":["line1","line2","line3"],"voiceSample":"one sentence they would say out loud","worryLevel":1,"speechStyle":"2 to 3 sentences"},"speciesLean":["rigamuffin","fluttino","lentino","shellbini","tortellump","mossaboo","puddlepip","snufflump","burrowl"],"temperamentLean":["zesto","carbonuzzle","rabbratty","seppy","alfredoze","truffoddity"]}',
   ].join("\n");
-  const parsed = await askJson(system, card, connectionId, {
+  const parsed = await askCardJson(system, card, connectionId, {
     maxTokens: PROFILE_MAX_TOKENS,
     temperature: 0.4,
     timeoutMs: PROFILE_TIMEOUT_MS,
@@ -444,7 +457,7 @@ async function modelPhrasebook(
   ]
     .filter(Boolean)
     .join("\n");
-  const parsed = await askJson(system, card, connectionId, {
+  const parsed = await askCardJson(system, card, connectionId, {
     maxTokens: PHRASEBOOK_MAX_TOKENS,
     temperature: 0.7,
     timeoutMs: PHRASEBOOK_TIMEOUT_MS,

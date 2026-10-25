@@ -40,29 +40,43 @@ export function parsePortraitImage(value: unknown): string | null {
   return SIGNATURES[mimeType](bytes) ? value : null;
 }
 
-/** How many frames a form strip has, from its PNG header width: 1 (a form painted before strips) or 3. */
-function formFrames(bytes: Buffer): 1 | 3 | null {
+/** The frame counts a form strip may have (1 is a form painted before strips) and a figure (3 is one painted before
+ *  0.6.0), each frame `side` image pixels wide. */
+const FORM_FRAMES = [1, 3] as const;
+const FIGURE_FRAMES = [8, 3] as const;
+
+/** How many frames a PNG header gives a strip: the count whose width the PNG has, when it is `side` high; else null. */
+function stripFrames<N extends number>(bytes: Buffer, side: number, counts: readonly N[]): N | null {
   // The first chunk of a PNG is IHDR: its width and height follow the chunk length and type.
   if (bytes.length < 24 || bytes.subarray(12, 16).toString("latin1") !== "IHDR") return null;
-  if (bytes.readUInt32BE(20) !== FORM_SIDE) return null;
+  if (bytes.readUInt32BE(20) !== side) return null;
   const width = bytes.readUInt32BE(16);
-  return width === FORM_SIDE ? 1 : width === FORM_SIDE * 3 ? 3 : null;
+  return counts.find((count) => width === side * count) ?? null;
 }
 
 const PNG_PREFIX = "data:image/png;base64,";
 /** The first 24 bytes of a stored strip, enough for its signature and IHDR. */
 const headerOf = (image: string) => Buffer.from(image.slice(PNG_PREFIX.length, PNG_PREFIX.length + 32), "base64");
 
-/** A form strip the client made: a PNG data URL of at most 48 KB whose header says 104 high and 104 or 312 wide. */
-export function parseFormImage(value: unknown): { image: string; frames: 1 | 3 } | null {
+/** A strip the client made: a PNG data URL of at most `maxBytes` whose header says `side` high and a width that
+ *  gives one of the frame counts. */
+function parseStrip<N extends number>(
+  value: unknown,
+  maxBytes: number,
+  side: number,
+  counts: readonly N[],
+): { image: string; frames: N } | null {
   if (typeof value !== "string" || !value.startsWith(PNG_PREFIX)) return null;
   const base64 = value.slice(PNG_PREFIX.length);
-  if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(base64) || (base64.length * 3) / 4 > MAX_FORM_BYTES + 2) return null;
+  if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(base64) || (base64.length * 3) / 4 > maxBytes + 2) return null;
   const bytes = Buffer.from(base64, "base64");
-  if (bytes.length > MAX_FORM_BYTES || !SIGNATURES["image/png"](bytes)) return null;
-  const frames = formFrames(bytes);
+  if (bytes.length > maxBytes || !SIGNATURES["image/png"](bytes)) return null;
+  const frames = stripFrames(bytes, side, counts);
   return frames ? { image: value, frames } : null;
 }
+
+/** A form strip the client made: a PNG data URL of at most 48 KB whose header says 104 high and 104 or 312 wide. */
+export const parseFormImage = (value: unknown) => parseStrip(value, MAX_FORM_BYTES, FORM_SIDE, FORM_FRAMES);
 
 /** A form's strips from a request: the front `image` and any of side, happy and grumpy, all the same width and at
  *  most 160 KB together. */
@@ -81,24 +95,10 @@ export function parseFormStrips(value: Record<string, unknown>): { strips: Sauce
   return (total * 3) / 4 <= MAX_FORM_DOCUMENT_BYTES ? { strips, frames: front.frames } : null;
 }
 
-/** How many frames a figure's PNG header gives it: 8, or 3 for one painted before 0.6.0; null for any other size. */
-function figureFrames(bytes: Buffer): 3 | 8 | null {
-  if (bytes.length < 24 || bytes.subarray(12, 16).toString("latin1") !== "IHDR") return null;
-  if (bytes.readUInt32BE(20) !== FIGURE_SIDE) return null;
-  const width = bytes.readUInt32BE(16);
-  return width === FIGURE_SIDE * 8 ? 8 : width === FIGURE_SIDE * 3 ? 3 : null;
-}
-
 /** A caretaker figure the client made: a PNG data URL of at most 128 KB whose header says 96 high and 768 wide
  *  (or 288). */
-export function parseFigureImage(value: unknown): string | null {
-  if (typeof value !== "string" || !value.startsWith(PNG_PREFIX)) return null;
-  const base64 = value.slice(PNG_PREFIX.length);
-  if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(base64) || (base64.length * 3) / 4 > MAX_FIGURE_BYTES + 2) return null;
-  const bytes = Buffer.from(base64, "base64");
-  if (bytes.length > MAX_FIGURE_BYTES || !SIGNATURES["image/png"](bytes)) return null;
-  return figureFrames(bytes) ? value : null;
-}
+export const parseFigureImage = (value: unknown) =>
+  parseStrip(value, MAX_FIGURE_BYTES, FIGURE_SIDE, FIGURE_FRAMES)?.image ?? null;
 
 type ImageKind = typeof PORTRAIT_KIND | typeof BACKGROUND_KIND | typeof FORM_KIND | typeof FIGURE_KIND;
 
@@ -160,7 +160,7 @@ export async function readSaucelingForm(
 ): Promise<(SaucelingFormStrips & { frames: 1 | 3 }) | null> {
   const data = await readImageData(FORM_KIND, id);
   const image = data?.image;
-  const frames = typeof image === "string" && image.startsWith(PNG_PREFIX) ? formFrames(headerOf(image)) : null;
+  const frames = typeof image === "string" && image.startsWith(PNG_PREFIX) ? stripFrames(headerOf(image), FORM_SIDE, FORM_FRAMES) : null;
   if (!data || !frames) return null;
   const form: SaucelingFormStrips & { frames: 1 | 3 } = { image: image as string, frames };
   if (frontOnly) return form;
@@ -173,11 +173,10 @@ export const saveSaucelingForm = (petId: string, strips: SaucelingFormStrips, no
   saveImage(FORM_KIND, strips, nowIso, petId);
 export const deleteSaucelingForm = (id: string) => deleteImage(FORM_KIND, id);
 
-/** A caretaker's figure names the character it shows, not a pet. */
-/** A stored figure and how many frames it has. */
+/** A stored figure and how many frames it has. A caretaker's figure names the character it shows, not a pet. */
 export async function readSaucelingFigure(id: string): Promise<{ image: string; frames: 3 | 8 } | null> {
   const image = await readImage(FIGURE_KIND, id);
-  const frames = image?.startsWith(PNG_PREFIX) ? figureFrames(headerOf(image)) : null;
+  const frames = image?.startsWith(PNG_PREFIX) ? stripFrames(headerOf(image), FIGURE_SIDE, FIGURE_FRAMES) : null;
   return image && frames ? { image, frames } : null;
 }
 export const saveSaucelingFigure = (characterId: string, image: string, nowIso: string) => {
