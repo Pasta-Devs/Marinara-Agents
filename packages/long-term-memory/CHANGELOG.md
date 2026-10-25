@@ -1,14 +1,14 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.92 — 2026-10-25
 
-- Sources now tells re-importing from the source apart from reloading the list: "Re-import from source" and "Reload list".
-- The lorebook tab in Sources reads "Entries" instead of "entries ·", and lorebook counts read as whole phrases, so a single entry no longer says "1 entries".
-- When Import is blocked for lack of a destination, Sources now offers a "Choose destination" button that takes you there.
+- Sources tells re-importing from the source apart from reloading the list: "Re-import from source" and "Reload list".
+- The lorebook tab in Sources reads "Entries", and a single entry no longer says "1 entries".
+- When Import is blocked for lack of a destination, Sources offers a "Choose destination" button.
 - While an import runs, Sources keeps its locked controls focusable and says why they are locked.
-- Tabs, filters and action buttons in Sources, Memory Settings and Debug are 2.75rem tall, so they are easier to hit on touch.
-- Maintenance in Memory Settings groups Backup, Repair and Delete or reset, and offers to export a backup before Delete all data.
-- Recall settings are grouped under Budget, Ranking, Text filters and Sharing, and show when your edits have made the style Custom, with a button to return to the preset.
+- Tabs, filters and action buttons in Sources, Memory Settings and Debug are 2.75rem tall for touch.
+- Maintenance groups Backup, Repair and Delete or reset, and offers a backup export before Delete all data.
+- Recall settings are grouped under Budget, Ranking, Text filters and Sharing, and show when edits make the style Custom.
 - Maintenance success messages are readable in the light theme and carry a check icon, unsaved Memory Settings tabs show a dot, and an identity repair says which backup it made.
 
 ## 1.4.91 — 2026-10-24

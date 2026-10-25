@@ -1,4 +1,28 @@
+## Soundtrack collection (1.15.0)
+
+Settings → Look → Visual includes **Home page menu music**, listing this world's available generated songs. **Automatic soundtrack** restores the usual Home music. Collected songs remain playable with generation off; mute and volume still apply. If a saved song is missing, the existing soundtrack plays.
+
+With music generation on, opening a summon banner generates its own theme through the selected audio connection. Pulling any 5-star from that banner adds the theme to your Home choices, including an off-banner result or a duplicate. Each featured rotation has its own theme; an unsuccessful pull never unlocks one. No past pulls are guessed from the owned roster.
+
+## Banner animations (1.15.0)
+
+Settings → World → Sources includes an optional **Animations** connection, listing Engine video connections. Selecting one animates generated banner illustrations as those banners are opened. A banner image and connection reuse their saved clip, including after reload. A featured rotation or redrawn image gets its own clip. Portraits remain still.
+
+Clips play muted on a loop, with Pause and Play controls. Reduced-motion preferences keep the illustration and skip automatic generation; hidden banners pause playback. Loading, provider failures and unsupported playback keep the illustration visible. A failed or interrupted generation requires **Retry animation**, which may use provider credits again.
+
+The Engine handles video provider settings, credentials, queues and fallback connections. Matching first and last frames are requested where the provider supports them; duration and loop quality depend on the model. This feature requires Engine Capability API 1.384 or newer.
+
 # Gacha Forge
+
+## Automatic continuity (1.14.0)
+
+Gacha Forge automatically keeps memories from the world's completed canonical chapters, Character Stories and character conversations. Original records stay saved. Later writing receives the constant overview, up to three relevant detailed chapter summaries, separate relevant character memories, the entire previous chapter, and the current chapter so far, in that order. The full previous chapter does not consume a recall slot. Saved first-play choices remain canonical; replaying an alternative does not replace them.
+
+The overview uses at most 10% of the selected generation model's context window, measured with the Engine's token estimator. If the generation or compression connection's context window is unknown, configure it in **Engine Connections**. Gacha Forge reports the missing configuration instead of guessing a model limit.
+
+All saved character memories contribute to the overview. Relevant Character Story and conversation details are recalled separately from the three chapters. When space is tight, whole optional recall blocks are removed in relevance order; the complete previous chapter and current played content remain intact. If required history alone exceeds the model's context, generation reports the overflow instead of silently shortening it.
+
+**Settings → Story → Continuity** shows automatic memory's status and offers a retry when an update needs attention. Memory work runs in the background; a failure keeps previous memories and original records and does not block play. Existing manual compression and editing controls remain optional tools.
 
 ## Artwork references and mobile controls (1.13.1)
 

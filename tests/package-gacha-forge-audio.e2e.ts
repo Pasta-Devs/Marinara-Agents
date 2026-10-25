@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page, type TestInfo } from "@playwrigh
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "node:http";
+import { recordForgeSoundtrack } from "../packages/gacha-forge/src/audio-settings.mjs";
 
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engine checkout");
@@ -56,11 +57,15 @@ async function openForge(
     realGeneration?: string;
     realConnections?: boolean;
     selectedAudio?: string;
+    realVideo?: boolean;
+    reducedMotion?: "reduce" | "no-preference";
+    selectedAnimation?: string;
   } = {},
 ) {
-  const saved = structuredClone(baseRun);
+  const saved: typeof baseRun & { animationConnectionId?: string } = structuredClone(baseRun);
   saved.audio.tts = options.voice === true;
   if (options.selectedAudio) saved.audio.audioConnectionId = options.selectedAudio;
+  if (options.selectedAnimation) saved.animationConnectionId = options.selectedAnimation;
   if (options.realGeneration) {
     saved.scenario = "W".repeat(4000);
     saved.audio.generate = true;
@@ -73,23 +78,32 @@ async function openForge(
   await page.setViewportSize(
     testInfo.project.name.includes("mobile") ? { width: 874, height: 402 } : { width: 1440, height: 900 },
   );
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.addInitScript((version) => {
-    localStorage.removeItem("marinara-active-chat-id");
-    localStorage.setItem("marinara:whats-new:seen-version", version);
-    localStorage.setItem(
-      "marinara-engine-ui",
-      JSON.stringify({
-        state: { hasCompletedOnboarding: true, sidebarOpen: false, rightPanelOpen: false, appAccentPulseMode: false },
-        version: 65,
-      }),
-    );
-    // Controlled media only: the real host TTS service still fetches, queues, cancels and handles ended.
-    // Native device playback/codec policy is deliberately outside this fixture.
-    HTMLMediaElement.prototype.play = function () {
-      return Promise.resolve();
-    };
-  }, appVersion);
+  await page.emulateMedia({ reducedMotion: options.reducedMotion ?? "reduce" });
+  await page.addInitScript(
+    ({ version, realVideo }) => {
+      localStorage.removeItem("marinara-active-chat-id");
+      localStorage.setItem("marinara:whats-new:seen-version", version);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: { hasCompletedOnboarding: true, sidebarOpen: false, rightPanelOpen: false, appAccentPulseMode: false },
+          version: 65,
+        }),
+      );
+      // Controlled media only: the real host TTS service still fetches, queues, cancels and handles ended.
+      // Native device playback/codec policy is deliberately outside this fixture.
+      const play = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function () {
+        if (realVideo && this instanceof HTMLVideoElement) {
+          if ((globalThis as any).__gachaRejectVideoAutoplay)
+            return Promise.reject(new DOMException("Controlled autoplay rejection", "NotAllowedError"));
+          return play.call(this);
+        }
+        return Promise.resolve();
+      };
+    },
+    { version: appVersion, realVideo: options.realVideo === true },
+  );
   await page.route("**/api/app-settings/ui", (route) =>
     route.fulfill({ json: route.request().method() === "GET" ? { value: null } : { success: true } }),
   );
@@ -245,6 +259,139 @@ async function showHome(forge: Locator) {
     game._renderBrowser();
   });
   await expect(forge.getByRole("button", { name: "Game settings", exact: true })).toBeVisible();
+}
+
+async function openAnimatedBanner(forge: Locator) {
+  await forge.evaluate((node) => {
+    const game = node as any;
+    game._guidesSeen.add("summon");
+    game._guide = "";
+    game._openSummon();
+  });
+  await expect(forge.locator('[data-screen="banner"] .show > .art.wide')).toBeVisible();
+}
+
+async function animationProof(page: Page, testInfo: TestInfo, options: { selected?: boolean; reduce?: boolean } = {}) {
+  const clip = readFileSync(resolve(__dirname, "fixtures/gacha-banner-loop.mp4"));
+  const url = `/api/gacha-forge/banner-animation/file/${"a".repeat(64)}/${"b".repeat(64)}.mp4`;
+  const state = {
+    posts: [] as Record<string, any>[],
+    compositions: 0,
+    generationFailed: false,
+    playbackFailed: false,
+    browserErrors: [] as string[],
+  };
+  page.on("pageerror", (error) => state.browserErrors.push(error.message));
+  const cached = new Set<string>();
+  await page.route("**/api/connections", (route) =>
+    route.fulfill({
+      json: [
+        { id: "fixture-model", provider: "custom", name: "Text fixture" },
+        { id: "image-fixture", provider: "image_generation", name: "Image fixture" },
+        { id: "music-fixture", provider: "audio_generation", name: "Audio fixture" },
+        { id: "video-fixture", provider: "video_generation", name: "Video fixture" },
+        { id: "quarantined", provider: "video_generation", name: "Unreviewed", profileImportReviewRequired: "true" },
+        {
+          id: "quarantined-boolean",
+          provider: "video_generation",
+          name: "Unreviewed boolean",
+          profileImportReviewRequired: true,
+        },
+      ],
+    }),
+  );
+  await page.route("**/api/gacha-forge/summon-banner", (route) => {
+    const id = route.request().postDataJSON().banner;
+    return route.fulfill({
+      json: {
+        ok: true,
+        banner: {
+          id,
+          kind: "character",
+          type: id.endsWith("featured") ? "featured" : "standard",
+          title: "Moonlit garden",
+          mode: "permanent",
+          art: portrait,
+          music: { cue: `banner-${id}-${id.endsWith("featured") ? "f1" : "standard"}` },
+          featured: [{ id: "arden", name: "Arden", rarity: 5, kind: "character", portrait }],
+          pool4: [],
+          canArt: false,
+        },
+        banners: ["char-standard", "char-featured"].map((id) => ({
+          id,
+          kind: "character",
+          type: id.endsWith("featured") ? "featured" : "standard",
+          title: "Moonlit garden",
+          art: portrait,
+          live: true,
+        })),
+        rates: { five: 0.01, four: 0.05 },
+        pity: { count: 0, soft: 75, hard: 90 },
+        wallet: { aether: 1600 },
+        cost: 160,
+      },
+    });
+  });
+  await page.route("**/api/gacha-forge/banner-animation", async (route) => {
+    const body = route.request().postDataJSON();
+    state.posts.push(body);
+    if (state.generationFailed) return route.fulfill({ json: { ok: false, error: "animation-failed", retry: true } });
+    if (!cached.has(body.banner)) state.compositions += 1;
+    await route.fulfill({
+      json: { ok: true, animation: { key: "b".repeat(64), url, poster: portrait }, cached: cached.has(body.banner) },
+    });
+    cached.add(body.banner);
+  });
+  await page.route("**/api/gacha-forge/banner-animation/file/**", (route) =>
+    route.fulfill({
+      contentType: "video/mp4",
+      body: state.playbackFailed ? Buffer.from("invalid video") : clip,
+    }),
+  );
+  const opened = await openForge(page, testInfo, {
+    realConnections: true,
+    realVideo: true,
+    reducedMotion: options.reduce ? "reduce" : "no-preference",
+    selectedAnimation: options.selected ? "video-fixture" : undefined,
+  });
+  return { ...opened, state };
+}
+
+async function decodedBannerVideo(forge: Locator) {
+  // Departing screens keep decorative shadow-root clones outside the active view during transitions.
+  const video = forge.locator(".gf-stage > .gf-view video[data-banner-animation]");
+  await expect(video).toHaveCount(1);
+  await expect(video).toBeVisible();
+  await expect
+    .poll(() =>
+      video.evaluate((node: HTMLVideoElement) => ({
+        width: node.videoWidth,
+        height: node.videoHeight,
+        decoded: node.readyState >= 2,
+        paused: node.paused,
+        muted: node.muted && node.defaultMuted,
+        loop: node.loop,
+        inline: node.playsInline,
+      })),
+    )
+    .toEqual({ width: 160, height: 90, decoded: true, paused: false, muted: true, loop: true, inline: true });
+  await expect(video).toHaveCSS("opacity", "1");
+  return video;
+}
+
+async function settleBannerCapture(forge: Locator) {
+  const view = forge.locator(".gf-stage > .gf-view");
+  await view.evaluate(async (node) => {
+    await Promise.all(
+      node
+        .getAnimations({ subtree: true })
+        .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+        .map((animation) => animation.finished.catch(() => {})),
+    );
+  });
+  await expect(forge.locator(".gf-stage > .gf-leave, .gf-stage > .gf-hold")).toHaveCount(0);
+  await expect(view).toHaveCSS("opacity", "1");
+  await expect(view).toHaveCSS("transform", "none");
 }
 
 async function seedScene(forge: Locator, theme = "aurora") {
@@ -562,6 +709,325 @@ test("Real story navigation selects distinct home, story and bond music after ea
   ).toBe(3);
   expect(briefs.map((request) => request.cue)).toEqual(["home", "sad", "bond"]);
   await page.screenshot({ path: testInfo.outputPath("audio-distinct-story-cues.png") });
+});
+
+test("Animations source persists and banner video decodes, loops and reuses its cache", async ({ page }, testInfo) => {
+  const { forge, saved, state } = await animationProof(page, testInfo);
+  await expect(forge.locator(".hm-plate video")).toHaveCount(0);
+  expect(state.posts).toHaveLength(0);
+  await forge.getByRole("button", { name: "Game settings", exact: true }).click();
+  await forge.locator('[role="tab"][data-view="sources"]').click();
+  const source = forge.locator('[data-input="animationConnectionId"]');
+  await expect(source).toBeEnabled();
+  await expect(source).toHaveAccessibleName("Animations");
+  expect(await source.locator("option").allTextContents()).toEqual(["Off, use still banners", "Video fixture"]);
+  await source.selectOption("video-fixture");
+  await expect.poll(() => saved.animationConnectionId).toBe("video-fixture");
+  await source.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("animations-source.png") });
+  await forge.locator("[data-settings-back]").click();
+  await openAnimatedBanner(forge);
+  const video = await decodedBannerVideo(forge);
+  await expect(forge.locator('[data-screen="banner"] .art.wide')).toHaveCSS("background-image", /url\(/);
+  await forge.locator("[data-animation-pause]").click();
+  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => node.paused)).toBe(true);
+  await forge.locator("[data-summon-back]").click();
+  await openAnimatedBanner(forge);
+  await expect(forge.getByRole("button", { name: "Play animation", exact: true })).toBeVisible();
+  await expect
+    .poll(() =>
+      forge
+        .locator(".gf-stage > .gf-view video[data-banner-animation]")
+        .evaluate((node: HTMLVideoElement) => node.paused),
+    )
+    .toBe(true);
+  await forge.locator("[data-animation-pause]").click();
+  await decodedBannerVideo(forge);
+  await page.screenshot({ path: testInfo.outputPath("animated-banner.png") });
+  await forge.evaluate((node) => {
+    const game = node as any;
+    game._renderBrowser();
+    game._renderBrowser();
+  });
+  await decodedBannerVideo(forge);
+  await forge.locator("[data-summon-back]").click();
+  await expect(forge.locator(".hm-plate video")).toHaveCount(0);
+  expect(state.posts).toHaveLength(1);
+  await openAnimatedBanner(forge);
+  await decodedBannerVideo(forge);
+  expect(state.posts).toHaveLength(1);
+  await page.reload();
+  await page.getByRole("tab", { name: "Open Gacha Forge" }).click();
+  await showHome(forge);
+  await openAnimatedBanner(forge);
+  await decodedBannerVideo(forge);
+  expect(state.posts).toHaveLength(2);
+  expect(state.compositions).toBe(1);
+  expect(state.posts.every((body) => body.banner === "char-standard" && !Object.hasOwn(body, "unitId"))).toBe(true);
+  await forge.locator("[data-animation-pause]").click();
+  await forge.locator('[data-banner="char-featured"]').click();
+  await decodedBannerVideo(forge);
+  await expect(forge.getByRole("button", { name: "Pause animation", exact: true })).toBeVisible();
+  expect(state.compositions).toBe(2);
+  expect(state.browserErrors).toEqual([]);
+});
+
+test("Reduced motion and a disabled Animations source keep still banners and portraits", async ({ page }, testInfo) => {
+  const { forge, saved, state } = await animationProof(page, testInfo, { selected: true, reduce: true });
+  await openAnimatedBanner(forge);
+  await forge.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(forge.locator("video[data-banner-animation]")).toHaveCount(0);
+  expect(state.posts).toHaveLength(0);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await decodedBannerVideo(forge);
+  expect(state.posts).toHaveLength(1);
+  await forge.locator("[data-summon-back]").click();
+  await expect(forge.locator(".hm-plate video")).toHaveCount(0);
+  await forge.getByRole("button", { name: "Game settings", exact: true }).click();
+  await forge.locator('[role="tab"][data-view="sources"]').click();
+  await forge.locator('[data-input="animationConnectionId"]').selectOption("");
+  await expect.poll(() => saved.animationConnectionId).toBe("");
+  await forge.locator("[data-settings-back]").click();
+  await openAnimatedBanner(forge);
+  await forge.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(forge.locator("video[data-banner-animation]")).toHaveCount(0);
+  expect(state.posts).toHaveLength(1);
+  await expect(forge.locator('[data-screen="banner"] .art.wide')).toHaveCSS("background-image", /url\(/);
+  await page.screenshot({ path: testInfo.outputPath("still-banner-source-off.png") });
+  expect(state.browserErrors).toEqual([]);
+});
+
+test("Banner generation and actual video decode failures retain the still artwork", async ({ page }, testInfo) => {
+  const { forge, state } = await animationProof(page, testInfo, { selected: true });
+  state.generationFailed = true;
+  await openAnimatedBanner(forge);
+  await expect(forge.locator("[data-banner-animation-status]")).toContainText("illustration is still shown");
+  await expect(forge.locator("video[data-banner-animation]")).toHaveCount(0);
+  state.generationFailed = false;
+  state.playbackFailed = true;
+  await forge.locator("[data-animation-retry]").click();
+  await expect(forge.locator("[data-banner-animation-status]")).toContainText("could not play");
+  await expect(forge.locator("video[data-banner-animation]")).toHaveCount(0);
+  await expect(forge.locator('[data-screen="banner"] .art.wide')).toHaveCSS("background-image", /url\(/);
+  expect(state.posts).toHaveLength(2);
+  expect(state.posts[1].retry).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("banner-animation-still-fallback.png") });
+  state.playbackFailed = false;
+  await page.reload();
+  await page.getByRole("tab", { name: "Open Gacha Forge" }).click();
+  await showHome(forge);
+  await page.evaluate(() => {
+    (globalThis as any).__gachaRejectVideoAutoplay = true;
+  });
+  await openAnimatedBanner(forge);
+  await expect(forge.locator("[data-banner-animation-status]")).toContainText("could not play");
+  await expect(forge.getByRole("button", { name: "Play animation", exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    (globalThis as any).__gachaRejectVideoAutoplay = false;
+  });
+  await forge.getByRole("button", { name: "Play animation", exact: true }).click();
+  await decodedBannerVideo(forge);
+  expect(state.posts).toHaveLength(3);
+  expect(state.compositions).toBe(1);
+  expect(state.browserErrors).toEqual([]);
+});
+
+for (const theme of ["aurora", "bloom"]) {
+  test(`Animation retry shows setup guidance, pending state and recovery in ${theme}`, async ({ page }, testInfo) => {
+    const { forge, state } = await animationProof(page, testInfo, { selected: true });
+    await forge.evaluate((node, theme) => {
+      const game = node as any;
+      game._run.hudStyle = theme;
+      game._renderBrowser();
+    }, theme);
+    let releaseRetry: () => void = () => {};
+    const waiting = new Promise<void>((resolve) => {
+      releaseRetry = resolve;
+    });
+    await page.route("**/api/gacha-forge/banner-animation", async (route) => {
+      const body = route.request().postDataJSON();
+      state.posts.push(body);
+      if (state.posts.length === 2) await waiting;
+      if (state.posts.length < 3)
+        return route.fulfill({
+          json: {
+            ok: false,
+            error: "animation-failed",
+            reason: "seedance-reference-setup",
+            retry: true,
+            detail: "SECRET_PROVIDER_DETAIL",
+          },
+        });
+      return route.fulfill({
+        json: {
+          ok: true,
+          animation: {
+            key: "b".repeat(64),
+            url: `/api/gacha-forge/banner-animation/file/${"a".repeat(64)}/${"b".repeat(64)}.mp4`,
+            poster: portrait,
+          },
+        },
+      });
+    });
+    await openAnimatedBanner(forge);
+    const status = forge.locator("[data-banner-animation-status]"),
+      retry = forge.locator("[data-animation-retry]");
+    await expect(status).toContainText('enable "Upload Seedance reference frames temporarily", then retry');
+    await expect(status).not.toContainText("SECRET_PROVIDER_DETAIL");
+    await settleBannerCapture(forge);
+    const bounds = await status.evaluate((node) => {
+      const message = node.getBoundingClientRect(),
+        banner = node.closest(".show")!.getBoundingClientRect(),
+        title = node.closest(".show")!.querySelector(".bname")!.getBoundingClientRect();
+      return {
+        message: { left: message.left, right: message.right, top: message.top },
+        banner: { left: banner.left, right: banner.right },
+        titleBottom: title.bottom,
+      };
+    });
+    expect(bounds.message.left).toBeGreaterThanOrEqual(bounds.banner.left);
+    expect(bounds.message.right).toBeLessThanOrEqual(bounds.banner.right);
+    expect(bounds.message.top).toBeGreaterThanOrEqual(bounds.titleBottom);
+    await page.screenshot({ path: testInfo.outputPath(`animation-setup-${theme}.png`) });
+    await retry.click();
+    await expect(retry).toBeDisabled();
+    await expect(retry).toHaveText("Retrying animation…");
+    await expect(retry).toHaveAttribute("aria-busy", "true");
+    await expect(status).toHaveText("Animating banner…");
+    await expect.poll(() => state.posts.length).toBe(2);
+    expect(state.posts[1].retry).toBe(true);
+    await retry.evaluate((node: HTMLButtonElement) => node.click());
+    expect(state.posts).toHaveLength(2);
+    await settleBannerCapture(forge);
+    await page.screenshot({ path: testInfo.outputPath(`animation-retry-pending-${theme}.png`) });
+    releaseRetry();
+    await expect(retry).toBeEnabled();
+    await expect(retry).toHaveText("Retry animation");
+    await expect(status).toContainText("Seedance needs a public HTTPS banner image");
+    expect(state.posts).toHaveLength(2);
+    await retry.click();
+    await decodedBannerVideo(forge);
+    await expect(retry).toHaveCount(0);
+    await expect(status).toHaveCount(0);
+    expect(state.posts).toHaveLength(3);
+    expect(state.posts[2].retry).toBe(true);
+    expect(state.browserErrors).toEqual([]);
+  });
+}
+
+test("A deferred response cannot attach a previous same-art banner rotation", async ({ page }, testInfo) => {
+  const { forge, state } = await animationProof(page, testInfo, { selected: true });
+  await openAnimatedBanner(forge);
+  await decodedBannerVideo(forge);
+  const releases: (() => void)[] = [];
+  await page.route("**/api/gacha-forge/banner-animation", async (route) => {
+    const index = releases.length;
+    await new Promise<void>((resolve) => releases.push(resolve));
+    const key = (index === 0 ? "b" : "c").repeat(64);
+    await route.fulfill({
+      json: {
+        ok: true,
+        animation: {
+          key,
+          url: `/api/gacha-forge/banner-animation/file/${"a".repeat(64)}/${key}.mp4`,
+          poster: portrait,
+        },
+      },
+    });
+  });
+  await forge.locator('[data-banner="char-featured"]').click();
+  await expect.poll(() => releases.length).toBe(1);
+  // Model the new canonical rotation arriving before the next view render. The old art/id/title remain identical.
+  await forge.evaluate((node) => {
+    (node as any)._summonBanner.banner.music.cue = "banner-char-featured-f2";
+  });
+  const oldResponse = page.waitForResponse((response) => response.url().endsWith("/api/gacha-forge/banner-animation"));
+  releases[0]();
+  await oldResponse;
+  await forge.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(forge.locator("video[data-banner-animation]")).toHaveCount(0);
+  await forge.evaluate((node) => {
+    const game = node as any;
+    game._summonBannerState = "loading";
+    game._renderBrowser();
+    game._summonBannerState = "ready";
+    game._renderBrowser();
+  });
+  await expect.poll(() => releases.length).toBe(2);
+  releases[1]();
+  const video = await decodedBannerVideo(forge);
+  await expect(video).toHaveAttribute("src", new RegExp(`${"c".repeat(64)}\\.mp4$`));
+  expect(state.browserErrors).toEqual([]);
+});
+
+test("Home menu music selects collected songs with generation off and survives reload", async ({ page }, testInfo) => {
+  const tag = "music:contexts:gacha-forge:world-fixture-banner-char-featured-f1:fixture";
+  const song = {
+    cue: "banner-char-featured-f1",
+    connectionId: "music-fixture",
+    tag,
+    path: "music/fixture.wav",
+    title: "Moonlit garden",
+  };
+  await page.route("**/api/gacha-forge/audio/library", (route) =>
+    route.fulfill({ json: { ok: true, tracks: [song] } }),
+  );
+  const { forge, saved, generated, state } = await animationProof(page, testInfo, { reduce: true });
+  await page.route("**/api/game-assets/manifest", (route) =>
+    route.fulfill({ json: { assets: { [tag]: { ...song, category: "music" } }, byCategory: {}, count: 1 } }),
+  );
+  // Recreate only the package player so it reads the new deterministic manifest.
+  await forge.evaluate((node) => {
+    const game = node as any;
+    game._forgeAudio.dispose();
+    game._forgeAudio = null;
+    game._renderBrowser();
+  });
+  for (const theme of ["aurora", "bloom"]) {
+    await forge.evaluate((node, theme) => {
+      const game = node as any;
+      game._run.hudStyle = theme;
+      game._renderBrowser();
+    }, theme);
+    await forge.getByRole("button", { name: "Game settings", exact: true }).click();
+    await forge.locator('[role="tab"][data-view="visual"]').click();
+    const select = forge.locator('[data-input="audio.homeMusic"]');
+    await expect(select).toBeEnabled();
+    await expect(select).toContainText("Moonlit garden");
+    await expect(select.locator("option")).toHaveCount(2);
+    await select.selectOption(tag);
+    await expect.poll(() => (saved.audio as any).homeMusic).toBe(tag);
+    await expect.poll(() => forge.evaluate((node) => (node as any)._forgeAudio.currentTag)).toBe(tag);
+    expect(saved.audio.generate).toBe(false);
+    expect(generated).toHaveLength(0);
+    await select.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath(`home-music-${theme}.png`) });
+    await forge.locator("[data-settings-back]").click();
+  }
+  await forge.evaluate((node) => {
+    const game = node as any;
+    game._forgeMusicNavigationProof = [];
+    const player = game._forgeAudio.player;
+    const play = player.playMusic.bind(player);
+    player.playMusic = (...args: any[]) => {
+      game._forgeMusicNavigationProof.push(args[0]);
+      return play(...args);
+    };
+  });
+  await openAnimatedBanner(forge);
+  await expect.poll(() => forge.evaluate((node) => (node as any)._forgeAudio.currentTag)).toBe(tag);
+  await forge.locator("[data-summon-back]").click();
+  await expect(forge.getByRole("button", { name: "Game settings", exact: true })).toBeVisible();
+  expect(await forge.evaluate((node) => (node as any)._forgeMusicNavigationProof)).toEqual([]);
+  expect(state.posts).toHaveLength(0);
+  await page.reload();
+  await page.getByRole("tab", { name: "Open Gacha Forge" }).click();
+  await showHome(forge);
+  await expect.poll(() => forge.evaluate((node) => (node as any)._forgeAudio.currentTag)).toBe(tag);
+  await forge.getByRole("button", { name: "Game settings", exact: true }).click();
+  await forge.locator('[role="tab"][data-view="visual"]').click();
+  await expect(forge.locator('[data-input="audio.homeMusic"]')).toHaveValue(tag);
+  expect(generated).toHaveLength(0);
 });
 
 test("Audio settings persist, mute is compact and portrait frames retain a bottom stroke", async ({
@@ -1162,6 +1628,7 @@ test("Shipped audio requests pass the real Engine route and reuse a local provid
     for (const { path, body } of providerCalls)
       expect(body.prompt.length).toBeLessThanOrEqual(path.endsWith("music") ? 1000 : 500);
     const music = outbound.find((response) => response.request.kind === "music")!;
+    expect(recordForgeSoundtrack({}, baseRun.runId, { ...music.result, connectionId, cue: "home" })).toBe(true);
     const replay = await page.request.post("/api/audio/generate", { data: music.request });
     expect(replay.status(), await replay.text()).toBe(200);
     expect((await replay.json()).cached).toBe(true);
@@ -1264,4 +1731,171 @@ test("Autoplay waits three seconds after revealed text and voice end, and Skip c
   await expect(forge.locator("[data-count]")).toHaveText("02 / 03");
   await expect(forge.locator("[data-skip]")).toBeDisabled();
   expect(speech).toHaveLength(2);
+});
+
+test("Story Cancel exits delayed chapter generation without losing progress", async ({ page }, testInfo) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const { forge, saved } = await openForge(page, testInfo);
+  const progress = { "1": { normal: 3, hard: 1, veryhard: 0 } };
+  saved.progress = progress;
+  const cancelled: Record<string, unknown>[] = [];
+  let releasePlan!: () => void,
+    releaseCancel!: () => void,
+    finishedPlan!: () => void,
+    requests = 0;
+  const heldPlan = new Promise<void>((resolve) => (releasePlan = resolve));
+  const heldCancel = new Promise<void>((resolve) => (releaseCancel = resolve));
+  const planFinished = new Promise<void>((resolve) => (finishedPlan = resolve));
+  await page.route("**/api/gacha-forge/story/cancel", async (route) => {
+    cancelled.push(route.request().postDataJSON());
+    await heldCancel;
+    await route.fulfill({ json: { ok: true } });
+  });
+  await page.route("**/api/gacha-forge/chapter-plan", async (route) => {
+    const first = ++requests === 1;
+    if (first) await heldPlan;
+    try {
+      await route.fulfill({
+        json: {
+          ok: true,
+          plan: { title: "Recovered chapter", nodes: [{ index: 1, type: "story", title: "Garden", storyIndex: 0 }] },
+          progress: { "2": { normal: 0, hard: 0, veryhard: 0 } },
+        },
+      });
+    } finally {
+      if (first) finishedPlan();
+    }
+  });
+  await page.route("**/api/gacha-forge/preforge/start", (route) =>
+    route.fulfill({ json: { ok: true, allowed: false, preforge: { mode: "off" } } }),
+  );
+  const start = () =>
+    forge.evaluate((node, keptProgress) => {
+      const game = node as any;
+      game._clearBeat();
+      game._run.progress = keptProgress;
+      game._run.prologuePending = false;
+      game._prologue = false;
+      game._storyUnwritten = false;
+      game._plan = null;
+      game._openChapter(2);
+    }, progress);
+  try {
+    await start();
+    await expect.poll(() => requests).toBe(1);
+    const cancel = forge.locator(".gf-stage > .gf-view [data-forge-story-cancel]");
+    await expect(cancel).toBeVisible();
+    await forge.screenshot({ path: testInfo.outputPath("chapter-loading-cancel.png") });
+    await cancel.click();
+    await expect(forge.getByRole("button", { name: "Game settings", exact: true })).toBeVisible();
+    await expect.poll(() => cancelled.length).toBe(1);
+    expect(cancelled[0]).toEqual({ runId: saved.runId, chapter: 2 });
+    expect(
+      await forge.evaluate((node) => ({ view: (node as any)._hudView, progress: (node as any)._run.progress })),
+    ).toEqual({
+      view: "home",
+      progress,
+    });
+    releasePlan();
+    releaseCancel();
+    await planFinished;
+    await expect(cancel).toHaveCount(0);
+    expect(await forge.evaluate((node) => (node as any)._state())).toBe("hud");
+    expect(requests).toBe(1);
+    await start();
+    await expect.poll(() => requests).toBe(2);
+    await expect.poll(() => forge.evaluate((node) => (node as any)._plan?.title)).toBe("Recovered chapter");
+    expect(await forge.evaluate((node) => (node as any)._run.progress)).toEqual(progress);
+    expect(errors).toEqual([]);
+  } finally {
+    releasePlan();
+    releaseCancel();
+  }
+});
+
+test("Story Cancel exits delayed and stale beat loading and permits a fresh story", async ({ page }, testInfo) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const { forge, saved } = await openForge(page, testInfo);
+  const progress = { "1": { normal: 3 } };
+  saved.progress = progress;
+  let releaseBeat!: () => void,
+    finishedBeat!: () => void,
+    requests = 0;
+  const heldBeat = new Promise<void>((resolve) => (releaseBeat = resolve));
+  const beatFinished = new Promise<void>((resolve) => (finishedBeat = resolve));
+  const cancellations: Record<string, unknown>[] = [];
+  await page.route("**/api/gacha-forge/story/cancel", (route) => {
+    cancellations.push(route.request().postDataJSON());
+    return route.fulfill({ json: { ok: true } });
+  });
+  await page.route("**/api/gacha-forge/beat", async (route) => {
+    const first = ++requests === 1;
+    if (first) await heldBeat;
+    try {
+      await route.fulfill({ json: scene });
+    } finally {
+      if (first) finishedBeat();
+    }
+  });
+  const start = () =>
+    forge.evaluate((node, keptProgress) => {
+      const game = node as any;
+      game._clearBeat();
+      game._run.progress = keptProgress;
+      game._prologue = false;
+      game._hudView = "chapter";
+      game._planChapter = 1;
+      game._plan = { title: "Saved chapter", nodes: [{ index: 1, type: "story", title: "Garden", storyIndex: 0 }] };
+      game._activeStoryNode = {
+        chapter: 1,
+        nodeIndex: 0,
+        storyIndex: 0,
+        title: "Garden",
+        difficulty: "normal",
+        replay: false,
+      };
+      game._beatState = "loading";
+      game._beatRequested = false;
+      game._renderBrowser();
+    }, progress);
+  try {
+    await start();
+    await expect.poll(() => requests).toBe(1);
+    const cancel = forge.locator(".gf-stage > .gf-view [data-forge-story-cancel]");
+    await expect(cancel).toBeVisible();
+    await forge.screenshot({ path: testInfo.outputPath("beat-loading-cancel.png") });
+    await cancel.click();
+    await expect(forge.getByRole("button", { name: "Game settings", exact: true })).toBeVisible();
+    await expect.poll(() => cancellations.length).toBe(1);
+    expect(
+      await forge.evaluate((node) => ({ plan: (node as any)._plan.title, progress: (node as any)._run.progress })),
+    ).toEqual({
+      plan: "Saved chapter",
+      progress,
+    });
+    releaseBeat();
+    await beatFinished;
+    await expect(forge.locator("[data-vn]")).toHaveCount(0);
+    expect(await forge.evaluate((node) => (node as any)._state())).toBe("hud");
+    await start();
+    await expect.poll(() => requests).toBe(2);
+    await expect(forge.locator("[data-vn]")).toBeVisible();
+    expect(await forge.evaluate((node) => (node as any)._run.progress)).toEqual(progress);
+    await forge.evaluate((node) => {
+      const game = node as any;
+      game._clearBeat();
+      game._beatState = "loading";
+      game._beatRequested = true;
+      game._renderBrowser();
+    });
+    await expect(cancel).toBeVisible();
+    await cancel.click();
+    await expect(forge.getByRole("button", { name: "Game settings", exact: true })).toBeVisible();
+    expect(requests).toBe(2);
+    expect(errors).toEqual([]);
+  } finally {
+    releaseBeat();
+  }
 });

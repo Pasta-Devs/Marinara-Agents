@@ -1,3 +1,26 @@
+## 1.15.2 — 2026-10-24 [highlight]
+
+- Show actionable Seedance setup guidance when a banner cannot be animated, and keep Retry visibly busy while generation is pending. Saved clips and the original banner illustration remain available.
+
+## 1.15.1 — 2026-10-24 [highlight]
+
+- Cancel chapter and story generation from the loading screen and return to Gacha Home without deleting the world or saved progress. Active story requests and chapter preforging stop, and late responses cannot reopen the cancelled screen.
+
+## 1.15.0 — 2026-10-24
+
+- Choose a generated song for the Home menu in Settings → Look → Visual. Saved songs remain playable when generation is off.
+- Generate a distinct soundtrack for each summon banner and collect it for Home music when pulling any 5-star from that banner.
+- Keep banner rotations separate and reuse generated songs after reload.
+- Select an optional Animations video connection in Sources to generate saved looping banner clips. Portraits remain still.
+- Reuse clips after reload, keep the illustration on failures or reduced motion, and offer pause, play and explicit generation retry controls.
+
+## 1.14.0 — 2026-10-24
+
+- Automatically remember completed canonical chapters and Character Stories, alongside saved character-chat memories.
+- Maintain a compressed overview within 10% of the generation model's known context, retaining detailed originals for relevant recall.
+- Recall up to three additional chapters plus separate character memories; retain the entire previous chapter and the current chapter so far.
+- Show automatic continuity status and allow retrying failed memory work without blocking gameplay.
+
 ## 1.13.1 — 2026-10-24
 
 - Character scenes, banners, portraits and outfits use available character/persona avatar references; provider support and limits still apply.

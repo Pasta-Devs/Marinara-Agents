@@ -1,5 +1,5 @@
 // Package-owned orchestration over the Engine's isolated player and shared voice service.
-/* global normalizeForgeAudio, normalizeForgeMusicMood, forgeAudioEnglish, forgeAudioFields, Ze */
+/* global normalizeForgeAudio, normalizeForgeMusicMood, forgeAudioEnglish, forgeAudioFields, forgeSoundtrackContextKey, forgeSoundtrackCues, recordForgeSoundtrack, Ze */
 const forgeAudioIcons = {
   sound:
     '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Zm4 3a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -23,11 +23,7 @@ let forgeAudioSession = 0;
 const forgeAudioRetryMs = 60_000;
 
 export function forgeMusicContextKey(runId, connectionId, cue) {
-  // A compact cache identity preserves full, case-sensitive IDs without requiring a secure-context WebCrypto API.
-  let hash = 0xcbf29ce484222325n;
-  for (const byte of new TextEncoder().encode(JSON.stringify([runId, connectionId])))
-    hash = BigInt.asUintN(64, (hash ^ BigInt(byte)) * 0x100000001b3n);
-  return `world-${hash.toString(16)}-${cue}`;
+  return forgeSoundtrackContextKey(runId, connectionId, cue);
 }
 
 async function forgeAudioJson(path, options) {
@@ -89,6 +85,10 @@ export class ForgeAudioController {
     this.requests = new Set();
     this.settings = normalizeForgeAudio(host._run?.audio);
     this.manifest = this.audio?.getAssetManifest().catch(() => null) ?? Promise.resolve(null);
+    this.library = [];
+    this.libraryRevision = 0;
+    this.unrecordedTracks = new Map();
+    this.libraryRequest = this.refreshLibrary();
     this.configure(this.settings);
     this.onClick = (event) => {
       const button = event.target?.closest?.("button");
@@ -102,6 +102,7 @@ export class ForgeAudioController {
   configure(value) {
     const previous = this.settings;
     this.settings = normalizeForgeAudio(value);
+    if (previous && previous.homeMusic !== this.settings.homeMusic) this.currentCue = null;
     if (
       previous &&
       (previous.generate !== this.settings.generate || previous.audioConnectionId !== this.settings.audioConnectionId)
@@ -112,7 +113,9 @@ export class ForgeAudioController {
     }
     if (
       previous &&
-      (previous.muted !== this.settings.muted || (previous.musicVolume === 0) !== (this.settings.musicVolume === 0))
+      (previous.homeMusic !== this.settings.homeMusic ||
+        previous.muted !== this.settings.muted ||
+        (previous.musicVolume === 0) !== (this.settings.musicVolume === 0))
     )
       this.musicRevision = undefined;
     if (
@@ -129,6 +132,66 @@ export class ForgeAudioController {
     if (this.tts?.getActiveId()?.startsWith(`gacha-forge:${this.runId}:`)) {
       this.tts.setCurrentPlaybackVolume(this.settings.dialogueVolume, this.settings.muted);
     }
+  }
+
+  refreshLibrary(track) {
+    if (track) this.unrecordedTracks.set(track.tag, track);
+    const revision = ++this.libraryRevision;
+    this.libraryRequest = (this.libraryQueue ?? Promise.resolve())
+      .catch(() => {})
+      .then(() => this.loadLibrary(revision));
+    this.libraryQueue = this.libraryRequest;
+    return this.libraryRequest;
+  }
+
+  async loadLibrary(revision) {
+    if (this.disposed || this.host._run?.runId !== this.runId || typeof this.host._postJson !== "function")
+      return this.library;
+    try {
+      let result;
+      for (const track of this.unrecordedTracks.values()) {
+        result = await this.host._postJson("/audio/library", { runId: this.runId, track });
+        if (result?.error === "bad-request" || result?.error === "not-found") {
+          this.unrecordedTracks.delete(track.tag);
+          result = undefined;
+          continue;
+        }
+        if (!result?.ok) return this.library;
+        this.unrecordedTracks.delete(track.tag);
+      }
+      result ??= await this.host._postJson("/audio/library", { runId: this.runId });
+      if (!result?.ok || !Array.isArray(result.tracks)) return this.library;
+      // Older worlds already have context files in the Engine, before this package kept a song list.
+      // Recover only this world's known cues and source, without making a generation request.
+      try {
+        const manifest = await this.manifest;
+        const assets = Object.entries(manifest?.assets || {});
+        if (assets.some(([tag]) => tag.startsWith("music:contexts:gacha-forge:world-"))) {
+          const connectionId =
+            this.settings.audioConnectionId ||
+            this.generationConnection ||
+            (await forgeAudioJson("/api/audio/config"))?.connectionId;
+          if (connectionId)
+            for (const cue of forgeSoundtrackCues) {
+              if (this.disposed || this.host._run?.runId !== this.runId) return this.library;
+              const key = forgeMusicContextKey(this.runId, connectionId, cue);
+              const asset = assets.find(([tag]) => tag.startsWith(`music:contexts:gacha-forge:${key}:`));
+              if (!asset || result.tracks.some((track) => track.tag === asset[0])) continue;
+              const track = { cue, connectionId, tag: asset[0], path: asset[1].path };
+              if (!recordForgeSoundtrack({}, this.runId, track)) continue;
+              const saved = await this.host._postJson("/audio/library", { runId: this.runId, track });
+              if (saved?.ok && Array.isArray(saved.tracks)) result = saved;
+            }
+        }
+      } catch {
+        /* A failed manifest/config read must preserve the persisted library. */
+      }
+      if (!this.disposed && this.host._run?.runId === this.runId && revision === this.libraryRevision)
+        this.library = result.tracks;
+    } catch {
+      /* Keep the last successful library during temporary failures. */
+    }
+    return this.library;
   }
 
   notice(key, httpStatus, reason = "") {
@@ -205,7 +268,11 @@ export class ForgeAudioController {
     const connectionId = settings.audioConnectionId || config.connectionId;
     this.generationConnection = connectionId;
     const cacheKey = `${connectionId}:${kind}:${cue}`;
-    if (this.generated.has(cacheKey)) return this.generated.get(cacheKey);
+    if (this.generated.has(cacheKey)) {
+      const cached = this.generated.get(cacheKey);
+      if (this.unrecordedTracks.has(cached.tag)) void this.refreshLibrary();
+      return cached;
+    }
     if (this.pending.has(cacheKey)) return this.pending.get(cacheKey);
     if (Date.now() - (this.failures.get(cacheKey) ?? 0) < forgeAudioRetryMs) return null;
     const abort = new AbortController();
@@ -267,6 +334,13 @@ export class ForgeAudioController {
       .then((result) => {
         if (typeof result?.tag !== "string" || typeof result?.path !== "string") throw new Error("Missing audio asset");
         this.generated.set(cacheKey, result);
+        if (kind === "music") {
+          void this.refreshLibrary({ ...result, cue, connectionId });
+          // Keep this controller's manifest current without waiting for another scan.
+          void this.manifest.then((manifest) => {
+            if (manifest?.assets) manifest.assets[result.tag] = { path: result.path };
+          });
+        }
         return result;
       })
       .catch((error) => {
@@ -301,26 +375,42 @@ export class ForgeAudioController {
       return;
     }
     const enabled = this.settings.generate && !this.settings.muted && this.settings.musicVolume > 0;
-    const revision = `${cue}:${enabled}:${this.settings.audioConnectionId}`;
+    const revision = `${cue}:${enabled}:${this.settings.audioConnectionId}:${this.settings.homeMusic}`;
     if (revision === this.musicRevision && (!enabled || Date.now() - this.musicAttemptAt < forgeAudioRetryMs)) return;
     this.musicRevision = revision;
     this.musicAttemptAt = Date.now();
     const manifest = await this.manifest;
     if (this.disposed || revision !== this.musicRevision) return;
+    const fallbackCue = cue.startsWith("banner-") ? "home" : cue;
+    let selected;
+    if (fallbackCue === "home" && this.settings.homeMusic) {
+      await this.libraryRequest;
+      if (this.disposed || revision !== this.musicRevision) return;
+      selected = this.library.find((track) => track.tag === this.settings.homeMusic && manifest?.assets?.[track.tag]);
+      if (selected && cue === "home") {
+        this.currentCue = cue;
+        if (selected.tag !== this.currentTag) this.player.playMusic(selected.tag, manifest.assets);
+        this.currentTag = selected.tag;
+        this.currentGenerated = false;
+        return;
+      }
+    }
     if (
       cue !== this.currentCue ||
       (this.currentGenerated &&
         (!this.settings.generate || this.generatedConnection !== this.settings.audioConnectionId))
     ) {
       this.currentCue = cue;
-      const tag = manifest && this.audio.selectDefaultMusic(cue, manifest, { currentTag: this.currentTag });
+      const tag =
+        selected?.tag ??
+        (manifest && this.audio.selectDefaultMusic(fallbackCue, manifest, { currentTag: this.currentTag }));
       if (tag) {
+        if (tag !== this.currentTag) this.player.playMusic(tag, manifest.assets);
         this.currentTag = tag;
         this.currentGenerated = false;
-        this.player.playMusic(tag, manifest.assets);
       }
     }
-    if (!enabled) return;
+    if (!enabled || (cue === "home" && this.settings.homeMusic)) return;
     const asset = await this.generate("music", cue, revision);
     if (asset && !this.disposed && revision === this.musicRevision && asset.tag !== this.currentTag) {
       this.currentTag = asset.tag;
@@ -418,6 +508,10 @@ export function forgeAudioCue(host) {
         ? "bond"
         : normalizeForgeMusicMood(host._forgeMusicMood)
       : null;
+  if (host._hudView === "summon") {
+    if (host._summonBannerState !== "ready" || !host._summonBanner?.banner?.music?.cue) return null;
+    return host._summonBanner.banner.music.cue;
+  }
   return "home";
 }
 
@@ -441,6 +535,34 @@ export function syncForgeAudio(host) {
 export function wireForgeAudio(host) {
   const audio = syncForgeAudio(host);
   const root = host._root;
+  const songs = root.querySelector('[data-input="audio.homeMusic"]');
+  if (songs && !songs.dataset.forgeSongsLoading) {
+    songs.dataset.forgeSongsLoading = "true";
+    const selected = normalizeForgeAudio(host._run?.audio).homeMusic;
+    songs.replaceChildren(new Option(forgeAudioEnglish["audio.settings.homeMusicDefault"], ""));
+    if (selected) songs.add(new Option(forgeAudioEnglish["audio.soundtrackUnavailable"], selected));
+    songs.value = selected;
+    songs.disabled = true;
+    Promise.all([audio?.refreshLibrary(), audio?.manifest]).then(([tracks, manifest]) => {
+      if (!songs.isConnected || host._forgeAudio !== audio) return;
+      const available = (tracks || []).filter((track) => manifest?.assets?.[track.tag]);
+      songs.replaceChildren(new Option(forgeAudioEnglish["audio.settings.homeMusicDefault"], ""));
+      for (const [index, track] of available.entries())
+        songs.add(
+          new Option(
+            `${track.title || forgeAudioEnglish[`audio.song.${track.cue}`] || track.cue} (${index + 1})`,
+            track.tag,
+          ),
+        );
+      if (selected && !available.some((track) => track.tag === selected)) {
+        const missing = new Option(forgeAudioEnglish["audio.soundtrackUnavailable"], selected);
+        missing.disabled = true;
+        songs.add(missing);
+      }
+      songs.value = selected;
+      songs.disabled = false;
+    });
+  }
   // Combat's toolbar replaces the floating fullscreen control and its paired mute.
   for (const fullscreen of root.querySelectorAll(
     ".gf-fs-bar, .gf-fs-chapter, .gf-fs-portrait, .gf-stage:not(:has(.gf-view .gf-fs-bar)) > .gf-fs-exit",
