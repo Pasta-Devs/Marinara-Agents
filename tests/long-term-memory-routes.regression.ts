@@ -4049,7 +4049,10 @@ async function main(routeScenario: RouteScenario) {
         message: "Event log could not be read. Details are in the server log.",
       });
       assert.match(issueAt("vault/world/world_unparsable.json").message, /JSON/);
-      assert.match(issueAt("vault/world/world_schema_invalid.json").message, /invalid_enum_value|Required/);
+      assert.match(
+        issueAt("vault/world/world_schema_invalid.json").message,
+        /invalid_enum_value|invalid_value|Required/,
+      );
       assert.equal(unreadableIntegrity.body.includes(ltmRoot), false, unreadableIntegrity.body);
       // An unexpected failure is logged, and the client gets the route's fallback, not the internal message.
       const failedIdentityApply = await app.inject({
