@@ -1628,6 +1628,10 @@ export default function SourcesWorkspace({
           overflow: hidden;
           overflow: clip;
         }
+        /* The Engine's unlayered .mari-editor-tab (2.25rem) and --compact (auto) beat the min-h-11 utilities. */
+        [data-ltm-surface="sources"] :is(.mari-editor-tab, .mari-editor-action--compact) {
+          min-height: 2.75rem;
+        }
         [data-ltm-workbench-mode="operation"] > :not([data-ltm-source-operation-workbench]),
         [data-ltm-workbench-mode="task-result"] > :not([data-ltm-source-task-result-workbench]) {
           display: none;

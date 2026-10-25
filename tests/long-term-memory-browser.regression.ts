@@ -1584,6 +1584,18 @@ async function main() {
           const rect = element.getBoundingClientRect();
           return rect.width >= 44 && rect.height >= 44 ? "fits" : `${rect.width}x${rect.height}`;
         });
+      // #1659: the visible tabs and compact actions inside a surface that are shorter than 2.75rem (44px).
+      // The Engine's unlayered .mari-editor-tab and --compact min-heights beat the min-h-11 utilities.
+      const shortTouchTargets = (surface: string) =>
+        page.locator(surface).evaluate((root) =>
+          [...root.querySelectorAll<HTMLElement>('[role="tab"], .mari-editor-action--compact')]
+            .filter((element) => element.getClientRects().length > 0)
+            .map(
+              (element) =>
+                `${(element.textContent ?? "").trim().slice(0, 24)}: ${element.getBoundingClientRect().height}`,
+            )
+            .filter((entry) => Number.parseFloat(entry.slice(entry.lastIndexOf(":") + 1)) < 44),
+        );
       // #1588: scrolls the bar's scroller to one end; "in view" when the bar is still inside the scrollport and
       // the window.
       const stickyBarInView = (bar: ReturnType<typeof page.locator>, end: "top" | "bottom") =>
@@ -2911,6 +2923,11 @@ async function main() {
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]').click();
       await page.locator('[data-ltm-source-tab="lorebooks"][aria-selected="true"]').waitFor();
       await page.locator('[data-ltm-source-tab="chats"]').click();
+      assert.deepEqual(
+        await shortTouchTargets('[data-ltm-surface="sources"]'),
+        [],
+        "Sources tabs and actions fit 2.75rem",
+      );
       assert.equal(
         scopeTargetQueries.slice(scopeTargetQueryCount).includes("?includeAllChats=true&chatId=desktop-chat"),
         true,
@@ -2930,6 +2947,11 @@ async function main() {
       );
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
       await page.locator("#settings-tab-extraction").click();
+      assert.deepEqual(
+        await shortTouchTargets('[data-ltm-surface="memory-settings"]'),
+        [],
+        "Settings tabs fit 2.75rem",
+      );
       const desktopExtractionLayout = await page
         .locator("#settings-panel-extraction > [data-ltm-extraction-grid]")
         .evaluate((grid) => {
@@ -6937,6 +6959,13 @@ async function main() {
           await destinationScope.locator("summary").evaluate((summary) => summary === document.activeElement),
           true,
           `${width}px: focus lands on the destination summary`,
+        );
+        // #1659: with selection mode on and the destination open, the pane tabs (narrow), status filters, Done and
+        // the destination rows all keep 2.75rem.
+        assert.deepEqual(
+          await shortTouchTargets('[data-ltm-surface="sources"]'),
+          [],
+          `${width}px: Sources tabs and actions fit 2.75rem`,
         );
       }
       await page.setViewportSize({ width: 1280, height: 900 });

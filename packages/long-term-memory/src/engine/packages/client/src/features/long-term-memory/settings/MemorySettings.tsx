@@ -455,6 +455,10 @@ export default function MemorySettings({
       }}
     >
       <style>{`
+        /* The Engine's unlayered .mari-editor-tab sets min-height: 2.25rem, which beats min-h-11. */
+        [data-ltm-surface="memory-settings"] [role="tablist"] > .mari-editor-tab {
+          min-height: 2.75rem;
+        }
         [data-ltm-extraction-grid] {
           display: grid;
           gap: 0.5rem;
@@ -536,7 +540,7 @@ export default function MemorySettings({
             }}
             data-active={activeTab === tab.id}
             data-ltm-tab-focus
-            className="mari-editor-tab min-h-10 rounded-md px-2 text-xs font-semibold transition-colors"
+            className="mari-editor-tab min-h-11 rounded-md px-2 text-xs font-semibold transition-colors"
           >
             {localizeUi(tab.labelKey)}
           </button>
