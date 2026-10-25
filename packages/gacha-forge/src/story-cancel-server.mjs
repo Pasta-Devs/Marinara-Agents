@@ -114,16 +114,21 @@ export function createForgeStoryCancellation() {
       state.controller.abort(forgeStoryCancelled());
       return true;
     },
-    async reset(runId, operation) {
+    async reset(runId, operation, beforeCancel) {
       if (typeof runId !== "string" || !runId.trim()) return { ok: false, error: "bad-request" };
       if (disposed) return { ok: false, error: "cancelled" };
       if (forgeStoryScope.getStore()?.runId === runId) return { ok: false, error: "reset-in-progress" };
       const state = world(runId);
       if (state.resetting) return { ok: false, error: "reset-in-progress" };
       state.resetting = true;
-      state.epoch++;
-      state.controller.abort(forgeStoryCancelled());
       try {
+        // Another reset may have committed after the caller's initial precheck.
+        // Deny that stale request before it can cancel the newly generated story.
+        const permitted = await beforeCancel?.();
+        if (permitted?.ok === false) return permitted;
+        if (disposed) return { ok: false, error: "cancelled" };
+        state.epoch++;
+        state.controller.abort(forgeStoryCancelled());
         // Cancel replies promptly; destructive reset joins the actual work, including writes
         // that entered persistence before their epoch lost permission to start another one.
         while (state.operations.size || state.writes.size) {

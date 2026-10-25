@@ -164,3 +164,33 @@ test("detached provider descendants remain tracked after their route returned", 
   assert.deepEqual(events, ["reset"]);
   runtime.dispose();
 });
+
+test("a reset that became stale after precheck leaves the newly active provider untouched", async () => {
+  const runtime = createForgeStoryCancellation(),
+    started = deferred(),
+    release = deferred();
+  let signal;
+  const generation = runtime.run("world", async (current) => {
+    signal = current;
+    started.resolve();
+    await release.promise;
+    return "fresh result";
+  });
+  await started.promise;
+  let cleanup = false;
+  assert.deepEqual(
+    await runtime.reset(
+      "world",
+      async () => {
+        cleanup = true;
+      },
+      async () => ({ ok: false, error: "story-changed" }),
+    ),
+    { ok: false, error: "story-changed" },
+  );
+  assert.equal(cleanup, false);
+  assert.equal(signal.aborted, false);
+  release.resolve();
+  assert.equal(await generation, "fresh result");
+  runtime.dispose();
+});

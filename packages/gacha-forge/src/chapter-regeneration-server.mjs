@@ -112,109 +112,113 @@ export function createForgeChapterRegeneration({
     const { runId, chapter, unitId, part } = selected;
     const preflight = await eligible(persistence.documents, selected, body);
     if (!preflight.ok) return preflight;
-    return cancellation.reset(runId, async () => {
-      return persistence.transaction(async ({ documents }) => {
-        const current = await eligible(documents, selected, body);
-        if (!current.ok) return current;
-        const { session, data, plan, progress } = current;
-        invalidateMemory(runId);
+    return cancellation.reset(
+      runId,
+      async () => {
+        return persistence.transaction(async ({ documents }) => {
+          const current = await eligible(documents, selected, body);
+          if (!current.ok) return current;
+          const { session, data, plan, progress } = current;
+          invalidateMemory(runId);
 
-        const selectedRows = [plan];
-        for (const kind of ["beat", "cg", "combat"]) {
-          const prefix = `${runId}:${kind}:${chapter}:`;
-          selectedRows.push(...(await documents.list(packageId, kind)).filter((row) => row.id.startsWith(prefix)));
-        }
-        const summaries = (await documents.list(packageId, "summary")).filter((row) =>
-          row.id.startsWith(`${runId}:summary:`),
-        );
-        for (const row of summaries) {
-          const summary = row.data || {};
-          const from = Number(summary.from ?? summary.chapter),
-            to = Number(summary.to ?? summary.chapter);
-          if (
-            row.id === `${runId}:summary:${chapter}` ||
-            (!unitId && from <= chapter && to >= chapter) ||
-            (Array.isArray(summary.bonds) && summary.bonds.some((bond) => String(bond) === String(chapter)))
-          )
-            selectedRows.push(row);
-        }
-        const aggregate = summaries.find((row) => row.id === `${runId}:summary:memory`);
-        if (aggregate) {
-          const memory = structuredClone(aggregate.data || {});
-          const key = JSON.stringify([unitId ? "character-story" : "chapter", String(chapter)]);
-          const relevant = (record) =>
-            record?.key === key ||
-            (record?.kind === (unitId ? "character-story" : "chapter") && String(record.id) === String(chapter));
-          const records = Array.isArray(memory.records) ? memory.records : [];
-          const covered = Array.isArray(memory.overview?.sources) ? memory.overview.sources : [];
-          if (records.some(relevant) || covered.some((entry) => Array.isArray(entry) && entry[0] === key)) {
-            memory.records = records.filter((record) => !relevant(record));
-            memory.overview = null;
-            memory.work = [];
-            memory.status = { phase: "stale", retryable: true, reason: "source-changed" };
+          const selectedRows = [plan];
+          for (const kind of ["beat", "cg", "combat"]) {
+            const prefix = `${runId}:${kind}:${chapter}:`;
+            selectedRows.push(...(await documents.list(packageId, kind)).filter((row) => row.id.startsWith(prefix)));
+          }
+          const summaries = (await documents.list(packageId, "summary")).filter((row) =>
+            row.id.startsWith(`${runId}:summary:`),
+          );
+          for (const row of summaries) {
+            const summary = row.data || {};
+            const from = Number(summary.from ?? summary.chapter),
+              to = Number(summary.to ?? summary.chapter);
             if (
-              !(await documents.update({
-                id: aggregate.id,
-                packageId,
-                expectedRevision: aggregate.revision,
-                name: aggregate.name,
-                description: aggregate.description,
-                data: memory,
-                updatedAt: new Date().toISOString(),
-              }))
+              row.id === `${runId}:summary:${chapter}` ||
+              (!unitId && from <= chapter && to >= chapter) ||
+              (Array.isArray(summary.bonds) && summary.bonds.some((bond) => String(bond) === String(chapter)))
             )
+              selectedRows.push(row);
+          }
+          const aggregate = summaries.find((row) => row.id === `${runId}:summary:memory`);
+          if (aggregate) {
+            const memory = structuredClone(aggregate.data || {});
+            const key = JSON.stringify([unitId ? "character-story" : "chapter", String(chapter)]);
+            const relevant = (record) =>
+              record?.key === key ||
+              (record?.kind === (unitId ? "character-story" : "chapter") && String(record.id) === String(chapter));
+            const records = Array.isArray(memory.records) ? memory.records : [];
+            const covered = Array.isArray(memory.overview?.sources) ? memory.overview.sources : [];
+            if (records.some(relevant) || covered.some((entry) => Array.isArray(entry) && entry[0] === key)) {
+              memory.records = records.filter((record) => !relevant(record));
+              memory.overview = null;
+              memory.work = [];
+              memory.status = { phase: "stale", retryable: true, reason: "source-changed" };
+              if (
+                !(await documents.update({
+                  id: aggregate.id,
+                  packageId,
+                  expectedRevision: aggregate.revision,
+                  name: aggregate.name,
+                  description: aggregate.description,
+                  data: memory,
+                  updatedAt: new Date().toISOString(),
+                }))
+              )
+                throw new Error("chapter-reset-write-conflict");
+            }
+          }
+          data.storyRewardProgress = {
+            ...data.storyRewardProgress,
+            [String(chapter)]: forgeStoryPaidThrough(data, chapter, progress),
+          };
+          data.storyRevision = forgeStoryVersion(data) + 1;
+          if (unitId) {
+            const suffix = part > 1 ? String(part) : "";
+            data.bondChapters[unitId][`beats${suffix}`] = 0;
+          } else {
+            data.progress = { ...data.progress, [String(chapter)]: { ...data.progress?.[String(chapter)], normal: 0 } };
+          }
+          if (String(data.reading?.chapter) === String(chapter)) delete data.reading;
+          if (String(data.combatPending?.chapter) === String(chapter)) delete data.combatPending;
+          if (data.preforge) delete data.preforge[String(chapter)];
+          for (const row of new Map(selectedRows.map((row) => [row.id, row])).values()) {
+            if (!(await documents.remove(packageId, row.id, row.revision)))
               throw new Error("chapter-reset-write-conflict");
           }
-        }
-        data.storyRewardProgress = {
-          ...data.storyRewardProgress,
-          [String(chapter)]: forgeStoryPaidThrough(data, chapter, progress),
-        };
-        data.storyRevision = forgeStoryVersion(data) + 1;
-        if (unitId) {
-          const suffix = part > 1 ? String(part) : "";
-          data.bondChapters[unitId][`beats${suffix}`] = 0;
-        } else {
-          data.progress = { ...data.progress, [String(chapter)]: { ...data.progress?.[String(chapter)], normal: 0 } };
-        }
-        if (String(data.reading?.chapter) === String(chapter)) delete data.reading;
-        if (String(data.combatPending?.chapter) === String(chapter)) delete data.combatPending;
-        if (data.preforge) delete data.preforge[String(chapter)];
-        for (const row of new Map(selectedRows.map((row) => [row.id, row])).values()) {
-          if (!(await documents.remove(packageId, row.id, row.revision)))
-            throw new Error("chapter-reset-write-conflict");
-        }
-        const now = new Date().toISOString();
-        const saved = session
-          ? await documents.update({
-              id: session.id,
-              packageId,
-              expectedRevision: session.revision,
-              name: session.name,
-              description: session.description,
-              data,
-              updatedAt: now,
-            })
-          : await documents.create({
-              id: sessionId(runId),
-              packageId,
-              kind: "session",
-              name: "session",
-              description: "gacha run progress",
-              data,
-              createdAt: now,
-              updatedAt: now,
-            });
-        if (!saved) throw new Error("chapter-reset-write-conflict");
-        return {
-          ok: true,
-          chapter,
-          storyRevision: data.storyRevision,
-          progress: data.progress,
-          ...(unitId ? { unitId, part, beats: 0 } : {}),
-        };
-      });
-    });
+          const now = new Date().toISOString();
+          const saved = session
+            ? await documents.update({
+                id: session.id,
+                packageId,
+                expectedRevision: session.revision,
+                name: session.name,
+                description: session.description,
+                data,
+                updatedAt: now,
+              })
+            : await documents.create({
+                id: sessionId(runId),
+                packageId,
+                kind: "session",
+                name: "session",
+                description: "gacha run progress",
+                data,
+                createdAt: now,
+                updatedAt: now,
+              });
+          if (!saved) throw new Error("chapter-reset-write-conflict");
+          return {
+            ok: true,
+            chapter,
+            storyRevision: data.storyRevision,
+            progress: data.progress,
+            ...(unitId ? { unitId, part, beats: 0 } : {}),
+          };
+        });
+      },
+      () => eligible(persistence.documents, selected, body),
+    );
   }
 
   function post(router, path, handler) {

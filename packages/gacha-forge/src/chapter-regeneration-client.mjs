@@ -228,7 +228,7 @@ export function wireForgeChapterRegeneration(host) {
     section.setAttribute("aria-labelledby", title.id);
     copy("p", "chapter.reset.selected").textContent = forgeChapterResetEnglish["chapter.reset.selected"].replace(
       "{title}",
-      request.title,
+      () => request.title,
     );
     copy("p", "chapter.reset.warning");
     copy("p", "chapter.reset.preserved");
