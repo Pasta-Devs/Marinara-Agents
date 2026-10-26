@@ -19,7 +19,8 @@ export type SlurpResettableSection =
   | "ads"
   | "autopurge"
   | "stir"
-  | "drama";
+  | "drama"
+  | "live";
 
 export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonly (keyof SlurpSettings)[]> = {
   general: [
@@ -150,6 +151,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
   ],
   stir: ["supportDesk"],
   drama: ["polyamory", "drama"],
+  live: ["live"],
   autopurge: [
     "autopurgeEnabled",
     "autopurgeRetentionValue",
@@ -173,6 +175,7 @@ export const SLURP_SETTINGS_NOT_RESET: readonly (keyof SlurpSettings)[] = [
   "extStir",
   "extSupportDesk",
   "extEngineLink",
+  "extLive",
   // Living world's own sub-switch, the same kind of choice.
   "trendsEnabled",
   // "Pause all" is a switch, not a tuning: resetting a section must never pause or resume Slurp.

@@ -1,5 +1,6 @@
 import { SlpBootstrap } from "../../../../../shared/src/slp/slp-social.types.js";
 import { z } from "zod";
+import { slpPartialInput } from "../../../../../shared/src/slp/slp-schema-defaults.js";
 import {
   SLP_EXTENSION_KEYS,
   SLP_EXTENSIONS,
@@ -112,10 +113,7 @@ export const slpCreatorFanArchetypeWeightsSchema = z
     message: "At least one fan archetype weight must be greater than zero.",
   });
 
-/**
- * Creator settings are owned by Slurp. Keep this deliberately narrow: public Noodle settings
- * must not become an implicit dependency of Creator scheduling or generation.
- */
+/** Creator settings are owned by Slurp; public Noodle settings must not drive Creator scheduling or generation. */
 export const slurpSettingsSchema = z.object({
   // The extension switches (shared slp-extensions.ts). Off hides and stops it; its data stays.
   extAds: z.boolean(),
@@ -449,6 +447,9 @@ export const slurpSettingsSchema = z.object({
   viewerPersonaId: z.string().max(200).nullable(), // Who browses Slurp, the same on every device (#103).
 });
 
+/** A settings PATCH body: a key the client did not send stays missing on zod 3 and 4. */
+export const slurpSettingsPatchSchema = slpPartialInput(slurpSettingsSchema);
+
 export type SlurpSettings = z.infer<typeof slurpSettingsSchema>;
 
 export type { SlurpPromptBlockOverrides, SlurpReusablePromptInstruction };
@@ -670,11 +671,8 @@ export function isSlurpViewerActorAccount(account: Pick<SlurpAccount, "invited" 
 let cachedSettingsRaw: string | null = null;
 let cachedSettings: SlurpSettings | null = null;
 
-/**
- * Keys retired in fix phase 1b (R1-136): nothing read them. Stored copies are safe: the normalizer
- * takes only known keys, the PATCH schema strips unknown ones, and the next save drops them. Listed
- * so a test can prove old data still loads.
- */
+/** Keys retired in fix phase 1b (R1-136); nothing reads them. The PATCH schema strips them and the next save
+ * drops them; listed so a test can prove old data still loads. */
 export const SLURP_RETIRED_SETTINGS_KEYS = [
   "imageGenerationConnectionId",
   "invitedCharacterGroupIds",

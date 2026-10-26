@@ -9,6 +9,8 @@ import {
 for (const lane of ["main", "bond"])
   for (const first of ["ordinary", "event"]) {
     const f = await createChapterRuntime();
+    // Admission must reach the provider; dedicated budget tests cover insufficient capacity.
+    f.transport.maxContext = 262144;
     let release, lead, follow;
     try {
       for (const [id] of f.docs)

@@ -44,7 +44,9 @@ export type SlurpEventKind =
   /** A fan's note to the player's own page: fans write notes there, never open a chat. */
   | "fan_note"
   /** A background sign-up finished: how many Creators joined (amount). */
-  | "sign_up";
+  | "sign_up"
+  /** A Creator the player subscribes to went live (LIVE-V3-PLAN.md). */
+  | "live";
 
 /**
  * Base weights. The gaps matter more than the numbers: anything at or above `SLURP_EVENT_NOTABLE`
@@ -79,6 +81,7 @@ const BASE: Record<SlurpEventKind, number> = {
   fan_note: 58,
   // The player started it and may have left: it has to be seen.
   sign_up: 70,
+  live: 75,
 };
 
 /**

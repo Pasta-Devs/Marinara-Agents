@@ -204,7 +204,7 @@ Use borders to define interactive or nested regions without boxing every text bl
 
 ### Navigation
 - **Destination rail:** Four destinations in order: Memory Vault, Review Queue, Sources, Memory Settings. Use Lucide icons and optional numeric badges for memory and pending-review counts.
-- **Desktop:** Horizontal `mari-editor-tab-rail` with scrollable tab items and `min-h-10` to `min-h-11` controls.
+- **Desktop:** Horizontal `mari-editor-tab-rail` with scrollable tab items and `min-h-11` controls (a package rule beats the Engine's `2.25rem` tab height).
 - **Mobile:** Full-width four-column rail, sticky to the bottom with safe-area padding. Keep labels short and icons prominent.
 - **Workspace tabs:** Reuse the same tab rail for navigator/workbench/inspector changes. Implement roving tab focus with Arrow keys, Home, and End.
 - **Active state:** Use `data-active` plus the inherited tab treatment; preserve `aria-selected`, `aria-current`, and `aria-controls` semantics.

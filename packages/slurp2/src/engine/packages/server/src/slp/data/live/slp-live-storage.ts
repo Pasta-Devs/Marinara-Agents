@@ -16,6 +16,11 @@ export type SlurpLiveShow = {
   createdAt: string;
 };
 
+/** Older live builds wrote rows without `state`; those shows never ran here, so they read as absent. */
+function v3Rows(rows: unknown[]): SlurpLiveShow[] {
+  return (rows as Record<string, unknown>[]).filter((row) => row.state != null).map(toShow);
+}
+
 function toShow(row: Record<string, unknown>): SlurpLiveShow {
   return { ...(row as Omit<SlurpLiveShow, "state">), state: JSON.parse(String(row.state)) as SlpLiveState };
 }
@@ -24,15 +29,15 @@ export function createSlurpLiveStorage(db: DB) {
   return {
     async get(id: string): Promise<SlurpLiveShow | null> {
       const rows = await db.select().from(slurpLiveShows).where(eq(slurpLiveShows.id, id));
-      return rows[0] ? toShow(rows[0] as Record<string, unknown>) : null;
+      return v3Rows(rows)[0] ?? null;
     },
     async listOpen(): Promise<SlurpLiveShow[]> {
       const rows = await db.select().from(slurpLiveShows).where(isNull(slurpLiveShows.endedAt));
-      return rows.map((row) => toShow(row as Record<string, unknown>));
+      return v3Rows(rows);
     },
     async listForHost(hostId: string): Promise<SlurpLiveShow[]> {
       const rows = await db.select().from(slurpLiveShows).where(eq(slurpLiveShows.hostId, hostId));
-      return rows.map((row) => toShow(row as Record<string, unknown>));
+      return v3Rows(rows);
     },
     /** Insert once: the id carries the host and its schedule slot, so a second tick cannot start the same show. */
     async create(show: SlurpLiveShow): Promise<boolean> {

@@ -7,7 +7,7 @@ import type {
 import { LTM_RECALL_STYLE_WEIGHTS } from "../../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { LTM_RECALL_SCORE_THRESHOLD_CEILING } from "../../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import { errorMessage, invalidateLtmQueries, queryKeys, request, requestHost, settingsQueryOptions } from "../api";
-import { Button, InfoPopover, NumberField, StatusSurface, inputClass } from "../shared-controls";
+import { Button, InfoPopover, NumberField, StatusSurface, inputClass, lockedActionProps } from "../shared-controls";
 import { nextTabIndex } from "../tab-keys";
 import type { LongTermMemoryDestinationProps } from "../types";
 import ActivityView from "./ActivityView";
@@ -471,7 +471,7 @@ export default function MemorySettings({
     );
 
   const busy = pending !== "" || maintenanceBusy;
-  const busyActionProps = busy ? ({ "aria-disabled": true, className: "opacity-50" } as const) : {};
+  const busyActionProps = lockedActionProps(busy);
 
   return (
     <section

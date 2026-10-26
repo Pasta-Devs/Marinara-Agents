@@ -35,6 +35,16 @@ export function revealFocusUnderStickyBar(event: FocusEvent<HTMLElement>, bar: H
   });
 }
 
+/**
+ * Props for a control whose lock is temporary (work running, loading, edits unsaved elsewhere): it stays
+ * focusable and `Button`/`IconButton` dim on `aria-disabled`. Enter and Space still fire `onClick`, and a
+ * submit button still submits, so the caller's handler needs its own early return. Native `disabled` is for
+ * permanent unavailability or input validity.
+ */
+export function lockedActionProps(locked: boolean, reasonId?: string) {
+  return locked ? ({ "aria-disabled": true, ...(reasonId ? { "aria-describedby": reasonId } : {}) } as const) : {};
+}
+
 export const Button = forwardRef<
   HTMLButtonElement,
   ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -49,7 +59,7 @@ export const Button = forwardRef<
       ref={ref}
       type="button"
       data-ltm-control="button"
-      className={`mari-editor-action min-h-11 px-3 ${tone} ${className}`}
+      className={`mari-editor-action min-h-11 px-3 ${props["aria-disabled"] ? "opacity-50" : ""} ${tone} ${className}`}
       style={className.includes("mari-editor-action--compact") ? style : { minHeight: "2.75rem", ...style }}
       {...props}
     >
@@ -79,7 +89,7 @@ export function IconButton({
       aria-label={label}
       title={label}
       data-ltm-control="icon-button"
-      className={`mari-editor-action h-11 min-h-11 w-11 min-w-11 shrink-0 p-0 ${destructive ? "mari-editor-action--danger" : ""} ${className}`}
+      className={`mari-editor-action h-11 min-h-11 w-11 min-w-11 shrink-0 p-0 ${props["aria-disabled"] ? "opacity-50" : ""} ${destructive ? "mari-editor-action--danger" : ""} ${className}`}
       {...props}
     >
       <Icon aria-hidden="true" size={iconSize} className={iconClassName} />
@@ -393,5 +403,28 @@ export function StatusSurface({
       ) : null}
       {children}
     </div>
+  );
+}
+
+/**
+ * A result line read out when its text changes. The hidden copy stays mounted, because a live region that
+ * mounts together with its text is often not announced; the visible surface is not live, so one save speaks once.
+ */
+export function LiveResult({
+  text,
+  tone = "success",
+  ...props
+}: { text: string; tone?: "neutral" | "success" | "warning" | "danger" } & HTMLAttributes<HTMLDivElement>) {
+  return (
+    <>
+      <p role="status" className="sr-only">
+        {text}
+      </p>
+      {text ? (
+        <StatusSurface tone={tone} {...props} role={undefined} aria-live={undefined}>
+          {text}
+        </StatusSurface>
+      ) : null}
+    </>
   );
 }

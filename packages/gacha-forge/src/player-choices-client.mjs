@@ -121,7 +121,9 @@ export function prepareForgeChoices(host, response) {
   let active = true;
   let busy = false;
   let resumePlayback = null;
-  const isCurrent = () => active && host._activeStoryNode === node && host._run?.runId === runId && host._plan === plan;
+  // Not tied to the plan object: opening a chapter reloads its plan in the background, and an identical reload
+  // landing mid-beat would otherwise hide every choice. A regenerated story still fails on storyRevision.
+  const isCurrent = () => active && host._activeStoryNode === node && host._run?.runId === runId;
   const rebuild = () => {
     timeline.length = 0;
     mainIndexes.length = 0;
@@ -255,6 +257,15 @@ export function prepareForgeChoices(host, response) {
   host._choicePlayback = {
     timeline,
     mainIndex: (index) => mainIndexes[index] ?? 0,
+    artworkChoice(index) {
+      const segment = timeline[index];
+      for (const choice of choices) {
+        if (choice.at !== mainIndexes[index]) continue;
+        const option = choice.options.find((entry) => entry.id === selected.get(choice.id));
+        if (option?.segments?.includes(segment)) return { choiceId: choice.id, optionId: option.id };
+      }
+      return {};
+    },
     startAt(mainIndex) {
       const wanted = Math.max(0, mainIndexes.indexOf(mainIndex));
       const pending = [...pendingIndexes.keys()].find((index) => index <= wanted);

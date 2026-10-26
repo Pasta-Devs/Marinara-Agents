@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { slpFilledDefault } from "./slp-schema-defaults.js";
 
 /**
  * Drama pack entries (`docs/DRAMA.md`): **situations** (a standing state with a deck of small beats,
@@ -52,22 +53,23 @@ export const slpDramaRoleSchema = z
   .object({
     key,
     player: z.boolean().optional(),
-    needs: z
-      .object({
-        /** The Creator is this to the player's persona (her relation to you). */
-        relationToPlayer: z.array(z.enum(SLP_RELATIONS_TO_PLAYER)).min(1).max(5).optional(),
-        gender: z.enum(["male", "female", "other"]).optional(),
-        minSpice: spice.optional(),
-        /** Shares a tag or interest with that role. */
-        sharesNicheWith: key.optional(),
-        /** Already tied to that role in one of these ways. */
-        tiedTo: z
-          .object({ role: key, kinds: z.array(z.enum(SLP_DRAMA_TIE_KINDS)).min(1).max(6) })
-          .strict()
-          .optional(),
-      })
-      .strict()
-      .default({}),
+    needs: slpFilledDefault(
+      z
+        .object({
+          /** The Creator is this to the player's persona (her relation to you). */
+          relationToPlayer: z.array(z.enum(SLP_RELATIONS_TO_PLAYER)).min(1).max(5).optional(),
+          gender: z.enum(["male", "female", "other"]).optional(),
+          minSpice: spice.optional(),
+          /** Shares a tag or interest with that role. */
+          sharesNicheWith: key.optional(),
+          /** Already tied to that role in one of these ways. */
+          tiedTo: z
+            .object({ role: key, kinds: z.array(z.enum(SLP_DRAMA_TIE_KINDS)).min(1).max(6) })
+            .strict()
+            .optional(),
+        })
+        .strict(),
+    ),
     /** Newcomers (joined in the last two weeks) or the biggest pages first. */
     prefer: z.enum(["newcomer", "popular"]).optional(),
   })

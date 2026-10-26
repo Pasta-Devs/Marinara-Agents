@@ -1,3 +1,50 @@
+## 1.23.0 — 2026-10-26
+
+- Keep playing: leave a main chapter that is still forging. It keeps forging, the busy pill shows its progress, and a notice says when it is ready, could not be forged or was interrupted. Pre-forging starts once it is ready. Cancel on any story loader still stops it, and switching worlds waits for it.
+- Pre-forge "Story and key images" is now "Story and images". With Backgrounds on, it also paints the places each pre-forged scene visits, in main chapters and Character Stories. Worlds already on this setting start painting places ahead after updating.
+- Pre-forged art now paints alongside the text, so the chapter menu opens once the text is written. A scene opened before its art is ready joins the paint in progress. Art may keep painting for a while after the menu opens; switch to Story only or Off, or use the story Cancel, to stop it.
+- Pre-forging no longer reports stopped, or lets Retry start a second chain, on chapters that take over 20 minutes.
+
+## 1.22.1 — 2026-10-26
+
+- In Formation, a unit's Skills tab shows its Formation kit (abilities, costs, triggers and special mechanics) instead of the classic skills, and the kit no longer appears as plain text on every tab.
+- Chapter plans, Character Story plans, story beats and event chapters request 16,384 answer tokens on top of the reasoning reserve.
+
+## 1.22.0 — 2026-10-26
+
+- Banner animations say why they failed, play on phones away from the server, and never offer a paid retry for a saved clip.
+- Water beats Fire, Fire beats Earth, Earth beats Wind, Wind beats Water, in both combat modes and on the Home chart.
+- Formation conversion handles five-star traits, converts one character at a time, explains failures and keeps ready kits.
+- The Vigor countdown always shows below full and stops flickering.
+- Story choices appear without reopening the story.
+- Letters fill the screen with a shorter reply box, and Read message lists your bonded units.
+- New messages show as a styled card on Home with the opening lines.
+- The story mute button and help marks match their neighbours.
+
+## 1.21.2 — 2026-10-26
+
+- Keep an unchanged, decoded unit portrait mounted while switching unit tabs. Replace it normally when the unit or artwork changes.
+- Preserve cached Units cards when a background refresh returns identical data, while keeping real card updates and loading status current.
+
+## 1.21.1 — 2026-10-26
+
+- Explain banner animation failures with safe recovery hints and the provider HTTP status when available.
+- Keep failed attempts saved across reopening, retain existing clips, and require an explicit retry before another generation request.
+
+## 1.21.0 — 2026-10-26
+
+- Download individual images from every Home background picker category without selecting them. Reuse Engine gallery saving, including prepared iPhone sharing.
+- Unlock story and Character Story backgrounds and key images only after viewing their scenes, with a brief unlock notice. Future generated scenes stay out of the picker.
+- Preserve completed scenes, saved artwork and existing background choices across updates and chapter regeneration.
+
+## 1.20.0 — 2026-10-25
+- Add optional daily messages from randomly selected units with conversations unlocked, configured in setup or Story Continuity and disabled by default.
+- Keep incoming conversations saved, preserve drafts and pace generation within each local day without offline catch-up.
+- Open mobile Writing help above Settings with outside-tap dismissal and compact question-mark controls.
+- Request at least 8,192 output tokens for every text generation, including character messages and Formation kits, while retaining reasoning headroom. Report insufficient connection capacity instead of silently using a smaller output cap.
+- Keep Classic and Formation descriptions readable beside their setup choices.
+- Preserve the paced message deadline when reopening a world or updating its settings.
+
 ## 1.19.0 — 2026-10-25
 
 - Choose optional Formation combat: frontline actions, protected elemental supports, shared energy, repositioning and generated tactical kits.

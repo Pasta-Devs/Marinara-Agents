@@ -5,6 +5,7 @@
  * or it stands (a situation). Pure; v1 packs convert through `slp-storyline-v1.ts`.
  */
 import { z } from "zod";
+import { slpFilledDefault } from "./slp-schema-defaults.js";
 import {
   checkSlpDramaRoles,
   slpFitSchema,
@@ -176,10 +177,10 @@ export const slpStorylineObjectSchema = z
     fit: slpFitSchema.optional(),
     /** 1 to 5 roles; one role is a solo story. */
     cast: z.array(slpDramaRoleSchema).min(1).max(5),
-    requires: slpStoryRequiresSchema.default({}),
+    requires: slpFilledDefault(slpStoryRequiresSchema),
     /** A built-in track, or one its pack adds (`tracks`). */
     track: key.optional(),
-    start: slpStorylineStartSchema.default({}),
+    start: slpFilledDefault(slpStorylineStartSchema),
     maxDays: z.number().int().min(1).max(SLP_STORYLINE_MAX_DAYS).default(90),
     dials: slpDramaDialsSchema,
     /** At most this many deck moments reach the player a day. */

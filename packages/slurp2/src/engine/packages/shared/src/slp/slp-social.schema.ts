@@ -4,6 +4,7 @@
 // ──────────────────────────────────────────────
 import { SLP_CLOTHING_STYLES } from "./slp-gender.js";
 import { z } from "zod";
+import { slpFilledDefault, slpPartialInput } from "./slp-schema-defaults.js";
 import { avatarCropSchema } from "@marinara-engine/shared";
 import { slpCreatorPageSchema } from "./slp-creator-page.js";
 
@@ -176,7 +177,7 @@ export const slpSettingsSchema = z.object({
   fanArchetypeWeights: slpCreatorFanArchetypeWeightsSchema.default(DEFAULT_SLP_SETTINGS.fanArchetypeWeights),
 });
 
-export const slpSettingsUpdateSchema = slpSettingsSchema.partial();
+export const slpSettingsUpdateSchema = slpPartialInput(slpSettingsSchema);
 
 export const slpCreatorSourceSnapshotSchema = z
   .object({
@@ -225,8 +226,7 @@ export const slpAutoPostingSettingsSchema = z
 export const slpCreatorFanActivitySettingsSchema = z
   .object({
     enabled: z.boolean().optional(),
-    archetypeWeights: slpCreatorFanArchetypeWeightsObjectSchema
-      .partial()
+    archetypeWeights: slpPartialInput(slpCreatorFanArchetypeWeightsObjectSchema)
       .refine((weights) => Object.values(weights).some((weight) => weight > 0), {
         message: "At least one audience archetype must have a positive weight.",
       })
@@ -244,7 +244,7 @@ export const slpAccountSchedulerSettingsSchema = z
 
 export const slpAccountSchedulerPatchSchema = z
   .object({
-    autoPosting: slpAutoPostingSettingsSchema.pick({ enabled: true, imagesEnabled: true }).partial().optional(),
+    autoPosting: slpPartialInput(slpAutoPostingSettingsSchema.pick({ enabled: true, imagesEnabled: true })).optional(),
     fanActivity: slpCreatorFanActivitySettingsSchema.nullable().optional(),
   })
   .strict();
@@ -262,7 +262,7 @@ export const slpAccountPrivacySettingsSchema = z
   .object({
     identityDisclosure: slpIdentityDisclosureSchema.optional(),
     stagePersonality: z.string().trim().max(1000).optional(),
-    access: slpAccountAccessSettingsSchema.default({
+    access: slpFilledDefault(slpAccountAccessSettingsSchema, {
       hiddenFromAccountIds: [],
     }),
   })
@@ -270,7 +270,7 @@ export const slpAccountPrivacySettingsSchema = z
 
 export const slpAccountPrivacyPatchSchema = slpAccountPrivacySettingsSchema
   .omit({ access: true })
-  .extend({ access: slpAccountAccessSettingsSchema.partial().optional() })
+  .extend({ access: slpPartialInput(slpAccountAccessSettingsSchema).optional() })
   .strict();
 
 export const slpAccountSocialPatchSchema = slpAccountSocialSettingsSchema.pick({
@@ -371,7 +371,7 @@ export const slpBulkCreatorAccountCreateSchema = z
       .refine((ids) => new Set(ids).size === ids.length, { message: "Duplicate account IDs are not allowed." }),
     disclosureMode: slpIdentityDisclosureSchema,
     disclosureExceptions: z.record(z.string().min(1).max(64), slpIdentityDisclosureSchema).default({}),
-    autoPosting: slpAutoPostingSettingsSchema.default({ enabled: true, imagesEnabled: false }),
+    autoPosting: slpFilledDefault(slpAutoPostingSettingsSchema, { enabled: true, imagesEnabled: false }),
     executionId: z.string().min(1).max(128).optional(),
   })
   .strict();
@@ -401,7 +401,7 @@ export const slpStageProfileDraftRequestSchema = z
     guidance: z.string().trim().max(2000).default(""),
     // The editor sends its whole form, discovery fields (gender, tags, location) included. The draft
     // reads only the stage fields, so the rest is dropped instead of failing the request (R1-070).
-    currentDraft: z.object(slpStageProfileShape).partial().optional(),
+    currentDraft: slpPartialInput(z.object(slpStageProfileShape)).optional(),
     connectionId: z.string().min(1).optional(),
   })
   .strict()

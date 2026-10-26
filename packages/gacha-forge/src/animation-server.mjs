@@ -18,9 +18,81 @@ const forgeAnimationDigest = (value) => forgeAnimationHash("sha256").update(valu
 const forgeAnimationBanners = new Set(["char-standard", "wpn-standard", "char-featured", "wpn-featured"]);
 const forgeAnimationPrompt =
   "Animate this gacha banner illustration as a seamless short loop. Preserve the exact composition, faces, outfits and artwork style. Fixed camera, subtle breathing, gently moving hair and fabric, small ambient particles or light. Return smoothly to the starting pose and lighting in the last frame. No cuts, zooms, new subjects, text or logos.";
+const forgeAnimationReasons = new Set([
+  "seedance-reference-setup",
+  "source-image",
+  "connection",
+  "provider",
+  "invalid-response",
+  "storage",
+  "timeout",
+  "unknown",
+]);
+const forgeAnimationSavedFailure = (value) => {
+  if (!forgeAnimationReasons.has(value?.reason)) return { reason: "unknown" };
+  return {
+    reason: value.reason,
+    ...(value.reason === "provider" &&
+    Number.isInteger(value.providerStatus) &&
+    value.providerStatus >= 400 &&
+    value.providerStatus <= 599
+      ? { providerStatus: value.providerStatus }
+      : {}),
+  };
+};
+const forgeAnimationFailure = (error) => {
+  // The package never receives API keys, so only classified failures and HTTP numbers may leave the server.
+  const message = typeof error?.message === "string" ? error.message : "";
+  const code = String(error?.code || error?.cause?.code || "");
+  if (
+    /Seedance image-to-video references require a publicly reachable HTTPS image URL|Seedance (?:first|last) frame reference (?:URL must be public HTTPS|has no public HTTPS URL)|Temporary Seedance reference upload/u.test(
+      message,
+    )
+  )
+    return { reason: "seedance-reference-setup" };
+  if (
+    /Global Gallery image not found|The selected gallery image (?:cannot be read|is too large)|This picture (?:needs converting|can't be read)/u.test(
+      message,
+    )
+  )
+    return { reason: "source-image" };
+  if (
+    /Video generation connection not found|not a video generation connection|requires an? .+ API key|ToAPIs adapter|Unsupported video generation service/u.test(
+      message,
+    )
+  )
+    return { reason: "connection" };
+  // Engine prefixes provider HTTP failures as "returned 4xx", "failed (4xx)" or "download … video (4xx)".
+  const status = /(?:\breturned|\bfailed|\bvideo)\s*\(?([45]\d{2})\b/iu.exec(message);
+  if (status) return { reason: "provider", providerStatus: Number(status[1]) };
+  if (/generation (?:failed|cancelled|canceled|expired|error)\b|workflow failed|completed without/iu.test(message))
+    return { reason: "provider" };
+  if (
+    error?.code === "ERR_INVALID_URL" ||
+    /Invalid banner animation video|OpenRouter video .*(?:polling|content) URL|non-JSON|non-MP4|response did not include/u.test(
+      message,
+    )
+  )
+    return { reason: "invalid-response" };
+  if (
+    /timed out|queue is saturated/iu.test(message) ||
+    /TIMEOUT|TIMEDOUT/u.test(code) ||
+    error?.name === "TimeoutError"
+  )
+    return { reason: "timeout" };
+  if (
+    /^fetch failed$|did not resolve to any address/u.test(message) ||
+    /^(?:ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH)$/u.test(code)
+  )
+    return { reason: "connection" };
+  // The Engine server log keeps the raw message under "[gacha-forge] Banner animation failed".
+  return { reason: "unknown" };
+};
 
 export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
   const jobs = new Map();
+  // Keys whose last status could not be written: their leftover "pending" marker is a storage failure, not a restart.
+  const storageFailed = new Set();
   const epochs = new Map(),
     mutations = new Map();
   const epochFor = (runId) => epochs.get(runId) || 0;
@@ -172,11 +244,18 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
           if (previousKey && body.retry !== true) return result(true, previousKey);
           if (banner.generateAllowed === false) return { ok: false, error: "animations-off" };
           if (prior !== null && body.retry !== true) {
-            const reason =
-              saved?.state === "failed" && saved.reason === "seedance-reference-setup" ? saved.reason : null;
-            return { ok: false, error: "animation-failed", ...(reason ? { reason } : {}), retry: true };
+            // This process has no job for the key (checked above), so a pending attempt was cut short by an
+            // Engine restart or package update; dispose() aborts it without writing a failed marker.
+            const failure =
+              saved?.state === "failed"
+                ? forgeAnimationSavedFailure(saved)
+                : saved?.state === "pending"
+                  ? { reason: storageFailed.has(key) ? "storage" : "interrupted" }
+                  : {};
+            return { ok: false, error: "animation-failed", ...failure, retry: true };
           }
           // A persisted attempt also survives a restart during a paid request. Only an explicit retry starts another.
+          storageFailed.delete(key);
           const pending = { state: "pending", ...(previousKey ? { mediaKey: previousKey } : {}) };
           if (body.retry === true || prior !== null) await writeStatus(pending);
           else await forgeAnimationWrite(status, JSON.stringify(pending), { flag: "wx", mode: 0o600 });
@@ -184,6 +263,7 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
         });
         if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
         if (prepared) return prepared;
+        let storingClip = false;
         try {
           const video = await animate({
             connectionId: banner.connectionId,
@@ -205,6 +285,7 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
             bytes.toString("ascii", 4, 8) !== "ftyp"
           )
             throw new Error("Invalid banner animation video");
+          storingClip = true;
           return await mutate(runId, async () => {
             if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
             // Each successful replacement has its own immutable URL. Keep the previous file and pointer
@@ -230,33 +311,26 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
         } catch (error) {
           if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
           runtime.logger?.warn(error, "[gacha-forge] Banner animation failed");
-          const setup =
-            /Seedance image-to-video references require a publicly reachable HTTPS image URL|Seedance (?:first|last) frame reference URL must be public HTTPS/u.test(
-              typeof error?.message === "string" ? error.message : "",
-            );
-          if (setup)
-            await mutate(runId, async () => {
-              if (superseded() || job.controller.signal.aborted) return;
-              if ((await directory(forgeAnimationDigest(runId))) !== folder)
-                throw new Error("Invalid animation directory");
-              await writeStatus({
-                state: "failed",
-                reason: "seedance-reference-setup",
-                ...(previousKey ? { mediaKey: previousKey } : {}),
-              });
-            });
+          const failure = storingClip ? { reason: "storage" } : forgeAnimationFailure(error);
+          await mutate(runId, async () => {
+            if (superseded() || job.controller.signal.aborted) return;
+            if ((await directory(forgeAnimationDigest(runId))) !== folder)
+              throw new Error("Invalid animation directory");
+            await writeStatus({ state: "failed", ...failure, ...(previousKey ? { mediaKey: previousKey } : {}) });
+          });
           if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
           return {
             ok: false,
             error: "animation-failed",
-            ...(setup ? { reason: "seedance-reference-setup" } : {}),
+            ...failure,
             retry: true,
           };
         }
       })()
         .catch((error) => {
+          storageFailed.add(key);
           runtime.logger?.warn(error, "[gacha-forge] Banner animation storage failed");
-          return { ok: false, error: "animation-failed", retry: true };
+          return { ok: false, error: "animation-failed", reason: "storage", retry: true };
         })
         .finally(() => {
           if (jobs.get(key) === job) jobs.delete(key);

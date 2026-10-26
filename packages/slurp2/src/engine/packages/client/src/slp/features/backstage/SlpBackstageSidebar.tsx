@@ -6,6 +6,7 @@ import {
   Gauge,
   Globe2,
   Headset,
+  Radio,
   LayoutDashboard,
   Link2,
   Megaphone,
@@ -39,6 +40,7 @@ export const SLP_BACKSTAGE_SECTION_ICONS: Record<SlpBackstageSection, LucideIcon
   content: BookOpen,
   world: Globe2,
   stir: Headset,
+  live: Radio,
   engine: Link2,
 };
 

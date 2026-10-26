@@ -83,13 +83,15 @@ export function normalizeForgeFormationKit(raw) {
   const standard = forgeFormationAbility(raw.standard, "standard"),
     ultimate = forgeFormationAbility(raw.ultimate, "ultimate"),
     passive = forgeFormationAbility(raw.passive, "passive");
-  if (!standard || !ultimate || !passive || !Array.isArray(raw.traits) || raw.traits.length > 2) return null;
-  const traits = [],
-    seen = new Set();
-  for (const trait of raw.traits) {
-    if (!trait || !forgeFormationTraits.includes(trait.kind) || seen.has(trait.kind)) return null;
-    seen.add(trait.kind);
-    traits.push({ kind: trait.kind, power: Math.max(10, Math.min(75, Math.round(Number(trait.power) || 30))) });
+  if (!standard || !ultimate || !passive || (raw.traits != null && !Array.isArray(raw.traits))) return null;
+  // Traits are optional extras: keep up to two known, distinct ones and drop the rest, so a five-star kit
+  // with a malformed trait still converts. A bare trait name counts as that trait at default power.
+  const traits = [];
+  for (const trait of raw.traits ?? []) {
+    const kind = typeof trait === "string" ? trait : trait?.kind;
+    if (traits.length === 2 || !forgeFormationTraits.includes(kind) || traits.some((entry) => entry.kind === kind))
+      continue;
+    traits.push({ kind, power: Math.max(10, Math.min(75, Math.round(Number(trait?.power) || 30))) });
   }
   return { version: 1, preferredRow: raw.preferredRow, standard, ultimate, passive, traits };
 }
@@ -102,7 +104,7 @@ export function forgeFormationKitMessages({ run, unit, cardContext = "" }) {
   return [
     {
       role: "system",
-      content: `Design a distinctive, balanced kit for Formation combat. Keep the supplied character's identity, authored canon, element and rarity. Never rewrite appearance, personality or backstory. Return ONLY JSON. Four characters occupy up to three Front Row and three Back Row slots. Only living Front Row fighters act once per team turn; Back Row supplies one typed energy each turn and strong row-gated passives. Team energy persists between turns, cap12. Attack and Guard are free. Moving costs one frontline activation; an advancing fighter waits until next turn. A frontline collapse loses after immediate effects. Standard costs0..4 any energy; ultimate costs2..8, elementCost0..cost native element. Light/Dark substitute2:1 for another required element. Roles may be front, back, hybrid. Create meaningful support and movement kits, varied costs and expensive situational effects, not merely damage. Five-stars may combine up to2 bounded traits; all effects must fit this exact executable grammar. Effects: ${forgeFormationEffects.join(",")}. Targets: ${forgeFormationTargets.join(",")}. Durations1..3 team turns. Power0..300, buff/debuff needs stat atk/def/spd/crit. Passive triggers: ${forgeFormationTriggers.join(",")}, row front/back/both; each triggers once per unit/team turn. Traits: solo_front(stat bonus while alone in Front Row), advance_ult(free next-turn ultimate after voluntarily advancing), retreat_echo(repeats previous standard at half power when retreating), front_tokens(fills open frontline slots with fragile non-acting tokens at turn start). Tokens generate no energy. No arbitrary code, invented fields, extra turns or recursive triggers. Shape: {"preferredRow":"front|back|hybrid","standard":{"name":"...","description":"...","effect":"damage","target":"enemy","power":100,"cost":0,"duration":2},"ultimate":{"name":"...","description":"...","effect":"damage","target":"enemy","power":200,"cost":4,"elementCost":2,"duration":2},"passive":{"name":"...","description":"...","effect":"shield","target":"self","power":50,"duration":2,"trigger":"turn_start","row":"front"},"traits":[]}.`,
+      content: `Design a distinctive, balanced kit for Formation combat. Keep the supplied character's identity, authored canon, element and rarity. Never rewrite appearance, personality or backstory. Return ONLY JSON. Four characters occupy up to three Front Row and three Back Row slots. Only living Front Row fighters act once per team turn; Back Row supplies one typed energy each turn and strong row-gated passives. Team energy persists between turns, cap12. Attack and Guard are free. Moving costs one frontline activation; an advancing fighter waits until next turn. A frontline collapse loses after immediate effects. Standard costs0..4 any energy; ultimate costs2..8, elementCost0..cost native element. Light/Dark substitute2:1 for another required element. Roles may be front, back, hybrid. Create meaningful support and movement kits, varied costs and expensive situational effects, not merely damage. Five-stars may combine up to2 bounded traits, each {"kind":"<trait>","power":10..75}; everyone else uses "traits":[]. All effects must fit this exact executable grammar. Effects: ${forgeFormationEffects.join(",")}. Targets: ${forgeFormationTargets.join(",")}. Durations1..3 team turns. Power0..300, buff/debuff needs stat atk/def/spd/crit. Passive triggers: ${forgeFormationTriggers.join(",")}, row front/back/both; each triggers once per unit/team turn. Traits: solo_front(stat bonus while alone in Front Row), advance_ult(free next-turn ultimate after voluntarily advancing), retreat_echo(repeats previous standard at half power when retreating), front_tokens(fills open frontline slots with fragile non-acting tokens at turn start). Tokens generate no energy. No arbitrary code, invented fields, extra turns or recursive triggers. Shape: {"preferredRow":"front|back|hybrid","standard":{"name":"...","description":"...","effect":"damage","target":"enemy","power":100,"cost":0,"duration":2},"ultimate":{"name":"...","description":"...","effect":"damage","target":"enemy","power":200,"cost":4,"elementCost":2,"duration":2},"passive":{"name":"...","description":"...","effect":"shield","target":"self","power":50,"duration":2,"trigger":"turn_start","row":"front"},"traits":[]}. A five-star's traits look like "traits":[{"kind":"advance_ult","power":40}].`,
     },
     {
       role: "user",
@@ -480,7 +482,7 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
           events.push({ op: "debuff", id: target.id, text: "IMMUNE" });
           continue;
         }
-        const strengths = { fire: "water", water: "wind", wind: "earth", earth: "fire", light: "dark", dark: "light" },
+        const strengths = { fire: "earth", earth: "wind", wind: "water", water: "fire", light: "dark", dark: "light" },
           affinity = strengths[source.aff] === target.aff ? 1.5 : strengths[target.aff] === source.aff ? 0.75 : 1;
         const criticalChance = Math.max(
           0,

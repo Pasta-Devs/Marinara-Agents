@@ -243,10 +243,29 @@ for (const theme of ["dark", "light"]) {
       });
       const classic = forge.locator('[data-forge-combat-mode][value="classic"]');
       const formation = forge.locator('[data-forge-combat-mode][value="formation"]');
+      const picker = forge.locator(".gf-combat-mode-setup");
+      await expect(picker.getByRole("radio", { name: "Classic", exact: true })).toHaveCount(1);
+      await expect(picker.getByRole("radio", { name: "Formation", exact: true })).toHaveCount(1);
+      await expect(forge.locator(".gf-combat-mode-setup + .ob-help")).toHaveCount(0);
+      for (const [radio, description] of [
+        [classic, "The existing turn-based combat system."],
+        [formation, "Frontline fighters act while back-row supports supply shared elemental energy."],
+      ] as const) {
+        const hintId = await radio.getAttribute("aria-describedby");
+        expect(hintId).toBeTruthy();
+        const hint = picker.locator(`[id=${JSON.stringify(hintId)}]`);
+        await expect(hint).toContainText(description);
+        await readable(hint);
+        expect((await hint.boundingBox())!.width).toBeGreaterThan(150);
+        expect((await radio.locator("..").boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      }
       await expect(classic).toBeChecked();
+      await expect(formation).not.toBeChecked();
       await formation.check();
       await expect(formation).toBeChecked();
+      await expect(classic).not.toBeChecked();
       await readable(formation.locator(".."));
+      await page.screenshot({ path: testInfo.outputPath(`formation-setup-${theme}.png`) });
       await forge.locator("[data-cancel]").click();
       await expect
         .poll(() =>
@@ -260,6 +279,47 @@ for (const theme of ["dark", "light"]) {
       await runtime.close();
     }
   });
+  test(`a Formation unit shows its kit on the Skills tab only · ${theme}`, async ({ page }, testInfo) => {
+    const { runtime, forge, chapterRunId } = await openForge(page, testInfo, theme, "formation");
+    try {
+      const id = `${chapterRunId}:unit:vale`;
+      await forge.evaluate(
+        (node, unit) => {
+          const game = node as any;
+          game._hudView = "roster";
+          game._rosterUnitId = unit.id;
+          game._unit = unit;
+          game._unitState = "ready";
+          game._unitTab = "skills";
+          game._renderBrowser();
+        },
+        { ...runtime.docs.get(id)!.data, id },
+      );
+      // The first visit opens the Skills guide over the card.
+      const guide = forge.getByRole("button", { name: "Close", exact: true });
+      await guide.click({ timeout: 3000 }).catch(() => {});
+      const panel = forge.locator('[data-screen="unit"] .cp-panel');
+      const rows = panel.locator(".sk-row");
+      await expect(rows).toHaveCount(3);
+      await expect(rows.nth(0)).toContainText("Standard ability");
+      await expect(rows.nth(0)).toContainText("Kindled strike");
+      await expect(rows.nth(1)).toContainText("Lighthouse dawn");
+      await expect(rows.nth(2)).toContainText("Steady watch");
+      await expect(rows.nth(2)).toContainText("Turn start · Either row");
+      // Damage and shields resolve at once, so neither shows a duration.
+      await expect(rows.nth(0)).not.toContainText("turns");
+      await expect(rows.nth(2)).toContainText("Shield · self");
+      await expect(rows.nth(2)).not.toContainText("turns");
+      await expect(panel).not.toContainText("Classic strike");
+      await page.screenshot({ path: testInfo.outputPath(`formation-unit-skills-${theme}.png`) });
+      await forge.locator('[data-screen="unit"] [role="tab"][data-tab="stats"]').click();
+      await expect(panel).not.toContainText("Formation combat");
+      await expect(panel).not.toContainText("Kindled strike");
+    } finally {
+      await runtime.close();
+    }
+  });
+
   test(`Formation warning preserves Cancel and converts only on Confirm · ${theme}`, async ({ page }, testInfo) => {
     const { runtime, forge, requests } = await openForge(page, testInfo, theme);
     try {

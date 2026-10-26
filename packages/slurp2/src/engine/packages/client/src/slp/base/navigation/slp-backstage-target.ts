@@ -12,6 +12,7 @@ export const SLP_BACKSTAGE_SECTIONS = [
   "content",
   "world",
   "stir",
+  "live",
   "engine",
 ] as const;
 export type SlpBackstageSection = (typeof SLP_BACKSTAGE_SECTIONS)[number];
@@ -22,6 +23,7 @@ export const SLP_BACKSTAGE_EXTENSION_SECTIONS: readonly SlpBackstageSection[] = 
   "content",
   "world",
   "stir",
+  "live",
   "engine",
 ];
 
@@ -53,6 +55,7 @@ export const SLP_BACKSTAGE_TARGETS = [
   "prompts",
   "autopurge",
   "stir",
+  "live",
 ] as const;
 export type SlpBackstageTarget = (typeof SLP_BACKSTAGE_TARGETS)[number];
 
@@ -70,6 +73,7 @@ export const SLP_BACKSTAGE_TARGETS_BY_SECTION: Record<SlpBackstageSection, reado
   content: ["storylines", "arcs", "packs", "drama"],
   world: ["events", "calendar"],
   stir: ["stir"],
+  live: ["live"],
   engine: ["engine"],
 };
 
@@ -83,6 +87,7 @@ export const SLP_BACKSTAGE_DEFAULT_TARGET: Record<SlpBackstageSection, SlpBackst
   content: "storylines",
   world: "events",
   stir: "stir",
+  live: "live",
   engine: "engine",
 };
 
@@ -96,6 +101,7 @@ export const SLP_BACKSTAGE_SECTION_LABELS: Record<SlpBackstageSection, string> =
   content: "Storylines",
   world: "Living world",
   stir: "Support desk",
+  live: "Live shows",
   engine: "Engine link",
 };
 
@@ -123,6 +129,7 @@ export const SLP_BACKSTAGE_TARGET_LABELS: Record<SlpBackstageTarget, string> = {
   prompts: "Prompts",
   autopurge: "Storage and backup",
   stir: "Support desk",
+  live: "Live shows",
 };
 
 export function destinationForTarget(target: SlpBackstageTarget): SlpBackstageSection {

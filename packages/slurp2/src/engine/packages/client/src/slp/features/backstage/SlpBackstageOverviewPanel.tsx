@@ -14,6 +14,7 @@ import {
   MessageCircle,
   Pause,
   Play,
+  Radio,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -224,6 +225,14 @@ export function SlpBackstageOverviewPanel(page: SlpBackstagePageProps) {
       Icon: Headset,
       open: () => go("stir", "stir"),
       toggle: { on: slpExtensionOn(settings, "supportDesk"), set: (on) => void update("extSupportDesk", on) },
+    },
+    {
+      id: "live",
+      title: tx("live", "Live shows"),
+      status: slpExtensionOn(settings, "live") ? tx("liveOnStatus", "Creators go live, and you can too") : onOff(false),
+      Icon: Radio,
+      open: () => go("live", "live"),
+      toggle: { on: slpExtensionOn(settings, "live"), set: (on) => void update("extLive", on) },
     },
     {
       id: "engine",

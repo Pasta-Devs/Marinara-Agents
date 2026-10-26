@@ -172,6 +172,48 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.23.0",
+          "date": "2026-10-26",
+          "notes": "- Keep playing: leave a main chapter that is still forging. It keeps forging, the busy pill shows its progress, and a notice says when it is ready, could not be forged or was interrupted. Pre-forging starts once it is ready. Cancel on any story loader still stops it, and switching worlds waits for it.\n- Pre-forge \"Story and key images\" is now \"Story and images\". With Backgrounds on, it also paints the places each pre-forged scene visits, in main chapters and Character Stories. Worlds already on this setting start painting places ahead after updating.\n- Pre-forged art now paints alongside the text, so the chapter menu opens once the text is written. A scene opened before its art is ready joins the paint in progress. Art may keep painting for a while after the menu opens; switch to Story only or Off, or use the story Cancel, to stop it.\n- Pre-forging no longer reports stopped, or lets Retry start a second chain, on chapters that take over 20 minutes.",
+          "highlight": true
+        },
+        {
+          "version": "1.22.1",
+          "date": "2026-10-26",
+          "notes": "- In Formation, a unit's Skills tab shows its Formation kit (abilities, costs, triggers and special mechanics) instead of the classic skills, and the kit no longer appears as plain text on every tab.\n- Chapter plans, Character Story plans, story beats and event chapters request 16,384 answer tokens on top of the reasoning reserve.",
+          "highlight": false
+        },
+        {
+          "version": "1.22.0",
+          "date": "2026-10-26",
+          "notes": "- Banner animations say why they failed, play on phones away from the server, and never offer a paid retry for a saved clip.\n- Water beats Fire, Fire beats Earth, Earth beats Wind, Wind beats Water, in both combat modes and on the Home chart.\n- Formation conversion handles five-star traits, converts one character at a time, explains failures and keeps ready kits.\n- The Vigor countdown always shows below full and stops flickering.\n- Story choices appear without reopening the story.\n- Letters fill the screen with a shorter reply box, and Read message lists your bonded units.\n- New messages show as a styled card on Home with the opening lines.\n- The story mute button and help marks match their neighbours.",
+          "highlight": true
+        },
+        {
+          "version": "1.21.2",
+          "date": "2026-10-26",
+          "notes": "- Keep an unchanged, decoded unit portrait mounted while switching unit tabs. Replace it normally when the unit or artwork changes.\n- Preserve cached Units cards when a background refresh returns identical data, while keeping real card updates and loading status current.",
+          "highlight": false
+        },
+        {
+          "version": "1.21.1",
+          "date": "2026-10-26",
+          "notes": "- Explain banner animation failures with safe recovery hints and the provider HTTP status when available.\n- Keep failed attempts saved across reopening, retain existing clips, and require an explicit retry before another generation request.",
+          "highlight": false
+        },
+        {
+          "version": "1.21.0",
+          "date": "2026-10-26",
+          "notes": "- Download individual images from every Home background picker category without selecting them. Reuse Engine gallery saving, including prepared iPhone sharing.\n- Unlock story and Character Story backgrounds and key images only after viewing their scenes, with a brief unlock notice. Future generated scenes stay out of the picker.\n- Preserve completed scenes, saved artwork and existing background choices across updates and chapter regeneration.",
+          "highlight": true
+        },
+        {
+          "version": "1.20.0",
+          "date": "2026-10-25",
+          "notes": "- Add optional daily messages from randomly selected units with conversations unlocked, configured in setup or Story Continuity and disabled by default.\n- Keep incoming conversations saved, preserve drafts and pace generation within each local day without offline catch-up.\n- Open mobile Writing help above Settings with outside-tap dismissal and compact question-mark controls.\n- Request at least 8,192 output tokens for every text generation, including character messages and Formation kits, while retaining reasoning headroom. Report insufficient connection capacity instead of silently using a smaller output cap.\n- Keep Classic and Formation descriptions readable beside their setup choices.\n- Preserve the paced message deadline when reopening a world or updating its settings.",
+          "highlight": true
+        },
+        {
           "version": "1.19.0",
           "date": "2026-10-25",
           "notes": "- Choose optional Formation combat: frontline actions, protected elemental supports, shared energy, repositioning and generated tactical kits.\n- Convert saved worlds after confirmation with bounded parallel generation, persistent progress and explicit retry, preserving characters and progression.\n- Add creative, validated boss objectives, elemental Ultimate portrait effects and optional fixed, saved combat voice lines for assigned voices.\n- Keep Classic combat, existing boss dialogue and authoritative reward replay.",
@@ -248,48 +290,6 @@
           "date": "2026-10-24",
           "notes": "- Chapters and Character Stories generate and play their own music cues instead of reusing the Home track. Loading scenes keep the current track until their cue is ready.\n- Small choices no longer block later shared narration or background pre-forging. Their alternatives remain generated together; playback, canon, replay and big-choice locks are preserved.\n- Completion and compression still wait for pending selections to preserve canonical story history.\n- Short audio notices no longer intercept taps on the game stage. Long reasons remain scrollable and stay visible while focused with a keyboard.\n- Notice scrolling adapts when the panel becomes visible or changes size; replacing a long reason with short text restores dismissal.\n- Recorded the actual merged Engine music-test baseline.",
           "highlight": false
-        },
-        {
-          "version": "1.12.0",
-          "date": "2026-10-24",
-          "notes": "### New\n\n- World-specific soundtrack briefs generated through the narration connection, cached for each music context and translated into original musical qualities.\n\n### Fixed\n\n- Audio failures show their HTTP status and, on newer Engine hosts, the provider's safe rejection reason while stock audio continues.\n- Unit and relic achievements count every gained level; capped duplicates do not count as gained facets, and Tower-shop facet gains count.\n- Existing worlds recover proven achievement progress without changing claimed rewards or pass progress.",
-          "highlight": true
-        },
-        {
-          "version": "1.11.1",
-          "date": "2026-10-23",
-          "notes": "- Fixed generated music and effects for worlds using migrated legacy audio connections.\n- Recorded the merged Engine audio connection baseline.",
-          "highlight": false
-        },
-        {
-          "version": "1.11.0",
-          "date": "2026-10-23",
-          "notes": "### New\n\n- Optional dialogue using explicitly assigned Engine character voices, with the current speech connection.\n- Stock Game music and effects, plus opt-in generated audio reused per world and cue.\n- A shared mute control, three precise channel volume sliders and configurable autoplay pacing.\n\n### Fixed\n\n- Home and story portrait frames include their bottom edge.",
-          "highlight": true
-        },
-        {
-          "version": "1.10.2",
-          "date": "2026-10-23",
-          "notes": "- New dialogue choices show intent labels instead of revealing the exact spoken line. Selected actions appear as narration; explicitly spoken choices remain protagonist dialogue.\n- Existing untyped saved choices remain playable as narration. First-play canon, replay alternatives and permanent big decisions are preserved.",
-          "highlight": false
-        },
-        {
-          "version": "1.10.1",
-          "date": "2026-10-23",
-          "notes": "- Fixed: the Welcome Gift rewards no longer overlap Claim on short mobile screens. The event scrolls when needed, and Claim has a larger touch target.",
-          "highlight": false
-        },
-        {
-          "version": "1.10.0",
-          "date": "2026-10-23",
-          "notes": "- Choose your protagonist's dialogue or actions from two to four themed options above the dialogue box. Player choices are on by default in Settings > Story > Continuity.\n- Small choices include every alternative scene in the same generation and return to the shared story. Your first-play choices become canon; replaying another route does not rewrite them.\n- A chapter or Character Story can end with one optional big choice. That fate is permanent, and later story generation waits for it before continuing from the chosen outcome.\n- Choices survive reloads. Existing linear chapters still work; turning choices off affects newly written scenes and keeps existing decisions.",
-          "highlight": true
-        },
-        {
-          "version": "1.9.1",
-          "date": "2026-10-23",
-          "notes": "- Chapter fullscreen controls now use a small icon aligned with the top-right header fade, with a usable touch target and visible keyboard focus.\n- Visible unit portraits use eager loading and synchronous decoding on detail updates.\n- Favorite and help icons are centered; unit cards show their existing affinity symbol in the top-right corner.",
-          "highlight": false
         }
       ]
     },
@@ -363,6 +363,18 @@
     },
     "long-term-memory": {
       "versions": [
+        {
+          "version": "1.4.95",
+          "date": "2026-10-26",
+          "notes": "- Maintenance, Debug, setup and Chat Settings buttons keep keyboard focus while their work runs, so the result appears where you are.\n- Vault and Review controls stay reachable while they save or while identity edits are unsaved, and say why they are locked.\n- Sources re-extract and re-import buttons stay reachable during a run and explain why they are waiting.\n- Debug, Maintenance and source results are announced to screen readers, and Add section explains why a name was not accepted.\n- The setup guide picture and detail header follow the panel's width, and navigation and availability tabs are easier to tap.\n- Loading spinners stop spinning when reduced motion is on, and typing in Debug search stays smooth on long logs.",
+          "highlight": false
+        },
+        {
+          "version": "1.4.94",
+          "date": "2026-10-26",
+          "notes": "- Long-Term Memory loads settings written by a newer version instead of failing to start, on Engines that use zod 4 or check a list's length before its entries.",
+          "highlight": false
+        },
         {
           "version": "1.4.93",
           "date": "2026-10-25",
@@ -469,18 +481,6 @@
           "version": "1.4.76",
           "date": "2026-10-21",
           "notes": "- A few more unexpected failures no longer show their raw error text, which could include file paths. In Sources, a source that could not be saved or extracted now says \"Failed to write imported source note.\" or \"Failed to extract imported source.\", followed by \"Details are in the server log.\"; this includes the model provider rejecting the request during an import. In Review, a change that could not be checked says \"Long-term memory preflight failed. Details are in the server log.\" An identity repair in settings whose backup could not be restored says so without the cause. The full error is written to the server log. Messages written for you, such as a model reply that was cut off, show as before.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.75",
-          "date": "2026-10-21",
-          "notes": "- In the Memory Vault, opening another memory while an archive Undo, a save or a permanent delete is still running no longer leaves it half-finished: the buttons work again, the list reloads, an Undo that could only restore some memories archives them again, a memory reopened during its own save shows what was saved, and deleted memories leave the list and the selection, closing one you had opened with a message that says so. Escape no longer closes the Rename detail dialog while the rename is still running.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.74",
-          "date": "2026-10-21",
-          "notes": "- After a recall index rebuild fails, the integrity check in Maintenance and the package status no longer show the raw error, which could include the vault's file paths. They now say that the latest index rebuild failed and to see the server log, which records the full error. A rebuild that fails while the Engine switches to a new embedding connection is now logged there too.",
           "highlight": false
         }
       ]
@@ -652,6 +652,24 @@
     "quartermaster": {
       "versions": [
         {
+          "version": "0.1.31",
+          "date": "2026-10-25",
+          "notes": "- No changes you'll notice: a code comment was corrected.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.30",
+          "date": "2026-10-25",
+          "notes": "- Accepting or keeping a pending item change and then switching chats before it finishes no\n  longer shows that chat's result in the chat you switched to.\n- The \"Only you can change it — becomes shown\" help now says removals are skipped too.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.29",
+          "date": "2026-10-25",
+          "notes": "- Hide items and outfits from their ⋯ menu. Hidden ones get their own Bag tab and are kept from\n  the agent: it only sees a hidden item while you're wearing it.\n- New Hidden Items settings choose what the agent may do to a hidden item, and whether it asks\n  first. Asking shows the change side by side so you can accept it or keep the old details.\n- Lock an item's description from the item editor so the agent can't change it.\n- Feed appearance has seven options, including equipped item names and descriptions. Outfit\n  portraits follow the same setting.\n- Build Wardrobe can use hidden items when you allow it, and always asks you about each one first.\n- Optional Delete button on item and outfit cards (Settings → Display, saved per device).\n- Re-equipping an outfit whose item was deleted now brings the item back with its default slot.",
+          "highlight": true
+        },
+        {
           "version": "0.1.28",
           "date": "2026-10-17",
           "notes": "- Build Wardrobe layers clothing properly: when two pieces of an outfit share a layer (tights and a\n  skirt over them), the outer one moves up a layer instead of being left out.\n- New artwork for the clothing layers, socks and Extra Wearable slots; the inner torso and legs\n  icons are now a shirt and leggings.",
@@ -752,24 +770,6 @@
           "date": "2026-09-14",
           "notes": "- Settings moved to its own tab instead of an accordion pushing inventory below the fold.\n- Settings regrouped into Appearance/Display/Image Generation/Data, with hover-and-tap tooltips\n  replacing permanent explanation text.\n- Recent Automatic Update (renamed Recent Agent Update) moved next to Restore Inventory, with a\n  colored +N/↑N/−N count summary and visible reasoning even on quiet turns.\n- Item and outfit cards collapse Edit/Update/Delete into a \"⋯\" menu, giving descriptions more\n  room.\n- Delete confirmations now also cover the item-image and outfit-portrait remove buttons.\n- Add Item is now a modal instead of an always-open form.",
           "highlight": true
-        },
-        {
-          "version": "0.1.11",
-          "date": "2026-09-13",
-          "notes": "- The tracking agent now targets specific changes instead of re-listing the whole inventory every\n  turn, so nothing gets dropped or cut off.\n- Added a \"Recent Automatic Update\" view showing what the last turn changed, with a per-item\n  Revert button.",
-          "highlight": true
-        },
-        {
-          "version": "0.1.10",
-          "date": "2026-09-13",
-          "notes": "- Rewrote the README's Features section for readability and documented several\n  previously-undocumented features.\n- Updated the in-app description to mention saved outfits, AI-generated art, and the tracker\n  agent.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.9",
-          "date": "2026-09-11",
-          "notes": "- Fixed equip-slot quick-fill only searching the Wearables tab, missing stashed wearable items.",
-          "highlight": false
         }
       ]
     },
@@ -827,6 +827,24 @@
     },
     "slurp2": {
       "versions": [
+        {
+          "version": "0.4.4",
+          "date": "2026-10-26",
+          "notes": "- Live shows, rebuilt: code runs every show minute by minute (fans, tips, menu orders, goals); while you watch, the model writes the host and the chat, and the host answers you by name.\n- Live pictures about once per minute, and private shows at the Backstage price and length.\n- Go live yourself as your persona's Creator, or as any Creator from Stir; the room reacts and suggests your next move.\n- \"X is live\" notices, a thank-you post after each show, and a Backstage > Live shows page.",
+          "highlight": false
+        },
+        {
+          "version": "0.4.3",
+          "date": "2026-10-26",
+          "notes": "- Slurp starts again on Engine builds with zod 4. The feed post and Creator generation routes no longer stop at load with \"Right-hand side of 'instanceof' is not an object\" (zod 4 has no `ZodEffects`); they extend the plain object schemas instead.",
+          "highlight": false
+        },
+        {
+          "version": "0.4.2",
+          "date": "2026-10-26",
+          "notes": "- Slurp starts again on Engine builds with zod 4. Settings sections with nested defaults are filled in again, so the server no longer stops at load with \"Cannot read properties of undefined (reading 'curve')\".\n- On zod 4 Engines, saving part of the Slurp settings, a Garnish ad or a creator account no longer resets the fields you did not send to their defaults. Creator access and auto-posting defaults are filled in again too.",
+          "highlight": true
+        },
         {
           "version": "0.4.1",
           "date": "2026-10-24",
@@ -928,23 +946,21 @@
           "date": "2026-10-14",
           "notes": "- Fixed: on Android, choosing a picture for a post (in the composer, or \"replace\" while editing a post) no longer opens the system photo picker, which lists only a few albums such as Camera, Screenshots and Downloads. Android now offers its full file browser, so every folder is reachable. A file that is not a picture still gets \"Choose an image file.\". Other platforms keep the picture-only file dialog. (#1378)",
           "highlight": false
-        },
+        }
+      ]
+    },
+    "story-writer": {
+      "versions": [
         {
-          "version": "0.3.38",
-          "date": "2026-10-13",
-          "notes": "- Added: in a Creator's settings, \"Appearance for pictures\" has a new button, \"Use the card's image tags\". It shows only while the linked character or persona has the Image Appearance Override switched on and filled in, and it saves those tags as the Creator's own appearance. It asks first when that replaces an appearance you wrote. \"Use linked appearance\" (or \"Clear override\") removes it again. (#1366)",
+          "version": "0.1.1",
+          "date": "2026-10-26",
+          "notes": "- On a phone turned sideways, the closed settings drawer now hides completely behind its arrow, and the book no longer loses extra room beside the camera.",
           "highlight": false
         },
         {
-          "version": "0.3.37",
-          "date": "2026-10-13",
-          "notes": "- With a Claude (Subscription) connection, Slurp no longer makes a hidden second request to name each session, and a request now stops with an error if Claude Code turns on claude.ai connectors. With a Marinara Engine release after 2.5.0, Claude Code also no longer adds your account email, the date or this computer's details to the prompt. Engine 2.5.0's Claude Code still adds them, and the server log warns about it until you update Marinara. (#1313)\n- Changed: avatar references are allowed for SpicyAPI edit models (model IDs ending in /edit) and still left out for its text-to-image models. Slurp's bundled image code cannot call SpicyAPI yet, so SpicyAPI pictures do not work in Slurp until it can. (#1337)",
-          "highlight": false
-        },
-        {
-          "version": "0.3.36",
-          "date": "2026-10-13",
-          "notes": "- Fixed: a Creator's bio and stage voice now steer what she posts about. The post planner reads them beside the character card (hidden identities stay hidden), so a hobby named only in the bio, such as cosplay, becomes post subjects. The post prompt also says that interests named in the bio and stage voice count. (#1358)\n- Changed: the no-repeat rule no longer blocks a theme that the bio, stage voice, or card names as what the Creator does. A new setting, framing, and look each time is still required, and the same outfit or wording is still a repeat. (#1358)",
+          "version": "0.1.0",
+          "date": "2026-10-25",
+          "notes": "- New Home tab: Story Writer, a co-writing book where the model writes your story chapter by chapter.\n- Pick a connection, characters, personas and lorebooks, describe the story, and press Write. The chapter streams onto the page.\n- Read it as an open book or an e-book, light or dark, with your own font, color and size. A portrait phone shows one page.\n- Click anywhere to edit, or start a chapter yourself and let the model continue it.\n- A sticky author's note tells the model what you want next, placed at a depth like Roleplay's Author's Notes.\n- Author tools: chapter summaries for long stories, a timeline the model follows (it can fill it in for you), and a target story length.\n- Every story saves itself: start new ones, come back to old ones any time, and download them as Markdown or plain text.\n- Change the prompt, banned phrases and continue message.",
           "highlight": false
         }
       ]

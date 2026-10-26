@@ -249,6 +249,15 @@ QM.panel = {
     return row;
   },
 
+  // Marks a hidden item/outfit, same as the dock's "Hidden" card badge.
+  _hiddenTag() {
+    const tag = document.createElement("span");
+    tag.textContent = "Hidden";
+    tag.className = "uppercase " + QM_TRACKER_MUTED_CLASS;
+    tag.style.fontSize = "10px";
+    return tag;
+  },
+
   _empty(text) {
     const node = document.createElement("div");
     node.className = QM_TRACKER_EMPTY_CLASS;
@@ -279,7 +288,9 @@ QM.panel = {
       });
       unequipButton.addEventListener("click", () => QM.state.updateItem(item.id, { location: "bag" }));
 
-      list.appendChild(this._row([name, slotLabel, unequipButton]));
+      list.appendChild(
+        this._row(item.hidden ? [name, this._hiddenTag(), slotLabel, unequipButton] : [name, slotLabel, unequipButton]),
+      );
     }
     return list;
   },
@@ -315,7 +326,9 @@ QM.panel = {
         equipped ? QM.state.unequipAll() : QM.state.equipOutfit(outfit.id),
       );
 
-      topLine.append(name, toggleButton);
+      topLine.append(name);
+      if (outfit.hidden) topLine.appendChild(this._hiddenTag());
+      topLine.appendChild(toggleButton);
 
       const itemNames = QM.state.outfitItemNames(outfit);
       const itemsLine = document.createElement("div");
@@ -347,7 +360,7 @@ QM.panel = {
         const qty = document.createElement("span");
         qty.textContent = `×${item.quantity}`;
         qty.className = QM_TRACKER_MUTED_CLASS;
-        list.appendChild(this._row([name, qty]));
+        list.appendChild(this._row(item.hidden ? [name, this._hiddenTag(), qty] : [name, qty]));
       }
     }
     return list;

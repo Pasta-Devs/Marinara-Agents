@@ -402,7 +402,10 @@ test("an opened Character Story is excluded until its final completion commits",
 });
 
 test("new chapter generation includes current legacy chats even when pre-forging gave them a later coarse chapter", async () => {
+  // Keep this successful canon-generation request within its explicitly ample configured window.
+  const configuredWindow = 262144;
   const host = await harness({
+    maxContext: configuredWindow,
     progress: 10,
     summarizeReply(messages) {
       const data = JSON.parse(messages[1].content);
@@ -436,7 +439,7 @@ test("new chapter generation includes current legacy chats even when pre-forging
   );
   const inputTokens = request.messages.reduce((sum, message) => sum + estimateTextTokens(message.content) + 4, 0);
   assert.ok(
-    inputTokens + request.maxTokens + 512 <= 10000,
+    inputTokens + request.maxTokens + 512 <= configuredWindow,
     "The actual provider request reserves its real output within the model context",
   );
   assert.equal((await settled(host)).recordCount, 10);

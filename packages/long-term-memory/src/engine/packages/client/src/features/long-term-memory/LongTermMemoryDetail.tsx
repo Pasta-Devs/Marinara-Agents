@@ -321,7 +321,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       {...(repairPending ? ({ "aria-disabled": true, className: "opacity-50" } as const) : {})}
       onClick={() => void repairRecall()}
     >
-      <RefreshCw aria-hidden="true" size="0.75rem" className={repairPending ? "animate-spin" : ""} />
+      <RefreshCw
+        aria-hidden="true"
+        size="0.75rem"
+        className={repairPending ? "animate-spin motion-reduce:animate-none" : ""}
+      />
       {localizeUi("ui.longTermMemory.longtermmemorydetail.reindexRecall")}
     </Button>
   );
@@ -416,7 +420,21 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         [data-ltm-mobile-navigation] {
           display: none;
         }
+        [data-ltm-surface="detail"] [data-ltm-navigation="desktop"] .mari-editor-tab {
+          height: auto;
+          min-height: 2.75rem;
+        }
+        [data-ltm-surface="detail"] [data-ltm-detail-content] {
+          padding: 1.5rem;
+        }
         @container ltm-detail (max-width: 47.99rem) {
+          [data-ltm-surface="detail"] [data-ltm-detail-icon] {
+            width: 0.875rem;
+            height: 0.875rem;
+          }
+          [data-ltm-surface="detail"] [data-ltm-detail-content] {
+            padding: 1rem;
+          }
           [data-ltm-surface="detail"] [data-ltm-navigation="desktop"] {
             display: none;
           }
@@ -638,7 +656,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             onClick={() => void close()}
           />
           <span className="mari-editor-icon-tile">
-            <Sparkles aria-hidden="true" size="1.125rem" className="max-md:!h-[0.875rem] max-md:!w-[0.875rem]" />
+            <Sparkles aria-hidden="true" size="1.125rem" data-ltm-detail-icon />
           </span>
           <div className="min-w-0 flex-1">
             <h1 id="ltm-detail-title" className="mari-editor-title truncate">
@@ -784,7 +802,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           ) : null}
         </div>
       </header>
-      <div className="mari-editor-content max-md:p-4">
+      <div className="mari-editor-content" data-ltm-detail-content>
         <div
           className="mari-editor-content-inner mari-editor-content-inner--wide space-y-5"
           style={{ maxWidth: "90rem" }}
@@ -879,7 +897,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                       <RefreshCw
                         aria-hidden="true"
                         size="0.75rem"
-                        className={status.isFetching ? "animate-spin" : ""}
+                        className={status.isFetching ? "animate-spin motion-reduce:animate-none" : ""}
                       />
                       {localizeUi("ui.longTermMemory.activityview.retry")}
                     </Button>
