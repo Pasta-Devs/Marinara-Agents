@@ -1,4 +1,4 @@
-/* global FORGE_FORMATION_ENGINE, forgeFormationBudget, forgeFormationCeilings, forgeFormationEffects, forgeFormationEnemyKit, forgeFormationMode, forgeFormationShares, forgeFormationSpread, forgeFormationTargets, forgeFormationTeamError, forgeFormationTriggers, normalizeForgeFormationKit, normalizeForgeFormationRules */
+/* global FORGE_FORMATION_ENGINE, forgeFormationCeilings, forgeFormationEffects, forgeFormationEnemyKit, forgeFormationMaxPower, forgeFormationMode, forgeFormationShares, forgeFormationSpread, forgeFormationTargets, forgeFormationTeamError, forgeFormationTriggers, normalizeForgeFormationKit, normalizeForgeFormationRules */
 export function forgeFormationAvailableElements(session, documents) {
   return [
     ...new Set(
@@ -16,9 +16,9 @@ export function forgeFormationRulesText() {
   return `FORMATION RULES. A team seats up to three Front Row fighters and up to three Back Row supports. At the start of each of its team turns, every living Back Row support adds 1 energy of its own element to the team's shared bank; a team with no supports gains 1 every other turn from its fighters. Energy never expires. Supports never act and cannot be attacked: they power the team and carry passives. Every Front Row fighter acts once per team turn: its Normal skill, its Ultimate, a row change (move into an empty seat or swap places with a support; whoever arrives in front acts next turn), or Hold (keep the energy). A team whose Front Row falls loses; Echo tokens do not count. Water beats Fire, Fire beats Earth, Earth beats Wind, Wind beats Water; Light and Dark beat each other. From round 12 healing fades and every hit grows stronger, so fights end.
 COSTS. Normal skill: cost 0-4 energy of any element. Ultimate: cost 2-8, of which elementCost (1..cost) must be the user's own element; Light and Dark energy can pay that part of any Ultimate. Every point spent adds its element's bonus to the action: Fire +5% damage, Dark +8% damage, Wind +10 crit, Earth a small shield, Water heals the weakest ally a little, Light heals the user.
 POWER means, per effect: damage, aoe_damage, drain, execute = % of the user's ATK per hit; dot = % of the user's ATK dealt at the start of each of the target's turns, past DEF and shields; heal and restore = % of each target's max HP; revive = % of max HP the ally returns with; shield = % of each target's max HP absorbed${ceiling("shield")}; regen = % of max HP healed at the start of each of the target's turns; buff/debuff = % ATK or DEF up/down, or crit chance points${ceiling("buff")}; stun/silence = % chance to land; energy = points of the user's element (1-3); summon = the Echo's share of the user's stats (20-60). taunt, immune, cleanse, swap and shuffle use power 0.
-POWER LIMITS. Budget B: Normal skill 100 + 30 per energy of cost; Ultimate 160 + 20 per energy of cost (max 320); passive 110 in the Front Row or 160 in the Back Row. Maximum power = B x ${share("damage")} for damage/aoe_damage, x ${share("drain")} drain/execute, x ${share("dot")} dot, x ${share("heal")} heal, x ${share("shield")} shield, x ${share("regen")} regen, x ${share("buff")} buff/debuff, x ${share("restore")} restore/revive (max 100); x ${forgeFormationSpread} when it reaches a whole row or team. stun/silence chance: Normal 25 + 25 per energy of cost, Ultimate 100, passive 35. Higher numbers are lowered to the limit.
+POWER LIMITS. Budget B: Normal skill 100 + 30 per energy of cost; Ultimate 160 + 20 per energy of cost (max 320); passive 110 in the Front Row or 160 in the Back Row. Maximum power = B x ${share("damage")} for damage/aoe_damage, x ${share("drain")} drain/execute, x ${share("dot")} dot, x ${share("heal")} heal, x ${share("shield")} shield, x ${share("regen")} regen, x ${share("buff")} buff/debuff, x ${share("restore")} restore/revive (max 100); x ${forgeFormationSpread} when it reaches a whole row or team. No ability's power exceeds ${forgeFormationMaxPower}. stun/silence chance: Normal 25 + 25 per energy of cost, Ultimate 100, passive 35. Higher numbers are lowered to the limit.
 EFFECTS: ${forgeFormationEffects.join(", ")}. damage hits its target; aoe_damage hits every enemy fighter; drain heals the user 40% of the damage dealt; execute grows up to x2 as the target weakens; dot burns each turn; heal; restore (Ultimate only) heals and removes harmful effects; shield; regen; buff/debuff need "stat": "atk", "def" or "crit"; stun (the target loses its next action); silence (the target can only move or hold); taunt (enemies must target the user); immune (Ultimate only: blocks enemy damage, damage over time and control); cleanse; revive (each fallen ally returns once per battle); energy; swap (pull one enemy support into their Front Row; if it is full, their healthiest fighter steps back); shuffle (reseat the enemy team at random); summon (an Echo token takes an empty Front Row seat). A unit that lost its last turn to stun or silence shrugs off the next one.
-TARGETS: ${forgeFormationTargets.join(", ")}. enemy = one enemy fighter the player picks; all_enemies or front_row = every enemy fighter; ally = one ally the player picks; allies = the whole team; back_row = the user's own supports. Back Row enemies can never be targeted, except by swap.
+TARGETS: ${forgeFormationTargets.join(", ")}. enemy = one enemy fighter the player picks; all_enemies = every enemy fighter; front_row = every enemy fighter for an attack, or the user's own Front Row for a heal, shield or buff; ally = one ally the player picks; allies = the whole team; back_row = the user's own supports. Back Row enemies can never be targeted, except by swap.
 DURATION 1-3 counts the target's own turns, starting with its next one.
 PASSIVE: fires at full power at most once per team turn. trigger: ${forgeFormationTriggers.join(", ")}. on_attack, on_hit, on_ult, on_kill, on_death and enter_front only fire in the Front Row; enter_back only in the Back Row; ally_* fire in either row when a teammate does it. "row" (front, back or both) is where the passive works; pick a trigger that can fire there.
 TRAITS: a hybrid may take ONE perk: advance_ult (its Ultimate is free on its next turn after it moves from Back to Front) or retreat_echo (power 40-100: when it moves from Front to Back it recasts its last skill for free at that % power). A five-star character takes exactly ONE signature: solo_front (power 30-100: +that % ATK and DEF while it is the only fighter in its Front Row) or front_tokens (power 20-60: while it fights in front, its Echo tokens fill every empty Front Row seat at its turn start; an Echo has that % of its stats, strikes weakly for free at the end of its team's turn and vanishes with it). Everyone else uses "traits": [].`;
@@ -34,15 +34,16 @@ export function forgeFormationKitMessages({ run, unit, cardContext = "" }) {
       content: `Design this character's kit for Formation combat. Keep the supplied character's identity, authored canon, element and rarity. Never rewrite appearance, personality or backstory. Return ONLY JSON.
 ${forgeFormationRulesText()}
 ARCHETYPE. Choose "preferredRow" from canon first (how this character fights), then from role: Tanks, Warriors and Assassins usually "front", Supports "back", Mages either; "hybrid" for characters who thrive moving between rows.
-- front: a fighter that hits or protects. Normal costs 0-1 (power 80-130 damage, or a tank's taunt or shield); Ultimate costs 2-5 with elementCost 1-3 and helps it fight; passive row "front" or "both".
+- front: a fighter that hits or protects. Normal costs 0-1 (damage power 80-100 at cost 0, up to 130 at cost 1, or a tank's taunt or shield); Ultimate costs 2-5 with elementCost 1-3 and helps it fight; passive row "front" or "both".
+A front or hybrid kit needs a Normal skill, Ultimate or passive that hits or controls enemies: a tank's taunt or shield Normal pairs with an attacking Ultimate or a striking passive.
 - back: a deliberately weak Normal (cost 1-3; a back character's Normal keeps only 60% of the power limit); a powerful but situational Ultimate that a team saves for, costing 5-8 with elementCost 2-4: revive, restore the party, team immunity, swap or shuffle the enemy board, or one devastating hit; and a VERY STRONG passive with row "back" using turn_start or an ally_* trigger, near the passive limit.
 - hybrid: Normal cost 0-2, Ultimate cost 3-6, and a perk and/or enter_front/enter_back passives that reward switching rows.
 Vary costs between characters: simple attackers may have a free Normal skill and a cheap Ultimate, while advanced characters need energy saved over several turns for devastating effects. Use effects that suit the character and the genre: damage over time, attack or defence up and down, regeneration, stun, silence, shields, taunts, immunity, and board control (swap, shuffle) for manipulators.
 Write every name and description in ${language}. A description is one or two sentences that say exactly what the skill does with its real numbers, for example "Deals 120% ATK to one enemy." or "Every ally regenerates 4% max HP for 2 turns."
 Every ability has exactly one effect. Use only the effects, targets, triggers and traits listed above. No arbitrary code, invented fields, extra turns or recursive triggers.
 Shape: ${forgeFormationKitShape}
-A front fighter: {"preferredRow":"front","standard":{"name":"Riptide Lance","description":"Deals 110% ATK to one enemy.","effect":"damage","target":"enemy","power":110,"cost":0,"duration":1},"ultimate":{"name":"Abyssal Tide","description":"Deals 150% ATK to every enemy fighter.","effect":"aoe_damage","target":"all_enemies","power":150,"cost":4,"elementCost":2,"duration":1},"passive":{"name":"Undertow","description":"When struck, it strikes back for 90% ATK.","effect":"damage","target":"enemy","power":90,"duration":1,"trigger":"on_hit","row":"front"},"traits":[]}
-A back support: {"preferredRow":"back","standard":{"name":"Soft Chime","description":"Heals one ally for 10% max HP.","effect":"heal","target":"ally","power":10,"cost":1,"duration":1},"ultimate":{"name":"Second Dawn","description":"Brings every fallen ally back with 60% max HP.","effect":"revive","target":"allies","power":60,"cost":7,"elementCost":3,"duration":1},"passive":{"name":"Hymn of Resolve","description":"At each turn start, every ally gains 20% ATK for 1 turn.","effect":"buff","target":"allies","stat":"atk","power":20,"duration":1,"trigger":"turn_start","row":"back"},"traits":[]}`,
+A front fighter: {"preferredRow":"front","standard":{"name":"Riptide Lance","description":"Deals 100% ATK to one enemy.","effect":"damage","target":"enemy","power":100,"cost":0,"duration":1},"ultimate":{"name":"Abyssal Tide","description":"Deals 150% ATK to every enemy fighter.","effect":"aoe_damage","target":"all_enemies","power":150,"cost":4,"elementCost":2,"duration":1},"passive":{"name":"Undertow","description":"When struck, it strikes back for 90% ATK.","effect":"damage","target":"enemy","power":90,"duration":1,"trigger":"on_hit","row":"front"},"traits":[]}
+A back support: {"preferredRow":"back","standard":{"name":"Soft Chime","description":"Heals one ally for 6% max HP.","effect":"heal","target":"ally","power":6,"cost":1,"duration":1},"ultimate":{"name":"Second Dawn","description":"Brings every fallen ally back with 60% max HP.","effect":"revive","target":"allies","power":60,"cost":7,"elementCost":3,"duration":1},"passive":{"name":"Hymn of Resolve","description":"At each turn start, every ally gains 20% ATK for 1 turn.","effect":"buff","target":"allies","stat":"atk","power":20,"duration":1,"trigger":"turn_start","row":"back"},"traits":[]}`,
     },
     {
       role: "user",
@@ -56,12 +57,12 @@ export function forgeFormationEncounterMessages(messages, run, elements) {
   const result = messages.map((message) => ({ ...message }));
   result[0].content += `
 
-FORMATION COMBAT. This encounter is fought in Formation, and these rules replace the classic combat rules above. Keep each enemy's classic skill and passive as flavour; its "formationKit" is what actually fights.
+FORMATION COMBAT. This encounter is fought in Formation: these rules decide how the fight plays. Every enemy still needs its classic fields exactly as specified above (role, stats, position, and a skill whose effect is one of the classic skill effects listed above); Formation-only effects such as taunt, silence, restore, immune, swap, shuffle, summon and regen go only inside its "formationKit", which is what actually fights.
 ${forgeFormationRulesText()}
 The player brings up to six characters. Give every enemy "position": "front" (it acts each turn and can be attacked) or "back" (a protected battery: each enemy turn it adds 1 energy of its element and its passive works, and it can only be reached by swap). One to three per row, at least one in front, at most six enemies; with three or more enemies, seat one or two supports in back.
 Give EVERY enemy a "formationKit"; EVERY elite and boss MUST have one. Kits follow the archetypes: front fighters hit and protect; back supports have weak actions, strong passives and a situational Ultimate. The boss stands in the Front Row, or is last in the defeat_order.
 Make boss fights creative and readable. Each boss fight uses at least one device besides the boss's mech: a formationRule, a Back Row engine (a support whose passive empowers the boss), or a board-changing Ultimate (swap or shuffle). Boss "mech" values add to its kit and never replace it: phases (enrages below half HP), charge (marks one fighter, then fires its Ultimate at x1.5 the next turn), guard (a guard bar that breaks into extra damage), summon (Echo reinforcements), double (a weaker second Normal skill each turn), immune (resists control and swap), counter (answers each paid Ultimate with a strike), aura (every third turn the player's supports make no energy).
-Optional "formationRules" (at most 2): {"kind":"element_barrier","elements":["fire"],"description":"Only Fire can pierce the ward."} means ONLY the player's units of those elements can target ANY enemy in this fight; use only an element the player already owns: ${(elements || []).join(", ") || "no element barrier allowed"}. {"kind":"defeat_order","order":[0,1,2],"description":"Fell the left sentinel, then the right, then the captain."} The order contains 2-3 distinct ZERO-BASED indices into this encounter's full formation array; ordered enemies are placed in the Front Row, and each can only be targeted after the earlier ones fall.
+Optional "formationRules" (at most 2): {"kind":"element_barrier","elements":["fire"],"description":"Only Fire can pierce the ward."} means ONLY the player's units of those elements can target ANY enemy in this fight; use only an element the player already owns: ${(elements || []).join(", ") || "no element barrier allowed"}. {"kind":"defeat_order","order":[0,1,2],"description":"Fell the left sentinel, then the right, then the captain."} The order contains 2-3 distinct ZERO-BASED indices into this encounter's full formation array; ordered enemies are placed in the Front Row, and each can only be targeted after the earlier ones fall. If the boss is not in the defeat_order, the order holds at most 2 indices so the boss keeps a Front Row seat.
 Explain every rule and mechanic plainly in the objective or opening and in the rule's description. Require counterplay the player has now: never demand unowned units, spending currency, impossible row access or hidden rules.
 Enemies talk during combat: keep the dialogueCues contract above, and let cues react to their own mechanics (for example a "charge" cue as a boss marks its target).
 formationKit shape: ${forgeFormationKitShape}. Omit anything this grammar does not support rather than inventing fields.`;
@@ -77,16 +78,63 @@ formationKit shape: ${forgeFormationKitShape}. Omit anything this grammar does n
 export function forgeFormationNormalizeGuide(raw, guide, elements) {
   if (!guide) return null;
   const formationWorld = Array.isArray(elements);
-  const rules = normalizeForgeFormationRules(raw?.formationRules, guide.formation).filter(
+  const formation = guide.formation.map((enemy, index) => {
+    const written = raw?.formation?.[index]?.formationKit;
+    // In Formation a kit the model wrote is salvaged slot by slot from the enemy's classic skill, never paid for twice.
+    const kit = normalizeForgeFormationKit(written, formationWorld ? { fallback: forgeFormationEnemyKit(enemy) } : {});
+    return kit ? { ...enemy, formationKit: kit } : enemy;
+  });
+  // A boss with no kit at all is the one thing worth regenerating: its fight would have no Formation identity.
+  if (formationWorld && formation.some((enemy) => enemy?.tier === "boss" && !enemy.formationKit)) return null;
+  let rules = normalizeForgeFormationRules(raw?.formationRules, guide.formation).filter(
     (rule) =>
       !formationWorld || rule.kind !== "element_barrier" || rule.elements.some((element) => elements.includes(element)),
   );
-  const formation = guide.formation.map((enemy, index) => {
-    const kit = normalizeForgeFormationKit(raw?.formation?.[index]?.formationKit);
-    return kit ? { ...enemy, formationKit: kit } : enemy;
-  });
-  if (formationWorld && formation.some((enemy) => enemy?.tier === "boss" && !enemy.formationKit)) return null;
-  return { ...guide, formation, ...(rules.length ? { formationRules: rules } : {}) };
+  if (formationWorld) rules = forgeFormationSeatedRules(formation, rules);
+  // The rules are rebuilt from the reply every time, so a copy left by an earlier pass never survives the filter.
+  const { formationRules: _previous, ...rest } = guide;
+  return { ...rest, formation, ...(rules.length ? { formationRules: rules } : {}) };
+}
+
+/**
+ * A three-member defeat order that leaves out the boss would bench it in the Back Row, where the fight could be
+ * won without it. The order then keeps its first two members, so the boss takes the third Front Row seat.
+ */
+export function forgeFormationSeatedRules(enemies, rules = []) {
+  const boss = enemies.findIndex((enemy) => enemy?.tier === "boss");
+  return rules.map((rule) =>
+    rule.kind === "defeat_order" && boss >= 0 && !rule.order.includes(boss) && rule.order.length > 2
+      ? { ...rule, order: rule.order.slice(0, 2) }
+      : rule,
+  );
+}
+
+/**
+ * Formation-only safety net before the classic parser runs: a classic skill or passive that borrowed a
+ * Formation-only effect is read as its nearest classic effect, so the guide is not refused over it.
+ */
+export function forgeFormationClassicFields(raw) {
+  if (!raw || typeof raw !== "object" || !Array.isArray(raw.formation)) return raw;
+  const nearest = {
+    taunt: "shield",
+    immune: "shield",
+    silence: "stun",
+    restore: "heal",
+    regen: "heal",
+    swap: "damage",
+    shuffle: "damage",
+    summon: "damage",
+  };
+  const fit = (ability) =>
+    ability && typeof ability === "object" && nearest[ability.effect]
+      ? { ...ability, effect: nearest[ability.effect] }
+      : ability;
+  return {
+    ...raw,
+    formation: raw.formation.map((enemy) =>
+      enemy && typeof enemy === "object" ? { ...enemy, skill: fit(enemy.skill), passive: fit(enemy.passive) } : enemy,
+    ),
+  };
 }
 
 /**
@@ -94,6 +142,7 @@ export function forgeFormationNormalizeGuide(raw, guide, elements) {
  * those the guide put in front. At most three per row (overflow takes the other row) and at least one in front.
  */
 export function forgeFormationEnemies(enemies, rules = []) {
+  rules = forgeFormationSeatedRules(enemies, rules);
   const result = enemies.map((enemy) => ({
     ...enemy,
     formationKit: normalizeForgeFormationKit(enemy.formationKit) || forgeFormationEnemyKit(enemy),
@@ -121,7 +170,9 @@ export function forgeFormationEnemies(enemies, rules = []) {
 
 export function forgeFormationPrepare(run, allies, enemies, rules = []) {
   if (forgeFormationMode(run) !== "formation") return { allies, enemies, combatMode: "classic", formationRules: [] };
-  return { allies, enemies: forgeFormationEnemies(enemies, rules), combatMode: "formation", formationRules: rules };
+  // The preview, the snapshot and the engine all read the same seated rules.
+  const seated = forgeFormationSeatedRules(enemies, rules);
+  return { allies, enemies: forgeFormationEnemies(enemies, seated), combatMode: "formation", formationRules: seated };
 }
 
 export function forgeFormationEncounterError(allies, rules = []) {

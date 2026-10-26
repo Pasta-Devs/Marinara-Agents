@@ -122,9 +122,10 @@ test("kits are read leniently: synonyms remap, numbers clamp, impossible passive
   );
   assert.equal(healer.standard.effect, "damage", "a front fighter always has something that reaches the enemy");
   assert.equal(normalizeForgeFormationKit(kit({ standard: ability({ effect: "restore" }) })).standard.effect, "heal");
-  assert.equal(normalizeForgeFormationKit(kit({ standard: ability({ effect: "eval" }) })), null);
+  // An unknown effect or a missing name takes the slot's plain default; only a missing ability is refused.
+  assert.equal(normalizeForgeFormationKit(kit({ standard: ability({ effect: "eval" }) })).standard.effect, "damage");
   assert.equal(normalizeForgeFormationKit(kit({ standard: undefined })), null);
-  assert.equal(normalizeForgeFormationKit(kit({ standard: ability({ name: "" }) })), null);
+  assert.equal(normalizeForgeFormationKit(kit({ standard: ability({ name: "" }) })).standard.name, "Strike");
   const again = normalizeForgeFormationKit(read);
   assert.deepEqual(again, read, "normalizing a normalized kit changes nothing");
 });
@@ -752,8 +753,17 @@ test("unknown or missing hero kits fail closed, and nothing in the engine depend
   assert.doesNotMatch(source, /localeCompare|Date\.now|Math\.random/u);
 });
 
-test("a log from the engine before 1.24.0 is scored by that engine when the server carries it", () => {
+test("the saved snapshot, not the client log, picks the engine that scores a claim", () => {
   const snapshot = { allies: [unit("a", { stats: strong })], enemies: [unit("e", { stats: weak })], seed: 5 };
+  // A fight saved on engine 2 refuses records it would not write, even with the old engine present.
+  globalThis.forgeFormationLegacyReplay = forgeFormationLegacyReplay;
+  try {
+    const stamped = { ...snapshot, formationEngine: FORGE_FORMATION_ENGINE };
+    assert.equal(replayForgeFormationBattle(stamped, [{ action: "attack" }, { action: "auto" }]).result, "lose");
+    assert.equal(replayForgeFormationBattle(stamped, []).result, replayForgeFormationBattle(snapshot, []).result);
+  } finally {
+    delete globalThis.forgeFormationLegacyReplay;
+  }
   const old = forgeFormationLegacyReplay(snapshot, []);
   assert.ok(old.log.length && old.log.every((record) => record.v === undefined));
   globalThis.forgeFormationLegacyReplay = forgeFormationLegacyReplay;
@@ -859,4 +869,416 @@ test("the server seats enemies front-first and keeps Classic guides byte-identic
   assert.match(messages[0].content, /No arbitrary code/u);
   assert.match(messages[0].content, /heal and restore = % of each target's max HP/u);
   assert.match(messages[0].content, /x 0\.08 heal/u, "the prompt states the engine's own heal share");
+});
+
+const fewer = (list, op, id) => list.filter((event) => event.op === op && (id == null || event.id === id));
+
+test("drifted kits parse: stat-named effects, synonyms, a 'normal' key and a tank's taunt", () => {
+  const drift = normalizeForgeFormationKit({
+    preferredRow: "front",
+    normal: { name: "Bulwark", effect: "Defense Up", target: "self", power: 99 },
+    ultimate: { name: "Mending Rain", effect: "heal_all", power: 99, cost: 4 },
+    passive: { name: "Thorns", effect: "thorns", trigger: "on_hit", row: "front" },
+  });
+  assert.deepEqual([drift.standard.effect, drift.standard.stat], ["buff", "def"]);
+  assert.deepEqual([drift.ultimate.effect, drift.ultimate.target], ["heal", "allies"]);
+  assert.equal(drift.passive.effect, "damage");
+  assert.equal(
+    drift.standard.description,
+    "",
+    "nothing was rewritten; a striking passive counts as reaching the enemy",
+  );
+  assert.equal(drift.standard.effect, "buff");
+  const tank = normalizeForgeFormationKit(
+    kit({
+      standard: ability({ name: "Bulwark Call", effect: "taunt", description: "Draws every attack." }),
+      ultimate: ability({ effect: "aoe_damage", cost: 4, elementCost: 1 }),
+    }),
+  );
+  assert.equal(tank.standard.effect, "taunt", "a taunt Normal with an attacking Ultimate stays a taunt");
+  const idle = normalizeForgeFormationKit(
+    kit({
+      standard: ability({ effect: "shield", target: "self", description: "Raises a ward." }),
+      ultimate: ability({ effect: "buff", stat: "def", cost: 3, elementCost: 1 }),
+    }),
+  );
+  assert.deepEqual(
+    [idle.standard.effect, idle.standard.description],
+    ["damage", ""],
+    "a rewritten skill drops its old text",
+  );
+  const salvaged = normalizeForgeFormationKit(
+    { preferredRow: "back", standard: { name: "Glare", effect: "glare" } },
+    { fallback: forgeFormationEnemyKit({ skill: ability({ name: "Old Strike" }) }) },
+  );
+  assert.equal(salvaged.ultimate.name, "Old Strike", "a missing slot comes from the enemy's classic skill");
+  assert.equal(salvaged.standard.name, "Glare");
+});
+
+test("a planned energy cast funds the steps after it, in the projection and the engine alike", () => {
+  const charger = unit("charger", {
+    stats: strong,
+    formationKit: kit({ standard: ability({ name: "Kindle", effect: "energy", target: "self", power: 2, cost: 1 }) }),
+  });
+  const striker = unit("striker", {
+    stats: strong,
+    formationKit: kit({ ultimate: ability({ name: "Blaze", cost: 2, elementCost: 1 }) }),
+  });
+  const snapshot = {
+    allies: [
+      charger,
+      striker,
+      unit("s", { position: "back", affinity: "Water" }),
+      unit("t", { position: "back", affinity: "Water" }),
+    ],
+    enemies: [unit("foe", { stats: { ...strong, hp: 9000, atk: 1 } })],
+  };
+  const battle = forgeFormationBattle(snapshot);
+  let next = battle.next();
+  const plan = [
+    { actorId: "charger", action: "normal" },
+    { actorId: "striker", action: "ultimate", targetId: "foe" },
+  ];
+  const formation = next.value.options.formation;
+  assert.deepEqual(formation.bank.water, 2);
+  const projection = forgeFormationProjection(formation, plan);
+  assert.deepEqual(
+    projection.results.map((result) => result.ok),
+    [true, true],
+    "Kindle's Fire pays the Ultimate's Fire share",
+  );
+  next = battle.next({ action: "plan", plan });
+  const turn = next.value.steps.flatMap((step) => step.events);
+  assert.ok(fewer(turn, "ult", "striker").length === 1);
+  assert.ok(!turn.some((event) => event.op === "formation-held" && event.reason === "energy"));
+});
+
+test("every spent point adds its element's bonus", () => {
+  const hit = (element, overrides = {}, seed = 3) => {
+    const hero = unit("hero", {
+      stats: { hp: 1000, atk: 200, def: 100, spd: 50, crit: 0 },
+      formationKit: kit({ standard: ability({ cost: 2 }) }),
+      ...overrides,
+    });
+    const played = drive(
+      {
+        allies: [
+          hero,
+          unit("mate", { stats: { ...strong, hp: 40 } }),
+          unit("s1", { position: "back", affinity: element }),
+          unit("s2", { position: "back", affinity: element }),
+        ],
+        enemies: [unit("foe", { stats: { hp: 9000, atk: 1, def: 100, spd: 1, crit: 0 } })],
+        seed,
+      },
+      (prompt, count) => (count === 1 ? plan({ actorId: "hero", action: "normal", targetId: "foe" }) : hold()),
+    );
+    const first = played.steps.slice(played.prompts[0].at, played.prompts[1].at).flatMap((step) => step.events);
+    return { first, amount: first.find((event) => event.op === "hit" && event.id === "foe")?.amount };
+  };
+  const water = hit("Water"),
+    fire = hit("Fire"),
+    dark = hit("Dark");
+  assert.ok(Math.abs(fire.amount / water.amount - 1.1) < 0.02, `Fire +5% a point: ${fire.amount} vs ${water.amount}`);
+  assert.ok(Math.abs(dark.amount / water.amount - 1.16) < 0.02, `Dark +8% a point: ${dark.amount} vs ${water.amount}`);
+  assert.ok(
+    fewer(hit("Earth").first, "shieldFx").some((event) => event.ids.includes("hero")),
+    "Earth shields the user",
+  );
+  assert.ok(fewer(water.first, "heal").length && !fewer(fire.first, "heal").length, "Water heals the weakest ally");
+  assert.ok(fewer(hit("Light").first, "heal", "hero").length, "Light heals the user");
+  // At 80 crit, two Wind points make every hit a crit; the same skill paid with Water does not always crit.
+  const crits = (element) =>
+    [1, 99992, 299974, 499956, 6599407].map(
+      (seed) =>
+        hit(element, { stats: { hp: 1000, atk: 200, def: 100, spd: 50, crit: 80 } }, seed).first.find(
+          (event) => event.op === "hit" && event.id === "foe",
+        ).crit,
+    );
+  assert.ok(crits("Wind").every(Boolean), "Wind +10 crit a point");
+  assert.ok(crits("Water").some((crit) => !crit));
+});
+
+test("the AI casts Ultimates it can pay, and a saver casts the one it saved for", () => {
+  const caster = unit("caster", {
+    stats: { ...strong, atk: 20 },
+    formationKit: kit({ ultimate: ability({ name: "Surge", cost: 2, elementCost: 1 }) }),
+  });
+  const played = drive({
+    allies: [unit("hero", { stats: { ...strong, atk: 1 } })],
+    enemies: [caster, unit("b1", { position: "back" }), unit("b2", { position: "back" })],
+  });
+  assert.ok(fewer(events(played), "ult", "caster").length > 0);
+  const saver = unit("saver", {
+    stats: { ...strong, atk: 20 },
+    formationKit: kit({
+      standard: ability({ cost: 1 }),
+      ultimate: ability({ name: "Payday", cost: 4, elementCost: 1 }),
+    }),
+  });
+  const saving = drive({
+    allies: [unit("hero", { stats: { ...strong, atk: 1 } })],
+    enemies: [saver, unit("b1", { position: "back" }), unit("b2", { position: "back" })],
+  });
+  assert.ok(fewer(events(saving), "ult", "saver").length > 0);
+});
+
+test("recast immunity cannot stall a fight: a ward forces a hittable turn and the AI stops wasting casts", () => {
+  const aegis = (target) =>
+    unit("boss", {
+      stats: { hp: 300, atk: 60, def: 100, spd: 50, crit: 0 },
+      formationKit: kit({
+        ultimate: ability({ name: "Aegis", effect: "immune", target, cost: 4, elementCost: 1, duration: 2 }),
+      }),
+    });
+  for (const target of ["self", "allies"])
+    for (const batteries of [2, 3]) {
+      const fighter = (id) => unit(id, { stats: { hp: 100, atk: 80, def: 80, spd: 50, crit: 0 } });
+      const fight = replayForgeFormationBattle({
+        allies: [fighter("a"), fighter("c"), fighter("d")],
+        enemies: [
+          aegis(target),
+          ...Array.from({ length: batteries }, (_, index) => unit(`b${index}`, { position: "back" })),
+        ],
+        seed: 7,
+      });
+      const all = events(fight);
+      const firstCast = all.findIndex((event) => event.op === "ult" && event.id === "boss");
+      assert.ok(firstCast >= 0, "the boss casts its immunity");
+      assert.ok(
+        all.slice(firstCast).some((event) => event.op === "hit" && event.id === "boss" && event.amount > 0),
+        `${target}/${batteries}: the boss can be hurt after its first immune cast`,
+      );
+      assert.equal(fight.result, "win", `${target}/${batteries}: the fight can be won`);
+      assert.ok(
+        !all.some((event) => event.op === "debuff" && event.id === "boss" && event.text === "RESIST"),
+        "the AI never casts immunity that cannot land",
+      );
+    }
+  const wall = unit("wall", {
+    stats: strong,
+    formationKit: kit({
+      standard: ability({ effect: "taunt", target: "self", duration: 3 }),
+      ultimate: ability({ effect: "immune", target: "self", cost: 2, elementCost: 1, duration: 3 }),
+    }),
+  });
+  const battle = forgeFormationBattle({
+    allies: [unit("hero", { stats: strong })],
+    enemies: [
+      wall,
+      unit("blade", { stats: strong }),
+      unit("b1", { position: "back" }),
+      unit("b2", { position: "back" }),
+    ],
+  });
+  battle.next();
+  const next = battle.next(hold());
+  const reach = next.value.options.formation.fighters[0].targets.normal;
+  assert.ok(reach.ids.includes("blade"), "an immune taunter cannot pin the attack");
+});
+
+test("a taunt says why the other foes cannot be picked", () => {
+  const taunter = unit("taunter", {
+    stats: strong,
+    formationKit: kit({
+      passive: { ...kit().passive, effect: "taunt", target: "self", trigger: "turn_start", row: "front" },
+    }),
+  });
+  const battle = forgeFormationBattle({
+    allies: [unit("hero", { stats: strong })],
+    enemies: [taunter, unit("other", { stats: strong })],
+  });
+  battle.next();
+  const next = battle.next(hold());
+  const reach = next.value.options.formation.fighters[0].targets.normal;
+  assert.deepEqual(reach.ids, ["taunter"]);
+  assert.equal(reach.blocked.other, "taunt");
+});
+
+test("a summon with no free seat holds without paying, and Echoes keep coming all fight", () => {
+  const caller = unit("caller", {
+    stats: strong,
+    formationKit: kit({
+      ultimate: ability({ name: "Call", effect: "summon", target: "self", cost: 2, elementCost: 1, power: 30 }),
+    }),
+  });
+  const battle = forgeFormationBattle({
+    allies: [
+      caller,
+      unit("m1", { stats: strong }),
+      unit("m2", { stats: strong }),
+      unit("s1", { position: "back" }),
+      unit("s2", { position: "back" }),
+    ],
+    enemies: [unit("foe", { stats: { ...strong, hp: 9000, atk: 1 } })],
+  });
+  let next = battle.next();
+  assert.deepEqual(next.value.options.formation.fighters[0].targets.ultimate.ids, [], "nothing to summon into");
+  const before = next.value.options.formation.bank.fire;
+  next = battle.next(plan({ actorId: "caller", action: "ultimate" }));
+  const turn = next.value.steps.flatMap((step) => step.events);
+  assert.ok(turn.some((event) => event.op === "formation-held" && event.id === "caller" && event.reason === "target"));
+  assert.ok(!fewer(turn, "ult", "caller").length);
+  assert.equal(next.value.options.formation.bank.fire, before + 2, "the bank kept its energy and gained this turn's");
+  // Ten starting units: the old cap of thirty actors stopped summoning after twenty Echoes, dead ones included.
+  const owner = unit("owner", {
+    stats: { hp: 3000, atk: 1, def: 2000, spd: 50, crit: 0 },
+    formationKit: kit({ traits: [{ kind: "front_tokens", power: 20 }] }),
+  });
+  const sweeper = (id) =>
+    unit(id, {
+      stats: { hp: 99999, atk: 450, def: 9000, spd: 50, crit: 0 },
+      formationKit: kit({ standard: ability({ effect: "aoe_damage", target: "all_enemies", power: 70 }) }),
+    });
+  const long = replayForgeFormationBattle({
+    allies: [owner, ...["b1", "b2", "b3"].map((id) => unit(id, { position: "back" }))],
+    enemies: [
+      sweeper("s1"),
+      sweeper("s2"),
+      sweeper("s3"),
+      ...["e1", "e2", "e3"].map((id) => unit(id, { position: "back" })),
+    ],
+    seed: 1,
+  });
+  const summons = fewer(events(long), "summon");
+  assert.ok(summons.length > 20, `Echoes keep refilling seats: ${summons.length}`);
+});
+
+test("retreat_echo repeats one paid cast once, never its own echo", () => {
+  const echo = unit("echo", {
+    stats: strong,
+    formationKit: kit({
+      preferredRow: "hybrid",
+      traits: [{ kind: "retreat_echo", power: 80 }],
+      ultimate: ability({ cost: 2, elementCost: 1 }),
+    }),
+  });
+  const played = drive(
+    {
+      allies: [echo, unit("mate", { stats: strong }), unit("s", { position: "back" }), unit("t", { position: "back" })],
+      enemies: [unit("foe", { stats: { ...strong, hp: 90000, atk: 1 } })],
+    },
+    (prompt) => {
+      const ready = prompt.options.formation.fighters.map((fighter) => fighter.id);
+      if (ready.includes("echo") && prompt.round === 1)
+        return plan({ actorId: "echo", action: "ultimate", targetId: "foe" });
+      if (ready.includes("echo")) return plan({ actorId: "echo", action: "row", moveId: "echo" });
+      return plan({ actorId: "mate", action: "row", moveId: "echo" });
+    },
+  );
+  assert.equal(fewer(events(played), "ult", "echo").length, 2, "the paid Ultimate and one echo of it");
+});
+
+test("a kit-less enemy's placeholder passive never fires", () => {
+  const played = drive({
+    allies: [unit("hero", { stats: { ...strong, atk: 1 } })],
+    enemies: [unit("soldier", { formationKit: null, skill: ability(), passive: null, stats: { ...strong, atk: 1 } })],
+  });
+  assert.equal(fewer(events(played), "passive", "soldier").length, 0);
+  assert.ok(!events(played).some((event) => event.op === "shieldFx" && event.ids.includes("soldier")));
+});
+
+test("the guide, seating and prompts keep the boss in the fight and every number honest", async () => {
+  const source = await readFile(
+    new URL("../packages/gacha-forge/src/formation-combat-server.mjs", import.meta.url),
+    "utf8",
+  );
+  const context = vm.createContext({ ...shared });
+  vm.runInContext(
+    source.replace(/^export /gmu, "") +
+      ";globalThis.adapter={enemies:forgeFormationEnemies,prepare:forgeFormationPrepare,guide:forgeFormationNormalizeGuide,error:forgeFormationEncounterError,classic:forgeFormationClassicFields,kit:forgeFormationKitMessages,messages:forgeFormationEncounterMessages};",
+    context,
+  );
+  const { adapter } = context;
+  const formation = { combat: { mode: "formation" } };
+  for (const [members, order, boss] of [
+    [["boss", "s1", "s2", "s3"], [1, 2, 3], 0],
+    [["s1", "s2", "s3", "boss"], [0, 1, 2], 3],
+  ]) {
+    const enemies = members.map((id) =>
+      unit(id, {
+        position: "back",
+        tier: id === "boss" ? "boss" : "soldier",
+        formationKit: kit({ preferredRow: "back" }),
+        stats: id === "boss" ? strong : weak,
+      }),
+    );
+    const prepared = adapter.prepare(formation, [], enemies, [
+      { kind: "defeat_order", order, description: "Wards first" },
+    ]);
+    assert.equal(prepared.enemies[boss].position, "front", `${members.join(",")}: the boss holds a Front Row seat`);
+    assert.equal(prepared.formationRules[0].order.length, 2);
+    const fight = replayForgeFormationBattle({
+      allies: [unit("hero", { stats: { ...strong, atk: 400 } })],
+      enemies: prepared.enemies,
+      rules: prepared.formationRules,
+    });
+    if (fight.result === "win")
+      assert.ok(fewer(events(fight), "death", "boss").length, "winning means defeating the boss");
+  }
+  const base = {
+    title: "Gate",
+    formation: [{ id: "enemy-0", name: "Boss", tier: "boss", position: "front", skill: ability() }],
+  };
+  const raw = {
+    formation: [{ formationKit: { standard: { name: "Glare", effect: "glare" }, passive: { name: "Ward" } } }],
+    formationRules: [{ kind: "element_barrier", elements: ["water"], description: "Water only" }],
+  };
+  const inner = adapter.guide(raw, structuredClone(base));
+  assert.ok(inner.formationRules, "the Classic pass keeps the rules it read");
+  const outer = adapter.guide(raw, inner, ["fire"]);
+  assert.equal(
+    outer.formationRules,
+    undefined,
+    "a barrier the player cannot meet is dropped, not kept from an earlier pass",
+  );
+  assert.equal(adapter.error([unit("hero")], outer.formationRules || []), null);
+  assert.ok(
+    outer.formation[0].formationKit.ultimate,
+    "a drifted boss kit is salvaged from its classic skill, not regenerated",
+  );
+  const fixed = adapter.classic({ formation: [{ skill: { effect: "taunt" }, passive: { effect: "regen" } }] });
+  assert.deepEqual([fixed.formation[0].skill.effect, fixed.formation[0].passive.effect], ["shield", "heal"]);
+  const appendix = adapter.messages([{ role: "system", content: "" }], formation, ["fire"])[0].content;
+  assert.match(appendix, /Every enemy still needs its classic fields/u);
+  assert.doesNotMatch(appendix, /replace the classic combat rules/u);
+  assert.match(appendix, /If the boss is not in the defeat_order, the order holds at most 2 indices/u);
+  const prompt = adapter.kit({ run: { scenario: "" }, unit: unit("hero") })[0].content;
+  assert.match(prompt, new RegExp(`No ability's power exceeds ${shared.forgeFormationMaxPower}`, "u"));
+  for (const line of prompt.split("\n").filter((entry) => /^A (front fighter|back support): /u.test(entry))) {
+    const written = JSON.parse(line.slice(line.indexOf("{")));
+    const read = normalizeForgeFormationKit(written);
+    for (const slot of ["standard", "ultimate", "passive"])
+      assert.equal(
+        read[slot].power,
+        written[slot].power,
+        `${line.slice(0, 16)} ${slot} is within its limit as written`,
+      );
+  }
+});
+
+test("a support skill on front_row reads as the user's own Front Row, matching who it reaches", async () => {
+  const { forgeFormationCombatEnglish } = await import("../packages/gacha-forge/src/formation-combat-en.mjs");
+  const source = await readFile(
+    new URL("../packages/gacha-forge/src/formation-combat-client.mjs", import.meta.url),
+    "utf8",
+  );
+  const context = vm.createContext({ ...shared, forgeFormationCombatEnglish });
+  vm.runInContext(source.replace(/^export /gmu, "") + ";globalThis.describe=forgeFormationDescribe;", context);
+  const heal = { effect: "heal", target: "front_row", power: 8, duration: 2 };
+  assert.match(context.describe(heal), /your Front Row fighters/u);
+  assert.match(context.describe({ effect: "damage", target: "front_row", power: 100 }), /every enemy fighter/u);
+  const healer = unit("healer", {
+    stats: strong,
+    formationKit: kit({ ultimate: ability({ ...heal, cost: 2, elementCost: 1 }) }),
+  });
+  const prompt = forgeFormationBattle({
+    allies: [healer, unit("mate", { stats: strong })],
+    enemies: [unit("foe")],
+  }).next().value;
+  assert.deepEqual(
+    prompt.options.formation.fighters[0].targets.ultimate.ids,
+    ["healer", "mate"],
+    "it reaches the user's own row",
+  );
 });

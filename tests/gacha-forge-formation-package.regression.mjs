@@ -360,18 +360,71 @@ test("a claimed win cannot override the server replay of a lost Formation fight"
   }
 });
 
-test("a fight played on the engine before 1.24.0 is still scored by its own rules", async () => {
+test("a fight saved before 1.24.0 is scored by its own engine; one saved on engine 2 refuses its records", async () => {
   const f = await fixture();
   try {
+    // A fragile hero whose skills cost energy it has no supports for: the old engine's free Attack wins before
+    // the sentinel does, while engine 2 must save up and loses. So the two engines disagree on this fight.
+    const hero = f.docs.get(f.heroId).data;
+    hero.stats = { hp: 30, atk: 100, def: 100, spd: 100 };
+    hero.formationKit = {
+      ...kit(),
+      standard: { ...kit().standard, cost: 4 },
+      ultimate: { ...kit().ultimate, cost: 8, elementCost: 2 },
+    };
+    f.session().roster[f.heroId] = { level: 1 };
+    f.docs.get(`${chapterRunId}:combat:2:1`).data.formation[0].stats = { hp: 20, atk: 60, def: 10, spd: 1 };
     assert.equal((await f.post("/battle/start", starting(request))).body.ok, true);
-    const fight = structuredClone(f.session().combatPending.fight);
-    // An old tab logs one record per activation and no engine version.
-    const old = forgeFormationLegacyReplay(fight, []);
+    assert.equal(f.session().combatPending.fight.formationEngine, FORGE_FORMATION_ENGINE, "new fights are stamped");
+    const stamped = structuredClone(f.session().combatPending.fight);
+    const old = forgeFormationLegacyReplay({ ...stamped, formationEngine: undefined }, []);
     assert.equal(old.result, "win");
     assert.ok(old.log.length && old.log.every((record) => record.v === undefined));
+    // Without the old engine the same log is read as Auto by engine 2, and loses: the server must carry it.
+    const { formationEngine: _stamp, ...unstamped } = stamped;
+    assert.equal(replayForgeFormationBattle(unstamped, old.log).result, "lose");
+    const wallet = structuredClone(f.session().wallet);
+    const refused = (await f.post("/complete", { ...request, nodeIndex: 4, log: old.log })).body;
+    assert.equal(refused.error, "lost", "a stamped fight never accepts the old engine's records");
+    assert.deepEqual(f.session().wallet, wallet);
+    // A fight saved before 1.24.0 carries no stamp and is scored by the engine it was played on.
+    assert.equal((await f.post("/battle/start", starting(request))).body.ok, true);
+    delete f.session().combatPending.fight.formationEngine;
     const won = (await f.post("/complete", { ...request, nodeIndex: 4, log: old.log })).body;
     assert.equal(won.ok, true, JSON.stringify(won));
     assert.equal(f.session().combatPending, null);
+  } finally {
+    await f.close();
+  }
+});
+
+test("old kits and a leftover unfinished fight: the remake runs, then the battle starts", async () => {
+  const f = await fixture();
+  try {
+    f.transport.stage = "formation";
+    f.transport.reply = () => JSON.stringify(kit());
+    for (const id of [f.heroId, chapterUnitId]) delete f.docs.get(id).data.formationKitPrompt;
+    f.session().combatPending = {
+      chapter: 2,
+      combatIndex: 0,
+      difficulty: "normal",
+      fight: { combatMode: "formation" },
+    };
+    f.session().farmPending = { stage: "funds", difficulty: 1, fight: { combatMode: "formation" } };
+    assert.equal((await f.post("/battle/start", starting(request))).body.error, "combat-conversion-in-progress");
+    let state;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      state = (await f.post("/combat-mode/status")).body;
+      if (["committed", "failed"].includes(state.conversion?.status)) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    assert.equal(state.conversion.status, "committed", JSON.stringify(state));
+    assert.equal(
+      (await f.post("/battle/start", starting(request))).body.ok,
+      true,
+      "the next start overwrites the stale fight",
+    );
+    assert.equal((await f.post("/farm/start", starting({ stage: "funds", difficulty: 1 }))).body.ok, true);
   } finally {
     await f.close();
   }

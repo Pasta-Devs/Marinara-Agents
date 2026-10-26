@@ -63,6 +63,27 @@ const forgeFormationOffense = new Set([
   "shuffle",
 ]);
 const forgeFormationMulti = new Set(["all_enemies", "allies", "front_row", "back_row"]);
+// Stat-named effects say which stat they move.
+const forgeFormationStatEffects = {
+  atk_up: ["buff", "atk"],
+  attack_up: ["buff", "atk"],
+  enrage: ["buff", "atk"],
+  def_up: ["buff", "def"],
+  defense_up: ["buff", "def"],
+  defence_up: ["buff", "def"],
+  crit_up: ["buff", "crit"],
+  atk_down: ["debuff", "atk"],
+  attack_down: ["debuff", "atk"],
+  weaken: ["debuff", "atk"],
+  slow: ["debuff", "atk"],
+  def_down: ["debuff", "def"],
+  defense_down: ["debuff", "def"],
+  defence_down: ["debuff", "def"],
+  armor_break: ["debuff", "def"],
+  sunder: ["debuff", "def"],
+};
+// The most power any ability carries.
+export const forgeFormationMaxPower = 300;
 // Model output drifts in predictable ways; known synonyms are read as the effect they name.
 const forgeFormationAliases = {
   effect: {
@@ -90,11 +111,16 @@ const forgeFormationAliases = {
     barrier: "shield",
     ward: "shield",
     protect: "shield",
-    attack_up: "buff",
-    defense_up: "buff",
-    attack_down: "debuff",
-    defense_down: "debuff",
-    weaken: "debuff",
+    heal_all: "heal",
+    mass_heal: "heal",
+    group_heal: "heal",
+    counter: "damage",
+    thorns: "damage",
+    reflect: "damage",
+    multi_hit: "damage",
+    combo: "damage",
+    sleep: "stun",
+    damage_reduction: "shield",
     freeze: "stun",
     paralyze: "stun",
     mute: "silence",
@@ -243,7 +269,7 @@ export function forgeFormationPowerCap(ability, slot, row = "front") {
     const spread =
       !["restore", "revive"].includes(effect) && (forgeFormationMulti.has(ability?.target) || effect === "aoe_damage");
     return Math.min(
-      forgeFormationCeilings[effect] || 300,
+      forgeFormationCeilings[effect] || forgeFormationMaxPower,
       Math.round(budget * share * (spread ? forgeFormationSpread : 1)),
     );
   }
@@ -269,24 +295,40 @@ function forgeFormationFitTarget(effect, target) {
   return target || (effect === "restore" ? "allies" : "ally");
 }
 
+const forgeFormationSlotDefaults = {
+  standard: { name: "Strike", effect: "damage" },
+  ultimate: { name: "Finisher", effect: "damage" },
+  passive: { name: "Instinct", effect: "shield" },
+};
+
 function forgeFormationAbility(raw, slot, preferredRow) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const name = forgeFormationText(raw.name, 80),
-    effect = forgeFormationPick(forgeFormationEffects, forgeFormationAliases.effect, raw.effect);
-  if (!name || !effect) return null;
+  // An unknown effect or a missing name takes its slot's plain default instead of failing a paid kit.
+  const statEffect = forgeFormationStatEffects[forgeFormationKey(raw.effect)];
+  const picked = statEffect?.[0] || forgeFormationPick(forgeFormationEffects, forgeFormationAliases.effect, raw.effect);
+  const effect = picked || forgeFormationSlotDefaults[slot].effect,
+    name = forgeFormationText(raw.name, 80) || forgeFormationSlotDefaults[slot].name;
+  const crowd = ["heal_all", "mass_heal", "group_heal"].includes(forgeFormationKey(raw.effect));
   const ability = {
     name,
     description: forgeFormationText(raw.description, 500),
     effect,
     target: forgeFormationFitTarget(
       effect,
-      forgeFormationPick(forgeFormationTargets, forgeFormationAliases.target, raw.target),
+      crowd
+        ? "allies"
+        : picked
+          ? forgeFormationPick(forgeFormationTargets, forgeFormationAliases.target, raw.target)
+          : slot === "passive"
+            ? "self"
+            : "enemy",
     ),
     power: 0,
     duration: forgeFormationClamp(forgeFormationNumber(raw.duration) ?? 2, 1, 3),
   };
   if (effect === "buff" || effect === "debuff")
-    ability.stat = forgeFormationPick(["atk", "def", "crit"], forgeFormationAliases.stat, raw.stat) || "atk";
+    ability.stat =
+      forgeFormationPick(["atk", "def", "crit"], forgeFormationAliases.stat, raw.stat) || statEffect?.[1] || "atk";
   if (slot === "passive") {
     let trigger =
       forgeFormationPick(forgeFormationTriggers, forgeFormationAliases.trigger, raw.trigger) || "turn_start";
@@ -339,21 +381,32 @@ function forgeFormationAbility(raw, slot, preferredRow) {
  * structurally broken kit (a missing ability, name or unknown effect) is refused. `rarity` (generation only)
  * drops signature traits below five stars; the stored version is preserved.
  */
-export function normalizeForgeFormationKit(raw, { rarity } = {}) {
+export function normalizeForgeFormationKit(raw, { rarity, fallback } = {}) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const preferredRow =
-    forgeFormationPick(["front", "back", "hybrid"], forgeFormationAliases.preferredRow, raw.preferredRow) || "front";
-  const standard = forgeFormationAbility(raw.standard, "standard", preferredRow),
-    ultimate = forgeFormationAbility(raw.ultimate, "ultimate", preferredRow),
-    passive = forgeFormationAbility(raw.passive, "passive", preferredRow);
+    forgeFormationPick(["front", "back", "hybrid"], forgeFormationAliases.preferredRow, raw.preferredRow) ||
+    fallback?.preferredRow ||
+    "front";
+  // `fallback` (an enemy's classic kit) fills a slot the model left out, so a boss guide is never paid for twice.
+  const slot = (key, ...names) =>
+    forgeFormationAbility(
+      names.map((name) => raw[name]).find((value) => value && typeof value === "object"),
+      key,
+      preferredRow,
+    ) || (fallback ? forgeFormationAbility(fallback[key], key, preferredRow) : null);
+  const standard = slot("standard", "standard", "normal"),
+    ultimate = slot("ultimate", "ultimate", "ult"),
+    passive = slot("passive", "passive");
   if (!standard || !ultimate || !passive) return null;
-  // The Front Row is there to fight: a fighter with nothing that touches the enemy strikes with its Normal skill.
+  // The Front Row is there to fight: a fighter with nothing that reaches the enemy (its Normal, Ultimate or a
+  // striking passive) strikes with its Normal skill. A tank's taunt or shield pairs with an attacking Ultimate.
   if (
     preferredRow !== "back" &&
     !forgeFormationOffense.has(standard.effect) &&
-    !forgeFormationOffense.has(ultimate.effect)
+    !forgeFormationOffense.has(ultimate.effect) &&
+    !forgeFormationStrikes.has(passive.effect)
   ) {
-    Object.assign(standard, { effect: "damage", target: "enemy" });
+    Object.assign(standard, { effect: "damage", target: "enemy", description: "" });
     delete standard.stat;
     standard.power = forgeFormationPowerCap(standard, "standard");
   }
@@ -441,6 +494,8 @@ export function forgeFormationProjection(formation, entries = []) {
     if (!skill) return { entry, payment: null, ok: true };
     const payment = forgeFormationPayment(bank, skill, fighter.aff);
     if (payment) for (const key of forgeFormationElements) bank[key] -= payment[key];
+    // A planned energy cast adds its energy before the next step pays, as the engine resolves it.
+    if (payment && skill.effect === "energy") bank[fighter.aff] += Math.max(1, Math.round(Number(skill.power) || 0));
     return { entry, payment, ok: !!payment };
   });
   return { bank, results };
@@ -533,6 +588,7 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
       activations: 0,
       charging: "",
       controlled: -9,
+      warded: -9,
       saving: false,
       damageBonus: 1,
       critBonus: 0,
@@ -594,17 +650,19 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
   const statuses = () => ({
     op: "statuses",
     byId: Object.fromEntries(
-      actors.map((actor) => [
-        actor.id,
-        [
-          ...actor.statuses.map((entry) => ({
-            k: entry.stat === "crit" ? "fcrit" : entry.stat || chips[entry.kind] || entry.kind,
-            v: entry.kind === "stun" ? 1 : entry.value,
-            r: entry.turns,
-          })),
-          ...(actor.alive && actor.shield > 0 ? [{ k: "shield", v: Math.round(actor.shield) }] : []),
-        ],
-      ]),
+      actors
+        .filter((actor) => actor.alive || !actor.token)
+        .map((actor) => [
+          actor.id,
+          [
+            ...actor.statuses.map((entry) => ({
+              k: entry.stat === "crit" ? "fcrit" : entry.stat || chips[entry.kind] || entry.kind,
+              v: entry.kind === "stun" ? 1 : entry.value,
+              r: entry.turns,
+            })),
+            ...(actor.alive && actor.shield > 0 ? [{ k: "shield", v: Math.round(actor.shield) }] : []),
+          ],
+        ]),
     ),
   });
   const addStatus = (target, kind, value, turns, from, stat) => {
@@ -641,6 +699,11 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
         !actor.token &&
         !(actor.side === "enemy" && barrier && !barrier.elements.includes(source.aff)),
     );
+  // A taunt only binds attacks that could land: an immune taunter cannot pin a fight in place.
+  const taunters = (source, pool) => pool.filter((actor) => status(actor, "taunt") && !immune(actor, source));
+  // Immunity cannot be renewed back to back: a unit that was still immune at the end of its last turn must take
+  // at least one enemy turn without it.
+  const wardable = (actor) => !status(actor, "immune") && !(actor.warded >= turn - 2);
   const targetsOf = (source, ability, targetId, context) => {
     const effect = ability.effect,
       side = source.side;
@@ -655,9 +718,9 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
     if (offensive(ability)) {
       const pool = live(opponent(side)).filter((actor) => canTarget(source, actor));
       if (ability.target !== "enemy") return pool;
-      const taunting = pool.find((actor) => status(actor, "taunt"));
+      const taunting = taunters(source, pool);
       return [
-        taunting ||
+        (taunting.length && (taunting.find((actor) => actor.id === targetId) || weakest(taunting))) ||
           pool.find((actor) => actor.id === targetId) ||
           pool.find((actor) => actor.id === context) ||
           weakest(pool),
@@ -679,7 +742,7 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
     if (["buff", "immune", "taunt"].includes(effect))
       return [
         fighters(side)
-          .slice()
+          .filter((actor) => effect !== "immune" || wardable(actor))
           .sort((a, b) => b.atk - a.atk || actors.indexOf(a) - actors.indexOf(b))[0] || source,
       ];
     return [weakest(pool) || source];
@@ -693,7 +756,9 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
       actor.triggers.has(key) ||
       depth >= 8 ||
       (passive.row !== "both" && passive.row !== actor.position) ||
-      (!actor.alive && key !== "on_death")
+      (!actor.alive && key !== "on_death") ||
+      // A power-scaled passive with no power (a kit-less enemy's placeholder) does nothing, so it never fires.
+      (forgeFormationShares[passive.effect] && !passive.power)
     )
       return;
     actor.triggers.add(key);
@@ -734,7 +799,7 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
     events.push({ op: "death", id: echo.id, killerId: "" });
   };
   const summon = (owner, power, events) => {
-    if (!owner.alive || fronts(owner.side).length >= 3 || actors.length >= 30) return;
+    if (!owner.alive || fronts(owner.side).length >= 3) return;
     const share = forgeFormationClamp(power, 20, 60) / 100;
     const echo = {
       ...owner,
@@ -949,6 +1014,10 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
           continue;
         }
         // Control cannot chain: a unit that lost its last turn to a stun or silence shrugs off the next one.
+        if (kind === "immune" && !wardable(target)) {
+          events.push({ op: "debuff", id: target.id, text: "RESIST" });
+          continue;
+        }
         if ((kind === "stun" || kind === "silence") && (random() * 100 >= power || target.controlled >= turn - 1)) {
           events.push({ op: "debuff", id: target.id, text: "RESIST" });
           continue;
@@ -993,7 +1062,7 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
     if (payment.light) heal(actor, 0.05 * payment.light, events);
     return payment;
   };
-  const cast = (actor, skill, ultimate, targetId, events, { free = false, mult = 1 } = {}) => {
+  const cast = (actor, skill, ultimate, targetId, events, { free = false, mult = 1, echo = false } = {}) => {
     if (ultimate) {
       events.push({ op: "ult", id: actor.id, name: skill.name, aff: actor.aff, weapon: false });
       trigger(actor, "on_ult", events);
@@ -1004,7 +1073,8 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
       trigger(actor, "on_attack", events);
       triggerAllies(actor.side, "ally_attack", actor, events);
     }
-    actor.lastCast = { skill, ultimate };
+    // An echo repeats a paid cast once; it never becomes the cast to repeat.
+    if (!echo) actor.lastCast = { skill, ultimate, turn };
     actor.damageBonus = 1;
     actor.critBonus = 0;
     if (ultimate && !free && actor.alive)
@@ -1055,9 +1125,15 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
       }
       enterRow(unit, events);
       const echo = trait(unit, "retreat_echo");
-      if (unit.position === "back" && echo && unit.lastCast && !unit.triggers.has("retreat_echo")) {
+      // Only the cast of its previous own turn is echoed, once.
+      if (unit.position === "back" && echo && unit.lastCast?.turn === turn - 2 && !unit.triggers.has("retreat_echo")) {
         unit.triggers.add("retreat_echo");
-        cast(unit, unit.lastCast.skill, unit.lastCast.ultimate, null, events, { free: true, mult: echo.power / 100 });
+        cast(unit, unit.lastCast.skill, unit.lastCast.ultimate, null, events, {
+          free: true,
+          mult: echo.power / 100,
+          echo: true,
+        });
+        unit.lastCast = null;
       }
     }
     return true;
@@ -1088,6 +1164,8 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
         );
       case "summon":
         return fronts(side).length < 3;
+      case "immune":
+        return targetsOf(actor, skill, null).some(wardable);
       default:
         return offensive(skill) ? foes.some((foe) => canTarget(actor, foe)) : true;
     }
@@ -1167,21 +1245,38 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
     if (skill.effect === "shuffle") return { kind: "set", ids: live(opponent(actor.side)).map((foe) => foe.id) };
     if (offensive(skill)) {
       const pool = live(opponent(actor.side)).filter((foe) => canTarget(actor, foe));
-      const taunting = pool.filter((foe) => status(foe, "taunt"));
+      const taunting = skill.target === "enemy" ? taunters(actor, pool) : [];
       return {
         kind: skill.target === "enemy" ? "enemy" : "set",
-        ids: (skill.target === "enemy" && taunting.length ? taunting : pool).map((foe) => foe.id),
-        blocked: Object.fromEntries(
-          live(opponent(actor.side))
+        ids: (taunting.length ? taunting : pool).map((foe) => foe.id),
+        blocked: Object.fromEntries([
+          ...live(opponent(actor.side))
             .filter((foe) => !pool.includes(foe))
             .map((foe) => [foe.id, blockedReason(actor, foe) || "back"]),
-        ),
+          // Foes a taunt pulls the attack away from say so.
+          ...(taunting.length ? pool.filter((foe) => !taunting.includes(foe)).map((foe) => [foe.id, "taunt"]) : []),
+        ]),
+        ...(taunting.length ? { taunt: taunting.map((foe) => foe.id) } : {}),
       };
     }
     if (skill.effect === "revive")
       return { kind: skill.target === "allies" ? "set" : "fallen", ids: fallenOf(actor.side).map((ally) => ally.id) };
-    if (skill.target === "ally") return { kind: "ally", ids: live(actor.side).map((ally) => ally.id) };
-    return { kind: "set", ids: targetsOf(actor, skill, null).map((ally) => ally.id) };
+    // A summon needs a free Front Row seat, and immunity a unit it can still land on.
+    if (skill.effect === "summon") return { kind: "set", ids: useful(actor, skill) ? [actor.id] : [] };
+    const lands = (ally) => skill.effect !== "immune" || wardable(ally);
+    if (skill.target === "ally")
+      return {
+        kind: "ally",
+        ids: live(actor.side)
+          .filter(lands)
+          .map((ally) => ally.id),
+      };
+    return {
+      kind: "set",
+      ids: targetsOf(actor, skill, null)
+        .filter(lands)
+        .map((ally) => ally.id),
+    };
   };
   const options = (side, list) => ({
     v: FORGE_FORMATION_ENGINE,
@@ -1278,7 +1373,7 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
     } else if (!skill) held(actor, "hold", events);
     else if (status(actor, "silence")) held(actor, "silenced", events);
     else if (
-      (["revive", "swap"].includes(skill.effect) && !useful(actor, skill)) ||
+      (["revive", "swap", "summon", "immune"].includes(skill.effect) && !useful(actor, skill)) ||
       (offensive(skill) && skill.effect !== "shuffle" && !targetsOf(actor, skill, entry.targetId).length)
     )
       held(actor, "target", events);
@@ -1412,6 +1507,7 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
         if (strikes.length) emit([...strikes, statuses()], 600);
         result = collapse();
       }
+      for (const actor of team(side)) if (status(actor, "immune")) actor.warded = turn;
       for (const actor of team(side))
         actor.statuses = actor.statuses.filter((entry) => {
           if (entry.kind === "marked") return byId(entry.from)?.alive && byId(entry.from).charging === actor.id;
@@ -1430,12 +1526,12 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
 
 export function replayForgeFormationBattle(snapshot, choices = []) {
   const list = Array.isArray(choices) ? choices : [];
-  // Fights started before engine 2 log one record per activation; the server scores them by their own rules.
-  if (
-    list.some((choice) => choice && choice.v !== FORGE_FORMATION_ENGINE) &&
-    typeof forgeFormationLegacyReplay === "function"
-  )
+  const foreign = list.some((choice) => choice && choice.v !== FORGE_FORMATION_ENGINE);
+  // The saved snapshot, never the client's log, says which engine a fight was started on. A fight saved before
+  // engine 2 carries no stamp and is scored by its own rules; a stamped fight only accepts engine-2 records.
+  if (snapshot?.formationEngine == null && foreign && typeof forgeFormationLegacyReplay === "function")
     return forgeFormationLegacyReplay(snapshot, list);
+  if (snapshot?.formationEngine === FORGE_FORMATION_ENGINE && foreign) return { result: "lose", steps: [], log: [] };
   const battle = forgeFormationBattle(snapshot);
   let index = 0,
     next = battle.next();
