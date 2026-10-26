@@ -1533,11 +1533,95 @@
             },
             {
               "find": "var oy=[{version:null,fixed:[\"Formation fights can no longer stall",
-              "replace": "var oy=[{version:null,fixed:[\"Retrying a failed Formation kit pays only for the characters that still need one, and kits already paid for are never made twice.\",\"A Front Row fighter whose passive can never fire attacks with its Normal skill again, and an immunity Ultimate lands on the ally you pick.\",\"Retreating a fighter and summoning into its seat works in the same turn.\",\"A battle no longer asks for an element nobody in your world has.\",\"On phones enemy names show in full, an Echo describes itself, and keyboard focus comes back after Fight.\"]},{version:\"1.24.1\",fixed:[\"Formation fights can no longer stall"
+              "replace": "var oy=[{version:null,changed:[\"Combat Power (CP) is now called Battle Power (BP).\"],fixed:[\"Retrying a failed Formation kit pays only for the characters that still need one, and kits already paid for are never made twice.\",\"A Front Row fighter whose passive can never fire attacks with its Normal skill again, and an immunity Ultimate lands on the ally you pick.\",\"Retreating a fighter and summoning into its seat works in the same turn.\",\"A battle no longer asks for an element nobody in your world has.\",\"On phones enemy names show in full, an Echo describes itself, and keyboard focus comes back after Fight.\"]},{version:\"1.24.1\",fixed:[\"Formation fights can no longer stall"
             },
             {
               "find": "return O?{...O,id:String(y)}:null},w={list:",
               "replace": "return O?{...O,id:String(y),...(a&&a.combatMode===\"formation\"&&String(O.id)!==String(y)?{name:O.name+\" · Echo\",echoOwner:O.name,tier:\"soldier\",mech:[]}:{})}:null},w={list:"
+            },
+            {
+              "find": "\" CP</span></button>\"}",
+              "replace": "\" BP</span></button>\"}"
+            },
+            {
+              "find": "ot(t.cp)+\" CP &middot; 1/day\"",
+              "replace": "ot(t.cp)+\" BP &middot; 1/day\""
+            },
+            {
+              "find": "\"Opening chapter &middot; no CP asked yet\":`Recommended CP <b>",
+              "replace": "\"Opening chapter &middot; no BP asked yet\":`Recommended BP <b>"
+            },
+            {
+              "find": "q:\"What is CP?\",a:\"A rough score for how strong a unit is with everything it is carrying, counted the same way for your team and for the enemies. Every stage prints the CP it asks -- Materials asks for 2,000, then 60,000, then 110,000 -- and with that CP you win; with a tenth less, about half the time.\"",
+              "replace": "q:\"What is BP?\",a:\"Battle Power (BP) is a rough score for how strong a unit is with everything it is carrying, counted the same way for your team and for the enemies. Every stage prints the BP it asks -- Materials asks for 2,000, then 60,000, then 110,000 -- and with that BP you win; with a tenth less, about half the time.\""
+            },
+            {
+              "find": "{k:\"CP\",a:\"CP sums up how strong a unit is in a single number. The higher, the better.\"}",
+              "replace": "{k:\"BP\",a:\"Battle Power (BP) sums up how strong a unit is in a single number. The higher, the better.\"}"
+            },
+            {
+              "find": "{k:\"Recommended CP\",a:\"The CP beside the difficulties",
+              "replace": "{k:\"Recommended BP\",a:\"The BP beside the difficulties"
+            },
+            {
+              "find": "ask for more CP, and they pay with better materials",
+              "replace": "ask for more BP, and they pay with better materials"
+            },
+            {
+              "find": "[\"cp\",\"CP\"],[\"level\",\"Level\"]",
+              "replace": "[\"cp\",\"BP\"],[\"level\",\"Level\"]"
+            },
+            {
+              "find": "<span class=\"gw-cp\">CP <b>'+Pe(Number(n.cp)||0)",
+              "replace": "<span class=\"gw-cp\">BP <b>'+Pe(Number(n.cp)||0)"
+            },
+            {
+              "find": "+Pe(b)+\" CP</span></div>\"",
+              "replace": "+Pe(b)+\" BP</span></div>\""
+            },
+            {
+              "find": "<span class=\"pw\">CP<b>'",
+              "replace": "<span class=\"pw\">BP<b>'"
+            },
+            {
+              "find": "<span class=\"gw-cp\">CP <b>'+Pe(d)+\"</b>\"",
+              "replace": "<span class=\"gw-cp\">BP <b>'+Pe(d)+\"</b>\""
+            },
+            {
+              "find": "'\">CP '+(s===null?\"&mdash;\"",
+              "replace": "'\">BP '+(s===null?\"&mdash;\""
+            },
+            {
+              "find": "<div class=\"cx-cp\"><span class=\"k\">CP</span>",
+              "replace": "<div class=\"cx-cp\"><span class=\"k\">BP</span>"
+            },
+            {
+              "find": "var vw=[[\"cp\",\"CP gain\"]",
+              "replace": "var vw=[[\"cp\",\"BP gain\"]"
+            },
+            {
+              "find": "(C.equipped?\"Worn now\":B.txt+\" CP\")",
+              "replace": "(C.equipped?\"Worn now\":B.txt+\" BP\")"
+            },
+            {
+              "find": "(g.wears?\"Worn now\":b.txt+\" CP\")",
+              "replace": "(g.wears?\"Worn now\":b.txt+\" BP\")"
+            },
+            {
+              "find": "_o(\"sort\",[[\"cp\",\"CP gain\"],[\"level\",\"Level\"]],n)",
+              "replace": "_o(\"sort\",[[\"cp\",\"BP gain\"],[\"level\",\"Level\"]],n)"
+            },
+            {
+              "find": "<span class=\"figs\"><span>CP <b>${Gt(To(i.n))}",
+              "replace": "<span class=\"figs\"><span>BP <b>${Gt(To(i.n))}"
+            },
+            {
+              "find": "<span class=\"figs\"><span>CP <b>${Gt(To(e))}",
+              "replace": "<span class=\"figs\"><span>BP <b>${Gt(To(e))}"
+            },
+            {
+              "find": "<span class=\"tt-cp\">CP <b>'",
+              "replace": "<span class=\"tt-cp\">BP <b>'"
             }
           ]
         }
