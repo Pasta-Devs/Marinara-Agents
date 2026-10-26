@@ -1,3 +1,7 @@
+## 1.24.4 — 2026-10-26
+
+- Messages you send in character chats are no longer read aloud. Your persona's assigned voice still reads its story dialogue.
+
 ## 1.24.3 — 2026-10-26
 
 - Combat Power (CP) is now called Battle Power (BP).

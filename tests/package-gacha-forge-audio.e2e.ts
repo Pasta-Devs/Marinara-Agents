@@ -941,95 +941,31 @@ test("Persona story dialogue uses the real SDK cast identity and its saved Engin
   }
 });
 
-test("Newly sent persona letters speak once while reopened and refreshed history stays silent", async ({
+test("Sent persona letters are never read aloud with an assigned voice and dialogue audio on", async ({
   page,
 }, testInfo) => {
-  const { forge, runtime, persona, speech, openLetters } = await openPersonaVoiceProof(page, testInfo);
+  const { forge, runtime, speech, openLetters } = await openPersonaVoiceProof(page, testInfo);
   try {
     await openLetters();
     const log = forge.locator("[data-chat-log]");
     await expect(log).toContainText("Keep this independent conversation.");
-    await page.waitForTimeout(350);
-    expect(speech).toHaveLength(0);
-    expect(await personaVoiceStarts(page)).toBe(0);
     const text = "A newly committed persona letter.";
     await forge.locator("[data-chat-text]").fill(text);
     await forge.locator("[data-chat-send]").click();
     await expect(log).toContainText("I heard your first message.");
     await expect(forge.locator(".ch-msg.mine").filter({ hasText: text })).toHaveCount(1);
-    await expect.poll(() => speech.length).toBe(1);
-    expect(speech[0]).toMatchObject({ text, voice: persona.voice, audioConnectionId: "speech-fixture" });
-    await expect.poll(() => personaVoiceStarts(page)).toBe(1);
-    await finishPersonaVoice(page);
     const revision = await forge.evaluate((node) => (node as any)._chatRev);
-    // Exercise the existing successful-send refresh path again with the same canonical player row.
+    // A later refresh adopts the same canonical player row again.
     await forge.evaluate((node) => (node as any)._chatReload());
     await expect.poll(() => forge.evaluate((node) => (node as any)._chatRev)).toBeGreaterThan(revision);
-    await forge.locator("button[data-chat-close]").click();
-    await openLetters();
-    await expect(log).toContainText(text);
-    await page.waitForTimeout(350);
-    expect(speech).toHaveLength(1);
-    expect(await personaVoiceStarts(page)).toBe(1);
-    expect(
-      runtime.chatDoc().data.messages.filter((row: any) => row.who === "player" && row.text === text),
-    ).toHaveLength(1);
-    await page.screenshot({ path: testInfo.outputPath("persona-letter-once-and-history.png") });
-  } finally {
-    await runtime.close();
-  }
-});
-
-test("Newly sent persona letters do not speak from a delayed success after closing and reopening", async ({
-  page,
-}, testInfo) => {
-  const { forge, runtime, persona, speech, openLetters } = await openPersonaVoiceProof(page, testInfo);
-  let releaseDelayed!: () => void;
-  const delayed = new Promise<void>((resolve) => (releaseDelayed = resolve));
-  const committed: Record<string, any>[] = [];
-  const oldText = "A delayed persona letter from the closed window.";
-  try {
-    await page.route("**/api/gacha-forge/chat/send", async (route) => {
-      const body = route.request().postDataJSON();
-      const response = await runtime.post("/chat/send", body);
-      if (body.text === oldText) {
-        committed.push(response.body);
-        await delayed;
-      }
-      await route.fulfill({ status: response.status, json: response.body });
-    });
-    await openLetters();
-    await forge.locator("[data-chat-text]").fill(oldText);
-    await forge.locator("[data-chat-send]").click();
-    await expect.poll(() => committed.length).toBe(1);
-    expect(committed[0].ok).toBe(true);
-    expect(runtime.chatDoc().data.messages.some((row: any) => row.who === "player" && row.text === oldText)).toBe(true);
-    await forge.locator("button[data-chat-close]").click();
-    await openLetters(false);
-    await expect(forge.locator("[data-chat-log]")).toContainText(oldText);
-    const oldResponse = page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === "/api/gacha-forge/chat/send" &&
-        response.request().postDataJSON().text === oldText,
-    );
-    releaseDelayed();
-    await oldResponse;
-    await expect(forge.locator("[data-chat-text]")).toBeVisible();
-    await expect(forge.locator("[data-chat-text]")).toBeEnabled();
     await page.waitForTimeout(350);
     expect(speech).toHaveLength(0);
     expect(await personaVoiceStarts(page)).toBe(0);
-    const freshText = "A fresh persona letter from the reopened window.";
-    await forge.locator("[data-chat-text]").fill(freshText);
-    await forge.locator("[data-chat-send]").click();
-    await expect(forge.locator(".ch-msg.mine").filter({ hasText: freshText })).toHaveCount(1);
-    await expect.poll(() => speech.length).toBe(1);
-    expect(speech[0]).toMatchObject({ text: freshText, voice: persona.voice });
-    await expect.poll(() => personaVoiceStarts(page)).toBe(1);
-    await finishPersonaVoice(page);
-    await page.screenshot({ path: testInfo.outputPath("persona-letter-stale-close-and-fresh-send.png") });
+    expect(
+      runtime.chatDoc().data.messages.filter((row: any) => row.who === "player" && row.text === text),
+    ).toHaveLength(1);
+    await page.screenshot({ path: testInfo.outputPath("persona-letter-silent.png") });
   } finally {
-    releaseDelayed();
     await runtime.close();
   }
 });

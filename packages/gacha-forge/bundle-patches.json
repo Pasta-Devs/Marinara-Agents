@@ -1674,6 +1674,44 @@
               "replace": "<span class=\"tt-cp\">BP <b>'"
             }
           ]
+        },
+        {
+          "version": "1.24.4",
+          "commits": [],
+          "edits": [
+            {
+              "find": "_chatWith(e){stopForgeChatVoice(this);",
+              "replace": "_chatWith(e){"
+            },
+            {
+              "find": "_closeChat(){stopForgeChatVoice(this);",
+              "replace": "_closeChat(){"
+            },
+            {
+              "find": "_chatEnd(){stopForgeChatVoice(this);",
+              "replace": "_chatEnd(){"
+            },
+            {
+              "find": "let forgeChatVoiceAtSend=forgeChatVoiceSession(this),forgeChatSendAtAdmission=beginForgeChatSend(this),",
+              "replace": "let forgeChatSendAtAdmission=beginForgeChatSend(this),"
+            },
+            {
+              "find": "retainForgeChatSuccess(this,{runId:forgeChatRunId,unitId:a.unit.id,voiceSession:forgeChatVoiceAtSend,previous:",
+              "replace": "retainForgeChatSuccess(this,{runId:forgeChatRunId,unitId:a.unit.id,previous:"
+            },
+            {
+              "find": "reconcileForgeChatFailure(this,{runId:forgeChatRunId,unitId:a.unit.id,voiceSession:forgeChatVoiceAtSend,previous:",
+              "replace": "reconcileForgeChatFailure(this,{runId:forgeChatRunId,unitId:a.unit.id,previous:"
+            },
+            {
+              "find": "ds=\"1.24.3\"",
+              "replace": "ds=\"1.24.4\""
+            },
+            {
+              "find": "var oy=[{version:null,changed:[\"Combat Power (CP) is now called Battle Power (BP).",
+              "replace": "var oy=[{version:null,fixed:[\"Messages you send in character chats are no longer read aloud. Your persona's assigned voice still reads its story dialogue.\"]},{version:\"1.24.3\",changed:[\"Combat Power (CP) is now called Battle Power (BP)."
+            }
+          ]
         }
       ]
     },

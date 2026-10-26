@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.24.4",
+          "date": "2026-10-26",
+          "notes": "- Messages you send in character chats are no longer read aloud. Your persona's assigned voice still reads its story dialogue.",
+          "highlight": false
+        },
+        {
           "version": "1.24.3",
           "date": "2026-10-26",
           "notes": "- Combat Power (CP) is now called Battle Power (BP).\n- Retrying a failed Formation kit pays only for the characters that still need one. Kits you kept after cancelling a remake stay as they are, and kits already paid for in a cancelled or failed remake are never made again.\n- A Front Row fighter whose only damage was a passive that never fires (on its own attack or kill, from the Back Row, or with no power) attacks with its Normal skill again.\n- An immunity Ultimate lands on the ally you pick, and one that can no longer land waits without spending energy. Retreating a fighter and summoning into its seat works in the same turn.\n- A battle saved with an element barrier nobody in your world can meet can now be fought, and a shortened defeat order names the enemies that come first.\n- On phones, enemy names show in full and protection tags no longer cover them. An Echo's sheet describes the Echo, and keyboard focus comes back after Fight.",
@@ -283,12 +289,6 @@
           "version": "1.15.0",
           "date": "2026-10-24",
           "notes": "- Choose a generated song for the Home menu in Settings → Look → Visual. Saved songs remain playable when generation is off.\n- Generate a distinct soundtrack for each summon banner and collect it for Home music when pulling any 5-star from that banner.\n- Keep banner rotations separate and reuse generated songs after reload.\n- Select an optional Animations video connection in Sources to generate saved looping banner clips. Portraits remain still.\n- Reuse clips after reload, keep the illustration on failures or reduced motion, and offer pause, play and explicit generation retry controls.",
-          "highlight": true
-        },
-        {
-          "version": "1.14.0",
-          "date": "2026-10-24",
-          "notes": "- Automatically remember completed canonical chapters and Character Stories, alongside saved character-chat memories.\n- Maintain a compressed overview within 10% of the generation model's known context, retaining detailed originals for relevant recall.\n- Recall up to three additional chapters plus separate character memories; retain the entire previous chapter and the current chapter so far.\n- Show automatic continuity status and allow retrying failed memory work without blocking gameplay.",
           "highlight": true
         }
       ]
