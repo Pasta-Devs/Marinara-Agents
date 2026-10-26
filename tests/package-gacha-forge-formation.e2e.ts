@@ -695,6 +695,7 @@ for (const theme of ["dark", "light"]) {
       await echo.click();
       const echoSheet = forge.locator("[data-foe-sheet]");
       await expect(echoSheet).toContainText("Leyshell Warden · Echo");
+      await expect(echoSheet.locator(".kick")).not.toHaveText(/boss/i);
       await expect(echoSheet).toContainText("An Echo of Leyshell Warden");
       await expect(echoSheet).not.toContainText("Lighthouse dawn");
       await page.screenshot({ path: testInfo.outputPath(`formation-echo-${theme}.png`) });

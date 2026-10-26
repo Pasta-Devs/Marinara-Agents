@@ -1537,7 +1537,7 @@
             },
             {
               "find": "return O?{...O,id:String(y)}:null},w={list:",
-              "replace": "return O?{...O,id:String(y),...(a&&a.combatMode===\"formation\"&&String(O.id)!==String(y)?{name:O.name+\" · Echo\",echoOwner:O.name,tier:void 0}:{})}:null},w={list:"
+              "replace": "return O?{...O,id:String(y),...(a&&a.combatMode===\"formation\"&&String(O.id)!==String(y)?{name:O.name+\" · Echo\",echoOwner:O.name,tier:\"soldier\",mech:[]}:{})}:null},w={list:"
             }
           ]
         }
