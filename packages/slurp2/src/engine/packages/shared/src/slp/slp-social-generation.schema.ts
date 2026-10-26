@@ -87,31 +87,32 @@ const slpCreatorGenerationRequestShape = {
   unlockPrice: z.number().int().min(1).max(100_000).optional(),
 };
 
-export const slpCreatorGenerationRequestSchema = z
+export const slpCreatorGenerationRequestObjectSchema = z
   .object({ ...slpCreatorGenerationRequestShape, access: slpPostAccessSchema.default("public") })
-  .strict()
-  .superRefine((input, ctx) => {
-    if (input.contentIntent && !slurpIntentFitsAccess(input.contentIntent, input.access)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["contentIntent"],
-        message: "That purpose does not fit a locked post.",
-      });
-    }
-    if (input.contentDelivery && !input.contentIntent) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["contentDelivery"], message: "Choose a post purpose too." });
-    } else if (
-      input.contentDelivery &&
-      input.contentIntent &&
-      !slurpContentDeliveryFits(input.contentIntent, input.contentDelivery)
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["contentDelivery"],
-        message: "That delivery does not fit this post purpose.",
-      });
-    }
-  });
+  .strict();
+
+export const slpCreatorGenerationRequestSchema = slpCreatorGenerationRequestObjectSchema.superRefine((input, ctx) => {
+  if (input.contentIntent && !slurpIntentFitsAccess(input.contentIntent, input.access)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["contentIntent"],
+      message: "That purpose does not fit a locked post.",
+    });
+  }
+  if (input.contentDelivery && !input.contentIntent) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["contentDelivery"], message: "Choose a post purpose too." });
+  } else if (
+    input.contentDelivery &&
+    input.contentIntent &&
+    !slurpContentDeliveryFits(input.contentIntent, input.contentDelivery)
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["contentDelivery"],
+      message: "That delivery does not fit this post purpose.",
+    });
+  }
+});
 
 export const slpGenerationRequestSchema = z.union([
   slpPublicGenerationRequestSchema,
