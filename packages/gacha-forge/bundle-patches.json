@@ -1279,7 +1279,17 @@
           ]
         },
         {
-          "version": "1.20.2",
+          "version": "1.21.1",
+          "notes": "Explain banner animation failures safely while retaining saved clips and explicit paid retry.",
+          "edits": [
+            {
+              "find": "ds=\"1.21.0\"",
+              "replace": "ds=\"1.21.1\""
+            }
+          ]
+        },
+        {
+          "version": "1.21.2",
           "commits": [],
           "edits": [
             {
@@ -1300,8 +1310,8 @@
               "replace": "JSON.stringify(this._roster)!==JSON.stringify(e.cards)&&(this._roster=e.cards,this._rosterRev+=1),this._rosterCount=e.cards.length"
             },
             {
-              "find": "ds=\"1.20.0\"",
-              "replace": "ds=\"1.20.2\""
+              "find": "ds=\"1.21.1\"",
+              "replace": "ds=\"1.21.2\""
             }
           ]
         }

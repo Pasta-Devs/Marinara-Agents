@@ -83,6 +83,7 @@ jobs:
           node tests/gacha-forge-background-witness-client.regression.mjs
           node tests/gacha-forge-background-package.regression.mjs
           node tests/gacha-forge-audio.regression.mjs
+          node tests/gacha-forge-animation-diagnostics.regression.mjs
           node tests/gacha-forge-music-prompts.regression.mjs
           node tests/gacha-forge-achievements.regression.mjs
           node tests/gacha-forge-bundle-rebuild.regression.mjs

@@ -1,6 +1,12 @@
-## Stable unit artwork (1.20.2)
+## Stable unit artwork (1.21.2)
 
 Unit tab changes reuse the current successfully decoded portrait when the unit and artwork URL stay the same. Opening another unit or changing its artwork still replaces the portrait. Returning to Units keeps cached cards in place when the refresh returns the same data.
+
+## Banner animation diagnostics (1.21.1)
+
+When a banner animation cannot be generated, its status now explains whether the saved source image, selected connection, provider response or local storage needs attention. Provider failures show a safe HTTP status when available; private URLs, provider response bodies and credentials stay out of the status.
+
+The illustration remains available, and a failed replacement keeps the previous saved clip. Reopening does not automatically repeat a failed generation. **Retry animation** is an explicit request and may use provider credits. Keep Marinara Engine updated for its video-provider fixes.
 
 ## Home background downloads and scene unlocks (1.21.0)
 
