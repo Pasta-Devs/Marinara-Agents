@@ -172,10 +172,10 @@
     "gacha-forge": {
       "versions": [
         {
-          "version": "1.20.2",
+          "version": "1.21.0",
           "date": "2026-10-26",
-          "notes": "- Keep an unchanged, decoded unit portrait mounted while switching unit tabs. Replace it normally when the unit or artwork changes.\n- Preserve cached Units cards when a background refresh returns identical data, while keeping real card updates and loading status current.",
-          "highlight": false
+          "notes": "- Download individual images from every Home background picker category without selecting them. Reuse Engine gallery saving, including prepared iPhone sharing.\n- Unlock story and Character Story backgrounds and key images only after viewing their scenes, with a brief unlock notice. Future generated scenes stay out of the picker.\n- Preserve completed scenes, saved artwork and existing background choices across updates and chapter regeneration.",
+          "highlight": true
         },
         {
           "version": "1.20.0",

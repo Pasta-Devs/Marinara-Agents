@@ -2,6 +2,12 @@
 
 Unit tab changes reuse the current successfully decoded portrait when the unit and artwork URL stay the same. Opening another unit or changing its artwork still replaces the portrait. Returning to Units keeps cached cards in place when the refresh returns the same data.
 
+## Home background downloads and scene unlocks (1.21.0)
+
+Open **Home → Background → Change**. Each image in **Story**, **Story CG**, **Banners** and **Bond** has its own download button. Downloading keeps the picker open and leaves the selected background unchanged. On iPhone, images prepare before the button becomes available; tapping opens the same native share sheet as Engine’s galleries. Cancelling does not report a failure. This feature requires Engine Capability API 1.385 or newer.
+
+Story backgrounds and key images become available after their scenes are viewed, including Character Stories and Seasonal events. A brief **New background unlocked** notice confirms newly seen artwork. Generating future chapters does not unlock their images. Existing completed scenes and chosen backgrounds stay available; replacing generated art does not overwrite a previously unlocked snapshot.
+
 ## Daily unit messages and mobile Writing help (1.20.0)
 
 Set **Daily unit messages** during setup or in **Settings → Story → Continuity**. The default is **0**, which turns this off. Enter a nonnegative whole number for a daily total across randomly chosen units whose conversations are unlocked. Up to that many message attempts run per local day while this world is open. Messages use the story connection and its provider credits, begin after a short delay, and are spaced through the day without an offline catch-up burst. Failed or interrupted attempts count toward the daily budget so reopening cannot repeat an ambiguous paid request.

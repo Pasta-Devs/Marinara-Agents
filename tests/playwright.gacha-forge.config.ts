@@ -23,6 +23,7 @@ export default defineConfig({
     "package-gacha-forge-seasonal-events.e2e.ts",
     "package-gacha-forge-formation.e2e.ts",
     "package-gacha-forge-proactive-messages.e2e.ts",
+    "package-gacha-forge-backgrounds.e2e.ts",
   ],
   projects: [
     ...config.projects!,
@@ -34,6 +35,7 @@ export default defineConfig({
         "package-gacha-forge-unit-art.e2e.ts",
         "package-gacha-forge-editors.e2e.ts",
         "package-gacha-forge-proactive-messages.e2e.ts",
+        "package-gacha-forge-backgrounds.e2e.ts",
       ],
       use: {
         ...devices["Desktop Safari"],

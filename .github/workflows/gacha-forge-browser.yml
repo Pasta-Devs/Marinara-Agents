@@ -16,6 +16,7 @@ on:
       - "tests/package-gacha-forge-formation*.e2e.ts"
       - "tests/package-gacha-forge-editors.e2e.ts"
       - "tests/package-gacha-forge-proactive-messages.e2e.ts"
+      - "tests/package-gacha-forge-backgrounds.e2e.ts"
       - "tests/playwright.package.config.ts"
       - "tests/playwright.gacha-forge.config.ts"
       - "tests/fixtures/gacha-forge-*.mjs"
@@ -75,7 +76,7 @@ jobs:
         run: |
           shopt -s nullglob
           suites=()
-          for suite in tests/package-gacha-forge-unit-art.e2e.ts tests/package-gacha-forge-units.e2e.ts tests/package-gacha-forge-seasonal-events.e2e.ts tests/package-gacha-forge-formation*.e2e.ts tests/package-gacha-forge-editors.e2e.ts tests/package-gacha-forge-proactive-messages.e2e.ts; do
+          for suite in tests/package-gacha-forge-unit-art.e2e.ts tests/package-gacha-forge-units.e2e.ts tests/package-gacha-forge-seasonal-events.e2e.ts tests/package-gacha-forge-formation*.e2e.ts tests/package-gacha-forge-editors.e2e.ts tests/package-gacha-forge-proactive-messages.e2e.ts tests/package-gacha-forge-backgrounds.e2e.ts; do
             if [[ -f "$suite" ]]; then suites+=("$suite"); fi
           done
           test "${#suites[@]}" -gt 0
