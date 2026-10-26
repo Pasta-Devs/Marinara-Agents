@@ -79,6 +79,10 @@ jobs:
           node tests/gacha-forge-location-ids.regression.mjs
           node tests/gacha-forge-unit-art.regression.mjs
           node tests/gacha-forge-player-choices.regression.mjs
+          node tests/gacha-forge-preforge-art.regression.mjs
+          node tests/gacha-forge-story-cancel.regression.mjs
+          node tests/gacha-forge-story-cancel-server.regression.mjs
+          node tests/gacha-forge-story-cancel-package.regression.mjs
           node tests/gacha-forge-background-unlocks.regression.mjs
           node tests/gacha-forge-background-witness-client.regression.mjs
           node tests/gacha-forge-background-package.regression.mjs
