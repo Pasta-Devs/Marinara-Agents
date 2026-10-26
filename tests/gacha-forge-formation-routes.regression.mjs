@@ -76,7 +76,7 @@ test("a completed preview retains the mode of the actors it actually built", asy
     },
   );
   routes.post("/battle", async () => ({ ok: true, combatMode: "classic", allies: [hero], enemies: [foe] }));
-  const response = await handlers.get("/battle")({ body: { runId: "world" } });
+  const response = await handlers.get("/battle")({ body: { runId: "world", ...current } });
   assert.equal(response.ok, true);
   assert.equal(response.combatMode, "classic");
   assert.equal(response.enemies[0].formationKit, undefined);
@@ -98,13 +98,23 @@ test("future story-event battle starts share the same admission and preview mode
     return { ok: true };
   });
   const response = await handlers.get("/story-event/battle/start")({
-    body: { runId: "world", expectedCombatMode: "classic" },
+    body: { runId: "world", expectedCombatMode: "classic", ...current },
   });
   assert.equal(response.error, "changed");
   assert.equal(called, false);
 });
 
-test("a Formation start from a tab on an older engine or older rules spends nothing; Classic never needs them", async () => {
+test("a Formation preview or start from a tab on an older engine or rules spends nothing; Classic never needs them", async () => {
+  const paths = [
+    "/battle",
+    "/battle/start",
+    "/farm/battle",
+    "/farm/start",
+    "/tower/battle",
+    "/tower/start",
+    "/story-event/battle",
+    "/story-event/battle/start",
+  ];
   for (const [mode, body, expected] of [
     ["formation", {}, "formation-engine-changed"],
     ["formation", { ...current, expectedFormationEngine: 1 }, "formation-engine-changed"],
@@ -115,25 +125,34 @@ test("a Formation start from a tab on an older engine or older rules spends noth
     ["classic", {}, null],
   ]) {
     const handlers = new Map();
-    let calls = 0;
+    let calls = 0,
+      ensured = 0;
     const routes = createRoutes(
       { post: (path, handler) => handlers.set(path, handler) },
       {
         readWorld: async () => ({ combat: { mode } }),
-        migration: { guard: async () => ({ ok: true }), ensure: async () => ({ ok: true }) },
+        migration: {
+          guard: async () => ({ ok: true }),
+          ensure: async () => {
+            ensured += 1;
+            return { ok: true };
+          },
+        },
         cancellation: { mutate: async (_runId, operation) => operation() },
       },
     );
-    for (const path of ["/battle/start", "/farm/start", "/tower/start", "/story-event/battle/start"])
+    for (const path of paths)
       routes.post(path, async () => {
         calls += 1;
         return { ok: true, spent: 20 };
       });
-    for (const path of ["/battle/start", "/farm/start", "/tower/start", "/story-event/battle/start"]) {
+    for (const path of paths) {
       const response = await handlers.get(path)({ body: { runId: "world", ...body } });
       assert.equal(response.error ?? null, expected, `${mode} ${path} ${JSON.stringify(body)}`);
     }
-    assert.equal(calls, expected ? 0 : 4, "a refused start never reaches the paid handler");
+    assert.equal(calls, expected ? 0 : paths.length, "a refused tab never reaches the paid handler");
+    // An older tab is turned away before ensure could start a paid kit remake; a current one reaches it.
+    assert.equal(ensured, expected ? 0 : paths.length, "a refused tab never reaches the kit remake");
   }
 });
 

@@ -210,6 +210,14 @@ export function forgeFormationRoutes(routes, { migration, readWorld, cancellatio
         if (guarded.has(path)) {
           const block = await migration.guard(runId);
           if (block && block.ok === false) return block;
+          // A tab still running an older engine or older rules would play a fight this server scores differently;
+          // it starts, previews and spends nothing, and never sets off a paid kit remake, until it reloads. A
+          // missing field means an older tab. Checked before ensure and again on the world it may have changed.
+          const stale = (world) =>
+            forgeFormationMode(world) === "formation" &&
+            (request.body?.expectedFormationEngine !== FORGE_FORMATION_ENGINE ||
+              request.body?.expectedFormationRules !== FORGE_FORMATION_RULES);
+          if (stale(run)) return { ok: false, error: "formation-engine-changed" };
           const ready = await migration.ensure(runId, run);
           if (ready && ready.ok === false) return ready;
           run = await readWorld(runId);
@@ -220,15 +228,7 @@ export function forgeFormationRoutes(routes, { migration, readWorld, cancellatio
             request.body.expectedCombatMode !== forgeFormationMode(run)
           )
             return { ok: false, error: "changed" };
-          // A tab still running an older engine or older rules would play a fight this server scores differently;
-          // it starts nothing and spends nothing until it reloads. A missing field means an older tab.
-          if (
-            starting &&
-            forgeFormationMode(run) === "formation" &&
-            (request.body?.expectedFormationEngine !== FORGE_FORMATION_ENGINE ||
-              request.body?.expectedFormationRules !== FORGE_FORMATION_RULES)
-          )
-            return { ok: false, error: "formation-engine-changed" };
+          if (stale(run)) return { ok: false, error: "formation-engine-changed" };
         }
         const response = await handler(request);
         run = (await readWorld(runId)) || run;

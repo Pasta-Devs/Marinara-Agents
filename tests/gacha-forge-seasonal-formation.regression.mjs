@@ -96,14 +96,14 @@ const engine = { expectedFormationEngine: FORGE_FORMATION_ENGINE, expectedFormat
 test("actual event routes freeze Formation mode and rules, replay its choices, and grant the event reward once", async () => {
   const f = await fixture();
   try {
-    const view = (await f.post("/story-event/battle", request)).body;
+    const view = (await f.post("/story-event/battle", { ...request, ...engine })).body;
     assert.equal(view.ok, true, JSON.stringify(view));
     assert.equal(view.combatMode, "formation");
     assert.equal(view.formationRules[0].kind, "element_barrier");
     assert.equal(view.dialogueCues[0].content, "Keep the lantern burning.");
     const wallet = structuredClone(f.session().wallet);
     assert.equal(
-      (await f.post("/story-event/battle/start", { ...request, expectedCombatMode: "classic" })).body.error,
+      (await f.post("/story-event/battle/start", { ...request, ...engine, expectedCombatMode: "classic" })).body.error,
       "changed",
     );
     assert.deepEqual(f.session().wallet, wallet);

@@ -9123,11 +9123,14 @@ const forgeFormationIcons = {
   plus: forgeFormationSvg('<path d="M12 5v14M5 12h14"/>'),
 };
 
+// Every battle preview and start names the engine and rules it plays, so the server can turn away an older tab
+// before it previews, pays for a kit remake or starts a fight.
 function forgeFormationStartRequest(host, path, body) {
-  if (!["/battle/start", "/farm/start", "/tower/start", "/story-event/battle/start"].includes(path)) return body;
+  const starting = ["/battle/start", "/farm/start", "/tower/start", "/story-event/battle/start"].includes(path);
+  if (!starting && !["/battle", "/farm/battle", "/tower/battle", "/story-event/battle"].includes(path)) return body;
   return {
     ...body,
-    expectedCombatMode: host._combat?.combatMode || "classic",
+    ...(starting ? { expectedCombatMode: host._combat?.combatMode || "classic" } : {}),
     expectedFormationEngine: FORGE_FORMATION_ENGINE,
     expectedFormationRules: FORGE_FORMATION_RULES,
   };

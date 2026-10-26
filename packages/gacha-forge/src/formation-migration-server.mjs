@@ -389,7 +389,13 @@ export function createForgeFormationMigration({
       )
         return false;
       const current = job.targetMode === "formation" ? await units(store, runId) : [];
-      job.units = Object.fromEntries(current.map((row) => [row.id, reuse(job.units[row.id], row)]));
+      // Retrying a job that only adds missing kits keeps the old kits the player chose to keep.
+      job.units = Object.fromEntries(
+        current.map((row) => [
+          row.id,
+          job.declined === true && playableKit(row.data) ? keep(row) : reuse(job.units[row.id], row),
+        ]),
+      );
       job.status = "preparing";
       job.error = "";
     });

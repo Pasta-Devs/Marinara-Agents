@@ -717,6 +717,59 @@ test("a character whose kit failed under the current rules waits for Retry; batt
   f.dispose();
 });
 
+test("Retry after a cancelled remake and a failed new kit pays only for the new kit and keeps the old ones", async () => {
+  const calls = [];
+  let release,
+    fail = true;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const f = fixture({
+    count: 3,
+    generate: async ({ unit, signal }) => {
+      calls.push(unit.name);
+      if (unit.name === "New arrival") {
+        if (fail) throw new Error("invalid-kit");
+        return kit;
+      }
+      await gate;
+      signal.throwIfAborted();
+      return kit;
+    },
+  });
+  const run = formationWorld(f, [1, 1, 1]);
+  const remake = await f.service.ensure(runId, run);
+  await f.service.cancel({ runId, jobId: remake.conversion.id });
+  release();
+  await f.service.settled(runId);
+  // A new pull has no kit, and its generation fails.
+  f.seed(`${runId}:unit:new`, "unit", { kind: "character", name: "New arrival", affinity: "wind" });
+  assert.equal((await f.service.ensure(runId, run)).error, "combat-conversion-in-progress");
+  await f.service.settled(runId);
+  const failed = (await f.service.status({ runId })).conversion;
+  assert.equal(failed.status, "failed");
+  for (let battle = 0; battle < 2; battle++)
+    assert.equal((await f.service.ensure(runId, run)).error, "combat-conversion-failed", "battles point at Retry");
+  const stale = (await f.service.status({ runId })).staleKits;
+  assert.equal(stale, 3);
+  const paid = calls.length;
+  fail = false;
+  assert.equal((await f.service.retry({ runId, jobId: failed.id, confirmed: true })).ok, true);
+  await f.service.settled(runId);
+  assert.deepEqual(calls.slice(paid), ["New arrival"], "Retry generates one kit per missing character");
+  assert.equal((await f.service.status({ runId })).conversion.status, "committed");
+  for (const index of [0, 1, 2]) {
+    assert.deepEqual(f.docs.get(`${runId}:unit:${index}`).data.formationKit, {
+      version: 1,
+      standard: { name: `Old ${index}` },
+    });
+    assert.equal(f.docs.get(`${runId}:unit:${index}`).data.formationKitPrompt, 1);
+  }
+  assert.equal((await f.service.status({ runId })).staleKits, stale, "Settings still offers the remake");
+  assert.deepEqual(f.docs.get(`${runId}:unit:new`).data.formationKit, kit);
+  f.dispose();
+});
+
 test("after a cancelled remake a new character still gets its kit, and the old kits stay as they are", async () => {
   let calls = 0,
     release;

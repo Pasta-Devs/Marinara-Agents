@@ -1060,8 +1060,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "bc12f1a093ad10d851d79ce5f0a2c0dcbf43fbcedeb0573b2d1c10df80a612f2",
-            "bytes": 1868359
+            "sha256": "6a9139498efeb0b4773a1c922b26bc616bd3cbf328bea14353a72cd04d290c9f",
+            "bytes": 1868676
           },
           {
             "path": "farm-asc.webp",
@@ -1535,8 +1535,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "e0804a12516d3d77811a85d908737fa9ef6f25234dbb3ce7262ee32996eee819",
-            "bytes": 947104
+            "sha256": "1b14a84fed34c3c4c7fae2e33c9b97aff3c9cea0b65f31883f666d625a5d4034",
+            "bytes": 947514
           },
           {
             "path": "skill-aoe_damage-dark.webp",
@@ -2290,8 +2290,8 @@
           },
           {
             "path": "src/formation-combat-client.mjs",
-            "sha256": "3b4dcde8a4be3bd5bc43f1ebd51dfb157e9d1fb16b638d41d55efca84569cc4e",
-            "bytes": 68852
+            "sha256": "01c21a3a71a03725a9c7097132e7c3299c014d3f85c953e55a6deff14ee12111",
+            "bytes": 69169
           },
           {
             "path": "src/formation-combat-en.mjs",
@@ -2300,8 +2300,8 @@
           },
           {
             "path": "src/formation-combat-server.mjs",
-            "sha256": "1a4b7089d3b17a37f0fe9490ddfe912fdd22643d859ce8e18621cf862905b827",
-            "bytes": 22871
+            "sha256": "56e946cd11aec56dc1740f6cb48dcca685ae65579cd1dd19529b2b651231d3c2",
+            "bytes": 23075
           },
           {
             "path": "src/formation-combat-shared.mjs",
@@ -2310,8 +2310,8 @@
           },
           {
             "path": "src/formation-migration-server.mjs",
-            "sha256": "6ac3403746532aefee8b55522fc039775368b218beae55ee8db647ba648f0b41",
-            "bytes": 20915
+            "sha256": "c3ff2836a6d3578b98e15743ad0cfa661d976af4c44248ec1ba30155a47a5a26",
+            "bytes": 21121
           },
           {
             "path": "src/formation-settings-client.mjs",
@@ -2389,8 +2389,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.24.1.zip",
-        "sha256": "270ce71087f24a90b0f0a223d7e6241208777b798490a4f29f1b6c3c6a7fe4e9",
-        "bytes": 9026389
+        "sha256": "20be8754b68a504a0960d0c09eb18a4ede389623a981d5e962f89e0420d78c7e",
+        "bytes": 9027843
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     },

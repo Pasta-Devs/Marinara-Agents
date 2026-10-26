@@ -129,7 +129,7 @@ async function fixture(mode = "formation") {
   return { ...f, run, heroId, weaponId };
 }
 const request = { chapter: 2, combatIndex: 1, difficulty: "normal" };
-// What a current client sends with every Formation start.
+// What a current client sends with every Formation preview and start.
 const starting = (body) => ({
   ...body,
   expectedFormationEngine: FORGE_FORMATION_ENGINE,
@@ -170,7 +170,7 @@ test("actual new-world creation preserves Formation and defaults to Classic with
 test("actual battle view/start and completion replay Formation with existing boss dialogue and one reward", async () => {
   const f = await fixture();
   try {
-    const view = (await f.post("/battle", request)).body;
+    const view = (await f.post("/battle", starting(request))).body;
     assert.equal(view.ok, true, JSON.stringify(view));
     assert.equal(view.combatMode, "formation");
     assert.ok(normalizeForgeFormationKit(view.allies[0].formationKit));
@@ -197,7 +197,7 @@ test("Classic remains selected by default and frozen legacy snapshots ignore lat
   const f = await fixture("classic");
   try {
     delete f.run.combat;
-    const view = (await f.post("/battle", request)).body;
+    const view = (await f.post("/battle", starting(request))).body;
     assert.equal(view.ok, true, JSON.stringify(view));
     assert.equal(view.combatMode, "classic");
     assert.equal((await f.post("/battle/start", request)).body.ok, true);
@@ -225,7 +225,7 @@ test("a full six-seat team starts, and a back-only team is rejected without spen
     assert.deepEqual(f.session(), before);
     f.session().presets[0].board = { front: ["leader", ids[0], ids[1]], back: [ids[2], ids[3], chapterUnitId] };
     f.session().roster[chapterUnitId] = { level: 1 };
-    const view = (await f.post("/battle", request)).body;
+    const view = (await f.post("/battle", starting(request))).body;
     assert.equal(view.ok, true, JSON.stringify(view));
     assert.equal(view.allies.length, 6);
     assert.deepEqual(
@@ -277,7 +277,7 @@ test("Materials and Tower freeze Formation snapshots and verify their own action
   const f = await fixture();
   try {
     const farm = { stage: "funds", difficulty: 1 };
-    const view = (await f.post("/farm/battle", farm)).body;
+    const view = (await f.post("/farm/battle", starting(farm))).body;
     assert.equal(view.ok, true, JSON.stringify(view));
     assert.equal(view.combatMode, "formation");
     assert.equal((await f.post("/farm/start", starting(farm))).body.ok, true);
@@ -289,7 +289,7 @@ test("Materials and Tower freeze Formation snapshots and verify their own action
     assert.equal(claim.ok, true, JSON.stringify(claim));
     assert.equal(f.session().farmPending, null);
     const tower = { floor: 1, part: 0 };
-    const towerView = (await f.post("/tower/battle", tower)).body;
+    const towerView = (await f.post("/tower/battle", starting(tower))).body;
     assert.equal(towerView.ok, true, JSON.stringify(towerView));
     assert.equal(towerView.combatMode, "formation");
     assert.equal((await f.post("/tower/start", starting(tower))).body.ok, true);
@@ -313,7 +313,7 @@ test("boss objectives reach frozen snapshots and an impossible elemental team is
     guide.formationRules = [
       { kind: "defeat_order", description: "Defeat the sentinel, then the captain.", order: [0, 1] },
     ];
-    const view = (await f.post("/battle", request)).body;
+    const view = (await f.post("/battle", starting(request))).body;
     assert.equal(view.ok, true, JSON.stringify(view));
     assert.deepEqual(view.formationRules, guide.formationRules);
     assert.equal(
@@ -335,7 +335,7 @@ test("boss objectives reach frozen snapshots and an impossible elemental team is
       { kind: "element_barrier", description: "Only Water breaks the barrier.", elements: ["water"] },
     ];
     const vigor = f.session().wallet.vigor;
-    assert.equal((await f.post("/battle", request)).body.error, "formation-element-required");
+    assert.equal((await f.post("/battle", starting(request))).body.error, "formation-element-required");
     assert.equal((await f.post("/battle/start", starting(request))).body.error, "formation-element-required");
     assert.equal(f.session().wallet.vigor, vigor);
     assert.equal(f.session().combatPending, null);
@@ -430,6 +430,34 @@ test("old kits and a leftover unfinished fight: the remake runs, then the battle
       "the next start overwrites the stale fight",
     );
     assert.equal((await f.post("/farm/start", starting({ stage: "funds", difficulty: 1 }))).body.ok, true);
+  } finally {
+    await f.close();
+  }
+});
+
+test("an older tab in a world with outdated kits is told to reload before any kit remake starts", async () => {
+  const f = await fixture();
+  try {
+    f.transport.stage = "formation";
+    f.transport.reply = () => JSON.stringify(kit());
+    for (const id of [f.heroId, chapterUnitId]) f.docs.get(id).data.formationKitPrompt = 1;
+    const job = `${chapterRunId}:formation-conversion`;
+    // A 1.24.0 tab sends no rules revision, and its previews send nothing at all.
+    for (const [path, body] of [
+      ["/battle", request],
+      ["/battle/start", { ...request, expectedFormationEngine: FORGE_FORMATION_ENGINE }],
+      ["/farm/battle", { stage: "funds", difficulty: 1 }],
+    ])
+      assert.equal((await f.post(path, body)).body.error, "formation-engine-changed", path);
+    assert.equal(f.docs.has(job), false, "no remake job is written");
+    // A current tab on the same world reaches the remake.
+    assert.equal((await f.post("/battle", starting(request))).body.error, "combat-conversion-in-progress");
+    assert.equal(f.docs.has(job), true);
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const state = (await f.post("/combat-mode/status")).body;
+      if (["committed", "failed"].includes(state.conversion?.status)) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
   } finally {
     await f.close();
   }
