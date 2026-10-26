@@ -1292,3 +1292,188 @@ test("a support skill on front_row reads as the user's own Front Row, matching w
     "it reaches the user's own row",
   );
 });
+
+const serverAdapter = async () => {
+  const source = await readFile(
+    new URL("../packages/gacha-forge/src/formation-combat-server.mjs", import.meta.url),
+    "utf8",
+  );
+  const context = vm.createContext({ ...shared });
+  vm.runInContext(
+    source.replace(/^export /gmu, "") +
+      ";globalThis.adapter={seated:forgeFormationSeatedRules,kit:forgeFormationKitMessages};",
+    context,
+  );
+  return context.adapter;
+};
+
+test("a front kit counts a passive only when it can strike without attacking first", async () => {
+  const tank = (passive) =>
+    normalizeForgeFormationKit(
+      kit({
+        standard: ability({ name: "Hold the line", effect: "taunt", target: "self", duration: 2 }),
+        ultimate: ability({ name: "Brace", effect: "buff", stat: "def", target: "self", cost: 2, elementCost: 1 }),
+        passive: {
+          ...kit().passive,
+          effect: "damage",
+          target: "enemy",
+          power: 60,
+          trigger: "on_hit",
+          row: "front",
+          ...passive,
+        },
+      }),
+    );
+  assert.equal(tank({}).standard.effect, "taunt", "an on_hit strike lets the tank keep its taunt");
+  for (const [passive, why] of [
+    [{ trigger: "on_attack" }, "on_attack needs an attack it never makes"],
+    [{ trigger: "on_kill" }, "on_kill needs a kill it never makes"],
+    [{ power: 0 }, "a passive with no power never fires"],
+    [{ row: "back" }, "a Back Row passive never fires in front"],
+  ]) {
+    const read = tank(passive);
+    assert.equal(read.standard.effect, "damage", why);
+    assert.equal(read.standard.description, "");
+  }
+  // A kit-less, classic-derived enemy with a heal and an on_attack drain strikes too.
+  const enemy = forgeFormationEnemyKit({
+    position: "front",
+    skill: { name: "Mend", effect: "heal", target: "ally", power: 50 },
+    passive: { name: "Leech", effect: "drain", target: "enemy", power: 40, trigger: "on_attack" },
+  });
+  assert.equal(enemy.standard.effect, "damage");
+  const adapter = await serverAdapter();
+  const prompt = adapter.kit({ run: { scenario: "" }, unit: unit("hero") })[0].content;
+  assert.match(prompt, /on a trigger other than on_attack or on_kill, in row "front" or "both"/u);
+});
+
+test("an immune Ultimate lands on the ally the player picked, and holds unpaid when an earlier cast warded it", () => {
+  const aegis = kit({
+    ultimate: ability({ name: "Aegis", effect: "immune", target: "ally", cost: 2, elementCost: 1, duration: 1 }),
+  });
+  const light = (id, overrides) => unit(id, { affinity: "Light", formationKit: aegis, ...overrides });
+  const foe = unit("foe", { stats: { hp: 5000, atk: 1, def: 100, spd: 1, crit: 0 } });
+  // A lone fighter wards itself, then its supports: they stay pickable and the cast lands on the one picked.
+  const battle = forgeFormationBattle({
+    allies: [light("A", { stats: strong }), light("S1", { position: "back" }), light("S2", { position: "back" })],
+    enemies: [foe],
+    seed: 3,
+  });
+  let next = battle.next(),
+    self = false,
+    picked = -1;
+  for (let turn = 0; turn < 16 && !next.done && picked < 0; turn++) {
+    const formation = next.value.options.formation,
+      me = formation.fighters.find((fighter) => fighter.id === "A");
+    let entries = [];
+    if (me && forgeFormationPayment(formation.bank, me.ultimate, me.aff)) {
+      const reach = me.targets.ultimate.ids;
+      if (!self && reach.includes("A")) {
+        entries = [{ actorId: "A", action: "ultimate", targetId: "A" }];
+        self = true;
+      } else if (self && !reach.includes("A") && reach.includes("S1")) {
+        entries = [{ actorId: "A", action: "ultimate", targetId: "S1" }];
+        picked = next.value.steps.length;
+      }
+    }
+    next = battle.next(plan(...entries));
+  }
+  assert.ok(picked >= 0, "the warded fighter offers its supports");
+  const after = next.value.steps.slice(picked).flatMap((step) => step.events);
+  assert.ok(after.some((event) => event.op === "buff" && event.id === "S1" && event.text === "IMMUNE"));
+  assert.ok(!after.some((event) => event.op === "formation-held" && event.id === "A"), "the cast is not refused");
+  // Two casts on the same ally in one plan: the second holds before it pays.
+  const both = (second) => {
+    const fight = forgeFormationBattle({
+      allies: [
+        light("C"),
+        light("A2"),
+        light("B", { stats: strong }),
+        light("S1", { position: "back" }),
+        light("S2", { position: "back" }),
+        light("S3", { position: "back" }),
+      ],
+      enemies: [foe],
+      seed: 3,
+    });
+    let step = fight.next();
+    for (let turn = 0; turn < 4 && !step.done; turn++)
+      step = fight.next(turn === 2 ? plan({ actorId: "C", action: "ultimate", targetId: "B" }, second) : plan());
+    return step.value;
+  };
+  const twice = both({ actorId: "A2", action: "ultimate", targetId: "B" });
+  const once = both({ actorId: "A2", action: "hold" });
+  const evs = twice.steps.flatMap((step) => step.events);
+  assert.ok(evs.some((event) => event.op === "buff" && event.id === "B" && event.text === "IMMUNE"));
+  assert.ok(evs.some((event) => event.op === "formation-held" && event.id === "A2" && event.reason === "target"));
+  assert.ok(!evs.some((event) => event.op === "ult" && event.id === "A2"));
+  assert.deepEqual(twice.options.formation.bank, once.options.formation.bank, "the held cast spent nothing");
+});
+
+test("a summon after a retreat earlier in the plan fills the seat the retreat frees", async () => {
+  const { forgeFormationSeatsFreed } = await import("../packages/gacha-forge/src/formation-combat-client.mjs");
+  const caller = unit("c", {
+    formationKit: kit({
+      ultimate: ability({ name: "Call", effect: "summon", target: "self", power: 60, cost: 2, elementCost: 1 }),
+    }),
+  });
+  const battle = forgeFormationBattle({
+    allies: [caller, unit("f2"), unit("f3"), unit("s1", { position: "back" }), unit("s2", { position: "back" })],
+    enemies: [unit("foe", { stats: { hp: 5000, atk: 1, def: 100, spd: 1, crit: 0 } })],
+    seed: 7,
+  });
+  let next = battle.next(),
+    at = -1,
+    formation = null;
+  for (let turn = 0; turn < 16 && !next.done && at < 0; turn++) {
+    formation = next.value.options.formation;
+    const me = formation.fighters.find((fighter) => fighter.id === "c");
+    if (me && forgeFormationPayment(formation.bank, me.ultimate, me.aff)) {
+      assert.deepEqual(me.targets.ultimate.ids, [], "a full Front Row leaves no seat at turn start");
+      at = next.value.steps.length;
+      const entries = [
+        { actorId: "f2", action: "row", moveId: "f2" },
+        { actorId: "c", action: "ultimate" },
+      ];
+      assert.equal(forgeFormationSeatsFreed(formation, entries, "c"), 1, "the retreat frees a seat before the summon");
+      assert.equal(forgeFormationSeatsFreed(formation, entries.toReversed(), "c"), 0, "a summon before it frees none");
+      next = battle.next(plan(...entries));
+    } else next = battle.next(plan());
+  }
+  assert.ok(at >= 0);
+  const after = next.value.steps.slice(at).flatMap((step) => step.events);
+  assert.ok(
+    after.some((event) => event.op === "summon" && event.from === "c"),
+    "the engine seats the Echo",
+  );
+  assert.equal(
+    forgeFormationSeatsFreed(
+      formation,
+      [
+        { actorId: "c", action: "row", moveId: "s1" },
+        { actorId: "f2", action: "ultimate" },
+      ],
+      "f2",
+    ),
+    -1,
+    "bringing a support forward fills a seat",
+  );
+});
+
+test("a trimmed defeat order says what the engine enforces, naming the enemies it kept", async () => {
+  const adapter = await serverAdapter();
+  const names = ["Left sentinel", "Right sentinel", "Gate warden", "Captain"];
+  const enemies = names.map((name, index) => ({ name, tier: index === 3 ? "boss" : "soldier" }));
+  const [rule] = adapter.seated(enemies, [
+    {
+      kind: "defeat_order",
+      order: [0, 1, 2],
+      description:
+        "Fell the left sentinel, then the right, then the gate warden; only then can the captain be reached.",
+    },
+  ]);
+  assert.deepEqual(rule.order, [0, 1]);
+  assert.equal(rule.description, "Defeat Left sentinel, then Right sentinel.");
+  const kept = { kind: "defeat_order", order: [0, 3], description: "Fell the sentinel first." };
+  assert.deepEqual(adapter.seated(enemies, [kept])[0], kept, "an order that keeps the boss is left as written");
+});

@@ -402,13 +402,19 @@ export function normalizeForgeFormationKit(raw, { rarity, fallback } = {}) {
     ultimate = slot("ultimate", "ultimate", "ult"),
     passive = slot("passive", "passive");
   if (!standard || !ultimate || !passive) return null;
-  // The Front Row is there to fight: a fighter with nothing that reaches the enemy (its Normal, Ultimate or a
-  // striking passive) strikes with its Normal skill. A tank's taunt or shield pairs with an attacking Ultimate.
+  // The Front Row is there to fight: a fighter with nothing that reaches the enemy strikes with its Normal skill.
+  // A passive counts only when it deals damage in front without the unit attacking first: it has power, and
+  // it does not wait for an attack (on_attack) or a kill (on_kill), or fire only from the Back Row.
+  const strikingPassive =
+    forgeFormationStrikes.has(passive.effect) &&
+    passive.power > 0 &&
+    passive.row !== "back" &&
+    !["on_attack", "on_kill"].includes(passive.trigger);
   if (
     preferredRow !== "back" &&
     !forgeFormationOffense.has(standard.effect) &&
     !forgeFormationOffense.has(ultimate.effect) &&
-    !forgeFormationStrikes.has(passive.effect)
+    !strikingPassive
   ) {
     Object.assign(standard, { effect: "damage", target: "enemy", description: "" });
     delete standard.stat;
@@ -743,12 +749,10 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
       return pool.filter((actor) => actor.position === (ability.target === "front_row" ? "front" : "back"));
     const chosen = pool.find((actor) => actor.id === targetId);
     if (chosen) return [chosen];
-    if (["buff", "immune", "taunt"].includes(effect))
-      return [
-        fighters(side)
-          .filter((actor) => effect !== "immune" || wardable(actor))
-          .sort((a, b) => b.atk - a.atk || actors.indexOf(a) - actors.indexOf(b))[0] || source,
-      ];
+    const strongest = (list) => [...list].sort((a, b) => b.atk - a.atk || actors.indexOf(a) - actors.indexOf(b))[0];
+    if (effect === "immune")
+      return [strongest(fighters(side).filter(wardable)) || strongest(pool.filter(wardable)) || source];
+    if (["buff", "taunt"].includes(effect)) return [strongest(fighters(side)) || source];
     return [weakest(pool) || source];
   };
   const trigger = (actor, key, events, context) => {
@@ -1142,7 +1146,7 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
     }
     return true;
   };
-  const useful = (actor, skill) => {
+  const useful = (actor, skill, targetId = null) => {
     if (!skill) return false;
     const side = actor.side,
       foes = live(opponent(side));
@@ -1169,7 +1173,7 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
       case "summon":
         return fronts(side).length < 3;
       case "immune":
-        return targetsOf(actor, skill, null).some(wardable);
+        return targetsOf(actor, skill, targetId).some(wardable);
       default:
         return offensive(skill) ? foes.some((foe) => canTarget(actor, foe)) : true;
     }
@@ -1377,7 +1381,8 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
     } else if (!skill) held(actor, "hold", events);
     else if (status(actor, "silence")) held(actor, "silenced", events);
     else if (
-      (["revive", "swap", "summon", "immune"].includes(skill.effect) && !useful(actor, skill)) ||
+      // Immunity is tested on the planned target, which an earlier cast in the same plan may have warded.
+      (["revive", "swap", "summon", "immune"].includes(skill.effect) && !useful(actor, skill, entry.targetId)) ||
       (offensive(skill) && skill.effect !== "shuffle" && !targetsOf(actor, skill, entry.targetId).length)
     )
       held(actor, "target", events);

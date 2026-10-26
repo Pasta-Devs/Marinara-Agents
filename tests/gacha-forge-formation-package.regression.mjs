@@ -334,6 +334,10 @@ test("boss objectives reach frozen snapshots and an impossible elemental team is
     guide.formationRules = [
       { kind: "element_barrier", description: "Only Water breaks the barrier.", elements: ["water"] },
     ];
+    // The world owns a Water character, but the team leaves it behind.
+    const waterId = `${chapterRunId}:unit:water`;
+    f.seed(waterId, "unit", { ...rawUnit(waterId, "Nami"), affinity: "Water" });
+    f.session().roster[waterId] = { level: 1 };
     const vigor = f.session().wallet.vigor;
     assert.equal((await f.post("/battle", starting(request))).body.error, "formation-element-required");
     assert.equal((await f.post("/battle/start", starting(request))).body.error, "formation-element-required");
@@ -430,6 +434,30 @@ test("old kits and a leftover unfinished fight: the remake runs, then the battle
       "the next start overwrites the stale fight",
     );
     assert.equal((await f.post("/farm/start", starting({ stage: "funds", difficulty: 1 }))).body.ok, true);
+  } finally {
+    await f.close();
+  }
+});
+
+test("a cached guide's element barrier nobody in the world can meet never blocks its battle", async () => {
+  const f = await fixture();
+  try {
+    // A guide cached before barriers were checked asks for Water in a Fire-only world.
+    f.docs.get(`${chapterRunId}:combat:2:1`).data.formationRules = [
+      { kind: "element_barrier", elements: ["water"], description: "Only Water can pierce the ward." },
+    ];
+    const view = (await f.post("/battle", starting(request))).body;
+    assert.equal(view.ok, true, JSON.stringify(view));
+    assert.deepEqual(view.formationRules, []);
+    const started = (await f.post("/battle/start", starting(request))).body;
+    assert.equal(started.ok, true, JSON.stringify(started));
+    assert.deepEqual(f.session().combatPending.fight.formationRules, [], "the fight is saved without it");
+    // Once the world owns a Water character, the same barrier asks the team to bring one.
+    const waterId = `${chapterRunId}:unit:water`;
+    f.seed(waterId, "unit", { ...rawUnit(waterId, "Nami"), affinity: "Water" });
+    f.session().roster[waterId] = { level: 1 };
+    delete f.session().combatPending;
+    assert.equal((await f.post("/battle", starting(request))).body.error, "formation-element-required");
   } finally {
     await f.close();
   }
