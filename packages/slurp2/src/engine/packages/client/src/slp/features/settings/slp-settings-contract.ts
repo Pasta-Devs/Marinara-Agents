@@ -2,6 +2,7 @@ import type { SlurpFanType } from "../../../../../shared/src/slp/slp-fan-types.j
 import type { SlurpModelBudget } from "../../../../../shared/src/slp/slp-model-budget.js";
 import type { SlpSupportDeskSettings } from "../../../../../shared/src/slp/slp-support-desk.js";
 import type { SlpDramaSettings } from "../../../../../shared/src/slp/slp-drama.js";
+import type { SlpLiveSettings } from "../../../../../shared/src/slp/slp-live.js";
 import type { SlurpPlatformEvent } from "../../../../../shared/src/slp/slp-platform-events.js";
 import type { SlurpSimulationTuning } from "../../../../../shared/src/slp/slp-tuning.js";
 import type { SlurpPromptPreset } from "./slp-prompt-presets.js";
@@ -206,6 +207,7 @@ export type SlurpSettings = {
   paused: boolean;
   /** Backstage › Drama: level, the situations and dramas switched on, situation dials. */
   drama: SlpDramaSettings;
+  live: SlpLiveSettings;
   onboarding: "not_started" | "in_progress" | "completed";
   /** The persona browsing Slurp, shared by every device. Null: not picked yet. */
   viewerPersonaId: string | null;

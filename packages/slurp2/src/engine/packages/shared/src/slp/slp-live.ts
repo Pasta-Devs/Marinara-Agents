@@ -66,7 +66,7 @@ export type SlpLiveOrder = { id: string; itemId: string; by: string; name: strin
 export type SlpLiveEvent = {
   /** Milliseconds since the show started. */
   at: number;
-  kind: "join" | "leave" | "tip" | "order" | "goal" | "done" | "strip" | "say" | "chat" | "you";
+  kind: "join" | "leave" | "tip" | "order" | "goal" | "done" | "strip" | "say" | "chat" | "you" | "private";
   by?: string;
   name?: string;
   amount?: number;
@@ -110,7 +110,13 @@ export type SlpLiveState = {
   pictureAt?: number;
   /** When the picture being made now was asked for; null when none is. */
   shooting?: number | null;
+  /** The paid private block (ms since start): only the payer and the Creator, the room waits outside. */
+  private?: { by: string; name: string; from: number; to: number } | null;
 };
+
+/** A private block runs at `at`. */
+export const slpLivePrivateOn = (state: SlpLiveState, at: number) =>
+  !!state.private && state.private.from <= at && at < state.private.to;
 export type SlpLiveTip = { by: string; name: string; amount: number; itemId?: string };
 
 const MINUTE = 60_000;
@@ -242,14 +248,20 @@ export function slpLiveMinute(
   const seed = `${input.showId}:${input.minute}`;
   const inRoom = new Set(state.room);
   const pull = 0.5 + state.heat / 100;
+  // While the show is private the room only sees "in private": nobody joins or tips, and fans drift off.
+  const away = slpLivePrivateOn(state, at);
   for (const fan of fans) {
     const roll = slpLiveUnit(`${seed}:${fan.id}:room`);
     if (inRoom.has(fan.id)) {
-      if (roll < 0.06 / pull) {
+      if (roll < (away ? 0.2 : 0.06 / pull)) {
         inRoom.delete(fan.id);
         slpLiveLog(state, { at, kind: "leave", by: fan.id, name: fan.name });
       }
-    } else if (inRoom.size < ROOM_MAX && roll < slurpMemberActivityWeight(fan.activeHour, input.hour) * 0.12 * pull) {
+    } else if (
+      !away &&
+      inRoom.size < ROOM_MAX &&
+      roll < slurpMemberActivityWeight(fan.activeHour, input.hour) * 0.12 * pull
+    ) {
       inRoom.add(fan.id);
       state.names[fan.id] = fan.name;
       slpLiveLog(state, { at, kind: "join", by: fan.id, name: fan.name });
@@ -258,6 +270,7 @@ export function slpLiveMinute(
   state.room = [...inRoom];
   state.heat = Math.min(100, state.heat + 0.5);
   const tips: SlpLiveTip[] = [];
+  if (away) return tips;
   for (const fan of fans) {
     if (!inRoom.has(fan.id) || slpLiveUnit(`${seed}:${fan.id}:tip`) >= fan.tipChance * 0.3 * pull) continue;
     const size = slpLiveUnit(`${seed}:${fan.id}:amount`);
@@ -291,6 +304,12 @@ export function slurpLiveSlot(hostId: string, live: SlpLiveSettings, at: number)
 /** A picture is being made; after 3 minutes it counts as lost (a failed or restarted server). */
 export const slpLiveShooting = (state: SlpLiveState, at: number) =>
   state.shooting !== undefined && state.shooting !== null && at - state.shooting < 3 * 60_000;
+
+function slpLivePrivateView(state: SlpLiveState, elapsed: number, me: string | null) {
+  return state.private && slpLivePrivateOn(state, elapsed)
+    ? { mine: state.private.by === me, to: state.private.to }
+    : null;
+}
 
 function slpLivePictureView(state: SlpLiveState, elapsed: number) {
   const pictures = state.pictures ?? [];
@@ -339,6 +358,7 @@ export function slpLiveView(
     beatTo: state.beatTo ?? 0,
     // Only the newest landed picture, by number; the media path stays on the server.
     picture: slpLivePictureView(state, Math.max(0, now - Date.parse(show.startedAt))),
+    private: slpLivePrivateView(state, Math.max(0, now - Date.parse(show.startedAt)), me),
     shooting: slpLiveShooting(state, Math.max(0, now - Date.parse(show.startedAt))),
     top: slpLiveTopTipper(state),
     mine: me ? (state.tippers[me] ?? 0) : 0,

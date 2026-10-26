@@ -58,3 +58,13 @@ export function useSlpLiveBeat(showId: string, personaId: string | null) {
     onSuccess: ({ show }) => qc.setQueryData(liveKey("show", showId, personaId ?? ""), show),
   });
 }
+
+/** Buys a private block (or extends the player's own). */
+export function useSlpLivePrivate(showId: string, personaId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { requestId: string }) =>
+      api.post<SlpLiveView>(`/slurp2/slurp/live/${encodeURIComponent(showId)}/private`, { ...input, personaId }),
+    onSuccess: (view) => qc.setQueryData(liveKey("show", showId, personaId ?? ""), view),
+  });
+}

@@ -12,7 +12,7 @@ import {
   slpLiveParseBeat,
   SLP_LIVE_BEAT_SECONDS,
 } from "../../../../../shared/src/slp/slp-live-beat.js";
-import { slpLiveLog } from "../../../../../shared/src/slp/slp-live.js";
+import { slpLiveLog, slpLivePrivateOn } from "../../../../../shared/src/slp/slp-live.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
@@ -68,6 +68,9 @@ export async function beatSlurpLiveShow(
   const startedAt = Date.parse(show.startedAt);
   const at = now.getTime() - startedAt;
   const talking = !!(input.message || input.joined);
+  const alone = slpLivePrivateOn(show.state, at) ? show.state.private! : null;
+  // The room waits outside a private block: only the payer's screen gets it written.
+  if (alone && alone.by !== `persona:${input.personaId}`) return "waiting";
   if (!talking && (show.state.beatTo ?? 0) - at > (seconds * 1_000) / 3) return "waiting";
   if (writing.has(show.id) && !talking) return "busy";
   const call = ++calls;
@@ -97,6 +100,12 @@ export async function beatSlurpLiveShow(
       minutesLeft: Math.max(0, Math.round((Date.parse(show.endsAt) - now.getTime()) / 60_000)),
       seconds,
       viewer,
+      private: alone
+        ? {
+            minutesLeft: Math.ceil((alone.to - at) / 60_000),
+            started: !show.state.log.some((event) => event.kind === "say" && event.at >= alone.from),
+          }
+        : null,
     });
     const beat = await writeBeat(db, settings.live.connectionId ?? settings.generationConnectionId, prompt).catch(
       (error: unknown) => {

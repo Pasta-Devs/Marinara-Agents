@@ -1,4 +1,4 @@
-import { slpLiveLog, type SlpLiveState } from "./slp-live.js";
+import { slpLiveLog, slpLivePrivateOn, type SlpLiveState } from "./slp-live.js";
 
 /** How many seconds of show one model call writes (Backstage "Beat length"). */
 export const SLP_LIVE_BEAT_SECONDS = { short: 20, normal: 35, long: 50 } as const;
@@ -52,6 +52,8 @@ export function slpLiveApplyBeat(
   if (input.you) slpLiveLog(state, { at, kind: "you", by: input.you.by, name: input.you.name, text: input.you.text });
   const inRoom = new Map(state.room.map((id) => [(state.names[id] ?? "").toLowerCase(), id]));
   const host = input.host.toLowerCase();
+  // In a private block only the Creator talks, and nothing private is said after the block ends.
+  const alone = slpLivePrivateOn(state, at) ? state.private! : null;
   // The first line comes a second after the player's words, so an answer reads as an answer.
   const start = at + (input.you ? 1_000 : 0);
   let last = start;
@@ -60,9 +62,10 @@ export function slpLiveApplyBeat(
     const who = line.who.toLowerCase();
     const fan = inRoom.get(who);
     const isHost = who === "host" || who === host;
-    if (!isHost && !fan) continue;
+    if (!isHost && (!fan || alone)) continue;
     // Never two lines in the same breath: at least 1.5 s apart, all inside the beat.
     last = Math.max(last + (kept ? 1_500 : 0), start + Math.max(0, Math.min(seconds, line.t)) * 1_000);
+    if (alone && last >= alone.to) break;
     slpLiveLog(state, {
       at: last,
       kind: isHost ? "say" : "chat",
@@ -80,6 +83,7 @@ export function slpLiveApplyBeat(
     slpLiveLog(state, { at: Math.round((start + last) / 2), kind: "strip", amount: state.strip });
   }
   if (beat.place) state.place = beat.place;
-  state.beatTo = Math.max(last, start + seconds * 1_000);
+  // The room's talk comes back as soon as a private block ends.
+  state.beatTo = Math.min(Math.max(last, start + seconds * 1_000), alone?.to ?? Infinity);
   return kept;
 }

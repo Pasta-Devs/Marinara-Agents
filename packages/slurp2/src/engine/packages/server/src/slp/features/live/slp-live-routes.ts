@@ -16,6 +16,7 @@ const TIP_ERRORS = {
   ended: [409, "The show has ended"],
   processing: [409, "Tip payment is still processing."],
   broke: [402, "Not enough coins"],
+  taken: [409, "The show is private right now"],
 } as const;
 
 /** Live shows (LIVE-V3-PLAN.md): who is live now, one show for the screen, and the player's tips. */
@@ -113,6 +114,31 @@ export async function slpLiveRoutes(app: FastifyInstance, { noodle, resolveViewe
         return reply.code(400).send({ error: "That is not on the menu at this price" });
     }
     const result = await tipSlurpLiveShow(app.db, { ...parsed.data, showId, viewer });
+    if (result !== "booked") return reply.code(TIP_ERRORS[result][0]).send({ error: TIP_ERRORS[result][1] });
+    const show = await storage.get(showId);
+    return show
+      ? slpLiveView(show, Date.now(), `persona:${parsed.data.personaId}`)
+      : reply.code(404).send({ error: "No such show" });
+  });
+
+  // A private block at the Backstage price and length; buying again while it runs extends it.
+  app.post("/slurp/live/:id/private", async (req, reply) => {
+    const settings = await noodle.getSettings();
+    if (!slpExtensionOn(settings, "live")) return reply.code(409).send({ error: LIVE_OFF });
+    const parsed = z
+      .object({ personaId: z.string().trim().min(1), requestId: z.string().trim().min(8).max(100) })
+      .safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const showId = (req.params as { id: string }).id;
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const result = await tipSlurpLiveShow(app.db, {
+      ...parsed.data,
+      showId,
+      viewer,
+      amount: settings.live.privatePrice,
+      private: true,
+    });
     if (result !== "booked") return reply.code(TIP_ERRORS[result][0]).send({ error: TIP_ERRORS[result][1] });
     const show = await storage.get(showId);
     return show

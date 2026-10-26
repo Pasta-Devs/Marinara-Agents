@@ -7,6 +7,7 @@ import {
   SLP_DEFAULT_LIVE_SETTINGS,
   normalizeSlpLiveSettings,
   slpLiveApplyTip,
+  slpLiveLog,
   slpLiveMenuFor,
   slpLiveMinute,
   slpLiveStart,
@@ -28,6 +29,7 @@ import {
   slpLivePictureDue,
   slpLivePictureScene,
 } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-live-picture.ts";
+import { slpLiveApplyPrivate } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-live-private.ts";
 import { slpExtensionFromLegacy } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-extensions.ts";
 
 // The menu follows the spice level: no strip items for a clean Creator, all of them for an explicit one.
@@ -222,5 +224,65 @@ const picView = (at: number) =>
 assert.deepEqual(picView(30_000).picture, { n: 0, at: 20_000 }, "a picture shows only once it has landed");
 assert.deepEqual(picView(80_000).picture, { n: 1, at: 70_000 });
 assert.equal(JSON.stringify(picView(80_000)).includes("b.png"), false, "media paths stay on the server");
+
+// Private show: one payer at a time, own block extends, the room waits, only the Creator talks.
+const priv = slpLiveStart({ level: "nudity", fans: 10 });
+priv.room = ["f1"];
+priv.names = { f1: "dex" };
+slpLiveLog(priv, { at: 70_000, kind: "chat", by: "f1", name: "dex", text: "written ahead" });
+const buy = { by: "persona:p", name: "Kai", price: 300, minutes: 10 };
+assert.equal(slpLiveApplyPrivate(priv, buy, 60_000, "r1"), true);
+assert.equal(slpLiveApplyPrivate(priv, buy, 60_000, "r1"), false, "a retry books once");
+assert.equal(
+  priv.log.some((event) => event.text === "written ahead"),
+  false,
+  "public talk written ahead stops",
+);
+assert.equal(priv.raised, 0, "private coins do not fill the goals");
+assert.equal(slpLiveApplyPrivate(priv, { ...buy, by: "persona:q" }, 120_000, "r2"), false, "one payer at a time");
+assert.equal(slpLiveApplyPrivate(priv, buy, 120_000, "r3"), true);
+assert.equal(priv.private?.to, 60_000 + 20 * 60_000, "buying again extends");
+const privFans = [{ id: "f1", name: "dex", activeHour: 12, tipChance: 1, maxTip: 500 }];
+assert.deepEqual(
+  slpLiveMinute(priv, privFans, { showId: "p", minute: 3, hour: 12 }),
+  [],
+  "nobody tips into a private show",
+);
+priv.room = ["f1"];
+const privBeat = slpLiveParseBeat({
+  lines: [
+    { t: 0, who: "host", text: "just us now" },
+    { t: 1, who: "dex", text: "hello?" },
+  ],
+})!;
+slpLiveApplyBeat(priv, privBeat, { at: 200_000, seconds: 20, host: "Rowan" });
+assert.equal(
+  priv.log.filter((event) => event.at >= 200_000 && event.kind === "chat").length,
+  0,
+  "no fan chat in private",
+);
+assert.equal(slpLivePictureDue(priv, 200_000, { pictureSeconds: 60, pictureMax: 5 }), "opening");
+priv.pictureAt = 61_000;
+assert.equal(
+  slpLivePictureDue(priv, 130_000, { pictureSeconds: 60, pictureMax: 5 }),
+  "private",
+  "a private block opens with a picture",
+);
+const privView = (me: string) =>
+  slpLiveView(
+    {
+      id: "p",
+      hostId: "h",
+      hostKind: "creator",
+      startedAt: new Date(0).toISOString(),
+      endsAt: new Date(3_600_000).toISOString(),
+      endedAt: null,
+      state: priv,
+    },
+    300_000,
+    me,
+  );
+assert.equal(privView("persona:p").private?.mine, true);
+assert.equal(privView("persona:q").private?.mine, false);
 
 console.log("slurp2 live sim: ok");

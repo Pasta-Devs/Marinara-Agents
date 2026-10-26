@@ -1,5 +1,6 @@
 import type { DB } from "../../../db/connection.js";
-import { slpLiveApplyTip } from "../../../../../shared/src/slp/slp-live.js";
+import { slpLiveApplyPrivate } from "../../../../../shared/src/slp/slp-live-private.js";
+import { slpLiveApplyTip, slpLivePrivateOn } from "../../../../../shared/src/slp/slp-live.js";
 import {
   claimSlurpPaymentIntentForDatabase,
   compensateSlurpPaymentForDatabase,
@@ -10,7 +11,7 @@ import { createSlurpLiveStorage } from "../../data/live/slp-live-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { withSlurpLiveShow } from "./slp-live-lock.js";
 
-export type SlurpLiveTipResult = "booked" | "ended" | "missing" | "processing" | "broke";
+export type SlurpLiveTipResult = "booked" | "ended" | "missing" | "processing" | "broke" | "taken";
 
 /**
  * The player tips a live show (optionally for a menu item). The coins move like a profile tip, through a
@@ -25,6 +26,8 @@ export async function tipSlurpLiveShow(
     amount: number;
     itemId?: string;
     requestId: string;
+    /** Buys (or extends) a private block at `settings.live.privatePrice` instead of a tip. */
+    private?: boolean;
   },
   at = new Date(),
 ): Promise<SlurpLiveTipResult> {
@@ -34,13 +37,17 @@ export async function tipSlurpLiveShow(
   if (show.endedAt || at.getTime() >= Date.parse(show.endsAt)) return "ended";
   const noodle = createSlurpStorage(db);
   const settings = await noodle.getSettings();
-  const operationId = `live-tip:${input.requestId}`;
+  const by = `persona:${input.personaId}`;
+  const elapsed = Math.max(0, at.getTime() - Date.parse(show.startedAt));
+  // Somebody else's private block: no coins move.
+  if (input.private && slpLivePrivateOn(show.state, elapsed) && show.state.private!.by !== by) return "taken";
+  const operationId = `${input.private ? "live-private" : "live-tip"}:${input.requestId}`;
   const wallets = settings.walletEnabled;
   const payment = {
     viewerAccountId: input.viewer.id,
     creatorAccountId: show.hostId,
     price: input.amount,
-    note: "live tip",
+    note: input.private ? "live private show" : "live tip",
     creditOperationId: operationId,
   };
   const intent = wallets ? await claimSlurpPaymentIntentForDatabase(db, payment, operationId) : "claimed";
@@ -65,12 +72,20 @@ export async function tipSlurpLiveShow(
     const fresh = await storage.get(show.id);
     if (!fresh) return;
     const tip = {
-      by: `persona:${input.personaId}`,
+      by,
       name: input.viewer.displayName,
       amount: input.amount,
       ...(input.itemId ? { itemId: input.itemId } : {}),
     };
-    if (slpLiveApplyTip(fresh.state, tip, Math.max(0, at.getTime() - Date.parse(fresh.startedAt)), input.requestId)) {
+    const booked = input.private
+      ? slpLiveApplyPrivate(
+          fresh.state,
+          { by, name: input.viewer.displayName, price: input.amount, minutes: settings.live.privateMinutes },
+          elapsed,
+          input.requestId,
+        )
+      : slpLiveApplyTip(fresh.state, tip, elapsed, input.requestId);
+    if (booked) {
       await storage.save(show.id, { state: fresh.state });
     }
   });
