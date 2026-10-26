@@ -59,7 +59,10 @@ assert.match(navigation, /latestSourceTask\.status === "cancelled"[\s\S]*\? 0/u)
 assert.match(navigation, /sourceTaskCancelled/u);
 assert.match(navigation, /selectLtmPluralForm\(locale, failureCount\)/u);
 assert.match(navigation, /sourceTaskFailedCountOne[\s\S]*sourceTaskFailedCountOther/u);
-assert.match(navigation, /className=\{item\.id === "sources" && activeSourceTask \? "animate-spin"/u);
+assert.match(
+  navigation,
+  /className=\{item\.id === "sources" && activeSourceTask \? "animate-spin motion-reduce:animate-none"/u,
+);
 assert.match(navigation, /const label = localizeUi\(mobile \? item\.shortLabelKey : item\.labelKey\)/u);
 assert.doesNotMatch(navigation, /const label =\s*item\.id === "sources" && sourceTaskLabel\s*\?\s*sourceTaskLabel/u);
 // Accessible name stays Sources; live status is outside the button.
@@ -1259,6 +1262,27 @@ assert.match(
   /\[data-ltm-activation-knob\] \{[^}]*box-shadow: 0 1px 2px var\(--marinara-editor-border-strong\);/u,
 );
 assert.match(detail, /Measured on the status panel[^\n]*at least 10\.0:1 light, 9\.1:1 dark/u);
+
+// Every spinner in the feature stops under reduced motion; the workspace rule only shortens the
+// loop, so a spinner outside it (navigation, detail header) would still turn without its own class.
+const spinnerFiles = readdirSync(ltmClientRoot, { recursive: true }).filter((name) => /\.tsx$/u.test(String(name)));
+assert.ok(spinnerFiles.length > 10, "spinner scan found the feature sources");
+for (const name of spinnerFiles) {
+  const lines = readFileSync(join(ltmClientRoot, String(name)), "utf8").split("\n");
+  lines.forEach((line, index) => {
+    if (line.includes("animate-spin")) {
+      assert.match(
+        line,
+        /motion-reduce:animate-none/u,
+        `${name}:${index + 1} spinner needs motion-reduce:animate-none`,
+      );
+    }
+  });
+}
+
+// Debug search filters up to 1,000 events, so typing must not block on the filter.
+assert.match(activity, /const deferredSearch = useDeferredValue\(search\);/u);
+assert.match(activity, /const query = deferredSearch\.trim\(\)/u);
 
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, defaults, and scope loading ok\n",

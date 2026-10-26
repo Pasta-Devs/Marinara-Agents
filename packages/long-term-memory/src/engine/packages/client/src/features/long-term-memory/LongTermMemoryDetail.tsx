@@ -321,7 +321,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       {...(repairPending ? ({ "aria-disabled": true, className: "opacity-50" } as const) : {})}
       onClick={() => void repairRecall()}
     >
-      <RefreshCw aria-hidden="true" size="0.75rem" className={repairPending ? "animate-spin" : ""} />
+      <RefreshCw
+        aria-hidden="true"
+        size="0.75rem"
+        className={repairPending ? "animate-spin motion-reduce:animate-none" : ""}
+      />
       {localizeUi("ui.longTermMemory.longtermmemorydetail.reindexRecall")}
     </Button>
   );
@@ -893,7 +897,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                       <RefreshCw
                         aria-hidden="true"
                         size="0.75rem"
-                        className={status.isFetching ? "animate-spin" : ""}
+                        className={status.isFetching ? "animate-spin motion-reduce:animate-none" : ""}
                       />
                       {localizeUi("ui.longTermMemory.activityview.retry")}
                     </Button>

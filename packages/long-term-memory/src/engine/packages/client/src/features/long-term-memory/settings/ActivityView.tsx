@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -711,7 +711,9 @@ export default function ActivityView({
     const labels = new Map((scopeTargets.data?.chats ?? []).map((chat) => [chat.id, chat.label]));
     return (chatId: string) => labels.get(chatId) ?? chatId;
   }, [scopeTargets.data]);
-  const query = search.trim().toLocaleLowerCase(locale);
+  // Filtering walks up to 1,000 events, so the list follows the typed text one render behind.
+  const deferredSearch = useDeferredValue(search);
+  const query = deferredSearch.trim().toLocaleLowerCase(locale);
   // The memory filter selects whole operations and composes with the chips and search
   // rather than replacing them; each matching operation keeps its full event list.
   const filteredOperations = useMemo(

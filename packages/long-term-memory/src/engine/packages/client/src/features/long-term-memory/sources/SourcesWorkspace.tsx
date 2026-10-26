@@ -1872,7 +1872,11 @@ export default function SourcesWorkspace({
                         data-ltm-source-action="load-more"
                       >
                         {lorebookPreview.isFetchingNextPage ? (
-                          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+                          <Loader2
+                            aria-hidden="true"
+                            size="0.75rem"
+                            className="animate-spin motion-reduce:animate-none"
+                          />
                         ) : null}
                         {localizeUi(
                           lorebookPreview.isFetchingNextPage
@@ -1923,7 +1927,11 @@ export default function SourcesWorkspace({
                         data-ltm-source-action="refresh-preview"
                       >
                         {lorebookPreview.isFetching ? (
-                          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+                          <Loader2
+                            aria-hidden="true"
+                            size="0.75rem"
+                            className="animate-spin motion-reduce:animate-none"
+                          />
                         ) : (
                           <RefreshCw aria-hidden="true" size="0.75rem" />
                         )}
@@ -2364,7 +2372,11 @@ export default function SourcesWorkspace({
                         data-ltm-source-action="load-more"
                       >
                         {preview.isFetchingNextPage ? (
-                          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+                          <Loader2
+                            aria-hidden="true"
+                            size="0.75rem"
+                            className="animate-spin motion-reduce:animate-none"
+                          />
                         ) : null}
                         {localizeUi(
                           preview.isFetchingNextPage
@@ -2415,7 +2427,11 @@ export default function SourcesWorkspace({
                         data-ltm-source-action="refresh-preview"
                       >
                         {preview.isFetching ? (
-                          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+                          <Loader2
+                            aria-hidden="true"
+                            size="0.75rem"
+                            className="animate-spin motion-reduce:animate-none"
+                          />
                         ) : (
                           <RefreshCw aria-hidden="true" size="0.75rem" />
                         )}

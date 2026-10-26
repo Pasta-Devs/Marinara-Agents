@@ -139,7 +139,7 @@ export function LongTermMemoryNavigation({
         <Icon
           aria-hidden="true"
           size={mobile ? "1.125rem" : "0.875rem"}
-          className={item.id === "sources" && activeSourceTask ? "animate-spin" : undefined}
+          className={item.id === "sources" && activeSourceTask ? "animate-spin motion-reduce:animate-none" : undefined}
         />
         <span className="min-w-0 truncate" aria-hidden={item.id === "sources" ? true : undefined}>
           {label}

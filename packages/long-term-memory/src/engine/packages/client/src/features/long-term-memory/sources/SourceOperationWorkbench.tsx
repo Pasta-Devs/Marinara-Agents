@@ -350,7 +350,7 @@ export function SourceOperationWorkbench({
         data-ltm-source-operation-action="preview"
       >
         {busy === "preview" ? (
-          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin motion-reduce:animate-none" />
         ) : (
           <Send aria-hidden="true" size="0.75rem" />
         )}
@@ -430,7 +430,7 @@ export function SourceOperationWorkbench({
             data-ltm-source-operation-action="apply"
           >
             {busy === "apply" ? (
-              <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+              <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin motion-reduce:animate-none" />
             ) : (
               <Check aria-hidden="true" size="0.75rem" />
             )}
