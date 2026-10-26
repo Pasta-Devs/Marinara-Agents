@@ -43,12 +43,20 @@ export async function shootSlurpLivePicture(db: DB, showId: string, at: number, 
   await withSlurpLiveShow(showId, async () => {
     const show = await storage.get(showId);
     if (!show) return path?.compensate();
-    show.state.shooting = null;
-    if (path && !show.endedAt) {
-      show.state.pictures = [...(show.state.pictures ?? []), { at: at + (Date.now() - t0), path: path.mediaPath }];
-      path.promote();
-    } else path?.compensate();
-    await storage.save(show.id, { state: show.state });
+    // A newer shot (after this one went stale) keeps its own mark.
+    if (show.state.shooting === at) show.state.shooting = null;
+    if (!path || show.endedAt) {
+      path?.compensate();
+      await storage.save(show.id, { state: show.state });
+      return;
+    }
+    show.state.pictures = [...(show.state.pictures ?? []), { at: at + (Date.now() - t0), path: path.mediaPath }];
+    // Saved first: a failed save must not leave a promoted file that nothing points to.
+    await storage.save(show.id, { state: show.state }).catch((error: unknown) => {
+      path.compensate();
+      throw error;
+    });
+    path.promote();
   });
 }
 
