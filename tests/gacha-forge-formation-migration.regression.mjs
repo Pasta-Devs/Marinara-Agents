@@ -89,6 +89,7 @@ function fixture({ count = 5, generate = async () => kit, cancellationOptions, r
       normalizeKit,
       generateKit: generate,
       retireInactiveFight,
+      kitPrompt: 2,
     });
   const service = create();
   return {
@@ -120,7 +121,8 @@ test("conversion requires confirmation and keeps pending battles and oversized t
     "combat-in-progress",
   );
   delete session.combatPending;
-  session.presets[0].board = { front: ["a", "b", "c"], back: ["d", "e"] };
+  // Six seats are a full team; a fourth fighter in front is not.
+  session.presets[0].board = { front: ["a", "b", "c", "g"], back: ["d", "e"] };
   assert.equal(
     (await f.service.start({ runId, targetMode: "formation", confirmed: true })).error,
     "formation-team-too-large",
@@ -163,6 +165,7 @@ test("bounded parallel conversion commits all kits atomically and preserves iden
       ...previous.data,
       formationKit: kit,
       formationKitSource: forgeFormationUnitFingerprint(previous.data),
+      formationKitPrompt: 2,
     });
   }
   for (const id of [`${runId}:unit:weapon`, "other-world:unit:0"]) assert.deepEqual(f.docs.get(id), before.get(id));
@@ -539,5 +542,105 @@ test("a failed character keeps its error code, and starting again after a cancel
   await f.service.settled(runId);
   assert.equal((await f.service.status({ runId })).conversion.status, "committed");
   assert.deepEqual(Object.fromEntries(calls), { "Hero 0": 1, "Hero 1": 2, "Hero 2": 2 });
+  f.dispose();
+});
+
+test("a full 3+3 team converts", async () => {
+  const f = fixture({ count: 1 });
+  f.docs.get(`${runId}:session`).data.presets[0].board = { front: ["a", "b", "c"], back: ["d", "e", "f"] };
+  assert.equal((await f.service.start({ runId, targetMode: "formation", confirmed: true })).ok, true);
+  await f.service.settled(runId);
+  assert.equal((await f.service.status({ runId })).mode, "formation");
+  f.dispose();
+});
+
+// Kits written for the old Formation rules fight on, but a Formation world remakes them before its next battle.
+function formationWorld(f, stamps) {
+  f.docs.get("index").data.runs[0].combat = { mode: "formation", revision: 1 };
+  stamps.forEach((stamp, index) => {
+    const data = f.docs.get(`${runId}:unit:${index}`).data;
+    data.formationKit = { version: 1, standard: { name: `Old ${index}` } };
+    if (stamp != null) data.formationKitPrompt = stamp;
+  });
+  return f.docs.get("index").data.runs[0];
+}
+
+test("old-rule kits are remade automatically on a Formation world's next battle, and only the stale ones", async () => {
+  let calls = 0;
+  const f = fixture({
+    count: 3,
+    generate: async () => {
+      calls++;
+      return kit;
+    },
+  });
+  const run = formationWorld(f, [undefined, 1, 2]);
+  assert.equal((await f.service.status({ runId })).staleKits, 2);
+  const blocked = await f.service.ensure(runId, run);
+  assert.equal(blocked.error, "combat-conversion-in-progress", "the battle waits for the remake");
+  await f.service.settled(runId);
+  assert.equal(calls, 2);
+  assert.deepEqual(f.docs.get(`${runId}:unit:2`).data.formationKit, { version: 1, standard: { name: "Old 2" } });
+  for (const index of [0, 1]) {
+    assert.deepEqual(f.docs.get(`${runId}:unit:${index}`).data.formationKit, kit);
+    assert.equal(f.docs.get(`${runId}:unit:${index}`).data.formationKitPrompt, 2);
+  }
+  const status = await f.service.status({ runId });
+  assert.equal(status.staleKits, 0);
+  assert.equal(status.mode, "formation");
+  assert.deepEqual(await f.service.ensure(runId, f.docs.get("index").data.runs[0]), { ok: true });
+  f.dispose();
+});
+
+test("a failed or cancelled remake never blocks battles: the old kits keep fighting", async () => {
+  for (const outcome of ["failed", "cancelled"]) {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const f = fixture({
+      count: 1,
+      generate: async ({ signal }) => {
+        if (outcome === "failed") throw new Error("generation-failed");
+        await gate;
+        signal.throwIfAborted();
+        return kit;
+      },
+    });
+    const run = formationWorld(f, [1]);
+    const started = await f.service.ensure(runId, run);
+    assert.equal(started.error, "combat-conversion-in-progress");
+    if (outcome === "cancelled") {
+      await f.service.cancel({ runId, jobId: started.conversion.id });
+      release();
+    }
+    await f.service.settled(runId);
+    assert.equal((await f.service.status({ runId })).conversion.status, outcome);
+    assert.deepEqual(await f.service.ensure(runId, run), { ok: true }, `${outcome} remake leaves old kits playable`);
+    assert.equal(f.docs.get(`${runId}:unit:0`).data.formationKitPrompt, 1);
+    assert.equal((await f.service.status({ runId })).staleKits, 1, "Settings still offers the remake");
+    f.dispose();
+  }
+});
+
+test("a Classic world never generates Formation kits, even when it holds old ones", async () => {
+  let calls = 0;
+  const f = fixture({
+    count: 2,
+    generate: async () => {
+      calls++;
+      return kit;
+    },
+  });
+  const run = formationWorld(f, [1, undefined]);
+  run.combat = { mode: "classic", revision: 2 };
+  assert.deepEqual(await f.service.ensure(runId, run), { ok: true });
+  assert.equal((await f.service.status({ runId })).staleKits, 0);
+  assert.equal(f.docs.has(`${runId}:formation-conversion`), false);
+  // Switching that world to Formation remakes them under the current rules.
+  await f.service.start({ runId, targetMode: "formation", confirmed: true });
+  await f.service.settled(runId);
+  assert.equal(calls, 2);
+  assert.equal(f.docs.get(`${runId}:unit:0`).data.formationKitPrompt, 2);
   f.dispose();
 });

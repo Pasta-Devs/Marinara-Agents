@@ -4,7 +4,7 @@ a, n, r, be, Ae, pe, Gn, Le, _t, It, Vt, uh, gS, yS, Uo, _r, fu, Ei, tr, wy, Ur,
 nt, nn, vn, ch, P0, Ph, vS, ES, U0, rt, Vr, gc, H0, zo, yu, I, forgeEnemyCombatMetadata,
 forgeEncounterPresentation, dh, W, Gs, ro, Bo, Wf, at, ie, forgeChoices, forgeStoryMemory, forgeStoryCancellation,
 forgeStoryPost, B, k, q, bgSlug, l, Xt, vf, jg, Qn, forgeBannerAnimations, xn */
-/* global forgeFormationEncounterMessages, forgeCanonicalSegments, forgeSeasonalEnabled */
+/* global forgeFormationEncounterMessages, forgeFormationMode, forgeFormationNormalizeGuide, forgeCanonicalSegments, forgeSeasonalEnabled */
 
 // ponytail: this is the narrow adapter for the contributed bundle; move its aliases to imports when that source lands.
 function createForgeSeasonalLegacyAdapter() {
@@ -262,6 +262,7 @@ function createForgeSeasonalLegacyAdapter() {
       ]);
       const characterContext = await events.narrationContext(target.runId, target.plan);
       if (characterContext) messages.push({ role: "user", content: characterContext });
+      let formationElements = null;
       if (typeof forgeFormationEncounterMessages === "function") {
         const session = await readSession(target.runId),
           units = (await a.list(n.id, "unit")).filter(
@@ -271,9 +272,13 @@ function createForgeSeasonalLegacyAdapter() {
             ...new Set(units.map((unit) => String(unit.data?.affinity || "").toLowerCase()).filter(Boolean)),
           ];
         messages = forgeFormationEncounterMessages(messages, run, available);
+        if (forgeFormationMode(run) === "formation") formationElements = available;
       }
+      // Classic event fights parse exactly as before; a Formation world also reads the kits and rules it asked for.
       const result = await generate(target.runId, run, messages, "story-event-combat", (value) =>
-        ES(value, U0(scale), node),
+        formationElements
+          ? forgeFormationNormalizeGuide(value, ES(value, U0(scale), node), formationElements)
+          : ES(value, U0(scale), node),
       );
       if (!result.ok) return result;
       const at = new Date().toISOString();
