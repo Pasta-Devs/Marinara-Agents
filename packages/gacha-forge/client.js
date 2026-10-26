@@ -8388,17 +8388,8 @@ function createForgeFormationPresentation(root, payload) {
   };
 }
 
-const forgeFormationLasting = new Set([
-  "shield",
-  "buff",
-  "debuff",
-  "dot",
-  "stun",
-  "regen",
-  "immune",
-  "silence",
-  "taunt",
-]);
+// Effects the engine keeps as timed statuses; damage, heals and shields resolve at once.
+const forgeFormationLasting = new Set(["buff", "debuff", "dot", "stun", "regen", "immune", "silence", "taunt"]);
 
 /** The unit's Formation kit while this world fights in Formation, else null. */
 function forgeFormationActiveKit(host) {
