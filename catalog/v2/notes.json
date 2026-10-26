@@ -652,6 +652,12 @@
     "quartermaster": {
       "versions": [
         {
+          "version": "0.1.31",
+          "date": "2026-10-25",
+          "notes": "- No changes you'll notice: a code comment was corrected.",
+          "highlight": false
+        },
+        {
           "version": "0.1.30",
           "date": "2026-10-25",
           "notes": "- Accepting or keeping a pending item change and then switching chats before it finishes no\n  longer shows that chat's result in the chat you switched to.\n- The \"Only you can change it — becomes shown\" help now says removals are skipped too.",
@@ -763,12 +769,6 @@
           "version": "0.1.12",
           "date": "2026-09-14",
           "notes": "- Settings moved to its own tab instead of an accordion pushing inventory below the fold.\n- Settings regrouped into Appearance/Display/Image Generation/Data, with hover-and-tap tooltips\n  replacing permanent explanation text.\n- Recent Automatic Update (renamed Recent Agent Update) moved next to Restore Inventory, with a\n  colored +N/↑N/−N count summary and visible reasoning even on quiet turns.\n- Item and outfit cards collapse Edit/Update/Delete into a \"⋯\" menu, giving descriptions more\n  room.\n- Delete confirmations now also cover the item-image and outfit-portrait remove buttons.\n- Add Item is now a modal instead of an always-open form.",
-          "highlight": true
-        },
-        {
-          "version": "0.1.11",
-          "date": "2026-09-13",
-          "notes": "- The tracking agent now targets specific changes instead of re-listing the whole inventory every\n  turn, so nothing gets dropped or cut off.\n- Added a \"Recent Automatic Update\" view showing what the last turn changed, with a per-item\n  Revert button.",
           "highlight": true
         }
       ]

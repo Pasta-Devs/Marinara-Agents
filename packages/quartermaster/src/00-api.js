@@ -160,9 +160,10 @@ QM.restoreInventory = (chatId, ownerId) =>
     body: "{}",
   });
 
-// Settles one pending agent change to a hidden item. Unlike qmRequest this
-// resolves (never throws) on a 409, since a stale change answers with the
-// item's before/current/after for the user to compare: { ok, status, body }.
+// Settles one pending agent change to a hidden item: { ok, status, body }.
+// A 409 resolves instead of throwing, since a stale change answers with the
+// item's before/current/after for the user to compare (and a deleted item with
+// gone); every other failure still throws.
 QM.resolvePending = (chatId, ownerId, pendingId, decision) =>
   qmRequest(
     `/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/pending/${encodeURIComponent(pendingId)}/resolve`,

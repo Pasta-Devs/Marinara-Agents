@@ -1,5 +1,8 @@
 # Quartermaster changelog
 
+## 0.1.31 — 2026-10-25
+- No changes you'll notice: a code comment was corrected.
+
 ## 0.1.30 — 2026-10-25
 - Accepting or keeping a pending item change and then switching chats before it finishes no
   longer shows that chat's result in the chat you switched to.

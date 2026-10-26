@@ -273,6 +273,9 @@ overwrite an already-released version's artifact file if you forget to bump `VER
 
 ## Changelog
 
+### 0.1.31
+- Corrected a code comment about settling pending item changes. Nothing changes in use.
+
 ### 0.1.30
 - Settling a pending item change (Accept, Keep, or the stale and deleted-item choices) and then
   switching chats before the answer arrives no longer writes that answer into the chat you
