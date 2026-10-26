@@ -299,8 +299,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "27cd2998bf9238ca51007ce10450b670cf6a1a508f9bae78a671b4551cbf460d",
-      "bytes": 1876366
+      "sha256": "ec5cc8a7dfa936922bfd9dc576d446beb8d9fdb8b919a2c29ab0604698e2be84",
+      "bytes": 1876539
     },
     {
       "path": "farm-asc.webp",
@@ -774,8 +774,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "99db6c154b69869e47ed6e1d4c4c846f50a12c61961bfaac4457e3665531e12b",
-      "bytes": 950982
+      "sha256": "67b1db4e4ee3ab82f9625718ba764dd6406369f4707989e64e07c64a55003695",
+      "bytes": 951155
     },
     {
       "path": "skill-aoe_damage-dark.webp",
@@ -1544,8 +1544,8 @@
     },
     {
       "path": "src/formation-combat-shared.mjs",
-      "sha256": "98cda28046fbe70d662f899a115c9cea52081fcaac7ef7c8642749cf7e7a3cd3",
-      "bytes": 66184
+      "sha256": "c56f7c8d6f6885d55a5b65bff73cd2b1b2b1e9071a66de96cd660b9632fee8d6",
+      "bytes": 66357
     },
     {
       "path": "src/formation-migration-server.mjs",

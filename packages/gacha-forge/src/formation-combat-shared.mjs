@@ -750,8 +750,9 @@ export function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rul
     const chosen = pool.find((actor) => actor.id === targetId);
     if (chosen) return [chosen];
     const strongest = (list) => [...list].sort((a, b) => b.atk - a.atk || actors.indexOf(a) - actors.indexOf(b))[0];
-    if (effect === "immune")
-      return [strongest(fighters(side).filter(wardable)) || strongest(pool.filter(wardable)) || source];
+    // Unplanned immunity goes to a Front Row fighter that can still be warded; a Back Row support cannot be
+    // attacked, so warding it would pay for nothing. With none, the cast is not useful and holds unpaid.
+    if (effect === "immune") return [strongest(fighters(side).filter(wardable)) || source];
     if (["buff", "taunt"].includes(effect)) return [strongest(fighters(side)) || source];
     return [weakest(pool) || source];
   };

@@ -1477,3 +1477,104 @@ test("a trimmed defeat order says what the engine enforces, naming the enemies i
   const kept = { kind: "defeat_order", order: [0, 3], description: "Fell the sentinel first." };
   assert.deepEqual(adapter.seated(enemies, [kept])[0], kept, "an order that keeps the boss is left as written");
 });
+
+test("unplanned immunity never wards a Back Row support: it holds unpaid, while a planned Front Row ally still gets it", () => {
+  const aegis = kit({
+    ultimate: ability({ name: "Aegis", effect: "immune", target: "ally", cost: 2, elementCost: 1, duration: 1 }),
+  });
+  const light = (id, overrides) => unit(id, { affinity: "Light", formationKit: aegis, ...overrides });
+  // The enemy AI wards its lone fighter, then holds rather than paying to ward its supports.
+  const fight = replayForgeFormationBattle({
+    allies: [unit("hero", { stats: { hp: 3000, atk: 60, def: 100, spd: 50, crit: 0 } })],
+    enemies: [
+      light("boss", { stats: { hp: 900, atk: 10, def: 80, spd: 50, crit: 0 } }),
+      light("b0", { position: "back" }),
+      light("b1", { position: "back" }),
+    ],
+    seed: 5,
+  });
+  const all = events(fight);
+  assert.ok(all.some((event) => event.op === "buff" && event.id === "boss" && event.text === "IMMUNE"));
+  assert.ok(
+    !all.some((event) => event.op === "buff" && /^b\d$/u.test(event.id) && event.text === "IMMUNE"),
+    "no ward is paid for on a support nobody can attack",
+  );
+  // A player's warded lone fighter: an Ultimate planned without a target holds and spends nothing.
+  const run = (second) => {
+    const battle = forgeFormationBattle({
+      allies: [
+        light("A", { stats: strong }),
+        light("B", { stats: strong }),
+        light("S1", { position: "back" }),
+        light("S2", { position: "back" }),
+      ],
+      enemies: [unit("foe", { stats: { hp: 5000, atk: 1, def: 100, spd: 1, crit: 0 } })],
+      seed: 3,
+    });
+    let next = battle.next(),
+      warded = false,
+      at = -1;
+    for (let turn = 0; turn < 16 && !next.done && at < 0; turn++) {
+      const formation = next.value.options.formation,
+        a = formation.fighters.find((fighter) => fighter.id === "A"),
+        b = formation.fighters.find((fighter) => fighter.id === "B");
+      let entries = [];
+      const first = a && forgeFormationPayment(formation.bank, a.ultimate, a.aff);
+      const rest =
+        first &&
+        Object.fromEntries(Object.entries(formation.bank).map(([key, value]) => [key, value - (first[key] || 0)]));
+      if (b && first && forgeFormationPayment(rest, b.ultimate, b.aff) && !warded) {
+        // Ward both Front Row fighters this turn.
+        entries = [
+          { actorId: "A", action: "ultimate", targetId: "A" },
+          { actorId: "B", action: "ultimate", targetId: "B" },
+        ];
+        warded = true;
+      } else if (warded && a && !a.targets.ultimate.ids.includes("A") && !a.targets.ultimate.ids.includes("B")) {
+        entries = [second];
+        at = next.value.steps.length;
+      }
+      next = battle.next(plan(...entries));
+    }
+    assert.ok(at >= 0, "both fighters were warded");
+    return { value: next.value, after: next.value.steps.slice(at).flatMap((step) => step.events) };
+  };
+  const unplanned = run({ actorId: "A", action: "ultimate" });
+  const held = run({ actorId: "A", action: "hold" });
+  assert.ok(
+    unplanned.after.some((event) => event.op === "formation-held" && event.id === "A" && event.reason === "target"),
+  );
+  assert.ok(!unplanned.after.some((event) => event.op === "buff" && event.text === "IMMUNE"));
+  assert.deepEqual(unplanned.value.options.formation.bank, held.value.options.formation.bank, "nothing was paid");
+  // Two fighters, one warded: the other, planned explicitly, still gets the ward.
+  const battle = forgeFormationBattle({
+    allies: [light("A", { stats: strong }), light("B", { stats: strong }), light("S1", { position: "back" })],
+    enemies: [unit("foe", { stats: { hp: 5000, atk: 1, def: 100, spd: 1, crit: 0 } })],
+    seed: 3,
+  });
+  let next = battle.next(),
+    self = false,
+    at = -1;
+  for (let turn = 0; turn < 16 && !next.done && at < 0; turn++) {
+    const formation = next.value.options.formation,
+      a = formation.fighters.find((fighter) => fighter.id === "A");
+    let entries = [];
+    if (a && forgeFormationPayment(formation.bank, a.ultimate, a.aff)) {
+      if (!self) {
+        entries = [{ actorId: "A", action: "ultimate", targetId: "A" }];
+        self = true;
+      } else if (!a.targets.ultimate.ids.includes("A") && a.targets.ultimate.ids.includes("B")) {
+        entries = [{ actorId: "A", action: "ultimate", targetId: "B" }];
+        at = next.value.steps.length;
+      }
+    }
+    next = battle.next(plan(...entries));
+  }
+  assert.ok(at >= 0);
+  assert.ok(
+    next.value.steps
+      .slice(at)
+      .flatMap((step) => step.events)
+      .some((event) => event.op === "buff" && event.id === "B" && event.text === "IMMUNE"),
+  );
+});
