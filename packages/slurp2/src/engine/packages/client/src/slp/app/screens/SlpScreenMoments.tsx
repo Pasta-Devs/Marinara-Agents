@@ -93,7 +93,9 @@ export function SlurpMomentsShelf({
   }
   // A live Creator's tile is the show; their Stories wait until it ends.
   const live = useSlpLiveNow().data ?? [];
-  const creatorMoments = [...tileByCreator.values()].filter((moment) => !live.some((show) => show.hostId === moment.creator.profile.id));
+  const creatorMoments = [...tileByCreator.values()].filter(
+    (moment) => !live.some((show) => show.hostId === moment.creator.profile.id),
+  );
   const isUnwatched = (moment: (typeof moments)[number]) => !watched(moment);
   creatorMoments.sort((left, right) => {
     const leftNew = isUnwatched(left);
@@ -132,7 +134,9 @@ export function SlurpMomentsShelf({
             </button>
           )}
           <SlpLiveMomentTiles shows={live} />
-        {creatorMoments.length === 0 && live.length > 0 ? null : creatorMoments.length === 0 && isLoading && !isError ? (
+          {creatorMoments.length === 0 && live.length > 0 ? null : creatorMoments.length === 0 &&
+            isLoading &&
+            !isError ? (
             <SlpSkeleton shape="stories" count={4} />
           ) : creatorMoments.length === 0 ? (
             <div

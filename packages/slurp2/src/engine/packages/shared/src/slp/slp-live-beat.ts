@@ -70,7 +70,9 @@ export function slpLiveApplyBeat(
   },
 ): number {
   const { at, seconds } = input;
-  state.log = state.log.filter((event) => !((event.kind === "say" || event.kind === "chat" || event.kind === "cam") && event.at > at));
+  state.log = state.log.filter(
+    (event) => !((event.kind === "say" || event.kind === "chat" || event.kind === "cam") && event.at > at),
+  );
   if (input.you)
     slpLiveLog(
       state,
