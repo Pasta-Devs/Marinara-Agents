@@ -1,5 +1,6 @@
 import { SlpBootstrap } from "../../../../../shared/src/slp/slp-social.types.js";
 import { z } from "zod";
+import { slpPartialInput } from "../../../../../shared/src/slp/slp-schema-defaults.js";
 import {
   SLP_EXTENSION_KEYS,
   SLP_EXTENSIONS,
@@ -446,6 +447,9 @@ export const slurpSettingsSchema = z.object({
   onboarding: z.enum(["not_started", "in_progress", "completed"]),
   viewerPersonaId: z.string().max(200).nullable(), // Who browses Slurp, the same on every device (#103).
 });
+
+/** A settings PATCH body: a key the client did not send stays missing on zod 3 and 4. */
+export const slurpSettingsPatchSchema = slpPartialInput(slurpSettingsSchema);
 
 export type SlurpSettings = z.infer<typeof slurpSettingsSchema>;
 
