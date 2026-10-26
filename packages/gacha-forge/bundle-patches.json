@@ -1528,12 +1528,62 @@
           "commits": [],
           "edits": [
             {
+              "find": "_chatWith(e){",
+              "replace": "_chatWith(e){stopForgeChatVoice(this);"
+            },
+            {
+              "find": "_closeChat(){",
+              "replace": "_closeChat(){stopForgeChatVoice(this);"
+            },
+            {
+              "find": "_chatEnd(){",
+              "replace": "_chatEnd(){stopForgeChatVoice(this);"
+            },
+            {
+              "find": "var oy=[{version:null,fixed:[",
+              "replace": "var oy=[{version:null,new:[\"Your persona uses its assigned Engine voice for story dialogue and newly sent character messages when dialogue audio is enabled.\"],changed:[\"Message history and failed, unsaved sends stay silent; confirmed messages queue without cancelling one another.\"]},{version:\"1.24.1\",fixed:["
+            },
+            {
+              "find": "if(!e.retry&&e.ask!==\"photo\"&&!r.trim())return;let s=",
+              "replace": "if(!e.retry&&e.ask!==\"photo\"&&!r.trim())return;let forgeChatVoiceAtSend=forgeChatVoiceSession(this),s="
+            },
+            {
+              "find": "retainForgeChatSuccess(this,{runId:forgeChatRunId,unitId:a.unit.id,previous:",
+              "replace": "retainForgeChatSuccess(this,{runId:forgeChatRunId,unitId:a.unit.id,voiceSession:forgeChatVoiceAtSend,previous:"
+            },
+            {
+              "find": "reconcileForgeChatFailure(this,{runId:forgeChatRunId,unitId:a.unit.id,previous:",
+              "replace": "reconcileForgeChatFailure(this,{runId:forgeChatRunId,unitId:a.unit.id,voiceSession:forgeChatVoiceAtSend,previous:"
+            },
+            {
               "find": "ds=\"1.24.1\"",
               "replace": "ds=\"1.24.2\""
             },
             {
-              "find": "var oy=[{version:null,fixed:[\"Formation fights can no longer stall",
-              "replace": "var oy=[{version:null,changed:[\"Combat Power (CP) is now called Battle Power (BP).\"],fixed:[\"Retrying a failed Formation kit pays only for the characters that still need one, and kits already paid for are never made twice.\",\"A Front Row fighter whose passive can never fire attacks with its Normal skill again, and an immunity Ultimate lands on the ally you pick.\",\"Retreating a fighter and summoning into its seat works in the same turn.\",\"A battle no longer asks for an element nobody in your world has.\",\"On phones enemy names show in full, an Echo describes itself, and keyboard focus comes back after Fight.\"]},{version:\"1.24.1\",fixed:[\"Formation fights can no longer stall"
+              "find": "let forgeChatVoiceAtSend=forgeChatVoiceSession(this),s=",
+              "replace": "let forgeChatVoiceAtSend=forgeChatVoiceSession(this),forgeChatSendAtAdmission=beginForgeChatSend(this),s="
+            },
+            {
+              "find": ".then(o=>{this._chatSending=\"\",o&&o.wallet&&this._adoptFromResponse(o);let n=",
+              "replace": ".then(o=>{o&&o.wallet&&this._adoptFromResponse(o);let n="
+            },
+            {
+              "find": "optimistic:s,error:c,response:o})})}_chatEnd(){",
+              "replace": "optimistic:s,error:c,response:o})}).finally(()=>finishForgeChatSend(this,forgeChatSendAtAdmission))}_chatEnd(){"
+            }
+          ]
+        },
+        {
+          "version": "1.24.3",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.24.2\"",
+              "replace": "ds=\"1.24.3\""
+            },
+            {
+              "find": "var oy=[{version:null,new:[\"Your persona uses its assigned Engine voice",
+              "replace": "var oy=[{version:null,changed:[\"Combat Power (CP) is now called Battle Power (BP).\"],fixed:[\"Retrying a failed Formation kit pays only for the characters that still need one, and kits already paid for are never made twice.\",\"A Front Row fighter whose passive can never fire attacks with its Normal skill again, and an immunity Ultimate lands on the ally you pick.\",\"Retreating a fighter and summoning into its seat works in the same turn.\",\"A battle no longer asks for an element nobody in your world has.\",\"On phones enemy names show in full, an Echo describes itself, and keyboard focus comes back after Fight.\"]},{version:\"1.24.2\",new:[\"Your persona uses its assigned Engine voice"
             },
             {
               "find": "return O?{...O,id:String(y)}:null},w={list:",
@@ -2974,6 +3024,36 @@
             {
               "find": "forgeFormationNormalizeGuide(De,ES(De,U0(d),P),",
               "replace": "forgeFormationNormalizeGuide(De,ES(forgeFormationClassicFields(De),U0(d),P),"
+            }
+          ]
+        },
+        {
+          "version": "1.24.2",
+          "commits": [],
+          "edits": [
+            {
+              "find": "v.push({name:k.name,art:E||null,prota:!0})",
+              "replace": "v.push({name:k.name,art:E||null,prota:!0,characterId:l(k.personaId)||null})"
+            },
+            {
+              "find": "let x=_&&l(u.ask)===\"photo\",L=null;if(!M)",
+              "replace": "let x=_&&l(u.ask)===\"photo\",L=null,forgeChatPlayerMessageId=null;if(!M)"
+            },
+            {
+              "find": ";await xn(o,Ye=>Xt(Ye,o,\"chat-message\",1,Date.now()))}let{data:O}=await Za(o,i)",
+              "replace": ";forgeChatPlayerMessageId=Fe.id;await xn(o,Ye=>Xt(Ye,o,\"chat-message\",1,Date.now()))}let{data:O}=await Za(o,i)"
+            },
+            {
+              "find": "wallet:L,retry:!0};let ee=ov(Y.value)",
+              "replace": "...(forgeChatPlayerMessageId?{playerMessageId:forgeChatPlayerMessageId}:{}),wallet:L,retry:!0};let ee=ov(Y.value)"
+            },
+            {
+              "find": "{ok:!0,wallet:L,said:Z,count:ue.messages.length}",
+              "replace": "{ok:!0,wallet:L,said:Z,count:ue.messages.length,...(forgeChatPlayerMessageId?{playerMessageId:forgeChatPlayerMessageId}:{})}"
+            },
+            {
+              "find": "):{ok:!1,error:\"write-conflict\",wallet:L,retry:!0}})),s.post(\"/chat/close\"",
+              "replace": "):{ok:!1,error:\"write-conflict\",...(forgeChatPlayerMessageId?{playerMessageId:forgeChatPlayerMessageId}:{}),wallet:L,retry:!0}})),s.post(\"/chat/close\""
             }
           ]
         }

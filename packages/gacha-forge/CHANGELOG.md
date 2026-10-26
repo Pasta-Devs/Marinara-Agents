@@ -1,4 +1,4 @@
-## 1.24.2 — 2026-10-26
+## 1.24.3 — 2026-10-26
 
 - Combat Power (CP) is now called Battle Power (BP).
 - Retrying a failed Formation kit pays only for the characters that still need one. Kits you kept after cancelling a remake stay as they are, and kits already paid for in a cancelled or failed remake are never made again.
@@ -6,6 +6,10 @@
 - An immunity Ultimate lands on the ally you pick, and one that can no longer land waits without spending energy. Retreating a fighter and summoning into its seat works in the same turn.
 - A battle saved with an element barrier nobody in your world can meet can now be fought, and a shortened defeat order names the enemies that come first.
 - On phones, enemy names show in full and protection tags no longer cover them. An Echo's sheet describes the Echo, and keyboard focus comes back after Fight.
+
+## 1.24.2 — 2026-10-26
+
+- Personas use their assigned Engine voice for story dialogue and newly sent character messages when dialogue audio is enabled.
 
 ## 1.24.1 — 2026-10-26
 
