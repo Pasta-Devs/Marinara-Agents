@@ -184,9 +184,10 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   await expect(indicator).toContainText(/Page \d+ of \d+/);
   const total = Number(/of (\d+)/.exec((await indicator.textContent()) ?? "")?.[1]);
   expect(total).toBeGreaterThanOrEqual(mobile ? 3 : 2);
-  await root.getByRole("button", { name: "Previous page" }).click();
+  // A loaded machine can finish the mocked stream before the pages are laid out, leaving the reader on page 1.
+  const next = root.getByRole("button", { name: "Next page" });
   const before = await indicator.textContent();
-  await root.getByRole("button", { name: "Next page" }).click();
+  await ((await next.isEnabled()) ? next : root.getByRole("button", { name: "Previous page" })).click();
   await expect(indicator).not.toHaveText(before ?? "");
   await page.waitForTimeout(800);
   await page.screenshot({ path: testInfo.outputPath("03-book-written.png") });
@@ -247,7 +248,9 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   await expect(page.locator("marinara-capability-story-writer .sw-root")).toBeVisible();
 
   if (mobile) {
-    // Landscape phones get the two-page spread.
+    // Landscape phones get the two-page spread. iPhones report the camera inset on both sides.
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets: { left: 59, right: 59, bottom: 21 } });
     await page.setViewportSize({ width: 844, height: 390 });
     await expect(page.locator("marinara-capability-story-writer .sw-reader")).toHaveAttribute("data-pps", "2");
     // The sticky note never covers the upright action bar's Write button.
@@ -255,6 +258,17 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
     if (await host.locator(".sw-drawer[data-open='true']").count()) {
       await host.getByRole("button", { name: "Hide story settings" }).click();
     }
+    // The Engine shell already keeps Home clear of the camera, so a closed drawer leaves only its handle.
+    const hostBox = await host.boundingBox();
+    await expect
+      .poll(async () => {
+        const drawer = await host.locator(".sw-drawer").boundingBox();
+        return drawer ? Math.round(drawer.x + drawer.width - hostBox!.x) : null;
+      })
+      .toBeLessThanOrEqual(0);
+    await expect
+      .poll(() => host.locator(".sw-drawer-panel").evaluate((panel) => getComputedStyle(panel).boxShadow))
+      .toBe("none");
     const note = await host.locator(".sw-note-collapsed").boundingBox();
     const writeButton = await host.locator(".sw-action-primary").boundingBox();
     expect(note && writeButton).toBeTruthy();

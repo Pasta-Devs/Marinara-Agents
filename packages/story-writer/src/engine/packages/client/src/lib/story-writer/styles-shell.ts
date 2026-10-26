@@ -143,10 +143,9 @@ export function storyThemeVariables(input: {
 const R = "marinara-capability-story-writer";
 /** The Engine's mobile shell query: phones, and touch tablets up to 1440 px. */
 const MOBILE_QUERY = "(max-width: 767px), (max-width: 1440px) and (hover: none) and (any-pointer: coarse)";
-const SAFE_TOP = "env(safe-area-inset-top, 0px)";
+/** The Engine shell already keeps Home below the status bar and clear of a sideways phone's camera;
+ *  only the bottom edge reaches the home indicator. */
 const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
-const SAFE_LEFT = "env(safe-area-inset-left, 0px)";
-const SAFE_RIGHT = "env(safe-area-inset-right, 0px)";
 const HAND_FONT = `"Bradley Hand", "Segoe Print", "Chalkboard SE", "Comic Sans MS", cursive`;
 
 // Control colors per theme and mode. The reading tokens above are inline; these only style the shell.
@@ -341,8 +340,8 @@ ${R} .sw-frame {
   position: absolute; inset: 0;
   --sw-slot-top: 22px;
   --sw-slot-bottom: calc(92px + ${SAFE_BOTTOM});
-  --sw-slot-left: calc(48px + ${SAFE_LEFT});
-  --sw-slot-right: calc(48px + ${SAFE_RIGHT});
+  --sw-slot-left: 48px;
+  --sw-slot-right: 48px;
 }
 ${R} .sw-stage { position: absolute; inset: 0; background: var(--sw-stage-bg); }
 ${R} .sw-reader-slot {
@@ -469,19 +468,19 @@ ${R} .sw-drawer {
   position: absolute; top: 0; bottom: 0; z-index: 40; width: min(380px, 92%);
   transition: transform 380ms var(--sw-ease);
 }
-${R} .sw-drawer[data-side="left"] { left: 0; transform: translateX(calc(-100% + ${SAFE_LEFT})); }
-${R} .sw-drawer[data-side="right"] { right: 0; transform: translateX(calc(100% - ${SAFE_RIGHT})); }
+${R} .sw-drawer[data-side="left"] { left: 0; transform: translateX(-100%); }
+${R} .sw-drawer[data-side="right"] { right: 0; transform: translateX(100%); }
 ${R} .sw-drawer[data-open="true"] { transform: translateX(0); }
 ${R} .sw-drawer-panel {
   position: absolute; inset: 0; display: flex; flex-direction: column; min-height: 0;
-  padding-top: ${SAFE_TOP}; padding-bottom: ${SAFE_BOTTOM};
+  padding-bottom: ${SAFE_BOTTOM};
   background: var(--sw-panel-texture), var(--sw-panel-bg); color: var(--sw-panel-fg);
   box-shadow: 0 0 0 1px var(--sw-panel-border);
   transition: box-shadow 380ms ease;
 }
 ${R} .sw-drawer[data-open="true"] .sw-drawer-panel { box-shadow: 0 0 0 1px var(--sw-panel-border), 0 24px 64px rgba(0, 0, 0, 0.45); }
-${R} .sw-drawer[data-side="left"] .sw-drawer-panel { padding-left: ${SAFE_LEFT}; }
-${R} .sw-drawer[data-side="right"] .sw-drawer-panel { padding-right: ${SAFE_RIGHT}; }
+/* Closed, the outline would spill 1px past the edge as a line beside the handle. */
+${R} .sw-drawer:not([data-open="true"]) .sw-drawer-panel { box-shadow: none; }
 ${R} .sw-root[data-sw-theme="ebook"] .sw-drawer-panel { -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2); }
 /* Book: a leather spine with stitching along the edge that faces the stage. */
 ${R} .sw-root[data-sw-theme="book"] .sw-drawer[data-side="left"] .sw-drawer-panel { padding-right: 12px; }
@@ -626,9 +625,9 @@ ${R} .sw-event-add { display: flex; gap: 8px; }
 ${R} .sw-event-add .sw-input { flex: 1; }`;
 
 const NOTE_RULES = `
-${R} .sw-note-anchor { position: absolute; top: calc(14px + ${SAFE_TOP}); z-index: 25; width: 0; height: 0; }
-${R} .sw-note-anchor[data-side="left"] { left: calc(16px + ${SAFE_LEFT}); }
-${R} .sw-note-anchor[data-side="right"] { right: calc(16px + ${SAFE_RIGHT}); }
+${R} .sw-note-anchor { position: absolute; top: 14px; z-index: 25; width: 0; height: 0; }
+${R} .sw-note-anchor[data-side="left"] { left: 16px; }
+${R} .sw-note-anchor[data-side="right"] { right: 16px; }
 ${R} .sw-note { position: absolute; top: 0; color: var(--sw-note-fg); background: var(--sw-note-bg); font-family: var(--sw-ui-font); }
 ${R} .sw-note-anchor[data-side="left"] .sw-note { left: 0; transform-origin: 0 0; }
 ${R} .sw-note-anchor[data-side="right"] .sw-note { right: 0; transform-origin: 100% 0; }
@@ -742,7 +741,7 @@ ${R} .sw-action-hint { max-width: 230px; padding: 0 12px 0 4px; font-size: 12.5p
 // Size-driven layout. Order matters: the short landscape rules come last and win on phones turned sideways.
 const LAYOUT_RULES = `
 @container sw-root (max-width: 1099px) {
-  ${R} .sw-frame { --sw-slot-top: calc(72px + ${SAFE_TOP}); }
+  ${R} .sw-frame { --sw-slot-top: 72px; }
   ${R} .sw-note-collapsed { width: 156px; height: 54px; gap: 2px; padding: 9px 12px 8px 14px; justify-content: center; }
   ${R} .sw-note-collapsed .sw-note-tape { top: -9px; width: 46px; height: 18px; margin-left: -23px; }
   ${R} .sw-note-collapsed .sw-note-preview { -webkit-line-clamp: 1; font-size: 12px; }
@@ -752,16 +751,16 @@ const LAYOUT_RULES = `
 }
 @container sw-root (max-width: 640px) {
   ${R} .sw-frame {
-    --sw-slot-top: calc(70px + ${SAFE_TOP});
+    --sw-slot-top: 70px;
     --sw-slot-bottom: calc(76px + ${SAFE_BOTTOM});
-    --sw-slot-left: calc(30px + ${SAFE_LEFT});
-    --sw-slot-right: calc(30px + ${SAFE_RIGHT});
+    --sw-slot-left: 30px;
+    --sw-slot-right: 30px;
   }
   ${R} .sw-handle { width: 28px; height: 68px; margin-top: -34px; }
   ${R} .sw-handle:hover { width: 28px; }
-  ${R} .sw-note-anchor { top: calc(10px + ${SAFE_TOP}); }
-  ${R} .sw-note-anchor[data-side="left"] { left: calc(12px + ${SAFE_LEFT}); }
-  ${R} .sw-note-anchor[data-side="right"] { right: calc(12px + ${SAFE_RIGHT}); }
+  ${R} .sw-note-anchor { top: 10px; }
+  ${R} .sw-note-anchor[data-side="left"] { left: 12px; }
+  ${R} .sw-note-anchor[data-side="right"] { right: 12px; }
   ${R} .sw-actionbar { bottom: calc(12px + ${SAFE_BOTTOM}); max-width: calc(100% - 20px); gap: 2px; padding: 5px; }
   ${R} .sw-action-primary { min-height: 44px; padding: 0 16px 0 13px; font-size: 14px; }
   ${R} .sw-action-label-long, ${R} .sw-action-status .sw-status-long { display: none; }
@@ -772,12 +771,12 @@ const LAYOUT_RULES = `
 }
 @container sw-root (max-height: 520px) and (min-aspect-ratio: 4 / 3) {
   ${R} .sw-frame {
-    --sw-slot-top: calc(8px + ${SAFE_TOP});
+    --sw-slot-top: 8px;
     --sw-slot-bottom: calc(8px + ${SAFE_BOTTOM});
-    --sw-slot-left: calc(78px + ${SAFE_LEFT});
-    --sw-slot-right: calc(78px + ${SAFE_RIGHT});
+    --sw-slot-left: 78px;
+    --sw-slot-right: 78px;
   }
-  ${R} .sw-note-anchor { top: calc(10px + ${SAFE_TOP}); }
+  ${R} .sw-note-anchor { top: 10px; }
   ${R} .sw-note-collapsed {
     width: 56px; height: 56px; padding: 0; align-items: center; justify-content: center; gap: 0;
   }
@@ -790,15 +789,15 @@ const LAYOUT_RULES = `
     top: 50%; bottom: auto; translate: 0 -50%; flex-direction: column; max-width: none; max-height: calc(100% - 16px);
     border-radius: 28px;
   }
-  ${R} .sw-root[data-sw-sidebar="left"] .sw-actionbar { left: auto; right: calc(10px + ${SAFE_RIGHT}); }
-  ${R} .sw-root[data-sw-sidebar="right"] .sw-actionbar { left: calc(10px + ${SAFE_LEFT}); }
+  ${R} .sw-root[data-sw-sidebar="left"] .sw-actionbar { left: auto; right: 10px; }
+  ${R} .sw-root[data-sw-sidebar="right"] .sw-actionbar { left: 10px; }
   ${R} .sw-action-primary { justify-content: center; width: 48px; height: 48px; min-height: 0; padding: 0; }
   ${R} .sw-action-primary :is(.sw-action-label-long, .sw-action-label-short) { display: none; }
   ${R} .sw-action-divider { align-self: auto; width: auto; height: 1px; margin: 2px 8px; }
   ${R} .sw-action-status, ${R} .sw-wordcount, ${R} .sw-action-hint { display: none; }
   /* The upright bar sits on the side away from the drawer; a note on that side moves in beside it, not over it. */
-  ${R} .sw-root[data-sw-sidebar="left"] .sw-note-anchor[data-side="right"] { right: calc(84px + ${SAFE_RIGHT}); }
-  ${R} .sw-root[data-sw-sidebar="right"] .sw-note-anchor[data-side="left"] { left: calc(84px + ${SAFE_LEFT}); }
+  ${R} .sw-root[data-sw-sidebar="left"] .sw-note-anchor[data-side="right"] { right: 84px; }
+  ${R} .sw-root[data-sw-sidebar="right"] .sw-note-anchor[data-side="left"] { left: 84px; }
 }`;
 
 const DEVICE_RULES = `
