@@ -63,7 +63,10 @@ export function forgeFormationDescribe(ability, affinity = "") {
       ? forgeFormationLabel(ability.target === "allies" ? "aim.fallenAll" : "aim.fallen")
       : ability.effect === "swap"
         ? forgeFormationLabel("aim.enemyBack")
-        : forgeFormationLabel(`aim.${ability.target}`);
+        : // A heal, shield or buff on front_row reaches the user's own Front Row, not the enemy's.
+          ability.target === "front_row" && !forgeFormationOffensive.has(ability.effect)
+          ? forgeFormationLabel("aim.ownFront")
+          : forgeFormationLabel(`aim.${ability.target}`);
   const percent = (ability.effect === "buff" || ability.effect === "debuff") && ability.stat !== "crit" ? "%" : "";
   return forgeFormationLabel(`does.${ability.effect}`, {
     power: `${Number(ability.power) || 0}${percent}`,
@@ -121,6 +124,10 @@ export const forgeFormationCombatStyles = `
 .gf-formation-encounter{margin:.5rem;padding:.5rem;border:1px solid var(--coral);font:400 max(12px,var(--t-sm))/1.4 var(--body);color:var(--text)}
 .gf-formation-skill{cursor:default}.gf-formation-mechanics{display:block;margin-top:.2em;opacity:.85}
 .gf-fglyph{display:inline-grid;place-items:center;vertical-align:-.15em;width:1.05em;height:1.05em;color:var(--aff,var(--steel))}.gf-fglyph svg{width:100%;height:100%}.gf-fsep{margin:0 .15em;opacity:.7}
+/* The enemy line starts below the battle bar (its height is measured), and its cards shrink to fit what is
+   left, so the boss plate never covers their FRONT/BACK tags. Classic keeps its own layout. */
+.root[data-formation] .side.enemies{padding-top:calc(var(--gf-cbar,var(--fbar-h)) + var(--sp-1));--gf-eh:min(calc(var(--f)*16.5),calc(100cqh - var(--band) - var(--gf-cbar,var(--fbar-h)) - var(--sp-1) - var(--sp-2)))}
+.root[data-formation] .side.enemies .cbt{height:var(--gf-eh);width:calc(var(--gf-eh)*2/3)}
 .root[data-formation] .cbt .enrow .en,.root[data-formation] .cbt .enrow .ev{display:none}
 .root[data-formation] .cbt .enrow{min-height:calc(var(--f)*0.62*var(--gf-scale,1))}
 .gf-fgen{display:inline-flex;align-items:center;gap:.15em;font-family:var(--display);font-weight:700;font-size:calc(var(--f)*0.66*var(--gf-scale,1));line-height:1;color:var(--text);text-shadow:0 1px 2px rgba(0,0,0,.9);white-space:nowrap}
@@ -147,7 +154,8 @@ export const forgeFormationCombatStyles = `
 .gf-fbadge.wait{background:var(--ink-2);color:var(--amber);border:1px solid var(--amber-deep);letter-spacing:.08em;text-transform:var(--case);font-size:calc(var(--f)*0.66*var(--gf-scale,1))}
 .gf-ftargets{position:absolute;z-index:6;left:calc(var(--f)*-0.35);top:40%;display:flex;flex-direction:column;gap:2px;pointer-events:none}
 .gf-ftargets b{display:grid;place-items:center;width:calc(var(--f)*1.8);height:calc(var(--f)*1.8);border-radius:50%;background:var(--coral);color:var(--ink);font:700 calc(var(--f)*0.85*var(--gf-scale,1)) var(--display)}
-.gf-forder{position:absolute;z-index:5;top:calc(var(--f)*0.45);left:calc(var(--f)*0.45);display:grid;place-items:center;min-width:calc(var(--f)*2);height:calc(var(--f)*2);background:var(--amber);color:var(--ink);font:700 calc(var(--f)*1.1*var(--gf-scale,1)) var(--display);pointer-events:none}
+/* Below the affinity badge on the right edge: the card's top band can sit under the boss plate on a phone. */
+.gf-forder{position:absolute;z-index:5;top:calc(var(--f)*4.9);right:calc(var(--f)*0.45);left:auto;display:grid;place-items:center;min-width:calc(var(--f)*2);height:calc(var(--f)*2);background:var(--amber);color:var(--ink);font:700 calc(var(--f)*1.1*var(--gf-scale,1)) var(--display);pointer-events:none}
 .gf-fprot{position:absolute;z-index:7;left:50%;top:44%;transform:translateX(-50%);max-width:94%;padding:calc(var(--f)*0.2) calc(var(--f)*0.45);background:color-mix(in srgb,var(--ink) 92%,transparent);border:1px solid var(--steel-dark);color:var(--text);font:700 calc(var(--f)*0.72*var(--gf-scale,1))/1.2 var(--display);letter-spacing:.06em;text-transform:var(--case);text-align:center;pointer-events:none}
 .gf-fslot{position:relative;flex:0 0 auto;width:calc(var(--f)*7.4);height:calc(var(--cw)*1.5);display:grid;place-items:center;align-content:center;gap:calc(var(--f)*0.4);padding:calc(var(--f)*0.4);cursor:pointer;border:2px dashed var(--coral);background:color-mix(in srgb,var(--ink) 55%,transparent);color:var(--text);font:700 calc(var(--f)*0.72*var(--gf-scale,1))/1.25 var(--display);text-align:center}
 .gf-fslot svg{width:calc(var(--f)*2.4);height:calc(var(--f)*2.4);color:var(--coral)}
@@ -351,6 +359,14 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
         })
       : null;
   resize?.observe(slot);
+  const bar = root.querySelector(".cbar");
+  const barSize =
+    bar && typeof ResizeObserver === "function"
+      ? new ResizeObserver(() =>
+          shell.style.setProperty("--gf-cbar", `${Math.ceil(bar.getBoundingClientRect().height)}px`),
+        )
+      : null;
+  barSize?.observe(bar);
   const side = document.createElement("div");
   side.className = "gf-fside";
   const foeStrip = document.createElement("div");
@@ -412,7 +428,8 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
     if (unit.silenced) return "silenced";
     const reach = unit.targets[action];
     if (
-      (["enemy", "enemy-back", "fallen"].includes(reach.kind) || ["revive", "swap"].includes(skill.effect)) &&
+      (["enemy", "enemy-back", "fallen"].includes(reach.kind) ||
+        ["revive", "swap", "summon", "immune"].includes(skill.effect)) &&
       !reach.ids.length
     )
       return "target";
@@ -423,8 +440,21 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
       !reach.ids.length
     )
       return "target";
-    if (!forgeFormationPayment(bankBefore(unit.id), skill, unit.aff)) return "energy";
-    return null;
+    const bank = bankBefore(unit.id);
+    if (forgeFormationPayment(bank, skill, unit.aff)) return null;
+    // Enough energy in all, but not of the element its share needs.
+    const total = forgeFormationElements.reduce((sum, element) => sum + (Number(bank[element]) || 0), 0);
+    return total >= (Number(skill.cost) || 0) ? "element" : "energy";
+  };
+  const lockValues = (unit, skill) => {
+    const bank = bankBefore(unit.id),
+      wild = ["light", "dark"].filter((element) => element !== unit.aff);
+    const native = (Number(bank[unit.aff]) || 0) + wild.reduce((sum, element) => sum + (Number(bank[element]) || 0), 0);
+    return {
+      cost: skill?.cost || 0,
+      element: Math.max(1, (Number(skill?.elementCost) || 0) - native),
+      name: forgeFormationElementName(unit.aff),
+    };
   };
   const drawBank = (target, bank, after, income, floor, label) => {
     if (!target) return;
@@ -493,6 +523,8 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
         gen.title = forgeFormationLabel("generates", { element: forgeFormationElementName(element) });
       } else gen?.remove();
     }
+    for (const node of root.querySelectorAll('.cbt[data-id*="~"] .gf-forder, .cbt[data-id*="~"] .gf-enemy-tier'))
+      node.remove();
     order.forEach((index, at) => {
       const node = card(enemyIds[index]);
       if (!node || node.querySelector(".gf-forder")) return;
@@ -574,6 +606,12 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
         continue;
       }
       node.classList.add(lit.has(node.dataset.id) ? (set ? "aim" : "targetable") : "dimmed");
+      // A pickable card is a keyboard target too.
+      if (lit.has(node.dataset.id) && !set) {
+        node.setAttribute("role", "button");
+        node.tabIndex = 0;
+        node.setAttribute("aria-label", forgeFormationLabel("choose", { name: nameOf(node.dataset.id) }));
+      }
       const reason = blocked[node.dataset.id];
       if (reason && !lit.has(node.dataset.id)) {
         const chip = document.createElement("span");
@@ -596,7 +634,9 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
                     ),
                   ),
                 })
-              : forgeFormationLabel("protected.back");
+              : reason === "taunt"
+                ? forgeFormationLabel("protected.taunt", { name: ids.map(nameOf).join(", ") })
+                : forgeFormationLabel("protected.back");
         node.classList.add("gf-protected");
         node.append(chip);
       }
@@ -649,13 +689,15 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
         aff: unit.aff,
         chip: action === "ultimate" ? "ULT" : "",
         cost: lock ? "" : forgeFormationCostHtml(skill, unit.aff),
-        wait: lock ? forgeFormationEscape(forgeFormationLabel(`lock.${lock}`, { cost: skill.cost })) : "",
+        wait: lock ? forgeFormationEscape(forgeFormationLabel(`lock.${lock}`, lockValues(unit, skill))) : "",
         locked: !!lock,
         tip:
           forgeFormationEscape(skill.description || "") +
           `<span class="gf-fmech">${forgeFormationEscape(forgeFormationDescribe(skill, unit.aff))}</span>`,
         vs: forgeFormationEscape(
-          lock ? forgeFormationLabel(`lockTip.${lock}`) : forgeFormationCostText(skill, unit.aff),
+          lock
+            ? forgeFormationLabel(`lockTip.${lock}`, lockValues(unit, skill))
+            : forgeFormationCostText(skill, unit.aff),
         ),
       };
     };
@@ -777,6 +819,10 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
     );
   };
   const drawInfo = (aim, id) => {
+    if (String(id).includes("~")) {
+      aim.innerHTML = `<div class="gf-finfo"><h4>${forgeFormationEscape(nameOf(id))}</h4><p>${forgeFormationEscape(forgeFormationLabel("echoInfo", { owner: nameOf(String(id).split("~")[0]) }))}</p></div><div class="ai-foot"><button class="ai-x" type="button" data-formation-cancel>${forgeFormationEscape(forgeFormationLabel("close"))}</button></div>`;
+      return;
+    }
     const unit = fighter(id);
     const support = formation()?.supports.find((entry) => entry.id === String(id));
     const base = unitOf(id) || {};
@@ -840,12 +886,32 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
   };
   function render() {
     if (disposed) return;
+    // Keyboard focus follows the plan: remember whether it was in this fight before the panel is redrawn.
+    const active = root.getRootNode?.()?.activeElement || globalThis.document?.activeElement;
+    const focused = !!active && root.contains?.(active) && active !== root;
     drawBanks();
     drawCards();
     relabel();
+    if (railNode) drawRail(railNode);
     const current = state(),
       container = current.container;
     if (!container || !planning()) return;
+    draw(current, container);
+    if (focused) restoreFocus(current, container);
+  }
+  const restoreFocus = (current, container) => {
+    const target =
+      current.mode === "summary"
+        ? container.querySelector("[data-formation-fight]")
+        : ["aim", "move", "pull"].includes(current.mode)
+          ? root.querySelector(".cbt.targetable[tabindex], [data-formation-seat]") ||
+            container.querySelector("[data-formation-confirm], [data-formation-cancel]")
+          : current.mode === "info"
+            ? container.querySelector("[data-formation-cancel]")
+            : container.querySelector(".cbt-act.gf-queued") || container.querySelector(".cbt-act");
+    target?.focus?.();
+  };
+  function draw(current, container) {
     unmark();
     container.classList.add("gf-fturn");
     const unit = fighter(current.selected);
@@ -873,6 +939,10 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
       if (!node) return;
       if (item.queued) node.classList.add("gf-queued");
       if (item.key === "fight") node.classList.add("gf-fight");
+      // Screen readers hear what the button costs or why it waits, not only its name.
+      if (item.locked) node.setAttribute("aria-disabled", "true");
+      const note = node.querySelector(".ai-vs")?.textContent || node.querySelector(".ai-desc")?.textContent || "";
+      if (note) node.setAttribute("aria-description", note);
       node.addEventListener("click", () => act(unit, item));
     });
     const aim = container.querySelector("[data-aim]");
@@ -893,11 +963,12 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
         item.name,
         item.key === "row"
           ? forgeFormationLabel("lockTip.move")
-          : forgeFormationLabel(`lockTip.${lockOf(unit, item.key)}`),
+          : forgeFormationLabel(`lockTip.${lockOf(unit, item.key)}`, lockValues(unit, skillOf(unit, item.key))),
       );
       return;
     }
-    if (item.key === "fight") return fight();
+    // With fighters still unplanned, the tray's Fight opens the plan to check first; its Fight carries it out.
+    if (item.key === "fight") return current.plan.length < formation().fighters.length ? select(null) : fight();
     if (item.key === "hold") return queue({ actorId: unit.id, action: "hold" });
     if (item.key === "info") {
       current.mode = "info";
@@ -962,6 +1033,25 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
     }
   };
   root.addEventListener("keydown", keys);
+  // The rail lists this turn's fighters and the enemy front; the fighter being planned is the large tile.
+  let railNode = null;
+  function drawRail(target) {
+    const live = formation();
+    const mine = live ? [...live.fighters.map((unit) => unit.id), ...live.waiting.map((unit) => unit.id)] : [];
+    const theirs = live ? live.foes.filter((foe) => foe.position === "front").map((foe) => foe.id) : [];
+    const key = `${run.round || 1}|${mine.join(",")}|${theirs.join(",")}`;
+    if (target.dataset.formationRail === key) {
+      for (const tile of target.querySelectorAll(".q-t[data-formation-tile]"))
+        tile.classList.toggle("now", tile.dataset.formationTile === state().selected);
+      return;
+    }
+    const tile = (id, foe) => {
+      const unit = unitOf(id) || {};
+      return `<span class="q-t${foe ? " foe" : ""}${!foe && state().selected === id ? " now" : ""}"${foe ? "" : ` data-formation-tile="${forgeFormationEscape(id)}"`} style="--aff:var(--${forgeFormationEscape(String(unit.affinity || "steel").toLowerCase())})" title="${forgeFormationEscape(nameOf(id))}">${unit.portrait ? `<img src="${forgeFormationEscape(unit.portrait)}" alt="">` : silhouette}</span>`;
+    };
+    target.dataset.formationRail = key;
+    target.innerHTML = `<span class="q-lab">${forgeFormationEscape(forgeFormationLabel("round", { round: run.round || 1 }))}</span><div class="q-strip">${mine.map((id) => tile(id, false)).join("")}${theirs.map((id) => tile(id, true)).join("")}</div>`;
+  }
   const floatOn = (id, html, color) => {
     const node = card(id)?.querySelector("[data-fx]");
     if (!node) return;
@@ -979,14 +1069,8 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
     click,
     rail(target) {
       if (!target) return true;
-      const live = formation();
-      const tile = (id, foe) => {
-        const unit = unitOf(id) || {};
-        return `<span class="q-t${foe ? " foe" : ""}${!foe && state().selected === id ? " now" : ""}" style="--aff:var(--${forgeFormationEscape(String(unit.affinity || "steel").toLowerCase())})" title="${forgeFormationEscape(nameOf(id))}">${unit.portrait ? `<img src="${forgeFormationEscape(unit.portrait)}" alt="">` : silhouette}</span>`;
-      };
-      const mine = live ? [...live.fighters.map((unit) => unit.id), ...live.waiting.map((unit) => unit.id)] : [];
-      const theirs = live ? live.foes.filter((foe) => foe.position === "front").map((foe) => foe.id) : [];
-      target.innerHTML = `<span class="q-lab">${forgeFormationEscape(forgeFormationLabel("round", { round: run.round || 1 }))}</span><div class="q-strip">${mine.map((id) => tile(id, false)).join("")}${theirs.map((id) => tile(id, true)).join("")}</div>`;
+      railNode = target;
+      drawRail(target);
       return true;
     },
     label(target) {
@@ -1052,10 +1136,14 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
           banner(forgeFormationLabel("fatigue"), forgeFormationLabel("fatigueSub"));
           break;
         case "summon":
-          // Echo cards are clones of their owner's: they carry the Echo's own name.
+          // Echo cards are clones of their owner's: they carry the Echo's own name and none of its badges.
           queueMicrotask(() => {
-            const node = card(event.id)?.querySelector(".nm");
-            if (node && event.name) node.textContent = event.name;
+            const node = card(event.id);
+            if (!node) return;
+            for (const badge of node.querySelectorAll(".gf-forder, .gf-enemy-tier")) badge.remove();
+            const name = node.querySelector(".nm");
+            if (name && event.name) name.textContent = event.name;
+            if (event.name) banner(forgeFormationLabel("reinforcements"), event.name);
           });
           break;
         case "death":
@@ -1075,6 +1163,8 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
       for (const timer of timers) clearTimeout(timer);
       root.removeEventListener("keydown", keys);
       resize?.disconnect();
+      barSize?.disconnect();
+      shell.style.removeProperty("--gf-cbar");
       slot?.classList.remove("gf-ftight", "gf-fnarrow");
       strip.remove();
       side.remove();
@@ -1153,6 +1243,7 @@ const forgeFormationEditorStyles = `
 [data-pick] .gf-fbadge-row{position:static;display:inline-grid;margin-left:.4em;vertical-align:middle}
 .gf-feditor{display:flex;flex-wrap:wrap;align-items:center;gap:.3em .8em;margin-top:.4em;font:600 max(12px,var(--t-xs))/1.4 var(--display);color:var(--text)}
 .gf-feditor .gf-fglyph{width:1.2em;height:1.2em}.gf-feditor .warn{color:var(--alarm)}
+.slot .slot-name{color:var(--text);text-shadow:0 1px 2px rgba(0,0,0,.9)}
 `;
 
 /** The team editor in a Formation world: six seats with row labels, preferred-row badges and the energy a team makes. */

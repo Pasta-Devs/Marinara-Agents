@@ -178,7 +178,7 @@ async function openForge(
             tier: "boss",
             position: "front",
             stats: { hp: 900, atk: 20, def: 40, spd: 1 },
-            formationKit: kit(),
+            formationKit: { ...kit(), traits: [{ kind: "front_tokens", power: 20 }] },
             mech: ["phases"],
           },
           {
@@ -347,6 +347,26 @@ async function startBattle(forge: Locator, runtime: any, plan: any) {
     { payload: response, plan },
   );
   return response;
+}
+
+// On a phone the boss plate sits over the top of the enemy line; in Formation the cards start below the bar, so
+// their FRONT/BACK tags and defeat-order badges stay visible.
+async function clearOfBar(forge: Locator, testInfo: TestInfo) {
+  const measured = await forge.evaluate((node) => {
+    const root = (node as any).shadowRoot || node;
+    const bar = root.querySelector(".cbar")!.getBoundingClientRect();
+    const cards = [...root.querySelectorAll(".side.enemies .cbt")].map((card: any) => card.getBoundingClientRect().top);
+    const badge = root.querySelector(".gf-forder");
+    const box = badge?.getBoundingClientRect();
+    // The badge ignores the pointer; let it take one just long enough to ask what is on top at its centre.
+    if (badge) badge.style.pointerEvents = "auto";
+    const hit = box ? root.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) : null;
+    if (badge) badge.style.pointerEvents = "";
+    return { bar: bar.bottom, cards, badgeVisible: !badge || badge === hit || badge.contains(hit) };
+  });
+  writeFileSync(testInfo.outputPath("enemy-bar.json"), JSON.stringify(measured, null, 2));
+  for (const top of measured.cards) expect(top).toBeGreaterThanOrEqual(measured.bar - 1);
+  expect(measured.badgeVisible).toBe(true);
 }
 
 // The turn panel stays inside its slot, nothing scrolls sideways and every control is a comfortable target.
@@ -540,7 +560,17 @@ for (const theme of ["dark", "light"]) {
       await expect(forge.locator('.cbt[data-id="enemy-1"] .gf-forder')).toHaveText("①");
       await expect(forge.locator("[data-formation-rules]")).toContainText("Fell the Blade before the Warden.");
       await geometry(page, forge, testInfo, `formation-tray-${theme}`);
+      await clearOfBar(forge, testInfo);
+      // The rail enlarges the fighter being planned.
+      await expect(forge.locator("[data-queue] .q-t.now")).toHaveAttribute("data-formation-tile", leader);
       await page.screenshot({ path: testInfo.outputPath(`formation-tray-${theme}.png`) });
+      // With fighters still unplanned, the tray's Fight opens the plan instead of holding everyone.
+      await turn.locator('[data-act="fight"]').click();
+      await expect(turn.locator("[data-formation-plan]")).toBeVisible();
+      await expect(turn.locator("[data-formation-plan] li.unset")).toHaveCount(3);
+      await expect(forge.locator("[data-turn-label]")).toHaveText("Plan your turn · 0 of 3");
+      await turn.locator(`[data-formation-pick="${leader}"]`).click();
+      await expect(forge.locator(".side.allies .cbt.is-actor")).toHaveAttribute("data-id", leader);
       // 1. Mari: Normal skill on the Blade.
       await turn.locator('[data-act="normal"]').click();
       const aim = turn.locator("[data-aim]");
@@ -617,6 +647,11 @@ for (const theme of ["dark", "light"]) {
       });
       await expect(forge.locator("[data-turn-label]")).toHaveText(/Plan your turn/, { timeout: 30000 });
       await expect(forge.locator(`.cbt[data-id="${extra[2]}"] .gf-fbadge.wait`)).toHaveCount(0);
+      // The Warden's Echoes are clones of its card, but they carry their own name and none of its badges.
+      const echo = forge.locator('.side.enemies .cbt[data-id^="enemy-0~"]:not(.dead)').first();
+      await expect(echo).toBeVisible();
+      await expect(echo.locator(".nm")).toHaveText("Leyshell Warden · Echo");
+      await expect(echo.locator(".gf-forder, .gf-enemy-tier")).toHaveCount(0);
       if (!testInfo.project.name.includes("mobile")) {
         // A large desktop keeps the same layout, scaled up.
         await page.setViewportSize({ width: 1920, height: 1080 });
@@ -660,6 +695,8 @@ for (const theme of ["dark", "light"]) {
       await forge.evaluate((node) => (node as any)._closeGuide());
       await expect(forge.locator("[data-guide-modal]")).toHaveCount(0);
       await expect(forge.locator("[data-formation-rules]")).toContainText("Defeat the sentinel.");
+      // Water and Wind supports cannot pay a Fire share: the lock says which element is missing.
+      await expect(turn.locator('[data-act="ultimate"] .a-cost.wait')).toHaveText("Need 1 Fire");
       // A support explains what it makes and what its passive does.
       await forge.locator(`.cbt[data-id="${arden}"]`).click();
       const aim = turn.locator("[data-aim]");
@@ -681,8 +718,15 @@ for (const theme of ["dark", "light"]) {
         timeout: 20000,
       });
       await expect(forge.locator("[data-turn-label]")).toHaveText(/Plan your turn/, { timeout: 30000 });
-      // Next turn Arden fights too.
+      // Next turn Arden fights too, and a keyboard alone can plan: button, then the target card.
       await expect(forge.locator(`.cbt[data-id="${arden}"]`)).toHaveClass(/gf-ready/);
+      await turn.locator('[data-act="normal"]').focus();
+      await page.keyboard.press("Enter");
+      await expect(forge.locator('.cbt[data-id="enemy-0"]')).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(forge.locator(".side.allies .cbt.is-actor")).toHaveAttribute("data-id", arden);
+      await expect(turn.locator("[data-act]").first()).toBeFocused();
+      await expect(forge.locator(`.cbt[data-id="${chapterRunId}:unit:protagonist"] .gf-fbadge`)).toContainText("①");
     } finally {
       await runtime.close();
     }
@@ -713,6 +757,15 @@ for (const theme of ["dark", "light"]) {
       await expect(board.locator('[data-slot="front:1"] .gf-fbadge-row')).toHaveAttribute("data-row", "hybrid");
       await expect(board.locator('[data-slot="back:2"] .gf-fbadge-row')).toHaveAttribute("data-row", "back");
       await page.screenshot({ path: testInfo.outputPath(`formation-editor-${theme}.png`) });
+      // Seat names read light on the dark seat cards, like their role line.
+      const name = await board
+        .locator('[data-slot="front:0"] .slot-name')
+        .evaluate((node) => getComputedStyle(node).color);
+      const channels = name
+        .match(/[\d.]+/g)!
+        .slice(0, 3)
+        .map(Number);
+      expect((channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722) / 255).toBeGreaterThan(0.6);
       await forge.evaluate((node) => (node as any)._openGuide("formation"));
       await expect(forge.locator("[data-guide-modal]")).toContainText(
         "three fighters in front and three supports behind",
