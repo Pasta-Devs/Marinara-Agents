@@ -19,7 +19,7 @@ export function SlpLiveNowRow() {
   if (!live.length) return null;
   return (
     <section aria-label={t("ui.slurp.live.liveNow")} className="mx-4 mt-3 sm:mx-5">
-      <ul className="flex gap-3 overflow-x-auto pb-1">
+      <ul className="flex gap-3 overflow-x-auto p-1">
         {live.map(({ show, host }) => (
           <li key={show.id} className="shrink-0">
             <button

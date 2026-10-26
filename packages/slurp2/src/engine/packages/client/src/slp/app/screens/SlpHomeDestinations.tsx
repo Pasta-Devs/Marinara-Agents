@@ -54,11 +54,13 @@ export function renderSlurpHomeDestinations({
 
   if (navigation.mode === "creator" && navigation.view === "live") {
     return (
-      <SlpLiveScreen
-        showId={navigation.showId}
-        personaId={viewerPersonaId}
-        onBack={navigation.returnTo ? () => onNavigate(navigation.returnTo!) : exitToCreatorHub}
-      />
+      <SlpShell {...shellProps}>
+        <SlpLiveScreen
+          showId={navigation.showId}
+          personaId={viewerPersonaId}
+          onBack={navigation.returnTo ? () => onNavigate(navigation.returnTo!) : exitToCreatorHub}
+        />
+      </SlpShell>
     );
   }
 

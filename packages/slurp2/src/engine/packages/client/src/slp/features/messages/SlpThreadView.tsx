@@ -55,7 +55,7 @@ import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js"
  * layer over the whole app, so the Slurp nav and the Engine bars are out of the way and the composer
  * owns the bottom edge. Wide screens keep it in place (split view).
  */
-function SlpThreadTaskLayer({ children }: { children: ReactNode }) {
+export function SlpThreadTaskLayer({ children }: { children: ReactNode }) {
   const phone = !useSlpMediaQuery("(min-width: 768px)");
   const portal = useContext(ModalPortalContext);
   const accent = useSlpAccent();
