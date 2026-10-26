@@ -1,3 +1,4 @@
+/* global FORGE_FORMATION_KIT_PROMPT */
 import { createHash as forgeFormationHash, randomUUID as forgeFormationUuid } from "node:crypto";
 
 const forgeFormationModes = new Set(["classic", "formation"]);
@@ -24,6 +25,8 @@ export function createForgeFormationMigration({
   logger,
   concurrency = 3,
   retireInactiveFight = async () => {},
+  // The kit prompt the current engine generates with; a kit stamped with an older one is remade.
+  kitPrompt = typeof FORGE_FORMATION_KIT_PROMPT === "number" ? FORGE_FORMATION_KIT_PROMPT : 1,
 }) {
   const documents = persistence.documents;
   const boot = forgeFormationUuid();
@@ -35,9 +38,11 @@ export function createForgeFormationMigration({
     (await store.list(packageId, "unit")).filter(
       (row) => row?.id?.startsWith(`${runId}:unit:`) && row.data?.kind === "character",
     );
-  const currentKit = (unit) =>
-    normalizeKit(unit?.formationKit) &&
+  // A playable kit can fight now; a current one was also written by the current kit prompt.
+  const playableKit = (unit) =>
+    !!normalizeKit(unit?.formationKit) &&
     (!unit.formationKitSource || unit.formationKitSource === forgeFormationUnitFingerprint(unit));
+  const currentKit = (unit) => playableKit(unit) && unit.formationKitPrompt === kitPrompt;
   const summary = (job) =>
     job
       ? {
@@ -90,7 +95,7 @@ export function createForgeFormationMigration({
     if (!selected) return "";
     const front = (selected.front || []).filter(Boolean);
     const back = (selected.back || []).filter(Boolean);
-    return front.length + back.length > 4 || front.length > 3 || back.length > 3
+    return front.length > 3 || back.length > 3
       ? "formation-team-too-large"
       : !front.length && back.length
         ? "formation-front-required"
@@ -101,15 +106,17 @@ export function createForgeFormationMigration({
     name: String(row.data.name || "").slice(0, 160),
     fingerprint: forgeFormationUnitFingerprint(row.data),
     status: currentKit(row.data) ? "ready" : "pending",
-    ...(currentKit(row.data) ? { kit: normalizeKit(row.data.formationKit) } : {}),
+    ...(currentKit(row.data) ? { kit: normalizeKit(row.data.formationKit), kitPrompt } : {}),
   });
-  // A ready kit for an unchanged character is kept, whether its job failed or was cancelled.
-  const reuse = (previous, row) =>
+  // A paid, ready kit for an unchanged character, written by the current kit prompt, is never paid for again.
+  const usable = (previous, row) =>
     previous?.status === "ready" &&
     previous.fingerprint === forgeFormationUnitFingerprint(row.data) &&
-    normalizeKit(previous.kit)
-      ? previous
-      : entry(row);
+    previous.kitPrompt === kitPrompt &&
+    !!normalizeKit(previous.kit);
+  // A ready kit is kept, whether its job failed or was cancelled, and so is one an old kit stands in for.
+  const reuse = (previous, row) =>
+    usable(previous, row) ? previous : usable(previous?.staged, row) ? previous.staged : entry(row);
   async function updateJob(runId, id, mutate) {
     return transaction(async ({ documents: store }) => {
       const row = await store.getById(packageId, jobId(runId));
@@ -122,15 +129,27 @@ export function createForgeFormationMigration({
     });
   }
   async function commit(runId, id) {
+    let sameMode = false;
     const eligibility = async () => {
       await retireInactiveFight(runId);
       const state = await readWorld(documents, runId);
       if (!state.run || state.job?.data?.id !== id || !forgeFormationJobActive(state.job.data))
         return { ok: false, error: "conversion-changed" };
-      if (pendingBattle(state.session?.data)) return { ok: false, error: "combat-in-progress" };
+      sameMode = state.job.data.sourceMode === state.job.data.targetMode;
+      if (!sameMode && pendingBattle(state.session?.data)) return { ok: false, error: "combat-in-progress" };
       return { ok: true };
     };
-    return cancellation.reset(
+    // A remake within Formation changes no story and no saved fight (pending fights replay their own frozen
+    // snapshot), so it commits without cancelling story work. Only a real mode switch resets the world.
+    const gate = (await readWorld(documents, runId)).job?.data;
+    const reset =
+      gate?.sourceMode === gate?.targetMode
+        ? async (_runId, work, beforeCancel) => {
+            const permitted = await beforeCancel();
+            return permitted?.ok === false ? permitted : work();
+          }
+        : (runId, work, beforeCancel) => cancellation.reset(runId, work, beforeCancel);
+    return reset(
       runId,
       async () => {
         return transaction(async ({ documents: store }) => {
@@ -143,7 +162,8 @@ export function createForgeFormationMigration({
             forgeFormationRevision(run) !== state.sourceRevision
           )
             return { ok: false, error: "combat-mode-changed" };
-          if (pendingBattle(session?.data)) return { ok: false, error: "combat-in-progress" };
+          if (state.sourceMode !== state.targetMode && pendingBattle(session?.data))
+            return { ok: false, error: "combat-in-progress" };
           if (state.targetMode === "formation") {
             const error = teamError(session?.data);
             if (error) return { ok: false, error };
@@ -162,6 +182,7 @@ export function createForgeFormationMigration({
                 ...row.data,
                 formationKit: normalizeKit(state.units[row.id].kit),
                 formationKitSource: state.units[row.id].fingerprint,
+                ...(state.units[row.id].kitPrompt != null ? { formationKitPrompt: state.units[row.id].kitPrompt } : {}),
               };
               await save(store, row, row.id, row.kind, data);
             }
@@ -216,7 +237,7 @@ export function createForgeFormationMigration({
         let kit, error;
         try {
           const generated = await generateKit({ runId, run, unit, signal });
-          kit = normalizeKit(generated?.ok === true ? generated.value : generated);
+          kit = normalizeKit(generated?.ok === true ? generated.value : generated, { rarity: unit.rarity });
           signal.throwIfAborted();
           if (!kit) {
             error = "invalid-kit";
@@ -232,7 +253,7 @@ export function createForgeFormationMigration({
             return false;
           latest.status = error ? "failed" : "ready";
           latest.error = error || "";
-          if (kit && !error) latest.kit = kit;
+          if (kit && !error) Object.assign(latest, { kit, kitPrompt });
         });
       }
     };
@@ -281,9 +302,35 @@ export function createForgeFormationMigration({
     const { run, job } = await readWorld(documents, body.runId);
     if (!run) return { ok: false, error: "not-found" };
     if (forgeFormationJobActive(job?.data)) kick(body.runId, job.data.id);
-    return result(run, job?.data);
+    // Kits that still fight but were written for older Formation rules, so Settings can offer to remake them.
+    const staleKits =
+      forgeFormationStoredMode(run) === "formation"
+        ? (await units(documents, body.runId)).filter((row) => playableKit(row.data) && !currentKit(row.data)).length
+        : 0;
+    return { ...result(run, job?.data), staleKits };
   }
-  async function start(body) {
+  // A remake the player cancelled (or that failed) is not forced again. After a cancel, later jobs only add
+  // missing kits and keep each old kit, and its old stamp, so Settings still offers the remake; a failed job
+  // waits for its explicit retry.
+  const declinedRemake = (job) =>
+    job?.kitPrompt === kitPrompt && (["failed", "cancelled"].includes(job.status) || job.declined === true);
+  // A kept old kit carries the paid kit it stands in for (`staged`, which commit ignores), so a later remake
+  // or retry uses that one instead of paying again. A current kit needs none, and `staged` is always flat:
+  // one entry deep however many jobs keep it.
+  const keep = (row, previous) => {
+    const paid = currentKit(row.data) ? null : [previous, previous?.staged].find((candidate) => usable(candidate, row));
+    const { staged: _nested, ...staged } = paid || {};
+    return {
+      unitId: row.id,
+      name: String(row.data.name || "").slice(0, 160),
+      fingerprint: forgeFormationUnitFingerprint(row.data),
+      status: "ready",
+      kit: normalizeKit(row.data.formationKit),
+      kitPrompt: row.data.formationKitPrompt ?? null,
+      ...(paid ? { staged } : {}),
+    };
+  };
+  async function start(body, { onlyMissing = false } = {}) {
     const runId = body?.runId;
     if (!validRunId(runId) || !forgeFormationModes.has(body?.targetMode) || body.confirmed !== true)
       return { ok: false, error: "confirmation-required" };
@@ -293,12 +340,16 @@ export function createForgeFormationMigration({
     const answer = await transaction(async ({ documents: store }) => {
       const { run, job, session } = await readWorld(store, runId);
       if (!run) return { ok: false, error: "not-found" };
+      // A failed job may have been paid for and waits for its explicit retry; only a cancelled one is followed
+      // by a new job.
       if (
         forgeFormationJobActive(job?.data) ||
         (job?.data?.status === "failed" && job.data.targetMode === body.targetMode)
       )
         return result(run, job.data);
-      if (pendingBattle(session?.data)) return { ok: false, error: "combat-in-progress" };
+      // A kit refresh within Formation leaves pending fights alone: they replay their own frozen snapshot.
+      const refresh = forgeFormationStoredMode(run) === "formation" && body.targetMode === "formation";
+      if (!refresh && pendingBattle(session?.data)) return { ok: false, error: "combat-in-progress" };
       if (body.targetMode === "formation") {
         const error = teamError(session?.data);
         if (error) return { ok: false, error };
@@ -312,11 +363,17 @@ export function createForgeFormationMigration({
         sourceMode: forgeFormationStoredMode(run),
         sourceRevision: forgeFormationRevision(run),
         targetMode: body.targetMode,
+        kitPrompt,
         status: "preparing",
+        ...(onlyMissing ? { declined: true } : {}),
         units: Object.fromEntries(
           roster.map((row) => [
             row.id,
-            job?.data?.targetMode === body.targetMode ? reuse(job.data.units?.[row.id], row) : entry(row),
+            onlyMissing && playableKit(row.data)
+              ? keep(row, job?.data?.targetMode === body.targetMode ? job.data.units?.[row.id] : null)
+              : job?.data?.targetMode === body.targetMode
+                ? reuse(job.data.units?.[row.id], row)
+                : entry(row),
           ]),
         ),
       };
@@ -341,7 +398,13 @@ export function createForgeFormationMigration({
       )
         return false;
       const current = job.targetMode === "formation" ? await units(store, runId) : [];
-      job.units = Object.fromEntries(current.map((row) => [row.id, reuse(job.units[row.id], row)]));
+      // Retrying a job that only adds missing kits keeps the old kits the player chose to keep.
+      job.units = Object.fromEntries(
+        current.map((row) => [
+          row.id,
+          job.declined === true && playableKit(row.data) ? keep(row, job.units[row.id]) : reuse(job.units[row.id], row),
+        ]),
+      );
       job.status = "preparing";
       job.error = "";
     });
@@ -369,9 +432,33 @@ export function createForgeFormationMigration({
   async function ensure(runId, run) {
     const available = await guard(runId);
     if (!available.ok || forgeFormationStoredMode(run) !== "formation") return available;
-    if ((await units(documents, runId)).every((row) => currentKit(row.data))) return { ok: true };
-    const started = await start({ runId, targetMode: "formation", confirmed: true });
-    return { ...started, ok: false, error: "combat-conversion-in-progress" };
+    const rows = await units(documents, runId);
+    if (rows.every((row) => currentKit(row.data))) return { ok: true };
+    const playable = rows.every((row) => playableKit(row.data));
+    // Once a remake under these rules was cancelled or failed, the old kits keep fighting; Settings offers the
+    // remake (or its retry) again, and after a cancel only a character with no kit at all is still generated.
+    const declined = declinedRemake((await documents.getById(packageId, jobId(runId)))?.data);
+    if (playable && declined) return { ok: true };
+    const started = await start({ runId, targetMode: "formation", confirmed: true }, { onlyMissing: declined });
+    if (forgeFormationJobActive(started.conversion))
+      return { ...started, ok: false, error: "combat-conversion-in-progress" };
+    // Nothing could start (a failed job awaiting its retry, say): kits that can fight, fight.
+    if (playable) return { ok: true };
+    // A character with no kit waits for that retry in Story Continuity; the battle start never pays for it.
+    if (started.conversion?.status === "failed") return { ...started, ok: false, error: "combat-conversion-failed" };
+    return { ...started, ok: false, error: started.error || "combat-conversion-in-progress" };
+  }
+  // The elements a world's roster can bring, read the way guide generation reads them.
+  async function elements(runId) {
+    const roster = (await documents.getById(packageId, `${runId}:session`))?.data?.roster || {};
+    return [
+      ...new Set(
+        (await units(documents, runId))
+          .filter((row) => roster[row.id])
+          .map((row) => String(row.data.affinity || "").toLowerCase())
+          .filter(Boolean),
+      ),
+    ];
   }
   return {
     start,
@@ -380,6 +467,7 @@ export function createForgeFormationMigration({
     cancel,
     ensure,
     guard,
+    elements,
     settled: async (runId) => running.get(runId)?.promise,
     async removeWorld(runId) {
       running.get(runId)?.controller.abort();

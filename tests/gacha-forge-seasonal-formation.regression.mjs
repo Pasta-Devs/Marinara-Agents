@@ -9,6 +9,9 @@ import {
   freshMainPlan,
 } from "./fixtures/gacha-forge-chapter-runtime.mjs";
 import {
+  FORGE_FORMATION_ENGINE,
+  FORGE_FORMATION_RULES,
+  FORGE_FORMATION_KIT_PROMPT,
   forgeFormationEnemyKit,
   replayForgeFormationBattle,
 } from "../packages/gacha-forge/src/formation-combat-shared.mjs";
@@ -37,6 +40,7 @@ async function fixture() {
     skill: { name: "Flare", effect: "damage", power: 100, target: "enemy", description: "A clear flame." },
   };
   hero.formationKit = forgeFormationEnemyKit(hero);
+  hero.formationKitPrompt = FORGE_FORMATION_KIT_PROMPT;
   f.seed(unitId, "unit", hero);
   const leaderId = `${runId}:unit:protagonist`;
   f.seed(leaderId, "unit", { ...hero, cardId: "", name: "Mari", isProtagonist: true });
@@ -87,23 +91,24 @@ async function fixture() {
   return f;
 }
 const request = { chapter: "event-1", combatIndex: 0 };
+const engine = { expectedFormationEngine: FORGE_FORMATION_ENGINE, expectedFormationRules: FORGE_FORMATION_RULES };
 
 test("actual event routes freeze Formation mode and rules, replay its choices, and grant the event reward once", async () => {
   const f = await fixture();
   try {
-    const view = (await f.post("/story-event/battle", request)).body;
+    const view = (await f.post("/story-event/battle", { ...request, ...engine })).body;
     assert.equal(view.ok, true, JSON.stringify(view));
     assert.equal(view.combatMode, "formation");
     assert.equal(view.formationRules[0].kind, "element_barrier");
     assert.equal(view.dialogueCues[0].content, "Keep the lantern burning.");
     const wallet = structuredClone(f.session().wallet);
     assert.equal(
-      (await f.post("/story-event/battle/start", { ...request, expectedCombatMode: "classic" })).body.error,
+      (await f.post("/story-event/battle/start", { ...request, ...engine, expectedCombatMode: "classic" })).body.error,
       "changed",
     );
     assert.deepEqual(f.session().wallet, wallet);
     assert.equal(
-      (await f.post("/story-event/battle/start", { ...request, expectedCombatMode: "formation" })).body.ok,
+      (await f.post("/story-event/battle/start", { ...request, ...engine, expectedCombatMode: "formation" })).body.ok,
       true,
     );
     const snapshot = structuredClone(f.session().combatPending.fight);
@@ -130,7 +135,7 @@ for (const reason of ["expired", "disabled"])
   test(`confirmed mode conversion retires the ${reason} event fight without reward or regeneration`, async () => {
     const f = await fixture();
     try {
-      assert.equal((await f.post("/story-event/battle/start", request)).body.ok, true);
+      assert.equal((await f.post("/story-event/battle/start", { ...request, ...engine })).body.ok, true);
       const wallet = structuredClone(f.session().wallet);
       if (reason === "expired") f.docs.get(`${runId}:story-event:1`).data.endsAt = Date.now() - 1;
       else f.docs.get("index").data.runs[0].story.seasonalEvents = false;

@@ -49,6 +49,93 @@ function forgeChatIsCurrent(host, runId, unitId) {
   return host._run?.runId === runId && host._chat?.unit?.id === unitId;
 }
 
+// Each admitted send owns this slot; late cleanup must not release a newer operation.
+const forgeChatSendGuards = new WeakMap();
+
+export function beginForgeChatSend(host) {
+  const guard = { unitId: host._chat?.unit?.id };
+  forgeChatSendGuards.set(host, guard);
+  return guard;
+}
+
+export function finishForgeChatSend(host, guard) {
+  if (forgeChatSendGuards.get(host) !== guard) return;
+  forgeChatSendGuards.delete(host);
+  if (host._chatSending !== guard.unitId || host._chatClosing) return;
+  host._chatSending = "";
+  if (host._chat?.open) host._renderBrowser();
+}
+
+const forgeChatVoiceSessions = new WeakMap();
+
+export function stopForgeChatVoice(host) {
+  const session = forgeChatVoiceSessions.get(host);
+  session?.controller?.abort();
+  if (session) {
+    session.controller = null;
+    session.token = {};
+  }
+}
+
+export function forgeChatVoiceSession(host) {
+  let session = forgeChatVoiceSessions.get(host);
+  const runId = host._run?.runId;
+  if (!session || session.runId !== runId) {
+    stopForgeChatVoice(host);
+    session = { runId, token: {}, spoken: new Set(), controller: null, queue: Promise.resolve() };
+    forgeChatVoiceSessions.set(host, session);
+  }
+  return session.token;
+}
+
+function speakForgeSavedPlayer(host, attempt, row) {
+  const { runId, unitId } = attempt;
+  const persona = host._run?.protagonist;
+  const audio = host._forgeAudio;
+  if (
+    !forgeChatIsCurrent(host, runId, unitId) ||
+    attempt.voiceSession !== forgeChatVoiceSession(host) ||
+    host._chat?.open === false ||
+    attempt.intent?.retry ||
+    attempt.intent?.ask === "photo" ||
+    row?.who !== "player" ||
+    attempt.playerMessageId !== row.id ||
+    typeof row.id !== "string" ||
+    !row.id ||
+    row.id.startsWith("local-") ||
+    row.archived ||
+    row.hidden ||
+    row.hiddenFromUser ||
+    !String(row.text || "").trim() ||
+    !persona?.personaId ||
+    !persona.name ||
+    typeof audio?.speak !== "function" ||
+    !audio.settings?.tts ||
+    audio.settings.muted ||
+    audio.settings.dialogueVolume === 0
+  )
+    return;
+  const session = forgeChatVoiceSessions.get(host);
+  const key = JSON.stringify([unitId, row.id]);
+  if (session.spoken.has(key)) return;
+  if (!session.controller) {
+    session.controller = new AbortController();
+    session.queue = Promise.resolve();
+  }
+  const controller = session.controller;
+  session.spoken.add(key);
+  session.queue = session.queue
+    .then(() => {
+      if (controller.signal.aborted || !forgeChatIsCurrent(host, runId, unitId)) return;
+      return audio.speak(
+        { speaker: persona.name, text: row.text },
+        { characterId: persona.personaId, name: persona.name },
+        controller.signal,
+      );
+    })
+    .catch(() => {});
+}
+
 function forgeChatMergeRows(earlier, later, freshest = later) {
   const order = [];
   const rows = new Map();
@@ -63,14 +150,33 @@ function forgeChatMergeRows(earlier, later, freshest = later) {
 
 function forgeChatFindSaved(snapshot, attempt, used = new Set()) {
   const previous = new Set((attempt.previous || []).map((row) => row?.id));
+  const id = typeof attempt.playerMessageId === "string" ? attempt.playerMessageId : "";
   return (snapshot.messages || []).find(
     (row) =>
       row?.who === "player" &&
       !previous.has(row.id) &&
       !used.has(row.id) &&
-      String(row.text || "").trim() === attempt.text.trim().slice(0, 600) &&
-      (row.ask === "photo") === (attempt.intent?.ask === "photo"),
+      (id
+        ? row.id === id
+        : String(row.text || "").trim() === attempt.text.trim().slice(0, 600) &&
+          (row.ask === "photo") === (attempt.intent?.ask === "photo")),
   );
+}
+
+function forgeChatSavedAttempts(snapshot, attempts, runId, unitId) {
+  const pending = attempts.filter((attempt) => attempt.runId === runId && attempt.unitId === unitId);
+  // Only this send's response can prove row ownership. Resolve exact IDs before UI-only text recovery.
+  pending.sort((left, right) => Number(!!right.playerMessageId) - Number(!!left.playerMessageId));
+  const used = new Set();
+  const saved = new Map();
+  for (const attempt of pending) {
+    const row = forgeChatFindSaved(snapshot, attempt, used);
+    if (row) {
+      used.add(row.id);
+      saved.set(attempt, row);
+    }
+  }
+  return saved;
 }
 
 export function removeForgeChatOptimistic(messages, optimistic) {
@@ -89,7 +195,12 @@ export function retainForgeChatSuccess(host, attempt, response) {
   const reply = response?.said?.id && response.said.who === "unit" ? response.said : null;
   // Success is known, but the canonical player ID may still be unavailable. Keep the
   // existing local text until a later snapshot can replace it, including after reopening.
-  const pending = { ...attempt, confirmed: true, ...(reply ? { reply } : {}) };
+  const pending = {
+    ...attempt,
+    playerMessageId: response?.playerMessageId,
+    confirmed: true,
+    ...(reply ? { reply } : {}),
+  };
   host._chatStash = {
     ...host._chatStash,
     runId: attempt.runId,
@@ -113,20 +224,22 @@ export function adoptForgeChatSnapshot(host, snapshot, { runId, unitId, opening 
   if (!snapshot?.ok || !forgeChatIsCurrent(host, runId, unitId)) return false;
   const stash = host._chatStash;
   const matches = stash?.unitId === unitId && (!stash.runId || stash.runId === runId);
-  const used = new Set();
+  const savedRows = forgeChatSavedAttempts(snapshot, stash?.unknowns || [], runId, unitId);
   const resolvedLocalRows = new Map();
   const unresolved = [];
   const unknowns = (stash?.unknowns || []).filter((attempt) => {
     if (attempt.runId !== runId || attempt.unitId !== unitId) return true;
-    const saved = forgeChatFindSaved(snapshot, attempt, used);
+    const saved = savedRows.get(attempt);
     const replied = attempt.reply?.id && snapshot.messages?.some((row) => row.id === attempt.reply.id);
     if (saved || replied) {
-      if (saved) used.add(saved.id);
+      if (saved && !opening) speakForgeSavedPlayer(host, attempt, saved);
       for (const row of attempt.optimistic || []) {
         resolvedLocalRows.set(row.id, row.who === "player" ? saved : null);
       }
       return false;
     }
+    // Keep another attempt's proven canonical rows excluded on later refreshes too.
+    attempt.previous = forgeChatMergeRows(attempt.previous || [], [...savedRows.values()]);
     unresolved.push(attempt);
     return true;
   });
@@ -159,11 +272,12 @@ export function adoptForgeChatSnapshot(host, snapshot, { runId, unitId, opening 
   };
   if (matches && stash.draft) host._chatDraft = stash.draft;
   // Keep attempts until their canonical row IDs are known. This stash never sends a request itself.
-  host._chatStash = unknowns.length ? { ...(matches ? {} : stash), unknowns } : matches ? null : stash;
+  host._chatStash = unknowns.length ? { ...(matches ? { runId, unitId } : stash), unknowns } : matches ? null : stash;
   return true;
 }
 
 export async function reconcileForgeChatFailure(host, attempt) {
+  attempt = { ...attempt, playerMessageId: attempt.response?.playerMessageId };
   const { runId, unitId } = attempt;
   const failure = forgeChatGenerationError(attempt.response, attempt.error);
   let snapshot = null;
@@ -174,15 +288,6 @@ export async function reconcileForgeChatFailure(host, attempt) {
   }
   if (host._run?.runId !== runId) return;
   const unknowns = host._chatStash?.unknowns || [];
-  const used = new Set();
-  if (snapshot?.ok) {
-    for (const pending of unknowns) {
-      if (pending.runId !== runId || pending.unitId !== unitId) continue;
-      const saved = forgeChatFindSaved(snapshot, pending, used);
-      if (saved) used.add(saved.id);
-    }
-  }
-  const saved = snapshot?.ok && (attempt.intent?.retry || forgeChatFindSaved(snapshot, attempt, used));
   const rejected = new Set([
     "bad-request",
     "no-vigor",
@@ -192,13 +297,18 @@ export async function reconcileForgeChatFailure(host, attempt) {
     "generation-in-progress",
   ]);
   const definitelyRejected = rejected.has(attempt.response?.error);
-  const unknown = !saved && !definitelyRejected && (attempt.optimistic || []).length > 0;
+  const pending = definitelyRejected ? unknowns : [...unknowns, attempt];
+  const saved =
+    !definitelyRejected &&
+    snapshot?.ok &&
+    (attempt.intent?.retry || forgeChatSavedAttempts(snapshot, pending, runId, unitId).get(attempt));
+  const retain = !definitelyRejected && (attempt.optimistic || []).length > 0;
   host._chatStash = {
     runId,
     unitId,
     error: failure,
     draft: definitelyRejected ? attempt.text : "",
-    unknowns: unknown ? [...unknowns, attempt] : unknowns,
+    unknowns: retain ? pending : unknowns,
   };
   if (!forgeChatIsCurrent(host, runId, unitId)) return;
   if (saved || definitelyRejected) {
