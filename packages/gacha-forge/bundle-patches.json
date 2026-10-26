@@ -1508,6 +1508,20 @@
               "replace": "var oy=[{version:null,new:[\"Formation is rebuilt: tap each Front Row fighter, choose its skill, Ultimate, move or Hold and its target, then press Fight to carry out the plan.\",\"Formation teams seat six: three Front Row fighters and three Back Row supports that make energy every turn and cannot be attacked.\",\"Formation combat shows every skill's effect, cost and the energy your plan will spend; tap a support or an enemy to read its kit.\"],changed:[\"Formation kits are remade for the new rules before a world's next battle; the old kits keep fighting until then.\",\"Formation story, event and boss fights are written with front fighters, back-row supports and clearer boss rules.\"]},{version:\"1.23.0\",new:[\"Keep playing"
             }
           ]
+        },
+        {
+          "version": "1.24.1",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.24.0\"",
+              "replace": "ds=\"1.24.1\""
+            },
+            {
+              "find": "var oy=[{version:null,new:[\"Formation is rebuilt",
+              "replace": "var oy=[{version:null,fixed:[\"Formation fights can no longer stall on immunity, Retreat Echo or summons.\",\"Remaking older Formation kits no longer locks battles, and cancelling it keeps your current kits.\",\"Story, event and boss fights in Formation no longer fail over a slightly wrong kit.\",\"On phones the boss bar no longer covers the row tags, and team editor names are readable.\"]},{version:\"1.24.0\",new:[\"Formation is rebuilt"
+            }
+          ]
         }
       ]
     },
@@ -2840,6 +2854,24 @@
               "sourceId": "formation-legacy-server",
               "replaceFrom": "src/formation-combat-legacy.mjs",
               "find": "async function _t("
+            }
+          ]
+        },
+        {
+          "version": "1.24.1",
+          "commits": [],
+          "edits": [
+            {
+              "find": "combatMode:prepared.combatMode,formationRules:prepared.formationRules}",
+              "replace": "combatMode:prepared.combatMode,formationRules:prepared.formationRules,...(prepared.combatMode===\"formation\"?{formationEngine:FORGE_FORMATION_ENGINE}:{})}"
+            },
+            {
+              "find": "combatMode:s.combatMode,formationRules:s.formationRules}",
+              "replace": "combatMode:s.combatMode,formationRules:s.formationRules,formationEngine:s.formationEngine}"
+            },
+            {
+              "find": "forgeFormationNormalizeGuide(De,ES(De,U0(d),P),",
+              "replace": "forgeFormationNormalizeGuide(De,ES(forgeFormationClassicFields(De),U0(d),P),"
             }
           ]
         }

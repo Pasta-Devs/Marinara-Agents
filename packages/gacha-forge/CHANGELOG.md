@@ -1,3 +1,10 @@
+## 1.24.1 — 2026-10-26
+
+- Formation fights can no longer stall. An enemy that keeps turning immune can be hit again after two turns, Retreat Echo repeats one real cast only once, and a summon with no free Front Row seat waits without spending energy.
+- Remaking older Formation kits no longer locks battles. Battles wait only while a remake is running, cancelling it keeps your current kits (new characters still get theirs), and it never cancels story work.
+- Story, event and boss fights in Formation no longer fail over a slightly wrong kit, keep the boss in the fight, and skip element barriers your team cannot meet.
+- On the battle screen, the boss bar no longer covers the row tags on phones, team editor names are readable, Echoes show their own name, Fight with fighters still unplanned opens the plan, energy skills pay for the steps after them, and a keyboard can plan a whole turn.
+
 ## 1.24.0 — 2026-10-26
 
 - Formation combat is rebuilt. Tap each Front Row fighter, pick its Normal skill, Ultimate, move/swap or Hold and its target, check the plan and the energy it spends, then press Fight. Every skill shows what it does and costs. Auto still plays a whole turn.
