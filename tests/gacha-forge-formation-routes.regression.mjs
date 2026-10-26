@@ -2,25 +2,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { test } from "node:test";
-import {
-  forgeFormationMode,
-  normalizeForgeFormationKit,
-  normalizeForgeFormationRules,
-  forgeFormationEnemyKit,
-  forgeFormationTeamError,
-} from "../packages/gacha-forge/src/formation-combat-shared.mjs";
+import * as shared from "../packages/gacha-forge/src/formation-combat-shared.mjs";
 
 const source = await readFile(
   new URL("../packages/gacha-forge/src/formation-combat-server.mjs", import.meta.url),
   "utf8",
 );
-const context = vm.createContext({
-  forgeFormationMode,
-  normalizeForgeFormationKit,
-  normalizeForgeFormationRules,
-  forgeFormationEnemyKit,
-  forgeFormationTeamError,
-});
+const context = vm.createContext({ ...shared });
 vm.runInContext(source.replace(/^export /gmu, "") + "\nglobalThis.routesFactory=forgeFormationRoutes;", context);
 const createRoutes = context.routesFactory;
 
@@ -62,7 +50,9 @@ test("a mode committed during admission is reread and a stale preview cannot sta
   const stale = await handlers.get("/battle/start")({ body: { runId: "world", expectedCombatMode: "classic" } });
   assert.equal(stale.error, "changed");
   assert.equal(calls, 0);
-  const fresh = await handlers.get("/battle/start")({ body: { runId: "world", expectedCombatMode: "formation" } });
+  const fresh = await handlers.get("/battle/start")({
+    body: { runId: "world", expectedCombatMode: "formation", expectedFormationEngine: shared.FORGE_FORMATION_ENGINE },
+  });
   assert.equal(fresh.ok, true);
   assert.equal(fresh.combatMode, "formation");
   assert.equal(calls, 1);
@@ -107,4 +97,58 @@ test("future story-event battle starts share the same admission and preview mode
   });
   assert.equal(response.error, "changed");
   assert.equal(called, false);
+});
+
+test("a Formation start from a tab on an older engine spends nothing; Classic starts never need the field", async () => {
+  for (const [mode, body, expected] of [
+    ["formation", {}, "formation-engine-changed"],
+    ["formation", { expectedFormationEngine: 1 }, "formation-engine-changed"],
+    ["formation", { expectedFormationEngine: shared.FORGE_FORMATION_ENGINE }, null],
+    ["classic", {}, null],
+  ]) {
+    const handlers = new Map();
+    let calls = 0;
+    const routes = createRoutes(
+      { post: (path, handler) => handlers.set(path, handler) },
+      {
+        readWorld: async () => ({ combat: { mode } }),
+        migration: { guard: async () => ({ ok: true }), ensure: async () => ({ ok: true }) },
+        cancellation: { mutate: async (_runId, operation) => operation() },
+      },
+    );
+    for (const path of ["/battle/start", "/farm/start", "/tower/start", "/story-event/battle/start"])
+      routes.post(path, async () => {
+        calls += 1;
+        return { ok: true, spent: 20 };
+      });
+    for (const path of ["/battle/start", "/farm/start", "/tower/start", "/story-event/battle/start"]) {
+      const response = await handlers.get(path)({ body: { runId: "world", ...body } });
+      assert.equal(response.error ?? null, expected, `${mode} ${path} ${JSON.stringify(body)}`);
+    }
+    assert.equal(calls, expected ? 0 : 4, "a refused start never reaches the paid handler");
+  }
+});
+
+test("the team editor saves any seating; Formation seats six and only a battle start checks the rows", async () => {
+  const handlers = new Map();
+  let saved = null;
+  const routes = createRoutes(
+    { post: (path, handler) => handlers.set(path, handler) },
+    {
+      readWorld: async () => ({ combat: { mode: "formation" } }),
+      migration: { guard: async () => ({ ok: true }), ensure: async () => ({ ok: true }) },
+      cancellation: {},
+    },
+  );
+  routes.post("/formation/save", async (request) => {
+    saved = request.body;
+    return { ok: true };
+  });
+  const presets = [{ board: { front: ["a", "b", "c"], back: ["d", "e", "f"] } }];
+  assert.equal((await handlers.get("/formation/save")({ body: { runId: "world", presets, active: 0 } })).ok, true);
+  assert.deepEqual(saved.presets, presets);
+  const six = ["a", "b", "c", "d", "e", "f"].map((id, index) => ({ id, position: index < 3 ? "front" : "back" }));
+  assert.equal(shared.forgeFormationTeamError(six), null);
+  assert.equal(shared.forgeFormationTeamError([...six, { id: "g", position: "back" }]), "formation-team-size");
+  assert.equal(shared.forgeFormationTeamError(six.slice(3)), "formation-rows");
 });
