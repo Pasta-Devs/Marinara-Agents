@@ -66,76 +66,6 @@ export function finishForgeChatSend(host, guard) {
   if (host._chat?.open) host._renderBrowser();
 }
 
-const forgeChatVoiceSessions = new WeakMap();
-
-export function stopForgeChatVoice(host) {
-  const session = forgeChatVoiceSessions.get(host);
-  session?.controller?.abort();
-  if (session) {
-    session.controller = null;
-    session.token = {};
-  }
-}
-
-export function forgeChatVoiceSession(host) {
-  let session = forgeChatVoiceSessions.get(host);
-  const runId = host._run?.runId;
-  if (!session || session.runId !== runId) {
-    stopForgeChatVoice(host);
-    session = { runId, token: {}, spoken: new Set(), controller: null, queue: Promise.resolve() };
-    forgeChatVoiceSessions.set(host, session);
-  }
-  return session.token;
-}
-
-function speakForgeSavedPlayer(host, attempt, row) {
-  const { runId, unitId } = attempt;
-  const persona = host._run?.protagonist;
-  const audio = host._forgeAudio;
-  if (
-    !forgeChatIsCurrent(host, runId, unitId) ||
-    attempt.voiceSession !== forgeChatVoiceSession(host) ||
-    host._chat?.open === false ||
-    attempt.intent?.retry ||
-    attempt.intent?.ask === "photo" ||
-    row?.who !== "player" ||
-    attempt.playerMessageId !== row.id ||
-    typeof row.id !== "string" ||
-    !row.id ||
-    row.id.startsWith("local-") ||
-    row.archived ||
-    row.hidden ||
-    row.hiddenFromUser ||
-    !String(row.text || "").trim() ||
-    !persona?.personaId ||
-    !persona.name ||
-    typeof audio?.speak !== "function" ||
-    !audio.settings?.tts ||
-    audio.settings.muted ||
-    audio.settings.dialogueVolume === 0
-  )
-    return;
-  const session = forgeChatVoiceSessions.get(host);
-  const key = JSON.stringify([unitId, row.id]);
-  if (session.spoken.has(key)) return;
-  if (!session.controller) {
-    session.controller = new AbortController();
-    session.queue = Promise.resolve();
-  }
-  const controller = session.controller;
-  session.spoken.add(key);
-  session.queue = session.queue
-    .then(() => {
-      if (controller.signal.aborted || !forgeChatIsCurrent(host, runId, unitId)) return;
-      return audio.speak(
-        { speaker: persona.name, text: row.text },
-        { characterId: persona.personaId, name: persona.name },
-        controller.signal,
-      );
-    })
-    .catch(() => {});
-}
-
 function forgeChatMergeRows(earlier, later, freshest = later) {
   const order = [];
   const rows = new Map();
@@ -232,7 +162,6 @@ export function adoptForgeChatSnapshot(host, snapshot, { runId, unitId, opening 
     const saved = savedRows.get(attempt);
     const replied = attempt.reply?.id && snapshot.messages?.some((row) => row.id === attempt.reply.id);
     if (saved || replied) {
-      if (saved && !opening) speakForgeSavedPlayer(host, attempt, saved);
       for (const row of attempt.optimistic || []) {
         resolvedLocalRows.set(row.id, row.who === "player" ? saved : null);
       }
