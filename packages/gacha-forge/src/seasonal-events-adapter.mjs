@@ -407,7 +407,7 @@ function createForgeSeasonalLegacyAdapter() {
           currentCharacterCanon: selected,
         }),
       });
-      const result = await generate(runId, run, messages, "story-event-plan", (value) => yS(value, after + 1));
+      const result = await generate(runId, run, messages, "story-event-plan", (value) => yS(value, after + 1), 16384);
       return result.ok ? { ok: true, plan: result.value } : result;
     },
     prepareMedia,
