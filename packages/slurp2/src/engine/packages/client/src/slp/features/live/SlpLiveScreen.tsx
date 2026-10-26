@@ -79,6 +79,11 @@ export function SlpLiveScreen({
     .reverse()
     .find((event) => event.kind === "tip" || event.kind === "order" || event.kind === "goal");
   const sayFailed = beat.isError && !!beat.variables?.message;
+  // The box clears on send so later typing is safe; a failed send puts the text back unless the player typed on.
+  useEffect(() => {
+    const sent = beat.variables?.message;
+    if (beat.isError && sent) setSaid((current) => current || sent);
+  }, [beat.isError, beat.variables]);
   const [bannerKey, setBannerKey] = useState<string | null>(null);
   useEffect(() => {
     if (!newest) return;
@@ -128,7 +133,7 @@ export function SlpLiveScreen({
     return (
       <SlpThreadTaskLayer>
         <div className="relative flex min-h-[70dvh] flex-1 flex-col items-center justify-center p-6">
-          <div className="absolute start-3 top-[max(0.75rem,env(safe-area-inset-top))]">{back}</div>
+          <div className="absolute start-3 top-3">{back}</div>
           <SlpErrorState title={t("ui.slurp.live.loadFailed")} onRetry={() => void query.refetch()} />
         </div>
       </SlpThreadTaskLayer>
@@ -137,7 +142,7 @@ export function SlpLiveScreen({
     return (
       <SlpThreadTaskLayer>
         <div className="relative min-h-[70dvh] flex-1 p-6 pt-16">
-          <div className="absolute start-3 top-[max(0.75rem,env(safe-area-inset-top))]">{back}</div>
+          <div className="absolute start-3 top-3">{back}</div>
           <SlpSkeleton label={t("ui.slurp.live.loading")} />
         </div>
       </SlpThreadTaskLayer>
@@ -385,8 +390,9 @@ export function SlpLiveScreen({
                         event.preventDefault();
                         const message = said.trim();
                         if (!message) return;
+                        setSaid("");
                         askedAt.current = Date.now();
-                        beat.mutate({ message }, { onSuccess: () => setSaid("") });
+                        beat.mutate({ message });
                       }}
                     >
                       <input
