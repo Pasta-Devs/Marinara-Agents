@@ -1,7 +1,9 @@
+import { existsSync } from "node:fs";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
 import { slpLiveView, slpLiveViewers } from "../../../../../shared/src/slp/slp-live.js";
+import { resolveCreatorMediaAbsolutePath, sendSlurpImageFile } from "../../base/media/slp-media.js";
 import { createSlurpLiveStorage } from "../../data/live/slp-live-storage.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { simulateSlurpLiveShow } from "./slp-live-service.js";
@@ -49,6 +51,16 @@ export async function slpLiveRoutes(app: FastifyInstance, { noodle, resolveViewe
     const show = stored.endedAt ? stored : await simulateSlurpLiveShow(app.db, stored, settings, at);
     if (!show.endedAt) await storage.save(show.id, { watchedAt: at.toISOString() });
     return slpLiveView(show, at.getTime(), personaId ? `persona:${personaId}` : null);
+  });
+
+  // A live picture by number (`picture.n` in the view). The show is public, so any viewer may load it.
+  app.get("/slurp/live/:id/picture/:n", async (req, reply) => {
+    if (!(await liveOn())) return reply.code(409).send({ error: LIVE_OFF });
+    const { id, n } = req.params as { id: string; n: string };
+    const picture = (await storage.get(id))?.state.pictures?.[Number(n)];
+    const absolute = picture ? resolveCreatorMediaAbsolutePath(picture.path) : null;
+    if (!absolute || !existsSync(absolute)) return reply.code(404).send({ error: "No such picture" });
+    return sendSlurpImageFile(reply.header("Cache-Control", "private, max-age=3600"), absolute);
   });
 
   // The screen asks for the next beat when the current one runs low, when the player joins, or with a

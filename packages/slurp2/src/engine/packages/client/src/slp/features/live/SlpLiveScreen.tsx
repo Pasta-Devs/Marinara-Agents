@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { ChevronLeft, Clock, Eye, Flame, ListOrdered } from "lucide-react";
+import { Camera, ChevronLeft, Clock, Eye, Flame, ListOrdered } from "lucide-react";
 import { Avatar, SlurpMediaImg } from "../../base/chrome/SlpChrome";
 import { SlpSheet } from "../../modules/chrome/SlpSheet";
 import { SlpErrorState, SlpSkeleton } from "../../modules/chrome/SlpStateKit";
@@ -19,9 +19,10 @@ const LIVE_STYLES = `
 @keyframes slp-live-dot { 50% { opacity: 0.35; } }
 .slp-live-drift { animation: slp-live-drift 18s ease-in-out infinite alternate; }
 .slp-live-in { animation: slp-live-in 300ms ease-out both; }
+.slp-live-in.slp-live-drift { animation: slp-live-in 300ms ease-out both, slp-live-drift 18s ease-in-out infinite alternate; }
 .slp-live-pop { animation: slp-live-pop 4s ease-out both; }
 .slp-live-dot { animation: slp-live-dot 1.2s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .slp-live-drift, .slp-live-in, .slp-live-pop, .slp-live-dot { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .slp-live-drift, .slp-live-in, .slp-live-in.slp-live-drift, .slp-live-pop, .slp-live-dot { animation: none; } }
 `;
 const QUICK_TIPS = [10, 25, 50, 100];
 const glass = "bg-black/40 text-white ring-1 ring-white/10 backdrop-blur-md";
@@ -158,8 +159,9 @@ export function SlpLiveScreen({
     <SlpThreadTaskLayer>
       <section className="relative isolate flex min-h-[70dvh] flex-1 flex-col overflow-hidden text-white">
         <style>{LIVE_STYLES}</style>
-        {/* The stage. Live pictures come in slice 4; until then the Creator's own picture, alive with a slow drift. */}
+        {/* The stage: the newest live picture, else the Creator's own picture, alive with a slow drift. */}
         <div aria-hidden="true" className="absolute inset-0 -z-10 overflow-hidden">
+          {/* The avatar (or a glow) stays under the pictures, so the stage never goes dark while one loads. */}
           {host?.avatarUrl ? (
             <SlurpMediaImg
               src={host.avatarUrl}
@@ -170,6 +172,19 @@ export function SlpLiveScreen({
           ) : (
             <div className="slp-live-drift h-full w-full bg-[radial-gradient(circle_at_40%_30%,var(--noodle-accent),transparent_60%),radial-gradient(circle_at_70%_80%,var(--slurp-violet),transparent_55%)]" />
           )}
+          {show.picture &&
+            // The last picture stays under the new one until it has loaded and faded in.
+            [show.picture.n - 1, show.picture.n]
+              .filter((n) => n >= 0)
+              .map((n) => (
+                <SlurpMediaImg
+                  key={n}
+                  src={`/api/slurp2/slurp/live/${encodeURIComponent(show.id)}/picture/${n}`}
+                  mediaWidth={720}
+                  alt=""
+                  className="slp-crop slp-live-in slp-live-drift absolute inset-0 h-full w-full object-cover"
+                />
+              ))}
           <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/75 to-transparent" />
           <div className="absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
         </div>
@@ -210,6 +225,12 @@ export function SlpLiveScreen({
                 />
               </span>
             </span>
+            {show.shooting && (
+              <span role="status" className="flex items-center gap-1 text-[var(--noodle-accent)]">
+                <Camera size={14} aria-hidden="true" className="slp-live-dot" />
+                {t("ui.slurp.live.shooting")}
+              </span>
+            )}
           </div>
           <button
             type="button"
