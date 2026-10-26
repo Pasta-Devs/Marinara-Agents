@@ -126,6 +126,7 @@ test("confirmed reset clears only selected caches and starts fresh generation af
     { host, request, requests, loads, events } = client(() => gate.promise);
   const pending = confirmForgeChapterReset(host, request);
   assert.equal(request.pending, true);
+  assert.equal(host._forgeStoryStoppedAt, host._forgeStoryRevision, "a chapter left forging hears it was stopped");
   assert.equal(host._planCache.get("r|2"), "old", "keep the displayed plan until transactional success");
   assert.deepEqual(loads, []);
   assert.deepEqual(events.slice(0, 2), ["stop preforge", "stop beat/audio"]);

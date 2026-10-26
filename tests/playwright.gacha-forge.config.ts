@@ -25,6 +25,7 @@ export default defineConfig({
     "package-gacha-forge-formation.e2e.ts",
     "package-gacha-forge-proactive-messages.e2e.ts",
     "package-gacha-forge-backgrounds.e2e.ts",
+    "package-gacha-forge-keep-playing.e2e.ts",
   ],
   projects: [
     ...config.projects!,
