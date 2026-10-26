@@ -479,6 +479,8 @@ ${R} .sw-drawer-panel {
   transition: box-shadow 380ms ease;
 }
 ${R} .sw-drawer[data-open="true"] .sw-drawer-panel { box-shadow: 0 0 0 1px var(--sw-panel-border), 0 24px 64px rgba(0, 0, 0, 0.45); }
+/* Closed, the outline would spill 1px past the edge as a line beside the handle. */
+${R} .sw-drawer:not([data-open="true"]) .sw-drawer-panel { box-shadow: none; }
 ${R} .sw-root[data-sw-theme="ebook"] .sw-drawer-panel { -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2); }
 /* Book: a leather spine with stitching along the edge that faces the stage. */
 ${R} .sw-root[data-sw-theme="book"] .sw-drawer[data-side="left"] .sw-drawer-panel { padding-right: 12px; }

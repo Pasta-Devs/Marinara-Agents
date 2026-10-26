@@ -266,6 +266,9 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
         return drawer ? Math.round(drawer.x + drawer.width - hostBox!.x) : null;
       })
       .toBeLessThanOrEqual(0);
+    await expect
+      .poll(() => host.locator(".sw-drawer-panel").evaluate((panel) => getComputedStyle(panel).boxShadow))
+      .toBe("none");
     const note = await host.locator(".sw-note-collapsed").boundingBox();
     const writeButton = await host.locator(".sw-action-primary").boundingBox();
     expect(note && writeButton).toBeTruthy();
