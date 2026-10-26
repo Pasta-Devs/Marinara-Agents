@@ -17,6 +17,7 @@ import { resolveSlurpCreatorSpice } from "../../data/creators/slp-spice-storage.
 import { createSlurpLiveStorage, type SlurpLiveShow } from "../../data/live/slp-live-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { withSlurpLiveShow } from "./slp-live-lock.js";
+import { slurpIsCouplePage } from "../../modules/projects/slp-creator-couples.js";
 
 const MINUTE = 60_000;
 /** ponytail: a fixed cap keeps the code simulation cheap; make it a setting if players want busier evenings. */
@@ -68,7 +69,7 @@ async function startDueShows(db: DB, settings: Settings, open: SlurpLiveShow[], 
       watchedAt: null,
       createdAt: at.toISOString(),
     };
-    if (!(await storage.create(show))) continue;
+    if (!(await createIfFree(storage, show))) continue;
     open.push(await simulateSlurpLiveShow(db, show, settings, at));
     busy.add(creator.id);
   }
@@ -159,4 +160,67 @@ async function simulateLocked(db: DB, show: SlurpLiveShow, settings: Settings, a
   const next = { ...show, state, endedAt };
   await createSlurpLiveStorage(db).save(show.id, { state, endedAt });
   return next;
+}
+
+/** One open show per host: the world tick and the player's Go live check and create under one host lock. */
+function createIfFree(storage: ReturnType<typeof createSlurpLiveStorage>, show: SlurpLiveShow) {
+  return withSlurpLiveShow(`host:${show.hostId}`, async () =>
+    (await storage.listOpen()).some((open) => open.hostId === show.hostId) ? false : storage.create(show),
+  );
+}
+
+export type SlurpLiveHostResult = { show: SlurpLiveShow } | "missing" | "live";
+
+/**
+ * The player goes live as a Creator: their persona's own Creator account, or (from Stir) the Creator they
+ * play. The world still fills the room and pays the tips; the player writes the host's lines.
+ */
+export async function hostSlurpLiveShow(
+  db: DB,
+  input: { personaId: string; creatorId?: string; minutes: number },
+  at = new Date(),
+): Promise<SlurpLiveHostResult> {
+  const noodle = createSlurpStorage(db);
+  const settings = await noodle.getSettings();
+  const host = input.creatorId
+    ? await noodle.getAccountById(input.creatorId)
+    : await noodle.getSlurpAccountForEntity("persona", input.personaId, "creator").catch(() => null);
+  if (!host || host.kind === "viewer") return "missing";
+  // Another persona's Creator is not the player's to run.
+  if (host.kind === "persona" && host.sourceEntityId !== input.personaId) return "missing";
+  if (slurpIsCouplePage(host)) return "missing";
+  const storage = createSlurpLiveStorage(db);
+  const live = normalizeSlpLiveSettings(settings.live);
+  const minutes = Math.min(live.maxMinutes, Math.max(live.minMinutes, Math.round(input.minutes)));
+  const spice = await resolveSlurpCreatorSpice(db, host);
+  const fans = (await createSlurpPopulationStorage(db).listTiesForCreator(host.id)).filter(
+    (tie) => tie.stage !== "lapsed",
+  ).length;
+  const show: SlurpLiveShow = {
+    id: `live:${host.id}:player:${at.getTime()}`,
+    hostKind: "player",
+    hostId: host.id,
+    startedAt: at.toISOString(),
+    endsAt: new Date(at.getTime() + minutes * MINUTE).toISOString(),
+    endedAt: null,
+    state: { ...slpLiveStart({ level: spice.level, fans }), hostPersona: input.personaId },
+    watchedAt: at.toISOString(),
+    createdAt: at.toISOString(),
+  };
+  if (!(await createIfFree(storage, show))) return "live";
+  return { show };
+}
+
+/** The hosting player ends their show early; the room's tips so far stay paid. */
+export async function endSlurpLiveShow(db: DB, input: { showId: string; personaId: string }, at = new Date()) {
+  return withSlurpLiveShow(input.showId, async () => {
+    const storage = createSlurpLiveStorage(db);
+    const show = await storage.get(input.showId);
+    if (!show || show.hostKind !== "player" || show.state.hostPersona !== input.personaId) return "missing";
+    if (show.endedAt) return show;
+    const endsAt = new Date(Math.min(at.getTime(), Date.parse(show.endsAt))).toISOString();
+    await storage.save(show.id, { endsAt });
+    // Plays the last minutes and closes the show now, so the summary does not wait for the world tick.
+    return simulateLocked(db, { ...show, endsAt }, await createSlurpStorage(db).getSettings(), at);
+  });
 }

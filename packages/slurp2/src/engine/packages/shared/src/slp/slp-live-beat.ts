@@ -4,7 +4,14 @@ import { slpLiveLog, slpLivePrivateOn, type SlpLiveState } from "./slp-live.js";
 export const SLP_LIVE_BEAT_SECONDS = { short: 20, normal: 35, long: 50 } as const;
 
 export type SlpLiveBeatLine = { t: number; who: string; text: string; action?: string };
-export type SlpLiveBeat = { lines: SlpLiveBeatLine[]; heat: number; strip: boolean; place: string | null };
+export type SlpLiveBeat = {
+  lines: SlpLiveBeatLine[];
+  heat: number;
+  strip: boolean;
+  place: string | null;
+  /** For a hosting player: three suggested next moves. */
+  next: string[];
+};
 
 const text = (value: unknown, max: number) =>
   typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
@@ -26,7 +33,12 @@ export function slpLiveParseBeat(raw: unknown): SlpLiveBeat | null {
     if (!who || (!said && !action) || !Number.isFinite(t)) return [];
     return [{ t, who, text: said, ...(action ? { action } : {}) }];
   });
-  if (!lines.length) return null;
+  const next = (Array.isArray(value.next) ? value.next : [])
+    .map((entry) => text(entry, 140))
+    .filter(Boolean)
+    .slice(0, 3);
+  // A hosting player's beat may be only suggestions, when the room is quiet.
+  if (!lines.length && !next.length) return null;
   const patch = value.patch && typeof value.patch === "object" ? (value.patch as Record<string, unknown>) : {};
   const heat = Number(patch.heat);
   return {
@@ -34,6 +46,7 @@ export function slpLiveParseBeat(raw: unknown): SlpLiveBeat | null {
     heat: Number.isFinite(heat) ? Math.max(0, Math.min(10, Math.round(heat))) : 0,
     strip: patch.strip === true,
     place: text(patch.place, 40) || null,
+    next,
   };
 }
 
@@ -52,11 +65,19 @@ export function slpLiveApplyBeat(
     you?: { by: string; name: string; text: string };
     /** The private block the beat was written for: its lines never outlive the block. */
     alone?: { to: number } | null;
+    /** The player hosts: their own line is the host's, and the model writes only the room. */
+    hosting?: boolean;
   },
 ): number {
   const { at, seconds } = input;
   state.log = state.log.filter((event) => !((event.kind === "say" || event.kind === "chat") && event.at > at));
-  if (input.you) slpLiveLog(state, { at, kind: "you", by: input.you.by, name: input.you.name, text: input.you.text });
+  if (input.you)
+    slpLiveLog(
+      state,
+      input.hosting
+        ? { at, kind: "say", by: "host", name: input.host, text: input.you.text }
+        : { at, kind: "you", by: input.you.by, name: input.you.name, text: input.you.text },
+    );
   const inRoom = new Map(state.room.map((id) => [(state.names[id] ?? "").toLowerCase(), id]));
   const host = input.host.toLowerCase();
   // In a private block only the Creator talks, and nothing private is said after the block ends.
@@ -69,7 +90,7 @@ export function slpLiveApplyBeat(
     const who = line.who.toLowerCase();
     const fan = inRoom.get(who);
     const isHost = who === "host" || who === host;
-    if (!isHost && (!fan || alone)) continue;
+    if (isHost ? input.hosting : !fan || alone) continue;
     // Never two lines in the same breath: at least 1.5 s apart, all inside the beat.
     last = Math.max(last + (kept ? 1_500 : 0), start + Math.max(0, Math.min(seconds, line.t)) * 1_000);
     if (alone && last >= alone.to) break;
@@ -83,13 +104,14 @@ export function slpLiveApplyBeat(
     });
     kept += 1;
   }
-  if (!kept) return 0;
+  if (!kept && !input.hosting) return 0;
   state.heat = Math.min(100, state.heat + beat.heat);
   if (beat.strip && state.strip < state.stripMax) {
     state.strip += 1;
     slpLiveLog(state, { at: Math.round((start + last) / 2), kind: "strip", amount: state.strip });
   }
   if (beat.place) state.place = beat.place;
+  if (input.hosting) state.next = beat.next;
   // The room's talk comes back as soon as a private block ends.
   state.beatTo = Math.min(Math.max(last, start + seconds * 1_000), alone?.to ?? Infinity);
   return kept;

@@ -71,6 +71,9 @@ export async function beatSlurpLiveShow(
   const alone = slpLivePrivateOn(show.state, at) ? show.state.private! : null;
   // The room waits outside a private block: only the payer's screen gets it written.
   if (alone && alone.by !== `persona:${input.personaId}`) return "waiting";
+  const hosting = show.hostKind === "player" && show.state.hostPersona === input.personaId;
+  // A show the player hosts is written only for the host's own screen.
+  if (show.hostKind === "player" && !hosting) return "waiting";
   if (!talking && (show.state.beatTo ?? 0) - at > (seconds * 1_000) / 3) return "waiting";
   if (writing.has(show.id) && !talking) return "busy";
   const call = ++calls;
@@ -106,6 +109,7 @@ export async function beatSlurpLiveShow(
             started: !show.state.log.some((event) => event.kind === "say" && event.at >= alone.from),
           }
         : null,
+      hosting,
     });
     const beat = await writeBeat(db, settings.live.connectionId ?? settings.generationConnectionId, prompt).catch(
       (error: unknown) => {
@@ -117,6 +121,16 @@ export async function beatSlurpLiveShow(
       input.message && input.personaId && input.viewer
         ? { by: `persona:${input.personaId}`, name: input.viewer.displayName, text: input.message }
         : undefined;
+    // The player's words: chat from a viewer, the host's own line from a hosting player.
+    const logYou = (state: typeof show.state, at: number) => {
+      if (!you) return;
+      slpLiveLog(
+        state,
+        hosting
+          ? { at, kind: "say", by: "host", name: host.displayName, text: you.text }
+          : { at, kind: "you", by: you.by, name: you.name, text: you.text },
+      );
+    };
     let kept = 0;
     let stale = false;
     await withSlurpLiveShow(show.id, async () => {
@@ -126,7 +140,7 @@ export async function beatSlurpLiveShow(
       const ready = at + (Date.now() - t0);
       // A newer cut-in already wrote its answer; this beat would cut it away.
       if ((cutIn.get(show.id) ?? 0) > call) {
-        if (you) slpLiveLog(fresh.state, { at: ready, kind: "you", by: you.by, name: you.name, text: you.text });
+        logYou(fresh.state, ready);
         stale = true;
       } else if (beat)
         kept = slpLiveApplyBeat(fresh.state, beat, {
@@ -135,14 +149,16 @@ export async function beatSlurpLiveShow(
           host: host.displayName,
           ...(you ? { you } : {}),
           alone,
+          hosting,
         });
       // A private beat that came back after its block ended is simply dropped: the room is back.
-      if (!kept && !stale && !(alone && ready >= alone.to)) {
+      if (!kept && !stale && !(alone && ready >= alone.to) && !(hosting && beat)) {
         // With a beat, the apply already logged the player's line.
-        if (you && !beat)
-          slpLiveLog(fresh.state, { at: ready, kind: "you", by: you.by, name: you.name, text: you.text });
+        if (!beat) logYou(fresh.state, ready);
+        // A hosting player speaks for themselves: only the Creator gets a cover line.
         const line = COVER_LINES[Math.floor(ready / 1_000) % COVER_LINES.length]!;
-        slpLiveLog(fresh.state, { at: ready + 1_000, kind: "say", by: "host", name: host.displayName, text: line });
+        if (!hosting)
+          slpLiveLog(fresh.state, { at: ready + 1_000, kind: "say", by: "host", name: host.displayName, text: line });
         // Try again in a while, outside the client's ask window, so a broken connection is not called nonstop.
         fresh.state.beatTo = ready + 30_000;
       }
@@ -152,7 +168,7 @@ export async function beatSlurpLiveShow(
     void shootSlurpLivePicture(db, show.id, at + (Date.now() - t0), settings.live).catch((error: unknown) =>
       logger.warn(error, "[slurp-live] Picture failed"),
     );
-    return kept || stale ? "written" : "failed";
+    return kept || stale || (hosting && beat) ? "written" : "failed";
   } finally {
     if (writing.get(show.id) === call) writing.delete(show.id);
   }
