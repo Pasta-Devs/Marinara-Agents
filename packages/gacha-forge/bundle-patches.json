@@ -1544,6 +1544,18 @@
             {
               "find": "ds=\"1.24.0\"",
               "replace": "ds=\"1.24.1\""
+            },
+            {
+              "find": "let forgeChatVoiceAtSend=forgeChatVoiceSession(this),s=",
+              "replace": "let forgeChatVoiceAtSend=forgeChatVoiceSession(this),forgeChatSendAtAdmission=beginForgeChatSend(this),s="
+            },
+            {
+              "find": ".then(o=>{this._chatSending=\"\",o&&o.wallet&&this._adoptFromResponse(o);let n=",
+              "replace": ".then(o=>{o&&o.wallet&&this._adoptFromResponse(o);let n="
+            },
+            {
+              "find": "optimistic:s,error:c,response:o})})}_chatEnd(){",
+              "replace": "optimistic:s,error:c,response:o})}).finally(()=>finishForgeChatSend(this,forgeChatSendAtAdmission))}_chatEnd(){"
             }
           ]
         }

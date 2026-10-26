@@ -49,6 +49,22 @@ function forgeChatIsCurrent(host, runId, unitId) {
   return host._run?.runId === runId && host._chat?.unit?.id === unitId;
 }
 
+const forgeChatSendGuards = new WeakMap();
+
+export function beginForgeChatSend(host) {
+  const guard = { unitId: host._chat?.unit?.id };
+  forgeChatSendGuards.set(host, guard);
+  return guard;
+}
+
+export function finishForgeChatSend(host, guard) {
+  if (forgeChatSendGuards.get(host) !== guard) return;
+  forgeChatSendGuards.delete(host);
+  if (host._chatSending !== guard.unitId || host._chatClosing) return;
+  host._chatSending = "";
+  if (host._chat?.open) host._renderBrowser();
+}
+
 const forgeChatVoiceSessions = new WeakMap();
 
 export function stopForgeChatVoice(host) {

@@ -86,10 +86,17 @@ function confirm(host, row = savedPlayer(), values = {}) {
 
 async function actualOutgoingClient(host) {
   let source = await readFile(new URL("../packages/gacha-forge/client.js", import.meta.url), "utf8");
-  if (!process.env.GACHA_PERSONA_CHAT_UNDER_TEST) {
+  if (
+    !process.env.GACHA_PERSONA_CHAT_UNDER_TEST &&
+    !source.includes(".finally(()=>finishForgeChatSend(this,forgeChatSendAtAdmission))")
+  ) {
     const ledger = JSON.parse(await readFile(new URL("../packages/gacha-forge/bundle-patches.json", import.meta.url)));
     for (const edit of ledger.files["client.js"].patches.find((patch) => patch.version === "1.24.1").edits) {
-      if (!/forgeChatVoiceSession|stopForgeChatVoice|voiceSession:forgeChatVoiceAtSend/.test(edit.replace || ""))
+      if (
+        !/forgeChatVoiceSession|stopForgeChatVoice|voiceSession:forgeChatVoiceAtSend|beginForgeChatSend|finishForgeChatSend|^\.then\(o=>\{o&&o\.wallet/.test(
+          edit.replace || "",
+        )
+      )
         continue;
       if (!source.includes(edit.replace)) {
         assert.equal(source.split(edit.find).length, 2, "unique actual send-admission edit");
@@ -115,6 +122,188 @@ async function actualOutgoingClient(host) {
   host._adoptFromResponse = () => {};
   return host;
 }
+
+async function actualComposer(host) {
+  const source = await readFile(new URL("../packages/gacha-forge/client.js", import.meta.url), "utf8");
+  const render = new Function(
+    "u",
+    "forgeChatHasCurrentMessages",
+    "jn",
+    "Un",
+    source.slice(source.indexOf("var qd="), source.indexOf("function Vv(")) + ";return Gv;",
+  )((value) => String(value ?? ""), chat.forgeChatHasCurrentMessages, 600, 2);
+  const bind = new Function(source.slice(source.indexOf("function Wd("), source.indexOf("var jd=")) + ";return Wd;")();
+  const Refresh = new Function(
+    "Ze",
+    "Ia",
+    "forgeUserTimeZone",
+    "return class {" +
+      source.slice(
+        source.indexOf("_refreshState(){"),
+        source.indexOf("_reconcileGenerating(", source.indexOf("_refreshState(){")),
+      ) +
+      "}",
+  )(
+    async () => ({ json: async () => ({}) }),
+    "fixture",
+    () => "UTC",
+  );
+  let html = "",
+    input;
+  host._root = {
+    addEventListener() {},
+    removeEventListener() {},
+    querySelector(selector) {
+      if (selector === ".root") return this;
+      return selector === "[data-chat-text]" && html.includes("data-chat-text") ? input : null;
+    },
+  };
+  host._adoptGlobals = () => {};
+  host._refreshState = Refresh.prototype._refreshState;
+  host._renderBrowser = () => {
+    html = render({
+      ...host._chat,
+      cost: 3,
+      hold: host._chatSending ? "mine" : "",
+      vigor: 100,
+      draft: host._chatDraft,
+    });
+    input = {
+      value: "",
+      addEventListener(name, callback) {
+        this[name] = callback;
+      },
+      focus() {},
+    };
+    bind(host._root, { onSend: (text) => host._chatSay({ text }) });
+  };
+  return {
+    canType: () => html.includes("data-chat-text") && !/data-chat-send disabled/.test(html),
+    enter(text) {
+      assert.ok(html.includes("data-chat-text"), "native composer is available");
+      input.value = text;
+      input.keydown({ key: "Enter", shiftKey: false, preventDefault() {} });
+    },
+  };
+}
+
+test("native Vigor refresh keeps Send held through failure reconciliation, then Enter preserves speech order", async () => {
+  const { host, controller, calls } = fixture();
+  let release;
+  const read = new Promise((resolve) => {
+    release = resolve;
+  });
+  const first = savedPlayer({ id: "first-player", text: "First committed line." });
+  const second = savedPlayer({ id: "second-player", text: "Second committed line." });
+  let sends = 0,
+    reads = 0;
+  try {
+    await actualOutgoingClient(host);
+    const composer = await actualComposer(host);
+    host._postJson = async (path) => {
+      if (path === "/chat/send") {
+        sends += 1;
+        return sends === 1
+          ? { ok: false, error: "generation-failed", playerMessageId: first.id }
+          : { ok: true, playerMessageId: second.id };
+      }
+      assert.equal(path, "/chat/open");
+      reads += 1;
+      return reads === 1 ? read : { ...snapshot(), messages: [first, second] };
+    };
+    host._chatSay({ text: first.text });
+    await settle();
+    assert.equal(reads, 1);
+    // The production Vigor clock invokes this exact state-refresh method when a point lands.
+    host._refreshState();
+    await settle();
+    assert.equal(composer.canType(), false, "an ordinary refresh cannot expose Send during recovery");
+    host._chatSay({ text: second.text });
+    assert.equal(sends, 1, "the native admission guard also rejects a second attempt");
+    release(snapshot(first));
+    await settle();
+    assert.equal(host._chatSending, "");
+    assert.equal(composer.canType(), true);
+    composer.enter(second.text);
+    await settle();
+    assert.equal(sends, 2);
+    assert.deepEqual(
+      calls.map((call) => call.requests[0].text),
+      [first.text, second.text],
+    );
+  } finally {
+    release?.({ ...snapshot(), messages: [] });
+    controller.dispose();
+  }
+});
+
+for (const finish of ["read-rejection", "closed", "other-contact"]) {
+  test(`failure reconciliation releases its own Send hold after ${finish}`, async () => {
+    const { host, controller } = fixture();
+    let release, reject;
+    const read = new Promise((resolve, fail) => {
+      release = resolve;
+      reject = fail;
+    });
+    try {
+      await actualOutgoingClient(host);
+      host._postJson = async (path) => (path === "/chat/send" ? { ok: false } : read);
+      host._chatSay({ text: "Keep this unconfirmed line." });
+      await settle();
+      assert.equal(host._chatSending, "unit");
+      if (finish === "closed") host._closeChat();
+      if (finish === "other-contact") host._chatWith("other-unit");
+      if (finish === "read-rejection") reject(new Error("Controlled canonical-read network failure"));
+      else release({ ...snapshot(), messages: [] });
+      await settle();
+      assert.equal(host._chatSending, "", "navigation must not strand the global busy flag");
+      assert.equal(host._chatStash.unknowns.length, 1, "unconfirmed text is preserved without resending");
+    } finally {
+      release?.({ ...snapshot(), messages: [] });
+      controller.dispose();
+    }
+  });
+}
+
+test("stale same-unit reconciliation cleanup cannot clear a newer Send operation", async () => {
+  const { host, controller, calls } = fixture();
+  let releaseOld, releaseNew;
+  const oldRead = new Promise((resolve) => {
+    releaseOld = resolve;
+  });
+  const newSend = new Promise((resolve) => {
+    releaseNew = resolve;
+  });
+  let sends = 0,
+    reads = 0;
+  try {
+    await actualOutgoingClient(host);
+    host._postJson = async (path) => {
+      if (path === "/chat/send") return ++sends === 1 ? { ok: false } : newSend;
+      return ++reads === 1 ? oldRead : snapshot();
+    };
+    host._chatSay({ text: "Old unresolved line." });
+    await settle();
+    // _adoptRun initializes these fields; a switch away and back may reuse the same run/unit IDs.
+    chat.stopForgeChatVoice(host);
+    host._chatSending = "";
+    host._chatStash = null;
+    host._chat = { open: true, unit: { id: "unit" }, messages: [], page: 1 };
+    host._chatSay({ text: savedPlayer().text });
+    assert.equal(sends, 2);
+    releaseOld({ ...snapshot(), messages: [] });
+    await settle();
+    assert.equal(host._chatSending, "unit", "old finally does not own the newer busy flag");
+    releaseNew({ ok: true, playerMessageId: savedPlayer().id });
+    await settle();
+    assert.equal(host._chatSending, "");
+    assert.equal(calls.length, 1);
+  } finally {
+    releaseOld?.({ ...snapshot(), messages: [] });
+    releaseNew?.({ ok: false });
+    controller.dispose();
+  }
+});
 
 for (const outcome of ["success", "failed-reply"]) {
   for (const reopen of [true, false]) {
