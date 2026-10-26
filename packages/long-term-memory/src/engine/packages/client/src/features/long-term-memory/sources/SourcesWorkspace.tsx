@@ -54,6 +54,7 @@ import {
   InfoPopover,
   StatusSurface,
   inputClass,
+  lockedActionProps,
   revealFocusUnderStickyBar,
 } from "../shared-controls";
 import { humanizeLabel, labelKeys, localizedLabel } from "../display-labels";
@@ -453,14 +454,10 @@ export default function SourcesWorkspace({
   // The lock note is only filled while a run is active, so only a run points `aria-describedby` at it.
   const importRunning = sourceTask.active?.status === "running";
   const importDisabled = !availabilityReady || availabilitySaving || importRunning;
-  const importActionProps = importDisabled
-    ? {
-        "aria-disabled": true,
-        ...(importRunning ? { "aria-describedby": importLockId } : {}),
-        className: "opacity-50",
-      }
-    : {};
-  const reextractDisabled = extractingId !== null || !availabilityReady;
+  const importActionProps = lockedActionProps(importDisabled, importRunning ? importLockId : undefined);
+  // Re-extract shares the import lock: a run of either kind holds it, and the reason line says which.
+  const reextractLocked = importRunning || !availabilityReady;
+  const reextractActionProps = lockedActionProps(reextractLocked, importRunning ? importLockId : undefined);
 
   const changeAvailabilityModes = async (nextModes: LtmMode[]) => {
     if (!nextModes.length || !availabilityReady || availabilitySavingRef.current) return;
@@ -1354,9 +1351,10 @@ export default function SourcesWorkspace({
         <IconButton
           icon={Sparkles}
           label={localizeUi("ui.longTermMemory.sourcesworkspace.reExtractValue1", { value1: title })}
-          disabled={reextractDisabled}
+          {...reextractActionProps}
           onClick={(event) => {
             stopRowAction(event);
+            if (reextractLocked) return;
             setOpenSourceActionId(null);
             void reextract(noteId);
           }}
@@ -1392,9 +1390,10 @@ export default function SourcesWorkspace({
             <IconButton
               icon={Sparkles}
               label={localizeUi("ui.longTermMemory.sourcesworkspace.reExtractValue1", { value1: title })}
-              disabled={reextractDisabled}
+              {...reextractActionProps}
               onClick={(event) => {
                 stopRowAction(event);
+                if (reextractLocked) return;
                 setOpenSourceActionId(null);
                 void reextract(noteId);
               }}
@@ -1505,7 +1504,8 @@ export default function SourcesWorkspace({
       sourceTitle={sourceOperation.title}
       initialOperation={sourceOperation.operation}
       destinations={scopeTargets.data?.chats ?? []}
-      disabled={activeSourceTask !== null}
+      disabled={importRunning}
+      lockReasonId={importLockId}
       confirmAction={props.confirmAction}
       onComplete={async () => {
         await invalidateAfterMutation();
@@ -1726,6 +1726,7 @@ export default function SourcesWorkspace({
             ariaLabel={localizeUi("ui.longTermMemory.sourcesworkspace.findSourcesIn")}
             testId="source"
             disabled={activeSourceTask !== null}
+            describedBy={importLockId}
           />
         </div>
       </div>
@@ -1736,7 +1737,13 @@ export default function SourcesWorkspace({
         className={activeSourceTask ? "text-xs text-[var(--muted-foreground)]" : "sr-only"}
         data-ltm-import-lock="sources"
       >
-        {activeSourceTask ? localizeUi("ui.longTermMemory.sourcesworkspace.lockedWhileImportRuns") : null}
+        {activeSourceTask
+          ? localizeUi(
+              activeSourceTask.kind === "re-extract"
+                ? "ui.longTermMemory.sourcesworkspace.lockedWhileReextractRuns"
+                : "ui.longTermMemory.sourcesworkspace.lockedWhileImportRuns",
+            )
+          : null}
       </p>
       {!availabilityReady ? (
         <StatusSurface tone={settingsQuery.isError ? "danger" : "neutral"} busy={!settingsQuery.isError}>
@@ -1805,8 +1812,11 @@ export default function SourcesWorkspace({
           ) : null}
           {retryableReextract?.contract.sourceIds[0] ? (
             <Button
-              onClick={() => void reextract(retryableReextract.contract.sourceIds[0]!, retryableReextract.contract)}
-              disabled={activeSourceTask !== null}
+              onClick={() => {
+                if (!importRunning)
+                  void reextract(retryableReextract.contract.sourceIds[0]!, retryableReextract.contract);
+              }}
+              {...lockedActionProps(importRunning, importLockId)}
               data-ltm-source-action="retry-re-extract"
             >
               <RefreshCw aria-hidden="true" size="0.75rem" />
@@ -1862,7 +1872,11 @@ export default function SourcesWorkspace({
                         data-ltm-source-action="load-more"
                       >
                         {lorebookPreview.isFetchingNextPage ? (
-                          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+                          <Loader2
+                            aria-hidden="true"
+                            size="0.75rem"
+                            className="animate-spin motion-reduce:animate-none"
+                          />
                         ) : null}
                         {localizeUi(
                           lorebookPreview.isFetchingNextPage
@@ -1913,7 +1927,11 @@ export default function SourcesWorkspace({
                         data-ltm-source-action="refresh-preview"
                       >
                         {lorebookPreview.isFetching ? (
-                          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+                          <Loader2
+                            aria-hidden="true"
+                            size="0.75rem"
+                            className="animate-spin motion-reduce:animate-none"
+                          />
                         ) : (
                           <RefreshCw aria-hidden="true" size="0.75rem" />
                         )}
@@ -2283,7 +2301,8 @@ export default function SourcesWorkspace({
                   {focusedImportedSource ? (
                     <ImportedSourceInspector
                       source={focusedImportedSource}
-                      disabled={sourceTask.active?.status === "running" || !availabilityReady}
+                      disabled={reextractLocked}
+                      lockReasonId={importRunning ? importLockId : undefined}
                       bulkActive={bulkSelectionActive}
                       onOpenMemory={onOpenMemory}
                       onOpenReview={onOpenReview}
@@ -2353,7 +2372,11 @@ export default function SourcesWorkspace({
                         data-ltm-source-action="load-more"
                       >
                         {preview.isFetchingNextPage ? (
-                          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+                          <Loader2
+                            aria-hidden="true"
+                            size="0.75rem"
+                            className="animate-spin motion-reduce:animate-none"
+                          />
                         ) : null}
                         {localizeUi(
                           preview.isFetchingNextPage
@@ -2404,7 +2427,11 @@ export default function SourcesWorkspace({
                         data-ltm-source-action="refresh-preview"
                       >
                         {preview.isFetching ? (
-                          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+                          <Loader2
+                            aria-hidden="true"
+                            size="0.75rem"
+                            className="animate-spin motion-reduce:animate-none"
+                          />
                         ) : (
                           <RefreshCw aria-hidden="true" size="0.75rem" />
                         )}
@@ -2724,13 +2751,13 @@ export default function SourcesWorkspace({
                         ) : (
                           <>
                             <Button
-                              {...(importing ? { "aria-disabled": true, className: "opacity-50" } : {})}
+                              {...lockedActionProps(importRunning)}
                               {...destinationWait(importReasonId)}
                               aria-describedby={`${
                                 currentDestinationScope
                                   ? reimportDescriptionId
                                   : `${reimportDescriptionId} ${importReasonId}`
-                              }${importing ? ` ${importLockId}` : ""}`}
+                              }${importRunning ? ` ${importLockId}` : ""}`}
                               onClick={() => {
                                 if (currentDestinationScope) void runImport([focusedFlatRow.sourceId], "refresh");
                               }}
@@ -2795,7 +2822,8 @@ export default function SourcesWorkspace({
                   {focusedImportedSource ? (
                     <ImportedSourceInspector
                       source={focusedImportedSource}
-                      disabled={sourceTask.active?.status === "running" || !availabilityReady}
+                      disabled={reextractLocked}
+                      lockReasonId={importRunning ? importLockId : undefined}
                       bulkActive={bulkSelectionActive}
                       onOpenMemory={onOpenMemory}
                       onOpenReview={onOpenReview}
@@ -2962,8 +2990,10 @@ export default function SourcesWorkspace({
                       {localizeUi("ui.longTermMemory.sourcesworkspace.openSourceMemory")}
                     </button>
                     <Button
-                      disabled={reextractDisabled}
-                      onClick={() => void reextract(item.note.id)}
+                      {...reextractActionProps}
+                      onClick={() => {
+                        if (!reextractLocked) void reextract(item.note.id);
+                      }}
                       data-ltm-source-action="re-extract"
                       data-ltm-source-note-id={item.note.id}
                     >

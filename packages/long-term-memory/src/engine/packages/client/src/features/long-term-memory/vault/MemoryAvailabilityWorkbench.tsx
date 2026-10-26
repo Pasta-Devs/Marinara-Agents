@@ -8,7 +8,7 @@ import {
   normalizeLtmScope,
 } from "../../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { errorMessage } from "../api";
-import { Button, StatusSurface } from "../shared-controls";
+import { Button, lockedActionProps, StatusSurface } from "../shared-controls";
 import { type LtmTranslationFunction } from "../localization";
 import { AvailabilityTabRail, type AvailabilityPlaceKind } from "../AvailabilityTabRail";
 import type { PickerTarget } from "./TargetPicker";
@@ -168,6 +168,7 @@ export function MemoryAvailabilityWorkbench({
     setError("");
   };
   const save = async () => {
+    if (busy) return;
     if (!entries.length && !legacyGlobalModeOnly) {
       setError(localizeUi("ui.longTermMemory.memoryvault.availabilityPlaceRequired"));
       return;
@@ -194,10 +195,10 @@ export function MemoryAvailabilityWorkbench({
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">{note.title}</p>
         </div>
         <div className="flex gap-2">
-          <Button disabled={busy} onClick={onCancel}>
+          <Button {...lockedActionProps(busy)} onClick={() => !busy && onCancel()}>
             {localizeUi("ui.longTermMemory.memoryvault.cancel")}
           </Button>
-          <Button primary disabled={busy} onClick={() => void save()}>
+          <Button primary {...lockedActionProps(busy)} onClick={() => void save()}>
             <Check aria-hidden="true" size="1rem" className="shrink-0" />
             {busy
               ? localizeUi("ui.longTermMemory.memoryvault.saving")

@@ -1,5 +1,5 @@
 import type { LtmLastInjectionResponse } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { StatusSurface } from "./shared-controls";
+import { StatusSurface, lockedActionProps } from "./shared-controls";
 import { selectLtmPluralForm, useLtmTranslation } from "./localization";
 
 export function LastInjectionSummary({
@@ -99,9 +99,11 @@ export function LastInjectionSummary({
             {onRetry ? (
               <button
                 type="button"
-                className={`inline-flex items-center underline ${compact ? "min-h-6" : "min-h-11"}`}
-                onClick={onRetry}
-                disabled={loading || retryPending}
+                className={`inline-flex items-center underline ${loading || retryPending ? "opacity-50" : ""} ${compact ? "min-h-7" : "min-h-11"}`}
+                onClick={() => {
+                  if (!loading && !retryPending) onRetry();
+                }}
+                {...lockedActionProps(loading || retryPending)}
               >
                 {localizeUi("ui.longTermMemory.activityview.retry")}
               </button>

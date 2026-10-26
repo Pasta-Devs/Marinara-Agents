@@ -155,6 +155,11 @@ export function AvailabilityTabRail({
         [data-ltm-availability-tab][data-active="true"] {
           background: var(--secondary);
         }
+        /* The Engine's unlayered .mari-editor-tab and --compact heights beat min-h-11, so the touch floor is set here. */
+        [data-ltm-availability-tabs] :is([data-ltm-availability-tab], [data-ltm-availability-target], [data-ltm-availability-show-more]) {
+          height: auto;
+          min-height: 2.75rem;
+        }
         @container (min-width: 22rem) {
           [data-ltm-availability-tablist] {
             grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -158,6 +158,8 @@ async function main() {
         version: 1,
       };
       const availabilityPatches: Array<Record<string, unknown>> = [];
+      // Set to hold the next legacy-global availability PATCH open, so a test can act while Save is running.
+      let availabilityGate: Promise<void> | null = null;
       const branchAvailabilityPatches: Array<Record<string, unknown>> = [];
       const batchNotesCalls: Array<Record<string, unknown>> = [];
       const batchNotesFailure = false;
@@ -988,6 +990,7 @@ async function main() {
           for await (const chunk of request) chunks.push(Buffer.from(chunk));
           const patch = JSON.parse(Buffer.concat(chunks).toString("utf8"));
           availabilityPatches.push(patch);
+          if (availabilityGate) await availabilityGate;
           legacyGlobalNote = {
             ...legacyGlobalNote,
             ...patch,
@@ -1588,7 +1591,7 @@ async function main() {
       // The Engine's unlayered .mari-editor-tab and --compact min-heights beat the min-h-11 utilities.
       const shortTouchTargets = (surface: string) =>
         page.locator(surface).evaluate((root) =>
-          [...root.querySelectorAll<HTMLElement>('[role="tab"], .mari-editor-action--compact')]
+          [...root.querySelectorAll<HTMLElement>('[role="tab"], .mari-editor-tab, .mari-editor-action--compact')]
             .filter((element) => element.getClientRects().length > 0)
             .map(
               (element) =>
@@ -2154,7 +2157,43 @@ async function main() {
       await page.locator("[data-ltm-availability-workbench]").waitFor();
       const availability = page.locator("[data-ltm-availability-workbench]");
       await availability.getByRole("checkbox", { name: "Conversation" }).check();
-      await availability.getByRole("button", { name: "Save availability" }).click();
+      // Save keeps keyboard focus while the request is held: it and Cancel are aria-disabled instead of
+      // `disabled`, and a second Enter sends no second request.
+      let releaseAvailability = () => {};
+      availabilityGate = new Promise<void>((resolve) => {
+        releaseAvailability = resolve;
+      });
+      const saveAvailability = availability.getByRole("button", { name: /^Save availability$|^Saving/u });
+      const cancelAvailability = availability.getByRole("button", { name: "Cancel", exact: true });
+      const patchesBeforeSave = availabilityPatches.length;
+      await saveAvailability.focus();
+      await page.keyboard.press("Enter");
+      await page.waitForFunction(
+        () =>
+          document
+            .querySelector("[data-ltm-availability-workbench] .mari-editor-action--primary")
+            ?.getAttribute("aria-disabled") === "true",
+      );
+      assert.equal(
+        await saveAvailability.evaluate((el) => el === document.activeElement),
+        true,
+        "Save availability keeps focus while it saves",
+      );
+      assert.equal(await saveAvailability.getAttribute("disabled"), null);
+      assert.equal(await cancelAvailability.getAttribute("aria-disabled"), "true");
+      assert.equal(await cancelAvailability.getAttribute("disabled"), null);
+      await page.keyboard.press("Enter");
+      await cancelAvailability.focus();
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(150);
+      assert.equal(availabilityPatches.length, patchesBeforeSave + 1, "a second Enter sends no second save");
+      assert.equal(
+        await page.locator("[data-ltm-availability-workbench]").count(),
+        1,
+        "a locked Cancel does not close",
+      );
+      availabilityGate = null;
+      releaseAvailability();
       await page.waitForFunction(() => document.querySelector("[data-ltm-availability-workbench]") === null);
       assert.deepEqual(availabilityPatches.at(-1), {
         scope: {},
@@ -2193,6 +2232,11 @@ async function main() {
       assert.equal(await branchPill.count(), 1);
       await branchAvailability.locator("[data-ltm-availability-picker] > summary").click();
       const branchRail = branchAvailability.locator("[data-ltm-availability-tabs]");
+      assert.deepEqual(
+        await shortTouchTargets("[data-ltm-availability-workbench]"),
+        [],
+        "the availability tabs fit 2.75rem",
+      );
       assert.deepEqual(
         await branchRail
           .locator("[data-ltm-availability-tab]")
@@ -2937,6 +2981,17 @@ async function main() {
         [],
         "Sources tabs and actions fit 2.75rem",
       );
+      // #1714: the destination tabs sit under the same Engine min-height rule as the Sources and Settings tabs.
+      assert.equal(
+        await page.locator('[data-ltm-navigation="desktop"] .mari-editor-tab:visible').count(),
+        4,
+        "the four destination tabs are on screen",
+      );
+      assert.deepEqual(
+        await shortTouchTargets('[data-ltm-navigation="desktop"]'),
+        [],
+        "the destination tabs fit 2.75rem",
+      );
       assert.equal(
         scopeTargetQueries.slice(scopeTargetQueryCount).includes("?includeAllChats=true&chatId=desktop-chat"),
         true,
@@ -3028,6 +3083,15 @@ async function main() {
       await narrowAdd.waitFor();
       assert.equal(await touchTargetSize(narrowAdd), "fits", "a 24rem panel keeps the add control at 2.75rem");
       assert.equal(await page.locator("[data-ltm-add-label]").isVisible(), false, "a 24rem panel shows the icon only");
+      // #1714: the header icon and content padding follow the panel too, not the window.
+      assert.deepEqual(
+        await page.evaluate(() => ({
+          icon: getComputedStyle(document.querySelector("[data-ltm-detail-icon]")!).width,
+          padding: getComputedStyle(document.querySelector("[data-ltm-detail-content]")!).paddingLeft,
+        })),
+        { icon: "14px", padding: "16px" },
+        "a 24rem panel uses the compact header icon and padding",
+      );
       await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="settings"]').click();
       assert.equal(
         await page
@@ -3704,11 +3768,21 @@ async function main() {
         );
         const download = await downloadPromise;
         assert.match(download.suggestedFilename(), /^ltm-debug-log-\d{4}/u);
-        await activity.getByText("Full Activity log exported.").waitFor();
+        await activity.locator("[data-ltm-status]", { hasText: "Full Activity log exported." }).waitFor();
+        // The same text is also in a region that stays mounted, which is what a screen reader announces.
+        assert.equal(
+          await activity.locator('p[role="status"].sr-only', { hasText: "Full Activity log exported." }).count(),
+          1,
+        );
+        assert.equal(
+          await activity.locator('[data-ltm-status][role="status"]').count(),
+          0,
+          "the visible copy is not live",
+        );
         // D07: a failed export surfaces the server's JSON error text.
         debugExportError = true;
         await exportButton.click();
-        await activity.getByText("Export fixture failed.").waitFor();
+        await activity.locator("[data-ltm-status]", { hasText: "Export fixture failed." }).waitFor();
         debugExportError = false;
         // D32: Clear confirms its all-chat scope and permanent, memory-safe behavior;
         // cancelling makes no DELETE request.
@@ -3750,7 +3824,7 @@ async function main() {
           (window as unknown as { __ltmConfirmResult?: boolean }).__ltmConfirmResult = true;
         });
         await clearButton.click();
-        await activity.getByText("Activity log cleared.").waitFor();
+        await activity.locator("[data-ltm-status]", { hasText: "Activity log cleared." }).waitFor();
         assert.equal(debugClearDeletes, clearDeletesBefore + 1);
         // D06: focus returns to the initiating control after the host confirmation.
         await activityPage.waitForFunction(() =>
@@ -4348,7 +4422,12 @@ async function main() {
         await resetPage.waitForTimeout(300);
         // #1452: the cleared forms wait for the refetch instead of refilling from the cached settings.
         await resetPage.getByText("Loading memory settings.").waitFor();
-        assert.equal(await resetButton.isDisabled(), true, "Reset stays disabled until the settings refetch resolves");
+        assert.equal(
+          await resetButton.getAttribute("aria-disabled"),
+          "true",
+          "Reset stays locked until the settings refetch resolves",
+        );
+        assert.equal(await resetButton.getAttribute("disabled"), null, "a locked Reset keeps keyboard focus");
         settingsGate = null;
         releaseSettings();
         await maintenancePanel
@@ -4357,7 +4436,11 @@ async function main() {
             hasText: "Memory settings reset to defaults, but the recall index rebuild failed: Fixture rebuild failed.",
           })
           .waitFor({ timeout: 5000 });
-        assert.equal(await resetButton.isDisabled(), false, "Reset is available again once the refetch resolves");
+        assert.equal(
+          await resetButton.getAttribute("aria-disabled"),
+          null,
+          "Reset is available again once the refetch resolves",
+        );
         assert.equal(settingsReads, 1, "Reset reads the settings once");
         // #1588: each result shows under the controls that produced it, not at the top of the panel.
         // #1659: Maintenance has Backup, Repair and Delete or reset groups; a result shows in its own group.
@@ -4384,6 +4467,52 @@ async function main() {
           0,
           "a new run replaces the previous result",
         );
+        // A running action keeps keyboard focus: while the repair request is held, Run selected maintenance and
+        // Export backup stay focused or focusable, are aria-disabled instead of `disabled`, and a second Enter
+        // sends no second request.
+        let repairRequests = 0;
+        let releaseRepair = () => {};
+        const repairHeld = new Promise<void>((resolve) => {
+          releaseRepair = resolve;
+        });
+        await resetPage.unroute("**/api/long-term-memory/repair");
+        await resetPage.route("**/api/long-term-memory/repair", async (route) => {
+          repairRequests += 1;
+          await repairHeld;
+          await route.fulfill({ json: { actions: [{ action: "rebuild_indexes", result: "completed", count: 5 }] } });
+        });
+        let exportRequests = 0;
+        await resetPage.route("**/api/long-term-memory/backup/export", (route) => {
+          exportRequests += 1;
+          return route.fulfill({ json: {} });
+        });
+        await maintenancePanel.getByRole("checkbox", { name: "Reindex recall data", exact: true }).check();
+        const runMaintenance = maintenancePanel.getByRole("button", { name: "Run selected maintenance" });
+        const exportBackupButton = maintenancePanel.getByRole("button", { name: "Export backup" });
+        await runMaintenance.focus();
+        await resetPage.keyboard.press("Enter");
+        await resetPage.waitForFunction(
+          (button) => button?.getAttribute("aria-disabled") === "true",
+          await runMaintenance.elementHandle(),
+        );
+        const isFocused = (button: typeof runMaintenance) => button.evaluate((el) => el === document.activeElement);
+        assert.equal(await isFocused(runMaintenance), true, "Run selected maintenance keeps focus while it runs");
+        assert.equal(await runMaintenance.getAttribute("disabled"), null);
+        assert.equal(await exportBackupButton.getAttribute("aria-disabled"), "true");
+        assert.equal(await exportBackupButton.getAttribute("disabled"), null);
+        await resetPage.keyboard.press("Enter");
+        await exportBackupButton.focus();
+        await resetPage.keyboard.press("Enter");
+        await resetPage.waitForTimeout(150);
+        assert.equal(repairRequests, 1, "a second Enter sends no second request");
+        assert.equal(exportRequests, 0, "a locked Export backup sends no request");
+        assert.equal(await isFocused(exportBackupButton), true, "a locked Export backup is focusable");
+        releaseRepair();
+        await maintenancePanel
+          .locator("[data-ltm-status]")
+          .filter({ hasText: /\(5\)$/u })
+          .waitFor();
+        assert.equal(await exportBackupButton.getAttribute("aria-disabled"), null);
         await resetPage.locator("#settings-tab-recall").click();
         assert.equal(
           await maxChunks.inputValue(),
@@ -4957,13 +5086,14 @@ async function main() {
           await loadRetry.click();
         }
         await maintenancePanel
-          .getByText(
-            failure === "reset"
-              ? "Memory settings reset to defaults."
-              : failure === "import"
-                ? "Memory backup imported, but settings could not be refreshed."
-                : "Memory backup imported.",
-          )
+          .locator("[data-ltm-status]", {
+            hasText:
+              failure === "reset"
+                ? "Memory settings reset to defaults."
+                : failure === "import"
+                  ? "Memory backup imported, but settings could not be refreshed."
+                  : "Memory backup imported.",
+          })
           .waitFor({ timeout: 5000 });
         if (failure === "import-integrity") {
           // The failed integrity read shows only its error, not the report cached before the import.
@@ -5147,7 +5277,9 @@ async function main() {
           settingsGate = null;
           releaseSettings();
           await maintenancePanel
-            .getByText(action === "reset" ? "Memory settings reset to defaults." : "Memory backup imported.")
+            .locator("[data-ltm-status]", {
+              hasText: action === "reset" ? "Memory settings reset to defaults." : "Memory backup imported.",
+            })
             .waitFor({ timeout: 5000 });
           await focusPage
             .waitForFunction(() => document.activeElement !== document.body, undefined, { timeout: 2000 })
@@ -5195,7 +5327,30 @@ async function main() {
           () => document.activeElement?.textContent?.trim() === "Create new memory detail",
         );
         await createDetail.click();
-        await detailPage.locator("[data-ltm-details]").getByLabel("New detail name").fill("habits");
+        const detailName = detailPage.locator("[data-ltm-details]").getByLabel("New detail name");
+        // A refused name is explained on the field, which keeps focus and links the reason.
+        await detailName.fill("日本語");
+        await detailPage.getByRole("button", { name: "Create detail", exact: true }).click();
+        await detailPage.locator("#ltm-new-section-error").waitFor();
+        assert.match(await detailPage.locator("#ltm-new-section-error").innerText(), /letter A-Z or a number/u);
+        await detailPage.waitForFunction(
+          () => document.activeElement?.getAttribute("aria-label") === "New detail name",
+        );
+        assert.match((await detailName.getAttribute("aria-describedby")) ?? "", /ltm-new-section-error/u);
+        await detailName.fill("Facts");
+        assert.equal(await detailPage.locator("#ltm-new-section-error").count(), 0, "typing clears the reason");
+        const existingKey = await detailPage
+          .locator("[data-ltm-details] textarea[data-ltm-field='section']")
+          .first()
+          .getAttribute("id");
+        await detailName.fill(existingKey?.replace("ltm-section-", "") ?? "facts");
+        await detailPage.getByRole("button", { name: "Create detail", exact: true }).click();
+        await detailPage.locator("#ltm-new-section-error").waitFor();
+        assert.match(await detailPage.locator("#ltm-new-section-error").innerText(), /already exists/u);
+        await detailPage.waitForFunction(
+          () => document.activeElement?.getAttribute("aria-label") === "New detail name",
+        );
+        await detailName.fill("habits");
         await detailPage.getByRole("button", { name: "Create detail", exact: true }).click();
         await detailPage.waitForFunction(() => document.activeElement?.id === "ltm-section-habits");
         await detailPage.close();
@@ -5315,18 +5470,20 @@ async function main() {
       assert.ok(compactRetryBox && compactRetryBox.height >= 24, "compact Retry keeps a 24px target");
       await compactRetry.click();
       // D27 repair: a cached-data retry still shows the title without a loading flash,
-      // but the Retry control stays disabled while that refetch is in flight.
+      // but the Retry control stays aria-disabled (and focusable) while that refetch is in flight.
       await page.waitForFunction(() => {
         const button = [...document.querySelectorAll("button")].find((candidate) =>
           /retry/i.test(candidate.textContent ?? ""),
         );
-        return button instanceof HTMLButtonElement && button.disabled;
+        return (
+          button instanceof HTMLButtonElement && button.getAttribute("aria-disabled") === "true" && !button.disabled
+        );
       });
       await page.waitForFunction(() => {
         const button = [...document.querySelectorAll("button")].find((candidate) =>
           /retry/i.test(candidate.textContent ?? ""),
         );
-        return button instanceof HTMLButtonElement && !button.disabled;
+        return button instanceof HTMLButtonElement && !button.hasAttribute("aria-disabled");
       });
       assert.equal(lastInjectionRequests, 3);
       assert.equal(await lastInjection.getByText("Retained memory").count(), 0);
@@ -5408,6 +5565,20 @@ async function main() {
       const restoredGuide = page.locator('[data-ltm-surface="onboarding"]');
       await restoredGuide.waitFor();
       assert.equal(await restoredGuide.getByText("Step 4 of 7 · Import").count(), 1);
+      // #1714: the sprite follows the guide's container, so a narrow panel on a wide window shows the phone sprite.
+      const shownSprite = () =>
+        page.evaluate(() =>
+          [...document.querySelectorAll<HTMLImageElement>("[data-ltm-onboarding-sprite]")]
+            .filter((image) => image.getClientRects().length > 0)
+            .map((image) => image.getAttribute("data-ltm-onboarding-sprite")),
+        );
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await dockDetailPanel(page, "24rem");
+      assert.deepEqual(await shownSprite(), ["basic/pose-point-down.webp"], "a 24rem panel shows the phone sprite");
+      await dockDetailPanel(page, null);
+      assert.deepEqual(await shownSprite(), ["basic/pose-point-middle.webp"], "a wide panel shows the wide sprite");
+      await page.setViewportSize({ width: 390, height: 844 });
+      assert.deepEqual(await shownSprite(), ["basic/pose-point-down.webp"], "a phone window shows the phone sprite");
       await restoredGuide.getByRole("button", { name: "Not now" }).click();
       await restoredGuide.waitFor({ state: "detached" });
       // #1611: Not now keeps the saved step for the next visit.
@@ -6513,15 +6684,47 @@ async function main() {
       await identitySelects.nth(0).press("Enter");
       assert.equal(await identitySelects.nth(0).inputValue(), "character:character-a");
       await identitySelects.nth(1).selectOption("different");
+      // Unsaved identity decisions lock the source list without dropping keyboard focus: the button is
+      // aria-disabled (not `disabled`), names its reason, and a click leaves the selection where it was.
+      const lockedSource = page.locator('[data-ltm-review-source-select="source_mobile_single"]');
       assert.equal(
-        await page.locator('[data-ltm-review-source-select="source_mobile_single"]').isDisabled(),
-        true,
+        await lockedSource.getAttribute("aria-disabled"),
+        "true",
         "changing source cannot silently discard unsaved identity decisions",
+      );
+      assert.equal(await lockedSource.getAttribute("disabled"), null, "a locked source stays focusable");
+      await lockedSource.focus();
+      assert.equal(await lockedSource.evaluate((el) => el === document.activeElement), true);
+      const lockReasonId = await lockedSource.getAttribute("aria-describedby");
+      assert.ok(lockReasonId, "a locked source names its reason");
+      assert.equal(
+        (await page.locator(`[id="${lockReasonId}"]`).textContent())?.trim(),
+        "Save or discard identity edits first.",
+      );
+      const activeSourceBefore = await page
+        .locator('[data-ltm-review-source-select][aria-current="true"]')
+        .getAttribute("data-ltm-review-source-select");
+      const expandedBefore = await lockedSource.getAttribute("aria-expanded");
+      await page.keyboard.press("Enter");
+      assert.equal(
+        await lockedSource.getAttribute("aria-expanded"),
+        expandedBefore,
+        "a locked source does not collapse or expand",
+      );
+      assert.equal(
+        await page
+          .locator('[data-ltm-review-source-select][aria-current="true"]')
+          .getAttribute("data-ltm-review-source-select"),
+        activeSourceBefore,
+        "a locked source does not change the selection",
       );
       await identityReview.getByRole("button", { name: "Discard identity choices" }).click();
       assert.equal(await identitySelects.nth(0).inputValue(), "");
       assert.equal(await identitySelects.nth(1).inputValue(), "");
-      assert.equal(await page.locator('[data-ltm-review-source-select="source_mobile_single"]').isEnabled(), true);
+      assert.equal(
+        await page.locator('[data-ltm-review-source-select="source_mobile_single"]').getAttribute("aria-disabled"),
+        null,
+      );
       await identitySelects.nth(0).selectOption("character:character-a");
       await identitySelects.nth(1).selectOption("different");
       const saveIdentityChoices = identityReview.getByRole("button", { name: "Save choices and review memory" });
@@ -8195,8 +8398,11 @@ async function main() {
       const transferPreviewButton = sourceOperationWorkbench.locator('[data-ltm-source-operation-action="preview"]');
       await transferPreviewButton.click();
       await page.waitForFunction(
-        () => document.querySelector('[data-ltm-source-operation-action="preview"]')?.hasAttribute("disabled") ?? false,
+        () =>
+          document.querySelector('[data-ltm-source-operation-action="preview"]')?.getAttribute("aria-disabled") ===
+          "true",
       );
+      assert.equal(await transferPreviewButton.getAttribute("disabled"), null, "a running preview stays focusable");
       await sourceOperationWorkbench.locator("[data-ltm-source-operation-close]").click();
       await sourceOperationWorkbench.waitFor({ state: "detached" });
       releaseTransferPreview();
@@ -8214,7 +8420,12 @@ async function main() {
           document.querySelector('[data-ltm-surface="sources"]')?.getAttribute("data-ltm-extraction-status") ===
           "pending",
       );
-      assert.equal(await desktopReextract.isDisabled(), true);
+      // The run holds the lock: the inspector's Re-extract is aria-disabled (never `disabled`) and says why.
+      assert.equal(await desktopReextract.getAttribute("aria-disabled"), "true");
+      assert.equal(await desktopReextract.getAttribute("disabled"), null);
+      const reextractLockId = await desktopReextract.getAttribute("aria-describedby");
+      assert.ok(reextractLockId, "a locked Re-extract points at the lock text");
+      assert.equal(await page.locator(`[id="${reextractLockId}"]`).innerText(), "Locked while a re-extract runs");
       await page.locator("[data-ltm-source-task-progress]").waitFor();
       // #1673: while a run holds the lock, Import stays focusable (aria-disabled, never `disabled`), points at the
       // visible lock text, and a press or click sends nothing.
@@ -8225,7 +8436,8 @@ async function main() {
       assert.equal(await lockedImport.evaluate((button) => button.hasAttribute("disabled")), false);
       const lockedImportReasonId = await lockedImport.getAttribute("aria-describedby");
       assert.ok(lockedImportReasonId, "a locked Import points at the lock text");
-      assert.equal(await page.locator(`[id="${lockedImportReasonId}"]`).innerText(), "Locked while an import runs");
+      // The held run is a re-extract, so the shared reason says so.
+      assert.equal(await page.locator(`[id="${lockedImportReasonId}"]`).innerText(), "Locked while a re-extract runs");
       await lockedImport.focus();
       assert.equal(await lockedImport.evaluate((button) => button === document.activeElement), true);
       const lockedImportWrites: string[] = [];
@@ -8239,6 +8451,19 @@ async function main() {
       page.off("request", recordWrite);
       assert.deepEqual(lockedImportWrites, []);
       await page.locator('[data-ltm-source-tab="chats"]').click();
+      // Re-extract waits on the same run: focusable, described by the reason, and silent on Enter. (The workbench
+      // swaps Re-import and the row actions for the progress panel while a run is active, so the static guard
+      // covers those.)
+      await desktopReextract.focus();
+      assert.equal(await desktopReextract.evaluate((button) => button === document.activeElement), true);
+      const reextractRequestsBefore = reextractionRequests.length;
+      lockedImportWrites.length = 0;
+      page.on("request", recordWrite);
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(150);
+      page.off("request", recordWrite);
+      assert.deepEqual(lockedImportWrites, []);
+      assert.equal(reextractionRequests.length, reextractRequestsBefore, "a locked Re-extract sends no second request");
       const desktopSourcesNavigation = page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]');
       assert.match(await desktopSourcesNavigation.innerText(), /Re-extracting\.\.\./u);
       assert.match(await page.locator("[data-ltm-source-task-progress]").innerText(), /Re-extracting 1/u);
