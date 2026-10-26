@@ -1812,3 +1812,169 @@ test("only stamped snapshots step up: an unstamped fight replays under the old r
   assert.ok(client.includes("forgeFormationBattle({allies:t,enemies:e,seed:a,rules:formationRules||[]})"));
   assert.ok(client.includes("formationRevision = FORGE_FORMATION_RULES"));
 });
+
+const trace = (step) =>
+  step.events
+    .filter((event) => ["act", "row", "passive", "hit", "death"].includes(event.op))
+    .map((event) => `${event.op}:${event.id}${event.op === "row" ? `->${event.position}` : ""}`)
+    .join(" ");
+
+test("a shuffle keeps a support's step-up seat when an enter trigger kills mid-shuffle, and never seats the dead", () => {
+  const stats = (overrides = {}) => ({ hp: 100, atk: 10, def: 50, spd: 50, crit: 0, ...overrides });
+  const buffs = (overrides = {}) =>
+    kit({
+      preferredRow: "back",
+      standard: ability({ effect: "buff", target: "self", stat: "atk", power: 20 }),
+      ultimate: ability({ effect: "buff", target: "self", stat: "atk", power: 30, cost: 4, elementCost: 2 }),
+      ...overrides,
+    });
+  const strike = (trigger, row) => ({ ...kit().passive, effect: "damage", target: "enemy", power: 160, trigger, row });
+  const snapshot = {
+    seed: 251,
+    rules: [{ kind: "defeat_order", description: "W, then E, then K", order: [2, 0, 1] }],
+    allies: [
+      unit("a0", { stats: stats({ atk: 1000 }), formationKit: buffs({ passive: strike("enter_back", "back") }) }),
+      back("a1", { stats: stats(), formationKit: kit({ preferredRow: "back" }) }),
+      back("a2", { stats: stats({ hp: 1 }) }),
+    ],
+    enemies: [
+      unit("E", {
+        stats: stats(),
+        formationKit: buffs({
+          standard: ability({ effect: "shuffle", target: "all_enemies", cost: 2 }),
+          ultimate: ability({ effect: "heal", target: "allies", power: 30, cost: 4, elementCost: 2 }),
+        }),
+      }),
+      unit("K", { stats: stats({ atk: 3000 }), formationKit: buffs({ passive: strike("ally_death", "front") }) }),
+      unit("W", { stats: stats({ hp: 1 }), formationKit: buffs() }),
+      back("B", { stats: stats(), formationKit: buffs() }),
+      back("B2", { stats: stats(), formationKit: buffs() }),
+    ],
+  };
+  const shuffled = (battle) =>
+    battle.steps.find((step) => step.events.some((event) => event.id === "E" && event.op === "act"));
+  const now = drive({ ...snapshot, formationRevision: FORGE_FORMATION_RULES });
+  assert.equal(
+    trace(shuffled(now)),
+    "act:E row:a2->front row:a0->back passive:a0 hit:W death:W passive:K hit:a2 death:a2 row:a1->front row:B->front",
+    "a1 steps up for a2 and keeps the seat; a2 stays dead",
+  );
+  assert.ok(now.steps.indexOf(shuffled(now)) < now.steps.length - 2, "the fight goes on after the shuffle");
+  // Revision 2 keeps the 1.24.4 shuffle, which seated the fallen a2 and lost on the spot.
+  const old = drive({ ...snapshot, formationRevision: 2 });
+  assert.equal(
+    trace(shuffled(old)),
+    "act:E row:a2->front row:a0->back passive:a0 hit:W death:W passive:K hit:a2 death:a2 row:a2->front",
+  );
+  assert.equal(old.steps.indexOf(shuffled(old)), old.steps.length - 2);
+  assert.equal(old.result, "lose");
+});
+
+test("an ally heir whose element cannot pass the enemy barrier steps up after one that can", () => {
+  const barred = drive(
+    {
+      allies: [
+        unit("lead", { stats: weak }),
+        support("blocked", "damage", { affinity: "Water" }),
+        support("crosser", "damage", { affinity: "Fire" }),
+      ],
+      enemies: [unit("foe", { stats: { ...strong, atk: 2000 } })],
+      rules: [{ kind: "element_barrier", description: "only fire passes", elements: ["fire"] }],
+    },
+    () => hold(),
+  );
+  assert.deepEqual(rowsOf(deathStep(barred, "lead")), ["crosser"]);
+  assert.deepEqual(rowsOf(deathStep(barred, "crosser")), ["blocked"], "then whoever is left");
+});
+
+test("fuzz: from rules 3 no side is beaten before the round cap while it has a non-token unit standing", () => {
+  const roster = (seed) => {
+    let state = seed >>> 0 || 1;
+    const random = () => (state = (Math.imul(state, 1664525) + 1013904223) >>> 0) / 4294967296;
+    const pick = (list) => list[Math.floor(random() * list.length)];
+    const skill = (effects, cost) => ({
+      ...ability({ effect: pick(effects), cost, elementCost: 1, stat: "atk" }),
+      target: pick(["enemy", "all_enemies", "self", "allies", "ally"]),
+      power: 40 + Math.floor(random() * 200),
+    });
+    const member = (id, position) => ({
+      ...unit(id, { position, affinity: pick(["fire", "water", "earth", "wind", "light", "dark"]) }),
+      stats: { hp: 1 + random() * 60, atk: 50 + random() * 600, def: 30 + random() * 60, spd: 50, crit: 10 },
+      formationKit: normalizeForgeFormationKit(
+        {
+          preferredRow: pick(["front", "back", "hybrid"]),
+          standard: skill(["shuffle", "shuffle", "damage", "heal", "buff"], Math.floor(random() * 2)),
+          ultimate: skill(
+            ["shuffle", "aoe_damage", "revive", "summon", "swap", "damage"],
+            2 + Math.floor(random() * 3),
+          ),
+          passive: {
+            ...skill(["damage", "aoe_damage", "damage", "summon", "revive"], 0),
+            trigger: pick(["enter_front", "enter_back", "ally_death", "on_death", "enter_back"]),
+            row: pick(["front", "back", "both"]),
+          },
+          traits: [],
+        },
+        { rarity: 4 },
+      ),
+    });
+    const side = (prefix, size) => {
+      const front = Math.min(3, size, Math.max(size - 3, 1 + Math.floor(random() * 3)));
+      return Array.from({ length: size }, (_, index) => member(`${prefix}${index}`, index < front ? "front" : "back"));
+    };
+    const allies = side("A", 2 + Math.floor(random() * 5)),
+      enemies = side("E", 2 + Math.floor(random() * 5)),
+      rules = [];
+    if (random() < 0.4)
+      rules.push({ kind: "defeat_order", description: "order", order: [Math.floor(random() * enemies.length), 0] });
+    if (random() < 0.3)
+      rules.push({
+        kind: "element_barrier",
+        description: "barrier",
+        elements: [pick(["fire", "water", "earth"]), pick(["wind", "light", "dark"])],
+      });
+    return { allies, enemies, rules, seed, formationRevision: FORGE_FORMATION_RULES, random };
+  };
+  let fights = 0;
+  for (let seed = 1; seed <= 600; seed += 1)
+    for (const planned of [false, true]) {
+      const { random, ...snapshot } = roster(seed);
+      const battle = forgeFormationBattle(snapshot);
+      let next = battle.next();
+      while (!next.done) {
+        const formation = next.value.options.formation;
+        // Auto, or a random plan that also moves rows, so swaps and retreats run into deaths mid-move.
+        const entries = formation.fighters.map((fighter) => {
+          const roll = random();
+          const option = fighter.moves[Math.floor(random() * fighter.moves.length)];
+          if (roll < 0.35 && option)
+            return { actorId: fighter.id, action: "row", moveId: option.moveId, swapId: option.swapId || undefined };
+          const foe = formation.foes[Math.floor(random() * formation.foes.length)];
+          return {
+            actorId: fighter.id,
+            action: roll < 0.7 ? "normal" : roll < 0.85 ? "ultimate" : "hold",
+            targetId: foe?.id,
+          };
+        });
+        next = battle.next(planned ? plan(...entries) : { v: FORGE_FORMATION_ENGINE, action: "auto" });
+      }
+      const fight = next.value;
+      const standing = new Set([...snapshot.allies, ...snapshot.enemies].map((entry) => entry.id));
+      for (const event of events(fight)) {
+        if (event.op === "death") standing.delete(event.id);
+        if (event.op === "revive") standing.add(event.id);
+      }
+      // Each side's turn opens with one 450 ms bank step; 80 of them means the fight ran into the round-40 cap.
+      const turns = fight.steps.filter(
+        (step) => step.d === 450 && step.events.some((event) => event.op === "formation-bank"),
+      ).length;
+      if (turns >= 80) continue;
+      fights += 1;
+      const beaten = fight.result === "win" ? "E" : "A";
+      assert.ok(
+        ![...standing].some((id) => id.startsWith(beaten)),
+        `seed ${seed}${planned ? " (planned)" : ""}: ${fight.result} with ${[...standing].join(",")} standing`,
+      );
+    }
+  assert.ok(fights > 1000, `most fights end before the cap (${fights})`);
+});

@@ -8102,9 +8102,13 @@ function* forgeFormationBattle({
     if (source?.alive) trigger(source, "on_kill", events);
     triggerAllies(actor.side, "ally_death", actor, events, source?.id);
     // A support takes the seat a fallen fighter leaves, unless a death trigger already refilled it: the next in a
-    // defeat order first, then one that can deal damage or wants the Front Row, then seat order. It acts next turn.
+    // defeat order first, then for allies one whose element passes an enemy barrier, then one that can deal damage or
+    // wants the Front Row, then seat order. It acts next turn.
     const side = actor.side;
     if (formationRevision < 3 || fighters(side).length >= seated || !seatFree(side, "front")) return;
+    stepUp(side, events);
+  };
+  const stepUp = (side, events) => {
     const [heir] = supports(side).sort((a, b) => rank(a) - rank(b));
     if (!heir) return;
     if (fronts(side).length >= 3) dismissToken(side, events);
@@ -8115,12 +8119,13 @@ function* forgeFormationBattle({
   const rank = (unit) =>
     pinned.has(unit.id)
       ? ordered.indexOf(team(unit.side).indexOf(unit)) - ordered.length
-      : ["front", "hybrid"].includes(unit.kit?.preferredRow) ||
-          [unit.kit?.standard, unit.kit?.ultimate].some(
-            (skill) => forgeFormationStrikes.has(skill?.effect) || skill?.effect === "dot",
-          )
-        ? 0
-        : 1;
+      : (unit.side === "ally" && barrier && !barrier.elements.includes(unit.aff) ? 2 : 0) +
+        (["front", "hybrid"].includes(unit.kit?.preferredRow) ||
+        [unit.kit?.standard, unit.kit?.ultimate].some(
+          (skill) => forgeFormationStrikes.has(skill?.effect) || skill?.effect === "dot",
+        )
+          ? 0
+          : 1);
   const dismissToken = (side, events) => {
     const echo = fronts(side).find((actor) => actor.token);
     if (!echo) return;
@@ -8275,6 +8280,19 @@ function* forgeFormationBattle({
       Math.min(3, Math.max(1, live(side).filter((actor) => actor.position === "front").length)) -
         fixed.filter((actor) => actor.position === "front").length,
     );
+    if (formationRevision >= 3) {
+      // Every seat is taken before any enter trigger fires: a trigger can kill, and the support that steps up must
+      // keep its seat. A unit that has died or been moved since its seat was taken enters nothing.
+      const rows = new Map(loose.map((actor, index) => [actor, index < seats ? "front" : "back"]));
+      const moved = loose.filter((actor) => actor.position !== rows.get(actor));
+      for (const actor of moved) {
+        actor.position = rows.get(actor);
+        if (actor.position === "front") actor.entered = turn;
+      }
+      for (const actor of moved) if (actor.alive && actor.position === rows.get(actor)) enterRow(actor, events);
+      if (!fighters(side).length) stepUp(side, events);
+      return;
+    }
     loose.forEach((actor, index) => {
       const row = index < seats ? "front" : "back";
       if (actor.position === row) return;
@@ -8447,8 +8465,16 @@ function* forgeFormationBattle({
     const mover = byId(legal.moveId),
       partner = legal.swapId ? byId(legal.swapId) : null;
     if (mover.position === "back" && fronts(actor.side).length >= 3) dismissToken(actor.side, events);
-    for (const unit of [mover, partner].filter(Boolean)) {
-      unit.position = unit.position === "front" ? "back" : "front";
+    // From rules 3 each unit's row is fixed up front: the mover's enter trigger can kill, and a support that steps up
+    // meanwhile (the partner included) keeps its seat. A unit that died or already arrived is skipped.
+    const rows = new Map(
+      [mover, partner].filter(Boolean).map((unit) => [unit, unit.position === "front" ? "back" : "front"]),
+    );
+    for (const unit of rows.keys()) {
+      const row = formationRevision < 3 ? (unit.position === "front" ? "back" : "front") : rows.get(unit);
+      if (formationRevision >= 3 && (!unit.alive || unit.position === row)) continue;
+      if (formationRevision >= 3 && row === "front" && fronts(actor.side).length >= 3) dismissToken(actor.side, events);
+      unit.position = row;
       if (unit.position === "front") {
         unit.entered = turn;
         unit.advanced = turn;
@@ -8466,6 +8492,7 @@ function* forgeFormationBattle({
         unit.lastCast = null;
       }
     }
+    if (formationRevision >= 3 && !fighters(actor.side).length) stepUp(actor.side, events);
     return true;
   };
   const useful = (actor, skill, targetId = null) => {
