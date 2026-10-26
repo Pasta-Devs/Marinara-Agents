@@ -43,6 +43,8 @@ for (const theme of ["dark", "light"]) {
       freshMainPlan,
     } = await nativeImport(pathToFileURL(resolve(__dirname, "fixtures/gacha-forge-chapter-runtime.mjs")).href);
     const f = await createChapterRuntime();
+    // This successful-generation fixture leaves room for the required 8192-token output window.
+    f.transport.maxContext = 262144;
     try {
       for (const [id] of f.docs)
         if (id.startsWith(`${runId}:chapter:2`) || id.startsWith(`${runId}:beat:2:`)) f.docs.delete(id);
@@ -316,6 +318,43 @@ for (const theme of ["dark", "light"]) {
           null,
           2,
         ),
+        contentType: "application/json",
+      });
+      // UI frame probe only: inject a controlled failure after every real event assertion.
+      // The SDK capacity boundary is covered separately; this must generate no new provider request.
+      const providerCalls = f.calls.length;
+      await forge.evaluate((node) => {
+        const game = node as any;
+        game._clearBeat();
+        game._hudView = "chapter";
+        game._plan = null;
+        game._planState = "error";
+        game._planEscaped = false;
+        game._storyUnwritten = false;
+        game._forgeFailure = {
+          error: "generation-output-capacity",
+          detail: JSON.stringify({
+            minimumOutputTokens: 8192,
+            availableContextTokens: 7343,
+            configuredMaxOutputTokens: 4096,
+          }),
+        };
+        game._renderKey = null;
+        game._renderBrowser();
+      });
+      await expect(forge.locator(".forge-status")).toHaveText("Generation needs more output space.");
+      const capacity = forge.locator(".forge-error");
+      await expect(capacity).toBeVisible();
+      for (const expected of ["This generation", "8192", "7343", "4096", "context size", "Max Output Tokens Override"])
+        await expect(capacity).toContainText(expected);
+      await expect(capacity).not.toContainText(/couldn't be read|availableContextTokens|configuredMaxOutputTokens/i);
+      await expect(forge.locator(".forge-why")).toBeHidden();
+      await expect(forge.locator(".forge-why")).toHaveText("");
+      await expect(forge.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`generation-capacity-frame-${theme}.png`) });
+      expect(f.calls.length).toBe(providerCalls);
+      await testInfo.attach("generation-capacity-ui-frame-proof", {
+        body: JSON.stringify({ scope: "Controlled installed UI frame only", newSdkProviderCalls: 0 }),
         contentType: "application/json",
       });
     } finally {

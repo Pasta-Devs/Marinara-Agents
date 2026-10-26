@@ -5,7 +5,7 @@ import {
   slurpPromptEditableDefaults,
 } from "../../base/prompting/slp-prompt-blocks.js";
 import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
-import { normalizeSlurpSettings, slurpSettingsSchema } from "../../modules/settings/slp-settings.js";
+import { normalizeSlurpSettings, slurpSettingsPatchSchema } from "../../modules/settings/slp-settings.js";
 import {
   countSlurpActiveCreators,
   getSlurpModelBudgetLedger,
@@ -143,7 +143,7 @@ export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     postsPerDay: slurpSizedPostsPerDay(await countSlurpActiveCreators(app.db)),
   }));
   app.patch("/settings", async (req, reply) => {
-    const body = slurpSettingsSchema.partial().safeParse(req.body ?? {});
+    const body = slurpSettingsPatchSchema.safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     return noodle.updateSlurpSettings(body.data);
   });

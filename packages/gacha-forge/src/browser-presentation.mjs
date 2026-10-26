@@ -14,16 +14,23 @@ const forgeBrowserLayout = `
 .forge-material { appearance: none; background: none; border: 0; color: inherit; font: inherit; text-align: left; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: .15em; }
 .forge-material:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; }
 .gw-acts { flex-wrap: wrap; }
-.gf-arena .gf-stage .ob-labelrow:has(.ob-help[aria-expanded="true"]) { flex-wrap: wrap; }
-.gf-arena .gf-stage .ob-labelrow:has(.ob-help[aria-expanded="true"]) .ob-tip {
+.gf-arena .gf-stage .ob-labelrow:has(.ob-help[aria-expanded="true"]):has(.ob-tip:not([popover])) { flex-wrap: wrap; }
+.gf-arena .gf-stage .ob-labelrow:has(.ob-help[aria-expanded="true"]) .ob-tip:not([popover]) {
   position: static; flex-basis: 100%; order: 1; opacity: 1; visibility: visible;
   max-height: 40cqh; overflow-y: auto; pointer-events: auto;
   font-size: max(12px, var(--t-xs)); line-height: 1.5;
 }
+.gf-arena .gf-stage .ob-tip[popover] {
+  position: fixed; inset: auto; margin: 0; box-sizing: border-box;
+  width: min(42rem, calc(100dvw - 24px)); max-height: calc(100dvh - 24px);
+  overflow: auto; overscroll-behavior: contain; overflow-wrap: anywhere;
+  font-size: max(12px, var(--t-xs)); line-height: 1.5;
+}
+.gf-arena .gf-stage .ob-tip[popover]:popover-open { opacity: 1; visibility: visible; pointer-events: auto; }
 @media (any-pointer: coarse), (pointer: coarse) {
   .ev-pane.nw .ev-claim { min-height: 44px; }
   /* Touch disclosures follow their click state, rather than Safari's sticky hover. */
-  .gf-arena .gf-stage .ob-labelrow:has(.ob-help[aria-expanded="false"]) .ob-tip { opacity: 0; visibility: hidden; pointer-events: none; }
+  .gf-arena .gf-stage .ob-labelrow:has(.ob-help[aria-expanded="false"]) .ob-tip:not([popover]) { opacity: 0; visibility: hidden; pointer-events: none; }
 }
 /* Portrait artwork leaves the same accent stroke at the foot as at its top. */
 /* Home and chapter sheets are loaded lazily, so keep this ahead of their inset shorthand. */
@@ -40,10 +47,14 @@ const forgeBrowserLayout = `
   font-size: 0.9rem; box-shadow: none; clip-path: none;
 }
 .vn-top:has(.gf-mute-chapter) { padding-right: 88px; }
+/* Matches the fullscreen button beside it. */
 .gf-stage > .gf-mute, .gf-rot > .gf-mute {
   position: absolute; z-index: 9; top: 0.55rem; right: 3rem;
-  width: 1.9rem; height: 1.9rem; background: var(--ink); color: var(--text);
+  width: 1.9rem; height: 1.9rem; background: color-mix(in srgb, var(--ink) 66%, transparent); color: var(--text);
   border: 1px solid var(--steel-dark); clip-path: none;
+}
+.gf-stage > .gf-mute:hover, .gf-rot > .gf-mute:hover {
+  border-color: var(--coral); color: color-mix(in srgb, var(--coral) 78%, #FFFFFF);
 }
 .gf-audio-status {
   position: absolute; z-index: 8; inset: 3.5rem 0.75rem auto auto; max-width: min(36ch, calc(100% - 1.5rem)); padding: 0.5rem 0.75rem;
@@ -65,6 +76,13 @@ const forgeBrowserLayout = `
 }
 .u-fav { display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
 .cp-fav svg, .cp-tabs > .sv-q svg, .u-fav svg { display: block; flex: none; margin: 0; }
+/* Help marks sit on their title's centre line; an icon-only button's baseline is its bottom edge. */
+.gf-arena .gf-guide-q.sv-q {
+  appearance: none; align-self: center; align-items: center; justify-content: center; padding: 0; line-height: 1;
+}
+.gf-arena .gf-guide-q.sv-q svg { display: block; flex: none; margin: 0; }
+/* Letters use the whole screen below the stats bar. */
+.hm-pk.chat { width: 100%; height: 100%; clip-path: none; border-radius: 0; border-width: 2px 0 0; }
 .u-type {
   position: absolute; top: calc(var(--f) * 0.3); right: calc(var(--f) * 0.4); z-index: 1;
   display: grid; place-items: center; width: 1em; height: 1em;
@@ -141,6 +159,133 @@ const forgeFullscreenIcons = {
   exit: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 14h6v6m0-6-7 7M20 10h-6V4m0 6 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 const forgeFullscreenButtons = ".gf-fs, .gf-fs-exit, .gf-fs-bar";
+
+function wireForgeFieldHelp(host) {
+  const root = host._root;
+  const scope = JSON.stringify([host._run?.runId, host._hudView, host._settingsCategory]);
+  if (host._forgeFieldHelp?.scope !== scope) {
+    host._forgeFieldHelp?.close?.();
+    host._forgeFieldHelp = { scope, open: "" };
+  }
+  const state = host._forgeFieldHelp;
+  const isPopoverOpen = (tip) => typeof tip?.showPopover === "function" && tip.matches(":popover-open");
+  const cancel = () => clearTimeout(state.timer);
+  const close = (restoreFocus = false) => {
+    cancel();
+    const { tip, button } = state;
+    state.open = "";
+    state.pinned = false;
+    state.tip = null;
+    button?.setAttribute("aria-expanded", "false");
+    if (isPopoverOpen(tip)) tip.hidePopover();
+    if (restoreFocus && button?.isConnected) {
+      state.suppressFocus = button;
+      button.focus({ preventScroll: true });
+      state.suppressFocus = null;
+    }
+  };
+  state.close = close;
+  state.position = () => {
+    const { tip, button } = state;
+    if (!isPopoverOpen(tip)) return;
+    const viewport = window.visualViewport;
+    const left = viewport?.offsetLeft || 0;
+    const top = viewport?.offsetTop || 0;
+    const width = viewport?.width || window.innerWidth;
+    const height = viewport?.height || window.innerHeight;
+    tip.style.width = `${Math.min(672, Math.max(0, width - 24))}px`;
+    tip.style.maxHeight = `${Math.max(0, Math.min(height - 24, height * 0.7))}px`;
+    const anchor = button.getBoundingClientRect();
+    const box = tip.getBoundingClientRect();
+    const clamp = (value, start, end) => Math.max(start, Math.min(value, Math.max(start, end)));
+    const below = anchor.bottom + 6;
+    const y = below + box.height <= top + height - 12 ? below : anchor.top - box.height - 6;
+    tip.style.left = `${clamp(anchor.left, left + 12, left + width - box.width - 12)}px`;
+    tip.style.top = `${clamp(y, top + 12, top + height - box.height - 12)}px`;
+  };
+  const open = (button, tip, field, pinned) => {
+    cancel();
+    if (state.tip !== tip) close();
+    Object.assign(state, { tip, button, open: field, pinned });
+    button.setAttribute("aria-expanded", "true");
+    if (typeof tip.showPopover === "function" && !isPopoverOpen(tip)) tip.showPopover();
+    state.position();
+  };
+  let restored = false;
+  for (const [index, button] of [...root.querySelectorAll(".ob-help")].entries()) {
+    const row = button.closest(".ob-labelrow");
+    const tip = row?.querySelector(".ob-tip");
+    if (!tip) continue;
+    const field = row.querySelector("label")?.getAttribute("for") || button.getAttribute("aria-label");
+    tip.id ||= `forge-field-help-${index}`;
+    if (typeof tip.showPopover === "function") {
+      tip.setAttribute("popover", "auto");
+      button.setAttribute("popovertarget", tip.id);
+    }
+    tip.tabIndex = 0;
+    button.setAttribute("aria-controls", tip.id);
+    button.setAttribute("aria-describedby", tip.id);
+    button.setAttribute("aria-expanded", String(state.open === field));
+    const leaveFocus = (event) => {
+      if (event.relatedTarget === button || tip.contains(event.relatedTarget)) return;
+      queueMicrotask(() => {
+        const active = root.activeElement;
+        if (state.tip === tip && active !== button && !tip.contains(active)) close();
+      });
+    };
+    const leavePointer = () => {
+      cancel();
+      if (!state.pinned)
+        state.timer = setTimeout(() => {
+          if (root.activeElement !== button && !tip.contains(root.activeElement) && !tip.matches(":hover")) close();
+        }, 120);
+    };
+    button.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (state.tip === tip && state.pinned) close();
+      else open(button, tip, field, true);
+    };
+    button.onfocus = () => {
+      if (state.suppressFocus !== button) open(button, tip, field, state.tip === tip && state.pinned);
+    };
+    button.onblur = tip.onfocusout = leaveFocus;
+    button.onmouseenter = () => {
+      if (!state.pinned && window.matchMedia("(hover: hover) and (pointer: fine)").matches)
+        open(button, tip, field, false);
+    };
+    button.onmouseleave = tip.onmouseleave = leavePointer;
+    tip.onmouseenter = cancel;
+    button.onkeydown = tip.onkeydown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        close(true);
+      } else if (event.key === "ArrowDown" && event.currentTarget === button && state.tip === tip) {
+        event.preventDefault();
+        tip.focus({ preventScroll: true });
+      }
+    };
+    tip.ontoggle = () => {
+      if (state.tip === tip && !isPopoverOpen(tip)) close();
+    };
+    tip.onbeforetoggle = (event) => {
+      // Light dismissal precedes the outside control's click, which may synchronously rebind the view.
+      if (event.newState === "closed" && state.tip === tip) {
+        cancel();
+        state.open = "";
+        state.pinned = false;
+        state.tip = null;
+        button.setAttribute("aria-expanded", "false");
+      }
+    };
+    if (state.open === field) {
+      restored = true;
+      open(button, tip, field, state.pinned);
+    }
+  }
+  if (state.open && !restored) close();
+}
 
 export function bindForgeExpandedEditor(root, popup, targetId, field, rebind) {
   const host = root.host;
@@ -263,33 +408,7 @@ export function wireForgeBrowserFullscreen(host) {
       control?.setActive(!control.active);
     };
   }
-  const helpScope = JSON.stringify([host._run?.runId, host._hudView, host._settingsCategory]);
-  if (host._forgeFieldHelp?.scope !== helpScope) host._forgeFieldHelp = { scope: helpScope, open: "" };
-  const helpState = host._forgeFieldHelp;
-  for (const [index, button] of [...root.querySelectorAll(".ob-help")].entries()) {
-    const row = button.closest(".ob-labelrow");
-    const tip = row?.querySelector(".ob-tip");
-    if (!tip) continue;
-    const field = row.querySelector("label")?.getAttribute("for") || button.getAttribute("aria-label");
-    tip.id ||= `forge-field-help-${index}`;
-    button.setAttribute("aria-controls", tip.id);
-    button.setAttribute("aria-expanded", String(helpState.open === field));
-    button.onclick = (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const open = button.getAttribute("aria-expanded") !== "true";
-      helpState.open = open ? field : "";
-      for (const other of root.querySelectorAll('.ob-help[aria-expanded="true"]'))
-        other.setAttribute("aria-expanded", "false");
-      button.setAttribute("aria-expanded", String(open));
-    };
-    button.onkeydown = (event) => {
-      if (event.key === "Escape") {
-        helpState.open = "";
-        button.setAttribute("aria-expanded", "false");
-      }
-    };
-  }
+  wireForgeFieldHelp(host);
   syncForgeBrowserPresentation(host);
   wireForgeViewportPresentation(host);
 }
@@ -334,6 +453,7 @@ function wireForgeViewportPresentation(host) {
   let frame = 0;
   const update = () => {
     frame = 0;
+    host._forgeFieldHelp?.position?.();
     if (header) view.style.setProperty("--forge-scene-top", `${header.offsetHeight}px`);
     const field = root.activeElement;
     const editing = field?.matches(
@@ -366,11 +486,13 @@ function wireForgeViewportPresentation(host) {
   if (header) resize.observe(header);
   root.addEventListener("focusin", schedule);
   root.addEventListener("focusout", schedule);
+  root.addEventListener("scroll", schedule, true);
   host._stopForgeBrowserPresentation = () => {
     cancelAnimationFrame(frame);
     resize.disconnect();
     root.removeEventListener("focusin", schedule);
     root.removeEventListener("focusout", schedule);
+    root.removeEventListener("scroll", schedule, true);
     host._stopForgeBrowserPresentation = null;
   };
   update();

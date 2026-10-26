@@ -294,6 +294,7 @@ async function animationProof(
     posts: [] as Record<string, any>[],
     compositions: 0,
     generationFailed: false,
+    generationFailure: null as Record<string, unknown> | null,
     playbackFailed: false,
     browserErrors: [] as string[],
   };
@@ -351,7 +352,8 @@ async function animationProof(
   await page.route("**/api/gacha-forge/banner-animation", async (route) => {
     const body = route.request().postDataJSON();
     state.posts.push(body);
-    if (state.generationFailed) return route.fulfill({ json: { ok: false, error: "animation-failed", retry: true } });
+    if (state.generationFailed || state.generationFailure)
+      return route.fulfill({ json: { ok: false, error: "animation-failed", retry: true, ...state.generationFailure } });
     if (!cached.has(body.banner)) state.compositions += 1;
     await route.fulfill({
       json: { ok: true, animation: { key: "b".repeat(64), url, poster: portrait }, cached: cached.has(body.banner) },
@@ -952,6 +954,44 @@ test("Animations source persists and banner video decodes, loops and reuses its 
   expect(state.browserErrors).toEqual([]);
 });
 
+for (const hostTheme of ["dark", "light"] as const) {
+  test(`Banner animation diagnostics give safe recovery hints in ${hostTheme}`, async ({ page }, testInfo) => {
+    const { forge, state } = await animationProof(page, testInfo, { selected: true, hostTheme });
+    const failures = [
+      [{ reason: "source-image" }, "saved source image"],
+      [{ reason: "connection" }, "selected video connection and API key"],
+      [{ reason: "provider", providerStatus: 400 }, "Video generation failed (HTTP 400)"],
+      [{ reason: "invalid-response" }, "request or response could not be read"],
+      [{ reason: "storage" }, "could not save the animation"],
+      [{ reason: "seedance-reference-setup" }, "Upload Seedance reference frames temporarily"],
+      [{ reason: "unknown-private-reason" }, "Banner animation unavailable"],
+    ] as const;
+    for (const [index, [failure, expected]] of failures.entries()) {
+      state.generationFailure = { ...failure, detail: "SECRET https://private.invalid/?api_key=PRIVATE" };
+      if (index === 0) await openAnimatedBanner(forge);
+      else await forge.locator("[data-animation-retry]").click();
+      const status = forge.locator("[data-banner-animation-status]");
+      await expect(status).toContainText(expected);
+      await expect(status).not.toContainText(/SECRET|PRIVATE|private\.invalid|unknown-private-reason/);
+      await expect(forge.locator("video[data-banner-animation]")).toHaveCount(0);
+      await expect(forge.locator('[data-screen="banner"] .art.wide')).toHaveCSS("background-image", /url\(/);
+      await expect(forge.locator("[data-animation-retry]")).toBeEnabled();
+      expect(state.posts).toHaveLength(index + 1);
+      expect(state.posts.at(-1)!.retry === true).toBe(index > 0);
+      await forge.evaluate((node) => {
+        (node as any)._renderBrowser();
+        (node as any)._renderBrowser();
+      });
+      await expect(status).toContainText(expected);
+      expect(state.posts).toHaveLength(index + 1);
+      if (failure.reason === "provider")
+        await page.screenshot({ path: testInfo.outputPath(`banner-diagnostic-${hostTheme}.png`) });
+    }
+    expect(state.compositions).toBe(0);
+    expect(state.browserErrors).toEqual([]);
+  });
+}
+
 test("Reduced motion and a disabled Animations source keep still banners and portraits", async ({ page }, testInfo) => {
   const { forge, saved, state } = await animationProof(page, testInfo, { selected: true, reduce: true });
   await openAnimatedBanner(forge);
@@ -1218,9 +1258,12 @@ test("A deferred response cannot attach a previous same-art banner rotation", as
     game._renderBrowser();
   });
   await expect.poll(() => releases.length).toBe(2);
+  const newClip = page.waitForRequest((request) => request.url().endsWith(`${"c".repeat(64)}.mp4`));
   releases[1]();
   const video = await decodedBannerVideo(forge);
-  await expect(video).toHaveAttribute("src", new RegExp(`${"c".repeat(64)}\\.mp4$`));
+  // The clip plays from an authenticated fetch, so the element holds a blob URL of the new rotation's file.
+  await newClip;
+  await expect(video).toHaveAttribute("src", /^blob:/u);
   expect(state.browserErrors).toEqual([]);
 });
 

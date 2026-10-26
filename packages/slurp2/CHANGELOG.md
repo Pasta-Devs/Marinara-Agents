@@ -1,18 +1,20 @@
 # Slurp release notes
 
-## 0.4.12 — 2026-10-26
+## 0.4.4 — 2026-10-26
 
-- Live shows v3, rebuilt from staging. A code simulation runs every show minute by minute whether
-  anyone watches: fans join and leave, tip from their weekly budget, order from the spice-level menu
-  and push goals. Money, goals and the room are counted by code only.
-- While you watch, one model call writes the next 20 to 50 seconds of the host and the chat as JSON.
-  Your chat message or your arrival cuts in, and the host answers you by name within seconds.
-- Live pictures about once per minute (configurable), drawn from a scene built in code; private
-  shows at the Backstage price and length, extendable, with the room waiting outside.
-- You can host: as your persona's own Creator from your page, or as any Creator from Stir. The
-  model then writes only the room and three ideas for your next move.
-- "X is live" notification for subscribers, a thank-you post after each Creator show, and a
-  Backstage > Live shows page.
+- Live shows, rebuilt: code runs every show minute by minute (fans, tips, menu orders, goals); while you watch, the model writes the host and the chat, and the host answers you by name.
+- Live pictures about once per minute, and private shows at the Backstage price and length.
+- Go live yourself as your persona's Creator, or as any Creator from Stir; the room reacts and suggests your next move.
+- "X is live" notices, a thank-you post after each show, and a Backstage > Live shows page.
+
+## 0.4.3 — 2026-10-26
+
+- Slurp starts again on Engine builds with zod 4. The feed post and Creator generation routes no longer stop at load with "Right-hand side of 'instanceof' is not an object" (zod 4 has no `ZodEffects`); they extend the plain object schemas instead.
+
+## 0.4.2 — 2026-10-26 [highlight]
+
+- Slurp starts again on Engine builds with zod 4. Settings sections with nested defaults are filled in again, so the server no longer stops at load with "Cannot read properties of undefined (reading 'curve')".
+- On zod 4 Engines, saving part of the Slurp settings, a Garnish ad or a creator account no longer resets the fields you did not send to their defaults. Creator access and auto-posting defaults are filled in again too.
 
 ## 0.4.1 — 2026-10-24 [highlight]
 

@@ -36,7 +36,7 @@ import {
   scopeTargetsQueryOptions,
   settingsQueryOptions,
 } from "../api";
-import { Button, IconButton, InfoPopover, inputClass, StatusSurface } from "../shared-controls";
+import { Button, IconButton, InfoPopover, inputClass, lockedActionProps, StatusSurface } from "../shared-controls";
 import type { LongTermMemoryDestinationProps } from "../types";
 import {
   humanizeLabel,
@@ -526,6 +526,8 @@ export default function MemoryVault({
   const [keywordError, setKeywordError] = useState<{ input: string; message: string } | null>(null);
   const visibleKeywordError = keywordError?.input === keywordInput ? keywordError.message : "";
   const [sectionKey, setSectionKey] = useState("");
+  const [sectionError, setSectionError] = useState("");
+  const sectionInputRef = useRef<HTMLInputElement>(null);
   const [addingSection, setAddingSection] = useState(false);
   const addSectionButtonRef = useRef<HTMLButtonElement>(null);
   const [renamingSectionKey, setRenamingSectionKey] = useState<string | null>(null);
@@ -1856,7 +1858,7 @@ export default function MemoryVault({
     }
   }
   async function deleteSection(key: string) {
-    if (!draft || draft.type === "source") return;
+    if (!draft || draft.type === "source" || busy) return;
     const section = draft.sections[key];
     if (!section) return;
     if (!isNew && Object.keys(draft.sections).length === 1) {
@@ -1892,7 +1894,7 @@ export default function MemoryVault({
     remove();
   }
   async function renameSection() {
-    if (!draft || !renamingSectionKey || draft.type === "source") return;
+    if (!draft || !renamingSectionKey || draft.type === "source" || busy) return;
     const fromSectionKey = renamingSectionKey;
     const toSectionKey = normalizeDetailName(renamedSectionKey);
     if (!toSectionKey) {
@@ -2157,7 +2159,7 @@ export default function MemoryVault({
   async function batch(action: "edit" | "archive" | "delete") {
     await runBatchForIds([...checked], action);
   }
-  const busyActionProps = busy ? ({ "aria-disabled": true, className: "opacity-50" } as const) : {};
+  const busyActionProps = lockedActionProps(Boolean(busy));
   const runNoteAction = async (
     event: { preventDefault: () => void; stopPropagation: () => void },
     note: LtmNote,
@@ -2230,7 +2232,7 @@ export default function MemoryVault({
     );
   };
   const beginRename = async (key: string) => {
-    if (!draft || isNew) return;
+    if (!draft || isNew || busy) return;
     if (dirty) {
       const saveFirst = props.confirmAction
         ? await props.confirmAction({
@@ -2253,7 +2255,7 @@ export default function MemoryVault({
     setRenameError("");
   };
   const previewRename = async () => {
-    if (!draft || !renamingSectionKey) return;
+    if (!draft || !renamingSectionKey || busy) return;
     const toSectionKey = normalizeDetailName(renamedSectionKey);
     if (!toSectionKey) {
       setRenameError(localizeUi("ui.longTermMemory.memoryvault.detailNameRequired"));
@@ -2303,7 +2305,15 @@ export default function MemoryVault({
   };
   const addSection = () => {
     const key = normalizeDetailName(sectionKey);
-    if (!draft || !key || draft.sections[key]) return;
+    if (!draft || !sectionKey.trim()) return;
+    // Focus returns to the name field after the reason renders, so it is read together with the field.
+    const refuse = (messageKey: string) => {
+      setSectionError(localizeUi(messageKey));
+      requestAnimationFrame(() => sectionInputRef.current?.focus());
+    };
+    if (!key) return refuse("ui.longTermMemory.memoryvault.detailNameNoLetters");
+    if (Object.hasOwn(draft.sections, key)) return refuse("ui.longTermMemory.memoryvault.detailNameAlreadyExists");
+    setSectionError("");
     update("sections", {
       ...draft.sections,
       [key]: {
@@ -3165,7 +3175,13 @@ export default function MemoryVault({
                               {localizeUi("ui.longTermMemory.memoryvault.memorySections")}
                             </h4>
                             {!addingSection ? (
-                              <Button ref={addSectionButtonRef} onClick={() => setAddingSection(true)}>
+                              <Button
+                                ref={addSectionButtonRef}
+                                onClick={() => {
+                                  setSectionError("");
+                                  setAddingSection(true);
+                                }}
+                              >
                                 <Plus aria-hidden="true" size="1rem" className="shrink-0" />
                                 {localizeUi("ui.longTermMemory.memoryvault.createNewMemoryDetail")}
                               </Button>
@@ -3176,18 +3192,31 @@ export default function MemoryVault({
                               <label className="min-w-0 flex-1 space-y-1 text-xs font-medium">
                                 <span>{localizeUi("ui.longTermMemory.memoryvault.nameThisDetail")}</span>
                                 <input
+                                  ref={sectionInputRef}
                                   autoFocus
                                   className={inputClass}
                                   value={sectionKey}
-                                  onChange={(event) => setSectionKey(event.target.value)}
+                                  onChange={(event) => {
+                                    setSectionKey(event.target.value);
+                                    setSectionError("");
+                                  }}
                                   placeholder={localizeUi("ui.longTermMemory.memoryvault.detailNameExample")}
                                   aria-label={localizeUi("ui.longTermMemory.memoryvault.newSectionName")}
+                                  aria-invalid={sectionError ? true : undefined}
+                                  aria-describedby={
+                                    sectionError ? "ltm-new-section-error ltm-new-section-key" : "ltm-new-section-key"
+                                  }
                                 />
-                                <span className="block text-[var(--muted-foreground)]">
+                                <span id="ltm-new-section-key" className="block text-[var(--muted-foreground)]">
                                   {localizeUi("ui.longTermMemory.memoryvault.storedKey")}:{" "}
                                   {normalizeDetailName(sectionKey) ||
                                     localizeUi("ui.longTermMemory.memoryvault.notSet")}
                                 </span>
+                                {sectionError ? (
+                                  <span id="ltm-new-section-error" className="block text-[var(--destructive)]">
+                                    {sectionError}
+                                  </span>
+                                ) : null}
                               </label>
                               <Button onClick={addSection} disabled={!sectionKey.trim()}>
                                 <Plus aria-hidden="true" size="1rem" className="shrink-0" />
@@ -3197,6 +3226,7 @@ export default function MemoryVault({
                                 onClick={() => {
                                   setAddingSection(false);
                                   setSectionKey("");
+                                  setSectionError("");
                                   requestAnimationFrame(() => addSectionButtonRef.current?.focus());
                                 }}
                               >
@@ -3218,7 +3248,7 @@ export default function MemoryVault({
                                         value1: key,
                                       })}
                                       destructive
-                                      disabled={Boolean(busy)}
+                                      {...busyActionProps}
                                       onClick={() => void deleteSection(key)}
                                     />
                                   </div>
@@ -3420,7 +3450,8 @@ export default function MemoryVault({
                                       <Button
                                         key={key}
                                         data-ltm-rename-detail={key}
-                                        disabled={Boolean(busy) || isNew}
+                                        disabled={isNew}
+                                        {...busyActionProps}
                                         onClick={() => void beginRename(key)}
                                       >
                                         {localizeUi("ui.longTermMemory.memoryvault.renameDetail")}: {noteTypeLabel(key)}
@@ -3773,7 +3804,7 @@ export default function MemoryVault({
           aria-labelledby="ltm-rename-detail-title"
           onCancel={(event) => {
             event.preventDefault();
-            // Like the disabled Cancel button, Escape keeps the dialog open while the rename runs.
+            // Like the locked Cancel button, Escape keeps the dialog open while the rename runs.
             if (busy) return;
             setRenamingSectionKey(null);
             setRenamedSectionKey("");
@@ -3820,21 +3851,23 @@ export default function MemoryVault({
             <div className="flex flex-wrap justify-end gap-2">
               <Button
                 onClick={() => {
+                  if (busy) return;
                   setRenamingSectionKey(null);
                   setRenamedSectionKey("");
                   setRenamePreview(null);
                 }}
-                disabled={Boolean(busy)}
+                {...busyActionProps}
               >
                 {localizeUi("ui.longTermMemory.memoryvault.cancel")}
               </Button>
-              <Button onClick={() => void previewRename()} disabled={Boolean(busy) || !renamedSectionKey.trim()}>
+              <Button onClick={() => void previewRename()} disabled={!renamedSectionKey.trim()} {...busyActionProps}>
                 {localizeUi("ui.longTermMemory.memoryvault.previewRename")}
               </Button>
               <Button
                 primary
                 onClick={() => void renameSection()}
-                disabled={Boolean(busy) || !renamedSectionKey.trim()}
+                disabled={!renamedSectionKey.trim()}
+                {...busyActionProps}
               >
                 {localizeUi("ui.longTermMemory.memoryvault.saveDetailName")}
               </Button>

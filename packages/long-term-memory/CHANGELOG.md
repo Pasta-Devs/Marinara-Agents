@@ -1,5 +1,18 @@
 # Long-Term Memory changelog
 
+## 1.4.95 — 2026-10-26
+
+- Maintenance, Debug, setup and Chat Settings buttons keep keyboard focus while their work runs, so the result appears where you are.
+- Vault and Review controls stay reachable while they save or while identity edits are unsaved, and say why they are locked.
+- Sources re-extract and re-import buttons stay reachable during a run and explain why they are waiting.
+- Debug, Maintenance and source results are announced to screen readers, and Add section explains why a name was not accepted.
+- The setup guide picture and detail header follow the panel's width, and navigation and availability tabs are easier to tap.
+- Loading spinners stop spinning when reduced motion is on, and typing in Debug search stays smooth on long logs.
+
+## 1.4.94 — 2026-10-26
+
+- Long-Term Memory loads settings written by a newer version instead of failing to start, on Engines that use zod 4 or check a list's length before its entries.
+
 ## 1.4.93 — 2026-10-25
 
 - Blocked and running controls in Review and Sources stay reachable by keyboard, so the reason beside them can be read.

@@ -1,6 +1,38 @@
+## Keep playing and pre-forged places (1.23.0)
+
+A main chapter's forge loader offers **Keep playing**. It returns Home without cancelling: the chapter keeps forging, the busy pill shows its progress, and an Engine notice says when it is ready, could not be forged or was interrupted. Pre-forging starts once it is ready. Opening the chapter before then rejoins the same generation; nothing is requested twice. Cancel on any story loader still stops all story generation for the world, other story requests queue behind the chapter, switching worlds waits until it is ready, entering a seasonal event stops tracking it without a notice (the chapter still finishes), and a reload brings its loader back. Deleting a world stops its story and art work. The prologue, Character Stories and seasonal events keep their loaders.
+
+**Settings → Story → Continuity → Pre-forge story** now offers **Story and images** (formerly "Story and key images"). With **Look → Backgrounds** on and an image connection set, it also paints the places each pre-forged scene visits, in main chapters and Character Stories, so those scenes open without a painting wait. Worlds already on this setting start painting places ahead after updating. Art paints on its own queue beside the text, so the chapter menu opens once the text is written; a scene opened before its art is ready joins the paint in progress. Art may keep painting for a while after the chapter menu opens; to stop it, switch to Story only or Off, or use the story Cancel. Pre-forge Cancel (while the menu is shut), switching to Story only or Off, no image connection or the story Cancel stops before the next paid image; turning Backgrounds off stops painting places ahead, while key images keep painting as before. A failed connection, or two failed images in a row, stops painting ahead; those scenes paint when opened. Painting ahead unlocks nothing on Home.
+
+## Stable unit artwork (1.21.2)
+
+Unit tab changes reuse the current successfully decoded portrait when the unit and artwork URL stay the same. Opening another unit or changing its artwork still replaces the portrait. Returning to Units keeps cached cards in place when the refresh returns the same data.
+
+## Banner animation diagnostics (1.21.1)
+
+When a banner animation cannot be generated, its status now explains whether the saved source image, selected connection, provider response or local storage needs attention. Provider failures show a safe HTTP status when available; private URLs, provider response bodies and credentials stay out of the status.
+
+The illustration remains available, and a failed replacement keeps the previous saved clip. Reopening does not automatically repeat a failed generation. **Retry animation** is an explicit request and may use provider credits. Keep Marinara Engine updated for its video-provider fixes.
+
+## Home background downloads and scene unlocks (1.21.0)
+
+Open **Home → Background → Change**. Each image in **Story**, **Story CG**, **Banners** and **Bond** has its own download button. Downloading keeps the picker open and leaves the selected background unchanged. On iPhone, images prepare before the button becomes available; tapping opens the same native share sheet as Engine’s galleries. Cancelling does not report a failure. This feature requires Engine Capability API 1.385 or newer.
+
+Story backgrounds and key images become available after their scenes are viewed, including Character Stories and Seasonal events. A brief **New background unlocked** notice confirms newly seen artwork. Generating future chapters does not unlock their images. Existing completed scenes and chosen backgrounds stay available; replacing generated art does not overwrite a previously unlocked snapshot.
+
+## Daily unit messages and mobile Writing help (1.20.0)
+
+Set **Daily unit messages** during setup or in **Settings → Story → Continuity**. The default is **0**, which turns this off. Enter a nonnegative whole number for a daily total across randomly chosen units whose conversations are unlocked. Up to that many message attempts run per local day while this world is open. Messages use the story connection and its provider credits, begin after a short delay, and are spaced through the day without an offline catch-up burst. Failed or interrupted attempts count toward the daily budget so reopening cannot repeat an ambiguous paid request.
+
+Incoming messages stay in each unit’s existing scrollable conversation. A notice lets you read a new message; background delivery preserves drafts and your position in older history. Writing → Advanced help opens above Settings on mobile and stays until you tap outside it or press Escape. The question-mark controls retain their compact size.
+
+All text generation, including character messages and retries, requests at least **8,192 output tokens**. Additional reasoning headroom is retained when the selected connection has room. If its configured context or hard output override cannot fit that minimum, generation reports the capacity problem before making a model request instead of silently using a smaller cap.
+
 ## Optional Formation combat (1.19.0)
 
 Choose **Classic** or **Formation** while creating a playthrough. Existing worlds keep Classic. For a saved world, open **Settings → Story → Continuity → Combat mode**. The confirmation explains the model requests needed to remake every character's kit. Up to three conversions are queued at a time; progress, individual failures, explicit retry and cancellation remain available after reopening. The world stays in its current mode until every current character kit is ready and one atomic transaction activates the change.
+
+Since 1.20.0, both setup choices include their own readable descriptions. Formation kit creation, conversion and retries request at least 8,192 answer tokens plus the existing reasoning allowance, subject to the selected model's context and provider limits.
 
 Character identity, authored cards, portraits, classic kits, levels, equipment, inventory, conversations, chapters and earned rewards stay saved. Formation kits are additive; switching back to Classic restores its original kit. Finish a pending battle before switching. Choose an active team of at most four before converting a larger team; existing slots are never silently discarded. Newly generated characters receive their Formation kits before their next battle.
 
@@ -54,7 +86,7 @@ Character conversations keep saved messages in the same window after **Close and
 
 Initial forging and later story writing read the current linked character card’s complete Description, Personality, Backstory and Appearance. Card Scenario, greetings and example dialogue are excluded. Existing saved scenes stay as written.
 
-Writing’s question mark controls keep their compact size. Tap to read an explanation below its label, then tap again to close it.
+Writing’s question mark controls keep their compact size. On mobile, tap to read the explanation in a separate overlay above Settings, then tap outside it to dismiss it.
 
 ## Automatic continuity (1.14.0)
 

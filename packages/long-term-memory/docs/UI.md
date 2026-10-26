@@ -92,7 +92,15 @@ the health pill's detail text appears from `40rem`. Below `48rem` the header
 tightens its gaps and padding and the activation switch keeps a `3rem` minimum
 width; below `22.5rem` it also hides the icon tile. The setup guide pads more
 from `40rem` and puts its illustration beside the text from `48rem` of its own
-container. The Vault and Debug lists cap at the window height minus `12rem`
+container, which also picks the setup guide's sprite (the phone sprite below
+`48rem`, the wide one from it, both at whole-pixel scale). The detail header's
+icon shrinks and the content padding drops to `1rem` below `48rem` of the detail
+container, not of the window. The destination tabs, the availability tabs and
+their rows keep `2.75rem` against the Engine's `2.25rem` tab height. Chat
+Settings keeps the host drawer's own control sizes as named exceptions: the
+recall-style select (`min-h-8`) and the number fields (`compactInputClass`,
+`min-h-9`) match the drawer's neighbouring fields, and the compact Retry
+(`min-h-7`) matches its action floor. The Vault and Debug lists cap at the window height minus `12rem`
 (`dvh`, with a `vh` fallback and a `10rem` floor), so a zoomed or short window
 scrolls the list instead of the page.
 
@@ -177,6 +185,13 @@ form. A finished identity repair names the backup it saved first (the first eigh
 Success messages (`StatusSurface` with the success tone) use the `--ltm-success` token (the accent mixed toward
 the editor text, measured at no less than 10.0:1 in the light and 9.1:1 in the dark default theme) and a check
 icon, never the bare accent color.
+A result that appears after an action (Debug export and clear, each Maintenance group, the source workbench preview
+summary) is read out from a region that is always mounted: `LiveResult` keeps a hidden `role="status"` copy in the
+page and shows the visible `StatusSurface` without its own live role, so one action speaks once (a failure is read politely, not as an alert). A live region that
+mounts together with its text is often not announced. Counts use the One/Other catalog keys with
+`selectLtmPluralForm`, name lists go through `Intl.ListFormat`, and stored codes map to catalog labels instead of
+`replaceAll("_", " ")`. Add section refuses an empty key (a name with no letters A-Z or numbers) or a duplicate on
+the name field itself: the reason is linked with `aria-describedby` and focus returns to the field.
 
 Debug operation details lead with recorded problems and guidance, then extraction,
 recall, or apply outcomes before diagnostic facts and the timeline. Dropped
@@ -201,11 +216,22 @@ Keep these states distinct in UI changes:
 - lexical-recall-only warning (its own Reindex recall button, reachable by keyboard)
 - source task running, cancelled, completed, and completed with failures
 
-A control that starts work stays focusable while the work runs: use `aria-disabled`,
-`opacity-50` and a ref guard that makes its handler return early (see
-`navigationBusyProps`, the activation switch, Reindex and Chat Settings). Native
-`disabled` is for permanent unavailability, such as a host that owns the setting,
-because it drops keyboard focus.
+A control that starts work stays focusable while the work runs: spread
+`lockedActionProps(locked, reasonId?)` from `shared-controls.tsx` (`aria-disabled`, plus
+`aria-describedby` for a reason line; `Button` and `IconButton` dim on `aria-disabled`
+themselves) and make its handler return early, because Enter and Space still fire
+`onClick` and a submit button still submits (see the activation switch, Reindex, Chat
+Settings, Maintenance and the Debug toolbar). The same holds in the Vault and Review:
+availability Save and Cancel, the rename dialog, and the Review source, re-extract,
+clear-rejected, Retry and delete controls stay focusable while they run. While identity
+edits are unsaved, the source select, rejected count, re-extract and clear-rejected share
+one linked reason ("Save or discard identity edits first."), and a stale or blocked change
+names why Apply is unavailable on its row, even when the row is collapsed. In Sources a running task of
+any kind holds one lock: Import, Refresh, Re-import, Re-extract (rows, inspector and Retry), the source
+picker and the Manage operations stay focusable, point at the always-mounted lock line ("Locked while an
+import runs" or "...a re-extract runs"), and send nothing on Enter. Native `disabled` is for permanent
+unavailability, such as a host that owns the setting, or input validity such as an empty
+name or nothing selected, because it drops keyboard focus.
 
 Every failure state needs its existing retry or recovery path where one exists.
 Status and alert semantics, focus behavior, touch targets, labels, and reduced

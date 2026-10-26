@@ -6,7 +6,7 @@ import type {
   LtmSubjectIdentityDecision,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { errorMessage, invalidateLtmQueries, queryKeys, request } from "../api";
-import { Button, inputClass, StatusSurface } from "../shared-controls";
+import { Button, inputClass, lockedActionProps, StatusSurface } from "../shared-controls";
 import { useLtmTranslation } from "../localization";
 
 type Candidate = LtmSubjectIdentityReview["candidates"][number];
@@ -116,6 +116,7 @@ export default function SubjectIdentityReview({
   };
 
   const setChoice = (index: number, value: string) => {
+    if (busy) return;
     const participant = review[index]!;
     const nextChoice: IdentityChoice = !value
       ? { name: participant.name, action: "" }
@@ -151,9 +152,9 @@ export default function SubjectIdentityReview({
             </label>
             <select
               id={fieldId}
-              className={inputClass}
+              className={`${inputClass}${busy ? " opacity-50" : ""}`}
               value={choice.action === "bind" ? (choice.subjectKey ?? "") : choice.action}
-              disabled={busy}
+              aria-disabled={busy || undefined}
               onChange={(event) => setChoice(index, event.currentTarget.value)}
             >
               <option value="">{localizeUi("ui.longTermMemory.reviewqueue.chooseIdentity")}</option>
@@ -191,7 +192,8 @@ export default function SubjectIdentityReview({
       ) : null}
       <Button
         primary={!choices.some((choice) => choice.action === "skip")}
-        disabled={busy || choices.some((choice) => !choice.action || (choice.action === "bind" && !choice.subjectKey))}
+        disabled={choices.some((choice) => !choice.action || (choice.action === "bind" && !choice.subjectKey))}
+        {...lockedActionProps(busy)}
         onClick={() => void save()}
       >
         {busy
@@ -204,8 +206,9 @@ export default function SubjectIdentityReview({
       </Button>
       {dirty ? (
         <Button
-          disabled={busy}
+          {...lockedActionProps(busy)}
           onClick={() => {
+            if (busy) return;
             setChoices(initialChoices());
             setDirty(false);
             setError("");

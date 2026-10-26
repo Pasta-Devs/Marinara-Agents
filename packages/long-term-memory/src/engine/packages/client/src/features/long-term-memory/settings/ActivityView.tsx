@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -33,7 +33,7 @@ import {
   requestRaw,
   scopeTargetsQueryOptions,
 } from "../api";
-import { Button, InfoPopover, StatusSurface, inputClass } from "../shared-controls";
+import { Button, InfoPopover, LiveResult, StatusSurface, inputClass } from "../shared-controls";
 import { humanizeLabel, labelKeys, localizedLabel, rejectionReasonLabels } from "../display-labels";
 import type { LongTermMemoryDestinationProps } from "../types";
 import { confirm } from "./settings-shared";
@@ -711,7 +711,9 @@ export default function ActivityView({
     const labels = new Map((scopeTargets.data?.chats ?? []).map((chat) => [chat.id, chat.label]));
     return (chatId: string) => labels.get(chatId) ?? chatId;
   }, [scopeTargets.data]);
-  const query = search.trim().toLocaleLowerCase(locale);
+  // Filtering walks up to 1,000 events, so the list follows the typed text one render behind.
+  const deferredSearch = useDeferredValue(search);
+  const query = deferredSearch.trim().toLocaleLowerCase(locale);
   // The memory filter selects whole operations and composes with the chips and search
   // rather than replacing them; each matching operation keeps its full event list.
   const filteredOperations = useMemo(
@@ -1687,7 +1689,7 @@ export default function ActivityView({
         </div>
       </div>
 
-      {actionState.text ? <StatusSurface tone={actionState.tone}>{actionState.text}</StatusSurface> : null}
+      <LiveResult text={actionState.text} tone={actionState.tone} />
       {activity.isLoading ? (
         <StatusSurface busy>{localizeUi("ui.longTermMemory.activityview.loadingActivity")}</StatusSurface>
       ) : null}

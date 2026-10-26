@@ -35,9 +35,13 @@ async function main() {
   const Fastify = (
     await import(pathToFileURL(join(engineRoot, "packages/server/node_modules/fastify/fastify.js")).href)
   ).default;
-  const { getLtmGlobalSettings, ltmSettingsPath, readLtmSettingsFile, updateLtmGlobalSettings } = await import(
-    `${source}/settings.ts`
-  );
+  const {
+    getLtmGlobalSettings,
+    ltmSettingsPath,
+    readLtmSettingsFile,
+    splitUnknownLtmSettings,
+    updateLtmGlobalSettings,
+  } = await import(`${source}/settings.ts`);
   const { DEFAULT_LTM_EXTRACTION_CONFIG, getLtmExtractionConfig, ltmExtractionConfigPath, updateLtmExtractionConfig } =
     await import(`${source}/extraction/extraction-config.ts`);
   const { ltmMutationTransactionSchema, recoverLtmMutations } = await import(
@@ -497,10 +501,13 @@ async function main() {
         "a legacy prompt request must save a loadable file",
       );
 
-      const zodIssue = (code: string, at: string) => (error: { issues?: { code: string; path: unknown[] }[] }) =>
-        Boolean(error.issues?.some((issue) => issue.code === code && issue.path.join(".") === at));
+      // zod 4 names an enum or literal miss `invalid_value`; zod 3 names them `invalid_enum_value` and `invalid_literal`.
+      const enumMiss = ["invalid_enum_value", "invalid_value"] as const;
+      const zodIssue =
+        (code: string | readonly string[], at: string) => (error: { issues?: { code: string; path: unknown[] }[] }) =>
+          Boolean(error.issues?.some((issue) => [code].flat().includes(issue.code) && issue.path.join(".") === at));
       for (const [request, update, code, at] of [
-        [{ reasoningEffort: "xhigh" }, updateLtmExtractionConfig, "invalid_enum_value", "reasoningEffort"],
+        [{ reasoningEffort: "xhigh" }, updateLtmExtractionConfig, enumMiss, "reasoningEffort"],
         [{ maxOutputTokens: 100_000 }, updateLtmExtractionConfig, "too_big", "maxOutputTokens"],
         [
           { promptTemplates: [{ id: "x", name: "X", prompt: "p", description: "d" }] },
@@ -508,12 +515,7 @@ async function main() {
           "unrecognized_keys",
           "promptTemplates.0",
         ],
-        [
-          { sourcesAvailabilityModes: ["adventure"] },
-          updateLtmGlobalSettings,
-          "invalid_enum_value",
-          "sourcesAvailabilityModes.0",
-        ],
+        [{ sourcesAvailabilityModes: ["adventure"] }, updateLtmGlobalSettings, enumMiss, "sourcesAvailabilityModes.0"],
         [{ longTermMemoryBudgetTokens: 99_999 }, updateLtmGlobalSettings, "too_big", "longTermMemoryBudgetTokens"],
       ] as const) {
         await assert.rejects(update(request, newer.root), zodIssue(code, at), `a request with ${at} must stay strict`);
@@ -525,13 +527,87 @@ async function main() {
           "sourcesAvailabilityModes",
         ],
         [{ settings: { version: 1, longTermMemoryMaxChunks: 2.5 } }, "invalid_type", "longTermMemoryMaxChunks"],
-        [{ settings: { version: 2 } }, "invalid_literal", "version"],
+        [{ settings: { version: 2 } }, ["invalid_literal", "invalid_value"], "version"],
       ] as const) {
         await assert.rejects(
           getLtmGlobalSettings((await rollbackRoot(files)).root),
           zodIssue(code, at),
           `${at} must still fail`,
         );
+      }
+      // The Engine may ship zod 4, which names an enum miss `invalid_value` and checks a list's length before its
+      // entries; a newer entry in an oversized list must still be found and dropped alone.
+      const z4 = await import(pathToFileURL(join(engineRoot, "packages/server/node_modules/zod/v4/index.js")).href);
+      const z4Schema = z4
+        .object({
+          version: z4.literal(1).default(1),
+          mode: z4.enum(["a", "b"]).optional(),
+          modes: z4
+            .array(z4.enum(["a", "b"]))
+            .min(1)
+            .max(3)
+            .optional(),
+          count: z4.number().max(10).optional(),
+          nested: z4.object({ ok: z4.string().optional() }).strict().optional(),
+        })
+        .strict();
+      const z4Split = splitUnknownLtmSettings(
+        z4Schema,
+        { version: 1, mode: "c", modes: ["a", "b", "a", "c"], count: 11, nested: { ok: "x", extra: 1 }, top: 1 },
+        join(tmpdir(), `ltm-zod4-${randomUUID()}.json`),
+      );
+      assert.deepEqual(z4Split.known, { version: 1, modes: ["a", "b", "a"], nested: { ok: "x" } });
+      assert.deepEqual(z4Split.unknown, { top: 1 });
+      assert.deepEqual(z4Split.newer.map((entry: (string | number)[]) => entry.join(".")).sort(), [
+        "count",
+        "mode",
+        "modes.3",
+        "nested.extra",
+      ]);
+      const z4Version = splitUnknownLtmSettings(
+        z4Schema,
+        { version: 2 },
+        join(tmpdir(), `ltm-zod4-${randomUUID()}.json`),
+      );
+      assert.deepEqual(z4Version.known, { version: 2 }, "a different version is kept so the parse still fails");
+      assert.deepEqual(z4Version.newer, [], "a different version never counts as newer");
+      assert.equal(z4Schema.safeParse(z4Version.known).success, false);
+      const z4Oversized = splitUnknownLtmSettings(
+        z4Schema,
+        { version: 1, modes: ["a", "b", "a", "a", "c"] },
+        join(tmpdir(), `ltm-zod4-${randomUUID()}.json`),
+      );
+      assert.deepEqual(z4Oversized.known, { version: 1 }, "a list still over its maximum after the drop falls back");
+      assert.deepEqual(z4Oversized.newer.map((entry: (string | number)[]) => entry.join(".")).sort(), [
+        "modes",
+        "modes.4",
+      ]);
+      // zod 4 also reports `too_big` for a string given where a list belongs; the wrong type must not read as newer.
+      const z4WrongType = splitUnknownLtmSettings(
+        z4Schema,
+        { version: 1, modes: "abcd" },
+        join(tmpdir(), `ltm-zod4-${randomUUID()}.json`),
+      );
+      assert.deepEqual(
+        z4WrongType.known,
+        { version: 1, modes: "abcd" },
+        "a wrong-typed list is kept so the parse fails",
+      );
+      assert.deepEqual(z4WrongType.newer, []);
+      // zod 4 reports any enum non-member as `invalid_value`; only a string is a newer option, the rest a wrong type.
+      for (const stored of [{ mode: null }, { modes: ["a", 5] }]) {
+        const wrong = splitUnknownLtmSettings(
+          z4Schema,
+          { version: 1, ...stored },
+          join(tmpdir(), `ltm-zod4-${randomUUID()}.json`),
+        );
+        assert.deepEqual(
+          wrong.known,
+          { version: 1, ...stored },
+          `${JSON.stringify(stored)} is kept so the parse fails`,
+        );
+        assert.deepEqual(wrong.newer, []);
+        assert.equal(z4Schema.safeParse(wrong.known).success, false);
       }
       const tooLongPrompt = await rollbackRoot({
         extraction: { version: 1, promptTemplates: [{ id: "t", name: "T", prompt: "x".repeat(20_001) }] },
@@ -570,7 +646,7 @@ async function main() {
           { ...newerExport, settings: { ...newerExport.settings, extraction: newerFiles.extraction } },
           (await rollbackRoot({})).root,
         ),
-        zodIssue("invalid_enum_value", "settings.extraction.reasoningEffort"),
+        zodIssue(enumMiss, "settings.extraction.reasoningEffort"),
         "restoring a backup made by a newer version must still fail",
       );
       // Delete all restores an export, which holds this version's fallbacks; the settings files stay as stored.
@@ -1089,7 +1165,7 @@ async function main() {
               ...exported,
               settings: { ...exported.settings, [key]: value },
             }),
-          /unrecognized|unknown|greater than or equal/i,
+          /unrecognized|unknown|greater than or equal|too small/i,
           `malformed legacy ${key} fields must remain rejected`,
         );
       }

@@ -66,11 +66,34 @@ function drive(snapshot, choose = () => ({ action: "defend" })) {
   return next.value;
 }
 
-test("kits reject unsupported model code, invented effects, bad costs and recursive trait duplication", () => {
+test("kits reject unsupported model code, invented effects and bad costs, and keep only valid distinct traits", () => {
   assert.ok(normalizeForgeFormationKit(kit()));
   assert.equal(normalizeForgeFormationKit(kit({ standard: ability({ effect: "eval" }) })), null);
   assert.equal(normalizeForgeFormationKit(kit({ ultimate: ability({ cost: 1, elementCost: 3 }) })), null);
-  assert.equal(normalizeForgeFormationKit(kit({ traits: [{ kind: "solo_front" }, { kind: "solo_front" }] })), null);
+  // Traits are optional: duplicates collapse, unknown or extra ones drop, and a bare name counts at default power.
+  assert.deepEqual(
+    normalizeForgeFormationKit(kit({ traits: [{ kind: "solo_front" }, { kind: "solo_front" }] })).traits,
+    [{ kind: "solo_front", power: 30 }],
+  );
+  assert.deepEqual(
+    normalizeForgeFormationKit(
+      kit({
+        traits: [
+          "advance_ult",
+          { kind: "extra_turn" },
+          { name: "x" },
+          { kind: "front_tokens", power: 99 },
+          "retreat_echo",
+        ],
+      }),
+    ).traits,
+    [
+      { kind: "advance_ult", power: 30 },
+      { kind: "front_tokens", power: 75 },
+    ],
+  );
+  assert.deepEqual(normalizeForgeFormationKit(kit({ traits: undefined })).traits, []);
+  assert.equal(normalizeForgeFormationKit(kit({ traits: "advance_ult" })), null);
   assert.equal(normalizeForgeFormationKit(kit({ passive: { ...kit().passive, trigger: "extra_turn" } })), null);
   assert.equal(
     normalizeForgeFormationRules([{ kind: "defeat_order", description: "Order", order: [0, 0] }], [{}, {}]),

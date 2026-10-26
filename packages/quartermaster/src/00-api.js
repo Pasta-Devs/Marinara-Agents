@@ -51,7 +51,8 @@ async function qmRequest(path, options) {
   const response = await fetch(`/api/quartermaster${path}`, { ...options, headers, credentials: "same-origin" });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(qmResponseError(response, body));
+    // status and body let a caller read an answer it expects, like resolvePending's 409.
+    throw Object.assign(new Error(qmResponseError(response, body)), { status: response.status, body });
   }
   return body;
 }
@@ -130,10 +131,12 @@ QM.generateWardrobe = (chatId, ownerId, direction, includePersonaContext) =>
   });
 
 // The separate confirm step that actually persists a previously-generated proposal.
-QM.confirmWardrobe = (chatId, ownerId, proposal) =>
+// hiddenChoices: { [itemId]: { action: "overwrite" | "keep" | "skip", show } }
+// for the hidden items the proposal uses; any it leaves out are skipped.
+QM.confirmWardrobe = (chatId, ownerId, proposal, hiddenChoices) =>
   qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/wardrobe/confirm`, {
     method: "POST",
-    body: JSON.stringify({ proposal }),
+    body: JSON.stringify({ proposal, hiddenChoices }),
   });
 
 QM.updateSettings = (chatId, ownerId, settings) =>
@@ -155,6 +158,29 @@ QM.restoreInventory = (chatId, ownerId) =>
   qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/restore`, {
     method: "POST",
     body: "{}",
+  });
+
+// Settles one pending agent change to a hidden item: { ok, status, body }.
+// A 409 resolves instead of throwing, since a stale change answers with the
+// item's before/current/after for the user to compare (and a deleted item with
+// gone); every other failure still throws.
+QM.resolvePending = (chatId, ownerId, pendingId, decision) =>
+  qmRequest(
+    `/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/pending/${encodeURIComponent(pendingId)}/resolve`,
+    { method: "POST", body: JSON.stringify(decision) },
+  ).then(
+    (body) => ({ ok: true, status: 200, body }),
+    (error) => {
+      if (error.status !== 409) throw error;
+      return { ok: false, status: 409, body: error.body };
+    },
+  );
+
+// Pending changes the user has already been shown, so the popup only opens for new ones.
+QM.markPendingSeen = (chatId, ownerId, ids) =>
+  qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/pending/seen`, {
+    method: "POST",
+    body: JSON.stringify({ ids }),
   });
 
 // Per-item undo from the Recent Changes view — see server.mjs's

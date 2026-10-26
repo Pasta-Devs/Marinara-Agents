@@ -7,7 +7,7 @@ import type {
   LtmNoteTransferPreviewResponse,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { derivedNotesQueryOptions, errorMessage, request } from "../api";
-import { Button, InfoPopover, StatusSurface, inputClass } from "../shared-controls";
+import { Button, InfoPopover, StatusSurface, inputClass, lockedActionProps } from "../shared-controls";
 import { labelKeys, localizedLabel, noteTypeLabel } from "../display-labels";
 import type { LongTermMemoryDestinationProps } from "../types";
 import { useLtmTranslation } from "../localization";
@@ -21,6 +21,7 @@ export function SourceOperationWorkbench({
   initialOperation,
   destinations,
   disabled,
+  lockReasonId,
   confirmAction,
   onComplete,
   onClose,
@@ -30,6 +31,7 @@ export function SourceOperationWorkbench({
   initialOperation?: SourceOperation;
   destinations: ScopeTargetChat[];
   disabled: boolean;
+  lockReasonId?: string;
   confirmAction?: LongTermMemoryDestinationProps["props"]["confirmAction"];
   onComplete: () => Promise<void>;
   /** Leaves the operation panel; the caller returns focus to the control that opened it. */
@@ -83,6 +85,7 @@ export function SourceOperationWorkbench({
   const previewOperation = async () => {
     if (
       disabled ||
+      busy !== null ||
       !linked.data ||
       linked.isError ||
       ((operation === "copy" || operation === "move") && !destinationChatId)
@@ -339,31 +342,31 @@ export function SourceOperationWorkbench({
       {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
       <Button
         primary
+        {...lockedActionProps(disabled || busy !== null, disabled ? lockReasonId : undefined)}
         disabled={
-          disabled ||
-          busy !== null ||
-          !linked.data ||
-          linked.isError ||
-          ((operation === "copy" || operation === "move") && !destinationChatId)
+          !linked.data || linked.isError || ((operation === "copy" || operation === "move") && !destinationChatId)
         }
         onClick={() => void previewOperation()}
         data-ltm-source-operation-action="preview"
       >
         {busy === "preview" ? (
-          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin motion-reduce:animate-none" />
         ) : (
           <Send aria-hidden="true" size="0.75rem" />
         )}
         {localizeUi("ui.longTermMemory.sourceoperation.preview")}
       </Button>
-      {previewed ? (
-        <div data-ltm-source-operation-preview className="space-y-2 text-xs">
-          <p role="status">
-            {localizeUi("ui.longTermMemory.sourceoperation.previewSummary", {
+      {/* Always mounted, so a finished preview is read out instead of mounting with its text. */}
+      <p role="status" data-ltm-source-operation-preview-summary className={previewed ? "text-xs" : "sr-only"}>
+        {previewed
+          ? localizeUi("ui.longTermMemory.sourceoperation.previewSummary", {
               selected: selectedMemories.length,
               excluded: excludedMemories.length,
-            })}
-          </p>
+            })
+          : null}
+      </p>
+      {previewed ? (
+        <div data-ltm-source-operation-preview className="space-y-2 text-xs">
           {operation === "delete" && excludedMemories.length ? (
             <StatusSurface tone="warning">
               {localizeUi("ui.longTermMemory.sourceoperation.deleteDetachment", { count: excludedMemories.length })}
@@ -416,10 +419,9 @@ export function SourceOperationWorkbench({
           <Button
             primary={operation !== "delete"}
             destructive={operation === "delete"}
+            {...lockedActionProps(disabled || busy !== null, disabled ? lockReasonId : undefined)}
             disabled={
-              disabled ||
               Boolean(result) ||
-              busy !== null ||
               !linked.data ||
               linked.isError ||
               ((operation === "copy" || operation === "move") && !preview?.buckets.ready.length)
@@ -428,7 +430,7 @@ export function SourceOperationWorkbench({
             data-ltm-source-operation-action="apply"
           >
             {busy === "apply" ? (
-              <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+              <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin motion-reduce:animate-none" />
             ) : (
               <Check aria-hidden="true" size="0.75rem" />
             )}
