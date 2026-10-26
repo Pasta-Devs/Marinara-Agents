@@ -4,6 +4,11 @@ const forgeFormationModes = new Set(["classic", "formation"]);
 const forgeFormationJobActive = (job) => job && ["preparing", "committing"].includes(job.status);
 const forgeFormationStoredMode = (run) => (run?.combat?.mode === "formation" ? "formation" : "classic");
 const forgeFormationRevision = (run) => (Number.isSafeInteger(run?.combat?.revision) ? run.combat.revision : 0);
+// Generation errors reach the job as short codes; anything else is reported generically.
+const forgeFormationFailureCode = (failure) => {
+  const code = String(failure?.message || "");
+  return /^[a-z][a-z0-9-]{0,63}$/u.test(code) ? code : "generation-failed";
+};
 export const forgeFormationUnitFingerprint = (unit) =>
   forgeFormationHash("sha256")
     .update(JSON.stringify([unit?.name, unit?.cardId, unit?.affinity, unit?.description, unit?.personality]))
@@ -98,6 +103,13 @@ export function createForgeFormationMigration({
     status: currentKit(row.data) ? "ready" : "pending",
     ...(currentKit(row.data) ? { kit: normalizeKit(row.data.formationKit) } : {}),
   });
+  // A ready kit for an unchanged character is kept, whether its job failed or was cancelled.
+  const reuse = (previous, row) =>
+    previous?.status === "ready" &&
+    previous.fingerprint === forgeFormationUnitFingerprint(row.data) &&
+    normalizeKit(previous.kit)
+      ? previous
+      : entry(row);
   async function updateJob(runId, id, mutate) {
     return transaction(async ({ documents: store }) => {
       const row = await store.getById(packageId, jobId(runId));
@@ -206,9 +218,13 @@ export function createForgeFormationMigration({
           const generated = await generateKit({ runId, run, unit, signal });
           kit = normalizeKit(generated?.ok === true ? generated.value : generated);
           signal.throwIfAborted();
-          if (!kit) error = "invalid-kit";
-        } catch {
-          error = signal.aborted ? "generation-interrupted" : "generation-failed";
+          if (!kit) {
+            error = "invalid-kit";
+            logger?.warn?.("[gacha-forge] Formation kit for %s did not fit the combat rules", item.name);
+          }
+        } catch (failure) {
+          error = signal.aborted ? "generation-interrupted" : forgeFormationFailureCode(failure);
+          if (!signal.aborted) logger?.warn?.(failure, "[gacha-forge] Formation kit for %s failed", item.name);
         }
         await updateJob(runId, id, (job) => {
           const latest = job.units[item.unitId];
@@ -220,7 +236,12 @@ export function createForgeFormationMigration({
         });
       }
     };
-    await Promise.all(Array.from({ length: Math.max(1, Math.min(3, concurrency)) }, () => worker()));
+    // Every worker stops before a failure is reported, so none can keep claiming units afterwards.
+    const workers = await Promise.allSettled(
+      Array.from({ length: Math.max(1, Math.min(3, concurrency)) }, () => worker()),
+    );
+    const crashed = workers.find((outcome) => outcome.status === "rejected");
+    if (crashed) throw crashed.reason;
     if (disposed || signal.aborted) return;
     const staged = await updateJob(runId, id, (job) => {
       if (!forgeFormationJobActive(job)) return false;
@@ -292,7 +313,12 @@ export function createForgeFormationMigration({
         sourceRevision: forgeFormationRevision(run),
         targetMode: body.targetMode,
         status: "preparing",
-        units: Object.fromEntries(roster.map((row) => [row.id, entry(row)])),
+        units: Object.fromEntries(
+          roster.map((row) => [
+            row.id,
+            job?.data?.targetMode === body.targetMode ? reuse(job.data.units?.[row.id], row) : entry(row),
+          ]),
+        ),
       };
       await save(store, job, jobId(runId), "formation-conversion", state);
       return result(run, state);
@@ -315,19 +341,7 @@ export function createForgeFormationMigration({
       )
         return false;
       const current = job.targetMode === "formation" ? await units(store, runId) : [];
-      job.units = Object.fromEntries(
-        current.map((row) => {
-          const previous = job.units[row.id];
-          return [
-            row.id,
-            previous?.status === "ready" &&
-            previous.fingerprint === forgeFormationUnitFingerprint(row.data) &&
-            normalizeKit(previous.kit)
-              ? previous
-              : entry(row),
-          ];
-        }),
-      );
+      job.units = Object.fromEntries(current.map((row) => [row.id, reuse(job.units[row.id], row)]));
       job.status = "preparing";
       job.error = "";
     });

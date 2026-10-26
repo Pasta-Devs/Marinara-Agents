@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { resolveObjectURL } from "node:buffer";
 import { createHash } from "node:crypto";
 import fsPromises from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
@@ -590,15 +591,20 @@ try {
     savedFailure = await readFile(setupStatus, "utf8");
   assert.deepEqual(JSON.parse(savedFailure), { state: "failed", reason: "seedance-reference-setup" });
   assert.equal(savedFailure.includes("SECRET_PROVIDER_DETAIL"), false);
-  for (const marker of [
-    '{"state":"pending"}',
-    '{"state":"pending","reason":"seedance-reference-setup"}',
-    '{"state":"failed","reason":"SECRET_PROVIDER_DETAIL"}',
-    "{broken",
-    "",
+  for (const [marker, reason] of [
+    ['{"state":"pending"}', "interrupted"],
+    ['{"state":"pending","reason":"seedance-reference-setup"}', "interrupted"],
+    ['{"state":"failed","reason":"SECRET_PROVIDER_DETAIL"}', "unknown"],
+    ["{broken"],
+    [""],
   ]) {
     await writeFile(setupStatus, marker);
-    assert.deepEqual(await setupReopened.generate(setupBody), { ok: false, error: "animation-failed", retry: true });
+    assert.deepEqual(await setupReopened.generate(setupBody), {
+      ok: false,
+      error: "animation-failed",
+      ...(reason ? { reason } : {}),
+      retry: true,
+    });
     assert.equal(setupCalls, 1, "legacy or corrupt markers never authorize an automatic purchase");
   }
   assert.equal((await setupReopened.generate({ ...setupBody, retry: true })).reason, "seedance-reference-setup");
@@ -1058,7 +1064,10 @@ try {
 
   // A minimal DOM tests async identity and pause/navigation without imitating a video decoder.
   const originals = Object.fromEntries(
-    ["document", "matchMedia", "IntersectionObserver", "forgeAnimationEnglish"].map((key) => [key, globalThis[key]]),
+    ["document", "matchMedia", "IntersectionObserver", "forgeAnimationEnglish", "Ze"].map((key) => [
+      key,
+      globalThis[key],
+    ]),
   );
   class Element {
     constructor(tag) {
@@ -1127,6 +1136,15 @@ try {
     };
     globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
     globalThis.IntersectionObserver = undefined;
+    // The host's authenticated fetch; <video> itself cannot send the X-Admin-Secret header.
+    const clipFetches = [],
+      savedClip = () => ({ ok: true, blob: async () => new Blob([bytes], { type: "video/mp4" }) });
+    let clipResponse = savedClip;
+    globalThis.Ze = async (url) => {
+      clipFetches.push(url);
+      return clipResponse(url);
+    };
+    const shown = (view, text) => view.chips.children.some((node) => node.textContent === text);
     const client = () => {
       const chips = new Element("chips"),
         target = new Element("art"),
@@ -1211,24 +1229,29 @@ try {
     playback.requests[0].resolve(response);
     await wait();
     const failedClip = playback.target.children[0];
+    assert.equal(clipFetches.at(-1), response.animation.url, "the saved clip is read with the host's fetch");
+    assert.deepEqual(
+      Buffer.from(await resolveObjectURL(failedClip.src).arrayBuffer()),
+      bytes,
+      "the element plays a local copy instead of the privileged route",
+    );
+    const failedSource = failedClip.src;
     failedClip.events.playing();
     failedClip.events.error();
-    const playbackRetry = playback.chips.querySelector("[data-animation-retry]");
-    assert.ok(playbackRetry, "a decoder/network error exposes an explicit regeneration action");
+    assert.equal(resolveObjectURL(failedSource), undefined, "a failed clip releases its in-memory copy");
+    assert.ok(shown(playback, `${forgeAnimationEnglish.playbackFailed} ${forgeAnimationEnglish.retryCost}`));
+    assert.ok(
+      playback.chips.querySelector("[data-animation-retry]"),
+      "a downloaded clip this browser cannot decode offers an explicit, priced replacement",
+    );
     playback.host._forgeBannerAnimation.onVisibility();
     wireForgeBannerAnimation(playback.host);
     await wait();
     assert.equal(playback.requests.length, 1, "playback errors never trigger automatic paid regeneration");
-    playbackRetry.onclick();
-    assert.equal(playback.requests.length, 2);
-    assert.equal(playback.requests[1].body.retry, true);
-    playbackRetry.onclick();
-    assert.equal(playback.requests.length, 2, "duplicate clicks cannot start another paid recovery");
-    playback.requests[1].resolve({ ok: false, retry: true });
-    await wait();
-    assert.equal(playbackRetry.disabled, false, "provider rejection restores the explicit recovery control");
-    playbackRetry.onclick();
-    playback.requests[2].resolve({
+    playback.host._summonBanner.banner.music.cue = "banner-char-featured-f2";
+    wireForgeBannerAnimation(playback.host);
+    assert.equal(playback.requests[1].body.retry, false, "a new rotation requests its own clip");
+    playback.requests[1].resolve({
       ...response,
       animation: { ...response.animation, url: response.animation.url.replace(/b{64}/u, "c".repeat(64)) },
     });
@@ -1244,8 +1267,74 @@ try {
     );
     assert.equal(recoveredClip.style.opacity, "1");
     assert.equal(playback.chips.querySelector("[data-animation-retry]"), undefined);
-    assert.equal(playback.requests.length, 3);
+    assert.equal(playback.requests.length, 2);
+    const recoveredSource = recoveredClip.src;
     disposeForgeBannerAnimation(playback.host);
+    assert.equal(resolveObjectURL(recoveredSource), undefined, "cleanup releases the in-memory clip");
+
+    const refused = client();
+    clipResponse = () => ({ ok: false, status: 403 });
+    wireForgeBannerAnimation(refused.host);
+    refused.requests[0].resolve(response);
+    await wait();
+    clipResponse = savedClip;
+    assert.equal(refused.target.children.length, 0);
+    assert.ok(shown(refused, forgeAnimationEnglish.playbackFailed));
+    assert.equal(
+      refused.chips.querySelector("[data-animation-retry]"),
+      undefined,
+      "a refused clip download never offers a paid regeneration",
+    );
+    refused.host._forgeBannerAnimation.onVisibility();
+    await wait();
+    assert.equal(refused.requests.length, 1);
+    disposeForgeBannerAnimation(refused.host);
+
+    const busy = client();
+    clipResponse = () => ({ ok: false, status: 503 });
+    wireForgeBannerAnimation(busy.host);
+    busy.requests[0].resolve(response);
+    await wait();
+    clipResponse = savedClip;
+    assert.equal(busy.target.children.length, 0);
+    assert.equal(busy.chips.querySelector("[data-animation-retry]"), undefined, "a busy proxy is not a paid retry");
+    busy.host._forgeBannerAnimation.onVisibility();
+    assert.equal(busy.requests[1]?.body.retry, false, "a temporary download error asks again for the saved clip");
+    busy.requests[1].resolve(response);
+    await wait();
+    assert.equal(busy.target.children[0]?.tagName, "video");
+    disposeForgeBannerAnimation(busy.host);
+
+    const lost = client();
+    wireForgeBannerAnimation(lost.host);
+    lost.requests[0].resolve({ ok: false, error: "animation-failed", reason: "unknown", retry: true });
+    await wait();
+    assert.ok(shown(lost, `${forgeAnimationEnglish.unknownFailed} ${forgeAnimationEnglish.retryCost}`));
+    lost.chips.querySelector("[data-animation-retry]").onclick();
+    assert.equal(lost.requests[1].body.retry, true);
+    lost.requests[1].resolve(null);
+    await wait();
+    assert.ok(shown(lost, forgeAnimationEnglish.connectionLost));
+    assert.equal(
+      lost.chips.querySelector("[data-animation-retry]"),
+      undefined,
+      "a dropped connection does not prompt an immediate paid retry",
+    );
+    lost.host._forgeBannerAnimation.onVisibility();
+    assert.equal(lost.requests.length, 3, "returning to the banner asks Engine again");
+    assert.equal(lost.requests[2].body.retry, false, "asking again joins the running job instead of paying again");
+    clipResponse = () => Promise.reject(new TypeError("Load failed"));
+    lost.requests[2].resolve(response);
+    await wait();
+    clipResponse = savedClip;
+    assert.ok(shown(lost, forgeAnimationEnglish.connectionLost), "a dropped clip download is not a paid failure");
+    assert.equal(lost.target.children.length, 0);
+    lost.host._forgeBannerAnimation.onVisibility();
+    assert.equal(lost.requests[3].body.retry, false);
+    lost.requests[3].resolve(response);
+    await wait();
+    assert.equal(lost.target.children[0]?.tagName, "video");
+    disposeForgeBannerAnimation(lost.host);
 
     const unsupported = client(),
       unsupportedPlay = deferred();
@@ -1255,15 +1344,13 @@ try {
     await wait();
     unsupportedPlay.reject(new DOMException("No supported media source.", "NotSupportedError"));
     await wait();
-    const unsupportedRetry = unsupported.chips.querySelector("[data-animation-retry]");
-    assert.ok(unsupportedRetry, "promise-only decoder rejection still offers deliberate regeneration");
-    assert.equal(unsupported.target.children.length, 0, "the unsupported clip cannot block mounting its replacement");
+    assert.ok(
+      unsupported.chips.querySelector("[data-animation-retry]"),
+      "a promise-only decoder rejection offers an explicit, priced replacement",
+    );
+    assert.ok(shown(unsupported, `${forgeAnimationEnglish.playbackFailed} ${forgeAnimationEnglish.retryCost}`));
+    assert.equal(unsupported.target.children.length, 0, "the unsupported clip is removed");
     assert.equal(unsupported.requests.length, 1, "promise-only failures never repurchase automatically");
-    unsupportedRetry.onclick();
-    unsupported.requests[1].resolve(response);
-    await wait();
-    assert.equal(unsupported.target.children[0]?.tagName, "video");
-    assert.equal(unsupported.requests.length, 2);
     disposeForgeBannerAnimation(unsupported.host);
 
     const stale = client();

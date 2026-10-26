@@ -9,7 +9,7 @@ export const forgeFormationEnglish = {
   "combat.mode.switchClassic": "Switch to Classic",
   "combat.mode.confirmTitle": "Change this playthrough’s combat mode?",
   "combat.mode.warning":
-    "Formation needs a new combat kit for every character. This uses your generation connection and may incur provider costs. Up to three conversions are queued at a time. The current mode stays active until every kit is ready.",
+    "Formation needs a new combat kit for every character. This uses your generation connection and may incur provider costs. Characters convert one at a time. The current mode stays active until every kit is ready.",
   "combat.mode.preserved":
     "Character identities, classic kits, levels, equipment, inventory, conversations and story stay saved. Already earned rewards are unchanged.",
   "combat.mode.classicWarning": "Classic restores the saved classic kits. Formation kits stay saved for later use.",
@@ -34,4 +34,9 @@ export const forgeFormationEnglish = {
   "combat.mode.editTeam": "Edit team",
   "combat.mode.drainTimeout": "Generation is still stopping. The combat mode has not changed. Wait a moment and retry.",
   "combat.mode.interrupted": "A generation was interrupted. Retry explicitly to generate its missing kit.",
+  "combat.mode.reason.capacity":
+    "The connection's output limit is too small for a kit. Raise its Max Output Tokens or choose a larger model.",
+  "combat.mode.reason.invalid": "The model's kit did not fit Formation's rules.",
+  "combat.mode.reason.truncated": "The reply was cut off before the kit was complete.",
+  "combat.mode.reason.failed": "Generation failed. The Debug view lists each attempt.",
 };

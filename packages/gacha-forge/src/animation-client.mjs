@@ -5,17 +5,19 @@ export function forgeAnimationFailureMessage(result) {
     return forgeAnimationEnglish.sourceImageMissing;
   if (result?.reason === "seedance-reference-setup") return forgeAnimationEnglish.seedanceSetup;
   if (result?.reason === "connection") return forgeAnimationEnglish.connectionFailed;
-  if (
-    result?.reason === "provider" &&
-    Number.isInteger(result.providerStatus) &&
-    result.providerStatus >= 400 &&
-    result.providerStatus <= 599
-  )
-    return forgeAnimationEnglish.providerFailed.replace("{status}", String(result.providerStatus));
+  if (result?.reason === "provider")
+    return Number.isInteger(result.providerStatus) && result.providerStatus >= 400 && result.providerStatus <= 599
+      ? forgeAnimationEnglish.providerFailed.replace("{status}", String(result.providerStatus))
+      : forgeAnimationEnglish.providerRejected;
   if (result?.reason === "invalid-response") return forgeAnimationEnglish.responseFailed;
   if (result?.reason === "storage") return forgeAnimationEnglish.storageFailed;
+  if (result?.reason === "timeout") return forgeAnimationEnglish.timeoutFailed;
+  if (result?.reason === "interrupted") return forgeAnimationEnglish.interruptedFailed;
+  if (result?.reason === "unknown") return forgeAnimationEnglish.unknownFailed;
   return result?.reason === "playback" ? forgeAnimationEnglish.playbackFailed : forgeAnimationEnglish.failed;
 }
+
+const forgeAnimationClipPath = /^\/api\/gacha-forge\/banner-animation\/file\/[a-f0-9]{64}\/[a-f0-9]{64}\.mp4$/u;
 
 export async function loadForgeAnimationConnections(root, values) {
   const select = root.querySelector('[data-input="animationConnectionId"]');
@@ -102,6 +104,10 @@ export function wireForgeBannerAnimation(host) {
   if (!target || !run?.animationConnectionId || !banner?.art) return;
   if (state.identity !== identity) state.paused = false;
   if (state.identity !== identity || state.banner !== banner) state.staleBanner = null;
+  // A rotated banner's earlier clip is never shown again in this view; let its memory go.
+  if (state.identity !== identity)
+    for (const key of state.requests.keys())
+      if (key !== identity && JSON.parse(key)[2] === bannerId) state.requests.delete(key);
   state.identity = identity;
   state.banner = banner;
   if (state.media?.matches) return;
@@ -121,6 +127,7 @@ export function wireForgeBannerAnimation(host) {
     cursor: "default",
   });
   let video,
+    source,
     pause,
     labelPause = () => {},
     observer,
@@ -183,15 +190,37 @@ export function wireForgeBannerAnimation(host) {
     };
     chips?.append(retry);
   };
+  const release = () => {
+    if (source) URL.revokeObjectURL(source);
+    source = null;
+  };
   const failPlayback = (clip) => {
     if (!current() || video !== clip) return;
     clip.pause();
     clip.remove();
     video = null;
+    release();
     pause?.remove();
     pause = null;
+    // The clip downloaded, so this browser cannot decode it (for example H.265). Only an explicit, priced retry
+    // replaces it; a refused or dropped download never reaches here.
     state.requests.set(identity, Promise.resolve({ ok: false, retry: true, reason: "playback" }));
     offerRetry(forgeAnimationEnglish.playbackFailed);
+  };
+  const load = async (result) => {
+    if (!result?.ok || result.animation?.poster !== art || !forgeAnimationClipPath.test(result.animation?.url || ""))
+      return result;
+    // ponytail: <video> cannot send the host's X-Admin-Secret header, so the whole clip is held in memory for each
+    // viewed banner of this world. Upgrade path: a host-signed media URL that the element can stream directly.
+    const response = await Ze(result.animation.url).catch(() => null);
+    // A busy proxy or tunnel is temporary: asking again later is free. A refused clip stays refused.
+    if (response && !response.ok)
+      return response.status === 408 || response.status === 429 || response.status >= 500
+        ? null
+        : { ok: false, reason: "playback" };
+    const clip = await response?.blob().catch(() => null);
+    // A dropped download is handled like a dropped generation request: asking again reads the saved clip for free.
+    return clip ? { ...result, clip } : null;
   };
   const mount = (result) => {
     if (!current()) return;
@@ -201,12 +230,7 @@ export function wireForgeBannerAnimation(host) {
       offerRetry(forgeAnimationEnglish.failed);
       return;
     }
-    if (
-      !result.ok ||
-      !/^\/api\/gacha-forge\/banner-animation\/file\/[a-f0-9]{64}\/[a-f0-9]{64}\.mp4$/u.test(
-        result.animation?.url || "",
-      )
-    ) {
+    if (!result.ok || !forgeAnimationClipPath.test(result.animation?.url || "")) {
       const message = forgeAnimationFailureMessage(result);
       if (result.retry || result.ok) offerRetry(message);
       else {
@@ -245,7 +269,7 @@ export function wireForgeBannerAnimation(host) {
       }
     });
     video.addEventListener("error", () => failPlayback(clip));
-    video.src = result.animation.url;
+    video.src = source = URL.createObjectURL(result.clip);
     target.append(video);
     pause = document.createElement("button");
     pause.type = "button";
@@ -273,16 +297,28 @@ export function wireForgeBannerAnimation(host) {
     let request = state.requests.get(identity);
     if (!request) {
       notice(forgeAnimationEnglish.generating);
-      request = host._postJson("/banner-animation", {
-        runId,
-        banner: bannerId,
-        retry,
-        debugMode: host.capabilityProps?.debugMode === true,
-      });
+      request = host
+        ._postJson("/banner-animation", {
+          runId,
+          banner: bannerId,
+          retry,
+          debugMode: host.capabilityProps?.debugMode === true,
+        })
+        .then(load);
       state.requests.set(identity, request);
     }
     try {
-      mount(await request);
+      const result = await request;
+      if (result === null) {
+        // The long request lost its connection (for example while iOS suspended the page) but the Engine job may
+        // still finish. Asking again joins that job or reads its saved result without paying for another clip.
+        if (state.requests.get(identity) === request) state.requests.delete(identity);
+        if (!current()) return;
+        notice(forgeAnimationEnglish.connectionLost);
+        chips?.querySelector("[data-animation-retry]")?.remove();
+        return;
+      }
+      mount(result);
     } catch {
       if (current()) {
         state.requests.set(identity, Promise.resolve({ ok: false, retry: true }));
@@ -303,6 +339,7 @@ export function wireForgeBannerAnimation(host) {
     observer?.disconnect();
     video?.pause();
     video?.remove();
+    release();
     pause?.remove();
     status.remove();
     chips?.querySelector("[data-animation-retry]")?.remove();
