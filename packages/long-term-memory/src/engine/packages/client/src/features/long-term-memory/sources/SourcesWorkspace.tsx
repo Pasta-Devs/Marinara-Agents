@@ -54,6 +54,7 @@ import {
   InfoPopover,
   StatusSurface,
   inputClass,
+  lockedActionProps,
   revealFocusUnderStickyBar,
 } from "../shared-controls";
 import { humanizeLabel, labelKeys, localizedLabel } from "../display-labels";
@@ -453,13 +454,7 @@ export default function SourcesWorkspace({
   // The lock note is only filled while a run is active, so only a run points `aria-describedby` at it.
   const importRunning = sourceTask.active?.status === "running";
   const importDisabled = !availabilityReady || availabilitySaving || importRunning;
-  const importActionProps = importDisabled
-    ? {
-        "aria-disabled": true,
-        ...(importRunning ? { "aria-describedby": importLockId } : {}),
-        className: "opacity-50",
-      }
-    : {};
+  const importActionProps = lockedActionProps(importDisabled, importRunning ? importLockId : undefined);
   const reextractDisabled = extractingId !== null || !availabilityReady;
 
   const changeAvailabilityModes = async (nextModes: LtmMode[]) => {

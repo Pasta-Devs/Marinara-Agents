@@ -4348,7 +4348,12 @@ async function main() {
         await resetPage.waitForTimeout(300);
         // #1452: the cleared forms wait for the refetch instead of refilling from the cached settings.
         await resetPage.getByText("Loading memory settings.").waitFor();
-        assert.equal(await resetButton.isDisabled(), true, "Reset stays disabled until the settings refetch resolves");
+        assert.equal(
+          await resetButton.getAttribute("aria-disabled"),
+          "true",
+          "Reset stays locked until the settings refetch resolves",
+        );
+        assert.equal(await resetButton.getAttribute("disabled"), null, "a locked Reset keeps keyboard focus");
         settingsGate = null;
         releaseSettings();
         await maintenancePanel
@@ -4357,7 +4362,11 @@ async function main() {
             hasText: "Memory settings reset to defaults, but the recall index rebuild failed: Fixture rebuild failed.",
           })
           .waitFor({ timeout: 5000 });
-        assert.equal(await resetButton.isDisabled(), false, "Reset is available again once the refetch resolves");
+        assert.equal(
+          await resetButton.getAttribute("aria-disabled"),
+          null,
+          "Reset is available again once the refetch resolves",
+        );
         assert.equal(settingsReads, 1, "Reset reads the settings once");
         // #1588: each result shows under the controls that produced it, not at the top of the panel.
         // #1659: Maintenance has Backup, Repair and Delete or reset groups; a result shows in its own group.
@@ -4384,6 +4393,52 @@ async function main() {
           0,
           "a new run replaces the previous result",
         );
+        // A running action keeps keyboard focus: while the repair request is held, Run selected maintenance and
+        // Export backup stay focused or focusable, are aria-disabled instead of `disabled`, and a second Enter
+        // sends no second request.
+        let repairRequests = 0;
+        let releaseRepair = () => {};
+        const repairHeld = new Promise<void>((resolve) => {
+          releaseRepair = resolve;
+        });
+        await resetPage.unroute("**/api/long-term-memory/repair");
+        await resetPage.route("**/api/long-term-memory/repair", async (route) => {
+          repairRequests += 1;
+          await repairHeld;
+          await route.fulfill({ json: { actions: [{ action: "rebuild_indexes", result: "completed", count: 5 }] } });
+        });
+        let exportRequests = 0;
+        await resetPage.route("**/api/long-term-memory/backup/export", (route) => {
+          exportRequests += 1;
+          return route.fulfill({ json: {} });
+        });
+        await maintenancePanel.getByRole("checkbox", { name: "Reindex recall data", exact: true }).check();
+        const runMaintenance = maintenancePanel.getByRole("button", { name: "Run selected maintenance" });
+        const exportBackupButton = maintenancePanel.getByRole("button", { name: "Export backup" });
+        await runMaintenance.focus();
+        await resetPage.keyboard.press("Enter");
+        await resetPage.waitForFunction(
+          (button) => button?.getAttribute("aria-disabled") === "true",
+          await runMaintenance.elementHandle(),
+        );
+        const isFocused = (button: typeof runMaintenance) => button.evaluate((el) => el === document.activeElement);
+        assert.equal(await isFocused(runMaintenance), true, "Run selected maintenance keeps focus while it runs");
+        assert.equal(await runMaintenance.getAttribute("disabled"), null);
+        assert.equal(await exportBackupButton.getAttribute("aria-disabled"), "true");
+        assert.equal(await exportBackupButton.getAttribute("disabled"), null);
+        await resetPage.keyboard.press("Enter");
+        await exportBackupButton.focus();
+        await resetPage.keyboard.press("Enter");
+        await resetPage.waitForTimeout(150);
+        assert.equal(repairRequests, 1, "a second Enter sends no second request");
+        assert.equal(exportRequests, 0, "a locked Export backup sends no request");
+        assert.equal(await isFocused(exportBackupButton), true, "a locked Export backup is focusable");
+        releaseRepair();
+        await maintenancePanel
+          .locator("[data-ltm-status]")
+          .filter({ hasText: /\(5\)$/u })
+          .waitFor();
+        assert.equal(await exportBackupButton.getAttribute("aria-disabled"), null);
         await resetPage.locator("#settings-tab-recall").click();
         assert.equal(
           await maxChunks.inputValue(),
@@ -5315,18 +5370,20 @@ async function main() {
       assert.ok(compactRetryBox && compactRetryBox.height >= 24, "compact Retry keeps a 24px target");
       await compactRetry.click();
       // D27 repair: a cached-data retry still shows the title without a loading flash,
-      // but the Retry control stays disabled while that refetch is in flight.
+      // but the Retry control stays aria-disabled (and focusable) while that refetch is in flight.
       await page.waitForFunction(() => {
         const button = [...document.querySelectorAll("button")].find((candidate) =>
           /retry/i.test(candidate.textContent ?? ""),
         );
-        return button instanceof HTMLButtonElement && button.disabled;
+        return (
+          button instanceof HTMLButtonElement && button.getAttribute("aria-disabled") === "true" && !button.disabled
+        );
       });
       await page.waitForFunction(() => {
         const button = [...document.querySelectorAll("button")].find((candidate) =>
           /retry/i.test(candidate.textContent ?? ""),
         );
-        return button instanceof HTMLButtonElement && !button.disabled;
+        return button instanceof HTMLButtonElement && !button.hasAttribute("aria-disabled");
       });
       assert.equal(lastInjectionRequests, 3);
       assert.equal(await lastInjection.getByText("Retained memory").count(), 0);

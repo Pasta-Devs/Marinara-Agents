@@ -36,7 +36,7 @@ import {
   scopeTargetsQueryOptions,
   settingsQueryOptions,
 } from "../api";
-import { Button, IconButton, InfoPopover, inputClass, StatusSurface } from "../shared-controls";
+import { Button, IconButton, InfoPopover, inputClass, lockedActionProps, StatusSurface } from "../shared-controls";
 import type { LongTermMemoryDestinationProps } from "../types";
 import {
   humanizeLabel,
@@ -2157,7 +2157,7 @@ export default function MemoryVault({
   async function batch(action: "edit" | "archive" | "delete") {
     await runBatchForIds([...checked], action);
   }
-  const busyActionProps = busy ? ({ "aria-disabled": true, className: "opacity-50" } as const) : {};
+  const busyActionProps = lockedActionProps(Boolean(busy));
   const runNoteAction = async (
     event: { preventDefault: () => void; stopPropagation: () => void },
     note: LtmNote,

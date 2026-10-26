@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Button } from "./shared-controls";
+import { Button, lockedActionProps } from "./shared-controls";
 import { useLtmTranslation } from "./localization";
 import type { CapabilityProps, SourceTab } from "./types";
 
@@ -230,6 +230,7 @@ export function Onboarding({
     });
   };
   const activateForOnboarding = async () => {
+    if (activationPending) return;
     if (await onActivate()) advanceOnboarding();
   };
 
@@ -715,7 +716,8 @@ export function Onboarding({
                 <>
                   <Button
                     primary
-                    disabled={activationPending || !props.onEnabledForChatChange}
+                    disabled={!props.onEnabledForChatChange}
+                    {...lockedActionProps(activationPending)}
                     onClick={() => void activateForOnboarding()}
                   >
                     {localizeUi("ui.longTermMemory.longtermmemorydetail.turnOnForThisChat")}

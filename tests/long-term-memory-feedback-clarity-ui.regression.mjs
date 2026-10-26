@@ -787,12 +787,11 @@ assert.match(workspace, /availabilitySavingRef\.current/u);
 assert.match(workspace, /availabilityDisabled=\{availabilitySaving \|\| !availabilityReady\}/u);
 assert.match(
   workspace,
-  /const importActionProps = importDisabled\s+\? \{[\s\S]*?"aria-disabled": true,[\s\S]*?importLockId/u,
+  /const importActionProps = lockedActionProps\(importDisabled, importRunning \? importLockId : undefined\)/u,
 );
 assert.match(workspace, /id=\{importLockId\}/u);
 // The lock note is empty unless a run is active, so only a run may reference it: not loading or saving, and
 // Refresh stays tied to import/refresh runs (`importing`), not to a re-extract or an availability save.
-assert.match(workspace, /\.\.\.\(importRunning \? \{ "aria-describedby": importLockId \} : \{\}\)/u);
 assert.match(workspace, /"aria-describedby": importRunning \? `\$\{importLockId\} \$\{reasonId\}` : reasonId/u);
 assert.match(workspace, /\$\{importing \? ` \$\{importLockId\}` : ""\}/u);
 assert.doesNotMatch(workspace, /importDisabled \? `[^`]*importLockId/u);
@@ -1045,6 +1044,15 @@ assert.match(vault, /localCharacters\.isLoading && !localCharacters\.data/u);
 assert.match(vault, /localCharacters\.isError && !localCharacters\.data/u);
 assert.match(vault, /localCharacters\.refetch\(\)/u);
 assert.equal((maintenance.match(/queryKeys\.localCharactersRoot/g) ?? []).length, 2);
+// One lock helper serves every run-time lock; `Button` and `IconButton` dim on `aria-disabled` themselves, so a
+// caller no longer passes `opacity-50`. Running work (`busy`, `pending`) never feeds a native `disabled`,
+// which would drop keyboard focus; only input validity does.
+assert.match(sharedControls, /export function lockedActionProps\(locked: boolean, reasonId\?: string\)/u);
+assert.equal((sharedControls.match(/props\["aria-disabled"\] \? "opacity-50"/gu) ?? []).length, 2);
+assert.match(maintenance, /const lock = lockedActionProps\(busy\)/u);
+assert.doesNotMatch(maintenance, /disabled=\{[^}]*\b(?:busy|pending)\b/u);
+assert.doesNotMatch(vault, /className: "opacity-50"/u);
+assert.doesNotMatch(readFileSync(ltmSourcePaths.settings, "utf8"), /className: "opacity-50"/u);
 // #1636: Save keeps its label and tone, stays focusable while off and reports Saving and Saved in a polite region
 // beside it; a save that waits on a recall rebuild is a warning, not an error.
 assert.match(vault, /aria-disabled=\{!dirty \|\| busy === "save" \? true : undefined\}/u);

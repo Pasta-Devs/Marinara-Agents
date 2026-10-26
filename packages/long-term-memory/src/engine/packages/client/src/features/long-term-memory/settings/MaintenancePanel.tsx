@@ -8,7 +8,7 @@ import type {
   LtmIntegrityResponse,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { errorMessage, failedResponseError, invalidateLtmQueries, queryKeys, request, requestRaw } from "../api";
-import { Button, InfoPopover, StatusSurface } from "../shared-controls";
+import { Button, InfoPopover, StatusSurface, lockedActionProps } from "../shared-controls";
 import type { LongTermMemoryDestinationProps } from "../types";
 import { useLtmTranslation } from "../localization";
 import { labelKeys, localizedLabel } from "../display-labels";
@@ -84,7 +84,9 @@ export function MaintenancePanel({
         {messageState.text}
       </StatusSurface>
     ) : null;
+  // Running work and the parent's save lock keep focus (`aria-disabled`), so each handler returns early on `busy`.
   const busy = pending !== "" || disabled;
+  const lock = lockedActionProps(busy);
   useEffect(() => {
     onBusyChange(pending !== "");
   }, [onBusyChange, pending]);
@@ -110,6 +112,7 @@ export function MaintenancePanel({
     if (hidden) setDeletePromptOpen(false);
   }, [hidden]);
   const closeDeletePrompt = () => {
+    if (busy) return;
     setDeletePromptOpen(false);
     deleteButton.current?.focus();
   };
@@ -138,7 +141,7 @@ export function MaintenancePanel({
   };
 
   const runRepair = async () => {
-    if (!selectedActions.length) return;
+    if (busy || !selectedActions.length) return;
     if (
       !(await confirm(
         props,
@@ -184,6 +187,7 @@ export function MaintenancePanel({
   };
 
   const previewIdentities = async () => {
+    if (busy) return;
     setPending("identity-preview");
     setMessage("", "success", "identity");
     // A failed preview must not leave Apply counting candidates from the cleared one.
@@ -211,7 +215,7 @@ export function MaintenancePanel({
   };
 
   const selectIdentityCanonical = async (candidateId: string, canonicalNoteId: string) => {
-    if (!identityPreview) return;
+    if (busy || !identityPreview) return;
     const canonicalNoteIds = {
       ...identityCanonicalNoteIds,
       [candidateId]: canonicalNoteId,
@@ -240,7 +244,7 @@ export function MaintenancePanel({
   };
 
   const applyIdentities = async () => {
-    if (!identityPreview || !selectedIdentityCandidates.length) return;
+    if (busy || !identityPreview || !selectedIdentityCandidates.length) return;
     const preview = identityPreview;
     const selectedCandidateIds = [...selectedIdentityCandidates];
     const sectionChoices = structuredClone(identitySectionChoices);
@@ -365,6 +369,7 @@ export function MaintenancePanel({
   };
 
   const exportBackup = async (area: MaintenanceArea = "backup") => {
+    if (busy) return;
     setPending("backup-export");
     setMessage("", "success", area);
     try {
@@ -413,7 +418,7 @@ export function MaintenancePanel({
   };
 
   const importBackup = async () => {
-    if (!backupPreview) return;
+    if (busy || !backupPreview) return;
     if (
       !(await confirm(
         props,
@@ -459,6 +464,7 @@ export function MaintenancePanel({
   };
 
   const resetSettings = async () => {
+    if (busy) return;
     if (
       !(await confirm(
         props,
@@ -505,6 +511,7 @@ export function MaintenancePanel({
   };
 
   const deleteAll = async () => {
+    if (busy) return;
     if (
       !(await confirm(
         props,
@@ -583,11 +590,17 @@ export function MaintenancePanel({
           />
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
-          <Button disabled={busy} onClick={() => void exportBackup()}>
+          <Button {...lock} onClick={() => void exportBackup()}>
             <Download aria-hidden="true" size="0.875rem" />{" "}
             {localizeUi("ui.longTermMemory.memorysettings.exportBackup")}
           </Button>
-          <Button ref={chooseBackupButton} disabled={busy} onClick={() => backupInput.current?.click()}>
+          <Button
+            ref={chooseBackupButton}
+            {...lock}
+            onClick={() => {
+              if (!busy) backupInput.current?.click();
+            }}
+          >
             <Upload aria-hidden="true" size="0.875rem" /> {localizeUi("ui.longTermMemory.memorysettings.chooseBackup")}
           </Button>
           <input
@@ -620,7 +633,7 @@ export function MaintenancePanel({
               {backupPreview.incoming.rejectedSuggestions}{" "}
               {localizeUi("ui.longTermMemory.memorysettings.rejectedSuggestionsIncoming")}
             </p>
-            <Button primary disabled={busy} onClick={() => void importBackup()}>
+            <Button primary {...lock} onClick={() => void importBackup()}>
               {localizeUi("ui.longTermMemory.memorysettings.replaceWithThisBackup")}
             </Button>
           </div>
@@ -676,7 +689,7 @@ export function MaintenancePanel({
             />
           ))}
         </div>
-        <Button primary disabled={busy || !selectedActions.length} onClick={() => void runRepair()}>
+        <Button primary disabled={!selectedActions.length} {...lock} onClick={() => void runRepair()}>
           {localizeUi("ui.longTermMemory.memorysettings.runSelectedMaintenance")}
         </Button>
         {resultFor("repair")}
@@ -692,12 +705,13 @@ export function MaintenancePanel({
           />
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
-          <Button disabled={busy} onClick={() => void previewIdentities()}>
+          <Button {...lock} onClick={() => void previewIdentities()}>
             {localizeUi("ui.longTermMemory.memorysettings.previewIdentityRepairs")}
           </Button>
           <Button
             destructive
-            disabled={busy || selectedIdentityCount === 0 || identitySelectionUnresolved}
+            disabled={selectedIdentityCount === 0 || identitySelectionUnresolved}
+            {...lock}
             onClick={() => void applyIdentities()}
           >
             {localizeUi("ui.longTermMemory.memorysettings.applySelectedRepairs", { count: selectedIdentityCount })}
@@ -720,15 +734,17 @@ export function MaintenancePanel({
               <div key={candidate.id} className="space-y-2 rounded border border-[var(--border)] p-3">
                 <label className="flex min-h-11 items-start gap-2">
                   <input
-                    className="mt-0.5"
+                    className={`mt-0.5 ${busy ? "opacity-50" : ""}`}
                     type="checkbox"
                     checked={selectedIdentityCandidates.includes(candidate.id)}
-                    disabled={busy || candidate.blockingReasons.length > 0}
-                    onChange={(event) =>
+                    disabled={candidate.blockingReasons.length > 0}
+                    {...lock}
+                    onChange={(event) => {
+                      if (busy) return;
                       setSelectedIdentityCandidates((current) =>
                         event.target.checked ? [...current, candidate.id] : current.filter((id) => id !== candidate.id),
-                      )
-                    }
+                      );
+                    }}
                   />
                   <span>
                     <span className="block font-semibold">{candidate.subjectNames.join(" and ")}</span>
@@ -754,11 +770,12 @@ export function MaintenancePanel({
                       >
                         <label className="flex items-start gap-2">
                           <input
-                            className="mt-0.5"
+                            className={`mt-0.5 ${busy ? "opacity-50" : ""}`}
                             type="radio"
                             name={`canonical-${candidate.id}`}
                             checked={canonical}
-                            disabled={busy || !selectedIdentityCandidates.includes(candidate.id)}
+                            disabled={!selectedIdentityCandidates.includes(candidate.id)}
+                            {...lock}
                             onChange={() => void selectIdentityCanonical(candidate.id, note.noteId)}
                           />
                           <span className="font-medium text-[var(--foreground)]">
@@ -767,18 +784,20 @@ export function MaintenancePanel({
                         </label>
                         <label className="flex min-w-0 flex-1 items-start gap-2">
                           <input
-                            className="mt-0.5"
+                            className={`mt-0.5 ${busy ? "opacity-50" : ""}`}
                             type="checkbox"
                             checked={canonical || (includedIdentityNoteIds[candidate.id] ?? []).includes(note.noteId)}
-                            disabled={busy || canonical || !selectedIdentityCandidates.includes(candidate.id)}
-                            onChange={(event) =>
+                            disabled={canonical || !selectedIdentityCandidates.includes(candidate.id)}
+                            {...lock}
+                            onChange={(event) => {
+                              if (busy) return;
                               setIncludedIdentityNoteIds((current) => ({
                                 ...current,
                                 [candidate.id]: event.target.checked
                                   ? [...(current[candidate.id] ?? []), note.noteId]
                                   : (current[candidate.id] ?? []).filter((id) => id !== note.noteId),
-                              }))
-                            }
+                              }));
+                            }}
                           />
                           <span>
                             <span className="block font-medium text-[var(--foreground)]">
@@ -814,7 +833,7 @@ export function MaintenancePanel({
                   <fieldset
                     key={conflict.sectionKey}
                     className="space-y-1 border-t border-[var(--border)] pt-2"
-                    disabled={busy || !selectedIdentityCandidates.includes(candidate.id)}
+                    disabled={!selectedIdentityCandidates.includes(candidate.id)}
                   >
                     <legend className="font-medium">
                       {localizeUi("ui.longTermMemory.memorysettings.chooseSectionContent", {
@@ -836,16 +855,17 @@ export function MaintenancePanel({
                           className="flex min-h-11 items-start gap-2 rounded border border-[var(--border)] p-2"
                         >
                           <input
-                            className="mt-0.5"
+                            className={`mt-0.5 ${busy ? "opacity-50" : ""}`}
                             type="radio"
                             name={`${candidate.id}-${conflict.sectionKey}`}
                             disabled={!noteId}
+                            {...lock}
                             checked={
                               noteId !== undefined &&
                               option.noteIds.includes(identitySectionChoices[candidate.id]?.[conflict.sectionKey] ?? "")
                             }
                             onChange={() => {
-                              if (!noteId) return;
+                              if (busy || !noteId) return;
                               setIdentitySectionChoices((current) => ({
                                 ...current,
                                 [candidate.id]: {
@@ -878,7 +898,7 @@ export function MaintenancePanel({
             {/* No Engine defines a warning color: the strong editor border and an icon carry the tone. */}
             <Button
               ref={resetButton}
-              disabled={busy}
+              {...lock}
               data-ltm-tone="warning"
               style={{ borderColor: "var(--marinara-editor-border-strong)" }}
               onClick={() => void resetSettings()}
@@ -894,9 +914,10 @@ export function MaintenancePanel({
             <Button
               ref={deleteButton}
               destructive
-              disabled={busy}
+              {...lock}
               aria-expanded={deletePromptOpen}
               onClick={() => {
+                if (busy) return;
                 setDeletePromptOpen(true);
                 requestAnimationFrame(() => exportFirstButton.current?.focus());
               }}
@@ -925,14 +946,14 @@ export function MaintenancePanel({
                   {localizeUi("ui.longTermMemory.memorysettings.exportBackupFirstPrompt")}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <Button ref={exportFirstButton} primary disabled={busy} onClick={() => void exportBackup("reset")}>
+                  <Button ref={exportFirstButton} primary {...lock} onClick={() => void exportBackup("reset")}>
                     <Download aria-hidden="true" size="0.875rem" />{" "}
                     {localizeUi("ui.longTermMemory.memorysettings.exportBackupFirst")}
                   </Button>
-                  <Button destructive disabled={busy} onClick={() => void deleteAll()}>
+                  <Button destructive {...lock} onClick={() => void deleteAll()}>
                     {localizeUi("ui.longTermMemory.memorysettings.continueToDelete")}
                   </Button>
-                  <Button disabled={busy} onClick={closeDeletePrompt}>
+                  <Button {...lock} onClick={closeDeletePrompt}>
                     {localizeUi("ui.longTermMemory.memoryvault.cancel")}
                   </Button>
                 </div>
