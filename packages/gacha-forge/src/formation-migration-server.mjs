@@ -108,14 +108,15 @@ export function createForgeFormationMigration({
     status: currentKit(row.data) ? "ready" : "pending",
     ...(currentKit(row.data) ? { kit: normalizeKit(row.data.formationKit), kitPrompt } : {}),
   });
-  // A ready kit for an unchanged character is kept, whether its job failed or was cancelled.
-  const reuse = (previous, row) =>
+  // A paid, ready kit for an unchanged character, written by the current kit prompt, is never paid for again.
+  const usable = (previous, row) =>
     previous?.status === "ready" &&
     previous.fingerprint === forgeFormationUnitFingerprint(row.data) &&
     previous.kitPrompt === kitPrompt &&
-    normalizeKit(previous.kit)
-      ? previous
-      : entry(row);
+    !!normalizeKit(previous.kit);
+  // A ready kit is kept, whether its job failed or was cancelled, and so is one an old kit stands in for.
+  const reuse = (previous, row) =>
+    usable(previous, row) ? previous : usable(previous?.staged, row) ? previous.staged : entry(row);
   async function updateJob(runId, id, mutate) {
     return transaction(async ({ documents: store }) => {
       const row = await store.getById(packageId, jobId(runId));
@@ -313,14 +314,22 @@ export function createForgeFormationMigration({
   // waits for its explicit retry.
   const declinedRemake = (job) =>
     job?.kitPrompt === kitPrompt && (["failed", "cancelled"].includes(job.status) || job.declined === true);
-  const keep = (row) => ({
-    unitId: row.id,
-    name: String(row.data.name || "").slice(0, 160),
-    fingerprint: forgeFormationUnitFingerprint(row.data),
-    status: "ready",
-    kit: normalizeKit(row.data.formationKit),
-    kitPrompt: row.data.formationKitPrompt ?? null,
-  });
+  // A kept old kit carries the paid kit it stands in for (`staged`, which commit ignores), so a later remake
+  // or retry uses that one instead of paying again. A current kit needs none, and `staged` is always flat:
+  // one entry deep however many jobs keep it.
+  const keep = (row, previous) => {
+    const paid = currentKit(row.data) ? null : [previous, previous?.staged].find((candidate) => usable(candidate, row));
+    const { staged: _nested, ...staged } = paid || {};
+    return {
+      unitId: row.id,
+      name: String(row.data.name || "").slice(0, 160),
+      fingerprint: forgeFormationUnitFingerprint(row.data),
+      status: "ready",
+      kit: normalizeKit(row.data.formationKit),
+      kitPrompt: row.data.formationKitPrompt ?? null,
+      ...(paid ? { staged } : {}),
+    };
+  };
   async function start(body, { onlyMissing = false } = {}) {
     const runId = body?.runId;
     if (!validRunId(runId) || !forgeFormationModes.has(body?.targetMode) || body.confirmed !== true)
@@ -361,7 +370,7 @@ export function createForgeFormationMigration({
           roster.map((row) => [
             row.id,
             onlyMissing && playableKit(row.data)
-              ? keep(row)
+              ? keep(row, job?.data?.targetMode === body.targetMode ? job.data.units?.[row.id] : null)
               : job?.data?.targetMode === body.targetMode
                 ? reuse(job.data.units?.[row.id], row)
                 : entry(row),
@@ -393,7 +402,7 @@ export function createForgeFormationMigration({
       job.units = Object.fromEntries(
         current.map((row) => [
           row.id,
-          job.declined === true && playableKit(row.data) ? keep(row) : reuse(job.units[row.id], row),
+          job.declined === true && playableKit(row.data) ? keep(row, job.units[row.id]) : reuse(job.units[row.id], row),
         ]),
       );
       job.status = "preparing";
@@ -439,6 +448,18 @@ export function createForgeFormationMigration({
     if (started.conversion?.status === "failed") return { ...started, ok: false, error: "combat-conversion-failed" };
     return { ...started, ok: false, error: started.error || "combat-conversion-in-progress" };
   }
+  // The elements a world's roster can bring, read the way guide generation reads them.
+  async function elements(runId) {
+    const roster = (await documents.getById(packageId, `${runId}:session`))?.data?.roster || {};
+    return [
+      ...new Set(
+        (await units(documents, runId))
+          .filter((row) => roster[row.id])
+          .map((row) => String(row.data.affinity || "").toLowerCase())
+          .filter(Boolean),
+      ),
+    ];
+  }
   return {
     start,
     status,
@@ -446,6 +467,7 @@ export function createForgeFormationMigration({
     cancel,
     ensure,
     guard,
+    elements,
     settled: async (runId) => running.get(runId)?.promise,
     async removeWorld(runId) {
       running.get(runId)?.controller.abort();

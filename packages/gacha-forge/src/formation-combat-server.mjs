@@ -35,7 +35,7 @@ export function forgeFormationKitMessages({ run, unit, cardContext = "" }) {
 ${forgeFormationRulesText()}
 ARCHETYPE. Choose "preferredRow" from canon first (how this character fights), then from role: Tanks, Warriors and Assassins usually "front", Supports "back", Mages either; "hybrid" for characters who thrive moving between rows.
 - front: a fighter that hits or protects. Normal costs 0-1 (damage power 80-100 at cost 0, up to 130 at cost 1, or a tank's taunt or shield); Ultimate costs 2-5 with elementCost 1-3 and helps it fight; passive row "front" or "both".
-A front or hybrid kit needs a Normal skill, Ultimate or passive that hits or controls enemies: a tank's taunt or shield Normal pairs with an attacking Ultimate or a striking passive.
+A front or hybrid kit needs a Normal skill or Ultimate that hits or controls enemies (damage, aoe_damage, drain, execute, dot, debuff, stun, silence, swap or shuffle), or a passive with power that deals damage (damage, aoe_damage, drain or execute) on a trigger other than on_attack or on_kill, in row "front" or "both": a tank's taunt or shield Normal pairs with an attacking Ultimate or such a passive. Otherwise its Normal skill becomes a plain strike.
 - back: a deliberately weak Normal (cost 1-3; a back character's Normal keeps only 60% of the power limit); a powerful but situational Ultimate that a team saves for, costing 5-8 with elementCost 2-4: revive, restore the party, team immunity, swap or shuffle the enemy board, or one devastating hit; and a VERY STRONG passive with row "back" using turn_start or an ally_* trigger, near the passive limit.
 - hybrid: Normal cost 0-2, Ultimate cost 3-6, and a perk and/or enter_front/enter_back passives that reward switching rows.
 Vary costs between characters: simple attackers may have a free Normal skill and a cheap Ultimate, while advanced characters need energy saved over several turns for devastating effects. Use effects that suit the character and the genre: damage over time, attack or defence up and down, regeneration, stun, silence, shields, taunts, immunity, and board control (swap, shuffle) for manipulators.
@@ -102,11 +102,13 @@ export function forgeFormationNormalizeGuide(raw, guide, elements) {
  */
 export function forgeFormationSeatedRules(enemies, rules = []) {
   const boss = enemies.findIndex((enemy) => enemy?.tier === "boss");
-  return rules.map((rule) =>
-    rule.kind === "defeat_order" && boss >= 0 && !rule.order.includes(boss) && rule.order.length > 2
-      ? { ...rule, order: rule.order.slice(0, 2) }
-      : rule,
-  );
+  return rules.map((rule) => {
+    if (rule.kind !== "defeat_order" || boss < 0 || rule.order.includes(boss) || rule.order.length <= 2) return rule;
+    const order = rule.order.slice(0, 2);
+    // The model's sentence still names the dropped step; say what the engine now enforces.
+    const names = order.map((index) => String(enemies[index]?.name || "").trim() || `enemy ${index + 1}`);
+    return { ...rule, order, description: `Defeat ${names.join(", then ")}.` };
+  });
 }
 
 /**
@@ -168,10 +170,21 @@ export function forgeFormationEnemies(enemies, rules = []) {
   return result.map((enemy, index) => ({ ...enemy, position: front.has(index) ? "front" : "back" }));
 }
 
+// ponytail: a guarded route records the elements its Formation world owns before the handler reads a cached guide,
+// so a barrier nobody in the world can meet (a guide cached by 1.24.0) is dropped the way generation drops it.
+// Ceiling: one process-wide map keyed by world; upgrade path: pass the elements through every guide reader.
+const forgeFormationOwnedElements = new Map();
+
 export function forgeFormationPrepare(run, allies, enemies, rules = []) {
   if (forgeFormationMode(run) !== "formation") return { allies, enemies, combatMode: "classic", formationRules: [] };
+  const owned = forgeFormationOwnedElements.get(run?.runId);
+  const meetable = owned
+    ? rules.filter(
+        (rule) => rule.kind !== "element_barrier" || rule.elements.some((element) => owned.includes(element)),
+      )
+    : rules;
   // The preview, the snapshot and the engine all read the same seated rules.
-  const seated = forgeFormationSeatedRules(enemies, rules);
+  const seated = forgeFormationSeatedRules(enemies, meetable);
   return { allies, enemies: forgeFormationEnemies(enemies, seated), combatMode: "formation", formationRules: seated };
 }
 
@@ -222,6 +235,8 @@ export function forgeFormationRoutes(routes, { migration, readWorld, cancellatio
           if (ready && ready.ok === false) return ready;
           run = await readWorld(runId);
           if (!run) return { ok: false, error: "not-found" };
+          if (forgeFormationMode(run) === "formation" && typeof migration.elements === "function")
+            forgeFormationOwnedElements.set(runId, await migration.elements(runId));
           if (
             starting &&
             request.body?.expectedCombatMode != null &&

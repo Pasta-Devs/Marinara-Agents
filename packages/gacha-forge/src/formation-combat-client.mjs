@@ -46,6 +46,19 @@ const forgeFormationIcons = {
   plus: forgeFormationSvg('<path d="M12 5v14M5 12h14"/>'),
 };
 
+/**
+ * Front Row seats freed before an action's place in the plan, as the plan resolves in order: a retreat frees one,
+ * bringing a support forward fills one, and a swap changes nothing.
+ */
+export function forgeFormationSeatsFreed(formation, plan = [], actorId) {
+  const at = plan.findIndex((entry) => entry.actorId === actorId),
+    front = new Set((formation?.allies || []).filter((ally) => ally.position === "front").map((ally) => ally.id));
+  let freed = 0;
+  for (const entry of at < 0 ? plan : plan.slice(0, at))
+    if (entry.action === "row" && !entry.swapId) freed += front.has(entry.moveId || entry.actorId) ? 1 : -1;
+  return freed;
+}
+
 // Every battle preview and start names the engine and rules it plays, so the server can turn away an older tab
 // before it previews, pays for a kit remake or starts a fight.
 export function forgeFormationStartRequest(host, path, body) {
@@ -132,6 +145,8 @@ export const forgeFormationCombatStyles = `
    left, so the boss plate never covers their FRONT/BACK tags. Classic keeps its own layout. */
 .root[data-formation] .side.enemies{padding-top:calc(var(--gf-cbar,var(--fbar-h)) + var(--sp-1));--gf-eh:min(calc(var(--f)*16.5),calc(100cqh - var(--band) - var(--gf-cbar,var(--fbar-h)) - var(--sp-1) - var(--sp-2)))}
 .root[data-formation] .side.enemies .cbt{height:var(--gf-eh);width:calc(var(--gf-eh)*2/3)}
+.root[data-formation] .side.enemies .cbt .nm{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:normal;line-height:1.05;font-size:calc(var(--f)*0.92*var(--gf-scale,1))}
+.root[data-formation] .side.enemies .gf-fprot{top:28%;max-width:96%;padding:calc(var(--f)*0.15) calc(var(--f)*0.3);font-size:calc(var(--f)*0.6*var(--gf-scale,1));letter-spacing:.02em;line-height:1.1}
 .root[data-formation] .cbt .enrow .en,.root[data-formation] .cbt .enrow .ev{display:none}
 .root[data-formation] .cbt .enrow{min-height:calc(var(--f)*0.62*var(--gf-scale,1))}
 .gf-fgen{display:inline-flex;align-items:center;gap:.15em;font-family:var(--display);font-weight:700;font-size:calc(var(--f)*0.66*var(--gf-scale,1));line-height:1;color:var(--text);text-shadow:0 1px 2px rgba(0,0,0,.9);white-space:nowrap}
@@ -256,6 +271,9 @@ const forgeFormationSkillSection = (heading, ability, affinity, image, extra = "
 
 /** The foe sheet's Formation half: the kit that actually fights, its mechanics, row and income. */
 export function forgeFormationFoeSheet(enemy, image, mechIcons = {}) {
+  // An Echo has no kit of its own: its sheet says what it is instead of listing its owner's.
+  if (String(enemy?.id ?? "").includes("~"))
+    return `<div class="sec"><div class="h">${forgeFormationEscape(forgeFormationLabel("echo"))}</div><p>${forgeFormationEscape(forgeFormationLabel("echoInfo", { owner: enemy.echoOwner || enemy.name || "" }))}</p></div>`;
   const kit = normalizeForgeFormationKit(enemy?.formationKit);
   if (!kit) return "";
   const affinity = String(enemy.affinity || "").toLowerCase();
@@ -403,7 +421,9 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
     for (const event of step.events || []) if (event.op === "formation-bank") banks[event.side] = event.bank;
   banks.ally ||= run.pending?.options?.formation?.bank || null;
   let phase = "ally",
-    disposed = false;
+    disposed = false,
+    // Keyboard focus was in the fight when Fight was pressed; the host clears the panel while the turn resolves.
+    refocus = false;
   const state = () => {
     const prompt = run.pending?.options?.formation ? run.pending : null;
     if (!run.forgeFormation || run.forgeFormation.prompt !== prompt)
@@ -434,7 +454,9 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
     if (
       (["enemy", "enemy-back", "fallen"].includes(reach.kind) ||
         ["revive", "swap", "summon", "immune"].includes(skill.effect)) &&
-      !reach.ids.length
+      !reach.ids.length &&
+      // A summon can fill a seat a retreat earlier in the plan frees.
+      !(skill.effect === "summon" && forgeFormationSeatsFreed(formation(), state().plan, unit.id) > 0)
     )
       return "target";
     if (
@@ -503,10 +525,11 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
   };
   const clearDecor = () => {
     for (const node of root.querySelectorAll(".gf-fbadge,.gf-ftargets,.gf-fprot,.gf-fslot")) node.remove();
-    for (const node of root.querySelectorAll(".cbt.gf-ready,.cbt[tabindex]")) {
+    for (const node of root.querySelectorAll(".cbt.gf-ready,.cbt[tabindex],.cbt[aria-label]")) {
       node.classList.remove("gf-ready");
       node.removeAttribute("tabindex");
       node.removeAttribute("role");
+      node.removeAttribute("aria-label");
     }
     for (const node of root.querySelectorAll(".cbt.gf-protected")) node.classList.remove("gf-protected");
   };
@@ -647,8 +670,11 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
     }
   };
   const unmark = () => {
-    for (const node of root.querySelectorAll(".cbt"))
+    for (const node of root.querySelectorAll(".cbt")) {
       node.classList.remove("targetable", "dimmed", "aim", "gf-protected");
+      // "Choose X" belongs to the aim that set it.
+      node.removeAttribute("aria-label");
+    }
     for (const node of root.querySelectorAll(".gf-fprot,.gf-fslot")) node.remove();
   };
   const queue = (entry) => {
@@ -665,6 +691,8 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
   };
   const fight = () => {
     if (!planning()) return;
+    const active = root.getRootNode?.()?.activeElement || globalThis.document?.activeElement;
+    refocus = !!active && !!root.contains?.(active) && active !== root;
     const plan = state().plan.map((entry) => ({ ...entry }));
     unmark();
     clearDecor();
@@ -747,7 +775,7 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
     const payment = forgeFormationPayment(bankBefore(unit.id), skill, unit.aff);
     const set = !["enemy", "ally", "fallen", "enemy-back"].includes(reach.kind);
     const hint = set
-      ? forgeFormationLabel("pick.set", { count: reach.ids.length })
+      ? forgeFormationLabel("pick.set", { count: reach.ids.length || (skill.effect === "summon" ? 1 : 0) })
       : forgeFormationLabel(
           reach.kind === "enemy"
             ? "pick.enemy"
@@ -901,7 +929,10 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
       container = current.container;
     if (!container || !planning()) return;
     draw(current, container);
-    if (focused) restoreFocus(current, container);
+    if (focused || refocus) {
+      refocus = false;
+      restoreFocus(current, container);
+    }
   }
   const restoreFocus = (current, container) => {
     // A plan still missing a fighter keeps focus on that fighter, so a repeated Enter never resolves it.

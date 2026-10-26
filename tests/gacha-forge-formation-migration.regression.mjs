@@ -770,6 +770,116 @@ test("Retry after a cancelled remake and a failed new kit pays only for the new 
   f.dispose();
 });
 
+test("kits paid for in a cancelled or failed remake survive a new pull and are never paid for twice", async () => {
+  for (const outcome of ["failed", "cancelled"]) {
+    const calls = {};
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const f = fixture({
+      count: 3,
+      generate: async ({ unit, signal }) => {
+        calls[unit.name] = (calls[unit.name] || 0) + 1;
+        if (unit.name === "Hero 2" && calls[unit.name] === 1) {
+          if (outcome === "failed") throw new Error("generation-failed");
+          await gate;
+          signal.throwIfAborted();
+        }
+        return kit;
+      },
+    });
+    const run = formationWorld(f, [1, 1, 1]);
+    const remake = await f.service.ensure(runId, run);
+    if (outcome === "cancelled") {
+      // Hero 0 and Hero 1 are generated and staged; Hero 2 is still being written when the player cancels.
+      for (let wait = 0; wait < 500; wait++) {
+        const units = (await f.service.status({ runId })).conversion.units;
+        if (units.filter((unit) => unit.status === "ready").length === 2) break;
+        await tick();
+      }
+      await f.service.cancel({ runId, jobId: remake.conversion.id });
+      release();
+    }
+    await f.service.settled(runId);
+    assert.equal((await f.service.status({ runId })).conversion.status, outcome);
+    // A new pull, then a battle.
+    f.seed(`${runId}:unit:new`, "unit", { kind: "character", name: "New arrival", affinity: "wind" });
+    await f.service.ensure(runId, f.docs.get("index").data.runs[0]);
+    await f.service.settled(runId);
+    // Then the player finishes the remake: Retry for a failed job, "Remake kits now" otherwise.
+    const state = await f.service.status({ runId });
+    if (state.conversion.status === "failed")
+      await f.service.retry({ runId, jobId: state.conversion.id, confirmed: true });
+    else await f.service.start({ runId, targetMode: "formation", confirmed: true });
+    await f.service.settled(runId);
+    assert.equal((await f.service.status({ runId })).conversion.status, "committed", outcome);
+    assert.deepEqual(
+      calls,
+      { "Hero 0": 1, "Hero 1": 1, "Hero 2": 2, "New arrival": 1 },
+      `${outcome}: each kit is paid for once, plus Hero 2's interrupted attempt`,
+    );
+    for (const index of [0, 1, 2]) {
+      assert.deepEqual(f.docs.get(`${runId}:unit:${index}`).data.formationKit, kit);
+      assert.equal(f.docs.get(`${runId}:unit:${index}`).data.formationKitPrompt, 2);
+    }
+    assert.equal((await f.service.status({ runId })).staleKits, 0);
+    f.dispose();
+  }
+});
+
+test("kept kits stay one level deep across repeated only-missing jobs, and a paid stale kit is reused once", async () => {
+  const calls = {};
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const f = fixture({
+    count: 3,
+    generate: async ({ unit, signal }) => {
+      calls[unit.name] = (calls[unit.name] || 0) + 1;
+      if (unit.name === "Hero 2" && calls[unit.name] === 1) {
+        await gate;
+        signal.throwIfAborted();
+      }
+      return kit;
+    },
+  });
+  // Hero 0 is current; Hero 1 and Hero 2 are stale. The remake pays for Hero 1, then the player cancels.
+  const run = formationWorld(f, [2, 1, 1]);
+  const remake = await f.service.ensure(runId, run);
+  for (let wait = 0; wait < 500; wait++) {
+    const units = (await f.service.status({ runId })).conversion.units;
+    if (units.find((unit) => unit.unitId === `${runId}:unit:1`)?.status === "ready") break;
+    await tick();
+  }
+  await f.service.cancel({ runId, jobId: remake.conversion.id });
+  release();
+  await f.service.settled(runId);
+  // Three pulls, each with its own only-missing job.
+  for (let pull = 0; pull < 3; pull++) {
+    f.seed(`${runId}:unit:new-${pull}`, "unit", { kind: "character", name: `New ${pull}`, affinity: "wind" });
+    await f.service.ensure(runId, f.docs.get("index").data.runs[0]);
+    await f.service.settled(runId);
+    const job = f.docs.get(`${runId}:formation-conversion`).data;
+    assert.equal(job.status, "committed", `pull ${pull}`);
+    for (const [id, unit] of Object.entries(job.units)) {
+      assert.equal(unit.staged?.staged, undefined, `${id}: staged stays flat`);
+      if (id.endsWith(":unit:0") || id.includes(":unit:new-"))
+        assert.equal(unit.staged, undefined, `${id}: a current kit stages nothing`);
+    }
+    assert.equal(job.units[`${runId}:unit:1`].staged.kitPrompt, 2, "the paid kit is still staged");
+    assert.equal(job.units[`${runId}:unit:2`].staged, undefined, "nothing was paid for Hero 2");
+  }
+  // "Remake kits now" uses the staged kit instead of paying for Hero 1 again.
+  await f.service.start({ runId, targetMode: "formation", confirmed: true });
+  await f.service.settled(runId);
+  assert.equal((await f.service.status({ runId })).conversion.status, "committed");
+  assert.deepEqual(calls, { "Hero 1": 1, "Hero 2": 2, "New 0": 1, "New 1": 1, "New 2": 1 });
+  assert.equal((await f.service.status({ runId })).staleKits, 0);
+  f.dispose();
+});
+
 test("after a cancelled remake a new character still gets its kit, and the old kits stay as they are", async () => {
   let calls = 0,
     release;

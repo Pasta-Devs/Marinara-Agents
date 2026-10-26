@@ -6,7 +6,7 @@ export const forgeUpgradeEnglish = Object.freeze({
   "upgrade.preview": "Lv {from} → {to}. Cost: {cost}.",
   "gear.autoFree": "Auto-equip free gear",
   "gear.autoFreeHint":
-    "Equip suitable unassigned gear that improves this unit's displayed CP. Never takes gear from another unit.",
+    "Equip suitable unassigned gear that improves this unit's displayed BP. Never takes gear from another unit.",
   "gear.autoBusy": "Equipping…",
   "gear.autoUnavailable": "Equipment changed. Refresh the unit and try again.",
 });

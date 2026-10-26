@@ -142,7 +142,7 @@ test("a bulk training selection belongs only to the current run, unit, track and
   }
 });
 
-test("best-free gear improves actual displayed CP and never selects another unit's equipment", () => {
+test("best-free gear improves actual displayed BP and never selects another unit's equipment", () => {
   const gear = {
     cp: 100,
     slots: [
@@ -195,7 +195,7 @@ test("auto-equip sends strict free-only requests and reevaluates gear after each
     },
   };
   await forgeEquipFreeGear(host);
-  assert.equal(posts.length, 2, "second slot compares refreshed CP, not stale absolute CP");
+  assert.equal(posts.length, 2, "second slot compares refreshed BP, not stale absolute BP");
   assert.equal(
     posts.every(({ path, body }) => path === "/equip" && body.onlyFree === true),
     true,

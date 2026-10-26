@@ -771,7 +771,7 @@
         },
         "id": "gacha-forge",
         "name": "Gacha Forge",
-        "version": "1.24.2",
+        "version": "1.24.3",
         "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
         "engine": {
           "min": "2.5.1",
@@ -1060,8 +1060,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "45cdabdb91ab3c1ccef43e557bfd58ffdbf7b169eb584fefb0b19daf073772d8",
-            "bytes": 1872944
+            "sha256": "ec5cc8a7dfa936922bfd9dc576d446beb8d9fdb8b919a2c29ab0604698e2be84",
+            "bytes": 1876539
           },
           {
             "path": "farm-asc.webp",
@@ -1535,8 +1535,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "1ea72010126c303c729d3cff780e68578dfd36aac29508c5c458f07ee83d0bf5",
-            "bytes": 947836
+            "sha256": "67b1db4e4ee3ab82f9625718ba764dd6406369f4707989e64e07c64a55003695",
+            "bytes": 951155
           },
           {
             "path": "skill-aoe_damage-dark.webp",
@@ -2290,28 +2290,28 @@
           },
           {
             "path": "src/formation-combat-client.mjs",
-            "sha256": "01c21a3a71a03725a9c7097132e7c3299c014d3f85c953e55a6deff14ee12111",
-            "bytes": 69169
+            "sha256": "75a785b10f05d5be4c68abbc443f972711d9c5702eb8d7b878f9358ed5de7d63",
+            "bytes": 71305
           },
           {
             "path": "src/formation-combat-en.mjs",
-            "sha256": "62996a6cceab3891dbbe7cb6e4513eb1d541ed2734260c341b3cf9e3d5f1f82b",
-            "bytes": 17769
+            "sha256": "5602df0cc5b75e0c64bdd64d6692bc72f413f33904d7f114067d5e189479f0ad",
+            "bytes": 17804
           },
           {
             "path": "src/formation-combat-server.mjs",
-            "sha256": "56e946cd11aec56dc1740f6cb48dcca685ae65579cd1dd19529b2b651231d3c2",
-            "bytes": 23075
+            "sha256": "aae672eb6944d0b01eaba1805f8fd51c07dec90e34533b1df137155577fdd546",
+            "bytes": 24434
           },
           {
             "path": "src/formation-combat-shared.mjs",
-            "sha256": "d2b8e85294b38bfe0412a4351e3543c8619a4ce0979fa3c8fe877cda54548903",
-            "bytes": 65703
+            "sha256": "c56f7c8d6f6885d55a5b65bff73cd2b1b2b1e9071a66de96cd660b9632fee8d6",
+            "bytes": 66357
           },
           {
             "path": "src/formation-migration-server.mjs",
-            "sha256": "c3ff2836a6d3578b98e15743ad0cfa661d976af4c44248ec1ba30155a47a5a26",
-            "bytes": 21121
+            "sha256": "c16b905157714c3528604e01edb3c4d67bf8d76e54ac6e30dc9477ff12fd43db",
+            "bytes": 22427
           },
           {
             "path": "src/formation-settings-client.mjs",
@@ -2388,9 +2388,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.24.2.zip",
-        "sha256": "fe9bf9766722cc089515b5f9788dae93fdf90f45aa97e9c0c23e25f04313fe0b",
-        "bytes": 9032433
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.24.3.zip",
+        "sha256": "8ea0769cf366d4fbef5fe20ffaca6302e8aeab7357efe2236031edeb13bcdf52",
+        "bytes": 9044837
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     },
