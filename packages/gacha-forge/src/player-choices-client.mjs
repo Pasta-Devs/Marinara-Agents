@@ -255,6 +255,15 @@ export function prepareForgeChoices(host, response) {
   host._choicePlayback = {
     timeline,
     mainIndex: (index) => mainIndexes[index] ?? 0,
+    artworkChoice(index) {
+      const segment = timeline[index];
+      for (const choice of choices) {
+        if (choice.at !== mainIndexes[index]) continue;
+        const option = choice.options.find((entry) => entry.id === selected.get(choice.id));
+        if (option?.segments?.includes(segment)) return { choiceId: choice.id, optionId: option.id };
+      }
+      return {};
+    },
     startAt(mainIndex) {
       const wanted = Math.max(0, mainIndexes.indexOf(mainIndex));
       const pending = [...pendingIndexes.keys()].find((index) => index <= wanted);

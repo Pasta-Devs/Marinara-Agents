@@ -1,3 +1,9 @@
+## 1.21.0 — 2026-10-26
+
+- Download individual images from every Home background picker category without selecting them. Reuse Engine gallery saving, including prepared iPhone sharing.
+- Unlock story and Character Story backgrounds and key images only after viewing their scenes, with a brief unlock notice. Future generated scenes stay out of the picker.
+- Preserve completed scenes, saved artwork and existing background choices across updates and chapter regeneration.
+
 ## 1.20.0 — 2026-10-25
 - Add optional daily messages from randomly selected units with conversations unlocked, configured in setup or Story Continuity and disabled by default.
 - Keep incoming conversations saved, preserve drafts and pace generation within each local day without offline catch-up.
