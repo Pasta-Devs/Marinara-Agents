@@ -1,3 +1,8 @@
+## 1.21.2 — 2026-10-26
+
+- Keep an unchanged, decoded unit portrait mounted while switching unit tabs. Replace it normally when the unit or artwork changes.
+- Preserve cached Units cards when a background refresh returns identical data, while keeping real card updates and loading status current.
+
 ## 1.21.1 — 2026-10-26
 
 - Explain banner animation failures with safe recovery hints and the provider HTTP status when available.

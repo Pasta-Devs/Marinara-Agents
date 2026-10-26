@@ -41,6 +41,7 @@ try {
     ["background-unlocks-client", ["client.js"]],
     ["background-unlocks-server", ["server.mjs"]],
     ["unit-notifications", ["client.js"]],
+    ["unit-art-client", ["client.js"]],
     ["image-avatar-references", ["server.mjs"]],
     ["story-memory", ["server.mjs"]],
     ["story-memory-integration", ["server.mjs"]],
