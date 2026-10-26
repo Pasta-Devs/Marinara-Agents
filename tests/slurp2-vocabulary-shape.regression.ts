@@ -80,11 +80,10 @@ const INTENDED_DELTAS: Record<string, [string, string][]> = {
     ["unlockPrice: z.number().int().min(1).max(100_000).optional(),", ""],
   ],
   // 0.2.0: a one-shot delivery must come with a purpose it fits.
-  slpCreatorGenerationRequestSchema: [
-    [
-      '\n  .superRefine((input, ctx) => {\n    if (input.contentIntent && !slurpIntentFitsAccess(input.contentIntent, input.access)) {\n      ctx.addIssue({\n        code: z.ZodIssueCode.custom,\n        path: ["contentIntent"],\n        message: "That purpose does not fit a locked post.",\n      });\n    }\n    if (input.contentDelivery && !input.contentIntent) {\n      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["contentDelivery"], message: "Choose a post purpose too." });\n    } else if (\n      input.contentDelivery &&\n      input.contentIntent &&\n      !slurpContentDeliveryFits(input.contentIntent, input.contentDelivery)\n    ) {\n      ctx.addIssue({\n        code: z.ZodIssueCode.custom,\n        path: ["contentDelivery"],\n        message: "That delivery does not fit this post purpose.",\n      });\n    }\n  });',
-      ";",
-    ],
+  // zod 4 has no ZodEffects, so Slurp keeps the plain object (`.extend`-able) under its own name and
+  // adds the refined schema separately. The object declaration is the Engine's one with a new name.
+  slpCreatorGenerationRequestObjectSchema: [
+    ["slpCreatorGenerationRequestObjectSchema", "noodlerGenerationRequestSchema"],
   ],
   // Creator stage facts, source account and cached appearance state: Slurp-only fields.
   SlpCreatorManagedStageProfile: [
@@ -213,6 +212,8 @@ for (const [enginePath, copies] of PAIRS) {
     for (const [name, body] of declarations(readFileSync(join(slpShared, copy), "utf8"))) {
       const original = BACK.get(name);
       if (!original) continue;
+      // Slurp-only refinement wrapped around the object schema above; nothing in the Engine to compare.
+      if (name === "slpCreatorGenerationRequestSchema") continue;
       const engineBody = engine.get(original);
       assert.ok(engineBody, `${name} claims to come from ${original}, which ${enginePath} does not declare`);
       let renamedBack = body.replace(RENAMED, (match) => BACK.get(match) ?? match);

@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 0.4.3 — 2026-10-26
+
+- Slurp starts again on Engine builds with zod 4. The feed post and Creator generation routes no longer stop at load with "Right-hand side of 'instanceof' is not an object" (zod 4 has no `ZodEffects`); they extend the plain object schemas instead.
+
 ## 0.4.2 — 2026-10-26 [highlight]
 
 - Slurp starts again on Engine builds with zod 4. Settings sections with nested defaults are filled in again, so the server no longer stops at load with "Cannot read properties of undefined (reading 'curve')".
