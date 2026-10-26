@@ -941,6 +941,50 @@ test("Persona story dialogue uses the real SDK cast identity and its saved Engin
   }
 });
 
+test("Expression portraits follow each line of the same speaker and fall back to the neutral face", async ({
+  page,
+}, testInfo) => {
+  const { forge } = await openForge(page, testInfo, { reducedMotion: "reduce" });
+  const face = (fill: string) =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="200" height="300" fill="${fill}"/></svg>`)}`;
+  const [neutral, anger, joy] = [face("#5c2869"), face("#b3261e"), face("#f2c94c")];
+  await page.route("**/api/gacha-forge/beat", (route) =>
+    route.fulfill({
+      json: {
+        ...scene,
+        cast: [{ name: "Arden", art: neutral, prota: false, characterId: "engine-arden", expressions: { anger, joy } }],
+        segments: [
+          { speaker: "Arden", text: "EXPRESSION_NEUTRAL" },
+          { speaker: "Arden", text: "EXPRESSION_ANGER", expression: "anger" },
+          { speaker: "Arden", text: "EXPRESSION_FEAR", expression: "fear" },
+          { speaker: "Arden", text: "EXPRESSION_JOY", expression: "joy" },
+        ],
+      },
+    }),
+  );
+  await seedScene(forge);
+  const plate = forge.locator('[data-plate="right"][data-open="true"]');
+  const front = () =>
+    plate.evaluate((node) => {
+      const image = node.querySelector(
+        `[data-art="${node.getAttribute("data-front")}"] [data-img]`,
+      ) as HTMLImageElement;
+      return image && !image.hidden && image.naturalWidth > 0 ? image.getAttribute("src") : null;
+    });
+  await expect(forge.locator("[data-text]")).toHaveText("EXPRESSION_NEUTRAL");
+  await expect.poll(front).toBe(neutral);
+  for (const [text, art] of [
+    ["EXPRESSION_ANGER", anger],
+    ["EXPRESSION_FEAR", neutral],
+    ["EXPRESSION_JOY", joy],
+  ]) {
+    await forge.locator("[data-box]").click();
+    await expect(forge.locator("[data-text]")).toHaveText(text);
+    await expect.poll(front).toBe(art);
+    await expect(plate).toBeVisible();
+  }
+});
+
 test("Sent persona letters are never read aloud with an assigned voice and dialogue audio on", async ({
   page,
 }, testInfo) => {

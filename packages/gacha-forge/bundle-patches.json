@@ -1776,6 +1776,56 @@
               "replace": "var oy=[{version:null,new:[\"Voice other characters, next to Read character dialogue, gives NPCs and units without an assigned voice a voice from the Engine's Random NPC Voices lists, matched to male or female when known. Each name keeps the same voice.\"],fixed:[\"Combat voice lines now play in Classic and Formation, start preparing when the battle screen opens, include your persona's voice, and say when nobody in the team can be voiced.\"]},{version:\"1.24.5\",changed:[\"When a Front Row unit falls in Formation, a Back Row unit on its side steps into the empty seat and acts from its next turn. A fight now ends only when one side has nobody left.\"]}"
             }
           ]
+        },
+        {
+          "version": "1.24.7",
+          "commits": [],
+          "edits": [
+            {
+              "sourceId": "story-expressions-client",
+              "replaceFrom": [
+                "src/story-expressions.mjs",
+                "src/story-expressions-en.mjs"
+              ],
+              "find": "var pb=48"
+            },
+            {
+              "find": "it=[...forgeAnimationFields(),...forgeAudioFields(),",
+              "replace": "it=forgeStoryExpressionFields([...forgeAnimationFields(),...forgeAudioFields(),"
+            },
+            {
+              "find": "wide:!0}],Eb=[",
+              "replace": "wide:!0}]),Eb=["
+            },
+            {
+              "find": "{match:/:portrait$/,cost:\"images\",label:()=>\"Painting a portrait\"}",
+              "replace": "{match:/:expressions$/,cost:\"images\",label:()=>forgeStoryExpressionEnglish[\"expressions.busy\"]},{match:/:portrait$/,cost:\"images\",label:()=>\"Painting a portrait\"}"
+            },
+            {
+              "find": "w=k.length?Xl(k,h.speaker):null",
+              "replace": "w=k.length?forgeStoryExpressionArt(Xl(k,h.speaker),h):null"
+            },
+            {
+              "find": "V=Xl(q,a[0].speaker),K=V?V.name:null",
+              "replace": "V=forgeStoryExpressionArt(Xl(q,a[0].speaker),a[0]),K=V?V.name:null,forgeStoryFace=V"
+            },
+            {
+              "find": "let ce=Xl(q,W.speaker),xe=ce?ce.name:null;if(xe===K)return;if(K=xe,",
+              "replace": "let ce=forgeStoryExpressionArt(Xl(q,W.speaker),W),xe=ce?ce.name:null;if(xe===K){forgeStoryFace=ce;ce&&!$&&showForgeStoryExpression(D[Vo(ce)],ce);return}if(K=xe,forgeStoryFace=ce,"
+            },
+            {
+              "find": "$=setTimeout(()=>{$=null,se(Be,ce)},ok)",
+              "replace": "$=setTimeout(()=>{$=null,se(Be,forgeStoryFace)},ok)"
+            },
+            {
+              "find": "ds=\"1.24.6\"",
+              "replace": "ds=\"1.24.7\""
+            },
+            {
+              "find": "var oy=[{version:null,new:[\"Voice other characters, next to Read character dialogue, gives NPCs and units without an assigned voice a voice from the Engine's Random NPC Voices lists, matched to male or female when known. Each name keeps the same voice.\"],fixed:[\"Combat voice lines now play in Classic and Formation, start preparing when the battle screen opens, include your persona's voice, and say when nobody in the team can be voiced.\"]}",
+              "replace": "var oy=[{version:null,new:[\"Expression portraits: turn them on in World → Sources → Images. Story portraits then show anger, fear, sadness or joy line by line, painted in the background for characters who speak.\"],fixed:[\"Your persona keeps its own voice even when another character shares part of its name, and turning Voice other characters off and on again no longer asks to pay again for combat lines that were never made.\"]},{version:\"1.24.6\",new:[\"Voice other characters, next to Read character dialogue, gives NPCs and units without an assigned voice a voice from the Engine's Random NPC Voices lists, matched to male or female when known. Each name keeps the same voice.\"],fixed:[\"Combat voice lines now play in Classic and Formation, start preparing when the battle screen opens, include your persona's voice, and say when nobody in the team can be voiced.\"]}"
+            }
+          ]
         }
       ]
     },
@@ -3196,6 +3246,68 @@
             {
               "find": "let Ye=new Date().toISOString();if(await a.create({id:A(p,u,o)",
               "replace": "await forgeRememberSpeakerGenders(()=>pe(p),forgeSave=>xn(p,forgeSave),ge.value);let Ye=new Date().toISOString();if(await a.create({id:A(p,u,o)"
+            }
+          ]
+        },
+        {
+          "version": "1.24.7",
+          "commits": [],
+          "edits": [
+            {
+              "sourceId": "story-expressions-server",
+              "replaceFrom": [
+                "src/story-expressions.mjs",
+                "src/story-expressions-server.mjs"
+              ],
+              "find": "var rb=["
+            },
+            {
+              "find": "battleBackgrounds:e.battleBackgrounds===!0||e.battleBackgrounds===\"true\",...$r(e)}",
+              "replace": "battleBackgrounds:e.battleBackgrounds===!0||e.battleBackgrounds===\"true\",expressions:e.expressions===!0||e.expressions===\"true\",...(t(e.expressionsSince)?{expressionsSince:t(e.expressionsSince).slice(0,40)}:{}),...$r(e)}"
+            },
+            {
+              "find": "_=du({...S,...M});_&&(w.images=_)",
+              "replace": "_=du({...S,...M});_&&(_.expressions&&S.expressions!==!0&&(_.expressionsSince=new Date().toISOString()),w.images=_)"
+            },
+            {
+              "find": "(G.thought===!0||G.thought===\"true\")&&(ie.thought=!0);let se=T(G.place)",
+              "replace": "(G.thought===!0||G.thought===\"true\")&&(ie.thought=!0);let forgeExpression=ie.speaker&&normalizeForgeStoryExpression(G.expression);forgeExpression&&(ie.expression=forgeExpression);let se=T(G.place)"
+            },
+            {
+              "find": "\"- thought: true when the segment is what that character THINKS without saying it out loud. false (or absent) for anything said aloud and for narration.\",",
+              "replace": "\"- thought: true when the segment is what that character THINKS without saying it out loud. false (or absent) for anything said aloud and for narration.\",'- expression: optional, on a dialogue or thought segment only: \"anger\", \"fear\", \"sadness\" or \"joy\" when the speaker clearly shows that emotion in this line. Omit it for a calm or neutral line and for narration.',"
+            },
+            {
+              "find": "async uploadToGallery({image:h,name:A,prompt:T,provider:R,model:C}){",
+              "replace": "async generateExpression({connectionId:h,name:A,unit:T,base:forgeBase,expression:R,referenceImage:forgeRef,styleProfileId:C,width:I,height:D,debugMode:forgeDebug}){let G=ve(A)||\"Character\",W=await this.portraitProfile(C),te=forgeStoryExpressionPrompt(T,forgeBase,R,W,{tagged:oa(W.promptMode),negative:Hr(W.negativeTags,Ig)}),se=await f(\"/api/characters/avatar-generation\",{method:\"POST\",headers:{\"Content-Type\":\"application/json\"},body:JSON.stringify({connectionId:h,name:G,referenceImages:[forgeRef],appearance:te.prompt,purpose:\"avatar\",styleProfileId:ve(C)||void 0,width:I,height:D,debugMode:forgeDebug===!0,promptOverrides:[{id:Ec(G),prompt:te.prompt,negativePrompt:te.negativePrompt}]})}),le=Lo(se&&se.image);if(!le)throw new Error(\"engine returned no usable image\");let ce=ve(se&&se.prompt);return{...le,width:I,height:D,prompt:ce,overrideTook:ce===te.prompt,sentPrompt:te.prompt}},async uploadToGallery({image:h,name:A,prompt:T,provider:R,model:C}){"
+            },
+            {
+              "find": "Gt=s=>{let c=gn.get(s);return!!c&&Date.now()-c.at<Tn};",
+              "replace": "Gt=s=>{let c=gn.get(s);return!!c&&Date.now()-c.at<Tn},forgeStoryExpressions=createForgeStoryExpressions({documents:a,packageId:n.id,logger:r.logger,readRun:async s=>Ae((await be()).data,s),images:nt,connection:nn,client:Le,slot:mt,dedupe:ze,background:An,update:Wn,base:sn,galleryRef:vn,debug:()=>/^(1|true)$/i.test(process.env.DEBUG_AGENTS||\"\")});"
+            },
+            {
+              "find": "async function dh(s,c){let d=await a.list(n.id,kt),v=[];",
+              "replace": "async function dh(s,c){let d=await a.list(n.id,kt),v=[],forgeStoryPersona=null;"
+            },
+            {
+              "find": "let N=E.data;!N||N.kind!==\"character\"||N.isProtagonist||!N.name||v.push({name:N.name,art:sn(N)||null,prota:!1,characterId:l(N.cardId)||null,gender:Er(N)})",
+              "replace": "let N=E.data;N&&N.isProtagonist&&(forgeStoryPersona=N);!N||N.kind!==\"character\"||N.isProtagonist||!N.name||v.push({name:N.name,art:sn(N)||null,prota:!1,characterId:l(N.cardId)||null,gender:Er(N),...forgeStoryExpressionCast(nt(c),N,sn(N))})"
+            },
+            {
+              "find": "v.push({name:k.name,art:E||null,prota:!0,characterId:l(k.personaId)||null})}return v}",
+              "replace": "v.push({name:k.name,art:E||null,prota:!0,characterId:l(k.personaId)||null}),Object.assign(v[v.length-1],forgeStoryExpressionCast(nt(c),forgeStoryPersona,E))}return v}"
+            },
+            {
+              "find": "cast:await dh(p,g)}),O=await a.getById(",
+              "replace": "cast:forgeStoryExpressions.queue(p,g,await dh(p,g),Y.data)}),O=await a.getById("
+            },
+            {
+              "find": "return{ok:!0,resumeAt:await x(),segments:Fe,",
+              "replace": "forgeStoryExpressions.queue(p,g,ne,ge.value);return{ok:!0,resumeAt:await x(),segments:Fe,"
+            },
+            {
+              "find": "forgeStoryCancellation.dispose();forgeBannerAnimations.dispose()}",
+              "replace": "forgeStoryCancellation.dispose();forgeBannerAnimations.dispose();forgeStoryExpressions.dispose()}"
             }
           ]
         }

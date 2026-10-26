@@ -157,8 +157,12 @@ export function createForgeCombatVoiceController({
               });
             }
             if (poolOff() && !job.controller.signal.aborted) {
-              // Nothing was paid for this token: settle it as interrupted and leave without a paid failure.
-              await post("/combat-voices/fail", { ...request, slot, token: reserved.token }, true).catch(() => {});
+              // Nothing was paid for this token: release its slot back to missing, never a paid failure.
+              await post(
+                "/combat-voices/fail",
+                { ...request, slot, token: reserved.token, released: true },
+                true,
+              ).catch(() => {});
               return failures.delete(actor.id);
             }
             if (!enabled() || job.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
