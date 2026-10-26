@@ -88,7 +88,20 @@ const SLOT_GROUPS = {
   weapons: new Set(["weapon_left_hand", "weapon_right_hand"]),
 };
 const SLOT_GROUP_DEFAULTS = { underwear: false, armor: true, weapons: true };
-const APPEARANCE_FEED_MODES = new Set(["off", "outfitDescription", "equippedNames"]);
+const APPEARANCE_FEED_MODES = new Set([
+  "off",
+  "outfitName",
+  "outfitDescription",
+  "outfitNameDescription",
+  "equippedNames",
+  "equippedDescriptions",
+  "equippedNamesDescriptions",
+]);
+// What the tracker agent may do to an item the user hid (applyAgentItemChange)
+// when it isn't asking first; with askBeforeHiddenChanges on, only which way
+// the popup's "Show item" box starts. "user*": the item's details stay as the
+// user set them. "*Shown": the agent touching it unhides it.
+const HIDDEN_ITEM_ACCESS_MODES = new Set(["userHidden", "userShown", "agentHidden", "agentShown"]);
 
 // A slot with no group is always visible/equippable. `visibility` is the
 // {showUnderwear, showArmor, showWeapons} slice of an inventory state.
@@ -363,6 +376,41 @@ function applyLocation(items, item, location) {
   item.location = location;
 }
 
+function isEquipped(item) {
+  return item.location.startsWith("equipped:");
+}
+
+// item.hidden is the user's choice and nothing else changes it. A hidden item
+// stays out of every model-facing feed except while it's equipped: wearing it
+// shows it, taking it off hides it again. Rules about who may CHANGE an item
+// (applyAgentItemChange, Build Wardrobe's confirm) read item.hidden itself,
+// equipped or not.
+function visibleToModel(item) {
+  return item.hidden !== true || isEquipped(item);
+}
+
+// The items and outfits the tracker agent is shown, in stored order.
+// prepareContext assigns the [1]/[A] tags from these and reconcileTrackerOutput
+// resolves them from these, so both must use exactly this filter.
+function agentVisibleItems(state) {
+  return state.items.filter(visibleToModel);
+}
+function agentVisibleOutfits(state) {
+  return state.outfits.filter((outfit) => outfit.hidden !== true);
+}
+
+// What an outfit keeps per slot: enough to rebuild the item exactly if it's
+// deleted later (applyOutfitEquip), not just its id.
+function itemSlotSnapshot(item) {
+  return {
+    itemId: item.id,
+    name: item.name,
+    description: item.description,
+    defaultSlot: item.defaultSlot ?? null,
+    descriptionLocked: item.descriptionLocked === true,
+  };
+}
+
 // slot -> a snapshot of the currently-equipped item, not just its id. Saved
 // outfits carry name/description alongside the id so a saved outfit is a
 // durable, self-contained record — see applyOutfitEquip's own comment for
@@ -371,23 +419,30 @@ function applyLocation(items, item, location) {
 function currentEquippedSlots(items) {
   const slots = {};
   for (const item of items) {
-    if (item.location.startsWith("equipped:")) {
-      slots[item.location.slice("equipped:".length)] = { itemId: item.id, name: item.name, description: item.description };
-    }
+    if (isEquipped(item)) slots[item.location.slice("equipped:".length)] = itemSlotSnapshot(item);
   }
   return slots;
 }
 
 // Outfits saved before this shape existed stored a bare itemId string per
-// slot. Normalize on read so old data keeps working (comparisons just never
-// match once the id is stale, same as before) rather than throwing — new
-// saves/updates always write the full object shape via currentEquippedSlots.
+// slot, and before 0.1.29 no defaultSlot/descriptionLocked. Normalize on read
+// so old data keeps working (comparisons just never match once the id is
+// stale, same as before) rather than throwing — new saves/updates always write
+// the full shape via itemSlotSnapshot.
 function normalizeOutfitSlotSnapshot(value) {
-  if (typeof value === "string") return { itemId: value, name: null, description: null };
-  if (value && typeof value === "object") {
-    return { itemId: value.itemId ?? null, name: value.name ?? null, description: value.description ?? null };
+  if (typeof value === "string") {
+    return { itemId: value, name: null, description: null, defaultSlot: null, descriptionLocked: false };
   }
-  return { itemId: null, name: null, description: null };
+  if (value && typeof value === "object") {
+    return {
+      itemId: value.itemId ?? null,
+      name: value.name ?? null,
+      description: value.description ?? null,
+      defaultSlot: normalizeDefaultSlot(value.defaultSlot) ?? null,
+      descriptionLocked: value.descriptionLocked === true,
+    };
+  }
+  return { itemId: null, name: null, description: null, defaultSlot: null, descriptionLocked: false };
 }
 
 // An outfit stays "the current outfit" as long as every slot IT saved is
@@ -455,20 +510,25 @@ function applyOutfitEquip(state, outfit) {
       item = state.items.find((candidate) => qmNormalizeMatchKey(candidate.name) === key);
     }
     if (!item && snapshot.name) {
+      // An outfit saved before snapshots kept defaultSlot falls back to the
+      // slot it's going into, rather than rebuilding the item with none.
       item = {
         id: randomUUID(),
         name: snapshot.name,
         description: snapshot.description || "",
         quantity: 1,
         location: "bag",
-        defaultSlot: null,
+        defaultSlot: snapshot.defaultSlot ?? slot,
         favorite: false,
+        descriptionLocked: snapshot.descriptionLocked,
       };
       state.items.push(item);
     }
     if (!item) continue; // legacy slot with neither a live id nor a recreatable name
+    // A hidden item goes on too (whoever equips the outfit), which shows it
+    // until it's taken off again -- see visibleToModel.
     item.location = `equipped:${slot}`;
-    outfit.slots[slot] = { itemId: item.id, name: item.name, description: item.description };
+    outfit.slots[slot] = itemSlotSnapshot(item);
   }
 }
 
@@ -490,12 +550,31 @@ const CLOTHING_LAYERS_INSIDE_OUT = [
   ["clothing_torso", "midlayer_torso", "outerwear_torso"],
   ["clothing_legs", "midlayer_legs", "outerwear_legs"],
 ];
-function applyGeneratedWardrobe(state, proposal) {
+//
+// A hidden item the proposal uses (wardrobeHiddenMatches) is only touched as
+// the user chose in the confirm window: `hiddenChoices` maps its id to
+// { action: "overwrite" | "keep" | "skip", show }. No choice means skip, and a
+// skipped piece is dropped from its outfits. "overwrite" is the user's own
+// decision, so it applies even to a locked description.
+function applyGeneratedWardrobe(state, proposal, hiddenChoices = {}) {
+  const hiddenAction = (item) => {
+    if (item.hidden !== true) return null;
+    const action = hiddenChoices[item.id]?.action;
+    return action === "overwrite" || action === "keep" ? action : "skip";
+  };
   const createdItemNames = [];
   for (const entry of proposal.items) {
     const key = qmNormalizeMatchKey(entry.name);
     const existing = state.items.find((candidate) => qmNormalizeMatchKey(candidate.name) === key);
-    if (existing) continue; // reuse as-is -- never overwrite a possibly-customized existing item
+    if (existing) {
+      // reuse as-is -- never overwrite a possibly-customized existing item,
+      // unless it's a hidden one the user chose to overwrite
+      if (hiddenAction(existing) === "overwrite") {
+        existing.description = entry.description || "";
+        if (entry.defaultSlot) existing.defaultSlot = entry.defaultSlot;
+      }
+      continue;
+    }
     state.items.push({
       id: randomUUID(),
       name: entry.name,
@@ -522,6 +601,10 @@ function applyGeneratedWardrobe(state, proposal) {
       const memberKey = qmNormalizeMatchKey(memberName);
       const item = state.items.find((candidate) => qmNormalizeMatchKey(candidate.name) === memberKey);
       if (!item || !item.defaultSlot) continue; // unresolvable member, or nothing to place it in -- drop silently
+      if (hiddenAction(item) === "skip") {
+        skipped.push({ outfitName: outfitEntry.name, itemName: memberName, reason: "hidden" });
+        continue;
+      }
       let slot = item.defaultSlot;
       if (slots[slot]) {
         const layers = CLOTHING_LAYERS_INSIDE_OUT.find((region) => region.includes(slot)) ?? [];
@@ -531,7 +614,7 @@ function applyGeneratedWardrobe(state, proposal) {
         skipped.push({ outfitName: outfitEntry.name, itemName: memberName, reason: "slot-collision" });
         continue;
       }
-      slots[slot] = { itemId: item.id, name: item.name, description: item.description };
+      slots[slot] = itemSlotSnapshot(item);
       if (!createdItemNames.includes(item.name)) reusedItemNames.add(item.name);
     }
     state.outfits.push({
@@ -544,16 +627,107 @@ function applyGeneratedWardrobe(state, proposal) {
     createdOutfitNames.push(outfitEntry.name);
   }
 
+  // Unhidden last, so both passes above saw the same hidden state.
+  for (const item of state.items) {
+    const action = hiddenAction(item);
+    if (action && action !== "skip" && hiddenChoices[item.id]?.show === true) item.hidden = false;
+  }
+
   return { createdItemNames, createdOutfitNames, reusedItemNames: [...reusedItemNames], skipped };
 }
 
-function equippedItemNamesText(items) {
-  const names = [];
+// Hidden items a Build Wardrobe proposal would use: a proposed item whose name
+// matches one (applyGeneratedWardrobe would otherwise reuse it), or an outfit
+// piece naming one. These are what the confirm window asks about; `proposed`
+// is null for a piece only named in an outfit (no new details to overwrite with).
+function wardrobeHiddenMatches(state, proposal) {
+  const hiddenByKey = new Map(
+    state.items.filter((item) => item.hidden === true).map((item) => [qmNormalizeMatchKey(item.name), item]),
+  );
+  const matches = new Map();
+  for (const entry of proposal.items) {
+    const item = hiddenByKey.get(qmNormalizeMatchKey(entry.name));
+    if (item) {
+      matches.set(item.id, {
+        item,
+        proposed: { name: entry.name, description: entry.description || "", defaultSlot: entry.defaultSlot ?? null },
+      });
+    }
+  }
+  for (const outfit of proposal.outfits) {
+    for (const memberName of outfit.itemNames) {
+      const item = hiddenByKey.get(qmNormalizeMatchKey(memberName));
+      if (item && !matches.has(item.id)) matches.set(item.id, { item, proposed: null });
+    }
+  }
+  return [...matches.values()].map(({ item, proposed }) => ({
+    itemId: item.id,
+    name: item.name,
+    description: item.description,
+    defaultSlot: item.defaultSlot ?? null,
+    descriptionLocked: item.descriptionLocked === true,
+    proposed,
+  }));
+}
+
+// Equipped items in EQUIP_SLOTS order (outer layers first).
+function equippedItemsInOrder(items) {
+  const equipped = [];
   for (const slot of EQUIP_SLOTS) {
     const item = items.find((candidate) => candidate.location === `equipped:${slot}`);
-    if (item) names.push(item.name);
+    if (item) equipped.push(item);
   }
-  return names.join(", ");
+  return equipped;
+}
+
+// Descriptions read as sentences: each gets a closing "." unless it already
+// ends in punctuation, so separators are never doubled (", ," or "..").
+function qmAsSentence(text) {
+  const trimmed = text.trim();
+  return /[.,!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+function qmNameAndDescription(name, description) {
+  const text = (description || "").trim();
+  return text ? `${name}, ${text}` : name;
+}
+
+// Items (live, or an outfit's saved pieces) as feed text: "names" is a comma
+// list; "descriptions" and "namesDescriptions" are sentences, e.g.
+// "Red hat, A weathered red hat. Black Sneakers, Sporty black sneakers." An
+// item without a description uses its name.
+function itemsFeedText(entries, style) {
+  if (style === "names") return entries.map((entry) => entry.name).join(", ");
+  return entries
+    .map((entry) =>
+      qmAsSentence(
+        style === "descriptions"
+          ? (entry.description || "").trim() || entry.name
+          : qmNameAndDescription(entry.name, entry.description),
+      ),
+    )
+    .join(" ");
+}
+
+function equippedItemNamesText(items) {
+  return itemsFeedText(equippedItemsInOrder(items), "names");
+}
+
+// appearanceFeedMode -> how items are written; the outfit modes use their
+// item equivalent when no saved outfit matches what's worn.
+const FEED_ITEM_STYLE = {
+  outfitName: "names",
+  outfitDescription: "descriptions",
+  outfitNameDescription: "namesDescriptions",
+  equippedNames: "names",
+  equippedDescriptions: "descriptions",
+  equippedNamesDescriptions: "namesDescriptions",
+};
+
+function outfitFeedText(outfit, mode) {
+  if (mode === "outfitName") return outfit.name;
+  if (mode === "outfitDescription") return (outfit.description || "").trim();
+  return qmAsSentence(qmNameAndDescription(outfit.name, outfit.description));
 }
 
 // ── Image generation (loopback to the Engine's own REST API) ───────────────
@@ -723,29 +897,56 @@ function outfitVisualDescriptionText(outfit) {
 // comma/whitespace collapse below, not silently backfilled from anything else.
 function buildOutfitPortraitPrompt(template, { personaName, personaAppearance, equippedItemsText }) {
   const tmpl = typeof template === "string" && template.trim() ? template : DEFAULT_OUTFIT_PORTRAIT_PROMPT_TEMPLATE;
+  // Sentence-style feed text ends in "."; the template supplies its own
+  // punctuation after {equipped_items}, so drop ours rather than doubling it.
+  const itemsText = (equippedItemsText || "no special equipment").replace(/\.$/, "");
   const out = tmpl
     .replace(/\{name\}/g, personaName || "the character")
     .replace(/\{persona_appearance\}/g, personaAppearance || "")
-    .replace(/\{equipped_items\}/g, equippedItemsText || "no special equipment");
+    .replace(/\{equipped_items\}/g, itemsText);
   return out.replace(/\s{2,}/g, " ").replace(/\s+,/g, ",").replace(/,\s*,/g, ",").trim();
 }
 
 // The text a {{getvar::quartermaster_appearance_<ownerId>}} macro should
-// currently resolve to, per the owner's appearanceFeedMode. "outfitDescription"
-// falls back to the equipped item names when the current equip state doesn't
-// exactly match any saved outfit — there's no "current outfit" concept then,
-// but showing nothing would be worse than showing what's actually worn.
+// currently resolve to, per the owner's appearanceFeedMode. The outfit modes
+// fall back to their item equivalent when the current equip state doesn't
+// match any (shown) saved outfit, or that outfit has nothing to say in this
+// mode — there's no "current outfit" then, but showing nothing would be worse
+// than showing what's actually worn. Equipped hidden items count as worn
+// (visibleToModel), so they're included.
 function computeAppearanceText(state) {
-  if (state.appearanceFeedMode === "outfitDescription") {
-    const matching = state.outfits.find((outfit) => outfitMatchesCurrent(outfit, state.items));
-    if (!matching) return equippedItemNamesText(state.items);
-    const extras = extraEquippedNames(matching, state.items);
-    return extras.length > 0 ? `${matching.description} Also wearing ${extras.join(", ")}.` : matching.description;
+  const mode = state.appearanceFeedMode;
+  const style = FEED_ITEM_STYLE[mode];
+  if (!style) return "";
+  if (mode.startsWith("outfit")) {
+    const matching = state.outfits.find(
+      (outfit) => outfit.hidden !== true && outfitMatchesCurrent(outfit, state.items),
+    );
+    const text = matching ? outfitFeedText(matching, mode) : "";
+    if (text) {
+      const extras = extraEquippedNames(matching, state.items);
+      return extras.length > 0 ? `${qmAsSentence(text)} Also wearing ${extras.join(", ")}.` : text;
+    }
   }
-  if (state.appearanceFeedMode === "equippedNames") {
-    return equippedItemNamesText(state.items);
+  return itemsFeedText(equippedItemsInOrder(state.items), style);
+}
+
+// {equipped_items} for one saved outfit's portrait, per the same feed setting,
+// from the outfit's own saved pieces (never live equip state -- see
+// outfitVisualDescriptionText). With the feed off it keeps the original
+// behavior: the outfit's description, else its piece names.
+function outfitPortraitItemsText(outfit, mode) {
+  const style = FEED_ITEM_STYLE[mode];
+  if (!style) return outfitVisualDescriptionText(outfit);
+  if (mode.startsWith("outfit")) {
+    const text = outfitFeedText(outfit, mode);
+    if (text) return text;
   }
-  return "";
+  const pieces = EQUIP_SLOTS.map((slot) => outfit.slots?.[slot])
+    .filter(Boolean)
+    .map(normalizeOutfitSlotSnapshot)
+    .filter((piece) => piece.name);
+  return itemsFeedText(pieces, style) || "no special equipment";
 }
 
 // ── Agent-driven inventory sync ──────────────────────────────────────────────
@@ -1048,6 +1249,109 @@ async function generateWardrobeProposal({
   return { ok: false, error: "generation-failed" };
 }
 
+const pendingFieldsOf = (item) => ({
+  name: item.name,
+  description: item.description,
+  quantity: item.quantity,
+  location: item.location,
+});
+
+// Holds an agent change to a hidden item for the user to accept or keep
+// (askBeforeHiddenChanges). One entry per item: a newer change replaces the
+// older one. `before` is the item as the change found it -- accepting refuses
+// if the item has moved on since (the /pending resolve route).
+function queuePendingHiddenChange(state, item, wanted) {
+  const before = pendingFieldsOf(item);
+  const after = { ...before };
+  for (const key of ["description", "quantity", "location"]) {
+    if (key in wanted) after[key] = wanted[key];
+  }
+  state.pendingHiddenChanges = state.pendingHiddenChanges.filter((entry) => entry.itemId !== item.id);
+  state.pendingHiddenChanges.push({
+    id: randomUUID(),
+    itemId: item.id,
+    createdAt: new Date().toISOString(),
+    seen: false,
+    before,
+    after,
+    remove: wanted.remove === true,
+    descriptionLocked: item.descriptionLocked === true,
+  });
+}
+
+// Applies the tracker agent's change to one EXISTING item, through the
+// description lock and the hidden-item rules. `change` holds only what the
+// agent set: { description?, quantity?, location?, remove? }. ctx carries the
+// turn's outfitItemIds (an outfit equipped this turn keeps its placement),
+// removeIds (applied after all updates) and hiddenOutcomes (what happened to
+// hidden items, for the client's toasts).
+//
+// A hidden item (item.hidden, equipped or not):
+// - Taking it off while it's worn is always allowed; that hides it again.
+// - Anything else goes to pendingHiddenChanges when askBeforeHiddenChanges is
+//   on, otherwise follows hiddenItemAccess: the "user*" modes skip details
+//   (description, quantity, removal) and only "userShown" lets it be equipped
+//   or moved; the "agent*" modes apply everything; "*Shown" unhides it (except
+//   a skipped removal, which leaves it hidden).
+// The description lock blocks the agent everywhere (silently); only the user
+// accepting a pending change can override it.
+function applyAgentItemChange(state, item, change, ctx) {
+  const wanted = {};
+  if ("description" in change) wanted.description = normalizeText(change.description, MAX_ITEM_DESCRIPTION_LENGTH);
+  if ("quantity" in change) wanted.quantity = normalizeQuantity(change.quantity);
+  if ("location" in change && !ctx.outfitItemIds?.has(item.id)) {
+    const location = typeof change.location === "string" ? normalizeLocation(change.location, state) : null;
+    if (location !== null) wanted.location = location;
+  }
+  if (change.remove === true) wanted.remove = true;
+  for (const key of ["description", "quantity", "location"]) {
+    if (key in wanted && wanted[key] === item[key]) delete wanted[key];
+  }
+
+  const applyFields = (fields) => {
+    if (fields.remove) {
+      ctx.removeIds.add(item.id);
+      return;
+    }
+    if ("description" in fields) item.description = fields.description;
+    if ("quantity" in fields) item.quantity = fields.quantity;
+    if ("location" in fields) applyLocation(state.items, item, fields.location);
+  };
+
+  if (item.hidden !== true) {
+    if (item.descriptionLocked === true) delete wanted.description;
+    applyFields(wanted);
+    return;
+  }
+
+  if (wanted.location && !wanted.remove && isEquipped(item) && !wanted.location.startsWith("equipped:")) {
+    applyLocation(state.items, item, wanted.location);
+    delete wanted.location;
+  }
+  if (Object.keys(wanted).length === 0) return;
+
+  if (state.askBeforeHiddenChanges) {
+    queuePendingHiddenChange(state, item, wanted);
+    ctx.hiddenOutcomes.push({ itemId: item.id, name: item.name, outcome: "pending" });
+    return;
+  }
+
+  const mode = state.hiddenItemAccess;
+  const agentMayChange = mode === "agentHidden" || mode === "agentShown";
+  // A lone removal attempt is most likely the agent guessing at an item it
+  // was never told about, so in "userShown" it's skipped without showing it.
+  const shows = (mode === "userShown" && !wanted.remove) || mode === "agentShown";
+  if (agentMayChange) {
+    if (item.descriptionLocked === true) delete wanted.description;
+    applyFields(wanted);
+  } else if (mode === "userShown" && wanted.location && !wanted.remove) {
+    applyLocation(state.items, item, wanted.location);
+  }
+  if (shows && !(agentMayChange && wanted.remove)) item.hidden = false;
+  const outcome = agentMayChange ? (shows ? "appliedShown" : "applied") : shows ? "shown" : "skipped";
+  ctx.hiddenOutcomes.push({ itemId: item.id, name: item.name, outcome });
+}
+
 // Patch semantics, NOT full-snapshot (see git history for the prior design,
 // which matched every other tracker in this ecosystem — Inventory Tracker/
 // Character Tracker/World State — but risked a weaker model's incomplete
@@ -1091,14 +1395,17 @@ async function reconcileTrackerOutput(documents, persistState, chatId, ownerId, 
     outfits: state.outfits.map((savedOutfit) => ({ ...savedOutfit, slots: { ...savedOutfit.slots } })),
   };
 
-  // Tag maps built from these exact arrays in their stored (never re-sorted)
-  // order — must match formatAgentRuntimeContext's own assignment exactly,
-  // which it does as long as nothing mutates state.items/state.outfits
-  // between this turn's prepareContext and finalizeResult (true: the
-  // agent-runtime service below only reads/writes through this same store,
-  // and one pipeline turn never interleaves with another).
-  const itemByTag = new Map(state.items.map((item, index) => [index + 1, item]));
-  const outfitByTag = new Map(state.outfits.map((savedOutfit, index) => [qmOutfitTagLetter(index), savedOutfit]));
+  // Tag maps built from the same visible-to-the-agent lists, in their stored
+  // (never re-sorted) order — must match formatAgentRuntimeContext's own
+  // assignment exactly, which it does as long as nothing mutates
+  // state.items/state.outfits between this turn's prepareContext and
+  // finalizeResult (true: the agent-runtime service below only reads/writes
+  // through this same store, and one pipeline turn never interleaves with
+  // another). Hidden items/outfits get no tag, so the agent can't target them.
+  const itemByTag = new Map(agentVisibleItems(state).map((item, index) => [index + 1, item]));
+  const outfitByTag = new Map(
+    agentVisibleOutfits(state).map((savedOutfit, index) => [qmOutfitTagLetter(index), savedOutfit]),
+  );
 
   let outfit = null;
   if (data.equipOutfit !== null && data.equipOutfit !== undefined) {
@@ -1115,6 +1422,11 @@ async function reconcileTrackerOutput(documents, persistState, chatId, ownerId, 
     outfitItemIds = new Set(Object.values(outfit.slots).map((snapshot) => snapshot.itemId));
   }
 
+  // An item the active outfit already placed keeps that placement — the
+  // outfit is authoritative over its own slots this turn (applyAgentItemChange
+  // reads ctx.outfitItemIds).
+  const ctx = { outfitItemIds, removeIds: new Set(), hiddenOutcomes: [] };
+
   for (const entry of addEntries) {
     if (!entry || typeof entry !== "object") continue;
     const name = normalizeText(entry.name, MAX_ITEM_NAME_LENGTH);
@@ -1125,30 +1437,27 @@ async function reconcileTrackerOutput(documents, persistState, chatId, ownerId, 
     // always used: an "addItem" for something already tracked under this
     // name merges into it instead of creating a duplicate. Only merges on a
     // matching NAME, never similarity — "Blue Hat" and "Red Hat" always stay
-    // separate items.
-    let item = state.items.find((candidate) => qmNormalizeMatchKey(candidate.name) === key);
-    if (!item) {
-      item = {
-        id: randomUUID(),
-        name,
-        description: "",
-        quantity: 1,
-        location: "bag",
-        defaultSlot: null,
-        favorite: false,
-      };
-      state.items.push(item);
+    // separate items. Merging into a HIDDEN item is how the agent reaches one
+    // it can't see; applyAgentItemChange decides what's allowed.
+    const existing = state.items.find((candidate) => qmNormalizeMatchKey(candidate.name) === key);
+    const change = { location: typeof entry.location === "string" ? entry.location : "bag" };
+    if (entry.description !== undefined) change.description = entry.description;
+    if (entry.quantity !== undefined) change.quantity = entry.quantity;
+    if (existing) {
+      applyAgentItemChange(state, existing, change, ctx);
+      continue;
     }
-
-    if (entry.description !== undefined) item.description = normalizeText(entry.description, MAX_ITEM_DESCRIPTION_LENGTH);
-    if (entry.quantity !== undefined) item.quantity = normalizeQuantity(entry.quantity);
-    // An item the active outfit already placed keeps that placement — the
-    // outfit is authoritative over its own slots this turn.
-    if (!(outfitItemIds && outfitItemIds.has(item.id))) {
-      const rawLocation = typeof entry.location === "string" ? entry.location : "bag";
-      const location = normalizeLocation(rawLocation, state);
-      if (location !== null) applyLocation(state.items, item, location);
-    }
+    const item = {
+      id: randomUUID(),
+      name,
+      description: "",
+      quantity: 1,
+      location: "bag",
+      defaultSlot: null,
+      favorite: false,
+    };
+    state.items.push(item);
+    applyAgentItemChange(state, item, change, ctx);
   }
 
   for (const entry of updateEntries) {
@@ -1165,23 +1474,22 @@ async function reconcileTrackerOutput(documents, persistState, chatId, ownerId, 
     // "bag" default for a brand-new item) — defaulting a missing location
     // to "bag" on an update would silently reset an item's placement every
     // time only its quantity/description changed.
-    if ("description" in entry) item.description = normalizeText(entry.description, MAX_ITEM_DESCRIPTION_LENGTH);
-    if ("quantity" in entry) item.quantity = normalizeQuantity(entry.quantity);
-    if ("location" in entry && !(outfitItemIds && outfitItemIds.has(item.id))) {
-      const location = typeof entry.location === "string" ? normalizeLocation(entry.location, state) : null;
-      if (location !== null) applyLocation(state.items, item, location);
+    const change = {};
+    for (const key of ["description", "quantity", "location"]) {
+      if (key in entry) change[key] = entry[key];
     }
+    applyAgentItemChange(state, item, change, ctx);
   }
 
-  const removeIds = new Set();
   for (const tag of removeEntries) {
     const item = itemByTag.get(Number(tag));
     if (!item) {
       logger?.warn("[quartermaster] tracker removeItem targeted an unknown tag %s -- skipped", JSON.stringify(tag));
       continue;
     }
-    removeIds.add(item.id);
+    applyAgentItemChange(state, item, { remove: true }, ctx);
   }
+  const removeIds = ctx.removeIds;
   // Saved outfits are NOT pruned when an item they reference is removed here
   // — see applyOutfitEquip's own comment: the outfit keeps its own name/
   // description snapshot precisely so it can recreate the item next time
@@ -1208,6 +1516,7 @@ async function reconcileTrackerOutput(documents, persistState, chatId, ownerId, 
     updatedItems: [],
     removedItems: [],
     equippedOutfitName: outfit ? outfit.name : null,
+    hiddenOutcomes: ctx.hiddenOutcomes,
   };
   for (const [id, after] of afterById) {
     const before = beforeById.get(id);
@@ -1221,8 +1530,12 @@ async function reconcileTrackerOutput(documents, persistState, chatId, ownerId, 
       changeLog.updatedItems.push({ id, name: after.name, before: fieldsOf(before), after: fieldsOf(after) });
     }
   }
+  // The whole removed item rides along so a Revert rebuilds it exactly
+  // (default slot, hidden, description lock), not just its tracked fields.
   for (const [id, before] of beforeById) {
-    if (!afterById.has(id)) changeLog.removedItems.push({ id, name: before.name, before: fieldsOf(before) });
+    if (!afterById.has(id)) {
+      changeLog.removedItems.push({ id, name: before.name, before: fieldsOf(before), item: { ...before } });
+    }
   }
   state.lastTrackerChange = changeLog;
 
@@ -1394,8 +1707,25 @@ async function loadInventoryState(documents, chatId, ownerId) {
               typeof doc.data.lastTrackerChange.equippedOutfitName === "string"
                 ? doc.data.lastTrackerChange.equippedOutfitName
                 : null,
+            hiddenOutcomes: Array.isArray(doc.data.lastTrackerChange.hiddenOutcomes)
+              ? doc.data.lastTrackerChange.hiddenOutcomes
+              : [],
           }
         : null,
+    // Hidden items (0.1.29): per-chat. askBeforeHiddenChanges holds agent
+    // changes to them as pendingHiddenChanges for the user to decide;
+    // hiddenItemAccess is what happens without asking (applyAgentItemChange).
+    askBeforeHiddenChanges:
+      typeof doc?.data?.askBeforeHiddenChanges === "boolean" ? doc.data.askBeforeHiddenChanges : true,
+    hiddenItemAccess: HIDDEN_ITEM_ACCESS_MODES.has(doc?.data?.hiddenItemAccess)
+      ? doc.data.hiddenItemAccess
+      : "userHidden",
+    wardrobeUsesHidden: typeof doc?.data?.wardrobeUsesHidden === "boolean" ? doc.data.wardrobeUsesHidden : false,
+    hiddenOnlyInHiddenTab:
+      typeof doc?.data?.hiddenOnlyInHiddenTab === "boolean" ? doc.data.hiddenOnlyInHiddenTab : true,
+    pendingHiddenChanges: Array.isArray(doc?.data?.pendingHiddenChanges)
+      ? doc.data.pendingHiddenChanges.filter((entry) => entry && typeof entry === "object" && entry.id && entry.itemId)
+      : [],
     // Generate Image settings -- a purely local preference read only when
     // THIS package calls the Engine's own image-generation route (see
     // resolveImageConnection/generateImageViaEngine below); never anything
@@ -1574,8 +1904,8 @@ export async function activate(context) {
       if (context.chatMode !== "roleplay") return null;
       const state = await loadInventoryState(documents, context.chatId, QM_TRACKER_OWNER_ID);
       return formatAgentRuntimeContext(
-        state.items,
-        state.outfits.map((outfit) => outfit.name),
+        agentVisibleItems(state),
+        agentVisibleOutfits(state).map((outfit) => outfit.name),
       );
     },
     async finalizeResult({ context, result }) {
@@ -1614,11 +1944,12 @@ export async function activate(context) {
     if (mode !== "roleplay" || !chatId || !isQuartermasterAgentActive(chatMeta)) return null;
     try {
       const state = await loadInventoryState(documents, chatId, QM_TRACKER_OWNER_ID);
+      const items = state.items.filter(visibleToModel);
       // Skip the persona lookup entirely when there's nothing to report yet —
       // this runs on every generation, not just once.
-      if (state.items.length === 0) return null;
+      if (items.length === 0) return null;
       const personaName = await resolvePersonaName(persistence, resources, chatId);
-      const text = inventorySummaryText(personaName, state.items);
+      const text = inventorySummaryText(personaName, items);
       if (!text) return null;
       return { text, provides: { inventory: true } };
     } catch {
@@ -1722,6 +2053,20 @@ export async function activate(context) {
           item.defaultSlot = defaultSlot;
         }
         if (body.favorite !== undefined) item.favorite = Boolean(body.favorite);
+        if (body.descriptionLocked !== undefined) {
+          if (typeof body.descriptionLocked !== "boolean") {
+            return reply.status(400).send({ error: "Invalid descriptionLocked" });
+          }
+          item.descriptionLocked = body.descriptionLocked;
+        }
+        if (body.hidden !== undefined) {
+          if (typeof body.hidden !== "boolean") return reply.status(400).send({ error: "Invalid hidden" });
+          // Hiding a worn item takes it off. Equipping a hidden one (a location
+          // change above, without hiding it in the same request) is allowed:
+          // it's shown while worn -- see visibleToModel.
+          if (body.hidden && item.hidden !== true && isEquipped(item)) item.location = "bag";
+          item.hidden = body.hidden;
+        }
 
         await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
@@ -1814,15 +2159,19 @@ export async function activate(context) {
           // Fresh id, not the dead one — nothing else references an item's
           // id across a deletion (outfits keep their own name/description
           // slot snapshot, not a live item reference), so there's no reason
-          // to reclaim it.
+          // to reclaim it. Entries from 0.1.29 on carry the whole item, so the
+          // rebuilt one keeps its default slot, hidden state and lock.
+          const saved = entry.item && typeof entry.item === "object" ? entry.item : {};
           const item = {
             id: randomUUID(),
             name: entry.name,
             description: entry.before.description,
             quantity: entry.before.quantity,
             location: "bag",
-            defaultSlot: null,
-            favorite: false,
+            defaultSlot: normalizeDefaultSlot(saved.defaultSlot) ?? null,
+            favorite: saved.favorite === true,
+            hidden: saved.hidden === true,
+            descriptionLocked: saved.descriptionLocked === true,
           };
           const location = normalizeLocation(entry.before.location, state);
           if (location !== null) applyLocation(state.items, item, location);
@@ -1851,9 +2200,98 @@ export async function activate(context) {
         // now (not just the id), so a deleted item's slot is NOT pruned —
         // re-equipping that outfit later recreates it fresh. See
         // applyOutfitEquip's own comment for why this is deliberate.
+        state.pendingHiddenChanges = state.pendingHiddenChanges.filter((entry) => entry.itemId !== itemId);
 
         await persistState(chatId, ownerId, state);
-        return { items: state.items, outfits: state.outfits };
+        return { items: state.items, outfits: state.outfits, pendingHiddenChanges: state.pendingHiddenChanges };
+      });
+
+      // Settles one pending agent change to a hidden item (see
+      // queuePendingHiddenChange). Body: { decision: "accept" | "keep", show,
+      // override }. "accept" applies the agent's change -- even to a locked
+      // description, since the user is choosing it; "keep" just drops it.
+      // `show` unhides the item either way. If the item changed since the
+      // agent's change was made, "accept" answers 409 with { stale, before,
+      // current, after } so the user can compare, and applies only with
+      // `override` -- then just the fields the agent changed, on top of the
+      // item as it is now. A deleted item can only be kept (dropped). An
+      // accepted change joins lastTrackerChange so it can be reverted.
+      routes.post("/inventory/:chatId/:ownerId/pending/:pendingId/resolve", async (request, reply) => {
+        const { chatId, ownerId, pendingId } = request.params;
+        const body = request.body ?? {};
+        if (body.decision !== "accept" && body.decision !== "keep") {
+          return reply.status(400).send({ error: "Invalid decision" });
+        }
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        const entry = state.pendingHiddenChanges.find((candidate) => candidate.id === pendingId);
+        if (!entry) return reply.status(404).send({ error: "Nothing pending" });
+        const item = state.items.find((candidate) => candidate.id === entry.itemId);
+
+        if (body.decision === "accept") {
+          if (!item) return reply.status(409).send({ error: "This item no longer exists", gone: true });
+          const now = pendingFieldsOf(item);
+          if (body.override !== true && Object.keys(now).some((key) => now[key] !== entry.before[key])) {
+            return reply.status(409).send({
+              error: "This item has changed since the agent's change",
+              stale: true,
+              before: entry.before,
+              current: now,
+              after: entry.after,
+            });
+          }
+          const change = (state.lastTrackerChange ??= {
+            appliedAt: new Date().toISOString(),
+            reasoning: "",
+            addedItems: [],
+            updatedItems: [],
+            removedItems: [],
+            equippedOutfitName: null,
+            hiddenOutcomes: [],
+          });
+          const fieldsOf = ({ description, quantity, location }) => ({ description, quantity, location });
+          if (entry.remove) {
+            state.items = state.items.filter((candidate) => candidate.id !== item.id);
+            change.removedItems.push({ id: item.id, name: item.name, before: fieldsOf(item), item: { ...item } });
+          } else {
+            const before = fieldsOf(item);
+            const agentChanged = (key) => entry.after[key] !== entry.before[key];
+            if (agentChanged("description")) {
+              item.description = normalizeText(entry.after.description, MAX_ITEM_DESCRIPTION_LENGTH);
+            }
+            if (agentChanged("quantity")) item.quantity = normalizeQuantity(entry.after.quantity);
+            if (agentChanged("location")) {
+              const location = normalizeLocation(entry.after.location, state);
+              if (location !== null) applyLocation(state.items, item, location);
+            }
+            change.updatedItems = change.updatedItems.filter((candidate) => candidate.id !== item.id);
+            change.updatedItems.push({ id: item.id, name: item.name, before, after: fieldsOf(item) });
+          }
+        }
+        if (item && body.show === true && state.items.includes(item)) item.hidden = false;
+        state.pendingHiddenChanges = state.pendingHiddenChanges.filter((candidate) => candidate.id !== pendingId);
+
+        const active = state.outfits.find((candidate) => outfitMatchesCurrent(candidate, state.items));
+        await syncRealAvatarForOutfit(persistence, resources, context.dataDir, chatId, state, active ?? null);
+        await persistState(chatId, ownerId, state);
+        return {
+          items: state.items,
+          outfits: state.outfits,
+          pendingHiddenChanges: state.pendingHiddenChanges,
+          lastTrackerChange: state.lastTrackerChange,
+        };
+      });
+
+      // Marks pending changes as already shown to the user, so the popup only
+      // opens for new ones; the rest wait in the dock. Body: { ids }.
+      routes.post("/inventory/:chatId/:ownerId/pending/seen", async (request, reply) => {
+        const { chatId, ownerId } = request.params;
+        const ids = Array.isArray(request.body?.ids) ? new Set(request.body.ids) : new Set();
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        for (const entry of state.pendingHiddenChanges) {
+          if (ids.has(entry.id)) entry.seen = true;
+        }
+        await persistState(chatId, ownerId, state);
+        return { pendingHiddenChanges: state.pendingHiddenChanges };
       });
 
       // Serves an item's image, resolved by NAME (not a stored reference —
@@ -2044,6 +2482,12 @@ export async function activate(context) {
         // "Update" in the extension's sense — resave the currently-equipped
         // items into this outfit without changing its name/description.
         if (body.resnapshot === true) outfit.slots = currentEquippedSlots(state.items);
+        // A hidden outfit is never offered to the agent (agentVisibleOutfits)
+        // or used by the outfit appearance feeds; the user can still equip it.
+        if (body.hidden !== undefined) {
+          if (typeof body.hidden !== "boolean") return reply.status(400).send({ error: "Invalid hidden" });
+          outfit.hidden = body.hidden;
+        }
 
         await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
@@ -2094,13 +2538,15 @@ export async function activate(context) {
           includePersonaContext,
           // Wearable only (a real defaultSlot) -- a phone/wallet/book with no
           // equip slot must never be offered as outfit material in the first
-          // place, not just discouraged by the prompt's own rules.
+          // place, not just discouraged by the prompt's own rules. Hidden
+          // items only when the user lets Build Wardrobe use them.
           existingItems: state.items
-            .filter((item) => item.defaultSlot)
+            .filter((item) => item.defaultSlot && (state.wardrobeUsesHidden || visibleToModel(item)))
             .map((item) => ({ name: item.name, description: item.description, defaultSlot: item.defaultSlot })),
         });
         if (!result.ok) return reply.status(502).send({ error: result.error });
-        return { proposal: result.proposal };
+        // Hidden items the proposal would use, for the client's confirm window.
+        return { proposal: result.proposal, hiddenMatches: wardrobeHiddenMatches(state, result.proposal) };
       });
 
       // The confirm step for Build Wardrobe. The client echoes back exactly
@@ -2114,7 +2560,18 @@ export async function activate(context) {
         if (!proposal) return reply.status(400).send({ error: "Invalid wardrobe proposal" });
 
         const state = await loadInventoryState(documents, chatId, ownerId);
-        const summary = applyGeneratedWardrobe(state, proposal);
+        // Choices only count for hidden items this proposal actually uses, as
+        // they are NOW -- recomputed here, not trusted from the client.
+        // Body: { proposal, hiddenChoices: { [itemId]: { action, show } } }.
+        const rawChoices = body.hiddenChoices && typeof body.hiddenChoices === "object" ? body.hiddenChoices : {};
+        const hiddenChoices = {};
+        for (const match of wardrobeHiddenMatches(state, proposal)) {
+          const choice = rawChoices[match.itemId];
+          if (choice && typeof choice === "object") {
+            hiddenChoices[match.itemId] = { action: choice.action, show: choice.show === true };
+          }
+        }
+        const summary = applyGeneratedWardrobe(state, proposal, hiddenChoices);
         await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits, summary };
       });
@@ -2213,7 +2670,7 @@ export async function activate(context) {
           prompt: buildOutfitPortraitPrompt(state.outfitPortraitPromptTemplate, {
             personaName,
             personaAppearance,
-            equippedItemsText: outfitVisualDescriptionText(outfit),
+            equippedItemsText: outfitPortraitItemsText(outfit, state.appearanceFeedMode),
           }),
         };
       });
@@ -2360,6 +2817,13 @@ export async function activate(context) {
           // templates ARE portable plain text, so those travel.
           itemImagePromptTemplate: state.itemImagePromptTemplate,
           outfitPortraitPromptTemplate: state.outfitPortraitPromptTemplate,
+          // Items/outfits already carry hidden/descriptionLocked themselves.
+          // pendingHiddenChanges is deliberately not exported: it's waiting on
+          // a decision in this chat, not part of the character sheet.
+          askBeforeHiddenChanges: state.askBeforeHiddenChanges,
+          hiddenItemAccess: state.hiddenItemAccess,
+          wardrobeUsesHidden: state.wardrobeUsesHidden,
+          hiddenOnlyInHiddenTab: state.hiddenOnlyInHiddenTab,
         };
       });
 
@@ -2392,6 +2856,16 @@ export async function activate(context) {
         // exported before this feature existed).
         state.itemImagePromptTemplate = normalizeText(body.itemImagePromptTemplate, MAX_PROMPT_TEMPLATE_LENGTH);
         state.outfitPortraitPromptTemplate = normalizeText(body.outfitPortraitPromptTemplate, MAX_PROMPT_TEMPLATE_LENGTH);
+        // Same defaults as a fresh chat when the file predates hidden items.
+        state.askBeforeHiddenChanges =
+          typeof body.askBeforeHiddenChanges === "boolean" ? body.askBeforeHiddenChanges : true;
+        state.hiddenItemAccess = HIDDEN_ITEM_ACCESS_MODES.has(body.hiddenItemAccess)
+          ? body.hiddenItemAccess
+          : "userHidden";
+        state.wardrobeUsesHidden = typeof body.wardrobeUsesHidden === "boolean" ? body.wardrobeUsesHidden : false;
+        state.hiddenOnlyInHiddenTab =
+          typeof body.hiddenOnlyInHiddenTab === "boolean" ? body.hiddenOnlyInHiddenTab : true;
+        state.pendingHiddenChanges = [];
 
         const idMap = new Map();
         const nextItems = [];
@@ -2408,6 +2882,8 @@ export async function activate(context) {
             location: "bag",
             defaultSlot: normalizeDefaultSlot(raw.defaultSlot) || null,
             favorite: Boolean(raw.favorite),
+            hidden: raw.hidden === true,
+            descriptionLocked: raw.descriptionLocked === true,
           };
           applyLocation(nextItems, item, location);
           nextItems.push(item);
@@ -2428,6 +2904,8 @@ export async function activate(context) {
               itemId: idMap.get(snapshot.itemId) ?? null,
               name: snapshotName,
               description: normalizeText(snapshot.description, MAX_ITEM_DESCRIPTION_LENGTH),
+              defaultSlot: normalizeDefaultSlot(snapshot.defaultSlot) ?? null,
+              descriptionLocked: snapshot.descriptionLocked === true,
             };
           }
           const outfitId = randomUUID();
@@ -2446,6 +2924,7 @@ export async function activate(context) {
             description: normalizeText(raw.description, MAX_OUTFIT_DESCRIPTION_LENGTH),
             slots,
             portraitFile,
+            hidden: raw.hidden === true,
           });
         }
 
@@ -2460,6 +2939,11 @@ export async function activate(context) {
           showArmor: state.showArmor,
           showWeapons: state.showWeapons,
           replaceRealAvatarOnEquip: state.replaceRealAvatarOnEquip,
+          askBeforeHiddenChanges: state.askBeforeHiddenChanges,
+          hiddenItemAccess: state.hiddenItemAccess,
+          wardrobeUsesHidden: state.wardrobeUsesHidden,
+          hiddenOnlyInHiddenTab: state.hiddenOnlyInHiddenTab,
+          pendingHiddenChanges: state.pendingHiddenChanges,
         };
       });
 
@@ -2474,10 +2958,23 @@ export async function activate(context) {
           }
           state.appearanceFeedMode = body.appearanceFeedMode;
         }
-        for (const key of ["showUnderwear", "showArmor", "showWeapons"]) {
+        for (const key of [
+          "showUnderwear",
+          "showArmor",
+          "showWeapons",
+          "askBeforeHiddenChanges",
+          "wardrobeUsesHidden",
+          "hiddenOnlyInHiddenTab",
+        ]) {
           if (body[key] === undefined) continue;
           if (typeof body[key] !== "boolean") return reply.status(400).send({ error: `Invalid ${key}` });
           state[key] = body[key];
+        }
+        if (body.hiddenItemAccess !== undefined) {
+          if (!HIDDEN_ITEM_ACCESS_MODES.has(body.hiddenItemAccess)) {
+            return reply.status(400).send({ error: "Invalid hiddenItemAccess" });
+          }
+          state.hiddenItemAccess = body.hiddenItemAccess;
         }
 
         if (body.replaceRealAvatarOnEquip !== undefined) {
@@ -2528,6 +3025,10 @@ export async function activate(context) {
           imageConnectionId: state.imageConnectionId,
           itemImagePromptTemplate: state.itemImagePromptTemplate,
           outfitPortraitPromptTemplate: state.outfitPortraitPromptTemplate,
+          askBeforeHiddenChanges: state.askBeforeHiddenChanges,
+          hiddenItemAccess: state.hiddenItemAccess,
+          wardrobeUsesHidden: state.wardrobeUsesHidden,
+          hiddenOnlyInHiddenTab: state.hiddenOnlyInHiddenTab,
         };
       });
     },
