@@ -308,8 +308,9 @@ export function createForgeFormationMigration({
         : 0;
     return { ...result(run, job?.data), staleKits };
   }
-  // A remake the player cancelled (or that failed) is not forced again: later jobs only add missing kits and
-  // keep each old kit, and its old stamp, so Settings still offers the remake.
+  // A remake the player cancelled (or that failed) is not forced again. After a cancel, later jobs only add
+  // missing kits and keep each old kit, and its old stamp, so Settings still offers the remake; a failed job
+  // waits for its explicit retry.
   const declinedRemake = (job) =>
     job?.kitPrompt === kitPrompt && (["failed", "cancelled"].includes(job.status) || job.declined === true);
   const keep = (row) => ({
@@ -330,9 +331,11 @@ export function createForgeFormationMigration({
     const answer = await transaction(async ({ documents: store }) => {
       const { run, job, session } = await readWorld(store, runId);
       if (!run) return { ok: false, error: "not-found" };
+      // A failed job may have been paid for and waits for its explicit retry; only a cancelled one is followed
+      // by a new job.
       if (
         forgeFormationJobActive(job?.data) ||
-        (!onlyMissing && job?.data?.status === "failed" && job.data.targetMode === body.targetMode)
+        (job?.data?.status === "failed" && job.data.targetMode === body.targetMode)
       )
         return result(run, job.data);
       // A kit refresh within Formation leaves pending fights alone: they replay their own frozen snapshot.
@@ -418,14 +421,16 @@ export function createForgeFormationMigration({
     if (rows.every((row) => currentKit(row.data))) return { ok: true };
     const playable = rows.every((row) => playableKit(row.data));
     // Once a remake under these rules was cancelled or failed, the old kits keep fighting; Settings offers the
-    // remake (or its retry) again, and only a character with no kit at all is still generated.
+    // remake (or its retry) again, and after a cancel only a character with no kit at all is still generated.
     const declined = declinedRemake((await documents.getById(packageId, jobId(runId)))?.data);
     if (playable && declined) return { ok: true };
     const started = await start({ runId, targetMode: "formation", confirmed: true }, { onlyMissing: declined });
     if (forgeFormationJobActive(started.conversion))
       return { ...started, ok: false, error: "combat-conversion-in-progress" };
-    // Nothing could start (an older failed job awaiting its retry, say): kits that can fight, fight.
+    // Nothing could start (a failed job awaiting its retry, say): kits that can fight, fight.
     if (playable) return { ok: true };
+    // A character with no kit waits for that retry in Story Continuity; the battle start never pays for it.
+    if (started.conversion?.status === "failed") return { ...started, ok: false, error: "combat-conversion-failed" };
     return { ...started, ok: false, error: started.error || "combat-conversion-in-progress" };
   }
   return {

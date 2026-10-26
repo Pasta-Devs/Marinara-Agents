@@ -1,4 +1,4 @@
-/* global FORGE_FORMATION_ENGINE, forgeFormationCeilings, forgeFormationEffects, forgeFormationEnemyKit, forgeFormationMaxPower, forgeFormationMode, forgeFormationShares, forgeFormationSpread, forgeFormationTargets, forgeFormationTeamError, forgeFormationTriggers, normalizeForgeFormationKit, normalizeForgeFormationRules */
+/* global FORGE_FORMATION_ENGINE, FORGE_FORMATION_RULES, forgeFormationCeilings, forgeFormationEffects, forgeFormationEnemyKit, forgeFormationMaxPower, forgeFormationMode, forgeFormationShares, forgeFormationSpread, forgeFormationTargets, forgeFormationTeamError, forgeFormationTriggers, normalizeForgeFormationKit, normalizeForgeFormationRules */
 export function forgeFormationAvailableElements(session, documents) {
   return [
     ...new Set(
@@ -220,12 +220,13 @@ export function forgeFormationRoutes(routes, { migration, readWorld, cancellatio
             request.body.expectedCombatMode !== forgeFormationMode(run)
           )
             return { ok: false, error: "changed" };
-          // A tab still running an older engine would play a fight this server scores differently; it starts
-          // nothing and spends nothing until it reloads. A missing field means an older tab.
+          // A tab still running an older engine or older rules would play a fight this server scores differently;
+          // it starts nothing and spends nothing until it reloads. A missing field means an older tab.
           if (
             starting &&
             forgeFormationMode(run) === "formation" &&
-            request.body?.expectedFormationEngine !== FORGE_FORMATION_ENGINE
+            (request.body?.expectedFormationEngine !== FORGE_FORMATION_ENGINE ||
+              request.body?.expectedFormationRules !== FORGE_FORMATION_RULES)
           )
             return { ok: false, error: "formation-engine-changed" };
         }

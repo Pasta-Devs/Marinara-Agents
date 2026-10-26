@@ -777,6 +777,16 @@ test("the saved snapshot, not the client log, picks the engine that scores a cla
     current.log.every((record) => record.v === FORGE_FORMATION_ENGINE),
     "without it, the log is read as Auto",
   );
+  // A fight left pending by 1.24.0 carries no stamp but writes engine-2 records: the current engine scores it,
+  // even with the old engine present.
+  globalThis.forgeFormationLegacyReplay = () => assert.fail("engine-2 records never reach the legacy replay");
+  try {
+    const replayed = replayForgeFormationBattle(snapshot, current.log);
+    assert.equal(replayed.result, current.result);
+    assert.deepEqual(replayed.log, current.log);
+  } finally {
+    delete globalThis.forgeFormationLegacyReplay;
+  }
 });
 
 test("the server seats enemies front-first and keeps Classic guides byte-identical", async () => {

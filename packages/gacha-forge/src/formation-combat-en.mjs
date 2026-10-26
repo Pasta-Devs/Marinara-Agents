@@ -7,6 +7,8 @@ export const forgeFormationCombatEnglish = {
   "combat.formation.rows": "Seat at least one character in the Front Row, with at most three in either row.",
   "combat.formation.kitPending":
     "Combat kits are being prepared. Open Story Continuity to view progress, retry a failed conversion, or cancel a remake to fight with the current kits.",
+  "combat.formation.kitFailed":
+    "A character's combat kit could not be prepared. Open Story Continuity and choose Retry to try again.",
   "combat.formation.engineChanged": "Formation was updated. Reload the game to keep playing.",
   "combat.formation.energy": "Team energy",
   "combat.formation.foeEnergy": "Enemy energy",

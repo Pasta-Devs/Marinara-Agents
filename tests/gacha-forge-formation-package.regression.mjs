@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { createChapterRuntime, chapterRunId, chapterUnitId } from "./fixtures/gacha-forge-chapter-runtime.mjs";
 import {
   FORGE_FORMATION_ENGINE,
+  FORGE_FORMATION_RULES,
   FORGE_FORMATION_KIT_PROMPT,
   normalizeForgeFormationKit,
   replayForgeFormationBattle,
@@ -129,7 +130,11 @@ async function fixture(mode = "formation") {
 }
 const request = { chapter: 2, combatIndex: 1, difficulty: "normal" };
 // What a current client sends with every Formation start.
-const starting = (body) => ({ ...body, expectedFormationEngine: FORGE_FORMATION_ENGINE });
+const starting = (body) => ({
+  ...body,
+  expectedFormationEngine: FORGE_FORMATION_ENGINE,
+  expectedFormationRules: FORGE_FORMATION_RULES,
+});
 
 test("actual new-world creation preserves Formation and defaults to Classic without converting units", async () => {
   const f = await fixture();

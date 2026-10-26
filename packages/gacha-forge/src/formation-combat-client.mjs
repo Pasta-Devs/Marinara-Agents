@@ -1,4 +1,4 @@
-/* global FORGE_FORMATION_ENGINE, forgeFormationCombatEnglish, forgeFormationElements, forgeFormationProjection, forgeFormationPayment, normalizeForgeFormationKit, bt */
+/* global FORGE_FORMATION_ENGINE, FORGE_FORMATION_RULES, forgeFormationCombatEnglish, forgeFormationElements, forgeFormationProjection, forgeFormationPayment, normalizeForgeFormationKit, bt */
 const forgeFormationEscape = (value) =>
   String(value ?? "").replace(
     /[&<>"']/gu,
@@ -52,6 +52,7 @@ export function forgeFormationStartRequest(host, path, body) {
     ...body,
     expectedCombatMode: host._combat?.combatMode || "classic",
     expectedFormationEngine: FORGE_FORMATION_ENGINE,
+    expectedFormationRules: FORGE_FORMATION_RULES,
   };
 }
 
@@ -900,9 +901,10 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
     if (focused) restoreFocus(current, container);
   }
   const restoreFocus = (current, container) => {
+    // A plan still missing a fighter keeps focus on that fighter, so a repeated Enter never resolves it.
     const target =
       current.mode === "summary"
-        ? container.querySelector("[data-formation-fight]")
+        ? container.querySelector(".unset [data-formation-pick]") || container.querySelector("[data-formation-fight]")
         : ["aim", "move", "pull"].includes(current.mode)
           ? root.querySelector(".cbt.targetable[tabindex], [data-formation-seat]") ||
             container.querySelector("[data-formation-confirm], [data-formation-cancel]")
@@ -1232,6 +1234,7 @@ export function forgeFormationErrorLabel(error) {
   if (error === "formation-rows") return forgeFormationLabel("rows");
   if (error === "formation-element-required") return forgeFormationLabel("unavailable");
   if (error === "formation-engine-changed") return forgeFormationLabel("engineChanged");
+  if (error === "combat-conversion-failed") return forgeFormationLabel("kitFailed");
   if (["conversion-in-progress", "formation-conversion-required", "combat-conversion-in-progress"].includes(error))
     return forgeFormationLabel("kitPending");
   return "";

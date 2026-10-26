@@ -10,6 +10,7 @@ import {
 } from "./fixtures/gacha-forge-chapter-runtime.mjs";
 import {
   FORGE_FORMATION_ENGINE,
+  FORGE_FORMATION_RULES,
   FORGE_FORMATION_KIT_PROMPT,
   forgeFormationEnemyKit,
   replayForgeFormationBattle,
@@ -90,7 +91,7 @@ async function fixture() {
   return f;
 }
 const request = { chapter: "event-1", combatIndex: 0 };
-const engine = { expectedFormationEngine: FORGE_FORMATION_ENGINE };
+const engine = { expectedFormationEngine: FORGE_FORMATION_ENGINE, expectedFormationRules: FORGE_FORMATION_RULES };
 
 test("actual event routes freeze Formation mode and rules, replay its choices, and grant the event reward once", async () => {
   const f = await fixture();

@@ -588,6 +588,15 @@ for (const theme of ["dark", "light"]) {
       // 2. Kaveh is selected next: Hold.
       await expect(forge.locator(".side.allies .cbt.is-actor")).toHaveAttribute("data-id", extra[0]);
       await turn.locator('[data-act="hold"]').click();
+      // Two of three planned: Enter on the tray's Fight opens the plan with focus on the fighter still unplanned,
+      // so another Enter cannot resolve the turn.
+      await expect(forge.locator(".side.allies .cbt.is-actor")).toHaveAttribute("data-id", extra[1]);
+      await turn.locator('[data-act="fight"]').focus();
+      await page.keyboard.press("Enter");
+      await expect(turn.locator("[data-formation-plan]")).toBeVisible();
+      await expect(turn.locator("[data-formation-fight]")).not.toBeFocused();
+      await expect(turn.locator(`[data-formation-pick="${extra[1]}"]`)).toBeFocused();
+      await page.keyboard.press("Enter");
       // 3. Pulcinella swaps with a support.
       await expect(forge.locator(".side.allies .cbt.is-actor")).toHaveAttribute("data-id", extra[1]);
       await turn.locator('[data-act="row"]').click();
@@ -609,9 +618,11 @@ for (const theme of ["dark", "light"]) {
       await forge.locator('.cbt[data-id="enemy-1"]').click();
       await expect(plan.locator("li").nth(0)).toContainText("Lighthouse dawn → Leyshell Blade");
       await expect(bank.locator("i").first()).toContainText("→");
-      // Cancel Kaveh's Hold: he is listed as holding with no action chosen.
-      await plan.locator(`[data-formation-clear="${extra[0]}"]`).click();
+      // Cancel Kaveh's Hold by keyboard: he is listed as holding with no action chosen, and focus stays on him.
+      await plan.locator(`[data-formation-clear="${extra[0]}"]`).focus();
+      await page.keyboard.press("Enter");
       await expect(plan.locator("li.unset")).toContainText("Holds (no action chosen)");
+      await expect(plan.locator(`[data-formation-pick="${extra[0]}"]`)).toBeFocused();
       await geometry(page, forge, testInfo, `formation-plan-${theme}`);
       await page.screenshot({ path: testInfo.outputPath(`formation-plan-${theme}.png`) });
       const fight = plan.locator("[data-formation-fight]");

@@ -11,6 +11,11 @@ const source = await readFile(
 const context = vm.createContext({ ...shared });
 vm.runInContext(source.replace(/^export /gmu, "") + "\nglobalThis.routesFactory=forgeFormationRoutes;", context);
 const createRoutes = context.routesFactory;
+// What a current client sends with every Formation start.
+const current = {
+  expectedFormationEngine: shared.FORGE_FORMATION_ENGINE,
+  expectedFormationRules: shared.FORGE_FORMATION_RULES,
+};
 
 test("a mode committed during admission is reread and a stale preview cannot start or spend", async () => {
   let run = { combat: { mode: "classic", revision: 0 } },
@@ -51,7 +56,7 @@ test("a mode committed during admission is reread and a stale preview cannot sta
   assert.equal(stale.error, "changed");
   assert.equal(calls, 0);
   const fresh = await handlers.get("/battle/start")({
-    body: { runId: "world", expectedCombatMode: "formation", expectedFormationEngine: shared.FORGE_FORMATION_ENGINE },
+    body: { runId: "world", expectedCombatMode: "formation", ...current },
   });
   assert.equal(fresh.ok, true);
   assert.equal(fresh.combatMode, "formation");
@@ -99,11 +104,14 @@ test("future story-event battle starts share the same admission and preview mode
   assert.equal(called, false);
 });
 
-test("a Formation start from a tab on an older engine spends nothing; Classic starts never need the field", async () => {
+test("a Formation start from a tab on an older engine or older rules spends nothing; Classic never needs them", async () => {
   for (const [mode, body, expected] of [
     ["formation", {}, "formation-engine-changed"],
-    ["formation", { expectedFormationEngine: 1 }, "formation-engine-changed"],
-    ["formation", { expectedFormationEngine: shared.FORGE_FORMATION_ENGINE }, null],
+    ["formation", { ...current, expectedFormationEngine: 1 }, "formation-engine-changed"],
+    // A 1.24.0 tab names engine 2 but no rules revision: it resolves fights by rules this server no longer uses.
+    ["formation", { expectedFormationEngine: shared.FORGE_FORMATION_ENGINE }, "formation-engine-changed"],
+    ["formation", { ...current, expectedFormationRules: shared.FORGE_FORMATION_RULES - 1 }, "formation-engine-changed"],
+    ["formation", current, null],
     ["classic", {}, null],
   ]) {
     const handlers = new Map();

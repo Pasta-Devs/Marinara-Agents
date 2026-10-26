@@ -683,6 +683,40 @@ test("an older failed job awaiting its retry never locks battles while every kit
   f.dispose();
 });
 
+test("a character whose kit failed under the current rules waits for Retry; battle starts never pay again", async () => {
+  let calls = 0,
+    fail = true;
+  const f = fixture({
+    count: 2,
+    generate: async ({ unit }) => {
+      calls++;
+      if (fail && unit.name === "Hero 1") throw new Error("invalid-kit");
+      return kit;
+    },
+  });
+  // Hero 0 has a current kit; Hero 1 has none at all.
+  const run = formationWorld(f, [2]);
+  assert.equal((await f.service.ensure(runId, run)).error, "combat-conversion-in-progress");
+  await f.service.settled(runId);
+  assert.equal(calls, 1);
+  const failed = (await f.service.status({ runId })).conversion;
+  assert.equal(failed.status, "failed");
+  for (let battle = 0; battle < 2; battle++) {
+    const blocked = await f.service.ensure(runId, run);
+    assert.equal(blocked.error, "combat-conversion-failed", "the battle start points at Retry");
+    assert.equal(blocked.conversion.id, failed.id, "the failed job is left for its retry");
+    await f.service.settled(runId);
+  }
+  assert.equal(calls, 1, "no battle start launches another paid generation");
+  fail = false;
+  assert.equal((await f.service.retry({ runId, jobId: failed.id, confirmed: true })).ok, true);
+  await f.service.settled(runId);
+  assert.equal(calls, 2, "Retry generates only the missing kit");
+  assert.deepEqual(f.docs.get(`${runId}:unit:1`).data.formationKit, kit);
+  assert.deepEqual(await f.service.ensure(runId, f.docs.get("index").data.runs[0]), { ok: true });
+  f.dispose();
+});
+
 test("after a cancelled remake a new character still gets its kit, and the old kits stay as they are", async () => {
   let calls = 0,
     release;
