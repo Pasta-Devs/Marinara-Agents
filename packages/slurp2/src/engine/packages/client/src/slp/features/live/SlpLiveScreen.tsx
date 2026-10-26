@@ -353,25 +353,24 @@ export function SlpLiveScreen({
 
         <SlpSheet open={sheet === "menu"} onClose={() => setSheet(null)} title={t("ui.slurp.live.menuTitle")}>
           <ul className="space-y-2 p-0.5">
-            {show.menu.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  onClick={() => pay(item.price, item.id)}
-                  className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl bg-[var(--card)] px-4 py-2 text-start ring-1 ring-[var(--border)]"
-                >
-                  <span>
-                    <b className="block">{itemLabel(item.id)}</b>
-                    {item.strip && show.strip < show.stripMax && (
-                      <span className="text-xs text-[var(--muted-foreground)]">{t("ui.slurp.live.takesLayer")}</span>
-                    )}
-                  </span>
-                  <span className="shrink-0 font-bold">
-                    <SlpCoinText>{t("ui.slurp.live.amount", { amount: item.price })}</SlpCoinText>
-                  </span>
-                </button>
-              </li>
-            ))}
+            {show.menu
+              .filter((item) => !item.strip || show.strip < show.stripMax)
+              .map((item) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => pay(item.price, item.id)}
+                    className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl bg-[var(--card)] px-4 py-2 text-start ring-1 ring-[var(--border)]"
+                  >
+                    <span>
+                      <b className="block">{itemLabel(item.id)}</b>
+                    </span>
+                    <span className="shrink-0 font-bold">
+                      <SlpCoinText>{t("ui.slurp.live.amount", { amount: item.price })}</SlpCoinText>
+                    </span>
+                  </button>
+                </li>
+              ))}
           </ul>
         </SlpSheet>
       </section>

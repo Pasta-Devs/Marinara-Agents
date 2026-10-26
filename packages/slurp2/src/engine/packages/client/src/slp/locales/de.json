@@ -3125,7 +3125,6 @@
   "ui.slurp.live.now": "Jetzt: {{item}} für {{name}}",
   "ui.slurp.live.pickPersona": "Wähle eine Persona für Trinkgeld",
   "ui.slurp.live.send": "Geben",
-  "ui.slurp.live.takesLayer": "Legt eine Schicht ab",
   "ui.slurp.live.tip": "Trinkgeld",
   "ui.slurp.live.tipBanner": "{{name}} gibt {{amount}} <coin/>",
   "ui.slurp.live.tipFailed": "Das Trinkgeld ging nicht durch. Versuch es noch einmal.",

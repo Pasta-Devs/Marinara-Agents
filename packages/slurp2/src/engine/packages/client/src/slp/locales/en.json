@@ -6677,7 +6677,6 @@
   "ui.slurp.live.now": "Now: {{item}} for {{name}}",
   "ui.slurp.live.pickPersona": "Pick a persona to tip",
   "ui.slurp.live.send": "Tip",
-  "ui.slurp.live.takesLayer": "Takes a layer off",
   "ui.slurp.live.tip": "Tip",
   "ui.slurp.live.tipBanner": "{{name}} tipped {{amount}} <coin/>",
   "ui.slurp.live.tipFailed": "The tip did not go through. Try again.",

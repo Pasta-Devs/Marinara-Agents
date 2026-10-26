@@ -3161,7 +3161,6 @@
   "ui.slurp.live.now": "Teraz: {{item}} dla {{name}}",
   "ui.slurp.live.pickPersona": "Wybierz personę, aby dać napiwek",
   "ui.slurp.live.send": "Daj",
-  "ui.slurp.live.takesLayer": "Zdejmuje warstwę",
   "ui.slurp.live.tip": "Napiwek",
   "ui.slurp.live.tipBanner": "{{name}} daje {{amount}} <coin/>",
   "ui.slurp.live.tipFailed": "Napiwek nie przeszedł. Spróbuj ponownie.",

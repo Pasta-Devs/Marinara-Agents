@@ -3939,7 +3939,6 @@
   "ui.slurp.live.now": "지금: {{name}}님을 위한 {{item}}",
   "ui.slurp.live.pickPersona": "후원하려면 페르소나를 고르세요",
   "ui.slurp.live.send": "후원",
-  "ui.slurp.live.takesLayer": "한 겹 벗어요",
   "ui.slurp.live.tip": "후원",
   "ui.slurp.live.tipBanner": "{{name}}님이 {{amount}} <coin/> 후원",
   "ui.slurp.live.tipFailed": "후원이 처리되지 않았어요. 다시 시도하세요.",

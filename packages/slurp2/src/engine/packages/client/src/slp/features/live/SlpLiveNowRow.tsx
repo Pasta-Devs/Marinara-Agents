@@ -29,7 +29,7 @@ export function SlpLiveNowRow() {
               className="flex w-20 flex-col items-center gap-1 text-center"
             >
               <span className="relative rounded-full p-0.5 ring-2 ring-red-500">
-                <Avatar account={host} size="lg" />
+                <Avatar account={host} size="md" />
                 <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 rounded bg-red-600 px-1.5 text-[10px] font-black leading-4 tracking-wide text-white">
                   {t("ui.slurp.live.badge")}
                 </span>
