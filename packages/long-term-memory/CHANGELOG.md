@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.5.0 — 2026-10-27
 
 - Sources has a Chat Messages tab that learns from a chat's own messages, so a chat without summaries can have memories too. It warns when the chat also has summaries, because importing both can repeat memories in review.
 - Whispers, and messages hidden from the AI or from some characters, are left out of chat messages, because a memory can reach every character.

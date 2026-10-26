@@ -1,3 +1,7 @@
+## 1.24.5 — 2026-10-26
+
+- When a Front Row unit falls in Formation, a Back Row unit on its side steps into the empty seat at once and acts from its next turn. This works for your team and for enemies, and a fight now ends only when one side has nobody left. Moving and retreating never pull a support forward. A fight started before this update is still scored by the rules it was played under.
+
 ## 1.24.4 — 2026-10-26
 
 - Messages you send in character chats are no longer read aloud. Your persona's assigned voice still reads its story dialogue.

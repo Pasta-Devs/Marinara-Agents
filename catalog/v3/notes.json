@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.24.5",
+          "date": "2026-10-26",
+          "notes": "- When a Front Row unit falls in Formation, a Back Row unit on its side steps into the empty seat at once and acts from its next turn. This works for your team and for enemies, and a fight now ends only when one side has nobody left. Moving and retreating never pull a support forward. A fight started before this update is still scored by the rules it was played under.",
+          "highlight": false
+        },
+        {
           "version": "1.24.4",
           "date": "2026-10-26",
           "notes": "- Messages you send in character chats are no longer read aloud. Your persona's assigned voice still reads its story dialogue.",
@@ -284,12 +290,6 @@
           "date": "2026-10-24",
           "notes": "- Cancel chapter and story generation from the loading screen and return to Gacha Home without deleting the world or saved progress. Active story requests and chapter preforging stop, and late responses cannot reopen the cancelled screen.",
           "highlight": true
-        },
-        {
-          "version": "1.15.0",
-          "date": "2026-10-24",
-          "notes": "- Choose a generated song for the Home menu in Settings → Look → Visual. Saved songs remain playable when generation is off.\n- Generate a distinct soundtrack for each summon banner and collect it for Home music when pulling any 5-star from that banner.\n- Keep banner rotations separate and reuse generated songs after reload.\n- Select an optional Animations video connection in Sources to generate saved looping banner clips. Portraits remain still.\n- Reuse clips after reload, keep the illustration on failures or reduced motion, and offer pause, play and explicit generation retry controls.",
-          "highlight": true
         }
       ]
     },
@@ -363,6 +363,12 @@
     },
     "long-term-memory": {
       "versions": [
+        {
+          "version": "1.5.0",
+          "date": "2026-10-27",
+          "notes": "- Sources has a Chat Messages tab that learns from a chat's own messages, so a chat without summaries can have memories too. It warns when the chat also has summaries, because importing both can repeat memories in review.\n- Whispers, and messages hidden from the AI or from some characters, are left out of chat messages, because a memory can reach every character.\n- Needs Marinara Engine 2.5.1 with capability API 1.387, which no longer runs its own memory recall in chats where Long-Term Memory is on.\n- Chats with Long-Term Memory on and nothing imported in Sources have no memories on that Engine. Import their messages or summaries from Sources.\n- If you used the Engine's old built-in memory, switch Long-Term Memory on in each chat's settings; the package no longer turns it on for those chats.\n- The package no longer asks to change chat settings.",
+          "highlight": true
+        },
         {
           "version": "1.4.95",
           "date": "2026-10-26",
@@ -475,12 +481,6 @@
           "version": "1.4.77",
           "date": "2026-10-21",
           "notes": "- Extraction now saves facts about a character whose name starts with \"Char\", such as \"Char Aznable\", or a relationship whose first name starts with \"Rel\", to the memory chosen for them instead of a second memory under a shorter id, and no longer drops events about them as linked to a missing memory. The same holds for any chosen memory whose id repeats its prefix, such as an imported char_char_mara. A memory already saved under the shorter id keeps receiving facts only while it is linked to the character or titled with its full name; if you have two memories for one character, merge them in the app.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.76",
-          "date": "2026-10-21",
-          "notes": "- A few more unexpected failures no longer show their raw error text, which could include file paths. In Sources, a source that could not be saved or extracted now says \"Failed to write imported source note.\" or \"Failed to extract imported source.\", followed by \"Details are in the server log.\"; this includes the model provider rejecting the request during an import. In Review, a change that could not be checked says \"Long-term memory preflight failed. Details are in the server log.\" An identity repair in settings whose backup could not be restored says so without the cause. The full error is written to the server log. Messages written for you, such as a model reply that was cut off, show as before.",
           "highlight": false
         }
       ]

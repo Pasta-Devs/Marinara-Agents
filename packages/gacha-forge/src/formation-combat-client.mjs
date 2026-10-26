@@ -148,6 +148,10 @@ export const forgeFormationCombatStyles = `
 .root[data-formation] .side.enemies .cbt .nm{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:normal;line-height:1.05;font-size:calc(var(--f)*0.92*var(--gf-scale,1))}
 .root[data-formation] .side.enemies .gf-fprot{top:28%;max-width:96%;padding:calc(var(--f)*0.15) calc(var(--f)*0.3);font-size:calc(var(--f)*0.6*var(--gf-scale,1));letter-spacing:.02em;line-height:1.1}
 .root[data-formation] .cbt .enrow .en,.root[data-formation] .cbt .enrow .ev{display:none}
+/* A fallen card whose seat another unit took stays out of the row. Classic relabels the Back Row as FRONT once a
+   side has no living Front Row card; in Formation supports step up instead, so Back Row cards keep their tag. */
+.root[data-formation] .cbt.gf-fgone{display:none}
+.root[data-formation] .side.no-front .row.back .cbt::before{content:"BACK";background:var(--ink-2);color:var(--steel);border:1px solid var(--steel-dark)}
 .root[data-formation] .cbt .enrow{min-height:calc(var(--f)*0.62*var(--gf-scale,1))}
 .gf-fgen{display:inline-flex;align-items:center;gap:.15em;font-family:var(--display);font-weight:700;font-size:calc(var(--f)*0.66*var(--gf-scale,1));line-height:1;color:var(--text);text-shadow:0 1px 2px rgba(0,0,0,.9);white-space:nowrap}
 .gf-fbank{position:absolute;z-index:5;top:calc(var(--f)*0.2);left:calc(var(--f)*1.4);right:0;display:flex;flex-wrap:wrap;align-items:center;gap:calc(var(--f)*0.35);min-height:calc(var(--f)*2.3);font-family:var(--display);color:var(--text)}
@@ -1187,7 +1191,22 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
           if (String(event.id).includes("~")) later(() => card(event.id)?.remove(), 700);
           break;
         case "row":
+          // A unit arriving in front takes a fallen card's place there; that card steps aside until it is revived.
+          if (event.position === "front")
+            queueMicrotask(() => {
+              const node = card(event.id),
+                row = node?.parentElement;
+              const fallen = row?.classList.contains("front")
+                ? row.querySelector('.cbt.dead:not(.gf-fgone):not([data-id*="~"])')
+                : null;
+              if (!fallen) return;
+              fallen.before(node);
+              fallen.classList.add("gf-fgone");
+            });
+          queueMicrotask(drawStatic);
+          break;
         case "revive":
+          card(event.id)?.classList.remove("gf-fgone");
           queueMicrotask(drawStatic);
           break;
         default:
