@@ -4,6 +4,14 @@
 
 Combat voice lines now play in Classic and Formation fights. Preparation starts when the battle screen opens, not when the fight starts. Your persona speaks its lines in its assigned voice. With Voice other characters on, every other team member can speak too. When combat voice lines are on but nobody in the team can be voiced, a short notice says so; it costs nothing. Classic battle rules are unchanged.
 
+## Expression portraits (1.24.6)
+
+**Settings → World → Sources → Images → Expression portraits** sits with the other image toggles and appears once an image connection is set. It is off by default. When it is on, story portraits follow each line: the scene writer tags a dialogue or thought line with anger, fear, sadness or joy in the same request that writes the scene, and the normal portrait is the neutral face. Untagged lines, including every scene written before 1.24.6, stay neutral.
+
+Each look gets one set of four faces: a character's worn outfit, or their default portrait, and your persona's Engine avatar. Every face is painted from that image as the only reference, with a prompt that changes only the expression; on a connection that cannot take a reference picture it is a fresh drawing instead. Painting runs in the background on the image connection's low-priority queue, never delays a scene, and starts only for characters who speak in a scene that is written, pre-forged or opened. Portraits are painted at the portrait size; a persona avatar is painted square at the portrait width. The busy pill shows **Painting expressions**, and the normal portrait shows until a set is ready.
+
+A set is saved on its character, so switching outfits back never paints again. Redrawing a portrait or an outfit replaces only that look's set: the old faces are deleted from the gallery, and deleting the world deletes them all. A failed or interrupted set is never retried on its own; turn **Expression portraits** off and on again to try once more, which paints only the missing faces. Turning it off stops new painting and keeps saved sets.
+
 ## Keep playing and pre-forged places (1.23.0)
 
 A main chapter's forge loader offers **Keep playing**. It returns Home without cancelling: the chapter keeps forging, the busy pill shows its progress, and an Engine notice says when it is ready, could not be forged or was interrupted. Pre-forging starts once it is ready. Opening the chapter before then rejoins the same generation; nothing is requested twice. Cancel on any story loader still stops all story generation for the world, other story requests queue behind the chapter, switching worlds waits until it is ready, entering a seasonal event stops tracking it without a notice (the chapter still finishes), and a reload brings its loader back. Deleting a world stops its story and art work. The prologue, Character Stories and seasonal events keep their loaders.

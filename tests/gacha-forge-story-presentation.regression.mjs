@@ -128,6 +128,7 @@ test("the shipped typewriter reveals the entire dialogue or narration before sho
       Ql: (segment) => segment.speaker || "Narration",
       createForgeVoiceLine: () => ({ start() {}, reveal() {}, ready: () => true, dispose() {} }),
       forgeVoiceCharacter: () => null,
+      forgeStoryExpressionArt: (character) => character,
       setInterval: (handler) => {
         tick = handler;
         return 1;

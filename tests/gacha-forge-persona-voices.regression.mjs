@@ -372,7 +372,18 @@ test("actual story cast projects the persona ID and the existing controller choo
   const start = source.indexOf("async function dh(s,c){");
   const end = source.indexOf("async function il(s){", start);
   assert.ok(start >= 0 && end > start, "actual server story-cast function");
-  const project = new Function("a", "n", "kt", "sn", "l", "Le", "r", `return (${source.slice(start, end)})`)(
+  const project = new Function(
+    "a",
+    "n",
+    "kt",
+    "sn",
+    "l",
+    "Le",
+    "r",
+    "nt",
+    "forgeStoryExpressionCast",
+    `return (${source.slice(start, end)})`,
+  )(
     { list: async () => [] },
     { id: "gacha-forge" },
     "units",
@@ -380,6 +391,8 @@ test("actual story cast projects the persona ID and the existing controller choo
     (value) => String(value || "").trim(),
     () => ({ personaAvatar: async () => "/persona.webp" }),
     { logger: { warn() {} } },
+    () => ({}),
+    () => ({}),
   );
   const { host, controller, calls } = fixture();
   try {
