@@ -82,7 +82,9 @@ const INTENDED_DELTAS: Record<string, [string, string][]> = {
   // 0.2.0: a one-shot delivery must come with a purpose it fits.
   // zod 4 has no ZodEffects, so Slurp keeps the plain object (`.extend`-able) under its own name and
   // adds the refined schema separately. The object declaration is the Engine's one with a new name.
-  slpCreatorGenerationRequestObjectSchema: [["slpCreatorGenerationRequestObjectSchema", "noodlerGenerationRequestSchema"]],
+  slpCreatorGenerationRequestObjectSchema: [
+    ["slpCreatorGenerationRequestObjectSchema", "noodlerGenerationRequestSchema"],
+  ],
   // Creator stage facts, source account and cached appearance state: Slurp-only fields.
   SlpCreatorManagedStageProfile: [
     [
