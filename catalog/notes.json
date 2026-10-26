@@ -172,6 +172,30 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.24.3",
+          "date": "2026-10-26",
+          "notes": "- Combat Power (CP) is now called Battle Power (BP).\n- Retrying a failed Formation kit pays only for the characters that still need one. Kits you kept after cancelling a remake stay as they are, and kits already paid for in a cancelled or failed remake are never made again.\n- A Front Row fighter whose only damage was a passive that never fires (on its own attack or kill, from the Back Row, or with no power) attacks with its Normal skill again.\n- An immunity Ultimate lands on the ally you pick, and one that can no longer land waits without spending energy. Retreating a fighter and summoning into its seat works in the same turn.\n- A battle saved with an element barrier nobody in your world can meet can now be fought, and a shortened defeat order names the enemies that come first.\n- On phones, enemy names show in full and protection tags no longer cover them. An Echo's sheet describes the Echo, and keyboard focus comes back after Fight.",
+          "highlight": false
+        },
+        {
+          "version": "1.24.2",
+          "date": "2026-10-26",
+          "notes": "- Personas use their assigned Engine voice for story dialogue and newly sent character messages when dialogue audio is enabled.",
+          "highlight": false
+        },
+        {
+          "version": "1.24.1",
+          "date": "2026-10-26",
+          "notes": "- Formation fights can no longer stall. An enemy that keeps turning immune can be hit again after two turns, Retreat Echo repeats one real cast only once, and a summon with no free Front Row seat waits without spending energy.\n- Remaking older Formation kits no longer locks battles. Battles wait only while a remake runs, cancelling it keeps your current kits (new characters still get theirs), a kit that failed waits for Retry in Story Continuity, and story work is never cancelled. A game left open from 1.24.0 asks you to reload first.\n- Story, event and boss fights in Formation no longer fail over a slightly wrong kit, keep the boss in the fight, and skip element barriers your team cannot meet.\n- In battle, the boss bar no longer covers row tags on phones, team editor names are readable, Echoes show their own name, Fight with fighters unplanned opens the plan, energy skills pay for later steps, and a keyboard can plan a whole turn.",
+          "highlight": false
+        },
+        {
+          "version": "1.24.0",
+          "date": "2026-10-26",
+          "notes": "- Formation combat is rebuilt. Tap each Front Row fighter, pick its Normal skill, Ultimate, move/swap or Hold and its target, check the plan and the energy it spends, then press Fight. Every skill shows what it does and costs. Auto still plays a whole turn.\n- Teams seat six: up to three Front Row fighters and three Back Row supports. Supports make one energy of their element each turn, cannot be attacked and carry strong passives. Energy never expires.\n- Kits from older Formation rules are remade automatically before a world's next battle and keep fighting until then. Story, event and boss fights in Formation get front fighters, back-row supports and clearer boss rules.\n- Classic combat is unchanged.",
+          "highlight": true
+        },
+        {
           "version": "1.23.0",
           "date": "2026-10-26",
           "notes": "- Keep playing: leave a main chapter that is still forging. It keeps forging, the busy pill shows its progress, and a notice says when it is ready, could not be forged or was interrupted. Pre-forging starts once it is ready. Cancel on any story loader still stops it, and switching worlds waits for it.\n- Pre-forge \"Story and key images\" is now \"Story and images\". With Backgrounds on, it also paints the places each pre-forged scene visits, in main chapters and Character Stories. Worlds already on this setting start painting places ahead after updating.\n- Pre-forged art now paints alongside the text, so the chapter menu opens once the text is written. A scene opened before its art is ready joins the paint in progress. Art may keep painting for a while after the menu opens; switch to Story only or Off, or use the story Cancel, to stop it.\n- Pre-forging no longer reports stopped, or lets Retry start a second chain, on chapters that take over 20 minutes.",
@@ -266,30 +290,6 @@
           "date": "2026-10-24",
           "notes": "- Automatically remember completed canonical chapters and Character Stories, alongside saved character-chat memories.\n- Maintain a compressed overview within 10% of the generation model's known context, retaining detailed originals for relevant recall.\n- Recall up to three additional chapters plus separate character memories; retain the entire previous chapter and the current chapter so far.\n- Show automatic continuity status and allow retrying failed memory work without blocking gameplay.",
           "highlight": true
-        },
-        {
-          "version": "1.13.1",
-          "date": "2026-10-24",
-          "notes": "- Character scenes, banners, portraits and outfits use available character/persona avatar references; provider support and limits still apply.\n- Story artwork starts below its header and preserves the top of the image.\n- Mobile ordinary and expanded editors adapt to the height left by the keyboard; expanded settings drafts survive refreshes.\n- Units explains the Home progression dot and refreshes its recommendation after level, equip and ascension actions.\n- Blocking combat dialogue supports keyboard focus and returns to combat controls afterward.",
-          "highlight": false
-        },
-        {
-          "version": "1.13.0",
-          "date": "2026-10-24",
-          "notes": "- Added Soldier, Elite and Boss enemy tiers in combat and enemy details.\n- New story chapters build toward a boss confrontation using existing boss mechanics.\n- Significant fights prepare contextual enemy dialogue, with local one-shot triggers and manual or Auto progression.\n- Combat dialogue respects assigned character voices, mute and dialogue volume. Existing saved chapters and Tower encounters remain playable.",
-          "highlight": true
-        },
-        {
-          "version": "1.12.2",
-          "date": "2026-10-24",
-          "notes": "- Home shows a compact affinity matchup diagram beneath the communication button.\n- Home backgrounds retain the top of the selected artwork below the game header.\n- Combat shows one mute control without overlapping the other toolbar buttons.\n- Autoplay resumes after a small story choice when it was enabled before the choice.\n- Character communication keeps the composer visible when a mobile keyboard reduces the available height.",
-          "highlight": false
-        },
-        {
-          "version": "1.12.1",
-          "date": "2026-10-24",
-          "notes": "- Chapters and Character Stories generate and play their own music cues instead of reusing the Home track. Loading scenes keep the current track until their cue is ready.\n- Small choices no longer block later shared narration or background pre-forging. Their alternatives remain generated together; playback, canon, replay and big-choice locks are preserved.\n- Completion and compression still wait for pending selections to preserve canonical story history.\n- Short audio notices no longer intercept taps on the game stage. Long reasons remain scrollable and stay visible while focused with a keyboard.\n- Notice scrolling adapts when the panel becomes visible or changes size; replacing a long reason with short text restores dismissal.\n- Recorded the actual merged Engine music-test baseline.",
-          "highlight": false
         }
       ]
     },

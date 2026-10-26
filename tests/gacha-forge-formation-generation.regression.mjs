@@ -7,7 +7,12 @@ import {
   chapterUnitId as unitId,
 } from "./fixtures/gacha-forge-chapter-runtime.mjs";
 import { chatConnectionId } from "./fixtures/gacha-forge-chat-runtime.mjs";
-import { normalizeForgeFormationKit } from "../packages/gacha-forge/src/formation-combat-shared.mjs";
+import {
+  FORGE_FORMATION_RULES,
+  FORGE_FORMATION_ENGINE,
+  FORGE_FORMATION_KIT_PROMPT,
+  normalizeForgeFormationKit,
+} from "../packages/gacha-forge/src/formation-combat-shared.mjs";
 
 const kit = () => ({
   version: 1,
@@ -160,6 +165,7 @@ test("actual new-unit ensure repair shares the conversion budget without regener
   const f = await fixture("formation");
   try {
     f.docs.get(unitId).data.formationKit = kit();
+    f.docs.get(unitId).data.formationKitPrompt = FORGE_FORMATION_KIT_PROMPT;
     const newId = `${runId}:unit:briar`;
     f.seed(newId, "unit", {
       kind: "character",
@@ -169,7 +175,15 @@ test("actual new-unit ensure repair shares the conversion budget without regener
       personality: "Patient.",
     });
     f.session().roster[newId] = { level: 20, bondFights: 0 };
-    const reply = (await f.post("/battle", { chapter: 2, combatIndex: 0, difficulty: "normal" })).body;
+    const reply = (
+      await f.post("/battle", {
+        chapter: 2,
+        combatIndex: 0,
+        difficulty: "normal",
+        expectedFormationEngine: FORGE_FORMATION_ENGINE,
+        expectedFormationRules: FORGE_FORMATION_RULES,
+      })
+    ).body;
     assert.equal(reply.error, "combat-conversion-in-progress");
     const state = await f.status();
     assert.equal(state.conversion.status, "committed", JSON.stringify(state));
@@ -179,6 +193,43 @@ test("actual new-unit ensure repair shares the conversion budget without regener
     assert.ok(JSON.stringify(f.calls[0].body.messages).includes("Briar"));
     assert.deepEqual(f.docs.get(unitId).data.formationKit, kit());
     assert.ok(normalizeForgeFormationKit(f.docs.get(newId).data.formationKit));
+  } finally {
+    await f.close();
+  }
+});
+
+test("actual conversion parses leniently: budgets clamp, a four-star loses a signature, and kits are stamped", async () => {
+  const f = await fixture();
+  try {
+    f.docs.get(unitId).data.rarity = 4;
+    f.transport.reply = () =>
+      JSON.stringify({
+        ...kit(),
+        preferredRow: "Front",
+        standard: { ...kit().standard, power: 999, effect: "Strike" },
+        ultimate: { ...kit().ultimate, elementCost: 0 },
+        traits: ["solo_front"],
+      });
+    assert.equal((await f.post("/combat-mode/switch", { targetMode: "formation", confirmed: true })).body.ok, true);
+    const state = await f.status();
+    assert.equal(state.conversion.status, "committed", JSON.stringify(state));
+    assert.equal(f.transport.completionOptions.length, 1, "a fixable kit never costs a paid retry");
+    const saved = f.docs.get(unitId).data;
+    assert.equal(saved.formationKitPrompt, FORGE_FORMATION_KIT_PROMPT);
+    assert.equal(saved.formationKit.preferredRow, "front");
+    assert.equal(saved.formationKit.standard.effect, "damage");
+    assert.equal(saved.formationKit.standard.power, 100, "a free Normal skill keeps the 100% budget");
+    assert.equal(saved.formationKit.ultimate.elementCost, 1);
+    assert.deepEqual(saved.formationKit.traits, []);
+    const prompt = f.calls[0].body.messages[0].content;
+    for (const phrase of [
+      "up to three Front Row fighters and up to three Back Row supports",
+      "ARCHETYPE",
+      "VERY STRONG passive",
+      "No arbitrary code",
+      "Hold",
+    ])
+      assert.ok(prompt.includes(phrase), phrase);
   } finally {
     await f.close();
   }

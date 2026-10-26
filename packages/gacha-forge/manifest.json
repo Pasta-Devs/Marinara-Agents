@@ -10,7 +10,7 @@
   },
   "id": "gacha-forge",
   "name": "Gacha Forge",
-  "version": "1.23.0",
+  "version": "1.24.3",
   "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
   "engine": {
     "min": "2.5.1",
@@ -299,8 +299,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "68198f2a66116055853a74030ae6923aa2e283ba92d8fa391b3f7b8080f61443",
-      "bytes": 1771292
+      "sha256": "ec5cc8a7dfa936922bfd9dc576d446beb8d9fdb8b919a2c29ab0604698e2be84",
+      "bytes": 1876539
     },
     {
       "path": "farm-asc.webp",
@@ -774,8 +774,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "e3f2c6e613bd4b09edde39c7066c2ab3cefebc8706a5bc6b96dfb0cd5794f80c",
-      "bytes": 865240
+      "sha256": "67b1db4e4ee3ab82f9625718ba764dd6406369f4707989e64e07c64a55003695",
+      "bytes": 951155
     },
     {
       "path": "skill-aoe_damage-dark.webp",
@@ -1529,38 +1529,38 @@
     },
     {
       "path": "src/formation-combat-client.mjs",
-      "sha256": "056c8d28d5ae11b64b8ac7e177670f1ce0a54680e6c6f1f68876a12aea1da41e",
-      "bytes": 15612
+      "sha256": "75a785b10f05d5be4c68abbc443f972711d9c5702eb8d7b878f9358ed5de7d63",
+      "bytes": 71305
     },
     {
       "path": "src/formation-combat-en.mjs",
-      "sha256": "d1e76dd43e405a29d81464267b6cbbd7aaeba70f42855a0a261cb5f798009323",
-      "bytes": 4869
+      "sha256": "5602df0cc5b75e0c64bdd64d6692bc72f413f33904d7f114067d5e189479f0ad",
+      "bytes": 17804
     },
     {
       "path": "src/formation-combat-server.mjs",
-      "sha256": "b940e272327981aca2f12a51ddad5547a5c8f080d0bbaad1817c6ed704f44f34",
-      "bytes": 8701
+      "sha256": "aae672eb6944d0b01eaba1805f8fd51c07dec90e34533b1df137155577fdd546",
+      "bytes": 24434
     },
     {
       "path": "src/formation-combat-shared.mjs",
-      "sha256": "945bdd7e3716834299ef0cc8f52143633be5110c03040a0047d4d67498ddbc54",
-      "bytes": 38172
+      "sha256": "c56f7c8d6f6885d55a5b65bff73cd2b1b2b1e9071a66de96cd660b9632fee8d6",
+      "bytes": 66357
     },
     {
       "path": "src/formation-migration-server.mjs",
-      "sha256": "06972eebdc9ba951ba2500f2b2937d77879984fe205b8e567aaa840a2cddb96c",
-      "bytes": 16969
+      "sha256": "c16b905157714c3528604e01edb3c4d67bf8d76e54ac6e30dc9477ff12fd43db",
+      "bytes": 22427
     },
     {
       "path": "src/formation-settings-client.mjs",
-      "sha256": "73bac3bb06dcf520ce51cde6ad343609abd1c92a29c69b18f0f605bc8fbfaba7",
-      "bytes": 8844
+      "sha256": "6741e855b2d704c7c70ad6ae461fd252b822e5b991216437dd588ea287e44a3d",
+      "bytes": 9980
     },
     {
       "path": "src/formation-settings-en.mjs",
-      "sha256": "3b3286cc3eaa06333a6f7610d3628974e720276f40713cf321a5a5206417c6f3",
-      "bytes": 2873
+      "sha256": "5335816230eb2a3dc63dab53abeb25231b0b63c1a87dc981ec851e062d8f91cc",
+      "bytes": 3723
     },
     {
       "path": "src/combat-ultimate-client.mjs",
@@ -1569,8 +1569,8 @@
     },
     {
       "path": "src/combat-voices-client.mjs",
-      "sha256": "1d461cd3b311749b2274de0156f2511c3713d3db03c8731e3f4bb514d7a58a09",
-      "bytes": 12713
+      "sha256": "8e1be77b50397a5ce9857827fb081f6240daf6741045f60e1a3fee308b977b96",
+      "bytes": 12854
     },
     {
       "path": "src/combat-voices-en.mjs",

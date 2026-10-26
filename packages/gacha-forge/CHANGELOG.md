@@ -1,3 +1,30 @@
+## 1.24.3 — 2026-10-26
+
+- Combat Power (CP) is now called Battle Power (BP).
+- Retrying a failed Formation kit pays only for the characters that still need one. Kits you kept after cancelling a remake stay as they are, and kits already paid for in a cancelled or failed remake are never made again.
+- A Front Row fighter whose only damage was a passive that never fires (on its own attack or kill, from the Back Row, or with no power) attacks with its Normal skill again.
+- An immunity Ultimate lands on the ally you pick, and one that can no longer land waits without spending energy. Retreating a fighter and summoning into its seat works in the same turn.
+- A battle saved with an element barrier nobody in your world can meet can now be fought, and a shortened defeat order names the enemies that come first.
+- On phones, enemy names show in full and protection tags no longer cover them. An Echo's sheet describes the Echo, and keyboard focus comes back after Fight.
+
+## 1.24.2 — 2026-10-26
+
+- Personas use their assigned Engine voice for story dialogue and newly sent character messages when dialogue audio is enabled.
+
+## 1.24.1 — 2026-10-26
+
+- Formation fights can no longer stall. An enemy that keeps turning immune can be hit again after two turns, Retreat Echo repeats one real cast only once, and a summon with no free Front Row seat waits without spending energy.
+- Remaking older Formation kits no longer locks battles. Battles wait only while a remake runs, cancelling it keeps your current kits (new characters still get theirs), a kit that failed waits for Retry in Story Continuity, and story work is never cancelled. A game left open from 1.24.0 asks you to reload first.
+- Story, event and boss fights in Formation no longer fail over a slightly wrong kit, keep the boss in the fight, and skip element barriers your team cannot meet.
+- In battle, the boss bar no longer covers row tags on phones, team editor names are readable, Echoes show their own name, Fight with fighters unplanned opens the plan, energy skills pay for later steps, and a keyboard can plan a whole turn.
+
+## 1.24.0 — 2026-10-26
+
+- Formation combat is rebuilt. Tap each Front Row fighter, pick its Normal skill, Ultimate, move/swap or Hold and its target, check the plan and the energy it spends, then press Fight. Every skill shows what it does and costs. Auto still plays a whole turn.
+- Teams seat six: up to three Front Row fighters and three Back Row supports. Supports make one energy of their element each turn, cannot be attacked and carry strong passives. Energy never expires.
+- Kits from older Formation rules are remade automatically before a world's next battle and keep fighting until then. Story, event and boss fights in Formation get front fighters, back-row supports and clearer boss rules.
+- Classic combat is unchanged.
+
 ## 1.23.0 — 2026-10-26
 
 - Keep playing: leave a main chapter that is still forging. It keeps forging, the busy pill shows its progress, and a notice says when it is ready, could not be forged or was interrupted. Pre-forging starts once it is ready. Cancel on any story loader still stops it, and switching worlds waits for it.
