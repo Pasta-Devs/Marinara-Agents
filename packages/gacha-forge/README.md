@@ -128,7 +128,7 @@ Level and relic achievements now count the levels actually gained, and facet ach
 
 ## Audio and pacing (1.11.0)
 
-Assign a voice to your persona in Engine Connections → Text-to-Speech using the same voice list as characters. With Gacha Forge dialogue audio enabled, this voice reads the protagonist’s story dialogue and newly sent character messages; opening message history does not read old messages again.
+Assign a voice to your persona in Engine Connections → Text-to-Speech using the same voice list as characters. With Gacha Forge dialogue audio enabled, this voice reads the protagonist’s story dialogue. Messages you send in character chats are not read aloud.
 
 Gacha Forge 1.11.0 adds optional dialogue using voices assigned in the Engine, stock Game music and sound effects, and optional generated audio through a dedicated audio connection. In world creation, open Lore to opt in. For an existing world, use Settings → World → Sources; Settings → Look → Visual has independent music, dialogue and effects levels and an autoplay pause (three seconds by default). The compact mute button silences all three channels. Autoplay waits for the revealed text and spoken line, and choices still wait for the player. Home and story portraits include their bottom frame edge. This version requires Engine Capability API 1.381 or newer.
 
