@@ -315,9 +315,11 @@ export function createForgeFormationMigration({
   const declinedRemake = (job) =>
     job?.kitPrompt === kitPrompt && (["failed", "cancelled"].includes(job.status) || job.declined === true);
   // A kept old kit carries the paid kit it stands in for (`staged`, which commit ignores), so a later remake
-  // or retry uses that one instead of paying again.
+  // or retry uses that one instead of paying again. A current kit needs none, and `staged` is always flat:
+  // one entry deep however many jobs keep it.
   const keep = (row, previous) => {
-    const staged = [previous, previous?.staged].find((candidate) => usable(candidate, row));
+    const paid = currentKit(row.data) ? null : [previous, previous?.staged].find((candidate) => usable(candidate, row));
+    const { staged: _nested, ...staged } = paid || {};
     return {
       unitId: row.id,
       name: String(row.data.name || "").slice(0, 160),
@@ -325,7 +327,7 @@ export function createForgeFormationMigration({
       status: "ready",
       kit: normalizeKit(row.data.formationKit),
       kitPrompt: row.data.formationKitPrompt ?? null,
-      ...(staged ? { staged } : {}),
+      ...(paid ? { staged } : {}),
     };
   };
   async function start(body, { onlyMissing = false } = {}) {

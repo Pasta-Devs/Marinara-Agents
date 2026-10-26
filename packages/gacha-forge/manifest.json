@@ -774,8 +774,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "e3f9ed6c948392814217b8928f729d4b1e0a32d802fb641fde4093ca02b63f41",
-      "bytes": 950799
+      "sha256": "99db6c154b69869e47ed6e1d4c4c846f50a12c61961bfaac4457e3665531e12b",
+      "bytes": 950982
     },
     {
       "path": "skill-aoe_damage-dark.webp",
@@ -1549,8 +1549,8 @@
     },
     {
       "path": "src/formation-migration-server.mjs",
-      "sha256": "f558fe3f2678bd0ddfdeba5ca762ffd27f43a2c9c4d8a9ef72dc76078005792d",
-      "bytes": 22244
+      "sha256": "c16b905157714c3528604e01edb3c4d67bf8d76e54ac6e30dc9477ff12fd43db",
+      "bytes": 22427
     },
     {
       "path": "src/formation-settings-client.mjs",
