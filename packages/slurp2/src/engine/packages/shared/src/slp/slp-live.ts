@@ -252,6 +252,8 @@ export function slpLiveMinute(
   const seed = `${input.showId}:${input.minute}`;
   const inRoom = new Set(state.room);
   const pull = 0.5 + state.heat / 100;
+  // The go-live notice pulls the room in during the first two minutes.
+  const opening = input.minute < 2 ? 4 : 1;
   // While the show is private the room only sees "in private": nobody joins or tips, and fans drift off.
   const away = slpLivePrivateOn(state, at);
   for (const fan of fans) {
@@ -264,12 +266,19 @@ export function slpLiveMinute(
     } else if (
       !away &&
       inRoom.size < ROOM_MAX &&
-      roll < slurpMemberActivityWeight(fan.activeHour, input.hour) * 0.12 * pull
+      roll < slurpMemberActivityWeight(fan.activeHour, input.hour) * 0.12 * pull * opening
     ) {
       inRoom.add(fan.id);
       state.names[fan.id] = fan.name;
       slpLiveLog(state, { at, kind: "join", by: fan.id, name: fan.name });
     }
+  }
+  // Somebody always answers the go-live notice, so the model never writes for an empty room.
+  const first = fans[0];
+  if (!away && inRoom.size === 0 && first) {
+    inRoom.add(first.id);
+    state.names[first.id] = first.name;
+    slpLiveLog(state, { at, kind: "join", by: first.id, name: first.name });
   }
   state.room = [...inRoom];
   state.heat = Math.min(100, state.heat + 0.5);

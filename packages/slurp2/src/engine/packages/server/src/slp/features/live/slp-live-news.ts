@@ -23,7 +23,7 @@ export async function notifySlurpLiveStart(db: DB, show: SlurpLiveShow) {
         kind: "live",
         creatorAccountId: show.hostId,
         subjectId: show.id,
-        actorLabel: host.displayName,
+        actorLabel: host.id,
         operationId: `live-start:${show.id}:${personaId}`,
       })
       .catch((error: unknown) => logger.warn(error, "[slurp-live] Could not send the live notification"));

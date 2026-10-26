@@ -350,4 +350,16 @@ assert.equal(privView("persona:q").private?.mine, false);
   assert.deepEqual(hostView("persona:q").next, []);
 }
 
+// Somebody answers the go-live notice: the first minute never leaves a room with fans empty.
+{
+  const quiet = slpLiveStart({ level: "nudity", fans: 1 });
+  slpLiveMinute(quiet, [{ id: "q1", name: "quiet_crash", activeHour: 3, tipChance: 0, maxTip: 5 }], {
+    showId: "quiet",
+    minute: 0,
+    hour: 15,
+  });
+  assert.deepEqual(quiet.room, ["q1"]);
+  assert.equal(quiet.names.q1, "quiet_crash");
+}
+
 console.log("slurp2 live sim: ok");
