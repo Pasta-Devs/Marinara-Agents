@@ -6750,6 +6750,7 @@
   "ui.slurp.live.tipBanner": "{{name}} tipped {{amount}} <coin/>",
   "ui.slurp.live.tipFailed": "The tip did not go through. Try again.",
   "ui.slurp.live.say": "Say something to {{name}}",
+  "ui.slurp.live.sayFailed": "Your message did not send. Try again.",
   "ui.slurp.live.shooting": "New shot coming",
   "ui.slurp.live.tipTitle": "Tip {{name}}",
   "ui.slurp.live.topTipper": "Top tipper: {{name}}",

@@ -80,8 +80,8 @@ export function slpLiveApplyBeat(
         ? { at, kind: "say", by: "host", name: input.host, text: input.you.text }
         : { at, kind: "you", by: input.you.by, name: input.you.name, text: input.you.text },
     );
-  const inRoom = new Map(state.room.map((id) => [(state.names[id] ?? "").toLowerCase(), id]));
   const host = input.host.toLowerCase();
+  const inRoom = new Map(state.room.map((id) => [(state.names[id] ?? "").toLowerCase(), id]));
   // In a private block only the Creator talks, and nothing private is said after the block ends.
   const alone = input.alone ?? (slpLivePrivateOn(state, at) ? state.private! : null);
   // The first line comes a second after the player's words, so an answer reads as an answer.
@@ -90,14 +90,15 @@ export function slpLiveApplyBeat(
   let kept = 0;
   for (const line of [...beat.lines].sort((a, b) => a.t - b.t)) {
     const who = line.who.toLowerCase();
+    // A fan in the room owns their name, even "Cam" or the Creator's name; only then do the reserved speakers apply.
+    const fan = inRoom.get(who);
     // The cam line describes the stage; it keeps its own time and does not space the talk.
-    if (who === "cam") {
+    if (!fan && who === "cam") {
       const camAt = start + Math.max(0, Math.min(seconds, line.t)) * 1_000;
       if (line.text && !(alone && camAt >= alone.to)) slpLiveLog(state, { at: camAt, kind: "cam", text: line.text });
       continue;
     }
-    const fan = inRoom.get(who);
-    const isHost = who === "host" || who === host;
+    const isHost = !fan && (who === "host" || who === host);
     if (isHost ? input.hosting : !fan || alone) continue;
     // Never two lines in the same breath: at least 1.5 s apart, all inside the beat.
     last = Math.max(last + (kept ? 1_500 : 0), start + Math.max(0, Math.min(seconds, line.t)) * 1_000);
@@ -114,11 +115,14 @@ export function slpLiveApplyBeat(
   }
   if (!kept && !input.hosting) return 0;
   state.heat = Math.min(100, state.heat + beat.heat);
-  if (beat.strip && state.strip < state.stripMax) {
-    state.strip += 1;
-    slpLiveLog(state, { at: Math.round((start + last) / 2), kind: "strip", amount: state.strip });
+  // The model writes only the room for a hosting player, so its strip and place do not apply.
+  if (!input.hosting) {
+    if (beat.strip && state.strip < state.stripMax) {
+      state.strip += 1;
+      slpLiveLog(state, { at: Math.round((start + last) / 2), kind: "strip", amount: state.strip });
+    }
+    if (beat.place) state.place = beat.place;
   }
-  if (beat.place) state.place = beat.place;
   if (input.hosting) state.next = beat.next;
   // The room's talk comes back as soon as a private block ends.
   state.beatTo = Math.min(Math.max(last, start + seconds * 1_000), alone?.to ?? Infinity);

@@ -17,6 +17,7 @@ import { ProfileInitial, slpImgFade } from "../../base/chrome/SlpChrome";
 import { SlurpSparkleVeil } from "../../base/chrome/SlpSparkleVeil";
 import { SlpSkeleton } from "../../modules/chrome/SlpStateKit";
 import { SlpLiveMomentTiles } from "../../features/live/SlpLiveMomentTiles";
+import { useCreatorAccounts } from "../../features/creators/slp-creators-contract";
 import { useSlpLiveNow } from "../../features/live/slp-live-hooks";
 import { SlpPostSurfaceMenu } from "../../modules/post/SlpPostMenu";
 import { api } from "../../../lib/api-client";
@@ -92,7 +93,10 @@ export function SlurpMomentsShelf({
     if (!current || (watched(current) && !watched(moment))) tileByCreator.set(moment.creator.profile.id, moment);
   }
   // A live Creator's tile is the show; their Stories wait until it ends.
-  const live = useSlpLiveNow().data ?? [];
+  const liveNow = useSlpLiveNow().data ?? [];
+  // Only a show whose host account resolves gets a tile, so only those hide the host's Stories.
+  const accounts = useCreatorAccounts(liveNow.length > 0).data ?? [];
+  const live = liveNow.filter((show) => accounts.some((account) => account.id === show.hostId));
   const creatorMoments = [...tileByCreator.values()].filter(
     (moment) => !live.some((show) => show.hostId === moment.creator.profile.id),
   );

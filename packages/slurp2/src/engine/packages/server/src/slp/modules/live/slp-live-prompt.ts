@@ -67,6 +67,7 @@ function logLines(state: SlpLiveState, at: number, host: string, count: number) 
       if (event.kind === "order") return `${time} ${event.name} tipped ${event.amount} for ${menuWords(event.itemId)}`;
       if (event.kind === "goal") return `${time} GOAL HIT, the room unlocked ${menuWords(event.itemId)}`;
       if (event.kind === "done") return `${time} ${host} finished ${menuWords(event.itemId)}`;
+      if (event.kind === "private") return `${time} ${event.name} paid for a private show`;
       return `${time} ${host} took a layer off`;
     });
 }

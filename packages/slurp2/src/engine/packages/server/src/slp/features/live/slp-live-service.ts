@@ -173,7 +173,8 @@ async function simulateLocked(db: DB, show: SlurpLiveShow, settings: Settings, a
       if (tips.length) await createSlurpLiveStorage(db).save(show.id, { state });
     }
   }
-  const endedAt = at.getTime() >= Date.parse(show.endsAt) ? show.endsAt : null;
+  // A closed show stays closed, whatever clock this pass ran on.
+  const endedAt = show.endedAt ?? (at.getTime() >= Date.parse(show.endsAt) ? show.endsAt : null);
   const next = { ...show, state, endedAt };
   await createSlurpLiveStorage(db).save(show.id, { state, endedAt });
   // The show just closed: a Creator thanks the room; a player host writes their own posts.
@@ -184,7 +185,11 @@ async function simulateLocked(db: DB, show: SlurpLiveShow, settings: Settings, a
 /** One open show per host: the world tick and the player's Go live check and create under one host lock. */
 function createIfFree(storage: ReturnType<typeof createSlurpLiveStorage>, show: SlurpLiveShow) {
   return withSlurpLiveShow(`host:${show.hostId}`, async () =>
-    (await storage.listOpen()).some((open) => open.hostId === show.hostId) ? false : storage.create(show),
+    (await storage.listOpen()).some(
+      (open) => open.hostId === show.hostId && Date.parse(open.endsAt) > Date.parse(show.startedAt),
+    )
+      ? false
+      : storage.create(show),
   );
 }
 

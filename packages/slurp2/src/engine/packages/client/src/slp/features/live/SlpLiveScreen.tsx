@@ -74,24 +74,33 @@ export function SlpLiveScreen({
   const show = query.data;
   const host = useCreatorAccounts().data?.find((account) => account.id === show?.hostId) ?? null;
   const lines = useLiveFeed(show?.log);
+  // The newest money line shows as a banner for 4 s. State, not a CSS fade, so reduced motion hides it too.
+  const newest = [...lines]
+    .reverse()
+    .find((event) => event.kind === "tip" || event.kind === "order" || event.kind === "goal");
+  const sayFailed = beat.isError && !!beat.variables?.message;
+  const [bannerKey, setBannerKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (!newest) return;
+    setBannerKey(newest.key);
+    const timer = window.setTimeout(() => setBannerKey(null), 4_000);
+    return () => window.clearTimeout(timer);
+  }, [newest?.key]);
+  const banner = newest && newest.key === bannerKey ? newest : undefined;
   const [sheet, setSheet] = useState<null | "tip" | "menu" | "private">(null);
   const [custom, setCustom] = useState("");
   const [goalOpen, setGoalOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const loadedAt = useRef(Date.now());
-  useEffect(() => {
-    loadedAt.current = Date.now();
-  }, [show]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, []);
   // Ask for the next beat when the one playing runs low; the first ask is the join (recap and welcome).
   useEffect(() => {
-    if (!show || show.endedAt || beat.isPending) return;
+    if (!show || show.endedAt || beat.isPending || document.visibilityState !== "visible") return;
     const sinceAsk = Date.now() - askedAt.current;
     if (sinceAsk < (beat.isError ? 20_000 : 6_000)) return;
-    const playing = show.elapsed + (Date.now() - loadedAt.current);
+    const playing = show.elapsed + Math.max(0, Date.now() - query.dataUpdatedAt);
     // The welcome waits for the persona, so it greets the player by name once it has loaded.
     const welcome = !joined.current && !!personaId && !show.hosting;
     if (!welcome && playing < show.beatTo - 10_000) return;
@@ -134,7 +143,7 @@ export function SlpLiveScreen({
       </SlpThreadTaskLayer>
     );
 
-  const elapsed = show.elapsed + (now - loadedAt.current);
+  const elapsed = show.elapsed + Math.max(0, now - query.dataUpdatedAt);
   // What the webcam shows now, in words: the stage for a show without pictures, a caption with them.
   const cam = show.log.filter((event) => event.kind === "cam").at(-1)?.text ?? null;
   const left = Math.max(0, Date.parse(show.endsAt) - Date.parse(show.startedAt) - elapsed);
@@ -148,9 +157,6 @@ export function SlpLiveScreen({
     : 100;
   const open = show.queue.filter((order) => order.doneAt === null);
   // The newest money line the chat has shown, so a fan tip pops when it reaches the screen; the pop fades itself out.
-  const banner = [...lines]
-    .reverse()
-    .find((event) => event.kind === "tip" || event.kind === "order" || event.kind === "goal");
   const pay = (amount: number, itemId?: string) => {
     if (!personaId) return;
     setSheet(null);
@@ -175,7 +181,7 @@ export function SlpLiveScreen({
           <style>{LIVE_STYLES}</style>
 
           {/* The bar: who is live, then the live stats, then the goal. */}
-          <header className="space-y-1.5 bg-black px-2 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-3">
+          <header className="space-y-1.5 bg-black px-2 pb-2 pt-2 sm:px-3">
             <div className="flex items-center gap-2">
               {back}
               <Avatar account={{ displayName: name, avatarUrl: host?.avatarUrl ?? null }} size="xs" />
@@ -379,9 +385,8 @@ export function SlpLiveScreen({
                         event.preventDefault();
                         const message = said.trim();
                         if (!message) return;
-                        setSaid("");
                         askedAt.current = Date.now();
-                        beat.mutate({ message });
+                        beat.mutate({ message }, { onSuccess: () => setSaid("") });
                       }}
                     >
                       <input
@@ -446,6 +451,11 @@ export function SlpLiveScreen({
               {privateBuy.isError && (
                 <p role="alert" className="text-center text-sm text-red-300">
                   {t("ui.slurp.live.privateFailed")}
+                </p>
+              )}
+              {sayFailed && (
+                <p role="alert" className="text-center text-sm text-red-300">
+                  {t("ui.slurp.live.sayFailed")}
                 </p>
               )}
               {tip.isError && (

@@ -4010,6 +4010,7 @@
   "ui.slurp.live.tipBanner": "{{name}}님이 {{amount}} <coin/> 후원",
   "ui.slurp.live.tipFailed": "후원이 처리되지 않았어요. 다시 시도하세요.",
   "ui.slurp.live.say": "{{name}}님에게 한마디",
+  "ui.slurp.live.sayFailed": "메시지가 전송되지 않았어요. 다시 시도해 주세요.",
   "ui.slurp.live.shooting": "새 사진 준비 중",
   "ui.slurp.live.tipTitle": "{{name}}님에게 후원",
   "ui.slurp.live.topTipper": "최고 후원자: {{name}}",

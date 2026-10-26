@@ -3,6 +3,7 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 import { Radio } from "lucide-react";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { useSlurpUIStore } from "../../base/state/slp-package-store";
+import { useSlpStirDeck } from "../../base/state/slp-stir-sheet-store";
 import { SlpButton, SlpChip, SlpPrimaryButton } from "../../modules/chrome/SlpButton";
 import { SlpSheet } from "../../modules/chrome/SlpSheet";
 import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
@@ -44,6 +45,7 @@ export function SlpLiveGoLive({
       {
         onSuccess: (view) => {
           setOpen(false);
+          useSlpStirDeck.setState({ open: false }); // a go-live from a Stir action must not leave the deck over the show
           setNavigation({ mode: "creator", view: "live", showId: view.id, returnTo: navigation });
         },
       },

@@ -368,4 +368,20 @@ assert.equal(privView("persona:q").private?.mine, false);
   assert.equal(quiet.names.q1, "quiet_crash");
 }
 
+// A fan named "Cam" speaks as a fan; a hosting player's show ignores the model's strip and place.
+const camRoom = slpLiveStart({ level: "suggestive", fans: 10 });
+camRoom.room = ["fan:9"];
+camRoom.names = { "fan:9": "Cam" };
+slpLiveApplyBeat(
+  camRoom,
+  slpLiveParseBeat({ lines: [{ t: 0, who: "cam", text: "hey" }], patch: { strip: true, place: "bed" } })!,
+  { at: 1_000, seconds: 30, host: "Mara", hosting: true },
+);
+assert.deepEqual(
+  camRoom.log.filter((event) => event.kind === "chat").map((event) => event.by),
+  ["fan:9"],
+);
+assert.equal(camRoom.strip, 0);
+assert.notEqual(camRoom.place, "bed");
+
 console.log("slurp2 live sim: ok");

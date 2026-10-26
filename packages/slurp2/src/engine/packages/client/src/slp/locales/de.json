@@ -3196,6 +3196,7 @@
   "ui.slurp.live.tipBanner": "{{name}} gibt {{amount}} <coin/>",
   "ui.slurp.live.tipFailed": "Das Trinkgeld ging nicht durch. Versuch es noch einmal.",
   "ui.slurp.live.say": "Schreib {{name}} etwas",
+  "ui.slurp.live.sayFailed": "Deine Nachricht ging nicht raus. Versuch es noch einmal.",
   "ui.slurp.live.shooting": "Neues Bild kommt",
   "ui.slurp.live.tipTitle": "Trinkgeld für {{name}}",
   "ui.slurp.live.topTipper": "Top-Fan: {{name}}",

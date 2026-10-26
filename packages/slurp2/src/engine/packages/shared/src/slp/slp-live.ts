@@ -256,6 +256,13 @@ export function slpLiveMinute(
   const opening = input.minute < 2 ? 4 : 1;
   // While the show is private the room only sees "in private": nobody joins or tips, and fans drift off.
   const away = slpLivePrivateOn(state, at);
+  // A fan who is no longer in the population (lapsed, removed) must not stay in the room for good.
+  const known = new Set(fans.map((fan) => fan.id));
+  for (const id of [...inRoom]) {
+    if (known.has(id)) continue;
+    inRoom.delete(id);
+    slpLiveLog(state, { at, kind: "leave", by: id, name: state.names[id] ?? "" });
+  }
   for (const fan of fans) {
     const roll = slpLiveUnit(`${seed}:${fan.id}:room`);
     if (inRoom.has(fan.id)) {
