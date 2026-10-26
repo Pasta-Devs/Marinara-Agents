@@ -709,11 +709,13 @@ for (const theme of ["dark", "light"]) {
         await page.screenshot({ path: testInfo.outputPath(`formation-next-turn-1920-${theme}.png`) });
         await page.setViewportSize({ width: 1440, height: 900 });
       }
-      // Enemies open their sheet, with the kit that actually fights.
+      // Enemies open their sheet, with the kit that actually fights. The Caster started in the Back Row and
+      // has stepped into a fallen fighter's seat, so its sheet now describes a Front Row unit.
+      await expect(forge.locator('.side.enemies .row.front .cbt[data-id="enemy-2"]')).toHaveCount(1);
       await forge.locator('.cbt[data-id="enemy-2"]').click();
       const sheet = forge.locator("[data-foe-sheet]");
       await expect(sheet).toContainText("Lighthouse dawn");
-      await expect(sheet).toContainText("Makes +1 Water energy each turn");
+      await expect(sheet).toContainText("Front line");
       await page.screenshot({ path: testInfo.outputPath(`formation-foe-${theme}.png`) });
       await sheet.getByRole("button", { name: "Close" }).click();
       await expect(sheet).toHaveCount(0);
@@ -723,6 +725,35 @@ for (const theme of ["dark", "light"]) {
       await expect(forge.locator(".side.allies .cbt.gf-ready")).toHaveCount(0);
       expect(runtime.session().combatPending?.fight?.combatMode).toBe("formation");
       expect(chapterRunId).toBeTruthy();
+    } finally {
+      await runtime.close();
+    }
+  });
+
+  test(`a support steps into the seat of a fallen fighter · ${theme}`, async ({ page }, testInfo) => {
+    const { runtime, forge, freshMainPlan } = await openForge(page, testInfo, theme, "formation", { six: true });
+    try {
+      await startBattle(forge, runtime, freshMainPlan);
+      await expect(forge.locator("[data-turn] .tu-hero")).toBeVisible();
+      const front = forge.locator(".side.enemies .row.front");
+      const blade = forge.locator('.cbt[data-id="enemy-1"]');
+      const caster = forge.locator('.cbt[data-id="enemy-2"]');
+      await expect(caster.locator(".gf-fgen")).toHaveCount(1);
+      // Auto fells the Blade first (the defeat order); the Caster takes its seat in the same step.
+      await forge.locator("[data-auto]").click();
+      await expect(front.locator('.cbt[data-id="enemy-2"]')).toHaveCount(1, { timeout: 30000 });
+      await expect(blade).toHaveClass(/dead/);
+      await expect(blade).toHaveClass(/gf-fgone/);
+      await expect(blade).toBeHidden();
+      expect(await caster.evaluate((node) => node.nextElementSibling?.getAttribute("data-id"))).toBe("enemy-1");
+      await expect(caster.locator(".gf-fgen")).toHaveCount(0);
+      // Fallen Echoes leave the band shortly after; the seated row never shows more than three cards.
+      await expect.poll(() => front.locator(".cbt:visible").count()).toBeLessThanOrEqual(3);
+      const scroll = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(scroll).toBeLessThanOrEqual(0);
+      await page.screenshot({ path: testInfo.outputPath(`formation-step-up-${theme}.png`) });
     } finally {
       await runtime.close();
     }

@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  FORGE_FORMATION_RULES,
   forgeFormationEffects,
   forgeFormationElements,
   forgeFormationTraitKinds,
@@ -109,12 +110,29 @@ test("seeded Auto-vs-Auto fights end, split evenly and keep a sane energy econom
     const enemies = team("E", 3 + (index % 4)).map((enemy, at) =>
       at === 0 && index % 5 === 0 ? { ...enemy, tier: "boss", mech: ["phases", "charge"] } : enemy,
     );
-    const fight = replayForgeFormationBattle({ allies: team("A", 3 + ((index >> 2) % 4)), enemies, seed: index + 1 });
+    const allies = team("A", 3 + ((index >> 2) % 4));
+    const fight = replayForgeFormationBattle({
+      allies,
+      enemies,
+      seed: index + 1,
+      formationRevision: FORGE_FORMATION_RULES,
+    });
     outcome[fight.result] += 1;
     lengths.push(fight.log.length);
     if (fight.log.length >= 40) stalled += 1;
     const all = fight.steps.flatMap((step) => step.events);
     if (!all.some((event) => event.op === "hit")) silent += 1;
+    // Supports step into fallen fighters' seats, so a side that is beaten before the round cap has nobody left.
+    const standing = new Set([...allies, ...enemies].map((entry) => entry.id));
+    for (const event of all) {
+      if (event.op === "death") standing.delete(event.id);
+      if (event.op === "revive") standing.add(event.id);
+    }
+    if (fight.log.length < 40)
+      assert.ok(
+        ![...standing].some((id) => id.startsWith(fight.result === "win" ? "E" : "A")),
+        `the beaten side has nobody left (${index})`,
+      );
     const charged = new Set(enemies.filter((enemy) => enemy.mech?.includes("charge")).map((enemy) => enemy.id));
     if (all.some((event) => event.op === "ult" && !charged.has(event.id))) casting += 1;
     peaks.push(
@@ -132,10 +150,12 @@ test("seeded Auto-vs-Auto fights end, split evenly and keep a sane energy econom
   lengths.sort((a, b) => a - b);
   // ponytail: thresholds from the 1.24.0 tuning run (1 stall, p95 21 rounds, median 9, 217 wins of 400, an Ultimate
   // in 292 fights, p95 peak bank 26); retune budgets, the energy floor, fatigue and the AI against it, not by feel.
+  // 1.24.5 (rules 3) seats a support in each fallen fighter's place, so fights run past the old win point: 5 stalls,
+  // p95 27 rounds, median 11, 218 wins, an Ultimate in 293 fights, p95 peak bank 17. Only the p95 bound moved (25 -> 28).
   assert.ok(stalled / total < 0.02, `stall rate ${stalled}/${total}`);
   assert.ok(
-    lengths[Math.floor(total * 0.95) - 1] < 25,
-    `95% end before round 25 (p95 ${lengths[Math.floor(total * 0.95)]})`,
+    lengths[Math.floor(total * 0.95) - 1] < 28,
+    `95% end before round 28 (p95 ${lengths[Math.floor(total * 0.95) - 1]})`,
   );
   assert.ok(
     outcome.win / total > 0.35 && outcome.win / total < 0.65,
