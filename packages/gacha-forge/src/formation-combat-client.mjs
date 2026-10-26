@@ -411,7 +411,11 @@ export function createForgeFormationPresentation(root, payload, hooks = {}) {
     if (!skill) return "target";
     if (unit.silenced) return "silenced";
     const reach = unit.targets[action];
-    if (["enemy", "enemy-back", "fallen"].includes(reach.kind) && !reach.ids.length) return "target";
+    if (
+      (["enemy", "enemy-back", "fallen"].includes(reach.kind) || ["revive", "swap"].includes(skill.effect)) &&
+      !reach.ids.length
+    )
+      return "target";
     if (
       reach.kind === "set" &&
       forgeFormationOffensive.has(skill.effect) &&
