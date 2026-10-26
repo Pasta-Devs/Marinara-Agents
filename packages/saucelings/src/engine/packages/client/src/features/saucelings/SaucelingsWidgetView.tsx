@@ -15,6 +15,7 @@ import {
   ACTION_LABEL_KEYS,
   CARE_POSE_MS,
   CaretakerAvatar,
+  FriendlyError,
   actionCoversGap,
   actionsFor,
   cooldownMinutes,
@@ -50,7 +51,8 @@ function WidgetMeter({ label, value, gap }: { label: string; value: number; gap?
 /** What each of the large widget's bars stands for, as a small picture beside it. */
 const BAR_ICONS = { warmth: "🔥", hatching: "🥚", hunger: "🍝", mood: "😊", bond: "💛" } as const;
 
-/** The large widget's bar: a small picture and a thin unlabeled bar, read out by the tooltip and the meter role. */
+/** The large widget's bar: a small picture, the meter's name in small text and a thin bar, so a touch screen with no
+ *  tooltip still says what each one is. */
 function WidgetBar({ icon, label, value, gap }: { icon: string; label: string; value: number; gap?: boolean }) {
   return (
     <div
@@ -64,6 +66,9 @@ function WidgetBar({ icon, label, value, gap }: { icon: string; label: string; v
     >
       <span className="sl-widget-bar-icon" aria-hidden="true">
         {icon}
+      </span>
+      <span className="sl-widget-bar-name" aria-hidden="true">
+        {label}
       </span>
       <div className="sl-widget-bar">
         <div className={`sl-meter-fill ${gap ? "sl-meter-fill--gap" : ""}`} style={{ width: `${value}%` }} />
@@ -362,12 +367,18 @@ export function SaucelingsWidgetView({
                     onClick={() => actionMutation.mutate(action)}
                   >
                     <span aria-hidden="true">{ACTION_ICONS[action]}</span>
+                    {/* A resting button has no room for words, so its minutes sit in the corner. */}
+                    {wait > 0 ? (
+                      <span className="sl-widget-act-wait" aria-hidden="true">
+                        {wait}
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}
             {actionMutation.error ? (
               <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
-                {actionMutation.error.message}
+                <FriendlyError error={actionMutation.error} />
               </span>
             ) : null}
           </div>

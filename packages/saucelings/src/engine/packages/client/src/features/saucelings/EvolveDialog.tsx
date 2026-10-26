@@ -6,6 +6,7 @@ import type {
   SaucelingStateResponse,
 } from "../../../../shared/src/features/agents/saucelings/types.js";
 import { saucelingsRequest } from "./api.js";
+import { FriendlyError } from "./care-ui.js";
 import { HelpTip } from "./HelpTip.js";
 import { useSaucelingsTranslation } from "./localization.js";
 import { PetSprite } from "./PetSprite.js";
@@ -61,7 +62,7 @@ export function UndoEvolution({ state }: { state: SaucelingStateResponse }) {
       </HelpTip>
       {undo.error && !undo.isPending ? (
         <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
-          {undo.error.message}
+          <FriendlyError error={undo.error} />
         </span>
       ) : null}
     </div>
@@ -219,10 +220,15 @@ function EvolveDialog({
           )}
           {error && !busy ? (
             <p role="alert" style={{ color: "#f87171" }}>
-              {error.message}
+              <FriendlyError error={error} />
             </p>
           ) : null}
           <div className="sl-dialog-actions">
+            {error && !choices && !busy ? (
+              <button type="button" className="sl-btn sl-btn--primary" onClick={() => options.mutate()}>
+                {t("saucelings.error.retry")}
+              </button>
+            ) : null}
             <button type="button" className="sl-btn" disabled={busy} onClick={onClose}>
               {t("saucelings.evolve.keep")}
             </button>

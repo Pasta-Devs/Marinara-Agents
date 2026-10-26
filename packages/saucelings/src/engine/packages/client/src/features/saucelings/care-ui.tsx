@@ -9,8 +9,9 @@ import {
   type SaucelingStateResponse,
   type SaucelingUserAction,
 } from "../../../../shared/src/features/agents/saucelings/types.js";
-import { marinaraRequest, saucelingsRequest } from "./api.js";
+import { friendlyError, marinaraRequest, saucelingsRequest } from "./api.js";
 import { breathingFigureFrom } from "./image-canvas.js";
+import { useSaucelingsTranslation } from "./localization.js";
 
 export const ACTION_ICONS: Record<SaucelingUserAction, string> = {
   feed: "🍝",
@@ -237,5 +238,27 @@ export function CaretakerAvatar({
     <span className={className} aria-hidden="true">
       {name.trim().charAt(0).toUpperCase() || "?"}
     </span>
+  );
+}
+
+/** A request error in plain words (see `friendlyError`), with the original text behind a Details toggle when it was
+ *  replaced. It sits inside the caller's own alert line. */
+export function FriendlyError({ error }: { error: unknown }) {
+  const { t } = useSaucelingsTranslation();
+  const [open, setOpen] = useState(false);
+  const { message, details } = friendlyError(error, t);
+  return (
+    <>
+      {message}
+      {details ? (
+        <>
+          {" "}
+          <button type="button" className="sl-link" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
+            {t("saucelings.error.details")}
+          </button>
+          {open ? <span className="sl-error-details">{details}</span> : null}
+        </>
+      ) : null}
+    </>
   );
 }

@@ -7,54 +7,40 @@ import { useSaucelingsTranslation } from "./localization.js";
 interface Asking {
   characterId: string;
   name: string;
-  onDone?: (go: boolean) => void;
 }
 
 /**
  * Offers to give a caretaker their own voice when they have none yet: the writing connection reads their card once
- * (POST /voice). `ask` opens the dialog for a character without a voice and does nothing for anyone else. `onDone`
- * hears whether to go on: true once the voice is made, after "Not now", or straight away when nothing was asked;
- * false when the dialog is closed.
+ * (POST /voice). `ask` opens the dialog for a character without a voice and does nothing for anyone else.
  */
 export function useVoicePrompt(): {
-  ask: (characterId: string, onDone?: (go: boolean) => void) => void;
+  ask: (characterId: string) => void;
   dialog: ReactNode;
 } {
   const queryClient = useQueryClient();
   const [asking, setAsking] = useState<Asking | null>(null);
   const ask = useCallback(
-    (characterId: string, onDone?: (go: boolean) => void) => {
+    (characterId: string) => {
       const state = queryClient.getQueryData<SaucelingStateResponse>(["saucelings", "state"]);
       const character = state?.characters.find((ch) => ch.id === characterId);
-      if (!character || character.hasVoice) {
-        onDone?.(true);
-        return;
-      }
-      setAsking({ characterId, name: character.name, onDone });
+      if (character && !character.hasVoice) setAsking({ characterId, name: character.name });
     },
     [queryClient],
   );
-  const finish = (go: boolean) => {
-    asking?.onDone?.(go);
-    setAsking(null);
-  };
   return {
     ask,
     dialog: asking ? (
-      <VoiceDialog key={asking.characterId} characterId={asking.characterId} name={asking.name} onFinish={finish} />
+      <VoiceDialog
+        key={asking.characterId}
+        characterId={asking.characterId}
+        name={asking.name}
+        onFinish={() => setAsking(null)}
+      />
     ) : null,
   };
 }
 
-function VoiceDialog({
-  characterId,
-  name,
-  onFinish,
-}: {
-  characterId: string;
-  name: string;
-  onFinish: (go: boolean) => void;
-}) {
+function VoiceDialog({ characterId, name, onFinish }: { characterId: string; name: string; onFinish: () => void }) {
   const { t } = useSaucelingsTranslation();
   const queryClient = useQueryClient();
   const ref = useRef<HTMLDialogElement>(null);
@@ -73,7 +59,7 @@ function VoiceDialog({
     try {
       const next = await saucelingsRequest<SaucelingStateResponse>("/voice", "POST", { characterId });
       queryClient.setQueryData(["saucelings", "state"], next);
-      onFinish(true);
+      onFinish();
     } catch {
       setPhase("failed");
     }
@@ -86,7 +72,7 @@ function VoiceDialog({
       aria-labelledby="sl-voice-title"
       onCancel={(e) => {
         e.preventDefault();
-        if (phase !== "reading") onFinish(false);
+        if (phase !== "reading") onFinish();
       }}
     >
       <h2 id="sl-voice-title">{t("saucelings.voice.title", { name })}</h2>
@@ -99,7 +85,7 @@ function VoiceDialog({
       </p>
       {phase === "reading" ? null : (
         <div className="sl-dialog-actions">
-          <button type="button" className="sl-btn" onClick={() => onFinish(phase === "ask")}>
+          <button type="button" className="sl-btn" onClick={onFinish}>
             {phase === "ask" ? t("saucelings.voice.notNow") : t("saucelings.voice.close")}
           </button>
           <button type="button" className="sl-btn sl-btn--primary" autoFocus onClick={() => void read()}>

@@ -21,6 +21,7 @@ import {
   ACTION_LABEL_KEYS,
   CARE_POSE_MS,
   CaretakerAvatar,
+  FriendlyError,
   actionCoversGap,
   actionsFor,
   cooldownMinutes,
@@ -41,6 +42,7 @@ import { EvolveButton, UndoEvolution } from "./EvolveDialog.js";
 import { caretakerCareAction, caretakerPose, standingCaretaker } from "./caretaker-look.js";
 import { CaretakerFlip, FigurePainter, FormPainter, FormRepaint, PetFlip } from "./FormPainter.js";
 import { HelpTip } from "./HelpTip.js";
+import { mariPose, NookTour, tourSeen } from "./NookTour.js";
 import { useSaucelingsTranslation } from "./localization.js";
 import { SaucelingSprite, useSpriteReaction } from "./SaucelingSprite.js";
 import { RareMark } from "./RareMark.js";
@@ -113,36 +115,54 @@ function EggForm({
   );
 }
 
-/** What a new egg may be: each special egg's milestone, and the Halloween ones. Shown beside the Adopt button. */
+/** What a new egg may be: each special egg's milestone, and the Halloween ones. A closed section under the egg button,
+ *  so a first visit sees only the button. */
 function SpecialEggs({ unlocks }: { unlocks: SaucelingUnlocks }) {
   const { t } = useSaucelingsTranslation();
-  const line = (id: SaucelingSpecialSpeciesId, todo: string) =>
-    unlocks[id].done ? t("saucelings.unlocks.done", { name: SPECIES_CATALOG[id].name }) : todo;
+  const specials: SaucelingSpecialSpeciesId[] = ["prismite", "thundrake", "clockrit"];
+  const have = specials.filter((id) => unlocks[id].done).length + (unlocks.halloween ? 1 : 0);
   return (
-    <div className="sl-unlocks" style={{ fontSize: "0.8rem", opacity: 0.85, textAlign: "left", margin: "0 auto" }}>
-      <div style={{ fontWeight: 600 }}>{t("saucelings.unlocks.title")}</div>
-      <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.1rem", display: "grid", gap: "0.15rem" }}>
-        <li>{line("prismite", t("saucelings.unlocks.prismite", { ...unlocks.prismite }))}</li>
-        <li>{line("thundrake", t("saucelings.unlocks.thundrake", { ...unlocks.thundrake }))}</li>
-        <li>{line("clockrit", t("saucelings.unlocks.clockrit", { ...unlocks.clockrit }))}</li>
+    <details className="sl-unlocks">
+      <summary>{t("saucelings.unlocks.title", { have, total: specials.length + 1 })}</summary>
+      <ul>
+        {specials.map((id) => (
+          <li key={id}>
+            {unlocks[id].done
+              ? t("saucelings.unlocks.done", { name: SPECIES_CATALOG[id].name })
+              : t(`saucelings.unlocks.${id}`, { ...unlocks[id] })}
+          </li>
+        ))}
         <li>{unlocks.halloween ? t("saucelings.unlocks.halloweenNow") : t("saucelings.unlocks.halloween")}</li>
       </ul>
-    </div>
+    </details>
   );
 }
 
-/** One meter in the strip under the stage: label and value on a line, the bar beneath; amber when it is a gap. */
-function Meter({ label, value, gapLabel }: { label: string; value: number; gapLabel?: string | null }) {
+/** One meter in the strip under the stage: label and value on a line, the bar beneath; amber when it is a gap. Its
+ *  name opens what it means. A `keepGap` note still shows on a phone, where the others leave it to the colour. */
+function Meter({
+  label,
+  help,
+  value,
+  gapLabel,
+  keepGap = false,
+}: {
+  label: string;
+  help: string;
+  value: number;
+  gapLabel?: string | null;
+  keepGap?: boolean;
+}) {
   return (
     <div className={`sl-meter-box ${gapLabel ? "sl-meter-box--gap" : ""}`} title={gapLabel ?? undefined}>
       <div className="sl-meter-head">
-        <span>{label}</span>
+        <HelpTip text={help} trigger={label} />
         <span className="sl-meter-value">{value}%</span>
       </div>
       <div className="sl-meter-bar">
         <div className={`sl-meter-fill ${gapLabel ? "sl-meter-fill--gap" : ""}`} style={{ width: `${value}%` }} />
       </div>
-      {gapLabel ? <div className="sl-meter-gap">{gapLabel}</div> : null}
+      {gapLabel ? <div className={`sl-meter-gap ${keepGap ? "sl-meter-gap--keep" : ""}`}>{gapLabel}</div> : null}
     </div>
   );
 }
@@ -168,17 +188,22 @@ export function SaucelingsNookView({
   packageId?: string;
   packageVersion?: string | null;
   /** Offers to make a caretaker's own voice when they have none (see VoiceDialog.tsx). */
-  askVoice: (characterId: string, onDone?: (go: boolean) => void) => void;
+  askVoice: (characterId: string) => void;
 }) {
   const { t } = useSaucelingsTranslation();
   const queryClient = useQueryClient();
   const pet = state.world.activePet;
   const characters = state.characters;
   const [swapOpen, setSwapOpen] = useState(false);
+  const [confirmRetire, setConfirmRetire] = useState(false);
+  // The caretaker picked in About, waiting for Hand over; Cancel puts the select back.
+  const [handOverTo, setHandOverTo] = useState<SaucelingCharacterSummary | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [renameValue, setRenameValue] = useState("");
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [failure, setFailure] = useState<unknown>(null);
   const [nudgePick, setNudgePick] = useState<SaucelingTendencyKey>("feedReliability");
+  // Mari's tour; `then` runs as it closes (the voice offer after a first egg).
+  const [tour, setTour] = useState<{ then?: () => void } | null>(null);
   const [reaction, playReaction] = useSpriteReaction();
   // A care has the pet come over to the caretaker first (see the stage director).
   const stageHandle = useRef<SaucelingStageHandle>(null);
@@ -201,14 +226,21 @@ export function SaucelingsNookView({
   const careId = lastCare?.id;
   const careText = lastCare?.text;
   const seenCareId = useRef(careId);
+  // A tap on a resting care button says when it is ready again in the same line.
   const [careNote, setCareNote] = useState({ text: "", shown: false });
+  const noteTimer = useRef(0);
+  const showNote = (text: string) => {
+    setCareNote({ text, shown: true });
+    window.clearTimeout(noteTimer.current);
+    // The words stay while the line fades out.
+    noteTimer.current = window.setTimeout(() => setCareNote((note) => ({ ...note, shown: false })), 6_000);
+  };
+  useEffect(() => () => window.clearTimeout(noteTimer.current), []);
   useEffect(() => {
     if (!careId || careId === seenCareId.current) return;
     seenCareId.current = careId;
-    setCareNote({ text: careText ?? "", shown: true });
-    // The words stay while the line fades out.
-    const timer = window.setTimeout(() => setCareNote((note) => ({ ...note, shown: false })), 6_000);
-    return () => window.clearTimeout(timer);
+    showNote(careText ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [careId, careText]);
 
   // Check in and Ask sit in the caretaker's box when the care card is beside the stage; on a narrower panel they
@@ -262,10 +294,10 @@ export function SaucelingsNookView({
   }, [hatchDue, queryClient]);
 
   const updateState = (next: SaucelingStateResponse) => {
-    setErrorMsg(null);
+    setFailure(null);
     queryClient.setQueryData(["saucelings", "state"], next);
   };
-  const showError = (err: unknown) => setErrorMsg(err instanceof Error ? err.message : t("saucelings.error.request"));
+  const showError = (err: unknown) => setFailure(err ?? new Error(t("saucelings.error.request")));
 
   const adoptMutation = useMutation({
     mutationFn: (payload: { characterId: string; swap?: boolean }) =>
@@ -316,6 +348,7 @@ export function SaucelingsNookView({
       saucelingsRequest<SaucelingStateResponse>("/pet", "PATCH", payload),
     onSuccess: (data, payload) => {
       setEditingName(false);
+      setHandOverTo(null);
       updateState(data);
       // A new caretaker with no voice of their own is offered one once they have said hello.
       if (payload.caretakerId) askVoice(payload.caretakerId);
@@ -332,15 +365,23 @@ export function SaucelingsNookView({
     onSuccess: updateState,
     onError: showError,
   });
-  // A caretaker with no voice of their own is offered one before they bring the egg; closing the offer brings none.
+  // The egg comes first; a caretaker with no voice of their own is offered one once it is in the nook, after Mari's
+  // tour on a first egg.
   const adopt = (input: { characterId: string; swap?: boolean }) =>
-    askVoice(input.characterId, (go) => {
-      if (go) adoptMutation.mutate(input);
+    adoptMutation.mutate(input, {
+      onSuccess: () => {
+        const offerVoice = () => askVoice(input.characterId);
+        if (input.swap || tourSeen()) offerVoice();
+        else setTour({ then: offerVoice });
+      },
     });
 
   const retireMutation = useMutation({
     mutationFn: () => saucelingsRequest<SaucelingStateResponse>("/retire", "POST", {}),
-    onSuccess: updateState,
+    onSuccess: (next) => {
+      setConfirmRetire(false);
+      updateState(next);
+    },
     onError: showError,
   });
 
@@ -361,6 +402,12 @@ export function SaucelingsNookView({
         <p style={{ fontSize: "0.85rem", opacity: 0.8, maxWidth: "32rem", margin: "0 auto" }}>
           {t("saucelings.empty.body")}
         </p>
+        {tourSeen() ? null : (
+          <div className="sl-mari-line">
+            <img src={mariPose("wave")} alt="" onError={(event) => (event.currentTarget.hidden = true)} />
+            <p>{t("saucelings.empty.mari")}</p>
+          </div>
+        )}
         <EggForm
           characters={characters}
           defaultCaretakerId={characters[0]?.id ?? "caretaker"}
@@ -369,7 +416,11 @@ export function SaucelingsNookView({
           onSubmit={adopt}
         />
         <SpecialEggs unlocks={state.unlocks} />
-        {errorMsg ? <p style={{ color: "#f87171", fontSize: "0.8rem", margin: 0 }}>{errorMsg}</p> : null}
+        {failure ? (
+          <p role="alert" style={{ color: "#f87171", fontSize: "0.8rem", margin: 0 }}>
+            <FriendlyError error={failure} />
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -383,6 +434,8 @@ export function SaucelingsNookView({
   const caretakerName = pet.careProfile.characterName;
   const isCharacter = characters.some((ch) => ch.id === pet.caretakerId);
   const hatching = hatchPercent(pet, nowMs);
+  // A hungry sauceling stops growing; the Hunger meter says so in its note.
+  const growthPaused = !pet.lockedStage && pet.stage !== "elder" && pet.meters.hunger < SAUCELING_GROWTH_MIN_HUNGER;
   // A sauceling that is not pasta keeps the house colours.
   const sauceStyle = (
     sauce ? { "--sl-sauce-accent": sauce.accentColor, "--sl-sauce-bg": sauce.badgeBg } : {}
@@ -422,7 +475,7 @@ export function SaucelingsNookView({
   // Check in and Ask: in the caretaker's box beside a wide panel's care card, under the care buttons otherwise.
   const talk = (
     <>
-      <div className="sl-care-row">
+      <div className="sl-care-row" data-sl-tour="caretaker">
         <button
           type="button"
           className="sl-btn"
@@ -435,7 +488,7 @@ export function SaucelingsNookView({
         </button>
       </div>
 
-      <div className="sl-care-row sl-ask-row">
+      <div className="sl-care-row sl-ask-row" data-sl-tour="caretaker">
         <label htmlFor="sl-nudge-pick" className="sl-care-ask">
           {t("saucelings.nudge.heading", { name: caretakerName })}
         </label>
@@ -467,27 +520,41 @@ export function SaucelingsNookView({
   );
   return (
     <div ref={panelRef} className="sl-nook" style={sauceStyle}>
-      {errorMsg ? (
+      {failure ? (
         <div
           role="alert"
           className="sl-card"
           style={{ borderColor: "#ef4444", color: "#fca5a5", fontSize: "0.8125rem", padding: "0.65rem 1rem" }}
         >
-          {errorMsg}
+          <FriendlyError error={failure} />
         </div>
       ) : null}
 
       {pet.retireReady ? (
         <div className="sl-card sl-retire">
-          <span>{t("saucelings.retire.ready", { name: pet.name })}</span>
-          <button
-            type="button"
-            className="sl-btn sl-btn--primary"
-            disabled={retireMutation.isPending}
-            onClick={() => retireMutation.mutate()}
-          >
-            📖 {t("saucelings.retire.button")}
-          </button>
+          {confirmRetire ? (
+            <>
+              <span>{t("saucelings.retire.confirmNote", { name: pet.name })}</span>
+              <button
+                type="button"
+                className="sl-btn sl-btn--primary"
+                disabled={retireMutation.isPending}
+                onClick={() => retireMutation.mutate()}
+              >
+                {t("saucelings.retire.confirm")}
+              </button>
+              <button type="button" className="sl-btn" onClick={() => setConfirmRetire(false)}>
+                {t("saucelings.common.cancel")}
+              </button>
+            </>
+          ) : (
+            <>
+              <span>{t("saucelings.retire.ready", { name: pet.name })}</span>
+              <button type="button" className="sl-btn sl-btn--primary" onClick={() => setConfirmRetire(true)}>
+                📖 {t("saucelings.retire.button")}
+              </button>
+            </>
+          )}
         </div>
       ) : null}
 
@@ -550,9 +617,6 @@ export function SaucelingsNookView({
                     {pet.lockedStage
                       ? t("saucelings.pet.locked", { stage: t(`saucelings.stage.${pet.lockedStage}`) })
                       : t(`saucelings.stage.${pet.stage}`)}
-                    {!pet.lockedStage && pet.stage !== "elder" && pet.meters.hunger < SAUCELING_GROWTH_MIN_HUNGER
-                      ? ` · ${t("saucelings.pet.growthPaused")}`
-                      : null}
                   </div>
                 )}
               </div>
@@ -566,6 +630,9 @@ export function SaucelingsNookView({
               onClick={() => setPickerOpen((open) => !open)}
             >
               🖼<span className="sl-btn-label"> {t("saucelings.nook.background")}</span>
+            </button>
+            <button type="button" className="sl-btn sl-btn--small" onClick={() => setTour({})}>
+              {t("saucelings.tour.link")}
             </button>
           </div>
 
@@ -602,16 +669,18 @@ export function SaucelingsNookView({
         </div>
 
         <div className="sl-card sl-care-card">
-          <div className="sl-meters sl-meters--strip">
+          <div className="sl-meters sl-meters--strip" data-sl-tour="meters">
             {isEgg ? (
               <>
                 <Meter
                   label={t("saucelings.meter.warmth")}
+                  help={t("saucelings.meter.warmthHelp")}
                   value={eggWarmth(pet)}
                   gapLabel={state.gaps.warmth ? t("saucelings.meter.warmthGap") : null}
                 />
                 <Meter
                   label={t("saucelings.meter.hatching")}
+                  help={t("saucelings.meter.hatchingHelp")}
                   value={hatching}
                   gapLabel={hatching >= 100 && pet.careActionCount < 1 ? t("saucelings.meter.hatchingGap") : null}
                 />
@@ -620,20 +689,29 @@ export function SaucelingsNookView({
               <>
                 <Meter
                   label={t("saucelings.meter.hunger")}
+                  help={t("saucelings.meter.hungerHelp")}
                   value={pet.meters.hunger}
-                  gapLabel={state.gaps.hunger ? t("saucelings.meter.hungerGap") : null}
+                  gapLabel={
+                    growthPaused
+                      ? t("saucelings.pet.growthPaused")
+                      : state.gaps.hunger
+                        ? t("saucelings.meter.hungerGap")
+                        : null
+                  }
+                  keepGap={growthPaused}
                 />
                 <Meter
                   label={t("saucelings.meter.mood")}
+                  help={t("saucelings.meter.moodHelp")}
                   value={pet.meters.mood}
                   gapLabel={state.gaps.mood ? t("saucelings.meter.moodGap") : null}
                 />
               </>
             )}
-            <Meter label={t("saucelings.meter.bond")} value={pet.meters.bond} />
+            <Meter label={t("saucelings.meter.bond")} help={t("saucelings.meter.bondHelp")} value={pet.meters.bond} />
           </div>
 
-          <div className="sl-actions">
+          <div className="sl-actions" data-sl-tour="care">
             {actionsFor(pet).map((action) => {
               const wait = cooldownMinutes(pet, action, nowMs);
               // Filling a gap cheers the caretaker up for a moment.
@@ -643,13 +721,19 @@ export function SaucelingsNookView({
                   key={action}
                   type="button"
                   className={`sl-btn ${fillsGap ? "sl-btn--gap" : ""}`}
-                  disabled={actionMutation.isPending || wait > 0}
+                  disabled={actionMutation.isPending}
+                  // A resting button stays tappable, so a tap (or a screen reader) hears when it is ready.
+                  aria-disabled={wait > 0 || undefined}
                   onClick={() =>
-                    actionMutation.mutate(action, {
-                      onSuccess: () => {
-                        if (fillsGap) cheer(true);
-                      },
-                    })
+                    wait > 0
+                      ? showNote(
+                          t("saucelings.action.resting", { action: t(ACTION_LABEL_KEYS[action]), minutes: wait }),
+                        )
+                      : actionMutation.mutate(action, {
+                          onSuccess: () => {
+                            if (fillsGap) cheer(true);
+                          },
+                        })
                   }
                 >
                   {ACTION_ICONS[action]} {t(ACTION_LABEL_KEYS[action])}
@@ -677,7 +761,7 @@ export function SaucelingsNookView({
         />
       ) : null}
 
-      <details className="sl-card sl-about">
+      <details className="sl-card sl-about" data-sl-tour="about">
         <summary>{isEgg ? t("saucelings.about.egg") : t("saucelings.about.summary", { name: pet.name })}</summary>
         <div className="sl-about-body">
           {isEgg ? (
@@ -717,91 +801,137 @@ export function SaucelingsNookView({
           )}
           <p>{t("saucelings.menagerie.foundBy", { name: pet.finder.name })}</p>
 
-          {characters.length > 1 ? (
-            <label className="sl-about-row">
-              <span>{isEgg ? t("saucelings.pet.eggCaretaker") : t("saucelings.pet.caretaker")}</span>
-              <select
-                className="sl-select sl-select--small"
-                aria-label={t("saucelings.empty.pickCaretaker")}
-                value={pet.caretakerId}
-                onChange={(e) => patchPetMutation.mutate({ caretakerId: e.target.value })}
-              >
-                {characters.map((ch) => (
-                  <option key={ch.id} value={ch.id}>
-                    {ch.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
+          {/* What you can change, grouped by what it changes: side by side when there is room. */}
+          <div className="sl-about-groups">
+            {characters.length > 1 || isCharacter ? (
+              <section className="sl-about-group">
+                <h3>{t("saucelings.about.caretakerGroup")}</h3>
+                {characters.length > 1 ? (
+                  <label className="sl-about-row">
+                    <span>{isEgg ? t("saucelings.pet.eggCaretaker") : t("saucelings.pet.caretaker")}</span>
+                    <select
+                      className="sl-select sl-select--small"
+                      aria-label={t("saucelings.empty.pickCaretaker")}
+                      value={handOverTo?.id ?? pet.caretakerId}
+                      onChange={(e) => setHandOverTo(characters.find((ch) => ch.id === e.target.value) ?? null)}
+                    >
+                      {characters.map((ch) => (
+                        <option key={ch.id} value={ch.id}>
+                          {ch.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                {handOverTo && handOverTo.id !== pet.caretakerId ? (
+                  <div className="sl-about-row" role="group">
+                    <span>
+                      {isEgg
+                        ? t("saucelings.about.handOverEggNote", { caretaker: handOverTo.name })
+                        : t("saucelings.about.handOverNote", { name: pet.name, caretaker: handOverTo.name })}
+                    </span>
+                    <button
+                      type="button"
+                      className="sl-btn sl-btn--primary"
+                      disabled={patchPetMutation.isPending}
+                      onClick={() => patchPetMutation.mutate({ caretakerId: handOverTo.id })}
+                    >
+                      {t("saucelings.about.handOver")}
+                    </button>
+                    <button type="button" className="sl-btn" onClick={() => setHandOverTo(null)}>
+                      {t("saucelings.common.cancel")}
+                    </button>
+                  </div>
+                ) : null}
 
-          {isCharacter ? (
-            <div className="sl-about-row">
-              <HelpTip
-                text={t("saucelings.about.refreshVoiceNote")}
-                label={t("saucelings.help.label", {
-                  action: t("saucelings.about.refreshVoice", { name: caretakerName }),
-                })}
-              >
+                {isCharacter ? (
+                  <div className="sl-about-row">
+                    <HelpTip
+                      text={t("saucelings.about.refreshVoiceNote")}
+                      label={t("saucelings.help.label", {
+                        action: t("saucelings.about.refreshVoice", { name: caretakerName }),
+                      })}
+                    >
+                      <button
+                        type="button"
+                        className="sl-btn"
+                        disabled={refreshVoiceMutation.isPending}
+                        onClick={() =>
+                          refreshVoiceMutation.mutate({ characterId: pet.caretakerId, name: caretakerName })
+                        }
+                      >
+                        {refreshVoiceMutation.isPending
+                          ? t("saucelings.about.refreshingVoice", { name: caretakerName })
+                          : `🔄 ${t("saucelings.about.refreshVoice", { name: caretakerName })}`}
+                      </button>
+                    </HelpTip>
+                  </div>
+                ) : null}
+                {isCharacter ? (
+                  <FigurePainter
+                    state={state}
+                    characterId={pet.caretakerId}
+                    name={caretakerName}
+                    sprites={caretakerSprites}
+                  />
+                ) : null}
+                {isCharacter ? (
+                  <CaretakerFlip state={state} characterId={pet.caretakerId} name={caretakerName} />
+                ) : null}
+              </section>
+            ) : null}
+            <section className="sl-about-group">
+              <h3>{t("saucelings.about.looksGroup")}</h3>
+              <FormRepaint state={state} assetUrl={assetUrl} />
+              <PetFlip state={state} />
+              <UndoEvolution state={state} />
+            </section>
+            <section className="sl-about-group">
+              <h3>{t("saucelings.about.newEggGroup")}</h3>
+              <div className="sl-about-row">
                 <button
                   type="button"
                   className="sl-btn"
-                  disabled={refreshVoiceMutation.isPending}
-                  onClick={() => refreshVoiceMutation.mutate({ characterId: pet.caretakerId, name: caretakerName })}
+                  aria-expanded={swapOpen}
+                  onClick={() => setSwapOpen((open) => !open)}
                 >
-                  {refreshVoiceMutation.isPending
-                    ? t("saucelings.about.refreshingVoice", { name: caretakerName })
-                    : `🔄 ${t("saucelings.about.refreshVoice", { name: caretakerName })}`}
+                  🥚 {t("saucelings.swap.button")}
                 </button>
-              </HelpTip>
-            </div>
-          ) : null}
-          {isCharacter ? (
-            <FigurePainter
-              state={state}
-              characterId={pet.caretakerId}
-              name={caretakerName}
-              sprites={caretakerSprites}
-            />
-          ) : null}
-          {isCharacter ? <CaretakerFlip state={state} characterId={pet.caretakerId} name={caretakerName} /> : null}
-
-          <FormRepaint state={state} assetUrl={assetUrl} />
-          <PetFlip state={state} />
-          <UndoEvolution state={state} />
-
-          <div className="sl-about-row">
-            <button
-              type="button"
-              className="sl-btn"
-              aria-expanded={swapOpen}
-              onClick={() => setSwapOpen((open) => !open)}
-            >
-              🥚 {t("saucelings.swap.button")}
-            </button>
+              </div>
+              {swapOpen ? (
+                <div style={{ display: "grid", gap: "0.5rem", textAlign: "center" }}>
+                  <p style={{ margin: 0, fontSize: "0.85rem" }}>
+                    {isEgg ? t("saucelings.swap.noteEgg") : t("saucelings.swap.note", { name: pet.name })}
+                  </p>
+                  <EggForm
+                    characters={characters}
+                    defaultCaretakerId={
+                      characters.some((ch) => ch.id === pet.caretakerId)
+                        ? pet.caretakerId
+                        : (characters[0]?.id ?? "caretaker")
+                    }
+                    submitLabel={t("saucelings.swap.confirm")}
+                    pending={adoptMutation.isPending}
+                    onSubmit={(input) => adopt({ ...input, swap: true })}
+                    onCancel={() => setSwapOpen(false)}
+                  />
+                  <SpecialEggs unlocks={state.unlocks} />
+                </div>
+              ) : null}
+            </section>
           </div>
-          {swapOpen ? (
-            <div style={{ display: "grid", gap: "0.5rem", textAlign: "center" }}>
-              <p style={{ margin: 0, fontSize: "0.85rem" }}>
-                {isEgg ? t("saucelings.swap.noteEgg") : t("saucelings.swap.note", { name: pet.name })}
-              </p>
-              <EggForm
-                characters={characters}
-                defaultCaretakerId={
-                  characters.some((ch) => ch.id === pet.caretakerId)
-                    ? pet.caretakerId
-                    : (characters[0]?.id ?? "caretaker")
-                }
-                submitLabel={t("saucelings.swap.confirm")}
-                pending={adoptMutation.isPending}
-                onSubmit={(input) => adopt({ ...input, swap: true })}
-                onCancel={() => setSwapOpen(false)}
-              />
-              <SpecialEggs unlocks={state.unlocks} />
-            </div>
-          ) : null}
         </div>
       </details>
+
+      {tour ? (
+        <NookTour
+          caretaker={caretakerName}
+          onClose={() => {
+            setTour(null);
+            tour.then?.();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

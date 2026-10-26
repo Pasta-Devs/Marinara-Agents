@@ -14,6 +14,7 @@ import {
   temperamentOf,
 } from "../../../../shared/src/features/agents/saucelings/vocabulary.js";
 import { packageAssetUrl, saucelingsRequest } from "./api.js";
+import { FriendlyError } from "./care-ui.js";
 import { EggPaintNote } from "./FormPainter.js";
 import { useSaucelingsTranslation } from "./localization.js";
 import { PetSprite } from "./PetSprite.js";
@@ -136,11 +137,12 @@ export function SaucelingsMenagerieView({
           className="sl-card"
           style={{ borderColor: "#ef4444", color: "#fca5a5", fontSize: "0.8125rem", padding: "0.65rem 1rem" }}
         >
-          {failure.message}
+          <FriendlyError error={failure} />
         </div>
       ) : null}
       {open ? (
         <MenagerieCard
+          key={open.id}
           entry={open}
           cardRef={cardRef}
           assetUrl={assetUrl}
@@ -257,6 +259,9 @@ function MenagerieCard({
   onClose: () => void;
 }) {
   const { t } = useSaucelingsTranslation();
+  // Bring back with nobody chosen says so and moves to the choice.
+  const [askCaretaker, setAskCaretaker] = useState(false);
+  const caretakerSelect = useRef<HTMLSelectElement>(null);
   const kind = petKind(entry);
   // An egg keeps its kind a surprise in the Menagerie too.
   const isEgg = entry.stageAtRetirement === "egg";
@@ -332,6 +337,7 @@ function MenagerieCard({
       <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.8rem", flexWrap: "wrap" }}>
         <span>{t("saucelings.menagerie.lookedAfterBy")}</span>
         <select
+          ref={caretakerSelect}
           className="sl-select"
           value={caretakerId}
           disabled={pending}
@@ -348,6 +354,11 @@ function MenagerieCard({
             </option>
           ))}
         </select>
+        {askCaretaker && !caretakerId ? (
+          <span className="sl-care-note" role="status">
+            {t("saucelings.menagerie.chooseFirst")}
+          </span>
+        ) : null}
       </label>
 
       <div
@@ -429,9 +440,15 @@ function MenagerieCard({
             <button
               type="button"
               className="sl-btn sl-btn--primary"
-              disabled={pending || !caretakerId}
-              title={caretakerId ? undefined : t("saucelings.menagerie.chooseCaretaker")}
-              onClick={() => (hasActivePet ? setConfirming("swap") : restore(false))}
+              disabled={pending}
+              aria-disabled={!caretakerId || undefined}
+              onClick={() => {
+                if (!caretakerId) {
+                  setAskCaretaker(true);
+                  caretakerSelect.current?.focus();
+                } else if (hasActivePet) setConfirming("swap");
+                else restore(false);
+              }}
             >
               {t("saucelings.menagerie.bringBack")}
             </button>

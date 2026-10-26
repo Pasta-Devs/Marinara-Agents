@@ -18,6 +18,7 @@ import {
   spriteStrip,
 } from "../../../../shared/src/features/agents/saucelings/vocabulary.js";
 import { marinaraRequest, packageAssetUrl, saucelingsRequest } from "./api.js";
+import { FriendlyError } from "./care-ui.js";
 import { FormPainter } from "./FormPainter.js";
 import { formQuery, PetSprite } from "./PetSprite.js";
 import { albumPainting, spriteReference } from "./image-canvas.js";
@@ -325,7 +326,7 @@ export function SaucelingsAlbumView({
         )}
         {failure ? (
           <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
-            {failure.message}
+            <FriendlyError error={failure} />
           </span>
         ) : null}
         {pet && !paintNote ? <FormPainter state={state} assetUrl={assetUrl} /> : null}

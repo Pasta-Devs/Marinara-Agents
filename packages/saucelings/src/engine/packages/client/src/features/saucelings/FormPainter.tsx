@@ -9,8 +9,8 @@ import {
   type SaucelingStateResponse,
 } from "../../../../shared/src/features/agents/saucelings/types.js";
 import { spriteStrip } from "../../../../shared/src/features/agents/saucelings/vocabulary.js";
-import { marinaraRequest, saucelingsRequest } from "./api.js";
-import { caretakerCardQuery, useCaretakerFigure } from "./care-ui.js";
+import { friendlyError, marinaraRequest, saucelingsRequest } from "./api.js";
+import { caretakerCardQuery, FriendlyError, useCaretakerFigure } from "./care-ui.js";
 import { pickStandingSprite } from "./caretaker-look.js";
 import { figureImageFrom, formImageFrom, pictureReference, sheetFormsFrom, spriteReference } from "./image-canvas.js";
 import {
@@ -264,7 +264,7 @@ export function EggPaintNote({ petId }: { petId: string }) {
   }
   return error ? (
     <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
-      {t("saucelings.form.eggFailed", { error: error.message })}
+      {t("saucelings.form.eggFailed", { error: friendlyError(error, t).message })}
     </span>
   ) : null;
 }
@@ -306,7 +306,7 @@ export function FormPainter({
       </span>
       {error && !pending ? (
         <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
-          {error.message}
+          <FriendlyError error={error} />
         </span>
       ) : null}
     </div>
@@ -405,12 +405,12 @@ export function FormRepaint({
       )}
       {error && !pending ? (
         <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
-          {error.message}
+          <FriendlyError error={error} />
         </span>
       ) : null}
       {undo.error && !undo.isPending ? (
         <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
-          {undo.error.message}
+          <FriendlyError error={undo.error} />
         </span>
       ) : null}
     </div>
@@ -451,7 +451,7 @@ function FlipButton({
       </HelpTip>
       {flip.error && !flip.isPending ? (
         <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
-          {flip.error.message}
+          <FriendlyError error={flip.error} />
         </span>
       ) : null}
     </div>
@@ -638,12 +638,12 @@ export function FigurePainter({
         )}
         {error && !pending ? (
           <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
-            {error.message}
+            <FriendlyError error={error} />
           </span>
         ) : null}
         {undo.error && !undo.isPending ? (
           <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
-            {undo.error.message}
+            <FriendlyError error={undo.error} />
           </span>
         ) : null}
       </div>

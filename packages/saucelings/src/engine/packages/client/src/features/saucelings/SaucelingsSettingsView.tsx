@@ -5,6 +5,7 @@ import type {
   SaucelingStateResponse,
 } from "../../../../shared/src/features/agents/saucelings/types.js";
 import { marinaraRequest, saucelingsRequest } from "./api.js";
+import { FriendlyError, useForAMoment } from "./care-ui.js";
 import { useSaucelingsTranslation } from "./localization.js";
 
 type ConnectionSummary = { id: string; name: string; provider: string };
@@ -69,6 +70,16 @@ export function SaucelingsSettingsView({ state }: { state: SaucelingStateRespons
       saucelingsRequest<SaucelingStateResponse>("/settings", "PATCH", patch),
     onSuccess: (next) => queryClient.setQueryData(["saucelings", "state"], next),
   });
+  // Each change saves on its own, so the row that changed says so for a moment.
+  const [saved, showSaved] = useForAMoment<keyof SaucelingSettings>(2000);
+  const patch = (change: Partial<SaucelingSettings>) =>
+    patchMutation.mutate(change, { onSuccess: () => showSaved(Object.keys(change)[0] as keyof SaucelingSettings) });
+  const savedTick = (key: keyof SaucelingSettings) =>
+    saved === key ? (
+      <span className="sl-saved" role="status">
+        {t("saucelings.settings.saved")}
+      </span>
+    ) : null;
 
   const resetMutation = useMutation({
     mutationFn: () => saucelingsRequest<SaucelingStateResponse>("/reset", "POST", {}),
@@ -82,20 +93,24 @@ export function SaucelingsSettingsView({ state }: { state: SaucelingStateRespons
     <div className="sl-card" style={{ display: "grid", gap: "1.15rem" }}>
       <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
         <div>
-          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>{t("saucelings.settings.careWindow")}</div>
+          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
+            {t("saucelings.settings.careWindow")} {savedTick("careWindowHours")}
+          </div>
           <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.settings.careWindowNote")}</div>
         </div>
         <NumberField
           value={settings.careWindowHours}
           min={1}
           max={24}
-          onSave={(careWindowHours) => patchMutation.mutate({ careWindowHours })}
+          onSave={(careWindowHours) => patch({ careWindowHours })}
         />
       </label>
 
       <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
         <div>
-          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>{t("saucelings.settings.dailyBudget")}</div>
+          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
+            {t("saucelings.settings.dailyBudget")} {savedTick("dailyGenerationBudget")}
+          </div>
           <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>
             {t("saucelings.settings.budgetUsed", {
               used: budget.used,
@@ -108,19 +123,21 @@ export function SaucelingsSettingsView({ state }: { state: SaucelingStateRespons
           value={settings.dailyGenerationBudget}
           min={0}
           max={30}
-          onSave={(dailyGenerationBudget) => patchMutation.mutate({ dailyGenerationBudget })}
+          onSave={(dailyGenerationBudget) => patch({ dailyGenerationBudget })}
         />
       </label>
 
       <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
         <div>
-          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>{t("saucelings.settings.connection")}</div>
+          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
+            {t("saucelings.settings.connection")} {savedTick("connectionId")}
+          </div>
           <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.settings.connectionNote")}</div>
         </div>
         <select
           className="sl-input"
           value={settings.connectionId ?? ""}
-          onChange={(e) => patchMutation.mutate({ connectionId: e.target.value || null })}
+          onChange={(e) => patch({ connectionId: e.target.value || null })}
         >
           <option value="">{t("saucelings.settings.connectionDefault")}</option>
           {textConnections.map((connection) => (
@@ -137,50 +154,44 @@ export function SaucelingsSettingsView({ state }: { state: SaucelingStateRespons
 
       <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
         <div>
-          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>{t("saucelings.settings.writeEveryLine")}</div>
+          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
+            {t("saucelings.settings.writeEveryLine")} {savedTick("writeEveryLine")}
+          </div>
           <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.settings.writeEveryLineNote")}</div>
         </div>
         <input
           type="checkbox"
           checked={settings.writeEveryLine}
-          onChange={(e) => patchMutation.mutate({ writeEveryLine: e.target.checked })}
+          onChange={(e) => patch({ writeEveryLine: e.target.checked })}
         />
       </label>
 
       <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
         <div>
-          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>{t("saucelings.settings.images")}</div>
+          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
+            {t("saucelings.settings.images")} {savedTick("portraitEnabled")}
+          </div>
           <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.settings.imagesNote")}</div>
         </div>
         <input
           type="checkbox"
           checked={settings.portraitEnabled}
-          onChange={(e) => patchMutation.mutate({ portraitEnabled: e.target.checked })}
-        />
-      </label>
-
-      <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>{t("saucelings.settings.eggHunting")}</div>
-          <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.settings.eggHuntingNote")}</div>
-        </div>
-        <input
-          type="checkbox"
-          checked={settings.eggHunting}
-          onChange={(e) => patchMutation.mutate({ eggHunting: e.target.checked })}
+          onChange={(e) => patch({ portraitEnabled: e.target.checked })}
         />
       </label>
 
       {settings.portraitEnabled ? (
         <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>{t("saucelings.settings.imageConnection")}</div>
+          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
+            {t("saucelings.settings.imageConnection")} {savedTick("portraitConnectionId")}
+          </div>
           {imageConnections && imageConnections.length === 0 ? (
             <span style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.settings.imageConnectionEmpty")}</span>
           ) : (
             <select
               className="sl-input"
               value={settings.portraitConnectionId ?? ""}
-              onChange={(e) => patchMutation.mutate({ portraitConnectionId: e.target.value || null })}
+              onChange={(e) => patch({ portraitConnectionId: e.target.value || null })}
             >
               <option value="">{t("saucelings.settings.imageConnectionPick")}</option>
               {(imageConnections ?? []).map((connection) => (
@@ -196,20 +207,36 @@ export function SaucelingsSettingsView({ state }: { state: SaucelingStateRespons
       {settings.portraitEnabled ? (
         <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
           <div>
-            <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>{t("saucelings.settings.threeDrawingFallback")}</div>
+            <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
+              {t("saucelings.settings.threeDrawingFallback")} {savedTick("threeDrawingFallback")}
+            </div>
             <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.settings.threeDrawingFallbackNote")}</div>
           </div>
           <input
             type="checkbox"
             checked={settings.threeDrawingFallback}
-            onChange={(e) => patchMutation.mutate({ threeDrawingFallback: e.target.checked })}
+            onChange={(e) => patch({ threeDrawingFallback: e.target.checked })}
           />
         </label>
       ) : null}
 
+      <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
+        <div>
+          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
+            {t("saucelings.settings.eggHunting")} {savedTick("eggHunting")}
+          </div>
+          <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.settings.eggHuntingNote")}</div>
+        </div>
+        <input
+          type="checkbox"
+          checked={settings.eggHunting}
+          onChange={(e) => patch({ eggHunting: e.target.checked })}
+        />
+      </label>
+
       {(patchMutation.error ?? resetMutation.error) ? (
         <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
-          {(patchMutation.error ?? resetMutation.error)?.message}
+          <FriendlyError error={patchMutation.error ?? resetMutation.error} />
         </span>
       ) : null}
 

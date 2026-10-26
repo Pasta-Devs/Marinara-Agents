@@ -1112,6 +1112,7 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
   for (const move of SAUCELING_EVOLVE_MOVES) used.add(`saucelings.evolve.moves.${move}`);
   for (const tab of ["nook", "journal", "album", "menagerie", "settings"]) used.add(`saucelings.tab.${tab}`);
   for (const rare of ["special", "halloween"]) used.add(`saucelings.pet.rare.${rare}`);
+  for (const id of ["prismite", "thundrake", "clockrit"]) used.add(`saucelings.unlocks.${id}`);
   assert.deepEqual(
     [...used].filter((key) => !(key in english)),
     [],

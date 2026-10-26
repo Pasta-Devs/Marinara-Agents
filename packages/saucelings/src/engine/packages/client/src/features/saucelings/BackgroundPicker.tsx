@@ -9,6 +9,7 @@ import {
 } from "../../../../shared/src/features/agents/saucelings/types.js";
 import { sceneAssetPath } from "../../../../shared/src/features/agents/saucelings/vocabulary.js";
 import { marinaraRequest, saucelingsRequest } from "./api.js";
+import { FriendlyError } from "./care-ui.js";
 import { loadImage } from "./image-canvas.js";
 import { SCENE_NEGATIVE, sceneRequest, startingScene } from "./image-prompts.js";
 import { useSaucelingsTranslation } from "./localization.js";
@@ -322,7 +323,7 @@ export function BackgroundPicker({
 
       {failure ? (
         <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
-          {failure.message}
+          <FriendlyError error={failure} />
         </span>
       ) : null}
     </section>

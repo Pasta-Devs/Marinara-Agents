@@ -708,6 +708,8 @@ html[data-marinara-effects-paused="true"] .sl-stage-actor { transition-duration:
   transition: opacity 0.6s ease;
 }
 .sl-action-note--shown { opacity: 0.85; transition-duration: 0.15s; }
+/* A settings row's "Saved", for a moment after it changes. */
+.sl-saved { margin-left: 0.35rem; font-size: 0.72rem; font-weight: 500; color: var(--sl-green); }
 .sl-retire {
   display: flex;
   flex-wrap: wrap;
@@ -866,6 +868,12 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
 .sl-about-body p { margin: 0; opacity: 0.85; }
 .sl-about-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .sl-about-row .sl-select { min-width: 0; max-width: 100%; }
+.sl-about-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr)); gap: 0.75rem; margin-top: 0.25rem; }
+.sl-about-group { display: grid; align-content: start; gap: 0.5rem; min-width: 0; padding-top: 0.6rem; border-top: 1px solid var(--border, rgba(255,255,255,0.1)); }
+.sl-about-group > h3 { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.7; }
+.sl-unlocks { margin: 0 auto; max-width: 32rem; font-size: 0.8rem; text-align: left; }
+.sl-unlocks > summary { cursor: pointer; font-weight: 600; opacity: 0.85; }
+.sl-unlocks ul { display: grid; gap: 0.15rem; margin: 0.35rem 0 0; padding-left: 1.1rem; opacity: 0.85; }
 /* A hint behind a "?", as in the Engine: muted until it is pointed at, and a 24px target for a finger. It stays
    beside the button it explains; on a narrow row the button's words wrap instead. */
 .sl-with-help { display: inline-flex; align-items: center; gap: 0.35rem; min-width: 0; max-width: 100%; }
@@ -887,6 +895,7 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
 }
 .sl-help:hover, .sl-help:focus-visible, .sl-help[aria-expanded="true"] { opacity: 1; }
 .sl-help:focus-visible { outline: 2px solid var(--sl-sauce-accent, #e05246); outline-offset: 1px; }
+.sl-help.sl-help--text { width: auto; height: auto; border-radius: 0.2rem; font: inherit; opacity: 1; text-decoration: underline dotted; text-underline-offset: 0.2em; }
 .sl-help svg {
   width: 0.9rem;
   height: 0.9rem;
@@ -911,6 +920,37 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
 }
 .sl-traits { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .sl-trait { font-size: 0.68rem; padding: 0.12rem 0.45rem; border-radius: 0.35rem; background: rgba(255,255,255,0.07); opacity: 0.85; }
+
+/* Mari's tour: a card at the bottom of the panel, and an outline on the part each step is about. */
+.sl-tour {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 9998;
+  width: min(22rem, calc(100% - 2rem));
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border, rgba(255,255,255,0.12));
+  border-radius: 0.75rem;
+  background: var(--popover, var(--card, #18181b));
+  color: var(--popover-foreground, var(--foreground, #f4f4f5));
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+}
+.sl-tour-mari { width: 4.5rem; height: auto; flex-shrink: 0; }
+.sl-tour-text { display: grid; gap: 0.35rem; min-width: 0; flex: 1; }
+.sl-tour-text p { margin: 0; font-size: 0.8rem; line-height: 1.45; opacity: 0.9; }
+.sl-tour-foot { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem; font-size: 0.8rem; }
+.sl-tour-dots { display: flex; gap: 0.25rem; margin-right: auto; }
+.sl-tour-dot { width: 0.4rem; height: 0.4rem; border-radius: 50%; background: currentColor; opacity: 0.25; }
+.sl-tour-dot--on { background: var(--sl-accent); opacity: 1; }
+.sl-tour-target { outline: 2px solid var(--sl-accent); outline-offset: 4px; border-radius: 0.5rem; }
+/* Room at the end of the nook, so the last parts can scroll up out from under the card. */
+.sl-nook:has(> .sl-tour) { padding-bottom: 9rem; }
+.sl-mari-line { display: flex; align-items: flex-end; justify-content: center; gap: 0.6rem; max-width: 30rem; margin: 0 auto; text-align: left; }
+.sl-mari-line img { width: 4rem; height: auto; flex-shrink: 0; }
+.sl-mari-line p { margin: 0; padding: 0.5rem 0.7rem; border-radius: 0.6rem; background: rgba(255,255,255,0.06); font-size: 0.82rem; line-height: 1.45; }
 
 /* Changing the background. */
 .sl-picker { display: grid; gap: 0.6rem; }
@@ -1063,12 +1103,17 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
 }
 
 @media (hover: hover) {
-  .sl-btn:hover:not(:disabled) {
+  .sl-btn:hover:not(:disabled, [aria-disabled="true"]) {
     background: rgba(255,255,255,0.14);
+  }
+  .sl-btn--primary:hover:not(:disabled, [aria-disabled="true"]) {
+    background: var(--sl-sauce-accent, #e05246);
+    filter: brightness(1.1);
   }
 }
 
-.sl-btn:disabled {
+.sl-btn:disabled,
+.sl-btn[aria-disabled="true"] {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -1120,6 +1165,7 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
   cursor: pointer;
 }
 .sl-link:disabled { cursor: default; opacity: 0.5; }
+.sl-error-details { display: block; margin-top: 0.25rem; font-family: ui-monospace, monospace; font-size: 0.72rem; opacity: 0.8; overflow-wrap: anywhere; }
 
 .sl-btn--gap {
   border-color: var(--sl-amber);
@@ -1171,7 +1217,7 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
 .sl-widget-bars {
   display: grid;
   gap: 0.4rem;
-  width: min(9rem, 60%);
+  width: min(11rem, 65%);
   padding: 0.5rem 0.6rem;
   border-radius: 0.6rem;
   background: rgba(0,0,0,0.45);
@@ -1179,10 +1225,14 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
 }
 .sl-widget-bar-row { display: flex; align-items: center; gap: 0.4rem; }
 .sl-widget-bar-icon { flex: none; width: 1rem; font-size: 0.8rem; line-height: 1; text-align: center; }
+.sl-widget-bar-name { flex: none; width: 3.6rem; overflow: hidden; font-size: 0.62rem; line-height: 1; text-overflow: ellipsis; white-space: nowrap; opacity: 0.85; }
 .sl-widget-bar { flex: 1; min-width: 0; height: 0.45rem; border-radius: 999px; background: rgba(255,255,255,0.22); overflow: hidden; }
 /* The column starts under the move handle Home puts in the card's top-right corner. */
 .sl-widget-acts { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 2.25rem; pointer-events: auto; }
-.sl-widget-act { width: 2.25rem; height: 2.25rem; padding: 0; border-radius: 50%; font-size: 1.05rem; background: rgba(0,0,0,0.5); }
+.sl-widget-act { position: relative; width: 2.25rem; height: 2.25rem; padding: 0; border-radius: 50%; font-size: 1.05rem; background: rgba(0,0,0,0.5); }
+.sl-widget-act-wait { position: absolute; top: -0.3rem; right: -0.3rem; min-width: 1.1rem; padding: 0.1rem 0.25rem; border-radius: 999px; background: var(--sl-amber); color: #000; font-size: 0.6rem; font-weight: 700; line-height: 1; }
+.sl-btn.sl-widget-act:disabled { opacity: 1; }
+.sl-widget-act:disabled > span:first-child { opacity: 0.5; }
 /* Home gives a large widget two columns by two rows; this one is one column by two rows, a tall square-ish card. Home
    counts it as four spots, which only leaves a spare empty slot at the end of the grid. */
 .mari-home-feed-grid .mari-home-widget[data-home-widget-kind="package"][data-home-widget-id$=":sauceling-nook"] {
@@ -1219,7 +1269,7 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
   .sl-meters--strip { gap: 0.35rem; }
   .sl-meter-box { padding: 0.35rem 0.5rem; }
   .sl-meter-head { font-size: 0.72rem; }
-  .sl-meter-gap { display: none; }
+  .sl-meter-gap:not(.sl-meter-gap--keep) { display: none; }
   .sl-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
   /* An odd last button (an egg's third, or Paint) takes the whole row. */
   .sl-actions > :last-child:nth-child(odd) { grid-column: 1 / -1; }
@@ -1234,6 +1284,11 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
   /* The caretaker's avatar stays beside the picker; the buttons share the row below. */
   .sl-egg-form > .sl-select, .sl-egg-form > .sl-input { flex: 1 1 calc(100% - 3.5rem); min-width: 0; }
   .sl-egg-form > .sl-btn { flex: 1 1 auto; }
+  /* The tour card docks across the bottom. */
+  .sl-tour { left: 0.5rem; right: 0.5rem; bottom: 0.5rem; width: auto; }
+  .sl-tour-mari { width: 3.5rem; }
+  /* Centred a little higher, so what it points at is not under the card. */
+  .sl-tour-target { scroll-margin-bottom: 9rem; }
 }
 
 /* Finger-sized targets, and text fields at 16 px so iOS Safari does not zoom the page on focus. */

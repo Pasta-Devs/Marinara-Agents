@@ -8,6 +8,7 @@ import type {
   SaucelingStateResponse,
 } from "../../../../shared/src/features/agents/saucelings/types.js";
 import { saucelingsRequest } from "./api.js";
+import { FriendlyError } from "./care-ui.js";
 import { SaucelingsLocalizationProvider, translateSaucelings, useSaucelingsTranslation } from "./localization.js";
 import { SaucelingsAlbumView } from "./SaucelingsAlbumView.js";
 import { SaucelingsJournalView } from "./SaucelingsJournalView.js";
@@ -106,7 +107,7 @@ function SaucelingsBrowserApp({ props }: { props: CapabilityProps }) {
           <strong style={{ fontSize: "1rem" }}>{t("saucelings.title")}</strong>
           <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.subtitle")}</div>
         </div>
-        <nav className="sl-nav" aria-label={t("saucelings.nav.label")}>
+        <nav className="sl-nav" data-sl-tour="tabs" aria-label={t("saucelings.nav.label")}>
           {TABS.map((item) => (
             <button
               key={item}
@@ -143,11 +144,7 @@ function SaucelingsBrowserApp({ props }: { props: CapabilityProps }) {
             <div className="sl-card" style={{ display: "grid", gap: "0.75rem" }} role="alert">
               <strong>{t("saucelings.error.load")}</strong>
               <span style={{ fontSize: "0.8rem", opacity: 0.8 }}>
-                {restartNeeded
-                  ? t("saucelings.error.restart")
-                  : stateQuery.error instanceof Error
-                    ? stateQuery.error.message
-                    : t("saucelings.error.request")}
+                {restartNeeded ? t("saucelings.error.restart") : <FriendlyError error={stateQuery.error} />}
               </span>
               <div>
                 <button type="button" className="sl-btn" onClick={() => void stateQuery.refetch()}>
