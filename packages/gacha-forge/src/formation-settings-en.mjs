@@ -42,10 +42,10 @@ export const forgeFormationEnglish = {
   "combat.mode.reason.failed": "Generation failed. The Debug view lists each attempt.",
   "combat.mode.remakeTitle": "Formation rules changed",
   "combat.mode.remakeHint":
-    "{count} characters still use combat kits written for the older Formation rules. They keep fighting as they are, and are remade for the new rules automatically before the next battle.",
+    "{count} characters use combat kits written for the older Formation rules. They are remade automatically before this world's next battle, and battles wait for the remake. If you cancel it, or it fails, the current kits keep fighting until you remake them here.",
   "combat.mode.remake": "Remake kits now",
   "combat.mode.remakeFailed":
     "Some kits could not be remade. Their current kits keep fighting; review the characters below, then retry.",
   "combat.mode.remakeWarning":
-    "Remaking uses your generation connection and may incur provider costs. Characters are remade one at a time, and their current kits stay in use until every new kit is ready.",
+    "Remaking uses your generation connection and may incur provider costs. Characters are remade one at a time, and battles in this world wait until every new kit is ready; cancel the remake to keep fighting with the current kits.",
 };

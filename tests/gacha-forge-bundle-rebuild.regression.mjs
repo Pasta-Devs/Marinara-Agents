@@ -61,6 +61,7 @@ try {
     ["audio-story", ["client.js"]],
     ["formation-combat-shared", ["client.js", "server.mjs"]],
     ["formation-combat-server", ["server.mjs"]],
+    ["formation-combat-legacy", ["server.mjs"]],
     ["formation-migration-server", ["server.mjs"]],
     ["formation-combat-en", ["client.js"]],
     ["formation-combat-client", ["client.js"]],

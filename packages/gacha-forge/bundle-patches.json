@@ -1514,6 +1514,20 @@
           "commits": [],
           "edits": [
             {
+              "find": "ds=\"1.24.0\"",
+              "replace": "ds=\"1.24.1\""
+            },
+            {
+              "find": "var oy=[{version:null,new:[\"Formation is rebuilt",
+              "replace": "var oy=[{version:null,fixed:[\"Formation fights can no longer stall on immunity, Retreat Echo or summons.\",\"Remaking older Formation kits no longer locks battles; cancelling keeps your current kits, and a failed kit waits for Retry.\",\"Story, event and boss fights in Formation no longer fail over a slightly wrong kit.\",\"On phones the boss bar no longer covers the row tags, and team editor names are readable.\"]},{version:\"1.24.0\",new:[\"Formation is rebuilt"
+            }
+          ]
+        },
+        {
+          "version": "1.24.2",
+          "commits": [],
+          "edits": [
+            {
               "find": "_chatWith(e){",
               "replace": "_chatWith(e){stopForgeChatVoice(this);"
             },
@@ -1526,8 +1540,8 @@
               "replace": "_chatEnd(){stopForgeChatVoice(this);"
             },
             {
-              "find": "var oy=[{version:null,new:[\"Formation is rebuilt: tap each Front Row fighter, choose its skill, Ultimate, move or Hold and its target, then press Fight to carry out the plan.\"",
-              "replace": "var oy=[{version:null,new:[\"Your persona uses its assigned Engine voice for story dialogue and newly sent character messages when dialogue audio is enabled.\"],changed:[\"Message history and failed, unsaved sends stay silent; confirmed messages queue without cancelling one another.\"]},{version:\"1.24.0\",new:[\"Formation is rebuilt: tap each Front Row fighter, choose its skill, Ultimate, move or Hold and its target, then press Fight to carry out the plan.\""
+              "find": "var oy=[{version:null,fixed:[",
+              "replace": "var oy=[{version:null,new:[\"Your persona uses its assigned Engine voice for story dialogue and newly sent character messages when dialogue audio is enabled.\"],changed:[\"Message history and failed, unsaved sends stay silent; confirmed messages queue without cancelling one another.\"]},{version:\"1.24.1\",fixed:["
             },
             {
               "find": "if(!e.retry&&e.ask!==\"photo\"&&!r.trim())return;let s=",
@@ -1542,8 +1556,8 @@
               "replace": "reconcileForgeChatFailure(this,{runId:forgeChatRunId,unitId:a.unit.id,voiceSession:forgeChatVoiceAtSend,previous:"
             },
             {
-              "find": "ds=\"1.24.0\"",
-              "replace": "ds=\"1.24.1\""
+              "find": "ds=\"1.24.1\"",
+              "replace": "ds=\"1.24.2\""
             },
             {
               "find": "let forgeChatVoiceAtSend=forgeChatVoiceSession(this),s=",
@@ -2895,6 +2909,24 @@
         },
         {
           "version": "1.24.1",
+          "commits": [],
+          "edits": [
+            {
+              "find": "combatMode:prepared.combatMode,formationRules:prepared.formationRules}",
+              "replace": "combatMode:prepared.combatMode,formationRules:prepared.formationRules,...(prepared.combatMode===\"formation\"?{formationEngine:FORGE_FORMATION_ENGINE}:{})}"
+            },
+            {
+              "find": "combatMode:s.combatMode,formationRules:s.formationRules}",
+              "replace": "combatMode:s.combatMode,formationRules:s.formationRules,formationEngine:s.formationEngine}"
+            },
+            {
+              "find": "forgeFormationNormalizeGuide(De,ES(De,U0(d),P),",
+              "replace": "forgeFormationNormalizeGuide(De,ES(forgeFormationClassicFields(De),U0(d),P),"
+            }
+          ]
+        },
+        {
+          "version": "1.24.2",
           "commits": [],
           "edits": [
             {

@@ -49,6 +49,7 @@ function forgeChatIsCurrent(host, runId, unitId) {
   return host._run?.runId === runId && host._chat?.unit?.id === unitId;
 }
 
+// Each admitted send owns this slot; late cleanup must not release a newer operation.
 const forgeChatSendGuards = new WeakMap();
 
 export function beginForgeChatSend(host) {

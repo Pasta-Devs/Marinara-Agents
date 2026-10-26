@@ -8,6 +8,8 @@ import {
 } from "./fixtures/gacha-forge-chapter-runtime.mjs";
 import { chatConnectionId } from "./fixtures/gacha-forge-chat-runtime.mjs";
 import {
+  FORGE_FORMATION_RULES,
+  FORGE_FORMATION_ENGINE,
   FORGE_FORMATION_KIT_PROMPT,
   normalizeForgeFormationKit,
 } from "../packages/gacha-forge/src/formation-combat-shared.mjs";
@@ -173,7 +175,15 @@ test("actual new-unit ensure repair shares the conversion budget without regener
       personality: "Patient.",
     });
     f.session().roster[newId] = { level: 20, bondFights: 0 };
-    const reply = (await f.post("/battle", { chapter: 2, combatIndex: 0, difficulty: "normal" })).body;
+    const reply = (
+      await f.post("/battle", {
+        chapter: 2,
+        combatIndex: 0,
+        difficulty: "normal",
+        expectedFormationEngine: FORGE_FORMATION_ENGINE,
+        expectedFormationRules: FORGE_FORMATION_RULES,
+      })
+    ).body;
     assert.equal(reply.error, "combat-conversion-in-progress");
     const state = await f.status();
     assert.equal(state.conversion.status, "committed", JSON.stringify(state));

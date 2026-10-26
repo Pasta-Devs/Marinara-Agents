@@ -86,12 +86,14 @@ function confirm(host, row = savedPlayer(), values = {}) {
 
 async function actualOutgoingClient(host) {
   let source = await readFile(new URL("../packages/gacha-forge/client.js", import.meta.url), "utf8");
-  if (
-    !process.env.GACHA_PERSONA_CHAT_UNDER_TEST &&
-    !source.includes(".finally(()=>finishForgeChatSend(this,forgeChatSendAtAdmission))")
-  ) {
+  const sendGuardMarker = ".finally(()=>finishForgeChatSend(this,forgeChatSendAtAdmission))";
+  if (!process.env.GACHA_PERSONA_CHAT_UNDER_TEST && !source.includes(sendGuardMarker)) {
     const ledger = JSON.parse(await readFile(new URL("../packages/gacha-forge/bundle-patches.json", import.meta.url)));
-    for (const edit of ledger.files["client.js"].patches.find((patch) => patch.version === "1.24.1").edits) {
+    const patches = ledger.files["client.js"].patches.filter((patch) =>
+      patch.edits.some((edit) => edit.replace?.includes(sendGuardMarker)),
+    );
+    assert.equal(patches.length, 1, "unique persona send-guard patch");
+    for (const edit of patches[0].edits) {
       if (
         !/forgeChatVoiceSession|stopForgeChatVoice|voiceSession:forgeChatVoiceAtSend|beginForgeChatSend|finishForgeChatSend|^\.then\(o=>\{o&&o\.wallet/.test(
           edit.replace || "",
@@ -350,9 +352,15 @@ test("actual story cast projects the persona ID and the existing controller choo
   // the same test uses the generated projection directly. The baseline seam deliberately skips it.
   if (!process.env.GACHA_PERSONA_SERVER_UNDER_TEST) {
     const ledger = JSON.parse(await readFile(new URL("../packages/gacha-forge/bundle-patches.json", import.meta.url)));
-    const edit = ledger.files["server.mjs"].patches
-      .find((patch) => patch.version === "1.24.1")
-      .edits.find((entry) => entry.find.includes("v.push({name:k.name,art:E||null,prota:!0})"));
+    const edits = ledger.files["server.mjs"].patches
+      .flatMap((patch) => patch.edits)
+      .filter(
+        (edit) =>
+          edit.find === "v.push({name:k.name,art:E||null,prota:!0})" &&
+          edit.replace?.includes("characterId:l(k.personaId)||null"),
+      );
+    assert.equal(edits.length, 1, "unique persona story-cast projection edit");
+    const [edit] = edits;
     if (source.includes(edit.find)) source = source.replace(edit.find, edit.replace);
     else assert.ok(source.includes(edit.replace), "the built persona cast projection is present");
   }

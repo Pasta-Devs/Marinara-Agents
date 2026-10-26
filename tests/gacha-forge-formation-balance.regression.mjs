@@ -28,7 +28,7 @@ function generator(seed) {
           ? pick(
               back
                 ? ["revive", "restore", "immune", "swap", "shuffle", "damage", "aoe_damage", "stun", "energy"]
-                : ["damage", "aoe_damage", "execute", "stun", "buff", "drain", "dot", "silence"],
+                : ["damage", "aoe_damage", "execute", "stun", "buff", "drain", "dot", "silence", "immune"],
             )
           : pick(
               back
@@ -101,7 +101,9 @@ test("seeded Auto-vs-Auto fights end, split evenly and keep a sane energy econom
     outcome = { win: 0, lose: 0 },
     lengths = [];
   let stalled = 0,
-    silent = 0;
+    silent = 0,
+    casting = 0;
+  const peaks = [];
   for (let index = 0; index < total; index += 1) {
     const { team } = generator(1000 + index);
     const enemies = team("E", 3 + (index % 4)).map((enemy, at) =>
@@ -113,13 +115,23 @@ test("seeded Auto-vs-Auto fights end, split evenly and keep a sane energy econom
     if (fight.log.length >= 40) stalled += 1;
     const all = fight.steps.flatMap((step) => step.events);
     if (!all.some((event) => event.op === "hit")) silent += 1;
+    const charged = new Set(enemies.filter((enemy) => enemy.mech?.includes("charge")).map((enemy) => enemy.id));
+    if (all.some((event) => event.op === "ult" && !charged.has(event.id))) casting += 1;
+    peaks.push(
+      Math.max(
+        0,
+        ...all
+          .filter((entry) => entry.op === "formation-bank")
+          .map((entry) => Object.values(entry.bank).reduce((sum, amount) => sum + amount, 0)),
+      ),
+    );
     for (const event of all.filter((entry) => entry.op === "formation-bank"))
       for (const amount of Object.values(event.bank))
         assert.ok(Number.isInteger(amount) && amount >= 0, `bank stays a whole, non-negative count (${index})`);
   }
   lengths.sort((a, b) => a - b);
-  // ponytail: thresholds from the 1.24.0 tuning run (no stalls, p95 22 rounds, median 9, 213 wins of 400); retune
-  // budgets, the energy floor, fatigue and the AI against this run, not by feel.
+  // ponytail: thresholds from the 1.24.0 tuning run (1 stall, p95 21 rounds, median 9, 217 wins of 400, an Ultimate
+  // in 292 fights, p95 peak bank 26); retune budgets, the energy floor, fatigue and the AI against it, not by feel.
   assert.ok(stalled / total < 0.02, `stall rate ${stalled}/${total}`);
   assert.ok(
     lengths[Math.floor(total * 0.95) - 1] < 25,
@@ -130,6 +142,10 @@ test("seeded Auto-vs-Auto fights end, split evenly and keep a sane energy econom
     `neither side always wins: ${JSON.stringify(outcome)}`,
   );
   assert.equal(silent, 0, "every fight trades blows");
+  // The AI and Auto spend their energy on Ultimates rather than hoarding it.
+  peaks.sort((a, b) => a - b);
+  assert.ok(casting / total >= 0.6, `fights with an Ultimate cast: ${casting}/${total}`);
+  assert.ok(peaks[Math.floor(total * 0.95) - 1] < 35, `p95 peak bank ${peaks[Math.floor(total * 0.95) - 1]}`);
 });
 
 test("a lone fighter without supports still acts, and a stalled fight is never a win", () => {
