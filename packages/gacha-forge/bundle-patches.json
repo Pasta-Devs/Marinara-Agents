@@ -1766,6 +1766,14 @@
             {
               "find": "this._combatPhase=\"prebattle\",this._autoStarting=r)",
               "replace": "this._combatPhase=\"prebattle\",this._autoStarting=r,forgeWarmCombatVoices(this))"
+            },
+            {
+              "find": "ds=\"1.24.5\"",
+              "replace": "ds=\"1.24.6\""
+            },
+            {
+              "find": "var oy=[{version:null,changed:[\"When a Front Row unit falls in Formation, a Back Row unit on its side steps into the empty seat and acts from its next turn. A fight now ends only when one side has nobody left.\"]}",
+              "replace": "var oy=[{version:null,new:[\"Voice other characters, next to Read character dialogue, gives NPCs and units without an assigned voice a voice from the Engine's Random NPC Voices lists, matched to male or female when known. Each name keeps the same voice.\"],fixed:[\"Combat voice lines now play in Classic and Formation, start preparing when the battle screen opens, include your persona's voice, and say when nobody in the team can be voiced.\"]},{version:\"1.24.5\",changed:[\"When a Front Row unit falls in Formation, a Back Row unit on its side steps into the empty seat and acts from its next turn. A fight now ends only when one side has nobody left.\"]}"
             }
           ]
         }
