@@ -279,6 +279,43 @@ for (const theme of ["dark", "light"]) {
       await runtime.close();
     }
   });
+  test(`a Formation unit shows its kit on the Skills tab only · ${theme}`, async ({ page }, testInfo) => {
+    const { runtime, forge, chapterRunId } = await openForge(page, testInfo, theme, "formation");
+    try {
+      const id = `${chapterRunId}:unit:vale`;
+      await forge.evaluate(
+        (node, unit) => {
+          const game = node as any;
+          game._hudView = "roster";
+          game._rosterUnitId = unit.id;
+          game._unit = unit;
+          game._unitState = "ready";
+          game._unitTab = "skills";
+          game._renderBrowser();
+        },
+        { ...runtime.docs.get(id)!.data, id },
+      );
+      // The first visit opens the Skills guide over the card.
+      const guide = forge.getByRole("button", { name: "Close", exact: true });
+      await guide.click({ timeout: 3000 }).catch(() => {});
+      const panel = forge.locator('[data-screen="unit"] .cp-panel');
+      const rows = panel.locator(".sk-row");
+      await expect(rows).toHaveCount(3);
+      await expect(rows.nth(0)).toContainText("Standard ability");
+      await expect(rows.nth(0)).toContainText("Kindled strike");
+      await expect(rows.nth(1)).toContainText("Lighthouse dawn");
+      await expect(rows.nth(2)).toContainText("Steady watch");
+      await expect(rows.nth(2)).toContainText("Turn start · Either row");
+      await expect(panel).not.toContainText("Classic strike");
+      await page.screenshot({ path: testInfo.outputPath(`formation-unit-skills-${theme}.png`) });
+      await forge.locator('[data-screen="unit"] [role="tab"][data-tab="stats"]').click();
+      await expect(panel).not.toContainText("Formation combat");
+      await expect(panel).not.toContainText("Kindled strike");
+    } finally {
+      await runtime.close();
+    }
+  });
+
   test(`Formation warning preserves Cancel and converts only on Confirm · ${theme}`, async ({ page }, testInfo) => {
     const { runtime, forge, requests } = await openForge(page, testInfo, theme);
     try {

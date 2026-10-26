@@ -1,3 +1,8 @@
+## 1.22.1 — 2026-10-26
+
+- In Formation, a unit's Skills tab shows its Formation kit (abilities, costs, triggers and special mechanics) instead of the classic skills, and the kit no longer appears as plain text on every tab.
+- Chapter plans, Character Story plans, story beats and event chapters request 16,384 answer tokens on top of the reasoning reserve.
+
 ## 1.22.0 — 2026-10-26
 
 - Banner animations say why they failed, play on phones away from the server, and never offer a paid retry for a saved clip.
