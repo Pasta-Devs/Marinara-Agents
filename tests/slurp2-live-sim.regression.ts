@@ -149,6 +149,7 @@ const beat = slpLiveParseBeat({
     { t: 0, who: "host", text: "hi Kit", action: "waves" },
     { t: 0, who: "Kit", text: "hiii" },
     { t: 3, who: "Stranger", text: "not in the room" },
+    { t: 2, who: "cam", text: "Mara waves at the cam from the bed" },
     { t: 99, who: "Mara", text: "the end" },
   ],
   patch: { heat: 40, strip: true, place: "on the bed" },
@@ -163,6 +164,11 @@ assert.equal(room.heat, 20, "heat patch is capped at 10");
 assert.equal(room.strip, 1);
 assert.equal(room.place, "on the bed");
 assert.equal(room.beatTo, 40_000);
+// A cam line keeps its own time and never spaces the talk.
+assert.deepEqual(
+  room.log.filter((event) => event.kind === "cam").map((event) => [event.at, event.text]),
+  [[12_000, "Mara waves at the cam from the bed"]],
+);
 slpLiveApplyBeat(room, slpLiveParseBeat({ lines: [{ t: 1, who: "host", text: "Alex, yes!" }] })!, {
   at: 20_000,
   seconds: 30,

@@ -51,11 +51,14 @@ export function slpLivePictureDue(
 /** The picture's scene, compiled from the show state, so pictures follow what was said and done. */
 export function slpLivePictureScene(state: SlpLiveState, at: number, why: SlpLivePictureWhy): string {
   const said = state.log.filter((event) => event.at <= at && event.kind === "say" && event.action).at(-1);
+  const cam = state.log.filter((event) => event.at <= at && event.kind === "cam" && event.text).at(-1);
   const order = state.queue.find((entry) => entry.doneAt === null && VISUAL.has(entry.itemId));
   const heat =
     state.heat < 30 ? "relaxed and chatty" : state.heat < 65 ? "playful and flirty" : "heated, the room is wild";
   return [
     `A still from the Creator's live cam stream, filmed by the webcam, ${state.place ?? "in their usual streaming spot"}.`,
+    "The Creator is in frame, alone on their own cam.",
+    cam ? `On cam: ${cam.text}` : "",
     `The mood is ${heat}.`,
     state.stripMax > 0 && state.strip > 0
       ? `${state.strip} of ${state.stripMax} layers of clothing are off so far.`

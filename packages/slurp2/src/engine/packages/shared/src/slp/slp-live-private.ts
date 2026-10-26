@@ -20,7 +20,7 @@ export function slpLiveApplyPrivate(
   const block = buy.minutes * 60_000;
   if (!running) {
     // The public talk written ahead stops; the next beat is the private one.
-    state.log = state.log.filter((event) => !((event.kind === "say" || event.kind === "chat") && event.at > at));
+    state.log = state.log.filter((event) => !((event.kind === "say" || event.kind === "chat" || event.kind === "cam") && event.at > at));
     state.beatTo = at;
   }
   state.private = running

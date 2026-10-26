@@ -70,7 +70,7 @@ export function slpLiveApplyBeat(
   },
 ): number {
   const { at, seconds } = input;
-  state.log = state.log.filter((event) => !((event.kind === "say" || event.kind === "chat") && event.at > at));
+  state.log = state.log.filter((event) => !((event.kind === "say" || event.kind === "chat" || event.kind === "cam") && event.at > at));
   if (input.you)
     slpLiveLog(
       state,
@@ -88,6 +88,12 @@ export function slpLiveApplyBeat(
   let kept = 0;
   for (const line of [...beat.lines].sort((a, b) => a.t - b.t)) {
     const who = line.who.toLowerCase();
+    // The cam line describes the stage; it keeps its own time and does not space the talk.
+    if (who === "cam") {
+      const camAt = start + Math.max(0, Math.min(seconds, line.t)) * 1_000;
+      if (line.text && !(alone && camAt >= alone.to)) slpLiveLog(state, { at: camAt, kind: "cam", text: line.text });
+      continue;
+    }
     const fan = inRoom.get(who);
     const isHost = who === "host" || who === host;
     if (isHost ? input.hosting : !fan || alone) continue;

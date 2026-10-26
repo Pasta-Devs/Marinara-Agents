@@ -3951,6 +3951,7 @@
   "ui.slurp.live.privateFailed": "프라이빗 쇼가 시작되지 않았어요. 다시 시도해 주세요.",
   "ui.slurp.live.goLive": "라이브 시작",
   "ui.slurp.live.goLiveLine": "내 크리에이터나 연기하는 크리에이터로 캠 방송을 해요.",
+  "ui.slurp.live.starting": "방송을 시작하는 중…",
   "ui.slurp.live.goLiveTitle": "라이브 시작",
   "ui.slurp.live.goLiveAs": "진행할 크리에이터",
   "ui.slurp.live.goLiveOwn": "{{name}} (나)",

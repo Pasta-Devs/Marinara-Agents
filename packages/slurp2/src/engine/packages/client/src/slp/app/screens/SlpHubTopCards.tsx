@@ -1,12 +1,6 @@
-import { SlpLiveNowRow } from "../../features/live/SlpLiveNowRow";
 import { SlpExtrasOfferCard } from "../../features/settings/SlpExtrasOffer";
 
-/** The cards above the feed: who is live now, then the extras offer. */
+/** The card above the feed: the extras offer. Who is live sits in the Moments shelf. */
 export function SlpHubTopCards() {
-  return (
-    <>
-      <SlpLiveNowRow />
-      <SlpExtrasOfferCard />
-    </>
-  );
+  return <SlpExtrasOfferCard />;
 }

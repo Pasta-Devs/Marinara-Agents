@@ -66,12 +66,12 @@ export type SlpLiveOrder = { id: string; itemId: string; by: string; name: strin
 export type SlpLiveEvent = {
   /** Milliseconds since the show started. */
   at: number;
-  kind: "join" | "leave" | "tip" | "order" | "goal" | "done" | "strip" | "say" | "chat" | "you" | "private";
+  kind: "join" | "leave" | "tip" | "order" | "goal" | "done" | "strip" | "say" | "chat" | "you" | "private" | "cam";
   by?: string;
   name?: string;
   amount?: number;
   itemId?: string;
-  /** Talk (`say` the Creator, `chat` a fan, `you` the player): the words, and the Creator's action. */
+  /** Talk (`say` the Creator, `chat` a fan, `you` the player): the words, and the Creator's action. `cam`: what the webcam shows. */
   text?: string;
   action?: string;
 };
