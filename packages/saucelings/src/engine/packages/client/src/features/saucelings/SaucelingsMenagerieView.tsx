@@ -388,13 +388,7 @@ function MenagerieCard({
             </span>
             <div style={{ display: "flex", gap: "0.5rem" }}>
               {confirming === "release" ? (
-                <button
-                  type="button"
-                  className="sl-btn"
-                  style={{ background: "#dc2626", borderColor: "#dc2626", color: "#fff" }}
-                  disabled={pending}
-                  onClick={onRelease}
-                >
+                <button type="button" className="sl-btn sl-btn--danger" disabled={pending} onClick={onRelease}>
                   {t("saucelings.menagerie.releaseConfirm")}
                 </button>
               ) : (

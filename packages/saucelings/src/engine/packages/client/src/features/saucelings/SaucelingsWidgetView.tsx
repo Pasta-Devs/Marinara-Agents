@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type {
   SaucelingStateResponse,
   SaucelingUserAction,
@@ -98,6 +98,15 @@ export function SaucelingsWidgetView({
   const [caring, showCaring] = useForAMoment<SaucelingUserAction>(CARE_POSE_MS);
   const [nowMs, refreshNow] = useNow(30_000);
   const assetUrl = (path: string) => packageAssetUrl(packageId, path, packageVersion);
+  // A tap on a resting care button says when it is ready again, in the strip where the caretaker's line sits.
+  const [restNote, setRestNote] = useState<string | null>(null);
+  const restTimer = useRef(0);
+  const showRestNote = (text: string) => {
+    setRestNote(text);
+    window.clearTimeout(restTimer.current);
+    restTimer.current = window.setTimeout(() => setRestNote(null), 6_000);
+  };
+  useEffect(() => () => window.clearTimeout(restTimer.current), []);
 
   const stateQuery = useQuery({
     queryKey: ["saucelings", "state"],
@@ -162,15 +171,7 @@ export function SaucelingsWidgetView({
 
   if (!pet) {
     return (
-      <div
-        className="sl-widget"
-        role="button"
-        tabIndex={0}
-        onClick={() => onOpenNoodle?.()}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") onOpenNoodle?.();
-        }}
-      >
+      <section className="sl-widget" aria-label={t("saucelings.title")}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <SaucelingSprite
             species="rigamuffin"
@@ -182,11 +183,18 @@ export function SaucelingsWidgetView({
             still={!active}
           />
           <div>
-            <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{t("saucelings.empty.title")}</div>
+            <button
+              type="button"
+              className="sl-widget-open"
+              style={{ fontWeight: 600, fontSize: "0.85rem" }}
+              onClick={() => onOpenNoodle?.()}
+            >
+              {t("saucelings.empty.title")}
+            </button>
             <div style={{ fontSize: "0.72rem", opacity: 0.75 }}>{t("saucelings.widget.emptyHint")}</div>
           </div>
         </div>
-      </div>
+      </section>
     );
   }
 
@@ -199,10 +207,26 @@ export function SaucelingsWidgetView({
     sauce ? { "--sl-sauce-accent": sauce.accentColor, "--sl-sauce-bg": sauce.badgeBg } : {}
   ) as CSSProperties;
 
+  // The newest journal entry is the line both widgets show; the AI pill follows whether a model wrote it.
+  const latest = pet.journal[0];
+  const petName = isEgg ? t("saucelings.egg.name") : pet.name;
   const heading = (
     <div style={{ minWidth: 0, flex: 1 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
-        <strong style={{ fontSize: "0.875rem" }}>{isEgg ? t("saucelings.egg.name") : pet.name}</strong>
+        <strong style={{ fontSize: "0.875rem" }}>
+          {compact ? (
+            <button
+              type="button"
+              className="sl-widget-open"
+              aria-label={t("saucelings.widget.open", { name: petName })}
+              onClick={() => onOpenNoodle?.()}
+            >
+              {petName}
+            </button>
+          ) : (
+            petName
+          )}
+        </strong>
         {isEgg || !temper ? null : (
           <span className="sl-badge" style={{ fontSize: "0.65rem", padding: "0.1rem 0.45rem" }} title={temper.readsAs}>
             {sauce
@@ -253,24 +277,18 @@ export function SaucelingsWidgetView({
         WebkitBoxOrient: "vertical",
       }}
     >
+      {latest?.generated ? (
+        <span className="sl-pill sl-pill--ai" style={{ marginRight: "0.35rem" }}>
+          {t("saucelings.journal.generated")}
+        </span>
+      ) : null}
       {state?.latestRemark}
     </p>
   );
 
-  const openOnKey = (e: { key: string }) => {
-    if (e.key === "Enter" || e.key === " ") onOpenNoodle?.();
-  };
-
   if (compact) {
     return (
-      <div
-        className="sl-widget"
-        style={sauceStyle}
-        role="button"
-        tabIndex={0}
-        onClick={() => onOpenNoodle?.()}
-        onKeyDown={openOnKey}
-      >
+      <section className="sl-widget" style={sauceStyle} aria-label={petName}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <PetSprite
             art={pet}
@@ -287,7 +305,7 @@ export function SaucelingsWidgetView({
         </div>
         {meters}
         {remark}
-      </div>
+      </section>
     );
   }
 
@@ -315,14 +333,13 @@ export function SaucelingsWidgetView({
   bars.push({ key: "bond", label: t("saucelings.meter.bond"), value: pet.meters.bond, gap: false });
 
   return (
-    <div
+    // A tap on the card (an egg's stage, the bars, the strip) opens Saucelings for a pointer; the open button below
+    // is the same step for a keyboard or screen reader.
+    <section
       className="sl-widget sl-widget--stage"
       style={sauceStyle}
-      role="button"
-      tabIndex={0}
-      aria-label={isEgg ? t("saucelings.egg.name") : pet.name}
+      aria-label={petName}
       onClick={() => onOpenNoodle?.()}
-      onKeyDown={openOnKey}
     >
       <div className="sl-widget-body">
         {/* A tap on a hatched pet calls it over instead of opening the Nook. */}
@@ -342,6 +359,12 @@ export function SaucelingsWidgetView({
             caretakerFlipped={state?.world.flippedCaretakers.includes(pet.caretakerId)}
             handle={stageHandle}
           />
+        </div>
+        <div className="sl-widget-remark" aria-live="polite">
+          {restNote === null && latest?.generated ? (
+            <span className="sl-pill sl-pill--ai">{t("saucelings.journal.generated")}</span>
+          ) : null}
+          <p>{restNote ?? state.latestRemark}</p>
         </div>
         <div className="sl-widget-hud">
           <div className="sl-widget-bars">
@@ -363,8 +386,14 @@ export function SaucelingsWidgetView({
                     className={`sl-btn sl-widget-act ${state && actionCoversGap(action, state.gaps) ? "sl-btn--gap" : ""}`}
                     aria-label={text}
                     title={text}
-                    disabled={actionMutation.isPending || wait > 0}
-                    onClick={() => actionMutation.mutate(action)}
+                    disabled={actionMutation.isPending}
+                    // A resting button stays tappable, so a tap (or a screen reader) hears when it is ready.
+                    aria-disabled={wait > 0 || undefined}
+                    onClick={() =>
+                      wait > 0
+                        ? showRestNote(t("saucelings.action.resting", { action: label, minutes: wait }))
+                        : actionMutation.mutate(action)
+                    }
                   >
                     <span aria-hidden="true">{ACTION_ICONS[action]}</span>
                     {/* A resting button has no room for words, so its minutes sit in the corner. */}
@@ -376,14 +405,23 @@ export function SaucelingsWidgetView({
                   </button>
                 );
               })}
+            <button
+              type="button"
+              className="sl-btn sl-widget-act"
+              aria-label={t("saucelings.widget.open", { name: petName })}
+              title={t("saucelings.widget.open", { name: petName })}
+              onClick={() => onOpenNoodle?.()}
+            >
+              <span aria-hidden="true">↗</span>
+            </button>
             {actionMutation.error ? (
-              <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
+              <span role="alert" className="sl-error">
                 <FriendlyError error={actionMutation.error} />
               </span>
             ) : null}
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

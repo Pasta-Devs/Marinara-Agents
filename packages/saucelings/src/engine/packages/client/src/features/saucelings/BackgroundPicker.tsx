@@ -244,8 +244,7 @@ export function BackgroundPicker({
           </span>
           <button
             type="button"
-            className="sl-btn"
-            style={{ background: "#dc2626", borderColor: "#dc2626", color: "#fff" }}
+            className="sl-btn sl-btn--danger"
             disabled={busy}
             onClick={() => deleteMutation.mutate(confirmDelete.id)}
           >
@@ -323,7 +322,7 @@ export function BackgroundPicker({
       </div>
 
       {failure ? (
-        <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
+        <span role="alert" className="sl-error">
           <FriendlyError error={failure} />
         </span>
       ) : null}

@@ -870,7 +870,10 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
   background: rgba(255,255,255,0.08);
   border: 1px solid var(--border, rgba(255,255,255,0.16));
 }
-.sl-pill--ai { background: rgba(169,120,232,0.2); border-color: transparent; color: #d8b4fe; }
+.sl-pill--ai { background: var(--accent, rgba(169,120,232,0.2)); border-color: transparent; color: var(--accent-foreground, #d8b4fe); }
+/* Failures and the sure-you-want-to button take the theme's own danger colour. */
+.sl-error { color: var(--destructive, #f87171); font-size: 0.8rem; }
+.sl-btn.sl-btn--danger { background: var(--destructive, #dc2626); border-color: var(--destructive, #dc2626); color: var(--destructive-foreground, #fff); }
 
 /* About the sauceling: closed until asked for. */
 .sl-about > summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; }
@@ -1120,6 +1123,10 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
     background: var(--sl-sauce-accent, #e05246);
     filter: brightness(1.1);
   }
+  .sl-btn--danger:hover:not(:disabled, [aria-disabled="true"]) {
+    background: var(--destructive, #dc2626);
+    filter: brightness(1.1);
+  }
 }
 
 .sl-btn:disabled,
@@ -1206,15 +1213,49 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
   height: 100%;
   padding: 0.85rem;
   color: var(--foreground, #fff);
+  position: relative;
+}
+/* The card's real open control is its name; its click area stretches over the card, so a tap anywhere opens
+   Saucelings while the meters stay plain text for a screen reader. */
+.sl-widget-open {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-align: left;
   cursor: pointer;
 }
+.sl-widget-open::after { content: ""; position: absolute; inset: 0; }
+.sl-widget-open:focus-visible { outline: none; }
+/* The ring goes round the whole card, which the button's click area covers. */
+.sl-widget:has(.sl-widget-open:focus-visible) { outline: 2px solid var(--ring, var(--primary, #e05246)); outline-offset: -2px; }
+/* Anything with its own tooltip stays above the stretched click area. */
+.sl-widget .sl-badge { position: relative; }
 /* The large widget: the stage fills the card, with thin bars (each with a small picture) over its top-left and the
    care buttons in a column down its right side, below Home's own move handle. Its height comes from Home's row, so
    the card is a size container. */
-.sl-widget--stage { container: sl-widget / size; position: relative; padding: 0; gap: 0; border-radius: inherit; overflow: clip; }
+.sl-widget--stage { --sl-remark-h: 3.4rem; container: sl-widget / size; position: relative; padding: 0; gap: 0; border-radius: inherit; overflow: clip; cursor: pointer; }
 .sl-widget-body { position: absolute; inset: 0; border-radius: inherit; }
-.sl-widget-stage { position: absolute; inset: 0; min-width: 0; border-radius: inherit; }
+.sl-widget-stage { position: absolute; inset: 0 0 var(--sl-remark-h); min-width: 0; border-radius: inherit; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .sl-widget-stage .sl-stage { width: 100%; height: 100%; max-width: none; aspect-ratio: auto; margin: 0; border-radius: inherit; }
+/* The caretaker's newest line sits in a strip under the stage, so it never covers the pet or the caretaker. */
+.sl-widget-remark {
+  position: absolute;
+  inset: auto 0 0;
+  height: var(--sl-remark-h);
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.7rem;
+  background: var(--card, rgba(24,24,27,0.95));
+  border-top: 1px solid var(--border, rgba(255,255,255,0.12));
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+.sl-widget-remark .sl-pill { flex: none; }
+.sl-widget-remark p { margin: 0; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .sl-widget-hud {
   position: absolute;
   inset: 0.5rem 0.5rem auto;
@@ -1241,8 +1282,8 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
 .sl-widget-acts { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 2.25rem; pointer-events: auto; }
 .sl-widget-act { position: relative; width: 2.25rem; height: 2.25rem; padding: 0; border-radius: 50%; font-size: 1.05rem; background: rgba(0,0,0,0.5); }
 .sl-widget-act-wait { position: absolute; top: -0.3rem; right: -0.3rem; min-width: 1.1rem; padding: 0.1rem 0.25rem; border-radius: 999px; background: var(--sl-amber); color: #000; font-size: 0.6rem; font-weight: 700; line-height: 1; }
-.sl-btn.sl-widget-act:disabled { opacity: 1; }
-.sl-widget-act:disabled > span:first-child { opacity: 0.5; }
+.sl-btn.sl-widget-act:disabled, .sl-btn.sl-widget-act[aria-disabled="true"] { opacity: 1; }
+.sl-widget-act:disabled > span:first-child, .sl-widget-act[aria-disabled="true"] > span:first-child { opacity: 0.5; }
 /* Home gives a large widget two columns by two rows; this one is one column by two rows, a tall square-ish card. Home
    counts it as four spots, which only leaves a spare empty slot at the end of the grid. */
 .mari-home-feed-grid .mari-home-widget[data-home-widget-kind="package"][data-home-widget-id$=":sauceling-nook"] {

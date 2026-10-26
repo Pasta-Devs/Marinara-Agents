@@ -228,6 +228,7 @@
   "saucelings.event.evolve": "Evolved",
   "saucelings.event.evolve-offer": "Ready to evolve",
   "saucelings.event.caretaker-change": "New caretaker",
+  "saucelings.widget.open": "Open {{name}} in Saucelings",
   "saucelings.widget.emptyHint": "Tap to open Saucelings and pick a caretaker.",
   "saucelings.error.interface": "Saucelings encountered an interface error.",
   "saucelings.error.load": "Could not load Saucelings Nook.",

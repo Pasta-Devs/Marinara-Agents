@@ -61,7 +61,7 @@ export function UndoEvolution({ state }: { state: SaucelingStateResponse }) {
         </button>
       </HelpTip>
       {undo.error && !undo.isPending ? (
-        <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
+        <span role="alert" className="sl-error">
           <FriendlyError error={undo.error} />
         </span>
       ) : null}
@@ -219,7 +219,7 @@ function EvolveDialog({
             </div>
           )}
           {error && !busy ? (
-            <p role="alert" style={{ color: "#f87171" }}>
+            <p role="alert" className="sl-error">
               <FriendlyError error={error} />
             </p>
           ) : null}

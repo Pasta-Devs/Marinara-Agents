@@ -1,5 +1,11 @@
 # Saucelings release notes
 
+## 0.21.2 — 2026-10-26
+
+- The large Nook widget shows the caretaker's latest line under the stage, with the AI label when a model wrote it. The small widget carries the label too.
+- The widgets open from a real button, so a keyboard or screen reader can reach them. A resting care button on the large widget says when it's ready again instead of doing nothing.
+- Errors, the delete confirmations and the AI label follow your Engine theme's colours, and the Journal uses the same AI label as the rest.
+
 ## 0.21.1 — 2026-10-26
 
 - The Menagerie explains what comes to it, shows a dot on its tab when a character finds an egg, and picks the finder to look after a found egg.

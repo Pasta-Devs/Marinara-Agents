@@ -263,7 +263,7 @@ export function EggPaintNote({ petId }: { petId: string }) {
     );
   }
   return error ? (
-    <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
+    <span role="alert" className="sl-error">
       {t("saucelings.form.eggFailed", { error: friendlyError(error, t).message })}
     </span>
   ) : null;
@@ -305,7 +305,7 @@ export function FormPainter({
         {pending ? t("saucelings.form.paintingNote") : t("saucelings.form.needed")}
       </span>
       {error && !pending ? (
-        <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
+        <span role="alert" className="sl-error">
           <FriendlyError error={error} />
         </span>
       ) : null}
@@ -404,12 +404,12 @@ export function FormRepaint({
         </>
       )}
       {error && !pending ? (
-        <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
+        <span role="alert" className="sl-error">
           <FriendlyError error={error} />
         </span>
       ) : null}
       {undo.error && !undo.isPending ? (
-        <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
+        <span role="alert" className="sl-error">
           <FriendlyError error={undo.error} />
         </span>
       ) : null}
@@ -450,7 +450,7 @@ function FlipButton({
         </button>
       </HelpTip>
       {flip.error && !flip.isPending ? (
-        <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
+        <span role="alert" className="sl-error">
           <FriendlyError error={flip.error} />
         </span>
       ) : null}
@@ -637,12 +637,12 @@ export function FigurePainter({
           </>
         )}
         {error && !pending ? (
-          <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
+          <span role="alert" className="sl-error">
             <FriendlyError error={error} />
           </span>
         ) : null}
         {undo.error && !undo.isPending ? (
-          <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
+          <span role="alert" className="sl-error">
             <FriendlyError error={undo.error} />
           </span>
         ) : null}

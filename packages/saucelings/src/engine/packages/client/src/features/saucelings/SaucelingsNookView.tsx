@@ -422,7 +422,7 @@ export function SaucelingsNookView({
         />
         <SpecialEggs unlocks={state.unlocks} />
         {failure ? (
-          <p role="alert" style={{ color: "#f87171", fontSize: "0.8rem", margin: 0 }}>
+          <p role="alert" className="sl-error" style={{ margin: 0 }}>
             <FriendlyError error={failure} />
           </p>
         ) : null}

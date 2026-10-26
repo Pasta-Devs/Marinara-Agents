@@ -235,7 +235,7 @@ export function SaucelingsSettingsView({ state }: { state: SaucelingStateRespons
       </label>
 
       {(patchMutation.error ?? resetMutation.error) ? (
-        <span role="alert" style={{ color: "#f87171", fontSize: "0.8rem" }}>
+        <span role="alert" className="sl-error">
           <FriendlyError error={patchMutation.error ?? resetMutation.error} />
         </span>
       ) : null}
@@ -256,8 +256,7 @@ export function SaucelingsSettingsView({ state }: { state: SaucelingStateRespons
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <button
               type="button"
-              className="sl-btn"
-              style={{ background: "#dc2626", borderColor: "#dc2626", color: "#fff" }}
+              className="sl-btn sl-btn--danger"
               disabled={resetMutation.isPending}
               onClick={() => resetMutation.mutate()}
             >

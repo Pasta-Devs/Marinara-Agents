@@ -160,7 +160,7 @@ function SaucelingsBrowserApp({ props }: { props: CapabilityProps }) {
         <div className="sl-container">
           {/* A refresh that fails leaves the Nook up with what it last had. */}
           {stateQuery.isError && stateQuery.data ? (
-            <div role="alert" style={{ fontSize: "0.8rem", color: "#f87171", marginBottom: "0.5rem" }}>
+            <div role="alert" className="sl-error" style={{ marginBottom: "0.5rem" }}>
               {t("saucelings.error.load")}
             </div>
           ) : null}

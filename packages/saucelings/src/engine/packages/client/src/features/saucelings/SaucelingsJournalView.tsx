@@ -69,16 +69,7 @@ export function SaucelingsJournalView({
                   </span>
                   {/* Lines the writing connection wrote are marked, so the player can tell them from built-in ones. */}
                   {ev.generated ? (
-                    <span
-                      style={{
-                        padding: "0.05rem 0.4rem",
-                        borderRadius: "999px",
-                        background: "rgba(169,120,232,0.2)",
-                        color: "#d8b4fe",
-                      }}
-                    >
-                      {t("saucelings.journal.generated")}
-                    </span>
+                    <span className="sl-pill sl-pill--ai">{t("saucelings.journal.generated")}</span>
                   ) : null}
                 </div>
                 <p style={{ margin: 0, fontSize: "0.875rem", lineHeight: 1.45 }}>
