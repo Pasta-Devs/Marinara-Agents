@@ -299,8 +299,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "00fd913b4f09aef92aa1c0754e10182f55495f11ff141ec4d1d787a9fa081de6",
-      "bytes": 1867495
+      "sha256": "bc12f1a093ad10d851d79ce5f0a2c0dcbf43fbcedeb0573b2d1c10df80a612f2",
+      "bytes": 1868359
     },
     {
       "path": "farm-asc.webp",
@@ -774,8 +774,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "37ca6eb7c8e8012069e04fbf5137fb769a08267fd188b6449dd0481586158a23",
-      "bytes": 946193
+      "sha256": "e0804a12516d3d77811a85d908737fa9ef6f25234dbb3ce7262ee32996eee819",
+      "bytes": 947104
     },
     {
       "path": "skill-aoe_damage-dark.webp",
@@ -1529,28 +1529,28 @@
     },
     {
       "path": "src/formation-combat-client.mjs",
-      "sha256": "34170f0ba4388a0f51ab13a848c736cf0a60e3842b4515568653bec0a706781e",
-      "bytes": 68528
+      "sha256": "3b4dcde8a4be3bd5bc43f1ebd51dfb157e9d1fb16b638d41d55efca84569cc4e",
+      "bytes": 68852
     },
     {
       "path": "src/formation-combat-en.mjs",
-      "sha256": "428e004dd37f1c9c6f179b7802040f545fc99f23b42b66bc0d19a4d26d8131cf",
-      "bytes": 17629
+      "sha256": "62996a6cceab3891dbbe7cb6e4513eb1d541ed2734260c341b3cf9e3d5f1f82b",
+      "bytes": 17769
     },
     {
       "path": "src/formation-combat-server.mjs",
-      "sha256": "38cd340d5e550e2f79c320831468d5130159ec01d4b8696abebd05788f0c7a04",
-      "bytes": 22751
+      "sha256": "1a4b7089d3b17a37f0fe9490ddfe912fdd22643d859ce8e18621cf862905b827",
+      "bytes": 22871
     },
     {
       "path": "src/formation-combat-shared.mjs",
-      "sha256": "90a43b86d4d3ce5ff0a5d8456c71cc8c4594dc9555631eb08f3dd504b3306f5d",
-      "bytes": 65323
+      "sha256": "d2b8e85294b38bfe0412a4351e3543c8619a4ce0979fa3c8fe877cda54548903",
+      "bytes": 65703
     },
     {
       "path": "src/formation-migration-server.mjs",
-      "sha256": "6dcfe9c31cbee5abd826fb22d87c7bf35b7bb64243965d53a2295a3256267d09",
-      "bytes": 20497
+      "sha256": "6ac3403746532aefee8b55522fc039775368b218beae55ee8db647ba648f0b41",
+      "bytes": 20915
     },
     {
       "path": "src/formation-settings-client.mjs",

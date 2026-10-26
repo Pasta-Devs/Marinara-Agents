@@ -1519,7 +1519,7 @@
             },
             {
               "find": "var oy=[{version:null,new:[\"Formation is rebuilt",
-              "replace": "var oy=[{version:null,fixed:[\"Formation fights can no longer stall on immunity, Retreat Echo or summons.\",\"Remaking older Formation kits no longer locks battles, and cancelling it keeps your current kits.\",\"Story, event and boss fights in Formation no longer fail over a slightly wrong kit.\",\"On phones the boss bar no longer covers the row tags, and team editor names are readable.\"]},{version:\"1.24.0\",new:[\"Formation is rebuilt"
+              "replace": "var oy=[{version:null,fixed:[\"Formation fights can no longer stall on immunity, Retreat Echo or summons.\",\"Remaking older Formation kits no longer locks battles; cancelling keeps your current kits, and a failed kit waits for Retry.\",\"Story, event and boss fights in Formation no longer fail over a slightly wrong kit.\",\"On phones the boss bar no longer covers the row tags, and team editor names are readable.\"]},{version:\"1.24.0\",new:[\"Formation is rebuilt"
             }
           ]
         }
