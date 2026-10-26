@@ -1508,6 +1508,40 @@
               "replace": "var oy=[{version:null,new:[\"Formation is rebuilt: tap each Front Row fighter, choose its skill, Ultimate, move or Hold and its target, then press Fight to carry out the plan.\",\"Formation teams seat six: three Front Row fighters and three Back Row supports that make energy every turn and cannot be attacked.\",\"Formation combat shows every skill's effect, cost and the energy your plan will spend; tap a support or an enemy to read its kit.\"],changed:[\"Formation kits are remade for the new rules before a world's next battle; the old kits keep fighting until then.\",\"Formation story, event and boss fights are written with front fighters, back-row supports and clearer boss rules.\"]},{version:\"1.23.0\",new:[\"Keep playing"
             }
           ]
+        },
+        {
+          "version": "1.24.1",
+          "commits": [],
+          "edits": [
+            {
+              "find": "_chatWith(e){",
+              "replace": "_chatWith(e){stopForgeChatVoice(this);"
+            },
+            {
+              "find": "_closeChat(){",
+              "replace": "_closeChat(){stopForgeChatVoice(this);"
+            },
+            {
+              "find": "_chatEnd(){",
+              "replace": "_chatEnd(){stopForgeChatVoice(this);"
+            },
+            {
+              "find": "var oy=[{version:null,new:[\"Formation is rebuilt: tap each Front Row fighter, choose its skill, Ultimate, move or Hold and its target, then press Fight to carry out the plan.\"",
+              "replace": "var oy=[{version:null,new:[\"Your persona uses its assigned Engine voice for story dialogue and newly sent character messages when dialogue audio is enabled.\"],changed:[\"Message history and failed, unsaved sends stay silent; confirmed messages queue without cancelling one another.\"]},{version:\"1.24.0\",new:[\"Formation is rebuilt: tap each Front Row fighter, choose its skill, Ultimate, move or Hold and its target, then press Fight to carry out the plan.\""
+            },
+            {
+              "find": "if(!e.retry&&e.ask!==\"photo\"&&!r.trim())return;let s=",
+              "replace": "if(!e.retry&&e.ask!==\"photo\"&&!r.trim())return;let forgeChatVoiceAtSend=forgeChatVoiceSession(this),s="
+            },
+            {
+              "find": "retainForgeChatSuccess(this,{runId:forgeChatRunId,unitId:a.unit.id,previous:",
+              "replace": "retainForgeChatSuccess(this,{runId:forgeChatRunId,unitId:a.unit.id,voiceSession:forgeChatVoiceAtSend,previous:"
+            },
+            {
+              "find": "reconcileForgeChatFailure(this,{runId:forgeChatRunId,unitId:a.unit.id,previous:",
+              "replace": "reconcileForgeChatFailure(this,{runId:forgeChatRunId,unitId:a.unit.id,voiceSession:forgeChatVoiceAtSend,previous:"
+            }
+          ]
         }
       ]
     },
@@ -2840,6 +2874,16 @@
               "sourceId": "formation-legacy-server",
               "replaceFrom": "src/formation-combat-legacy.mjs",
               "find": "async function _t("
+            }
+          ]
+        },
+        {
+          "version": "1.24.1",
+          "commits": [],
+          "edits": [
+            {
+              "find": "v.push({name:k.name,art:E||null,prota:!0})",
+              "replace": "v.push({name:k.name,art:E||null,prota:!0,characterId:l(k.personaId)||null})"
             }
           ]
         }

@@ -1,3 +1,7 @@
+## 1.24.1 — 2026-10-26
+
+- Personas use their assigned Engine voice for story dialogue and newly sent character messages when dialogue audio is enabled.
+
 ## 1.24.0 — 2026-10-26
 
 - Formation combat is rebuilt. Tap each Front Row fighter, pick its Normal skill, Ultimate, move/swap or Hold and its target, check the plan and the energy it spends, then press Fight. Every skill shows what it does and costs. Auto still plays a whole turn.

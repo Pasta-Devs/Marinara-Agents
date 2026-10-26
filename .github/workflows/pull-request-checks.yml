@@ -87,6 +87,7 @@ jobs:
           node tests/gacha-forge-background-witness-client.regression.mjs
           node tests/gacha-forge-background-package.regression.mjs
           node tests/gacha-forge-audio.regression.mjs
+          node tests/gacha-forge-persona-voices.regression.mjs
           node tests/gacha-forge-animation-diagnostics.regression.mjs
           node tests/gacha-forge-animations.regression.mjs
           node tests/gacha-forge-vigor-clock.regression.mjs

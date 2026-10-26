@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.24.1",
+          "date": "2026-10-26",
+          "notes": "- Personas use their assigned Engine voice for story dialogue and newly sent character messages when dialogue audio is enabled.",
+          "highlight": false
+        },
+        {
           "version": "1.24.0",
           "date": "2026-10-26",
           "notes": "- Formation combat is rebuilt. Tap each Front Row fighter, pick its Normal skill, Ultimate, move/swap or Hold and its target, check the plan and the energy it spends, then press Fight. Every skill shows what it does and costs. Auto still plays a whole turn.\n- Teams seat six: up to three Front Row fighters and three Back Row supports. Supports make one energy of their element each turn, cannot be attacked and carry strong passives. Energy never expires.\n- Kits from older Formation rules are remade automatically before a world's next battle and keep fighting until then. Story, event and boss fights in Formation get front fighters, back-row supports and clearer boss rules.\n- Classic combat is unchanged.",
@@ -284,12 +290,6 @@
           "date": "2026-10-24",
           "notes": "- Added Soldier, Elite and Boss enemy tiers in combat and enemy details.\n- New story chapters build toward a boss confrontation using existing boss mechanics.\n- Significant fights prepare contextual enemy dialogue, with local one-shot triggers and manual or Auto progression.\n- Combat dialogue respects assigned character voices, mute and dialogue volume. Existing saved chapters and Tower encounters remain playable.",
           "highlight": true
-        },
-        {
-          "version": "1.12.2",
-          "date": "2026-10-24",
-          "notes": "- Home shows a compact affinity matchup diagram beneath the communication button.\n- Home backgrounds retain the top of the selected artwork below the game header.\n- Combat shows one mute control without overlapping the other toolbar buttons.\n- Autoplay resumes after a small story choice when it was enabled before the choice.\n- Character communication keeps the composer visible when a mobile keyboard reduces the available height.",
-          "highlight": false
         }
       ]
     },
