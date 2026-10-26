@@ -516,6 +516,11 @@ try {
       matchMedia: () => ({ matches: true }),
       rl: () => ({}),
       Uw: () => ({}),
+      // The Formation presentation's hooks; a Classic fight never calls them.
+      Lt: () => "",
+      Mo: {},
+      ua: {},
+      jt: "",
     });
     const run = { steps: [], stepI: 0, auto: true, done: { result: "lose", log: [] }, pending: null };
     let finished = 0;

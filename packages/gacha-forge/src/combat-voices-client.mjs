@@ -186,8 +186,12 @@ export function createForgeCombatVoiceController({
     try {
       const config = await getConfig();
       if (!enabled()) return;
-      // The party is at most four actors; each actor's four clips are generated sequentially.
-      await Promise.all(candidates.map((actor) => prepareActor(actor, config, retry)));
+      // A party seats up to six actors; two prepare at a time and each actor's four clips are generated in turn.
+      const queue = candidates.slice();
+      const worker = async () => {
+        while (queue.length) await prepareActor(queue.shift(), config, retry);
+      };
+      await Promise.all([worker(), worker()]);
     } catch {
       if (active()) for (const actor of candidates) failures.set(actor.id, actor);
     }

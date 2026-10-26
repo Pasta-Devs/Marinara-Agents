@@ -7,11 +7,20 @@ const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to the validated Engine checkout");
 const appVersion = JSON.parse(readFileSync(resolve(engineRoot, "package.json"), "utf8")).version;
 const nativeImport = new Function("url", "return import(url)");
-const portrait =
+const art = (back: string, body: string) =>
   "data:image/svg+xml," +
   encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 360"><rect width="240" height="360" fill="#29334e"/><path d="M120 24 218 322H22Z" fill="#72bde7"/><circle cx="120" cy="110" r="32" fill="#f0c879"/></svg>',
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 360"><rect width="240" height="360" fill="${back}"/><path d="M120 24 218 322H22Z" fill="${body}"/><circle cx="120" cy="110" r="32" fill="#f0c879"/></svg>`,
   );
+const portrait = art("#29334e", "#72bde7");
+const portraits = [
+  portrait,
+  art("#3a2430", "#e8735a"),
+  art("#1f3a2e", "#7fd1a8"),
+  art("#2c2546", "#b59cf0"),
+  art("#3b3420", "#f2c75c"),
+  art("#1d2f40", "#8fc7f0"),
+];
 const kit = () => ({
   version: 1,
   preferredRow: "front",
@@ -47,11 +56,19 @@ const kit = () => ({
   traits: [],
 });
 
-async function openForge(page: Page, testInfo: TestInfo, theme: string, mode = "classic") {
+async function openForge(
+  page: Page,
+  testInfo: TestInfo,
+  theme: string,
+  mode = "classic",
+  { six = false, viewport }: { six?: boolean; viewport?: { width: number; height: number } } = {},
+) {
   const { createChapterRuntime, chapterRunId, chapterUnitId, freshMainPlan } = await nativeImport(
     pathToFileURL(resolve(__dirname, "fixtures/gacha-forge-chapter-runtime.mjs")).href,
   );
   const runtime = await createChapterRuntime({ port: 7856 + testInfo.parallelIndex });
+  // A connection with room for the kit prompt and the answer it reserves.
+  runtime.transport.maxContext = 262144;
   const transact = runtime.persistence.transaction;
   let tail = Promise.resolve();
   runtime.persistence.transaction = (operation: any) => {
@@ -63,7 +80,7 @@ async function openForge(page: Page, testInfo: TestInfo, theme: string, mode = "
   run.combat = { mode, revision: 0 };
   run.audio = { tts: false, generate: false, muted: true, combatVoices: false };
   const heroId = `${chapterRunId}:unit:protagonist`;
-  const unit = (id: string, name: string, affinity: string) => ({
+  const unit = (id: string, name: string, affinity: string, index = 0, overrides: any = {}) => ({
     unitId: id,
     kind: "character",
     name,
@@ -71,7 +88,7 @@ async function openForge(page: Page, testInfo: TestInfo, theme: string, mode = "
     role: "Warrior",
     affinity,
     identitySex: "female",
-    portrait,
+    portrait: portraits[index % portraits.length],
     stats: { hp: 100, atk: 100, def: 100, spd: 100 },
     skill: { name: "Classic strike", description: "Classic.", effect: "damage", target: "enemy", power: 100 },
     passive: {
@@ -82,14 +99,15 @@ async function openForge(page: Page, testInfo: TestInfo, theme: string, mode = "
       power: 0,
       trigger: "battle_start",
     },
-    ...(mode === "formation" ? { formationKit: kit() } : {}),
+    ...(mode === "formation" ? { formationKit: kit(), formationKitPrompt: 2 } : {}),
+    ...overrides,
   });
   const seed = (id: string, kind: string, data: any) =>
     runtime.docs.set(id, { id, packageId: "gacha-forge", kind, revision: 1, name: id, data: structuredClone(data) });
   seed(heroId, "unit", { ...unit(heroId, "Mari", "Fire"), isProtagonist: true });
   seed(chapterUnitId, "unit", { ...unit(chapterUnitId, "Arden", "Water"), cardId: "chapter-proof-arden-card" });
   const supportId = `${chapterRunId}:unit:vale`;
-  seed(supportId, "unit", unit(supportId, "Vale", "Wind"));
+  seed(supportId, "unit", unit(supportId, "Vale", "Wind", 2));
   const session = runtime.session();
   session.roster[heroId] = { level: 20 };
   session.roster[supportId] = { level: 20 };
@@ -97,6 +115,53 @@ async function openForge(page: Page, testInfo: TestInfo, theme: string, mode = "
   session.presets = [
     { name: "Three keepers", board: { front: ["leader", null, null], back: [chapterUnitId, supportId, null] } },
   ];
+  const extra: string[] = [];
+  if (six) {
+    // A full team: three fighters in front, three supports behind.
+    const backKit = () => ({
+      ...kit(),
+      preferredRow: "back",
+      standard: { ...kit().standard, name: "Soft chime", effect: "heal", target: "ally", power: 6, cost: 1 },
+      ultimate: {
+        ...kit().ultimate,
+        name: "Second dawn",
+        description: "Every fallen ally returns.",
+        effect: "revive",
+        target: "allies",
+        power: 60,
+        cost: 6,
+        elementCost: 2,
+      },
+      passive: {
+        ...kit().passive,
+        name: "Hymn of resolve",
+        description: "Allies grow bolder at each turn start.",
+        effect: "buff",
+        target: "allies",
+        stat: "atk",
+        power: 15,
+        duration: 1,
+        row: "back",
+      },
+    });
+    const roster = [
+      ["kaveh", "Kaveh", "Earth", { formationKit: { ...kit(), preferredRow: "hybrid" } }],
+      ["pulcinella", "Pulcinella", "Dark", {}],
+      ["nahida", "Nahida", "Light", { formationKit: backKit() }],
+    ] as const;
+    roster.forEach(([slug, name, affinity, overrides], index) => {
+      const id = `${chapterRunId}:unit:${slug}`;
+      seed(id, "unit", unit(id, name, affinity, index + 3, overrides));
+      session.roster[id] = { level: 20 };
+      extra.push(id);
+    });
+    session.presets = [
+      {
+        name: "Six keepers",
+        board: { front: ["leader", extra[0], extra[1]], back: [chapterUnitId, supportId, extra[2]] },
+      },
+    ];
+  }
   session.activePreset = 0;
   session.progress = { 1: { normal: 10 }, 2: { normal: 4 } };
   seed(`${chapterRunId}:combat:2:1`, "combat", {
@@ -106,15 +171,43 @@ async function openForge(page: Page, testInfo: TestInfo, theme: string, mode = "
     opening: "The sentinel waits.",
     objective: "Defeat the sentinel.",
     outcomeOnWin: "The gate opens.",
-    formation: [
-      {
-        ...unit("enemy-0", "Sentinel", "Earth"),
-        tier: "boss",
-        stats: { hp: 800, atk: 1, def: 1, spd: 1 },
-        formationKit: kit(),
-        mech: ["phases"],
-      },
-    ],
+    formation: six
+      ? [
+          {
+            ...unit("enemy-0", "Leyshell Warden", "Earth", 1),
+            tier: "boss",
+            position: "front",
+            stats: { hp: 900, atk: 20, def: 40, spd: 1 },
+            formationKit: kit(),
+            mech: ["phases"],
+          },
+          {
+            ...unit("enemy-1", "Leyshell Blade", "Wind", 4),
+            tier: "soldier",
+            position: "front",
+            stats: { hp: 300, atk: 20, def: 20, spd: 1 },
+            formationKit: kit(),
+          },
+          {
+            ...unit("enemy-2", "Leyshell Caster", "Water", 5),
+            tier: "soldier",
+            position: "back",
+            stats: { hp: 200, atk: 10, def: 20, spd: 1 },
+            formationKit: { ...kit(), preferredRow: "back" },
+          },
+        ]
+      : [
+          {
+            ...unit("enemy-0", "Sentinel", "Earth"),
+            tier: "boss",
+            stats: { hp: 800, atk: 1, def: 1, spd: 1 },
+            formationKit: kit(),
+            mech: ["phases"],
+          },
+        ],
+    ...(six
+      ? { formationRules: [{ kind: "defeat_order", order: [1, 0], description: "Fell the Blade before the Warden." }] }
+      : {}),
     dialogueCues: [],
   });
   runtime.transport.stage = "formation";
@@ -131,7 +224,7 @@ async function openForge(page: Page, testInfo: TestInfo, theme: string, mode = "
   });
   const requests: { path: string; body: any }[] = [];
   await page.setViewportSize(
-    testInfo.project.name.includes("mobile") ? { width: 874, height: 402 } : { width: 1440, height: 900 },
+    viewport || (testInfo.project.name.includes("mobile") ? { width: 874, height: 402 } : { width: 1440, height: 900 }),
   );
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.addInitScript(
@@ -163,7 +256,10 @@ async function openForge(page: Page, testInfo: TestInfo, theme: string, mode = "
         },
       });
     const body = route.request().method() === "POST" ? route.request().postDataJSON() : {};
-    if (path.startsWith("/combat-mode/") || ["/battle", "/battle/start", "/run/sources"].includes(path)) {
+    if (
+      path.startsWith("/combat-mode/") ||
+      ["/battle", "/battle/start", "/run/sources", "/formation", "/formation/save"].includes(path)
+    ) {
       requests.push({ path, body });
       const response = await runtime.post(path, body);
       return route.fulfill({ status: response.status, json: response.body });
@@ -198,7 +294,7 @@ async function openForge(page: Page, testInfo: TestInfo, theme: string, mode = "
     game._renderKey = null;
     game._renderBrowser();
   });
-  return { runtime, forge, requests, chapterRunId, freshMainPlan };
+  return { runtime, forge, requests, chapterRunId, freshMainPlan, extra };
 }
 
 async function readable(item: Locator) {
@@ -220,6 +316,64 @@ async function readable(item: Locator) {
   expect(box.left).toBeGreaterThanOrEqual(-1);
   expect(box.right).toBeLessThanOrEqual(box.width + 1);
   return box;
+}
+
+async function startBattle(forge: Locator, runtime: any, plan: any) {
+  const response = (await runtime.post("/battle", { chapter: 2, combatIndex: 1, difficulty: "normal" })).body;
+  expect(response.ok, JSON.stringify(response)).toBe(true);
+  await forge.evaluate(
+    (node, input) => {
+      const game = node as any;
+      let seed = 2166136261;
+      for (const character of String(input.payload.battleKey)) {
+        seed ^= character.charCodeAt(0);
+        seed = Math.imul(seed, 16777619);
+      }
+      game._plan = input.plan;
+      game._planChapter = 2;
+      game._planState = "ready";
+      game._difficulty = "normal";
+      game._combat = input.payload;
+      game._combatNode = { chapter: 2, combatIndex: 1, nodeIndex: 4, difficulty: "normal", title: "Gate sentinel" };
+      game._combatSeed = seed >>> 0;
+      game._combatPhase = "prebattle";
+      game._hudView = "combat";
+      game._combatAuto = false;
+      game._guide = "";
+      game._renderKey = null;
+      game._renderBrowser();
+      game._startBattle();
+    },
+    { payload: response, plan },
+  );
+  return response;
+}
+
+// The turn panel stays inside its slot, nothing scrolls sideways and every control is a comfortable target.
+async function geometry(page: Page, forge: Locator, testInfo: TestInfo, name: string) {
+  const measured = await forge.evaluate((node) => {
+    const root = (node as any).shadowRoot || node;
+    const slot = root.querySelector(".cbt-turn-slot")!.getBoundingClientRect();
+    const turn = root.querySelector("[data-turn]")!.getBoundingClientRect();
+    const buttons = [...root.querySelectorAll("[data-turn] [data-act], [data-turn] button")].map((button: any) => {
+      const box = button.getBoundingClientRect();
+      return { width: box.width, height: box.height, text: button.textContent.trim().slice(0, 24) };
+    });
+    return {
+      slot: { left: slot.left, right: slot.right, top: slot.top, bottom: slot.bottom },
+      turn: { left: turn.left, right: turn.right, top: turn.top, bottom: turn.bottom },
+      buttons,
+      scroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  });
+  writeFileSync(testInfo.outputPath(`${name}.json`), JSON.stringify(measured, null, 2));
+  expect(measured.scroll).toBeLessThanOrEqual(0);
+  expect(measured.turn.left).toBeGreaterThanOrEqual(measured.slot.left - 1);
+  expect(measured.turn.right).toBeLessThanOrEqual(measured.slot.right + 1);
+  expect(measured.turn.bottom).toBeLessThanOrEqual(measured.slot.bottom + 1);
+  for (const button of measured.buttons.filter((entry) => entry.width > 0))
+    expect(Math.min(button.width, button.height), JSON.stringify(button)).toBeGreaterThanOrEqual(24);
+  void page;
 }
 
 for (const theme of ["dark", "light"]) {
@@ -301,14 +455,16 @@ for (const theme of ["dark", "light"]) {
       const panel = forge.locator('[data-screen="unit"] .cp-panel');
       const rows = panel.locator(".sk-row");
       await expect(rows).toHaveCount(3);
-      await expect(rows.nth(0)).toContainText("Standard ability");
+      await expect(rows.nth(0)).toContainText("Normal skill");
+      await expect(rows.nth(0)).toContainText("100% ATK to one enemy fighter");
+      await expect(panel).toContainText("Prefers the Front Row");
       await expect(rows.nth(0)).toContainText("Kindled strike");
       await expect(rows.nth(1)).toContainText("Lighthouse dawn");
       await expect(rows.nth(2)).toContainText("Steady watch");
       await expect(rows.nth(2)).toContainText("Turn start · Either row");
       // Damage and shields resolve at once, so neither shows a duration.
       await expect(rows.nth(0)).not.toContainText("turns");
-      await expect(rows.nth(2)).toContainText("Shield · self");
+      await expect(rows.nth(2)).toContainText("Shield · Shields itself");
       await expect(rows.nth(2)).not.toContainText("turns");
       await expect(panel).not.toContainText("Classic strike");
       await page.screenshot({ path: testInfo.outputPath(`formation-unit-skills-${theme}.png`) });
@@ -351,68 +507,85 @@ for (const theme of ["dark", "light"]) {
       await runtime.close();
     }
   });
-  test(`Formation energy, actions and the correct elemental Ultimate portrait · ${theme}`, async ({
+  test(`Formation plans each fighter by tapping, then Fight resolves the plan · ${theme}`, async ({
     page,
   }, testInfo) => {
-    const { runtime, forge, chapterRunId, freshMainPlan } = await openForge(page, testInfo, theme, "formation");
+    const { runtime, forge, freshMainPlan, chapterRunId, extra } = await openForge(page, testInfo, theme, "formation", {
+      six: true,
+    });
+    const leader = `${chapterRunId}:unit:protagonist`;
     try {
       await page.emulateMedia({ reducedMotion: "no-preference" });
-      const response = (await runtime.post("/battle", { chapter: 2, combatIndex: 1, difficulty: "normal" })).body;
-      expect(response.ok).toBe(true);
-      expect(response.combatMode).toBe("formation");
-      await forge.evaluate(
-        (node, input) => {
-          const game = node as any;
-          let seed = 2166136261;
-          for (const character of String(input.payload.battleKey)) {
-            seed ^= character.charCodeAt(0);
-            seed = Math.imul(seed, 16777619);
-          }
-          game._plan = input.plan;
-          game._planChapter = 2;
-          game._planState = "ready";
-          game._difficulty = "normal";
-          game._combat = input.payload;
-          game._combatNode = { chapter: 2, combatIndex: 1, nodeIndex: 4, difficulty: "normal", title: "Gate sentinel" };
-          game._combatSeed = seed >>> 0;
-          game._combatPhase = "prebattle";
-          game._hudView = "combat";
-          game._combatAuto = false;
-          game._guide = "";
-          game._renderKey = null;
-          game._renderBrowser();
-          game._startBattle();
-        },
-        { payload: response, plan: freshMainPlan, runId: chapterRunId },
-      );
-      const turn = forge.locator("[data-formation-turn]");
-      await expect(turn).toBeVisible();
-      const bank = turn.locator("[data-formation-bank]");
-      await expect(bank).toBeVisible();
-      await expect(bank.locator("span")).toHaveCount(6);
-      const bankGeometry = await bank.evaluate((node) => {
-        const box = node.getBoundingClientRect();
-        const parent = node.closest("form")!.getBoundingClientRect();
-        return {
-          top: box.top,
-          bottom: box.bottom,
-          left: box.left,
-          right: box.right,
-          parentTop: parent.top,
-          parentBottom: parent.bottom,
-          parentLeft: parent.left,
-          parentRight: parent.right,
-          scrollWidth: node.scrollWidth,
-          clientWidth: node.clientWidth,
-        };
-      });
-      expect(bankGeometry.top).toBeGreaterThanOrEqual(bankGeometry.parentTop - 1);
-      expect(bankGeometry.bottom).toBeLessThanOrEqual(bankGeometry.parentBottom + 1);
-      expect(bankGeometry.left).toBeGreaterThanOrEqual(bankGeometry.parentLeft - 1);
-      expect(bankGeometry.right).toBeLessThanOrEqual(bankGeometry.parentRight + 1);
-      expect(bankGeometry.scrollWidth).toBeLessThanOrEqual(bankGeometry.clientWidth + 1);
-      writeFileSync(testInfo.outputPath(`formation-bank-${theme}.json`), JSON.stringify(bankGeometry, null, 2));
-      const contrast = await turn.getByRole("button", { name: "Confirm action" }).evaluate((node) => {
+      await startBattle(forge, runtime, freshMainPlan);
+      const turn = forge.locator("[data-turn]");
+      await expect(turn.locator(".tu-hero")).toBeVisible();
+      await expect(turn.locator("select, form")).toHaveCount(0);
+      const bank = forge.locator('.cbt-turn-slot [data-formation-bank="ally"]');
+      await expect(bank.locator("[data-formation-energy]")).toHaveCount(6);
+      await expect(bank).toContainText("+3 next turn");
+      // Supports say what they make; fighters are ready to be planned.
+      const backCards = forge.locator(".side.allies .row.back .cbt");
+      await expect(backCards).toHaveCount(3);
+      await expect(backCards.locator(".gf-fgen")).toHaveCount(3);
+      const ready = forge.locator(".side.allies .cbt.gf-ready");
+      await expect(ready).toHaveCount(3);
+      await expect(forge.locator(".side.allies .cbt.is-actor")).toHaveAttribute("data-id", leader);
+      await expect(forge.locator("[data-turn-label]")).toHaveText("Plan your turn · 0 of 3");
+      const actions = turn.locator(".cbt-acts [data-act]");
+      await expect(actions).toHaveCount(6);
+      await expect(turn.locator('[data-act="normal"]')).toHaveAttribute("aria-label", "Kindled strike");
+      await expect(turn.locator('[data-act="ultimate"] .a-chip')).toHaveText("ULT");
+      await expect(turn.locator('[data-act="ultimate"] .cbt-tip')).toContainText("200% ATK to one enemy fighter");
+      // The defeat order is on the board: the Warden is protected until the Blade falls.
+      await expect(forge.locator('.cbt[data-id="enemy-1"] .gf-forder')).toHaveText("①");
+      await expect(forge.locator("[data-formation-rules]")).toContainText("Fell the Blade before the Warden.");
+      await geometry(page, forge, testInfo, `formation-tray-${theme}`);
+      await page.screenshot({ path: testInfo.outputPath(`formation-tray-${theme}.png`) });
+      // 1. Mari: Normal skill on the Blade.
+      await turn.locator('[data-act="normal"]').click();
+      const aim = turn.locator("[data-aim]");
+      await expect(aim).toContainText("An elemental strike.");
+      await expect(aim).toContainText("100% ATK to one enemy fighter");
+      await expect(forge.locator('.cbt[data-id="enemy-1"]')).toHaveClass(/targetable/);
+      await expect(forge.locator('.cbt[data-id="enemy-0"]')).toHaveClass(/dimmed/);
+      await expect(forge.locator('.cbt[data-id="enemy-0"] .gf-fprot')).toHaveText("Defeat ① first");
+      await expect(forge.locator('.cbt[data-id="enemy-2"] .gf-fprot')).toHaveText("Back Row");
+      await expect(forge.locator("[data-turn-label]")).toHaveText("Choose a target");
+      await page.screenshot({ path: testInfo.outputPath(`formation-aim-${theme}.png`) });
+      await forge.locator('.cbt[data-id="enemy-1"]').click();
+      await expect(forge.locator(`.cbt[data-id="${leader}"] .gf-fbadge`)).toContainText("①");
+      await expect(forge.locator('.cbt[data-id="enemy-1"] .gf-ftargets')).toContainText("①");
+      // 2. Kaveh is selected next: Hold.
+      await expect(forge.locator(".side.allies .cbt.is-actor")).toHaveAttribute("data-id", extra[0]);
+      await turn.locator('[data-act="hold"]').click();
+      // 3. Pulcinella swaps with a support.
+      await expect(forge.locator(".side.allies .cbt.is-actor")).toHaveAttribute("data-id", extra[1]);
+      await turn.locator('[data-act="row"]').click();
+      await expect(forge.locator("[data-turn-label]")).toHaveText("Choose where to move");
+      await expect(forge.locator(`.cbt[data-id="${extra[2]}"]`)).toHaveClass(/targetable/);
+      await forge.locator(`.cbt[data-id="${extra[2]}"]`).click();
+      // Everyone has an action: the plan shows the order and what it spends.
+      const plan = turn.locator("[data-formation-plan]");
+      await expect(plan).toBeVisible();
+      await expect(plan.locator("li")).toHaveCount(3);
+      await expect(plan.locator("li").nth(0)).toContainText("Kindled strike → Leyshell Blade");
+      await expect(plan.locator("li").nth(1)).toContainText("Holds");
+      await expect(plan.locator("li").nth(2)).toContainText("Swaps with Nahida");
+      await expect(forge.locator("[data-turn-label]")).toHaveText("Plan your turn · 3 of 3");
+      // Change Mari's action: her Ultimate, paid from the projected bank.
+      await plan.locator(`[data-formation-pick="${leader}"]`).click();
+      await turn.locator('[data-act="ultimate"]').click();
+      await expect(aim).toContainText("Pays");
+      await forge.locator('.cbt[data-id="enemy-1"]').click();
+      await expect(plan.locator("li").nth(0)).toContainText("Lighthouse dawn → Leyshell Blade");
+      await expect(bank.locator("i").first()).toContainText("→");
+      // Cancel Kaveh's Hold: he is listed as holding with no action chosen.
+      await plan.locator(`[data-formation-clear="${extra[0]}"]`).click();
+      await expect(plan.locator("li.unset")).toContainText("Holds (no action chosen)");
+      await geometry(page, forge, testInfo, `formation-plan-${theme}`);
+      await page.screenshot({ path: testInfo.outputPath(`formation-plan-${theme}.png`) });
+      const fight = plan.locator("[data-formation-fight]");
+      const contrast = await fight.evaluate((node) => {
         const style = getComputedStyle(node);
         const luminance = (color: string) => {
           const rgb = color
@@ -427,30 +600,152 @@ for (const theme of ["dark", "light"]) {
         };
         const foreground = luminance(style.color),
           background = luminance(style.backgroundColor);
-        return {
-          foreground: style.color,
-          background: style.backgroundColor,
-          ratio: (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05),
-        };
+        return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
       });
-      expect(contrast.background).not.toBe("rgba(0, 0, 0, 0)");
-      expect(contrast.ratio).toBeGreaterThanOrEqual(4.5);
-      writeFileSync(testInfo.outputPath(`formation-confirm-contrast-${theme}.json`), JSON.stringify(contrast, null, 2));
-      await expect(turn.locator('select[name="action"] option[value="ultimate"]')).toBeEnabled();
-      await turn.locator('select[name="action"]').selectOption("ultimate");
-      await expect(turn.locator("[data-formation-mover-label]")).toBeHidden();
-      await expect(turn.locator("[data-formation-swap-label]")).toBeHidden();
-      await expect(turn.locator("[data-formation-payment]")).toBeVisible();
-      await readable(turn.getByRole("button", { name: "Confirm action" }));
-      await page.screenshot({ path: testInfo.outputPath(`formation-actions-${theme}.png`) });
-      await turn.getByRole("button", { name: "Confirm action" }).click();
+      expect(contrast).toBeGreaterThanOrEqual(4.5);
+      await fight.click();
       const cutin = forge.locator(".gf-ultimate-portrait");
       await expect(cutin).toBeVisible();
       await expect(cutin).toHaveAttribute("data-element", "fire");
       await expect(cutin.locator("img")).toHaveAttribute("src", portrait);
       expect(await cutin.evaluate((node) => getComputedStyle(node).pointerEvents)).toBe("none");
       await page.screenshot({ path: testInfo.outputPath(`formation-ultimate-${theme}.png`) });
-      await expect(cutin).toHaveCount(0);
+      await expect(bank.locator("[data-formation-energy]")).toHaveCount(6);
+      // The swap happened and the next turn comes back to the player.
+      await expect(forge.locator(`.side.allies .row.front .cbt[data-id="${extra[2]}"]`)).toHaveCount(1, {
+        timeout: 20000,
+      });
+      await expect(forge.locator("[data-turn-label]")).toHaveText(/Plan your turn/, { timeout: 30000 });
+      await expect(forge.locator(`.cbt[data-id="${extra[2]}"] .gf-fbadge.wait`)).toHaveCount(0);
+      if (!testInfo.project.name.includes("mobile")) {
+        // A large desktop keeps the same layout, scaled up.
+        await page.setViewportSize({ width: 1920, height: 1080 });
+        await expect(forge.locator(".side.allies .cbt.gf-ready").first()).toBeVisible();
+        await geometry(page, forge, testInfo, `formation-next-turn-1920-${theme}`);
+        await page.screenshot({ path: testInfo.outputPath(`formation-next-turn-1920-${theme}.png`) });
+        await page.setViewportSize({ width: 1440, height: 900 });
+      }
+      // Enemies open their sheet, with the kit that actually fights.
+      await forge.locator('.cbt[data-id="enemy-2"]').click();
+      const sheet = forge.locator("[data-foe-sheet]");
+      await expect(sheet).toContainText("Lighthouse dawn");
+      await expect(sheet).toContainText("Makes +1 Water energy each turn");
+      await page.screenshot({ path: testInfo.outputPath(`formation-foe-${theme}.png`) });
+      await sheet.getByRole("button", { name: "Close" }).click();
+      await expect(sheet).toHaveCount(0);
+      // Auto plays whole turns with no planning left on screen.
+      await forge.locator("[data-auto]").click();
+      await expect(forge.locator("[data-turn-label]")).toHaveText(/Auto-battle|Battle over/);
+      await expect(forge.locator(".side.allies .cbt.gf-ready")).toHaveCount(0);
+      expect(runtime.session().combatPending?.fight?.combatMode).toBe("formation");
+      expect(chapterRunId).toBeTruthy();
+    } finally {
+      await runtime.close();
+    }
+  });
+
+  test(`Move opens empty seats to bring a support forward, and a support explains itself · ${theme}`, async ({
+    page,
+  }, testInfo) => {
+    const { runtime, forge, freshMainPlan, chapterRunId } = await openForge(page, testInfo, theme, "formation");
+    try {
+      await startBattle(forge, runtime, freshMainPlan);
+      const turn = forge.locator("[data-turn]");
+      const arden = `${chapterRunId}:unit:arden`;
+      await expect(turn.locator(".tu-hero")).toBeVisible();
+      // The battle's help describes Formation, not Classic.
+      await forge.evaluate((node) => (node as any)._openGuide("combat"));
+      await expect(forge.locator("[data-guide-modal]")).toContainText("Plan everyone, then press Fight");
+      await expect(forge.locator("[data-guide-modal]")).not.toContainText("Defend");
+      await forge.evaluate((node) => (node as any)._closeGuide());
+      await expect(forge.locator("[data-guide-modal]")).toHaveCount(0);
+      await expect(forge.locator("[data-formation-rules]")).toContainText("Defeat the sentinel.");
+      // A support explains what it makes and what its passive does.
+      await forge.locator(`.cbt[data-id="${arden}"]`).click();
+      const aim = turn.locator("[data-aim]");
+      await expect(aim).toContainText("Makes +1 Water energy each turn");
+      await expect(aim).toContainText("Steady watch");
+      await aim.getByRole("button", { name: "Close" }).click();
+      await turn.locator('[data-act="row"]').click();
+      const seat = forge.locator('.side.allies [data-formation-seat="front"]');
+      await expect(seat).toHaveCount(1);
+      await expect(forge.locator('.side.allies [data-formation-seat="back"]')).toHaveCount(0);
+      await page.screenshot({ path: testInfo.outputPath(`formation-move-${theme}.png`) });
+      await seat.click();
+      await expect(forge.locator(`.cbt[data-id="${arden}"]`)).toHaveClass(/targetable/);
+      await forge.locator(`.cbt[data-id="${arden}"]`).click();
+      const plan = turn.locator("[data-formation-plan]");
+      await expect(plan.locator("li").first()).toContainText("Brings Arden forward");
+      await plan.locator("[data-formation-fight]").click();
+      await expect(forge.locator(`.side.allies .row.front .cbt[data-id="${arden}"]`)).toHaveCount(1, {
+        timeout: 20000,
+      });
+      await expect(forge.locator("[data-turn-label]")).toHaveText(/Plan your turn/, { timeout: 30000 });
+      // Next turn Arden fights too.
+      await expect(forge.locator(`.cbt[data-id="${arden}"]`)).toHaveClass(/gf-ready/);
+    } finally {
+      await runtime.close();
+    }
+  });
+
+  test(`the Formation team editor seats six with row labels, badges and energy · ${theme}`, async ({
+    page,
+  }, testInfo) => {
+    const { runtime, forge } = await openForge(page, testInfo, theme, "formation", { six: true });
+    try {
+      await forge.evaluate((node) => {
+        const game = node as any;
+        game._guide = "";
+        game._guidesSeen.add("formation");
+        game._openFormation();
+      });
+      const board = forge.locator(".board");
+      await expect(board.locator(".row-lab").nth(0)).toHaveText(
+        "Front Row — fighters act every turn and can be attacked",
+      );
+      await expect(board.locator(".row-lab").nth(1)).toHaveText(
+        "Back Row — supports make energy and can't be attacked",
+      );
+      await expect(board.locator("[data-slot].filled")).toHaveCount(6);
+      const summary = board.locator("[data-formation-editor]");
+      await expect(summary).toContainText("Front 3/3 · Back 3/3");
+      await expect(summary).toContainText("+3 energy per turn");
+      await expect(board.locator('[data-slot="front:1"] .gf-fbadge-row')).toHaveAttribute("data-row", "hybrid");
+      await expect(board.locator('[data-slot="back:2"] .gf-fbadge-row')).toHaveAttribute("data-row", "back");
+      await page.screenshot({ path: testInfo.outputPath(`formation-editor-${theme}.png`) });
+      await forge.evaluate((node) => (node as any)._openGuide("formation"));
+      await expect(forge.locator("[data-guide-modal]")).toContainText(
+        "three fighters in front and three supports behind",
+      );
+      await forge.evaluate((node) => (node as any)._closeGuide());
+      // Benching a fighter keeps the line truthful and saves the six-seat board as it is.
+      await board.locator('[data-remove="front:2"]').click();
+      await expect(summary).toContainText("Front 2/3 · Back 3/3");
+      await expect.poll(() => runtime.session().presets[0].board.front.filter(Boolean).length).toBe(2);
+      expect(runtime.session().presets[0].board.back.filter(Boolean).length).toBe(3);
+    } finally {
+      await runtime.close();
+    }
+  });
+
+  test(`Classic battles keep the Classic turn panel, queue and foe sheet · ${theme}`, async ({ page }, testInfo) => {
+    const { runtime, forge, freshMainPlan } = await openForge(page, testInfo, theme, "classic");
+    try {
+      await startBattle(forge, runtime, freshMainPlan);
+      const turn = forge.locator("[data-turn]");
+      await expect(turn.locator(".cbt-acts [data-act]")).toHaveCount(6);
+      for (const key of ["attack", "ultimate", "weapon", "defend", "row", "item"])
+        await expect(turn.locator(`[data-act="${key}"]`)).toHaveCount(1);
+      await expect(forge.locator("[data-queue] .q-strip .q-t").first()).toBeVisible();
+      await expect(forge.locator("[data-formation-bank], .gf-fbadge, .gf-fside")).toHaveCount(0);
+      expect(await forge.locator(".root[data-formation]").count()).toBe(0);
+      await turn.locator('[data-act="attack"]').click();
+      await forge.locator('.cbt[data-id="enemy-0"]').click();
+      await expect(forge.locator('.cbt[data-id="enemy-0"] .hpn')).not.toHaveText("", { timeout: 15000 });
+      await expect(turn.locator(".cbt-acts [data-act]")).toHaveCount(6, { timeout: 30000 });
+      await forge.locator('.cbt[data-id="enemy-0"]').click();
+      await expect(forge.locator("[data-foe-sheet]")).toContainText("/ 100 energy");
+      await page.screenshot({ path: testInfo.outputPath(`classic-battle-${theme}.png`) });
     } finally {
       await runtime.close();
     }
