@@ -323,3 +323,18 @@ await test("the existing Tower boss keeps its legacy mechanics without model gen
   assert.equal(host.data(sessionId).tower.coins, 17);
   assert.equal(host.calls.length, 0);
 });
+
+await test("battle allies carry the persona ID and voice gender that combat voice lines use", async () => {
+  const host = await harness({ combat: guide(), progress: { 1: { normal: 8 } } });
+  const index = host.data("index");
+  index.runs[0].protagonist = { name: "Mari", personaId: "persona-mari" };
+  host.seed("index", "index", index);
+  host.seed(heroId, "unit", { ...host.data(heroId), identitySex: "female" });
+  const battle = await host.post("/battle", battleRequest);
+  ok(battle);
+  const leader = battle.allies.find((ally) => ally.isLeader);
+  assert.equal(leader.id, heroId);
+  assert.equal(leader.characterId, "persona-mari", "the protagonist speaks in its persona's assigned voice");
+  assert.equal(leader.gender, "female");
+  assert.equal(host.calls.length, 0);
+});
