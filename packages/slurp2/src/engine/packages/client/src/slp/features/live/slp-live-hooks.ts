@@ -15,7 +15,7 @@ export type SlpLiveListEntry = {
 
 const liveKey = (...parts: string[]) => [...slpKeys.all, "live", ...parts] as const;
 
-/** Who is live now. Quiet when Live is off (the route answers 409). */
+/** Who is live now. Empty when Live is off. */
 export function useSlpLiveNow() {
   return useQuery({
     queryKey: liveKey("now"),

@@ -25,8 +25,9 @@ export async function slpLiveRoutes(app: FastifyInstance, { noodle, resolveViewe
   const storage = createSlurpLiveStorage(app.db);
   const liveOn = async () => slpExtensionOn(await noodle.getSettings(), "live");
 
-  app.get("/slurp/live", async (_req, reply) => {
-    if (!(await liveOn())) return reply.code(409).send({ error: LIVE_OFF });
+  app.get("/slurp/live", async () => {
+    // Nobody is live while Live is off: an empty list keeps the polling screen's console clean.
+    if (!(await liveOn())) return { shows: [] };
     const now = Date.now();
     const shows = (await storage.listOpen()).filter((show) => Date.parse(show.endsAt) > now);
     return {
