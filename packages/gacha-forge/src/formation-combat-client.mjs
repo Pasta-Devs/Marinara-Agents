@@ -13,7 +13,7 @@ export const forgeFormationCombatStyles = `
 .gf-formation-turn{display:flex;flex-wrap:wrap;gap:.45rem;align-items:end;max-height:min(45dvh,22rem);overflow:auto;padding:.5rem;width:100%;box-sizing:border-box;background:var(--ink-2);color:var(--text);border-top:1px solid var(--steel-dark)}
 .gf-formation-turn label{display:flex;flex-direction:column;gap:.2rem;font:500 max(12px,var(--t-xs))/1.3 var(--body);min-width:7rem;flex:1}.gf-formation-turn [hidden]{display:none}.gf-formation-turn select,.gf-formation-turn input,.gf-formation-turn button{font:500 max(14px,var(--t-sm))/1.3 var(--body);background:var(--ink);color:var(--text);border:1px solid var(--steel);border-radius:var(--radius-sm);padding:.4rem;min-height:36px;box-sizing:border-box;max-width:100%}.gf-formation-turn button{cursor:pointer;background:var(--coral);color:var(--ink)}
 .gf-formation-turn details{flex-basis:100%;font:500 max(12px,var(--t-xs))/1.4 var(--body)}.gf-formation-payment{display:flex;gap:.35rem;flex-wrap:wrap}.gf-formation-payment label{min-width:3.3rem;flex:1}.gf-formation-payment input{width:100%;color:var(--text)}
-.gf-formation-bank{display:flex;flex-wrap:wrap;align-items:center;flex:0 0 100%;gap:.35rem;font:600 max(12px,var(--t-xs))/1.4 var(--body);padding:.15rem 0;color:var(--text);box-sizing:border-box}.gf-formation-bank span{white-space:nowrap;padding:.1rem .35rem;border:1px solid var(--steel-dark);border-radius:var(--radius-sm)}.gf-formation-kit{padding:.7rem;margin:.5rem 0;border:1px solid var(--steel-dark);border-radius:var(--radius-sm);font:400 max(12px,var(--t-sm))/1.45 var(--body);color:var(--text)}.gf-formation-kit h3,.gf-formation-kit p{margin:.35rem 0}.gf-formation-error{color:var(--coral);flex-basis:100%}.gf-formation-encounter{margin:.5rem;padding:.5rem;border:1px solid var(--coral);font:400 max(12px,var(--t-sm))/1.4 var(--body);color:var(--text)}
+.gf-formation-bank{display:flex;flex-wrap:wrap;align-items:center;flex:0 0 100%;gap:.35rem;font:600 max(12px,var(--t-xs))/1.4 var(--body);padding:.15rem 0;color:var(--text);box-sizing:border-box}.gf-formation-bank span{white-space:nowrap;padding:.1rem .35rem;border:1px solid var(--steel-dark);border-radius:var(--radius-sm)}.gf-formation-skill{cursor:default}.gf-formation-mechanics{display:block;margin-top:.2em;opacity:.8}.gf-formation-error{color:var(--coral);flex-basis:100%}.gf-formation-encounter{margin:.5rem;padding:.5rem;border:1px solid var(--coral);font:400 max(12px,var(--t-sm))/1.4 var(--body);color:var(--text)}
 @media(pointer:coarse){.gf-formation-turn select,.gf-formation-turn input{font-size:16px}}@media(max-height:500px){.gf-formation-turn{max-height:45dvh}.gf-formation-turn label{min-width:5rem}}
 `;
 const forgeFormationBankHtml = (bank) =>
@@ -163,29 +163,70 @@ export function createForgeFormationPresentation(root, payload) {
   };
 }
 
-export function wireForgeFormationUnit(host) {
-  if (host._run?.combat?.mode !== "formation" || !host._unit) return;
-  const unit = host._unit.unit || host._unit,
-    kit = normalizeForgeFormationKit(unit.formationKit);
-  const panel = host._root.querySelector('[data-screen="unit"] .cp-panel');
-  if (!kit || !panel || panel.querySelector("[data-formation-kit]")) return;
-  const element = document.createElement("section");
-  element.className = "gf-formation-kit";
-  element.dataset.formationKit = "";
-  element.innerHTML =
-    `<style>${forgeFormationCombatStyles}</style><h3>${forgeFormationLabel("title")}</h3>` +
+// Effects the engine keeps as timed statuses; damage, heals and shields resolve at once.
+const forgeFormationLasting = new Set(["buff", "debuff", "dot", "stun", "regen", "immune", "silence", "taunt"]);
+
+/** The unit's Formation kit while this world fights in Formation, else null. */
+export function forgeFormationActiveKit(host) {
+  if (host._run?.combat?.mode !== "formation" || !host._unit) return null;
+  return normalizeForgeFormationKit((host._unit.unit || host._unit).formationKit);
+}
+
+/**
+ * The Skills tab in Formation: the kit's abilities in the classic skill-row style, replacing the classic skills
+ * (Formation ignores classic skill levels and weapon skills). `icon` and `fallbackIcon` are the bundle's skill art.
+ */
+export function forgeFormationSkillList(unit, kit, icon, fallbackIcon) {
+  const label = (group, key) => forgeFormationLabel(`${group}.${key}`);
+  const mechanics = (ability) =>
     [
-      ["standard", kit.standard],
-      ["ultimate", kit.ultimate],
-      ["passive", kit.passive],
+      label("effect", ability.effect),
+      label("aim", ability.target),
+      ability.power ? `${forgeFormationLabel("power")} ${ability.power}` : "",
+      ability.stat ? ability.stat.toUpperCase() : "",
+      // Every ability stores a duration; only lasting effects use it.
+      forgeFormationLasting.has(ability.effect) && ability.duration
+        ? ability.duration === 1
+          ? forgeFormationLabel("turn")
+          : forgeFormationLabel("turns").replace("{count}", String(ability.duration))
+        : "",
     ]
-      .map(
-        ([key, ability]) =>
-          `<p><b>${forgeFormationLabel(key)} · ${forgeFormationEscape(ability.name)}</b><br>${forgeFormationEscape(ability.description)}${ability.cost != null ? `<br>${forgeFormationLabel("cost")}: ${ability.cost}` : ""}</p>`,
-      )
+      .filter(Boolean)
+      .join(" · ");
+  const row = (kind, name, meta, line, ability) => {
+    const art = ability ? icon(ability.effect, unit.affinity, ability.target, ability.name) : "";
+    return (
+      `<div class="sk-row gf-formation-skill"><span class="ic${art ? " has-art" : ""}">${art || fallbackIcon}</span>` +
+      `<span class="sk-id"><span class="sk-kind">${forgeFormationEscape(kind)}</span>` +
+      `<span class="sk-nm">${forgeFormationEscape(name)}</span></span>` +
+      `<span class="sk-lv">${forgeFormationEscape(meta)}</span><span class="sk-line">${forgeFormationEscape(line.text)}` +
+      (line.mechanics ? `<span class="gf-formation-mechanics">${forgeFormationEscape(line.mechanics)}</span>` : "") +
+      "</span></div>"
+    );
+  };
+  const cost = (ability) =>
+    `${forgeFormationLabel("cost")} ${ability.cost}` +
+    (ability.elementCost ? ` · ${ability.elementCost} ${forgeFormationLabel("native")}` : "");
+  const describe = (ability) => ({ text: ability.description, mechanics: mechanics(ability) });
+  return (
+    '<div class="sk-list">' +
+    row(forgeFormationLabel("standard"), kit.standard.name, cost(kit.standard), describe(kit.standard), kit.standard) +
+    row(forgeFormationLabel("ultimate"), kit.ultimate.name, cost(kit.ultimate), describe(kit.ultimate), kit.ultimate) +
+    row(
+      forgeFormationLabel("passive"),
+      kit.passive.name,
+      `${label("trigger", kit.passive.trigger)} · ${label("row", kit.passive.row)}`,
+      describe(kit.passive),
+      kit.passive,
+    ) +
+    kit.traits
+      .map((trait) => {
+        const [name, ...rest] = forgeFormationLabel(trait.kind).split(": ");
+        return row(forgeFormationLabel("traits"), name, "", { text: rest.join(": ") }, null);
+      })
       .join("") +
-    kit.traits.map((trait) => `<p>${forgeFormationLabel(trait.kind)}</p>`).join("");
-  panel.prepend(element);
+    "</div>"
+  );
 }
 
 export function forgeFormationErrorLabel(error) {
@@ -198,7 +239,6 @@ export function forgeFormationErrorLabel(error) {
 }
 
 export function wireForgeFormationPreview(host) {
-  wireForgeFormationUnit(host);
   if (host._run?.combat?.mode !== "formation") return;
   const root = host._root;
   if (host._formation?.combatMode === "formation") {
