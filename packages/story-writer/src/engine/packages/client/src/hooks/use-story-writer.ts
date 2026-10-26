@@ -116,9 +116,13 @@ function reportError(error: unknown, key: string) {
 
 const errorStatus = (error: unknown) => (error as { status?: unknown } | null)?.status;
 
+// A refusal the author cannot fix by waiting. 408 and 429 come from proxies and limits, and 409 is the server's
+// "data changed while saving": those are retried like a dropped connection.
 function isClientError(error: unknown): boolean {
   const status = errorStatus(error);
-  return typeof status === "number" && status >= 400 && status < 500;
+  return (
+    typeof status === "number" && status >= 400 && status < 500 && status !== 408 && status !== 409 && status !== 429
+  );
 }
 
 function pickKeys(source: object, keys: object): Patch {

@@ -10,7 +10,7 @@ It has its own settings and its own prompt, separate from your chats. Your chats
 2. Restart Marinara Engine when it asks you to.
 3. Open **Home → Story Writer** (the book icon).
 
-It needs a Marinara Engine with Capability API 1.386 or newer; older Engines do not offer it.
+It needs a Marinara Engine newer than v2.5.1 (the next release, or a current staging build); older Engines do not offer it.
 
 ## Your first story
 
