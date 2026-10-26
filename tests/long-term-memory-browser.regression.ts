@@ -8323,8 +8323,11 @@ async function main() {
       const transferPreviewButton = sourceOperationWorkbench.locator('[data-ltm-source-operation-action="preview"]');
       await transferPreviewButton.click();
       await page.waitForFunction(
-        () => document.querySelector('[data-ltm-source-operation-action="preview"]')?.hasAttribute("disabled") ?? false,
+        () =>
+          document.querySelector('[data-ltm-source-operation-action="preview"]')?.getAttribute("aria-disabled") ===
+          "true",
       );
+      assert.equal(await transferPreviewButton.getAttribute("disabled"), null, "a running preview stays focusable");
       await sourceOperationWorkbench.locator("[data-ltm-source-operation-close]").click();
       await sourceOperationWorkbench.waitFor({ state: "detached" });
       releaseTransferPreview();
@@ -8342,7 +8345,12 @@ async function main() {
           document.querySelector('[data-ltm-surface="sources"]')?.getAttribute("data-ltm-extraction-status") ===
           "pending",
       );
-      assert.equal(await desktopReextract.isDisabled(), true);
+      // The run holds the lock: the inspector's Re-extract is aria-disabled (never `disabled`) and says why.
+      assert.equal(await desktopReextract.getAttribute("aria-disabled"), "true");
+      assert.equal(await desktopReextract.getAttribute("disabled"), null);
+      const reextractLockId = await desktopReextract.getAttribute("aria-describedby");
+      assert.ok(reextractLockId, "a locked Re-extract points at the lock text");
+      assert.equal(await page.locator(`[id="${reextractLockId}"]`).innerText(), "Locked while a re-extract runs");
       await page.locator("[data-ltm-source-task-progress]").waitFor();
       // #1673: while a run holds the lock, Import stays focusable (aria-disabled, never `disabled`), points at the
       // visible lock text, and a press or click sends nothing.
@@ -8353,7 +8361,8 @@ async function main() {
       assert.equal(await lockedImport.evaluate((button) => button.hasAttribute("disabled")), false);
       const lockedImportReasonId = await lockedImport.getAttribute("aria-describedby");
       assert.ok(lockedImportReasonId, "a locked Import points at the lock text");
-      assert.equal(await page.locator(`[id="${lockedImportReasonId}"]`).innerText(), "Locked while an import runs");
+      // The held run is a re-extract, so the shared reason says so.
+      assert.equal(await page.locator(`[id="${lockedImportReasonId}"]`).innerText(), "Locked while a re-extract runs");
       await lockedImport.focus();
       assert.equal(await lockedImport.evaluate((button) => button === document.activeElement), true);
       const lockedImportWrites: string[] = [];
@@ -8367,6 +8376,19 @@ async function main() {
       page.off("request", recordWrite);
       assert.deepEqual(lockedImportWrites, []);
       await page.locator('[data-ltm-source-tab="chats"]').click();
+      // Re-extract waits on the same run: focusable, described by the reason, and silent on Enter. (The workbench
+      // swaps Re-import and the row actions for the progress panel while a run is active, so the static guard
+      // covers those.)
+      await desktopReextract.focus();
+      assert.equal(await desktopReextract.evaluate((button) => button === document.activeElement), true);
+      const reextractRequestsBefore = reextractionRequests.length;
+      lockedImportWrites.length = 0;
+      page.on("request", recordWrite);
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(150);
+      page.off("request", recordWrite);
+      assert.deepEqual(lockedImportWrites, []);
+      assert.equal(reextractionRequests.length, reextractRequestsBefore, "a locked Re-extract sends no second request");
       const desktopSourcesNavigation = page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]');
       assert.match(await desktopSourcesNavigation.innerText(), /Re-extracting\.\.\./u);
       assert.match(await page.locator("[data-ltm-source-task-progress]").innerText(), /Re-extracting 1/u);

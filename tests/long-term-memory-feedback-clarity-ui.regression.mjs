@@ -747,7 +747,7 @@ const vaultLocaleValues = Object.entries(locale)
 assert.doesNotMatch(vaultLocaleValues, /\b(?:Metadata|Scope|Derived memories|Connections)\b/u);
 assert.match(workspaceScreen, /function SourceOperationWorkbench/u);
 assert.match(workspaceScreen, /!previewed \|\| busy \|\| result/u);
-assert.match(workspaceScreen, /disabled=\{\s*disabled \|\|\s*Boolean\(result\)/u);
+assert.match(workspaceScreen, /disabled=\{\s*Boolean\(result\) \|\|/u);
 assert.match(workspace, /confirmAction=\{props\.confirmAction\}/u);
 assert.match(workspace, /key=\{`\$\{sourceOperation\.id\}:\$\{sourceOperation\.operation/u);
 assert.match(workspaceScreen, /data-ltm-linked-memory-selection/u);
@@ -773,12 +773,16 @@ assert.match(workspace, /data-ltm-import-result-modes=/u);
 assert.match(workspace, /data-ltm-retry-modes/u);
 assert.match(workspace, /\.\.\.\(contract\.modes\?\.length \? \{ modes: contract\.modes \} : \{\}\)/u);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.retryUsesModes"], "Retries with {{modes}}");
-assert.match(workspace, /const reextractDisabled = extractingId !== null \|\| !availabilityReady;/u);
-assert.equal(workspace.match(/disabled=\{reextractDisabled\}/gu)?.length, 3);
-assert.equal(
-  workspace.match(/disabled=\{sourceTask\.active\?\.status === "running" \|\| !availabilityReady\}/gu)?.length,
-  2,
+// Re-extract locks on any running source task, stays focusable and points at the lock reason.
+assert.match(workspace, /const reextractLocked = importRunning \|\| !availabilityReady;/u);
+assert.match(
+  workspace,
+  /const reextractActionProps = lockedActionProps\(reextractLocked, importRunning \? importLockId : undefined\);/u,
 );
+assert.equal(workspace.match(/\{\.\.\.reextractActionProps\}/gu)?.length, 3);
+assert.doesNotMatch(workspace, /(?<!aria-)disabled=\{reextractDisabled\}/u);
+assert.equal(workspace.match(/disabled=\{reextractLocked\}/gu)?.length, 2);
+assert.equal(workspace.match(/lockReasonId=\{importRunning \? importLockId : undefined\}/gu)?.length, 2);
 assert.match(
   workspace,
   /const availabilityReady = settingsQuery\.isSuccess && effectiveAvailabilityModes\.length > 0/u,
@@ -791,9 +795,9 @@ assert.match(
 );
 assert.match(workspace, /id=\{importLockId\}/u);
 // The lock note is empty unless a run is active, so only a run may reference it: not loading or saving, and
-// Refresh stays tied to import/refresh runs (`importing`), not to a re-extract or an availability save.
+// Re-import locks on any running task (`importRunning`), not on an availability save.
 assert.match(workspace, /"aria-describedby": importRunning \? `\$\{importLockId\} \$\{reasonId\}` : reasonId/u);
-assert.match(workspace, /\$\{importing \? ` \$\{importLockId\}` : ""\}/u);
+assert.match(workspace, /\$\{importRunning \? ` \$\{importLockId\}` : ""\}/u);
 assert.doesNotMatch(workspace, /importDisabled \? `[^`]*importLockId/u);
 assert.equal((workspace.match(/disabled=\{importDisabled\}/gu) ?? []).length, 0);
 assert.doesNotMatch(workspace, /disabled=\{importing\}/u);
@@ -1145,6 +1149,35 @@ assert.equal(locale["ui.longTermMemory.sourcesworkspace.chooseDestinationAction"
 assert.match(workspaceScreen, /<span role="status" className="sr-only" data-ltm-destination-hint>/u);
 // #1659: controls locked by a running import stay focusable (aria-disabled plus an early return) and a status line says why.
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.lockedWhileImportRuns"], "Locked while an import runs");
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.lockedWhileReextractRuns"], "Locked while a re-extract runs");
+// A running source task never feeds a native `disabled` on Sources controls; each carries the lock reason.
+// Only the scope combobox still takes the prop on a button; it renders aria-disabled itself.
+assert.equal(workspace.match(/(?<!aria-)disabled=\{activeSourceTask !== null\}/gu)?.length, 1);
+assert.match(workspace, /\{\.\.\.lockedActionProps\(importRunning, importLockId\)\}[\s\S]{0,60}retry-re-extract/u);
+assert.match(workspace, /lockReasonId=\{importLockId\}/u);
+// Each locked Re-extract and Retry handler guards itself: Enter still fires onClick on an aria-disabled button.
+assert.equal(workspace.match(/if \(reextractLocked\) return;/gu)?.length, 2);
+assert.match(workspace, /if \(!reextractLocked\) void reextract\(item\.note\.id\)/u);
+assert.match(workspace, /if \(!importRunning\)\s+void reextract\(\s*retryableReextract/u);
+assert.match(workspace, /describedBy=\{importLockId\}/u);
+assert.match(sourceScopeCombobox, /aria-describedby=\{disabled \? describedBy : undefined\}/u);
+const sourceOperationWorkbench = readFileSync(
+  join(dirname(ltmSourcePaths.sourcesWorkspace), "SourceOperationWorkbench.tsx"),
+  "utf8",
+);
+assert.doesNotMatch(sourceOperationWorkbench, /(?<!aria-)disabled=\{\s*(?:disabled|busy)\b/u);
+assert.equal(
+  sourceOperationWorkbench.match(
+    /\{\.\.\.lockedActionProps\(disabled \|\| busy !== null, disabled \? lockReasonId : undefined\)\}/gu,
+  )?.length,
+  2,
+);
+const importedSourceInspector = readFileSync(
+  join(dirname(ltmSourcePaths.sourcesWorkspace), "ImportedSourceInspector.tsx"),
+  "utf8",
+);
+assert.doesNotMatch(importedSourceInspector, /className=\{disabled \? "opacity-50" : ""\}/u);
+assert.equal(importedSourceInspector.match(/lockedActionProps\(disabled, lockReasonId\)/gu)?.length, 2);
 assert.doesNotMatch(availabilityTabRail, /\bdisabled=\{disabled\}/u);
 assert.doesNotMatch(sourceScopeCombobox, /\bdisabled=\{disabled\}/u);
 assert.match(availabilityTabRail, /aria-disabled=\{disabled \|\| undefined\}/u);

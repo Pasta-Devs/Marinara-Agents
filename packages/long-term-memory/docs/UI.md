@@ -211,7 +211,10 @@ availability Save and Cancel, the rename dialog, and the Review source, re-extra
 clear-rejected, Retry and delete controls stay focusable while they run. While identity
 edits are unsaved, the source select, rejected count, re-extract and clear-rejected share
 one linked reason ("Save or discard identity edits first."), and a stale or blocked change
-names why Apply is unavailable on its row, even when the row is collapsed. Native `disabled` is for permanent
+names why Apply is unavailable on its row, even when the row is collapsed. In Sources a running task of
+any kind holds one lock: Import, Refresh, Re-import, Re-extract (rows, inspector and Retry), the source
+picker and the Manage operations stay focusable, point at the always-mounted lock line ("Locked while an
+import runs" or "...a re-extract runs"), and send nothing on Enter. Native `disabled` is for permanent
 unavailability, such as a host that owns the setting, or input validity such as an empty
 name or nothing selected, because it drops keyboard focus.
 

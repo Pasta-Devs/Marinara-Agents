@@ -1,11 +1,12 @@
 import { Sparkles } from "lucide-react";
-import { Button } from "../shared-controls";
+import { Button, lockedActionProps } from "../shared-controls";
 import { useLtmTranslation } from "../localization";
 import type { SourceOperation } from "./source-shared";
 
 export function ImportedSourceInspector({
   source,
   disabled,
+  lockReasonId,
   bulkActive,
   onOpenMemory,
   onOpenReview,
@@ -14,6 +15,7 @@ export function ImportedSourceInspector({
 }: {
   source: { id: string; title: string };
   disabled: boolean;
+  lockReasonId?: string;
   bulkActive: boolean;
   onOpenMemory?: (id: string) => void;
   onOpenReview?: (id: string) => void;
@@ -32,8 +34,7 @@ export function ImportedSourceInspector({
           {localizeUi("ui.longTermMemory.memoryvault.reviewRelatedDrafts")}
         </Button>
         <Button
-          aria-disabled={disabled || undefined}
-          className={disabled ? "opacity-50" : ""}
+          {...lockedActionProps(disabled, lockReasonId)}
           onClick={() => {
             if (!disabled) onReextract(source.id);
           }}
@@ -51,8 +52,7 @@ export function ImportedSourceInspector({
           {(["copy", "move", "archive", "delete"] as const).map((operation) => (
             <Button
               key={operation}
-              aria-disabled={disabled || undefined}
-              className={disabled ? "opacity-50" : ""}
+              {...lockedActionProps(disabled, lockReasonId)}
               destructive={operation === "delete"}
               onClick={(event) => {
                 if (!disabled) onManage(source.id, source.title, operation, event.currentTarget);
