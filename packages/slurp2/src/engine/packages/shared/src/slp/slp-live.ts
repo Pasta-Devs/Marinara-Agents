@@ -66,11 +66,14 @@ export type SlpLiveOrder = { id: string; itemId: string; by: string; name: strin
 export type SlpLiveEvent = {
   /** Milliseconds since the show started. */
   at: number;
-  kind: "join" | "leave" | "tip" | "order" | "goal" | "done" | "strip";
+  kind: "join" | "leave" | "tip" | "order" | "goal" | "done" | "strip" | "say" | "chat" | "you";
   by?: string;
   name?: string;
   amount?: number;
   itemId?: string;
+  /** Talk (`say` the Creator, `chat` a fan, `you` the player): the words, and the Creator's action. */
+  text?: string;
+  action?: string;
 };
 export type SlpLiveFan = {
   id: string;
@@ -97,6 +100,10 @@ export type SlpLiveState = {
   log: SlpLiveEvent[];
   /** Request ids of the player's paid tips already booked, so a retry never books twice. */
   receipts: string[];
+  /** Where the show happens now, set by a beat ("on the bed"). */
+  place?: string;
+  /** Milliseconds since the start where the last written beat runs out. */
+  beatTo?: number;
 };
 export type SlpLiveTip = { by: string; name: string; amount: number; itemId?: string };
 
@@ -153,7 +160,7 @@ export function slpLiveStart(input: { level: SlpExplicitLevelName; fans: number;
   };
 }
 
-function log(state: SlpLiveState, event: SlpLiveEvent) {
+export function slpLiveLog(state: SlpLiveState, event: SlpLiveEvent) {
   state.log.push(event);
   if (state.log.length > LOG_MAX) state.log.splice(0, state.log.length - LOG_MAX);
 }
@@ -185,14 +192,14 @@ export function slpLiveApplyTip(state: SlpLiveState, tip: SlpLiveTip, at: number
   const item = tip.itemId ? state.menu.find((entry) => entry.id === tip.itemId) : undefined;
   if (item && tip.amount >= item.price) {
     state.queue.push({ id: `${tip.by}:${at}`, itemId: item.id, by: tip.by, name: tip.name, at, doneAt: null });
-    log(state, { at, kind: "order", by: tip.by, name: tip.name, amount: tip.amount, itemId: item.id });
-  } else log(state, { at, kind: "tip", by: tip.by, name: tip.name, amount: tip.amount });
+    slpLiveLog(state, { at, kind: "order", by: tip.by, name: tip.name, amount: tip.amount, itemId: item.id });
+  } else slpLiveLog(state, { at, kind: "tip", by: tip.by, name: tip.name, amount: tip.amount });
   for (const next of state.goals) {
     if (next.hitAt !== null || state.raised < next.target) continue;
     next.hitAt = at;
     state.heat = Math.min(100, state.heat + 10);
     state.queue.push({ id: `goal:${next.target}`, itemId: next.reward, by: "goal", name: "", at, doneAt: null });
-    log(state, { at, kind: "goal", amount: next.target, itemId: next.reward });
+    slpLiveLog(state, { at, kind: "goal", amount: next.target, itemId: next.reward });
   }
   return true;
 }
@@ -204,12 +211,12 @@ export function slpLiveWorkQueue(state: SlpLiveState, at: number): void {
   const first = open[0];
   if (!first || at - Math.max(first.at, lastDone) < SLP_LIVE_ORDER_MS) return;
   first.doneAt = at;
-  log(state, { at, kind: "done", by: first.by, name: first.name, itemId: first.itemId });
+  slpLiveLog(state, { at, kind: "done", by: first.by, name: first.name, itemId: first.itemId });
   const item = state.menu.find((entry) => entry.id === first.itemId);
   if (item?.strip && state.strip < state.stripMax) {
     state.strip += 1;
     state.heat = Math.min(100, state.heat + 8);
-    log(state, { at, kind: "strip", amount: state.strip });
+    slpLiveLog(state, { at, kind: "strip", amount: state.strip });
   }
   if (state.queue.length > 40)
     state.queue = state.queue.filter((order) => order.doneAt === null || at - order.doneAt < 30 * MINUTE);
@@ -234,12 +241,12 @@ export function slpLiveMinute(
     if (inRoom.has(fan.id)) {
       if (roll < 0.06 / pull) {
         inRoom.delete(fan.id);
-        log(state, { at, kind: "leave", by: fan.id, name: fan.name });
+        slpLiveLog(state, { at, kind: "leave", by: fan.id, name: fan.name });
       }
     } else if (inRoom.size < ROOM_MAX && roll < slurpMemberActivityWeight(fan.activeHour, input.hour) * 0.12 * pull) {
       inRoom.add(fan.id);
       state.names[fan.id] = fan.name;
-      log(state, { at, kind: "join", by: fan.id, name: fan.name });
+      slpLiveLog(state, { at, kind: "join", by: fan.id, name: fan.name });
     }
   }
   state.room = [...inRoom];
@@ -308,7 +315,12 @@ export function slpLiveView(
     queue: state.queue
       .filter((order) => order.doneAt === null || state.simulatedTo - order.doneAt < 10 * MINUTE)
       .slice(-12),
-    log: state.log.slice(-80),
+    // A beat's lines are stored ahead of time; the room hears each one when its moment comes.
+    log: state.log
+      .filter((event) => event.at <= Math.max(0, now - Date.parse(show.startedAt)))
+      .sort((a, b) => a.at - b.at)
+      .slice(-80),
+    beatTo: state.beatTo ?? 0,
     top: slpLiveTopTipper(state),
     mine: me ? (state.tippers[me] ?? 0) : 0,
   };

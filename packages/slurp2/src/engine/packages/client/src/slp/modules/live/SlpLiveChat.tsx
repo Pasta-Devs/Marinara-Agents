@@ -26,7 +26,7 @@ export function SlpLiveChat({
   itemLabel: (id: string | undefined) => string;
   t: (key: string, values?: Record<string, unknown>) => string;
 }) {
-  const recent = lines.slice(-6);
+  const recent = lines.slice(-8);
   return (
     <ol
       aria-live="polite"
@@ -36,6 +36,31 @@ export function SlpLiveChat({
         const mine = !!me && event.by === me;
         const name = event.name ?? "";
         const item = itemLabel(event.itemId);
+        if (event.kind === "say") {
+          return (
+            <li
+              key={event.key}
+              className="slp-live-in self-start rounded-2xl bg-black/55 px-3 py-1.5 text-[15px] text-white backdrop-blur-sm"
+            >
+              <b className="text-[var(--noodle-accent)]">{host}</b>{" "}
+              {event.action && <i className="text-white/70">{event.action} </i>}
+              {event.text}
+            </li>
+          );
+        }
+        if (event.kind === "chat" || event.kind === "you") {
+          return (
+            <li key={event.key} className="slp-live-in text-sm text-white drop-shadow-[0_1px_2px_rgb(0_0_0/0.9)]">
+              <b
+                style={event.kind === "you" ? undefined : { color: slpLiveNameColour(name) }}
+                className={event.kind === "you" ? "text-[var(--slurp-violet)]" : undefined}
+              >
+                {name}
+              </b>{" "}
+              {event.text}
+            </li>
+          );
+        }
         if (event.kind === "goal" || event.kind === "done" || event.kind === "strip") {
           const text =
             event.kind === "goal"

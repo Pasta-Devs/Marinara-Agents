@@ -5,6 +5,7 @@ import { slpLiveView, slpLiveViewers } from "../../../../../shared/src/slp/slp-l
 import { createSlurpLiveStorage } from "../../data/live/slp-live-storage.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { simulateSlurpLiveShow } from "./slp-live-service.js";
+import { beatSlurpLiveShow } from "./slp-live-beat.js";
 import { tipSlurpLiveShow } from "./slp-live-tip.js";
 
 const LIVE_OFF = "Live is switched off in Backstage.";
@@ -48,6 +49,36 @@ export async function slpLiveRoutes(app: FastifyInstance, { noodle, resolveViewe
     const show = stored.endedAt ? stored : await simulateSlurpLiveShow(app.db, stored, settings, at);
     if (!show.endedAt) await storage.save(show.id, { watchedAt: at.toISOString() });
     return slpLiveView(show, at.getTime(), personaId ? `persona:${personaId}` : null);
+  });
+
+  // The screen asks for the next beat when the current one runs low, when the player joins, or with a
+  // chat message (which cuts in). The answer is the show as the viewer sees it now.
+  app.post("/slurp/live/:id/beat", async (req, reply) => {
+    if (!(await liveOn())) return reply.code(409).send({ error: LIVE_OFF });
+    const parsed = z
+      .object({
+        personaId: z.string().trim().min(1).optional(),
+        message: z.string().trim().min(1).max(300).optional(),
+        joined: z.boolean().optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { personaId, message, joined } = parsed.data;
+    if (message && !personaId) return reply.code(400).send({ error: "Pick a persona to talk in a live show" });
+    const viewer = personaId ? await resolveViewerPersona(personaId) : null;
+    if (personaId && !viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const showId = (req.params as { id: string }).id;
+    const result = await beatSlurpLiveShow(app.db, {
+      showId,
+      viewer,
+      ...(personaId ? { personaId } : {}),
+      ...(message ? { message } : {}),
+      ...(joined ? { joined } : {}),
+    });
+    if (result === "missing") return reply.code(404).send({ error: "No such show" });
+    const show = await storage.get(showId);
+    if (!show) return reply.code(404).send({ error: "No such show" });
+    return { beat: result, show: slpLiveView(show, Date.now(), personaId ? `persona:${personaId}` : null) };
   });
 
   app.post("/slurp/live/:id/tip", async (req, reply) => {

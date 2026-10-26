@@ -10,7 +10,7 @@ import { slpLiveFeedDelay, slpLiveFeedMerge, type SlpLiveLine } from "../../modu
 import type { SlpLiveEvent } from "../../../../../shared/src/slp/slp-live.js";
 import { useCreatorAccounts } from "../creators/slp-creators-contract";
 import { newRequestId, SlpThreadTaskLayer } from "../messages/slp-messages-contract";
-import { useSlpLiveShow, useSlpLiveTip } from "./slp-live-hooks";
+import { useSlpLiveBeat, useSlpLiveShow, useSlpLiveTip } from "./slp-live-hooks";
 
 const LIVE_STYLES = `
 @keyframes slp-live-drift { from { transform: scale(1.08) translate3d(-1.5%, -1%, 0); } to { transform: scale(1.16) translate3d(1.5%, 1%, 0); } }
@@ -64,6 +64,10 @@ export function SlpLiveScreen({
   const { t } = useUiTranslation();
   const query = useSlpLiveShow(showId, personaId);
   const tip = useSlpLiveTip(showId, personaId);
+  const beat = useSlpLiveBeat(showId, personaId);
+  const [said, setSaid] = useState("");
+  const joined = useRef(false);
+  const askedAt = useRef(0);
   const show = query.data;
   const host = useCreatorAccounts().data?.find((account) => account.id === show?.hostId) ?? null;
   const lines = useLiveFeed(show?.log);
@@ -79,6 +83,17 @@ export function SlpLiveScreen({
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, []);
+  // Ask for the next beat when the one playing runs low; the first ask is the join (recap and welcome).
+  useEffect(() => {
+    if (!show || show.endedAt || beat.isPending) return;
+    const sinceAsk = Date.now() - askedAt.current;
+    if (sinceAsk < (beat.isError ? 20_000 : 6_000)) return;
+    const playing = show.elapsed + (Date.now() - loadedAt.current);
+    if (joined.current && playing < show.beatTo - 10_000) return;
+    askedAt.current = Date.now();
+    beat.mutate(joined.current ? {} : { joined: true });
+    joined.current = true;
+  }, [now, show, beat]);
   const name = host?.displayName ?? t("ui.slurp.live.creator");
   const me = personaId ? `persona:${personaId}` : null;
   const itemLabel = (id: string | undefined) =>
@@ -275,17 +290,30 @@ export function SlpLiveScreen({
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <p className="min-w-0 flex-1 truncate text-sm text-white/70">
-                {personaId ? (
-                  show.mine ? (
-                    <SlpCoinText>{t("ui.slurp.live.mine", { amount: show.mine })}</SlpCoinText>
-                  ) : (
-                    t("ui.slurp.live.tipHint", { name })
-                  )
-                ) : (
-                  t("ui.slurp.live.pickPersona")
-                )}
-              </p>
+              {personaId ? (
+                <form
+                  className="min-w-0 flex-1"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const message = said.trim();
+                    if (!message) return;
+                    setSaid("");
+                    askedAt.current = Date.now();
+                    beat.mutate({ message });
+                  }}
+                >
+                  <input
+                    value={said}
+                    onChange={(event) => setSaid(event.target.value.slice(0, 300))}
+                    enterKeyHint="send"
+                    placeholder={t("ui.slurp.live.say", { name })}
+                    aria-label={t("ui.slurp.live.say", { name })}
+                    className={`h-12 w-full rounded-full px-4 text-base placeholder:text-white/60 ${glass}`}
+                  />
+                </form>
+              ) : (
+                <p className="min-w-0 flex-1 truncate text-sm text-white/70">{t("ui.slurp.live.pickPersona")}</p>
+              )}
               <button
                 type="button"
                 disabled={!personaId}
@@ -304,6 +332,11 @@ export function SlpLiveScreen({
                 {t("ui.slurp.live.tip")}
               </button>
             </div>
+          )}
+          {!ended && show.mine > 0 && (
+            <p className="text-sm text-white/70">
+              <SlpCoinText>{t("ui.slurp.live.mine", { amount: show.mine })}</SlpCoinText>
+            </p>
           )}
           {tip.isError && (
             <p role="alert" className="text-center text-sm text-red-300">

@@ -45,3 +45,16 @@ export function useSlpLiveTip(showId: string, personaId: string | null) {
     onSuccess: (view) => qc.setQueryData(liveKey("show", showId, personaId ?? ""), view),
   });
 }
+
+/** The next beat of the show (model-written talk), or the player's chat message, which cuts in. */
+export function useSlpLiveBeat(showId: string, personaId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { message?: string; joined?: boolean }) =>
+      api.post<{ beat: string; show: SlpLiveView }>(`/slurp2/slurp/live/${encodeURIComponent(showId)}/beat`, {
+        ...input,
+        ...(personaId ? { personaId } : {}),
+      }),
+    onSuccess: ({ show }) => qc.setQueryData(liveKey("show", showId, personaId ?? ""), show),
+  });
+}

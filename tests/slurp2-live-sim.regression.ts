@@ -14,11 +14,16 @@ import {
   slurpLiveSlot,
   SLP_LIVE_ORDER_MS,
   type SlpLiveFan,
+  slpLiveView,
 } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-live.ts";
 import {
   slpLiveFeedDelay,
   slpLiveFeedMerge,
 } from "../packages/slurp2/src/engine/packages/client/src/slp/modules/live/slp-live-feed.ts";
+import {
+  slpLiveApplyBeat,
+  slpLiveParseBeat,
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-live-beat.ts";
 import { slpExtensionFromLegacy } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-extensions.ts";
 
 // The menu follows the spice level: no strip items for a clean Creator, all of them for an explicit one.
@@ -126,5 +131,55 @@ assert.equal(feedTwice.queue.length, 3, "two equal tips in one minute are two li
 assert.equal(slpLiveFeedMerge(feedTwice, [twice, twice]).queue.length, 3, "and never repeat");
 assert.equal(slpLiveFeedDelay(1), 3_000);
 assert.equal(slpLiveFeedDelay(100), 600);
+
+// A beat keeps only lines from the host and fans in the room, spaced out; the player's message cuts the
+// unplayed rest of the last beat, and the screen only shows lines whose moment has come.
+assert.equal(slpLiveParseBeat({ lines: [{ t: "x", who: "a", text: "b" }] }), null);
+const room = slpLiveStart({ level: "suggestive", fans: 10 });
+room.room = ["fan:1"];
+room.names = { "fan:1": "Kit" };
+const beat = slpLiveParseBeat({
+  lines: [
+    { t: 0, who: "host", text: "hi Kit", action: "waves" },
+    { t: 0, who: "Kit", text: "hiii" },
+    { t: 3, who: "Stranger", text: "not in the room" },
+    { t: 99, who: "Mara", text: "the end" },
+  ],
+  patch: { heat: 40, strip: true, place: "on the bed" },
+})!;
+assert.equal(slpLiveApplyBeat(room, beat, { at: 10_000, seconds: 30, host: "Mara" }), 3);
+const said = room.log.filter((event) => event.kind === "say" || event.kind === "chat");
+assert.deepEqual(
+  said.map((event) => event.at),
+  [10_000, 11_500, 40_000],
+);
+assert.equal(room.heat, 20, "heat patch is capped at 10");
+assert.equal(room.strip, 1);
+assert.equal(room.place, "on the bed");
+assert.equal(room.beatTo, 40_000);
+slpLiveApplyBeat(room, slpLiveParseBeat({ lines: [{ t: 1, who: "host", text: "Alex, yes!" }] })!, {
+  at: 20_000,
+  seconds: 30,
+  host: "Mara",
+  you: { by: "persona:p1", name: "Alex", text: "can you dance?" },
+});
+assert.deepEqual(
+  room.log.filter((event) => ["say", "chat", "you"].includes(event.kind)).map((event) => event.text),
+  ["hi Kit", "hiii", "can you dance?", "Alex, yes!"],
+);
+const shown = slpLiveView(
+  {
+    id: "s",
+    hostId: "h",
+    hostKind: "creator",
+    startedAt: new Date(0).toISOString(),
+    endsAt: new Date(3_600_000).toISOString(),
+    endedAt: null,
+    state: room,
+  },
+  20_500,
+  null,
+);
+assert.equal(shown.log.at(-1)?.kind, "you", "the answer waits for its moment");
 
 console.log("slurp2 live sim: ok");

@@ -3942,7 +3942,7 @@
   "ui.slurp.live.tip": "후원",
   "ui.slurp.live.tipBanner": "{{name}}님이 {{amount}} <coin/> 후원",
   "ui.slurp.live.tipFailed": "후원이 처리되지 않았어요. 다시 시도하세요.",
-  "ui.slurp.live.tipHint": "후원해서 {{name}}님의 눈에 띄어 보세요",
+  "ui.slurp.live.say": "{{name}}님에게 한마디",
   "ui.slurp.live.tipTitle": "{{name}}님에게 후원",
   "ui.slurp.live.topTipper": "최고 후원자: {{name}}",
   "ui.slurp.live.watch": "{{name}}님 라이브 보기",
