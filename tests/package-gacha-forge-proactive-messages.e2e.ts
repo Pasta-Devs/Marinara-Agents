@@ -308,10 +308,12 @@ for (const theme of ["dark", "light"]) {
       await expect(composer).toHaveValue("A draft I am still writing.");
       await expect(composer).toBeFocused();
       expect(await log.evaluate((node) => node.scrollTop)).toBeCloseTo(before.top, 0);
-      await expect(f.forge.getByText("A saved spontaneous lighthouse check-in.", { exact: true })).toHaveCount(0);
+      // The card previews the letter, but it stays out of the open conversation until the player reads it.
+      await expect(notice.getByText("A saved spontaneous lighthouse check-in.", { exact: true })).toBeVisible();
+      await expect(log.getByText("A saved spontaneous lighthouse check-in.", { exact: true })).toHaveCount(0);
       await page.screenshot({ path: testInfo.outputPath(`unit-message-draft-notice-${theme}.png`) });
       await notice.getByRole("button", { name: "Read message", exact: true }).click();
-      await expect(f.forge.getByText("A saved spontaneous lighthouse check-in.", { exact: true })).toBeVisible();
+      await expect(log.getByText("A saved spontaneous lighthouse check-in.", { exact: true })).toBeVisible();
       await expect(composer).toHaveValue("A draft I am still writing.");
       await composer.fill("");
       await composer.evaluate((node: HTMLTextAreaElement) => node.blur());

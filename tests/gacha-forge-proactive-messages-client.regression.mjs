@@ -50,6 +50,7 @@ function fixture({ count = 2, view = "browser", field = false } = {}) {
       this.dataset = {};
       this.isConnected = false;
       this.textContent = "";
+      this.style = {};
     }
     append(...items) {
       for (const item of items) {
@@ -73,6 +74,8 @@ function fixture({ count = 2, view = "browser", field = false } = {}) {
   }
   const stage = new Element("stage");
   stage.isConnected = true;
+  // The mocked view is always the Home screen.
+  stage.querySelector = (selector) => (selector === ".hm-screen" ? {} : null);
   const input = field ? new Element("input") : null;
   if (input) {
     input.value = "0";
@@ -539,6 +542,6 @@ test("a letter waits for Home, then shows its channel, sender and opening lines"
   assert.equal(f.notice(), undefined, "leaving Home hides the card but keeps the letter");
   screen = "hud";
   f.wire();
-  assert.ok(f.notice());
+  assert.equal(f.notice().style.animation, "none", "the same letter does not replay its arrival");
   f.dispose();
 });

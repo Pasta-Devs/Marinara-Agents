@@ -116,6 +116,7 @@ async function seedChapterList(forge: Locator) {
       game._chapterProgress = { normal: 0 };
       // The plan the player already saw (boot, an earlier visit, or the plan cache).
       game._plan = structuredClone(fixture.plan);
+      game.__seededPlan = game._plan;
       game._planState = "idle";
       game._hudView = "chapters";
       game._renderBrowser();
@@ -124,8 +125,13 @@ async function seedChapterList(forge: Locator) {
   );
 }
 
-for (const reloadLandsAfterBeat of [true, false]) {
-  test(`choices appear when the chapter plan reload lands ${reloadLandsAfterBeat ? "after" : "before"} the beat loads`, async ({
+// An identical reload keeps the shown plan object; a revised one replaces it. Choices survive both.
+for (const [reloadLandsAfterBeat, revised] of [
+  [true, false],
+  [true, true],
+  [false, false],
+] as const) {
+  test(`choices appear when ${revised ? "a revised" : "an identical"} chapter plan reload lands ${reloadLandsAfterBeat ? "after" : "before"} the beat loads`, async ({
     page,
   }, testInfo) => {
     let releasePlan!: () => void;
@@ -134,7 +140,13 @@ for (const reloadLandsAfterBeat of [true, false]) {
     await page.route("**/api/gacha-forge/chapter-plan", async (route) => {
       planRequests += 1;
       await planHeld;
-      await route.fulfill({ json: { ok: true, plan, progress: { "1": { normal: 0 } } } });
+      await route.fulfill({
+        json: {
+          ok: true,
+          plan: revised ? { ...plan, title: "Two paths, revised" } : plan,
+          progress: { "1": { normal: 0 } },
+        },
+      });
     });
     const forge = await openForge(page, testInfo);
     await seedChapterList(forge);
@@ -157,6 +169,7 @@ for (const reloadLandsAfterBeat of [true, false]) {
       releasePlan();
       await expect.poll(() => forge.evaluate((node) => (node as any)._planState)).toBe("idle");
     }
+    expect(await forge.evaluate((node) => (node as any)._plan === (node as any).__seededPlan)).toBe(!revised);
     // Arrive at the choice point.
     await forge.locator("[data-box]").click();
     await expect(text).toHaveText("CHOICE_POINT_LINE");

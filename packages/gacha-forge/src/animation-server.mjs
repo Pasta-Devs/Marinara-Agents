@@ -91,6 +91,8 @@ const forgeAnimationFailure = (error) => {
 
 export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
   const jobs = new Map();
+  // Keys whose last status could not be written: their leftover "pending" marker is a storage failure, not a restart.
+  const storageFailed = new Set();
   const epochs = new Map(),
     mutations = new Map();
   const epochFor = (runId) => epochs.get(runId) || 0;
@@ -248,11 +250,12 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
               saved?.state === "failed"
                 ? forgeAnimationSavedFailure(saved)
                 : saved?.state === "pending"
-                  ? { reason: "interrupted" }
+                  ? { reason: storageFailed.has(key) ? "storage" : "interrupted" }
                   : {};
             return { ok: false, error: "animation-failed", ...failure, retry: true };
           }
           // A persisted attempt also survives a restart during a paid request. Only an explicit retry starts another.
+          storageFailed.delete(key);
           const pending = { state: "pending", ...(previousKey ? { mediaKey: previousKey } : {}) };
           if (body.retry === true || prior !== null) await writeStatus(pending);
           else await forgeAnimationWrite(status, JSON.stringify(pending), { flag: "wx", mode: 0o600 });
@@ -325,6 +328,7 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
         }
       })()
         .catch((error) => {
+          storageFailed.add(key);
           runtime.logger?.warn(error, "[gacha-forge] Banner animation storage failed");
           return { ok: false, error: "animation-failed", reason: "storage", retry: true };
         })

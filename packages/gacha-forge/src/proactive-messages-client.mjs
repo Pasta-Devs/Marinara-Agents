@@ -1,10 +1,12 @@
 /* global forgeUnitMessagesEnglish, forgeChatGenerationError */
-// A letter card in the Home panel style. It lives in .gf-view, below the stats bar, where the type scale is defined.
+// A letter card in the Home panel style. It lives in .gf-view, below the stats bar, where the type scale is defined,
+// above an open Letters panel (z-index 20) and below dialogs.
 const forgeUnitMessageStyle = `
-.gf-unit-message-notice{position:absolute;z-index:12;top:calc(var(--f) * 1);left:50%;translate:-50% 0;box-sizing:border-box;inline-size:min(calc(var(--f) * 44),calc(100% - var(--f) * 2));max-block-size:calc(100% - var(--f) * 2);overflow:auto;display:grid;gap:calc(var(--f) * 0.5);padding:calc(var(--f) * 0.9) calc(var(--f) * 1.2);background:linear-gradient(0deg,var(--ink-2),var(--ink-2)),var(--ink);color:var(--text);border:1px solid var(--ink-3);border-top:2px solid var(--coral);--cut:1em;clip-path:var(--clip-card);border-radius:var(--radius);box-shadow:var(--panel-shadow),var(--panel-bevel);font-family:var(--body);font-size:var(--t-sm);line-height:1.4;animation:gf-unit-message-in 300ms ease-out backwards}
+.gf-unit-message-notice{position:absolute;z-index:25;top:calc(var(--f) * 1);left:50%;translate:-50% 0;box-sizing:border-box;inline-size:min(calc(var(--f) * 44),calc(100% - var(--f) * 2));max-block-size:calc(100% - var(--f) * 2);overflow:auto;display:grid;gap:calc(var(--f) * 0.5);padding:calc(var(--f) * 0.9) calc(var(--f) * 1.2);background:linear-gradient(0deg,var(--ink-2),var(--ink-2)),var(--ink);color:var(--text);border:1px solid var(--ink-3);border-top:2px solid var(--coral);--cut:1em;clip-path:var(--clip-card);border-radius:var(--radius);box-shadow:var(--panel-shadow),var(--panel-bevel);font-family:var(--body);font-size:var(--t-sm);line-height:1.4;animation:gf-unit-message-in 300ms ease-out backwards}
 .gf-unit-message-notice .kick{margin:0;font-family:var(--display);font-size:var(--t-tiny);letter-spacing:0.2em;text-transform:var(--case);color:var(--coral)}
 .gf-unit-message-notice .who{margin:0;font-family:var(--title);font-stretch:var(--stretch);font-weight:var(--title-weight);font-size:var(--t-md);line-height:1.2;overflow-wrap:anywhere}
 .gf-unit-message-notice .said{margin:0;font-style:italic;color:var(--porcelain-3);overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.gf-unit-message-notice .why{margin:0;overflow-wrap:anywhere}
 .gf-unit-message-notice .acts{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:calc(var(--f) * 0.5)}
 .gf-unit-message-notice button{min-block-size:44px;padding:calc(var(--f) * 0.32) calc(var(--f) * 1.1);cursor:pointer;font-family:var(--display);font-weight:700;font-size:var(--t-xs);letter-spacing:0.08em;text-transform:var(--case);background:transparent;color:var(--text);border:1px solid var(--steel-dark);--cut:0.45em;clip-path:var(--clip-btn);border-radius:var(--radius-sm)}
 .gf-unit-message-notice button:hover{border-color:var(--coral);color:var(--coral)}
@@ -118,6 +120,7 @@ export function wireForgeUnitMessages(host) {
   let timer;
   let notice = null;
   let pending = null;
+  let shown = null;
   const current = () =>
     !disposed &&
     host._run?.runId === runId &&
@@ -132,8 +135,9 @@ export function wireForgeUnitMessages(host) {
       notice = null;
       return;
     }
+    // Only the incoming Home view: a render's first pass can still hold the outgoing screen.
     const view = root.querySelector(".gf-stage > .gf-view");
-    if (!view || notice?.isConnected) return;
+    if (!view?.querySelector(".hm-screen") || notice?.isConnected) return;
     notice = document.createElement("aside");
     notice.className = "gf-unit-message-notice";
     const style = document.createElement("style");
@@ -150,7 +154,7 @@ export function wireForgeUnitMessages(host) {
     if (pending.failed)
       status.append(
         line(
-          "said",
+          "why",
           forgeChatGenerationError(
             pending,
             forgeUnitMessagesEnglish["messages.failed"],
@@ -201,6 +205,9 @@ export function wireForgeUnitMessages(host) {
         },
         true,
       );
+    // The same letter coming back with Home does not replay its arrival.
+    if (shown === pending) notice.style.animation = "none";
+    shown = pending;
     view.append(notice);
   };
   const poll = async () => {

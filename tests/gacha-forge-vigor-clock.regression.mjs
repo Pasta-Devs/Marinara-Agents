@@ -77,6 +77,29 @@ test("the clock writes the live countdown each second and refreshes once per lan
   stop();
 });
 
+test("a point that landed while no clock watched asks for fresh state once, not on every re-render", (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setInterval"], now: 10_000 });
+  const node = { textContent: "" };
+  const root = { querySelector: () => node };
+  let landed = 0;
+  const options = {
+    read: () => forgeVigorRemaining(5_000, 77, 78, 10_000),
+    due: () => 5_000,
+    format: (ms) => `${ms}`,
+    onLanded: () => {
+      landed += 1;
+    },
+  };
+  const first = startForgeVigorClock(root, options);
+  assert.equal(landed, 1, "the bar came back after the last point landed");
+  assert.equal(node.textContent, "", "full Vigor shows no countdown");
+  first();
+  const second = startForgeVigorClock(root, options);
+  t.mock.timers.tick(3_000);
+  assert.equal(landed, 1, "a re-rendered clock does not ask again for the same point");
+  second();
+});
+
 test("the bundles wire the live wallet and clock, and water beats fire", async () => {
   const client = await readFile(new URL("../packages/gacha-forge/client.js", import.meta.url), "utf8");
   const server = await readFile(new URL("../packages/gacha-forge/server.mjs", import.meta.url), "utf8");
@@ -85,7 +108,11 @@ test("the bundles wire the live wallet and clock, and water beats fire", async (
     "utf8",
   );
   assert.ok(client.includes('this._bannerState="idle",wireForgeVigorWallet(this),'));
-  assert.ok(client.includes("this._stopVigorClock=startForgeVigorClock(this._root,{format:cs,read:()=>"));
+  assert.ok(
+    client.includes(
+      "this._stopVigorClock=startForgeVigorClock(this._root,{format:cs,read:()=>this._wallet?this._wallet.vigorNextMs:null,due:()=>this._wallet?this._wallet.vigorNextAt:null,",
+    ),
+  );
   assert.ok(!client.includes("this._stopVigorClock=fc("));
   // Each element beats the next: water > fire > earth > wind > water. The Home graph draws this map.
   assert.ok(client.includes('var ao={fire:"earth",earth:"wind",wind:"water",water:"fire",light:"dark",dark:"light"}'));

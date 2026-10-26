@@ -17,6 +17,7 @@ on:
       - "tests/package-gacha-forge-editors.e2e.ts"
       - "tests/package-gacha-forge-proactive-messages.e2e.ts"
       - "tests/package-gacha-forge-backgrounds.e2e.ts"
+      - "tests/package-gacha-forge-choice-plan-reload.e2e.ts"
       - "tests/package-gacha-forge-audio.e2e.ts"
       - "tests/playwright.package.config.ts"
       - "tests/playwright.gacha-forge.config.ts"

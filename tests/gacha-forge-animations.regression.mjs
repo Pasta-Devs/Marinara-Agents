@@ -1239,11 +1239,10 @@ try {
     failedClip.events.playing();
     failedClip.events.error();
     assert.equal(resolveObjectURL(failedSource), undefined, "a failed clip releases its in-memory copy");
-    assert.ok(shown(playback, forgeAnimationEnglish.playbackFailed));
-    assert.equal(
+    assert.ok(shown(playback, `${forgeAnimationEnglish.playbackFailed} ${forgeAnimationEnglish.retryCost}`));
+    assert.ok(
       playback.chips.querySelector("[data-animation-retry]"),
-      undefined,
-      "a decoder/network error never offers a paid regeneration of a saved clip",
+      "a downloaded clip this browser cannot decode offers an explicit, priced replacement",
     );
     playback.host._forgeBannerAnimation.onVisibility();
     wireForgeBannerAnimation(playback.host);
@@ -1291,6 +1290,21 @@ try {
     assert.equal(refused.requests.length, 1);
     disposeForgeBannerAnimation(refused.host);
 
+    const busy = client();
+    clipResponse = () => ({ ok: false, status: 503 });
+    wireForgeBannerAnimation(busy.host);
+    busy.requests[0].resolve(response);
+    await wait();
+    clipResponse = savedClip;
+    assert.equal(busy.target.children.length, 0);
+    assert.equal(busy.chips.querySelector("[data-animation-retry]"), undefined, "a busy proxy is not a paid retry");
+    busy.host._forgeBannerAnimation.onVisibility();
+    assert.equal(busy.requests[1]?.body.retry, false, "a temporary download error asks again for the saved clip");
+    busy.requests[1].resolve(response);
+    await wait();
+    assert.equal(busy.target.children[0]?.tagName, "video");
+    disposeForgeBannerAnimation(busy.host);
+
     const lost = client();
     wireForgeBannerAnimation(lost.host);
     lost.requests[0].resolve({ ok: false, error: "animation-failed", reason: "unknown", retry: true });
@@ -1330,12 +1344,11 @@ try {
     await wait();
     unsupportedPlay.reject(new DOMException("No supported media source.", "NotSupportedError"));
     await wait();
-    assert.equal(
+    assert.ok(
       unsupported.chips.querySelector("[data-animation-retry]"),
-      undefined,
-      "promise-only decoder rejection never offers a paid regeneration of a saved clip",
+      "a promise-only decoder rejection offers an explicit, priced replacement",
     );
-    assert.ok(shown(unsupported, forgeAnimationEnglish.playbackFailed));
+    assert.ok(shown(unsupported, `${forgeAnimationEnglish.playbackFailed} ${forgeAnimationEnglish.retryCost}`));
     assert.equal(unsupported.target.children.length, 0, "the unsupported clip is removed");
     assert.equal(unsupported.requests.length, 1, "promise-only failures never repurchase automatically");
     disposeForgeBannerAnimation(unsupported.host);

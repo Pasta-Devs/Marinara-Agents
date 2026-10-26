@@ -50,8 +50,11 @@ export function wireForgeVigorWallet(host) {
   });
 }
 
+// Deadlines a clock has already asked about, per root, so a re-render does not ask again for the same point.
+const forgeVigorReported = new WeakMap();
+
 /** Writes the countdown every second and asks for fresh state once each time a point lands. */
-export function startForgeVigorClock(root, { read, format, onLanded } = {}) {
+export function startForgeVigorClock(root, { read, due, format, onLanded } = {}) {
   let last = null;
   const tick = () => {
     const node = root?.querySelector?.("[data-vigor-next]");
@@ -60,7 +63,12 @@ export function startForgeVigorClock(root, { read, format, onLanded } = {}) {
     const remaining = Number.isFinite(ms) ? ms : null;
     const text = remaining === null ? "" : format(remaining);
     if (node.textContent !== text) node.textContent = text;
-    if (last !== null && (remaining === null || remaining > last)) onLanded?.();
+    // A point that landed while no clock was watching (the bar hidden, or between renders) still asks once.
+    const at = due?.();
+    let landed = last !== null && (remaining === null || remaining > last);
+    if (Number.isFinite(at) && Date.now() >= at && forgeVigorReported.get(root) !== at) landed = true;
+    if (landed && Number.isFinite(at)) forgeVigorReported.set(root, at);
+    if (landed) onLanded?.();
     last = remaining;
   };
   tick();

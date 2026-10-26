@@ -104,6 +104,10 @@ export function wireForgeBannerAnimation(host) {
   if (!target || !run?.animationConnectionId || !banner?.art) return;
   if (state.identity !== identity) state.paused = false;
   if (state.identity !== identity || state.banner !== banner) state.staleBanner = null;
+  // A rotated banner's earlier clip is never shown again in this view; let its memory go.
+  if (state.identity !== identity)
+    for (const key of state.requests.keys())
+      if (key !== identity && JSON.parse(key)[2] === bannerId) state.requests.delete(key);
   state.identity = identity;
   state.banner = banner;
   if (state.media?.matches) return;
@@ -198,10 +202,10 @@ export function wireForgeBannerAnimation(host) {
     release();
     pause?.remove();
     pause = null;
-    // A saved clip exists, so a paid regeneration from the same provider is not offered for a local playback failure.
-    state.requests.set(identity, Promise.resolve({ ok: false, reason: "playback" }));
-    notice(forgeAnimationEnglish.playbackFailed);
-    chips?.querySelector("[data-animation-retry]")?.remove();
+    // The clip downloaded, so this browser cannot decode it (for example H.265). Only an explicit, priced retry
+    // replaces it; a refused or dropped download never reaches here.
+    state.requests.set(identity, Promise.resolve({ ok: false, retry: true, reason: "playback" }));
+    offerRetry(forgeAnimationEnglish.playbackFailed);
   };
   const load = async (result) => {
     if (!result?.ok || result.animation?.poster !== art || !forgeAnimationClipPath.test(result.animation?.url || ""))
@@ -209,7 +213,11 @@ export function wireForgeBannerAnimation(host) {
     // ponytail: <video> cannot send the host's X-Admin-Secret header, so the whole clip is held in memory for each
     // viewed banner of this world. Upgrade path: a host-signed media URL that the element can stream directly.
     const response = await Ze(result.animation.url).catch(() => null);
-    if (response && !response.ok) return { ok: false, reason: "playback" };
+    // A busy proxy or tunnel is temporary: asking again later is free. A refused clip stays refused.
+    if (response && !response.ok)
+      return response.status === 408 || response.status === 429 || response.status >= 500
+        ? null
+        : { ok: false, reason: "playback" };
     const clip = await response?.blob().catch(() => null);
     // A dropped download is handled like a dropped generation request: asking again reads the saved clip for free.
     return clip ? { ...result, clip } : null;

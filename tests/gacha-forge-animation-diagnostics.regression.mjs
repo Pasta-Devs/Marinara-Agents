@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fsPromises from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createForgeBannerAnimations } from "../packages/gacha-forge/src/animation-server.mjs";
 import { forgeAnimationFailureMessage } from "../packages/gacha-forge/src/animation-client.mjs";
 import { forgeAnimationEnglish } from "../packages/gacha-forge/src/animation-en.mjs";
@@ -297,6 +297,36 @@ try {
   assert.equal((await restarted.generate({ ...body, retry: true })).reason, "timeout");
   assert.equal(interruptedCalls, 2, "Only an explicit retry submits the interrupted attempt again");
   restarted.dispose();
+  // A failed status that cannot be written leaves the pending marker behind: that is a storage failure, not a restart.
+  const unwritableDirectory = join(directory, "unwritable-status");
+  await mkdir(unwritableDirectory);
+  let lockedFolder = "";
+  const unwritable = createForgeBannerAnimations({
+    dataDir: unwritableDirectory,
+    readBanner: async () => banner,
+    runtime: {
+      logger: { warn() {} },
+      integrations: {
+        videos: {
+          animateGalleryImage: async () => {
+            const marker = (await readdir(unwritableDirectory, { recursive: true })).find((name) =>
+              name.endsWith(".json"),
+            );
+            lockedFolder = dirname(join(unwritableDirectory, marker));
+            await chmod(lockedFolder, 0o500);
+            throw new Error("Video generation timed out after 1800 seconds");
+          },
+        },
+      },
+    },
+  });
+  try {
+    assert.equal((await unwritable.generate(body)).reason, "storage");
+    assert.equal((await unwritable.generate(body)).reason, "storage", "the leftover pending marker is not a restart");
+  } finally {
+    if (lockedFolder) await chmod(lockedFolder, 0o700);
+    unwritable.dispose();
+  }
   assert.equal(forgeAnimationFailureMessage({ reason: "SECRET", detail: "SECRET" }), forgeAnimationEnglish.failed);
   assert.equal(forgeAnimationFailureMessage(null), forgeAnimationEnglish.failed);
 } finally {
