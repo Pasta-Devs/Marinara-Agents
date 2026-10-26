@@ -15,6 +15,10 @@ import {
   SLP_LIVE_ORDER_MS,
   type SlpLiveFan,
 } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-live.ts";
+import {
+  slpLiveFeedDelay,
+  slpLiveFeedMerge,
+} from "../packages/slurp2/src/engine/packages/client/src/slp/modules/live/slp-live-feed.ts";
 import { slpExtensionFromLegacy } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-extensions.ts";
 
 // The menu follows the spice level: no strip items for a clean Creator, all of them for an explicit one.
@@ -99,5 +103,24 @@ const retry = slpLiveStart({ level: "none", fans: 0 });
 assert.equal(slpLiveApplyTip(retry, { by: "persona:p1", name: "Kit", amount: 50 }, 0, "req-12345678"), true);
 assert.equal(slpLiveApplyTip(retry, { by: "persona:p1", name: "Kit", amount: 50 }, 0, "req-12345678"), false);
 assert.equal(retry.raised, 50);
+
+// The chat shows the last lines of the first poll at once, then queues new ones and never repeats a line.
+const join = (at: number) => ({ at, kind: "join" as const, by: `fan:${at}`, name: `Fan ${at}` });
+const feedFirst = slpLiveFeedMerge({ shown: [], queue: [], seen: new Set() }, [1, 2, 3, 4].map(join), 2);
+assert.deepEqual(
+  feedFirst.shown.map((event) => event.at),
+  [3, 4],
+);
+assert.equal(feedFirst.queue.length, 0);
+const feedSecond = slpLiveFeedMerge(
+  feedFirst,
+  [3, 4, 5].map(join).concat([{ at: 6, kind: "leave", by: "fan:6", name: "Fan 6" }]),
+);
+assert.deepEqual(
+  feedSecond.queue.map((event) => event.at),
+  [5],
+);
+assert.equal(slpLiveFeedDelay(1), 3_000);
+assert.equal(slpLiveFeedDelay(100), 600);
 
 console.log("slurp2 live sim: ok");
