@@ -18,7 +18,7 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
     version: "0.4.4",
     date: "2026-10-26",
     notes: [
-      "Live shows: Creators stream cam shows with a busy chat, tips, goals and live pictures. Talk to them, tip, or buy a private show.",
+      "Live shows: Creators stream cam shows with a busy chat, tips and goals. The cam is told in words, with live pictures when you make pictures. Talk to them, tip, or buy a private show.",
       "Go live yourself from your own page or from Stir: the room reacts to you and suggests your next move.",
       "Backstage has a Live shows page for how often, how long and how lively the shows are.",
     ],

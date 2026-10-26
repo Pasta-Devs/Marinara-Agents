@@ -135,6 +135,8 @@ export function SlpLiveScreen({
     );
 
   const elapsed = show.elapsed + (now - loadedAt.current);
+  // What the webcam shows now, in words: the stage for a show without pictures, a caption with them.
+  const cam = show.log.filter((event) => event.kind === "cam").at(-1)?.text ?? null;
   const left = Math.max(0, Date.parse(show.endsAt) - Date.parse(show.startedAt) - elapsed);
   const ended = !!show.endedAt || left === 0;
   const goal = show.goals.find((entry) => entry.hitAt === null) ?? null;
@@ -169,37 +171,8 @@ export function SlpLiveScreen({
     <SlpThreadTaskLayer>
       <section className="relative isolate flex min-h-[70dvh] flex-1 flex-col overflow-hidden text-white">
         <style>{LIVE_STYLES}</style>
-        {/* The stage: the newest live picture, else the Creator's own picture, alive with a slow drift. */}
-        <div aria-hidden="true" className="absolute inset-0 -z-10 overflow-hidden">
-          {/* The avatar (or a glow) stays under the pictures, so the stage never goes dark while one loads. */}
-          {host?.avatarUrl ? (
-            <SlurpMediaImg
-              src={host.avatarUrl}
-              mediaWidth={720}
-              alt=""
-              className="slp-crop slp-live-drift h-full w-full object-cover"
-            />
-          ) : (
-            <div className="slp-live-drift h-full w-full bg-[radial-gradient(circle_at_40%_30%,var(--noodle-accent),transparent_60%),radial-gradient(circle_at_70%_80%,var(--slurp-violet),transparent_55%)]" />
-          )}
-          {show.picture &&
-            // The last picture stays under the new one until it has loaded and faded in.
-            [show.picture.n - 1, show.picture.n]
-              .filter((n) => n >= 0)
-              .map((n) => (
-                <SlurpMediaImg
-                  key={n}
-                  src={`/api/slurp2/slurp/live/${encodeURIComponent(show.id)}/picture/${n}`}
-                  mediaWidth={720}
-                  alt=""
-                  className="slp-crop slp-live-in slp-live-drift absolute inset-0 h-full w-full object-cover"
-                />
-              ))}
-          <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/75 to-transparent" />
-          <div className="absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
-        </div>
 
-        <header className="space-y-2 px-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <header className="space-y-2 bg-black px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <div className="flex items-center gap-2">
             {back}
             <div className={`flex min-w-0 items-center gap-2 rounded-full py-1 pe-4 ps-1 ${glass}`}>
@@ -273,6 +246,42 @@ export function SlpLiveScreen({
             )}
           </button>
         </header>
+        {/* Below the bar: the picture never runs under it. */}
+        <div className="relative isolate flex min-h-0 flex-1 flex-col">
+          {/* The stage: the newest live picture of the Creator; a drifting glow until the cam's first picture lands. */}
+          <div aria-hidden="true" className="absolute inset-0 -z-10 overflow-hidden">
+            <div className="slp-live-drift h-full w-full bg-[radial-gradient(circle_at_40%_30%,var(--noodle-accent),transparent_60%),radial-gradient(circle_at_70%_80%,var(--slurp-violet),transparent_55%)]" />
+            {show.picture &&
+              // The last picture stays under the new one until it has loaded and faded in.
+              [show.picture.n - 1, show.picture.n]
+                .filter((n) => n >= 0)
+                .map((n) => (
+                  <SlurpMediaImg
+                    key={n}
+                    src={`/api/slurp2/slurp/live/${encodeURIComponent(show.id)}/picture/${n}`}
+                    mediaWidth={720}
+                    alt=""
+                    className="slp-crop slp-live-in slp-live-drift absolute inset-0 h-full w-full object-cover"
+                  />
+                ))}
+            <div className="absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
+          </div>
+          {!ended && cam ? (
+            <p
+              key={cam}
+              aria-live="polite"
+              className={`slp-live-in mx-3 mt-3 rounded-2xl px-3 py-2 text-sm italic leading-snug ${glass}`}
+            >
+              {cam}
+            </p>
+          ) : (
+            !show.picture &&
+            !ended && (
+              <p role="status" className="slp-live-dot absolute inset-x-0 top-1/3 text-center text-sm font-semibold text-white/80">
+                {t("ui.slurp.live.starting")}
+              </p>
+            )
+          )}
 
         {banner && (
           <div className="pointer-events-none flex justify-center px-4 pt-4" aria-live="polite">
@@ -523,6 +532,7 @@ export function SlpLiveScreen({
             </SlpCoinText>
           </button>
         </SlpSheet>
+        </div>
       </section>
     </SlpThreadTaskLayer>
   );

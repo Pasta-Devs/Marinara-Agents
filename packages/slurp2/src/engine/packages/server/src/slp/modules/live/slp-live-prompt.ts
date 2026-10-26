@@ -29,6 +29,10 @@ export type SlpLivePromptInput = {
   hosting?: boolean;
 };
 
+/** The cam lines carry the stage, so a show without pictures still shows something and a picture follows them. */
+const camRule = (name: string, seconds: number) =>
+  `Add 2 or 3 "cam" lines spread over the ${seconds} seconds ({"t":…,"who":"cam","text":"…"}): what the webcam shows at that moment, the way a viewer sees it. Name ${name}, their look, outfit and pose, the spot, and what they are doing. Present tense, one or two sentences, no spoken words.`;
+
 /** The rules when the user hosts: the room is the model's, the host is the user's. */
 function hostingSystem(host: SlpLivePromptInput["host"], seconds: number, spiceLines: readonly string[]) {
   return [
@@ -38,7 +42,8 @@ function hostingSystem(host: SlpLivePromptInput["host"], seconds: number, spiceL
     `"next" holds 3 short ideas for what ${host.name} could say or do next, first person, in ${host.name}'s voice from the profile, at most 15 words each, each one different: one to talk with a fan by name, one tease, one about the order on stage or the goal.`,
     ...spiceLines,
     `"patch.strip" stays false: ${host.name} decides that. "patch.heat" is 0 to 10 for how much this stretch heats the room. "patch.place" stays null.`,
-    `Answer with JSON only: {"lines":[{"t":1,"who":"<fan name>","text":"..."}],"next":["...","...","..."],"patch":{"heat":3,"strip":false,"place":null}}`,
+    camRule(host.name, seconds),
+    `Answer with JSON only: {"lines":[{"t":0,"who":"cam","text":"..."},{"t":1,"who":"<fan name>","text":"..."}],"next":["...","...","..."],"patch":{"heat":3,"strip":false,"place":null}}`,
   ].join("\n\n");
 }
 
@@ -56,6 +61,7 @@ function logLines(state: SlpLiveState, at: number, host: string, count: number) 
       if (event.kind === "say")
         return `${time} ${host}: ${event.action ? `(${event.action}) ` : ""}${event.text ?? ""}`;
       if (event.kind === "chat" || event.kind === "you") return `${time} ${event.name}: ${event.text ?? ""}`;
+      if (event.kind === "cam") return `${time} [cam] ${event.text ?? ""}`;
       if (event.kind === "join") return `${time} ${event.name} joined`;
       if (event.kind === "tip") return `${time} ${event.name} tipped ${event.amount}`;
       if (event.kind === "order") return `${time} ${event.name} tipped ${event.amount} for ${menuWords(event.itemId)}`;
@@ -110,7 +116,8 @@ export function slpLivePrompt(input: SlpLivePromptInput) {
           ? `"patch.strip" is true only if ${host.name} takes one layer of clothing off in this stretch (${layersLeft} left), and only when the heat or a tip earns it.`
           : `${host.name} has nothing left to take off: "patch.strip" stays false.`,
         `"patch.heat" is 0 to 10 for how much this stretch heats the room. "patch.place" names a new spot only if ${host.name} moves (for example "on the bed"), else null.`,
-        `Answer with JSON only: {"lines":[{"t":0,"who":"host","text":"...","action":"..."},{"t":2,"who":"<fan name>","text":"..."}],"patch":{"heat":3,"strip":false,"place":null}}`,
+        camRule(host.name, seconds),
+        `Answer with JSON only: {"lines":[{"t":0,"who":"cam","text":"..."},{"t":0,"who":"host","text":"...","action":"..."},{"t":2,"who":"<fan name>","text":"..."}],"patch":{"heat":3,"strip":false,"place":null}}`,
       ].join("\n\n");
 
   const facts = {
