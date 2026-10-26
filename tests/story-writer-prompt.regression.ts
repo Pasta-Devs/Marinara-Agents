@@ -332,7 +332,33 @@ test("summary and timeline prompts carry the chapter and the JSON contract", () 
   assert.match(timeline[0]!.content, /end at about 50,000 words/);
   assert.match(timeline[1]!.content, /<current_timeline>\n1\. \[ \] Meet the crew\n<\/current_timeline>/);
   assert.match(timeline[1]!.content, /<chapter_summaries>\nChapter 1 — untitled: They meet\.\n<\/chapter_summaries>/);
-  assert.match(timeline[1]!.content, /<latest_chapter number="2">\nThe vault opens\.\n<\/latest_chapter>/);
+  assert.match(
+    timeline[1]!.content,
+    /<chapter_excerpts>\n<chapter number="2">\nThe vault opens\.\n<\/chapter>\n<\/chapter_excerpts>/,
+  );
+});
+
+test("the timeline planner sees every written chapter, by summary or by excerpt", () => {
+  const timeline = buildTimelineMessages({
+    settings: settings(),
+    chapters: [
+      chapter(1, { text: "They steal the map." }),
+      chapter(2, { text: "The guard is bribed." }),
+      chapter(3, { text: "The vault opens." }),
+    ],
+  });
+  for (const text of ["They steal the map.", "The guard is bribed.", "The vault opens."]) {
+    assert.ok(timeline[1]!.content.includes(text), text);
+  }
+  const long = buildTimelineMessages({
+    settings: settings(),
+    chapters: Array.from({ length: 80 }, (_, index) =>
+      chapter(index + 1, { text: `${index + 1} ${"x".repeat(5_000)}` }),
+    ),
+  });
+  assert.ok(long[1]!.content.length < 70_000, "the excerpts share one budget");
+  assert.match(long[1]!.content, /Chapters 1, 2, [\d, ]+ have no summary and are not included here\./);
+  assert.ok(long[1]!.content.includes('<chapter number="80">'), "the newest chapters come first");
 });
 
 test("parseTimelineResponse reads JSON, fenced JSON and numbered lists, and keeps unchanged ids", () => {
@@ -382,6 +408,21 @@ test("parseTimelineResponse reads JSON, fenced JSON and numbered lists, and keep
   );
   assert.equal(new Set(list.map((event) => event.id)).size, 3);
   assert.deepEqual(parseTimelineResponse("I cannot help with that.", previous), []);
+});
+
+test("banned phrases in scripts written without spaces are found inside sentences", () => {
+  assert.deepEqual(findBannedPhrases("他嘴角上扬地笑了", "嘴角上扬"), ["嘴角上扬"]);
+  assert.deepEqual(findBannedPhrases("彼はにやりと笑った", "にやり"), ["にやり"]);
+  assert.deepEqual(findBannedPhrases("Elaravel smiled.", "Elara"), []);
+});
+
+test("the system message stays under the route's limit when summaries fill it", () => {
+  const [system] = build({
+    settings: settings({ keepFullChapters: 0, overview: "O".repeat(50_000), notes: "N".repeat(50_000) }),
+    chapters: Array.from({ length: 300 }, (_, index) => chapter(index + 1, { summary: "S".repeat(2_000) })),
+  });
+  assert.ok(system!.content.length <= 500_000, `${system!.content.length} characters`);
+  assert.match(system!.content, /<formatting>/, "the closing sections are kept");
 });
 
 test("findBannedPhrases matches single words whole and phrases anywhere", () => {

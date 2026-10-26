@@ -431,11 +431,28 @@ export function createStoryStore(persistence: StoryPersistence, options: { now?:
           if (story.chapterIds.length >= LIMITS.chaptersPerStory) {
             throw new StoryWriterError(400, `A story can have at most ${LIMITS.chaptersPerStory} chapters.`);
           }
-          if (await documents.getById(PACKAGE_ID, chapterDocumentId(chapterId))) {
-            throw new StoryWriterError(409, "A chapter with this id already exists.");
+          const existing = await documents.getById(PACKAGE_ID, chapterDocumentId(chapterId));
+          let stored = chapter;
+          if (existing) {
+            // A chapter of this story that is stored but not listed was left by a create whose story update failed
+            // (a host without transactions): adopt it with what was sent now. A listed chapter, or another story's,
+            // keeps its id.
+            const previous = parseChapter(existing);
+            if (previous.storyId !== id || story.chapterIds.includes(chapterId)) {
+              throw new StoryWriterError(409, "A chapter with this id already exists.");
+            }
+            ({ next: stored } = await updateDocument(
+              documents,
+              CHAPTER,
+              chapterDocumentId(chapterId),
+              (current) => ({ ...current, ...fields, updatedAt: at }),
+              "Chapter not found.",
+              at,
+            ));
+          } else {
+            await createDocument(documents, CHAPTER, chapterDocumentId(chapterId), chapter, at);
           }
-          await createDocument(documents, CHAPTER, chapterDocumentId(chapterId), chapter, at);
-          const words = countWords(chapter.text);
+          const words = countWords(stored.text);
           await updateDocument(
             documents,
             STORY,

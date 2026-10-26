@@ -61,7 +61,8 @@
     "wordsOfTarget": "{{words}} / {{target}}",
     "targetProgress": "{{percent}}% of the target length",
     "library": "Your stories",
-    "finishChapter": "Finish chapter {{number}} and write the next one"
+    "finishChapter": "Finish chapter {{number}} and write the next one",
+    "fullscreen": "Fullscreen"
   },
   "stories": {
     "list": "Your stories",
@@ -236,6 +237,7 @@
     "loadStories": "Could not load your stories.",
     "createStory": "Could not create the story.",
     "duplicateStory": "Could not duplicate the story.",
+    "duplicateUnsaved": "Could not duplicate the story: some of its changes are not saved yet. Try again in a moment.",
     "deleteStory": "Could not delete the story.",
     "saveSettings": "Could not save the story settings.",
     "saveChapter": "Could not save the chapter.",

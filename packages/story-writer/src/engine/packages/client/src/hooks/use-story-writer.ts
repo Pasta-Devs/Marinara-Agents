@@ -73,6 +73,8 @@ const failing = new Set<string>();
 /** Chapters the server may not have yet, by save key: until one is created, its key's requests create it. */
 const creatingChapters = new Map<string, SaveTarget>();
 const deletingChapters = new Set<string>();
+/** Stories being deleted or deleted: a save that finds one gone is not an error. */
+const removedStories = new Set<string>();
 const savingListeners = new Set<() => void>();
 let requestsInFlight = 0;
 let translate: (key: string) => string = (key) => key;
@@ -205,6 +207,8 @@ function flushSave(key: string, now = false): Promise<void> {
         // The server refused this write: show its version again instead of retrying forever.
         confirmEdit(key, sent);
         failing.delete(key);
+        // The story was deleted meanwhile: nothing is left to save or to show.
+        if (removedStories.has(target.storyId)) return;
         reportError(error, target.errorKey);
         if (target.refuse) target.refuse();
         else
@@ -488,24 +492,31 @@ export function useStoryList(): {
       try {
         // The copy is made on the server, so it must have every edit first.
         await flushAllSaves();
+        // A save of this story that keeps failing would be missing from the copy. Other stories do not matter here.
+        const doc = qc.getQueryData<StoryWithChapters>(storyWriterKeys.story(storyId));
+        const keys = [settingsKey(storyId), ...(doc?.chapters ?? []).map((chapter) => chapterKey(chapter.id))];
+        if (keys.some((key) => failing.has(key))) throw new Error(translate("errors.duplicateUnsaved"));
         return adopt(await api.post<StoryWithChapters>(`${storyPath(storyId)}/duplicate`));
       } catch (error) {
         reportError(error, "errors.duplicateStory");
         throw error;
       }
     },
-    [adopt],
+    [adopt, qc],
   );
   const remove = useCallback(
     async (storyId: string) => {
-      dropSaves((_key, save) => save.storyId === storyId);
       await Promise.all([...queues.values()]);
+      // The story's saves stay until the delete succeeds, so a failed delete keeps every edit.
+      removedStories.add(storyId);
       try {
         await api.delete<{ ok: true }>(storyPath(storyId));
       } catch (error) {
+        removedStories.delete(storyId);
         reportError(error, "errors.deleteStory");
         throw error;
       }
+      dropSaves((_key, save) => save.storyId === storyId);
       qc.setQueryData<StorySummary[]>(storyWriterKeys.stories, (list) => list?.filter((item) => item.id !== storyId));
       qc.removeQueries({ queryKey: storyWriterKeys.story(storyId) });
     },

@@ -333,7 +333,7 @@ export function Checklist(props: {
                   <img className="sw-avatar" src={item.avatarUrl} alt="" loading="lazy" decoding="async" />
                 ) : (
                   <span className="sw-avatar" aria-hidden="true">
-                    {props.fallbackIcon ?? (item.name.trim().charAt(0).toLocaleUpperCase() || "?")}
+                    {props.fallbackIcon ?? (Array.from(item.name.trim())[0]?.toLocaleUpperCase() || "?")}
                   </span>
                 )}
                 <span className="sw-check-text">

@@ -173,22 +173,17 @@ export function ActionBar(props: {
         <Library size={18} aria-hidden="true" />
       </button>
       {fullscreen ? (
-        <>
-          <button
-            type="button"
-            className="sw-action-icon"
-            aria-pressed={fullscreen.active}
-            aria-label={fullscreen.active ? fullscreen.exitLabel : fullscreen.enterLabel}
-            title={fullscreen.active ? fullscreen.exitLabel : fullscreen.enterLabel}
-            onClick={() => fullscreen.setActive(!fullscreen.active)}
-          >
-            {fullscreen.active ? (
-              <Minimize2 size={18} aria-hidden="true" />
-            ) : (
-              <Maximize2 size={18} aria-hidden="true" />
-            )}
-          </button>
-        </>
+        // A toggle keeps one name; aria-pressed says whether it is on, and the tooltip says what a click does.
+        <button
+          type="button"
+          className="sw-action-icon"
+          aria-pressed={fullscreen.active}
+          aria-label={t("actions.fullscreen")}
+          title={fullscreen.active ? fullscreen.exitLabel : fullscreen.enterLabel}
+          onClick={() => fullscreen.setActive(!fullscreen.active)}
+        >
+          {fullscreen.active ? <Minimize2 size={18} aria-hidden="true" /> : <Maximize2 size={18} aria-hidden="true" />}
+        </button>
       ) : null}
       <span className="sw-action-divider" aria-hidden="true" />
       <div className="sw-wordcount">

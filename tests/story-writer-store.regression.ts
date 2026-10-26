@@ -21,6 +21,7 @@ import {
 function memoryPersistence({ transactions = false } = {}) {
   let rows = new Map<string, StoryDocument>();
   const interference: Array<{ id: string; change?: (data: any) => unknown }> = [];
+  const failures = new Set<string>();
   const documents: StoryDocumentStore = {
     async list(packageId, kind) {
       return [...rows.values()]
@@ -38,6 +39,7 @@ function memoryPersistence({ transactions = false } = {}) {
       return structuredClone(row);
     },
     async update(input) {
+      if (failures.delete(input.id)) throw new Error("The disk is full.");
       const index = interference.findIndex((entry) => entry.id === input.id);
       const stale = rows.get(input.id);
       if (index >= 0 && stale) {
@@ -82,6 +84,7 @@ function memoryPersistence({ transactions = false } = {}) {
     row: (id: string) => rows.get(id),
     setData: (id: string, data: unknown) => rows.set(id, { ...rows.get(id)!, data }),
     interfere: (id: string, change?: (data: any) => unknown) => interference.push({ id, change }),
+    failNextUpdate: (id: string) => failures.add(id),
   };
 }
 
@@ -326,4 +329,26 @@ test("routes answer known failures with { error } and hide unexpected ones behin
   });
   assert.equal(logged.length, 1);
   assert.match(String(logged[0]), /disk failed/);
+});
+
+test("a chapter left unlisted by a failed story update is adopted by the retry, with the latest text", async () => {
+  const { store, failNextUpdate } = setup();
+  const { story } = await store.createStory({ title: "Unlucky" });
+  const chapterId = "chapter-retry-0001";
+  failNextUpdate(storyDocumentId(story.id));
+  await assert.rejects(store.createChapter(story.id, { id: chapterId, text: "First try" }));
+  assert.deepEqual((await store.getStory(story.id)).chapters, [], "the half-made chapter is not listed");
+
+  const retried = await store.createChapter(story.id, { id: chapterId, text: "Second try, longer" });
+  assert.deepEqual(
+    retried.chapters.map((chapter) => [chapter.id, chapter.text]),
+    [[chapterId, "Second try, longer"]],
+  );
+  assert.equal(retried.story.wordCount, 3);
+  assert.equal(retried.story.chapterCount, 1);
+
+  await assert.rejects(store.createChapter(story.id, { id: chapterId, text: "Again" }), { statusCode: 409 });
+  const other = await store.createStory({ title: "Other" });
+  await assert.rejects(store.createChapter(other.story.id, { id: chapterId, text: "Theft" }), { statusCode: 409 });
+  assert.equal((await store.getStory(story.id)).chapters[0]?.text, "Second try, longer");
 });

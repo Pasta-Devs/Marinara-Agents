@@ -6,7 +6,7 @@
   },
   "builtAgainst": {
     "engineVersion": "2.5.1",
-    "engineCommit": "236bfa1c69f1a88c6ec9c96d59287a210bf9538a"
+    "engineCommit": "e45386a5e8133836079139548bb585aa668ab73d"
   },
   "id": "story-writer",
   "name": "Story Writer",
@@ -52,13 +52,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "9a2f8604e13b25a5a51d231f4699ebcb5401616d731a368006d827964c7c9be0",
-      "bytes": 13511
+      "sha256": "ca6300129f178a7f32aa5eadd587a5a7c885ffc4a202c617e70ee235731d3974",
+      "bytes": 13665
     },
     {
       "path": "client.js",
-      "sha256": "36c54252ec8f2a49b80dae77ccff8ad08622bb8c205f23d388394ffec6dbb0a3",
-      "bytes": 209567
+      "sha256": "aa546dfd227fe289cb27acb048ebcc1fee1f106a6b951c9b67de9ff2c7aaf8c6",
+      "bytes": 210456
     },
     {
       "path": "story-writer-icon.png",

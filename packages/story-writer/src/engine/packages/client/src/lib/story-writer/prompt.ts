@@ -221,8 +221,9 @@ interface ChapterTurn {
 }
 
 /** The newest part of an over-long message: the Engine would trim the oldest context first anyway. */
-function keepTail(text: string): string {
-  return text.length > MAX_MESSAGE_CHARS ? text.slice(text.length - MAX_MESSAGE_CHARS) : text;
+function keepTail(text: string, limit = MAX_MESSAGE_CHARS): string {
+  if (limit <= 0) return "";
+  return text.length > limit ? text.slice(text.length - limit) : text;
 }
 
 export function buildChapterMessages(input: {
@@ -270,21 +271,26 @@ export function buildChapterMessages(input: {
 
   const banned = parseBannedPhrases(settings.bannedPhrases);
   const language = settings.language.trim();
-  const system = joinSections([
-    replaceMacros(settings.systemPrompt, names).trim(),
-    section("story_details", storyDetails(settings)),
-    section("story_overview", replaceMacros(settings.overview, names)),
-    section("world_info", worldInfo(lore, names)),
-    section("characters", characters.map((character) => formatCharacterCard(character, names.user)).join("\n")),
-    section("personas", personas.map((persona) => formatPersona(persona, names.char)).join("\n")),
-    section("story_notes", replaceMacros(settings.notes, names)),
-    settings.timeline.length ? section("timeline", `${TIMELINE_INTRO}\n${timelineList(settings.timeline)}`) : "",
-    section("earlier_chapters", keepTail(summaries.join("\n\n"))),
-    section("length", lengthSection(settings, chapters, number, partial)),
-    section("banned_phrases", banned.length ? `Never use these words or phrases: ${banned.join(", ")}` : ""),
-    section("language", language ? `Write the story in ${language}.` : ""),
-    section("formatting", formattingSection(settings, number, !!partial)),
-  ]);
+  const systemSections = (earlierChapters: string) =>
+    joinSections([
+      replaceMacros(settings.systemPrompt, names).trim(),
+      section("story_details", storyDetails(settings)),
+      section("story_overview", replaceMacros(settings.overview, names)),
+      section("world_info", worldInfo(lore, names)),
+      section("characters", characters.map((character) => formatCharacterCard(character, names.user)).join("\n")),
+      section("personas", personas.map((persona) => formatPersona(persona, names.char)).join("\n")),
+      section("story_notes", replaceMacros(settings.notes, names)),
+      settings.timeline.length ? section("timeline", `${TIMELINE_INTRO}\n${timelineList(settings.timeline)}`) : "",
+      section("earlier_chapters", earlierChapters),
+      section("length", lengthSection(settings, chapters, number, partial)),
+      section("banned_phrases", banned.length ? `Never use these words or phrases: ${banned.join(", ")}` : ""),
+      section("language", language ? `Write the story in ${language}.` : ""),
+      section("formatting", formattingSection(settings, number, !!partial)),
+    ]);
+  // The summaries take the room the other sections leave, so the system message stays under the route's limit;
+  // the newest summaries are kept.
+  const room = MAX_MESSAGE_CHARS - systemSections("").length - 64;
+  const system = systemSections(keepTail(summaries.join("\n\n"), room));
 
   const messages: ChatMessage[] = [{ role: "system", content: system }];
   for (const turn of full) {
@@ -339,7 +345,9 @@ export function buildSummaryMessages(input: {
 // ── Timeline ──
 
 /** How much of an unsummarized latest chapter the timeline planner reads. */
-const TIMELINE_CHAPTER_CHARS = 40_000;
+// Unsummarized chapters reach the timeline planner as the end of their text, sharing one budget.
+const TIMELINE_EXCERPT_CHARS = 60_000;
+const TIMELINE_EXCERPT_MIN = 1_200;
 
 export function buildTimelineMessages(input: { settings: StorySettings; chapters: StoryChapter[] }): ChatMessage[] {
   const { settings, chapters } = input;
@@ -364,11 +372,26 @@ export function buildTimelineMessages(input: { settings: StorySettings; chapters
       ? [`Chapter ${index + 1} — ${chapterTitle(chapter.text) || "untitled"}: ${chapter.summary.trim()}`]
       : [],
   );
-  const last = chapters[chapters.length - 1];
-  const latest =
-    last && last.text.trim() && !last.summary.trim()
-      ? `<latest_chapter number="${chapters.length}">\n${last.text.trim().slice(-TIMELINE_CHAPTER_CHARS)}\n</latest_chapter>`
-      : "";
+  // Every written chapter reaches the planner, so it can mark earlier events done: its summary, or else the end of
+  // its text. The excerpts share one budget, newest first; chapters past it are named rather than silently dropped.
+  const unsummarized = chapters
+    .map((chapter, index) => ({ text: chapter.text.trim(), number: index + 1, summarized: !!chapter.summary.trim() }))
+    .filter((entry) => entry.text && !entry.summarized);
+  const share = Math.max(TIMELINE_EXCERPT_MIN, Math.floor(TIMELINE_EXCERPT_CHARS / Math.max(1, unsummarized.length)));
+  let budget = TIMELINE_EXCERPT_CHARS;
+  const excerpts: string[] = [];
+  const left: number[] = [];
+  for (const entry of [...unsummarized].reverse()) {
+    if (budget <= 0) {
+      left.unshift(entry.number);
+      continue;
+    }
+    const size = Math.min(share, budget);
+    budget -= size;
+    const excerpt = entry.text.length > size ? `…${entry.text.slice(-size)}` : entry.text;
+    excerpts.unshift(`<chapter number="${entry.number}">\n${excerpt}\n</chapter>`);
+  }
+  if (left.length) excerpts.unshift(`Chapters ${left.join(", ")} have no summary and are not included here.`);
   const user =
     joinSections([
       section("story_details", storyDetails(settings)),
@@ -376,7 +399,7 @@ export function buildTimelineMessages(input: { settings: StorySettings; chapters
       section("story_notes", settings.notes),
       section("current_timeline", timelineList(settings.timeline)),
       section("chapter_summaries", summaries.join("\n\n")),
-      latest,
+      section("chapter_excerpts", excerpts.join("\n")),
     ]) || "The author has not set up the story yet: plan the timeline of a complete short story.";
   return [
     { role: "system", content: system },
@@ -486,11 +509,15 @@ function escapeRegExp(value: string): string {
 }
 
 /** The banned words and phrases `text` uses. Single words match whole words only; phrases match anywhere. */
+const UNSPACED_SCRIPT =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
+
 export function findBannedPhrases(text: string, bannedPhrases: string): string[] {
   const flat = text.replace(/\s+/g, " ");
   const lower = flat.toLocaleLowerCase();
   return parseBannedPhrases(bannedPhrases).filter((phrase) => {
-    if (phrase.includes(" ")) return lower.includes(phrase.toLocaleLowerCase());
+    // Phrases and scripts written without spaces between words match anywhere; single words match whole.
+    if (phrase.includes(" ") || UNSPACED_SCRIPT.test(phrase)) return lower.includes(phrase.toLocaleLowerCase());
     return new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRegExp(phrase)}(?![\\p{L}\\p{N}_])`, "iu").test(flat);
   });
 }
