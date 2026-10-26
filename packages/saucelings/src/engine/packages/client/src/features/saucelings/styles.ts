@@ -677,6 +677,12 @@ html[data-marinara-effects-paused="true"] .sl-stage-actor { transition-duration:
   background: var(--sl-amber);
 }
 
+/* A meter jumps to its new level instead of sliding when reduced effects or reduced motion is on. */
+html[data-marinara-reduced-effects="true"] .sl-meter-fill { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .sl-meter-fill { transition: none; }
+}
+
 .sl-actions {
   display: flex;
   flex-wrap: wrap;

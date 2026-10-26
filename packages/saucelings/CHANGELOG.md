@@ -1,5 +1,11 @@
 # Saucelings release notes
 
+## 0.21.4 — 2026-10-26
+
+- The Journal says how many entries are new since you last looked.
+- A pet whose Journal is empty now says so, instead of saying there is no sauceling.
+- The meters in the Nook jump to their new level when reduced effects or reduced motion is on, instead of sliding.
+
 ## 0.21.3 — 2026-10-26
 
 - On the Home widgets, a meter that needs care now shows its amber fill, and the waiting badge on a care button has its colour back.

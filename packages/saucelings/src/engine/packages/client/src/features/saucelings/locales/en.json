@@ -212,6 +212,8 @@
   "saucelings.journal.generated": "AI",
   "saucelings.journal.speaker": "{{name}}:",
   "saucelings.journal.toNook": "Go to the Nook",
+  "saucelings.journal.empty": "Nothing in the journal yet. Feed, play or cuddle {{name}} and it shows up here.",
+  "saucelings.journal.new": "{{count}} new since you last looked",
   "saucelings.journal.today": "Today",
   "saucelings.journal.yesterday": "Yesterday",
   "saucelings.event.egg-found": "Egg found",

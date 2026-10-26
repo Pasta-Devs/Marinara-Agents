@@ -618,7 +618,7 @@ const features = [
   },
   {
     id: "saucelings",
-    version: "0.21.3",
+    version: "0.21.4",
     // Home widgets need capability API 1.35+, first released in Engine 2.5.0 (2.4.6 shipped 1.18).
     minEngineVersion: "2.5.0",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,

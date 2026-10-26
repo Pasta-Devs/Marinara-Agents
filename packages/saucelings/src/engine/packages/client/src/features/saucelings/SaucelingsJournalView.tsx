@@ -1,8 +1,21 @@
+import { useEffect, useState } from "react";
 import type {
   SaucelingEvent,
   SaucelingStateResponse,
 } from "../../../../shared/src/features/agents/saucelings/types.js";
 import { useSaucelingsTranslation } from "./localization.js";
+
+// ponytail: the newest entry this browser has shown, kept per browser rather than per Engine, so another browser
+// counts everything as new once. A seen-time field in the world save is the upgrade.
+const JOURNAL_SEEN_KEY = "saucelings-journal-seen";
+
+function readJournalSeen(): string | null {
+  try {
+    return localStorage.getItem(JOURNAL_SEEN_KEY);
+  } catch {
+    return null;
+  }
+}
 
 /** The events under one heading per local day, keeping the journal's newest-first order. */
 function byDay(events: SaucelingEvent[]) {
@@ -27,11 +40,25 @@ export function SaucelingsJournalView({
   const { t } = useSaucelingsTranslation();
   const pet = state.world.activePet;
   const events = pet?.journal ?? [];
+  const newest = events[0]?.createdAt ?? null;
+  // Read once on opening, so the note holds while the Journal is on screen and clears the next time.
+  const [seenBefore] = useState(readJournalSeen);
+  useEffect(() => {
+    if (!newest) return;
+    try {
+      localStorage.setItem(JOURNAL_SEEN_KEY, newest);
+    } catch {
+      // Storage can be blocked; the note then just counts everything as new.
+    }
+  }, [newest]);
+  const unread = seenBefore ? events.filter((ev) => ev.createdAt > seenBefore).length : 0;
 
   if (!pet || events.length === 0) {
     return (
       <div className="sl-card" style={{ display: "grid", gap: "0.75rem", justifyItems: "center", padding: "2rem" }}>
-        <span style={{ opacity: 0.75 }}>{t("saucelings.empty.title")}</span>
+        <span style={{ opacity: 0.75 }}>
+          {pet ? t("saucelings.journal.empty", { name: pet.name }) : t("saucelings.empty.title")}
+        </span>
         {pet ? null : (
           <button type="button" className="sl-btn" onClick={onOpenNook}>
             {t("saucelings.journal.toNook")}
@@ -45,6 +72,11 @@ export function SaucelingsJournalView({
   const yesterday = new Date(Date.now() - 86_400_000).toDateString();
   return (
     <div style={{ display: "grid", gap: "0.65rem" }}>
+      {unread > 0 ? (
+        <p role="status" style={{ margin: 0, fontSize: "0.8rem", fontWeight: 600 }}>
+          {t("saucelings.journal.new", { count: unread })}
+        </p>
+      ) : null}
       {byDay(events).map((day) => (
         <section key={day.key} style={{ display: "grid", gap: "0.65rem" }}>
           <h3 style={{ margin: "0.35rem 0 0", fontSize: "0.8rem", fontWeight: 600, opacity: 0.75 }}>
