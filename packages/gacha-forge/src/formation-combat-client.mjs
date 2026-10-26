@@ -13,7 +13,7 @@ export const forgeFormationCombatStyles = `
 .gf-formation-turn{display:flex;flex-wrap:wrap;gap:.45rem;align-items:end;max-height:min(45dvh,22rem);overflow:auto;padding:.5rem;width:100%;box-sizing:border-box;background:var(--ink-2);color:var(--text);border-top:1px solid var(--steel-dark)}
 .gf-formation-turn label{display:flex;flex-direction:column;gap:.2rem;font:500 max(12px,var(--t-xs))/1.3 var(--body);min-width:7rem;flex:1}.gf-formation-turn [hidden]{display:none}.gf-formation-turn select,.gf-formation-turn input,.gf-formation-turn button{font:500 max(14px,var(--t-sm))/1.3 var(--body);background:var(--ink);color:var(--text);border:1px solid var(--steel);border-radius:var(--radius-sm);padding:.4rem;min-height:36px;box-sizing:border-box;max-width:100%}.gf-formation-turn button{cursor:pointer;background:var(--coral);color:var(--ink)}
 .gf-formation-turn details{flex-basis:100%;font:500 max(12px,var(--t-xs))/1.4 var(--body)}.gf-formation-payment{display:flex;gap:.35rem;flex-wrap:wrap}.gf-formation-payment label{min-width:3.3rem;flex:1}.gf-formation-payment input{width:100%;color:var(--text)}
-.gf-formation-bank{display:flex;flex-wrap:wrap;align-items:center;flex:0 0 100%;gap:.35rem;font:600 max(12px,var(--t-xs))/1.4 var(--body);padding:.15rem 0;color:var(--text);box-sizing:border-box}.gf-formation-bank span{white-space:nowrap;padding:.1rem .35rem;border:1px solid var(--steel-dark);border-radius:var(--radius-sm)}.gf-formation-skill{cursor:default}.gf-formation-error{color:var(--coral);flex-basis:100%}.gf-formation-encounter{margin:.5rem;padding:.5rem;border:1px solid var(--coral);font:400 max(12px,var(--t-sm))/1.4 var(--body);color:var(--text)}
+.gf-formation-bank{display:flex;flex-wrap:wrap;align-items:center;flex:0 0 100%;gap:.35rem;font:600 max(12px,var(--t-xs))/1.4 var(--body);padding:.15rem 0;color:var(--text);box-sizing:border-box}.gf-formation-bank span{white-space:nowrap;padding:.1rem .35rem;border:1px solid var(--steel-dark);border-radius:var(--radius-sm)}.gf-formation-skill{cursor:default}.gf-formation-mechanics{display:block;margin-top:.2em;opacity:.8}.gf-formation-error{color:var(--coral);flex-basis:100%}.gf-formation-encounter{margin:.5rem;padding:.5rem;border:1px solid var(--coral);font:400 max(12px,var(--t-sm))/1.4 var(--body);color:var(--text)}
 @media(pointer:coarse){.gf-formation-turn select,.gf-formation-turn input{font-size:16px}}@media(max-height:500px){.gf-formation-turn{max-height:45dvh}.gf-formation-turn label{min-width:5rem}}
 `;
 const forgeFormationBankHtml = (bank) =>
@@ -163,6 +163,18 @@ export function createForgeFormationPresentation(root, payload) {
   };
 }
 
+const forgeFormationLasting = new Set([
+  "shield",
+  "buff",
+  "debuff",
+  "dot",
+  "stun",
+  "regen",
+  "immune",
+  "silence",
+  "taunt",
+]);
+
 /** The unit's Formation kit while this world fights in Formation, else null. */
 export function forgeFormationActiveKit(host) {
   if (host._run?.combat?.mode !== "formation" || !host._unit) return null;
@@ -181,7 +193,12 @@ export function forgeFormationSkillList(unit, kit, icon, fallbackIcon) {
       label("aim", ability.target),
       ability.power ? `${forgeFormationLabel("power")} ${ability.power}` : "",
       ability.stat ? ability.stat.toUpperCase() : "",
-      ability.duration ? forgeFormationLabel("turns").replace("{count}", String(ability.duration)) : "",
+      // Every ability stores a duration; only lasting effects use it.
+      forgeFormationLasting.has(ability.effect) && ability.duration
+        ? ability.duration === 1
+          ? forgeFormationLabel("turn")
+          : forgeFormationLabel("turns").replace("{count}", String(ability.duration))
+        : "",
     ]
       .filter(Boolean)
       .join(" · ");
@@ -191,13 +208,15 @@ export function forgeFormationSkillList(unit, kit, icon, fallbackIcon) {
       `<div class="sk-row gf-formation-skill"><span class="ic${art ? " has-art" : ""}">${art || fallbackIcon}</span>` +
       `<span class="sk-id"><span class="sk-kind">${forgeFormationEscape(kind)}</span>` +
       `<span class="sk-nm">${forgeFormationEscape(name)}</span></span>` +
-      `<span class="sk-lv">${forgeFormationEscape(meta)}</span><span class="sk-line">${forgeFormationEscape(line)}</span></div>`
+      `<span class="sk-lv">${forgeFormationEscape(meta)}</span><span class="sk-line">${forgeFormationEscape(line.text)}` +
+      (line.mechanics ? `<span class="gf-formation-mechanics">${forgeFormationEscape(line.mechanics)}</span>` : "") +
+      "</span></div>"
     );
   };
   const cost = (ability) =>
     `${forgeFormationLabel("cost")} ${ability.cost}` +
     (ability.elementCost ? ` · ${ability.elementCost} ${forgeFormationLabel("native")}` : "");
-  const describe = (ability) => [ability.description, mechanics(ability)].filter(Boolean).join(" ");
+  const describe = (ability) => ({ text: ability.description, mechanics: mechanics(ability) });
   return (
     '<div class="sk-list">' +
     row(forgeFormationLabel("standard"), kit.standard.name, cost(kit.standard), describe(kit.standard), kit.standard) +
@@ -212,7 +231,7 @@ export function forgeFormationSkillList(unit, kit, icon, fallbackIcon) {
     kit.traits
       .map((trait) => {
         const [name, ...rest] = forgeFormationLabel(trait.kind).split(": ");
-        return row(forgeFormationLabel("traits"), name, "", rest.join(": "), null);
+        return row(forgeFormationLabel("traits"), name, "", { text: rest.join(": ") }, null);
       })
       .join("") +
     "</div>"

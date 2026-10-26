@@ -44,6 +44,7 @@ export const forgeFormationCombatEnglish = {
   "combat.formation.front_tokens":
     "Echoes: fills open frontline slots with fragile tokens at turn start. Tokens do not act or supply energy and vanish when their owner falls.",
   "combat.formation.power": "Power",
+  "combat.formation.turn": "1 turn",
   "combat.formation.turns": "{count} turns",
   "combat.formation.effect.damage": "Damage",
   "combat.formation.effect.aoe_damage": "Area damage",

@@ -306,6 +306,9 @@ for (const theme of ["dark", "light"]) {
       await expect(rows.nth(1)).toContainText("Lighthouse dawn");
       await expect(rows.nth(2)).toContainText("Steady watch");
       await expect(rows.nth(2)).toContainText("Turn start · Either row");
+      // Instant damage has no duration to show; the lasting shield does.
+      await expect(rows.nth(0)).not.toContainText("turns");
+      await expect(rows.nth(2)).toContainText("Shield · self · 2 turns");
       await expect(panel).not.toContainText("Classic strike");
       await page.screenshot({ path: testInfo.outputPath(`formation-unit-skills-${theme}.png`) });
       await forge.locator('[data-screen="unit"] [role="tab"][data-tab="stats"]').click();
