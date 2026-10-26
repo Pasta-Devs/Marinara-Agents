@@ -16,6 +16,7 @@ import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-s
 import { resolveSlurpCreatorSpice } from "../../data/creators/slp-spice-storage.js";
 import { createSlurpLiveStorage, type SlurpLiveShow } from "../../data/live/slp-live-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
+import { withSlurpLiveShow } from "./slp-live-lock.js";
 
 const MINUTE = 60_000;
 /** ponytail: a fixed cap keeps the code simulation cheap; make it a setting if players want busier evenings. */
@@ -51,6 +52,7 @@ async function startDueShows(db: DB, settings: Settings, open: SlurpLiveShow[], 
     if (open.length >= MAX_OPEN_SHOWS) return;
     if (busy.has(creator.id)) continue;
     const slot = slurpLiveSlot(creator.id, live, at.getTime());
+    if (await storage.get(slot.id)) continue;
     // Not yet, or the first half went by while the world was off: that show happened without anyone.
     if (at.getTime() < slot.startAt || at.getTime() > (slot.startAt + slot.endsAt) / 2) continue;
     const spice = await resolveSlurpCreatorSpice(db, creator);
@@ -101,40 +103,56 @@ async function liveFans(db: DB, hostId: string, settings: Settings): Promise<Arr
  * Move one show forward to `at` (or its end), a world minute at a time, with code only. Fans' tips are paid
  * from their weekly budget and credited to the Creator like any tip. Saves and returns the show.
  */
-export async function simulateSlurpLiveShow(
+export function simulateSlurpLiveShow(
   db: DB,
   show: SlurpLiveShow,
   settings: Settings,
   at: Date,
 ): Promise<SlurpLiveShow> {
+  return withSlurpLiveShow(show.id, async () => {
+    const fresh = (await createSlurpLiveStorage(db).get(show.id)) ?? show;
+    return simulateLocked(db, fresh, settings, at);
+  });
+}
+
+async function simulateLocked(db: DB, show: SlurpLiveShow, settings: Settings, at: Date): Promise<SlurpLiveShow> {
   const started = Date.parse(show.startedAt);
   const until = Math.min(at.getTime(), Date.parse(show.endsAt)) - started;
   const state = show.state;
-  const from = Math.floor(state.simulatedTo / MINUTE) + (state.simulatedTo ? 1 : 0);
-  const to = Math.min(Math.floor(until / MINUTE), from + MAX_CATCH_UP_MINUTES);
-  if (to >= from) {
+  // Minutes [0, simulatedTo / MINUTE) are done; minute m runs once the clock reaches its start.
+  const from = Math.round(state.simulatedTo / MINUTE);
+  const to = Math.min(Math.floor(until / MINUTE) + 1, from + MAX_CATCH_UP_MINUTES);
+  if (until >= 0 && to > from) {
     const population = createSlurpPopulationStorage(db);
     const noodle = createSlurpStorage(db);
     const fans = await liveFans(db, show.hostId, settings);
     const budgets = new Map(fans.map((fan) => [fan.id, fan.budget]));
-    for (let minute = from; minute <= to; minute += 1) {
+    for (let minute = from; minute < to; minute += 1) {
       const when = started + minute * MINUTE;
       const tips = slpLiveMinute(state, fans, { showId: show.id, minute, hour: new Date(when).getUTCHours() });
       for (const tip of tips) {
+        const operationId = `live:${show.id}:${tip.by}:${minute}`;
+        // A pass that died before its save replays this minute: the receipt says it was already paid.
+        if (await noodle.hasCreatorIncomeOperation(show.hostId, operationId)) {
+          slpLiveApplyTip(state, tip, minute * MINUTE);
+          continue;
+        }
         const paid = await population
           .reserveWeeklySpend(tip.by, show.hostId, tip.amount, budgets.get(tip.by) ?? 0, new Date(when))
           .catch(() => false);
         if (!paid) continue;
         slpLiveApplyTip(state, tip, minute * MINUTE);
         await noodle
-          .creditCreatorIncome(show.hostId, tip.amount, "tip", `live:${show.id}:${tip.by}:${minute}`)
+          .creditCreatorIncome(show.hostId, tip.amount, "tip", operationId)
           .catch((error: unknown) => logger.warn(error, "[slurp-live] Could not credit a live tip"));
         await population
           .advanceTie(tip.by, show.hostId, { spent: tip.amount, tipped: tip.amount, interactions: 1 })
           .catch(() => undefined);
       }
       slpLiveWorkQueue(state, minute * MINUTE);
-      state.simulatedTo = minute * MINUTE;
+      state.simulatedTo = (minute + 1) * MINUTE;
+      // Money moved this minute: save now, so a crash cannot replay (and pay) the same tips again.
+      if (tips.length) await createSlurpLiveStorage(db).save(show.id, { state });
     }
   }
   const endedAt = at.getTime() >= Date.parse(show.endsAt) ? show.endsAt : null;

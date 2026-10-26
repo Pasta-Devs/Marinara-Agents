@@ -55,7 +55,7 @@ import {
   SLP_DEFAULT_SUPPORT_DESK_SETTINGS,
 } from "../../../../../shared/src/slp/slp-support-desk.js";
 import { slpDramaSettingsSchema } from "../../../../../shared/src/slp/slp-drama.js";
-import { SLP_DEFAULT_LIVE_SETTINGS, slpLiveSettingsSchema } from "../../../../../shared/src/slp/slp-live.js";
+import { SLP_DEFAULT_LIVE_SETTINGS, slpLiveSettingsField } from "../../../../../shared/src/slp/slp-live.js";
 import { SLURP_STORY_JOB_DEFAULTS, type SlurpStoryJobWeights } from "../../../../../shared/src/slp/slp-post-purpose.js";
 import { DEFAULT_SLP_CREATOR_REPLIES_PER_24_HOURS } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { SLURP_COOL_OFF_HOURS } from "../world/slp-stance.js";
@@ -439,7 +439,7 @@ export const slurpSettingsSchema = z.object({
   /** Settings › Stir: the Slurp Support desk (tickets, notices, refusals, shady moves, leaving). */
   supportDesk: slpSupportDeskSettingsSchema,
   drama: slpDramaSettingsSchema,
-  live: slpLiveSettingsSchema,
+  live: slpLiveSettingsField,
   /** Settings › Stir: a couple may grow to four people (0.3.5). Off by default. */
   polyamory: z.boolean(),
   /** Settings › Overview › Pause all: no model or image call, no tick, nothing (`slp-pause.ts`). */

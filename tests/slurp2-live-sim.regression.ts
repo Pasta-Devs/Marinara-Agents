@@ -15,6 +15,7 @@ import {
   SLP_LIVE_ORDER_MS,
   type SlpLiveFan,
 } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-live.ts";
+import { slpExtensionFromLegacy } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-extensions.ts";
 
 // The menu follows the spice level: no strip items for a clean Creator, all of them for an explicit one.
 const clean = slpLiveMenuFor("none").map((item) => item.id);
@@ -86,5 +87,17 @@ const minutes = (slot.endsAt - slot.startAt) / 60_000;
 assert.ok(minutes >= 30 && minutes <= 60);
 assert.equal(normalizeSlpLiveSettings({ minMinutes: 50, maxMinutes: 20 }).maxMinutes, 50);
 assert.equal(normalizeSlpLiveSettings({ everyDays: "x" }).everyDays, SLP_DEFAULT_LIVE_SETTINGS.everyDays);
+
+// An install saved before Live existed keeps it off; only the player turns it on.
+assert.equal(
+  slpExtensionFromLegacy("live", { paused: false }, { inlineAdsEnabled: true, brandDealsPace: "normal" }),
+  false,
+);
+
+// A player tip is booked once per request id, however often the request is retried.
+const retry = slpLiveStart({ level: "none", fans: 0 });
+assert.equal(slpLiveApplyTip(retry, { by: "persona:p1", name: "Kit", amount: 50 }, 0, "req-12345678"), true);
+assert.equal(slpLiveApplyTip(retry, { by: "persona:p1", name: "Kit", amount: 50 }, 0, "req-12345678"), false);
+assert.equal(retry.raised, 50);
 
 console.log("slurp2 live sim: ok");

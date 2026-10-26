@@ -35,6 +35,9 @@ export function normalizeSlpLiveSettings(raw: unknown): SlpLiveSettings {
   return settings.maxMinutes < settings.minMinutes ? { ...settings, maxMinutes: settings.minMinutes } : settings;
 }
 
+/** The settings field: a bad or older value keeps the default for each field it gets wrong. */
+export const slpLiveSettingsField = z.preprocess(normalizeSlpLiveSettings, slpLiveSettingsSchema);
+
 /** What a viewer can tip for. `strip` items take one layer off; `level` is the least spice the Creator must allow. */
 export const SLP_LIVE_MENU = [
   { id: "shoutout", price: 15, level: "none" },
@@ -89,9 +92,11 @@ export type SlpLiveState = {
   room: string[];
   names: Record<string, string>;
   tippers: Record<string, number>;
-  /** Milliseconds since start that the simulation has reached. */
+  /** Minutes before this (in ms since start) are simulated. */
   simulatedTo: number;
   log: SlpLiveEvent[];
+  /** Request ids of the player's paid tips already booked, so a retry never books twice. */
+  receipts: string[];
 };
 export type SlpLiveTip = { by: string; name: string; amount: number; itemId?: string };
 
@@ -144,6 +149,7 @@ export function slpLiveStart(input: { level: SlpExplicitLevelName; fans: number;
     tippers: {},
     simulatedTo: 0,
     log: [],
+    receipts: [],
   };
 }
 
@@ -162,8 +168,12 @@ export function slpLiveTopTipper(state: SlpLiveState): { by: string; name: strin
   return by ? { by, name: state.names[by] ?? by, amount: amount! } : null;
 }
 
-/** Book one paid tip (a fan's or the player's) into the show. Mutates `state`. */
-export function slpLiveApplyTip(state: SlpLiveState, tip: SlpLiveTip, at: number): void {
+/** Book one paid tip (a fan's or the player's) into the show. Mutates `state`; false when `receipt` was booked before. */
+export function slpLiveApplyTip(state: SlpLiveState, tip: SlpLiveTip, at: number, receipt?: string): boolean {
+  if (receipt) {
+    if (state.receipts.includes(receipt)) return false;
+    state.receipts = [...state.receipts, receipt].slice(-200);
+  }
   state.raised += tip.amount;
   state.names[tip.by] = tip.name;
   state.tippers[tip.by] = (state.tippers[tip.by] ?? 0) + tip.amount;
@@ -184,6 +194,7 @@ export function slpLiveApplyTip(state: SlpLiveState, tip: SlpLiveTip, at: number
     state.queue.push({ id: `goal:${next.target}`, itemId: next.reward, by: "goal", name: "", at, doneAt: null });
     log(state, { at, kind: "goal", amount: next.target, itemId: next.reward });
   }
+  return true;
 }
 
 /** Finish the order on stage once it has had its time, then start the next. Mutates `state`. */
@@ -263,3 +274,43 @@ export function slurpLiveSlot(hostId: string, live: SlpLiveSettings, at: number)
   );
   return { id: `live:${hostId}:${slot}`, startAt, endsAt: startAt + minutes * MINUTE };
 }
+
+/** What a viewer's screen gets: the show without the bookkeeping. `me` is the viewer's tipper key. */
+export function slpLiveView(
+  show: {
+    id: string;
+    hostId: string;
+    hostKind: string;
+    startedAt: string;
+    endsAt: string;
+    endedAt: string | null;
+    state: SlpLiveState;
+  },
+  now: number,
+  me: string | null,
+) {
+  const { state } = show;
+  return {
+    id: show.id,
+    hostId: show.hostId,
+    hostKind: show.hostKind,
+    startedAt: show.startedAt,
+    endsAt: show.endsAt,
+    endedAt: show.endedAt,
+    elapsed: Math.max(0, now - Date.parse(show.startedAt)),
+    viewers: slpLiveViewers(state, show.id),
+    raised: state.raised,
+    heat: Math.round(state.heat),
+    strip: state.strip,
+    stripMax: state.stripMax,
+    goals: state.goals,
+    menu: state.menu,
+    queue: state.queue
+      .filter((order) => order.doneAt === null || state.simulatedTo - order.doneAt < 10 * MINUTE)
+      .slice(-12),
+    log: state.log.slice(-80),
+    top: slpLiveTopTipper(state),
+    mine: me ? (state.tippers[me] ?? 0) : 0,
+  };
+}
+export type SlpLiveView = ReturnType<typeof slpLiveView>;

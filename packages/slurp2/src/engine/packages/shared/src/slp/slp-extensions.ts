@@ -87,6 +87,8 @@ export function slpExtensionFromLegacy(
   defaults: { inlineAdsEnabled: boolean; brandDealsPace: string },
 ): boolean {
   if (Object.keys(raw).length === 0) return false;
+  // Live came after the switches: an older install opts in, it never wakes up live.
+  if (id === "live") return false;
   if (id === "ads") {
     const ads = raw.inlineAdsEnabled ?? defaults.inlineAdsEnabled;
     const deals = raw.brandDealsPace ?? defaults.brandDealsPace;
