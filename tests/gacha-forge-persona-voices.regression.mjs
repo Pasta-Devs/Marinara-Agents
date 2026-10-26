@@ -395,6 +395,49 @@ test("actual story cast projects the persona ID and the existing controller choo
   }
 });
 
+test("an ambiguous persona name still speaks only in the persona's own voice, never the NPC pool", async () => {
+  const { host, config, controller, calls } = fixture();
+  try {
+    config.npcDefaultFemaleVoices = ["pool-voice"];
+    config.npcDefaultMaleVoices = ["pool-voice"];
+    controller.configure({ tts: true, otherVoices: true });
+    // Two cast entries share the persona's name, so the cast resolver cannot settle the speaker.
+    const cast = [
+      { name: "Mari", prota: true, characterId: "persona" },
+      { name: "Mari", prota: false, characterId: "card-mari" },
+    ];
+    assert.equal(
+      forgeVoiceCharacter(cast, "Mari", () => null),
+      null,
+    );
+    for (const speaker of ["Mari", "MARI!", "you"]) {
+      await controller.speak(
+        { speaker, text: "Protagonist line." },
+        forgeVoiceCharacter(cast, speaker, () => null),
+      );
+    }
+    assert.deepEqual(
+      calls.map((call) => [call.requests[0].voice, call.requests[0].characterId]),
+      [
+        ["persona-voice", "persona"],
+        ["persona-voice", "persona"],
+        ["persona-voice", "persona"],
+      ],
+    );
+    host._run.protagonist = { personaId: "persona", name: "Mari Rossi" };
+    await controller.speak({ speaker: "Mari", text: "First name only." }, null);
+    assert.equal(calls.at(-1).requests[0].voice, "persona-voice");
+    config.voiceAssignments = [];
+    calls.length = 0;
+    await controller.speak({ speaker: "Mari", text: "No persona voice." }, null);
+    assert.equal(calls.length, 0, "a persona without its own voice stays silent");
+    await controller.speak({ speaker: "Bryn", text: "An NPC." }, null);
+    assert.equal(calls[0]?.requests[0].voice, "pool-voice", "other unresolved speakers still use the pool");
+  } finally {
+    controller.dispose();
+  }
+});
+
 for (const outcome of ["success", "failed-reply"]) {
   test(`a confirmed ${outcome} send adopts its canonical player row once and is never read aloud`, async () => {
     const fx = fixture();

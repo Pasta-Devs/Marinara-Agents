@@ -1,4 +1,4 @@
-/* global forgeExplicitVoice, forgeVoiceCacheKey, forgeAudioJson, forgeCombatVoiceEnglish, createForgeUltimatePresentation, bt */
+/* global forgeExplicitVoice, forgeSpeakerVoice, forgeConnectionVoices, forgeVoiceCacheKey, forgeAudioJson, forgeCombatVoiceEnglish, createForgeUltimatePresentation, bt */
 const forgeCombatClipSlots = ["death", "kill", "ultimateA", "ultimateB"];
 const forgeCombatClipUrl =
   /^\/api\/gacha-forge\/combat-voices\/file\/[a-f0-9]{64}\/[a-f0-9]{64}\.(?:wav|ogg|flac|m4a|webm|mp3|aac)$/u;
@@ -17,12 +17,14 @@ export function createForgeCombatVoiceController({
   audio,
   services = globalThis.__MARINARA_HOST__?.services,
   getConfig = () => forgeAudioJson("/api/tts/config"),
+  listVoices = forgeConnectionVoices,
 }) {
   const runId = host._run?.runId;
   const entries = new Map();
   const completed = new Set();
   const jobs = new Map();
   const failures = new Map();
+  const noticed = new Set();
   let disposed = false;
   let player = null;
   let status = null;
@@ -30,13 +32,21 @@ export function createForgeCombatVoiceController({
   const active = () => !disposed && host._run?.runId === runId && !audio.disposed;
   const enabled = () =>
     active() &&
-    host._run?.combat?.mode === "formation" &&
     audio.settings?.combatVoices === true &&
     !audio.settings.muted &&
     audio.settings.dialogueVolume > 0 &&
     typeof services?.tts?.ttsService?.generateAudio === "function" &&
     typeof services?.audio?.createPlayer === "function";
   const inBattle = () => !host._state || host._state() === "combat";
+  // The persona (team leader) keeps only its own assigned voice; card-less units are keyed by their unit.
+  const voiceFor = (config, actor) =>
+    forgeSpeakerVoice(
+      config,
+      { characterId: actor.characterId, name: actor.name, gender: actor.gender, persona: actor.isLeader === true },
+      audio.settings?.otherVoices === true,
+      listVoices,
+    );
+  const subjectOf = (actor) => (actor.characterId ? actor : { ...actor, characterId: actor.id });
   const identity = (actor, config, voice) =>
     forgeVoiceCacheKey(runId, { speaker: actor.name, text: "fixed-combat-voices-v1" }, actor, config, voice);
   const bodyFor = (actor, voiceIdentity) => ({
@@ -89,12 +99,12 @@ export function createForgeCombatVoiceController({
     }
     status.hidden = false;
   };
-  const prepareActor = (actor, config, retry) => {
-    const voice = forgeExplicitVoice(config, actor.characterId);
-    if (!voice) {
-      failures.delete(actor.id);
-      return Promise.resolve();
-    }
+  const prepareActor = (unit, voice, config, retry) => {
+    const actor = subjectOf(unit);
+    // The server cannot see voice assignments, so it voices any card unit. A pool voice stops here as soon as
+    // "Voice other characters" is turned off, before any further paid line or clip request.
+    const pooled = !forgeExplicitVoice(config, unit.characterId);
+    const poolOff = () => pooled && audio.settings?.otherVoices !== true;
     const voiceIdentity = identity(actor, config, voice);
     const key = `${actor.id}:${voiceIdentity}`;
     if (jobs.has(key)) return jobs.get(key).promise;
@@ -104,8 +114,10 @@ export function createForgeCombatVoiceController({
     job.promise = (async () => {
       try {
         if (!enabled()) return;
+        if (poolOff()) return failures.delete(actor.id);
         const prepared = await post("/combat-voices/prepare", { ...request, retry });
         if (!enabled() || job.controller.signal.aborted) return;
+        if (prepared?.error === "combat-voices-off") return failures.delete(actor.id);
         if (!prepared?.ok || !Array.isArray(prepared.clips)) throw new Error("Combat voice lines unavailable");
         const clips = entries.get(key) || new Map();
         entries.set(key, clips);
@@ -118,9 +130,12 @@ export function createForgeCombatVoiceController({
             continue;
           }
           if (!enabled() || job.controller.signal.aborted) return;
+          if (poolOff()) return failures.delete(actor.id);
           if (clip.state !== "missing" && !retry) throw new Error("Combat voice retry requires confirmation");
           const reserved = await post("/combat-voices/reserve", { ...request, slot, retry });
           if (!reserved?.ok && !enabled()) return;
+          // The server no longer voices this unit (Voice other characters was turned off): that is not a failure.
+          if (reserved?.error === "combat-voices-off") return failures.delete(actor.id);
           if (!reserved?.ok) throw new Error("Combat voice reservation unavailable");
           if (reserved.cached && forgeCombatClipUrl.test(reserved.url || "")) {
             clips.set(slot, reserved.url);
@@ -129,7 +144,7 @@ export function createForgeCombatVoiceController({
           if (typeof reserved.token !== "string") throw new Error("Invalid combat voice reservation");
           try {
             // Keep an unspent reservation on this job while muted; a new token could repeat paid work.
-            while (active() && !enabled() && !job.controller.signal.aborted) {
+            while (active() && !enabled() && !poolOff() && !job.controller.signal.aborted) {
               await new Promise((resolve) => {
                 const resume = () => {
                   if (job.resume === resume) delete job.resume;
@@ -138,8 +153,13 @@ export function createForgeCombatVoiceController({
                 };
                 job.resume = resume;
                 job.controller.signal.addEventListener("abort", resume, { once: true });
-                if (!active() || enabled() || job.controller.signal.aborted) resume();
+                if (!active() || enabled() || poolOff() || job.controller.signal.aborted) resume();
               });
+            }
+            if (poolOff() && !job.controller.signal.aborted) {
+              // Nothing was paid for this token: settle it as interrupted and leave without a paid failure.
+              await post("/combat-voices/fail", { ...request, slot, token: reserved.token }, true).catch(() => {});
+              return failures.delete(actor.id);
             }
             if (!enabled() || job.controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
             const blob = await services.tts.ttsService.generateAudio(clip.text, {
@@ -169,7 +189,7 @@ export function createForgeCombatVoiceController({
         completed.add(key);
         failures.delete(actor.id);
       } catch {
-        if (active()) failures.set(actor.id, actor);
+        if (active()) failures.set(actor.id, unit);
       } finally {
         if (jobs.get(key) === job) jobs.delete(key);
         showStatus();
@@ -181,19 +201,61 @@ export function createForgeCombatVoiceController({
   async function warm(actors, retry = false) {
     if (!enabled()) return;
     for (const job of jobs.values()) job.resume?.();
-    const candidates = actors.filter((actor) => actor?.id && actor.characterId);
-    if (!candidates.length) return;
+    const candidates = actors.filter((actor) => actor?.id);
     try {
       const config = await getConfig();
       if (!enabled()) return;
+      const queue = [];
+      let unread = false;
+      for (const actor of candidates) {
+        let voice;
+        try {
+          voice = await voiceFor(config, actor);
+        } catch {
+          // The connection's voice list could not be read: free, unknown rather than empty, and read again next time.
+          unread = true;
+          continue;
+        }
+        if (voice) queue.push(actor);
+        else failures.delete(actor.id);
+      }
+      if (!enabled()) return;
+      const team = candidates.map((actor) => actor.id).join("\n");
+      if (!queue.length && !retry && !unread && !noticed.has(team)) {
+        // Free and informational: nobody here can speak, so nothing is prepared or charged.
+        noticed.add(team);
+        audio.notice?.(audio.settings.otherVoices ? "audio.combatVoicesNoVoice" : "audio.combatVoicesNone");
+      }
       // A party seats up to six actors; two prepare at a time and each actor's four clips are generated in turn.
-      const queue = candidates.slice();
+      // A queued actor's voice is resolved again when its turn comes, so a setting changed meanwhile applies.
       const worker = async () => {
-        while (queue.length) await prepareActor(queue.shift(), config, retry);
+        while (queue.length && enabled()) {
+          const actor = queue.shift();
+          let voice;
+          try {
+            voice = await voiceFor(config, actor);
+          } catch {
+            continue;
+          }
+          if (voice) await prepareActor(actor, voice, config, retry);
+          else failures.delete(actor.id);
+        }
       };
       await Promise.all([worker(), worker()]);
     } catch {
-      if (active()) for (const actor of candidates) failures.set(actor.id, actor);
+      // Only prepareActor records failures, for paid work that started. Reading the voice settings is free and
+      // nothing was requested, so the next warm or line simply reads them again.
+    }
+    showStatus();
+  }
+  // A failure whose unit no longer has a voice (for example Voice other characters was turned off) is no longer
+  // retryable, so it leaves the paid retry banner.
+  async function forget() {
+    try {
+      const config = await getConfig();
+      for (const actor of [...failures.values()]) if (!(await voiceFor(config, actor))) failures.delete(actor.id);
+    } catch {
+      // Unknown voices keep their failure; the next settings change or warm checks again.
     }
     showStatus();
   }
@@ -204,21 +266,22 @@ export function createForgeCombatVoiceController({
         ++voiceRevision;
         // Muting pauses new requests. Finish and save an already paid clip instead of forcing a paid retry.
         if (!active()) for (const job of jobs.values()) job.controller.abort();
-      } else {
-        for (const job of jobs.values()) job.resume?.();
       }
+      // A waiting job checks again whether it may continue, may stop (pool voice turned off) or must keep waiting.
+      for (const job of jobs.values()) job.resume?.();
       player?.setVolumes({ music: 0, sfx: audio.settings?.dialogueVolume ?? 1 });
       player?.setMuted(!enabled());
       showStatus();
+      if (failures.size && active()) void forget();
     },
     async play(actor, slot) {
-      if (!enabled() || !inBattle() || !actor?.characterId || !forgeCombatClipSlots.includes(slot)) return;
+      if (!enabled() || !inBattle() || !actor?.id || !forgeCombatClipSlots.includes(slot)) return;
       const revision = ++voiceRevision;
       try {
         const config = await getConfig();
-        const voice = forgeExplicitVoice(config, actor.characterId);
+        const voice = await voiceFor(config, actor);
         if (!voice || !enabled() || revision !== voiceRevision) return;
-        const clips = entries.get(`${actor.id}:${identity(actor, config, voice)}`);
+        const clips = entries.get(`${actor.id}:${identity(subjectOf(actor), config, voice)}`);
         const url = clips?.get(slot);
         if (!forgeCombatClipUrl.test(url || "")) return;
         // One owned player per audible callout prevents overlapping character voices.
@@ -247,6 +310,15 @@ export function createForgeCombatVoiceController({
   };
 }
 
+// Preparation starts as soon as the battle screen loads, before the fight is played.
+export function forgeWarmCombatVoices(host) {
+  const audio = host?._forgeAudio;
+  if (!audio || !Array.isArray(host._combat?.allies)) return;
+  const voices = (audio._forgeCombatVoices ??= createForgeCombatVoiceController({ host, audio }));
+  voices.configure();
+  void voices.warm(host._combat.allies);
+}
+
 export function createForgeCombatPresentation(root, { payload, run, host, audio }) {
   const actors = [...(payload?.allies || []), ...(payload?.enemies || [])];
   const formation = payload?.combatMode === "formation" || host?._run?.combat?.mode === "formation";
@@ -256,10 +328,9 @@ export function createForgeCombatPresentation(root, { payload, run, host, audio 
   const allies = new Map((payload?.allies || []).map((actor) => [String(actor.id), actor]));
   const enemies = new Set((payload?.enemies || []).map((actor) => String(actor.id)));
   const state = (run._forgeCombatVoices ??= { seen: new WeakSet(), ultimates: new Map() });
+  // Classic and Formation share the voice hooks; only Formation draws the Ultimate presentation.
   const voices =
-    formation && audio && host
-      ? (audio._forgeCombatVoices ??= createForgeCombatVoiceController({ host, audio }))
-      : null;
+    audio && host ? (audio._forgeCombatVoices ??= createForgeCombatVoiceController({ host, audio })) : null;
   let disposed = false;
   voices?.configure();
   void voices?.warm([...allies.values()]);
