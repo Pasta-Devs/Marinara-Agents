@@ -3,9 +3,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createChapterRuntime, chapterRunId, chapterUnitId } from "./fixtures/gacha-forge-chapter-runtime.mjs";
 import {
+  FORGE_FORMATION_ENGINE,
+  FORGE_FORMATION_KIT_PROMPT,
   normalizeForgeFormationKit,
   replayForgeFormationBattle,
 } from "../packages/gacha-forge/src/formation-combat-shared.mjs";
+import { forgeFormationLegacyReplay } from "../packages/gacha-forge/src/formation-combat-legacy.mjs";
 
 const kit = () => ({
   version: 1,
@@ -61,12 +64,15 @@ const rawUnit = (id, name = "Mari") => ({
     description: "Classic.",
   },
   formationKit: kit(),
+  formationKitPrompt: FORGE_FORMATION_KIT_PROMPT,
   appearance: "A blue coat.",
   personality: "Patient.",
   description: "A lighthouse keeper.",
 });
 async function fixture(mode = "formation") {
   const f = await createChapterRuntime();
+  // A connection with room for the kit prompt and the 8192-token answer it reserves.
+  f.transport.maxContext = 262144;
   // The public Engine transaction contract serializes commits. The story fixture's
   // original rollback helper needs that serialization when three kit workers race.
   const transact = f.persistence.transaction;
@@ -122,6 +128,8 @@ async function fixture(mode = "formation") {
   return { ...f, run, heroId, weaponId };
 }
 const request = { chapter: 2, combatIndex: 1, difficulty: "normal" };
+// What a current client sends with every Formation start.
+const starting = (body) => ({ ...body, expectedFormationEngine: FORGE_FORMATION_ENGINE });
 
 test("actual new-world creation preserves Formation and defaults to Classic without converting units", async () => {
   const f = await fixture();
@@ -144,7 +152,7 @@ test("actual new-world creation preserves Formation and defaults to Classic with
     assert.ok(
       !f.calls.some((call) =>
         call.body.messages.some((message) =>
-          message.content.includes("Design a distinctive, balanced kit for Formation combat"),
+          message.content.includes("Design this character's kit for Formation combat"),
         ),
       ),
       "selecting a new world's mode does not launch the existing-world unit conversion",
@@ -162,7 +170,7 @@ test("actual battle view/start and completion replay Formation with existing bos
     assert.equal(view.combatMode, "formation");
     assert.ok(normalizeForgeFormationKit(view.allies[0].formationKit));
     assert.equal(view.dialogueCues[0].content, "You shall not pass.");
-    const start = (await f.post("/battle/start", request)).body;
+    const start = (await f.post("/battle/start", starting(request))).body;
     assert.equal(start.ok, true, JSON.stringify(start));
     const pending = structuredClone(f.session().combatPending);
     assert.equal(pending.fight.combatMode, "formation");
@@ -197,7 +205,7 @@ test("Classic remains selected by default and frozen legacy snapshots ignore lat
   }
 });
 
-test("oversized and back-only teams are rejected without spending Vigor or deleting saved slots", async () => {
+test("a full six-seat team starts, and a back-only team is rejected without spending Vigor or deleting slots", async () => {
   const f = await fixture();
   try {
     for (let index = 1; index <= 4; index += 1) {
@@ -206,14 +214,21 @@ test("oversized and back-only teams are rejected without spending Vigor or delet
       f.session().roster[id] = { level: 1 };
     }
     const ids = [1, 2, 3, 4].map((index) => `${chapterRunId}:unit:extra${index}`);
-    f.session().presets[0].board = { front: ["leader", ids[0], ids[1]], back: [ids[2], ids[3], null] };
+    f.session().presets[0].board = { front: [null, null, null], back: ["leader", ids[0], null] };
     const before = structuredClone(f.session());
-    const result = (await f.post("/battle/start", request)).body;
-    assert.equal(result.error, "formation-team-size");
+    assert.equal((await f.post("/battle/start", starting(request))).body.error, "formation-rows");
     assert.deepEqual(f.session(), before);
-    f.session().presets[0].board = { front: [null, null, null], back: ["leader", null, null] };
-    assert.equal((await f.post("/battle/start", request)).body.error, "formation-rows");
-    assert.equal(f.session().wallet.vigor, before.wallet.vigor);
+    f.session().presets[0].board = { front: ["leader", ids[0], ids[1]], back: [ids[2], ids[3], chapterUnitId] };
+    f.session().roster[chapterUnitId] = { level: 1 };
+    const view = (await f.post("/battle", request)).body;
+    assert.equal(view.ok, true, JSON.stringify(view));
+    assert.equal(view.allies.length, 6);
+    assert.deepEqual(
+      view.allies.map((ally) => ally.position),
+      ["front", "front", "front", "back", "back", "back"],
+    );
+    assert.equal((await f.post("/battle/start", starting(request))).body.ok, true);
+    assert.equal(f.session().combatPending.fight.allies.length, 6);
   } finally {
     await f.close();
   }
@@ -243,7 +258,7 @@ test("the actual conversion route uses the same model and commits additive kits 
     assert.equal(updated.appearance, before.appearance);
     assert.ok(normalizeForgeFormationKit(updated.formationKit));
     const prompts = f.calls.filter((call) =>
-      call.body.messages[0].content.includes("Design a distinctive, balanced kit"),
+      call.body.messages[0].content.includes("Design this character's kit for Formation combat"),
     );
     assert.equal(prompts.length, 2);
     assert.ok(prompts.some((call) => JSON.stringify(call.body.messages).includes("CURRENT_AUTHORED_CARD_CANON")));
@@ -260,7 +275,7 @@ test("Materials and Tower freeze Formation snapshots and verify their own action
     const view = (await f.post("/farm/battle", farm)).body;
     assert.equal(view.ok, true, JSON.stringify(view));
     assert.equal(view.combatMode, "formation");
-    assert.equal((await f.post("/farm/start", farm)).body.ok, true);
+    assert.equal((await f.post("/farm/start", starting(farm))).body.ok, true);
     const farmFight = f.session().farmPending.fight;
     assert.equal(farmFight.combatMode, "formation");
     const farmReplay = replayForgeFormationBattle(farmFight);
@@ -272,7 +287,7 @@ test("Materials and Tower freeze Formation snapshots and verify their own action
     const towerView = (await f.post("/tower/battle", tower)).body;
     assert.equal(towerView.ok, true, JSON.stringify(towerView));
     assert.equal(towerView.combatMode, "formation");
-    assert.equal((await f.post("/tower/start", tower)).body.ok, true);
+    assert.equal((await f.post("/tower/start", starting(tower))).body.ok, true);
     const towerFight = f.session().towerPending.fight;
     assert.equal(towerFight.combatMode, "formation");
     const towerReplay = replayForgeFormationBattle(towerFight);
@@ -296,7 +311,10 @@ test("boss objectives reach frozen snapshots and an impossible elemental team is
     const view = (await f.post("/battle", request)).body;
     assert.equal(view.ok, true, JSON.stringify(view));
     assert.deepEqual(view.formationRules, guide.formationRules);
-    assert.equal((await f.post("/battle/start", { ...request, expectedCombatMode: "formation" })).body.ok, true);
+    assert.equal(
+      (await f.post("/battle/start", starting({ ...request, expectedCombatMode: "formation" }))).body.ok,
+      true,
+    );
     const fight = f.session().combatPending.fight;
     assert.deepEqual(fight.formationRules, guide.formationRules);
     const played = replayForgeFormationBattle(fight);
@@ -313,7 +331,7 @@ test("boss objectives reach frozen snapshots and an impossible elemental team is
     ];
     const vigor = f.session().wallet.vigor;
     assert.equal((await f.post("/battle", request)).body.error, "formation-element-required");
-    assert.equal((await f.post("/battle/start", request)).body.error, "formation-element-required");
+    assert.equal((await f.post("/battle/start", starting(request))).body.error, "formation-element-required");
     assert.equal(f.session().wallet.vigor, vigor);
     assert.equal(f.session().combatPending, null);
   } finally {
@@ -328,7 +346,7 @@ test("a claimed win cannot override the server replay of a lost Formation fight"
     hero.stats = { hp: 1, atk: 1, def: 1, spd: 1 };
     f.session().roster[f.heroId].level = 1;
     f.docs.get(`${chapterRunId}:combat:2:1`).data.formation[0].stats = { hp: 100, atk: 100, def: 100, spd: 100 };
-    assert.equal((await f.post("/battle/start", request)).body.ok, true);
+    assert.equal((await f.post("/battle/start", starting(request))).body.ok, true);
     assert.equal(replayForgeFormationBattle(f.session().combatPending.fight).result, "lose");
     const wallet = structuredClone(f.session().wallet),
       progress = structuredClone(f.session().progress);
@@ -337,6 +355,35 @@ test("a claimed win cannot override the server replay of a lost Formation fight"
     assert.equal(response.error, "lost");
     assert.deepEqual(f.session().wallet, wallet);
     assert.deepEqual(f.session().progress, progress);
+  } finally {
+    await f.close();
+  }
+});
+
+test("a fight played on the engine before 1.24.0 is still scored by its own rules", async () => {
+  const f = await fixture();
+  try {
+    assert.equal((await f.post("/battle/start", starting(request))).body.ok, true);
+    const fight = structuredClone(f.session().combatPending.fight);
+    // An old tab logs one record per activation and no engine version.
+    const old = forgeFormationLegacyReplay(fight, []);
+    assert.equal(old.result, "win");
+    assert.ok(old.log.length && old.log.every((record) => record.v === undefined));
+    const won = (await f.post("/complete", { ...request, nodeIndex: 4, log: old.log })).body;
+    assert.equal(won.ok, true, JSON.stringify(won));
+    assert.equal(f.session().combatPending, null);
+  } finally {
+    await f.close();
+  }
+});
+
+test("an older tab cannot start a Formation fight it would be scored on differently, and spends nothing", async () => {
+  const f = await fixture();
+  try {
+    const vigor = f.session().wallet.vigor;
+    assert.equal((await f.post("/battle/start", request)).body.error, "formation-engine-changed");
+    assert.equal(f.session().wallet.vigor, vigor);
+    assert.equal(f.session().combatPending ?? null, null);
   } finally {
     await f.close();
   }

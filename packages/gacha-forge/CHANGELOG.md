@@ -1,3 +1,10 @@
+## 1.24.0 — 2026-10-26
+
+- Formation combat is rebuilt. Tap each Front Row fighter, pick its Normal skill, Ultimate, move/swap or Hold and its target, check the plan and the energy it spends, then press Fight. Every skill shows what it does and costs. Auto still plays a whole turn.
+- Teams seat six: up to three Front Row fighters and three Back Row supports. Supports make one energy of their element each turn, cannot be attacked and carry strong passives. Energy never expires.
+- Kits from older Formation rules are remade automatically before a world's next battle and keep fighting until then. Story, event and boss fights in Formation get front fighters, back-row supports and clearer boss rules.
+- Classic combat is unchanged.
+
 ## 1.23.0 — 2026-10-26
 
 - Keep playing: leave a main chapter that is still forging. It keeps forging, the busy pill shows its progress, and a notice says when it is ready, could not be forged or was interrupted. Pre-forging starts once it is ready. Cancel on any story loader still stops it, and switching worlds waits for it.

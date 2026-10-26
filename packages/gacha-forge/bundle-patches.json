@@ -1454,6 +1454,60 @@
               "replace": "var oy=[{version:null,new:[\"Keep playing leaves a chapter that is still forging, and a notice says when it is ready.\",\"Pre-forging with Story and images also paints the places each scene visits when Backgrounds is on.\"],changed:[\"Pre-forged art paints alongside the story, so the chapter menu opens as soon as the text is written.\"],fixed:[\"Pre-forging no longer reports stopped on chapters that take over 20 minutes.\"]},{version:\"1.22.1\",fixed:[\"In Formation, a unit's Skills tab"
             }
           ]
+        },
+        {
+          "version": "1.24.0",
+          "commits": [],
+          "edits": [
+            {
+              "find": "forgeFormationView=createForgeFormationPresentation(t,a)",
+              "replace": "forgeFormationView=createForgeFormationPresentation(t,a,{run:r,choose:ft,card:$,hero:Je,button:Ye,banner:Ge,art:Lt,icons:Mo,actions:ua,relabel:A,silhouette:jt})"
+            },
+            {
+              "find": "function et(y){if(y.options?.formation)return forgeRenderFormationTurn({root:t,container:_e,choice:y,payload:a,onChoice:ft});",
+              "replace": "function et(y){if(y.options?.formation)return forgeFormationView.turn(y,_e);"
+            },
+            {
+              "find": "function me(y){y.addEventListener(\"click\",()=>{",
+              "replace": "function me(y){y.addEventListener(\"click\",()=>{if(forgeFormationView.click(y))return;"
+            },
+            {
+              "find": "function A(){if(!Re)return;",
+              "replace": "function A(){if(!Re||forgeFormationView.label(Re))return;"
+            },
+            {
+              "find": "function p(y){if(!Me)return;",
+              "replace": "function p(y){if(!Me||forgeFormationView.rail(Me,y))return;"
+            },
+            {
+              "find": "(I?'<div class=\"sec\"><div class=\"h\">Boss rules</div><div class=\"fs-rules\">'+I+\"</div></div>\":\"\")+Xu(\"Ultimate &middot; \"+g+\" / 100 energy\",i.skill,c,!1,v)+(i.passive?Xu(\"Passive\",i.passive,c,!0,v):\"\")+Xw(Number(l.gain)||Zu.ENERGY_ATTACK)",
+              "replace": "(i.formation?forgeFormationFoeSheet(i,Jr,Ot):(I?'<div class=\"sec\"><div class=\"h\">Boss rules</div><div class=\"fs-rules\">'+I+\"</div></div>\":\"\")+Xu(\"Ultimate &middot; \"+g+\" / 100 energy\",i.skill,c,!1,v)+(i.passive?Xu(\"Passive\",i.passive,c,!0,v):\"\")+Xw(Number(l.gain)||Zu.ENERGY_ATTACK))"
+            },
+            {
+              "find": "var Co={",
+              "replace": "var Co={...forgeFormationStatusChips,"
+            },
+            {
+              "find": "ke.k===\"marked\")",
+              "replace": "ke.k===\"marked\"||ke.k===\"fmarked\")"
+            },
+            {
+              "find": "I&&(I.disabled=!b);for(let se of t.querySelectorAll(\"[data-slot]\"))",
+              "replace": "I&&(I.disabled=!b);forgeFormationEditor(t,e,c,v);for(let se of t.querySelectorAll(\"[data-slot]\"))"
+            },
+            {
+              "find": "_guideContent(e){if(Or[e])return Or[e];",
+              "replace": "_guideContent(e){if(Or[e])return forgeFormationGuide(this,e)||Or[e];"
+            },
+            {
+              "find": "ds=\"1.23.0\"",
+              "replace": "ds=\"1.24.0\""
+            },
+            {
+              "find": "var oy=[{version:null,new:[\"Keep playing",
+              "replace": "var oy=[{version:null,new:[\"Formation is rebuilt: tap each Front Row fighter, choose its skill, Ultimate, move or Hold and its target, then press Fight to carry out the plan.\",\"Formation teams seat six: three Front Row fighters and three Back Row supports that make energy every turn and cannot be attacked.\",\"Formation combat shows every skill's effect, cost and the energy your plan will spend; tap a support or an enemy to read its kit.\"],changed:[\"Formation kits are remade for the new rules before a world's next battle; the old kits keep fighting until then.\",\"Formation story, event and boss fights are written with front fighters, back-row supports and clearer boss rules.\"]},{version:\"1.23.0\",new:[\"Keep playing"
+            }
+          ]
         }
       ]
     },
@@ -2775,6 +2829,17 @@
             {
               "find": "v.promise=(async()=>{try{return await forgeStoryWork(c)}finally{",
               "replace": "v.promise=(async()=>{try{await null;return await forgeStoryWork(c)}finally{"
+            }
+          ]
+        },
+        {
+          "version": "1.24.0",
+          "commits": [],
+          "edits": [
+            {
+              "sourceId": "formation-legacy-server",
+              "replaceFrom": "src/formation-combat-legacy.mjs",
+              "find": "async function _t("
             }
           ]
         }
