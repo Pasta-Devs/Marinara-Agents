@@ -297,4 +297,57 @@ assert.equal(
 );
 assert.equal(privView("persona:q").private?.mine, false);
 
+// The player hosts: their line is the host's, the model's host lines are dropped, the ideas are kept.
+{
+  const hosted = { ...slpLiveStart({ level: "suggestive", fans: 10 }), hostPersona: "p" };
+  hosted.room = ["f1"];
+  hosted.names.f1 = "Kai";
+  const hostBeat = slpLiveParseBeat({
+    lines: [
+      { t: 0, who: "host", text: "the model must not speak for the player" },
+      { t: 1, who: "Kai", text: "omg hi" },
+    ],
+    next: ["Ask Kai about their day", "Tease the goal", ""],
+  })!;
+  assert.deepEqual(hostBeat.next, ["Ask Kai about their day", "Tease the goal"]);
+  const kept = slpLiveApplyBeat(hosted, hostBeat, {
+    at: 10_000,
+    seconds: 20,
+    host: "Rowan",
+    you: { by: "persona:p", name: "Rowan", text: "hey chat" },
+    hosting: true,
+  });
+  assert.equal(kept, 1);
+  const says = hosted.log.filter((event) => event.kind === "say");
+  assert.deepEqual(
+    says.map((event) => event.text),
+    ["hey chat"],
+  );
+  assert.equal(
+    hosted.log.some((event) => event.kind === "you"),
+    false,
+  );
+  assert.deepEqual(hosted.next, hostBeat.next);
+  // Only-ideas beats still count when the room is quiet.
+  assert.ok(slpLiveParseBeat({ lines: [], next: ["Wave"] }));
+  const hostView = (me: string) =>
+    slpLiveView(
+      {
+        id: "h",
+        hostId: "c",
+        hostKind: "player",
+        startedAt: new Date(0).toISOString(),
+        endsAt: new Date(3_600_000).toISOString(),
+        endedAt: null,
+        state: hosted,
+      },
+      20_000,
+      me,
+    );
+  assert.equal(hostView("persona:p").hosting, true);
+  assert.deepEqual(hostView("persona:p").next, hostBeat.next);
+  assert.equal(hostView("persona:q").hosting, false);
+  assert.deepEqual(hostView("persona:q").next, []);
+}
+
 console.log("slurp2 live sim: ok");

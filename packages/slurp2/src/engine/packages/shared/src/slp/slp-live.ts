@@ -112,6 +112,10 @@ export type SlpLiveState = {
   shooting?: number | null;
   /** The paid private block (ms since start): only the payer and the Creator, the room waits outside. */
   private?: { by: string; name: string; from: number; to: number } | null;
+  /** The player's persona that hosts this show (hostKind "player"): it writes the host's lines. */
+  hostPersona?: string;
+  /** Three moves the model suggests to the hosting player for what to say or do next. */
+  next?: string[];
 };
 
 /** A private block runs at `at`. */
@@ -360,6 +364,9 @@ export function slpLiveView(
     beatTo: state.beatTo ?? 0,
     // Only the newest landed picture, by number; the media path stays on the server.
     picture: slpLivePictureView(state, Math.max(0, now - Date.parse(show.startedAt))),
+    // The hosting player gets the suggestions; viewers never see them.
+    hosting: !!state.hostPersona && me === `persona:${state.hostPersona}`,
+    next: state.hostPersona && me === `persona:${state.hostPersona}` ? (state.next ?? []) : [],
     offer: live ? { price: live.privatePrice, minutes: live.privateMinutes } : null,
     private: slpLivePrivateView(state, Math.max(0, now - Date.parse(show.startedAt)), me),
     shooting: slpLiveShooting(state, Math.max(0, now - Date.parse(show.startedAt))),

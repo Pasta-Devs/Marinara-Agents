@@ -37,6 +37,7 @@ import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js"
 import { SLP_STIR_DECK, SLP_STIR_DECK_ORDER, slpStirDeckOn } from "./slp-stir-deck";
 import { slpStirDeckNeed, slpStirLiveLever } from "./slp-stir-screen-model";
 import { SlpStirRecentPlays } from "./SlpStirRecentPlays";
+import { SlpLiveGoLive } from "../live/slp-live-contract";
 
 const HINT_KEY = "slurp2:stir-hint-seen";
 
@@ -659,6 +660,10 @@ export function SlpStirScreen({
           ) : view ? (
             <>
               <YourRelationship view={view} />
+              <SlpLiveGoLive
+                hosts={view.creators.filter((creator) => !creator.couplePage)}
+                className="h-12 w-full justify-center text-sm"
+              />
               <NowShowing
                 view={view}
                 onSeeAll={onOpenPulse}

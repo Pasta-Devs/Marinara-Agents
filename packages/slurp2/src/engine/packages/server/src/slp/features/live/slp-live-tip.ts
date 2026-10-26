@@ -11,7 +11,7 @@ import { createSlurpLiveStorage } from "../../data/live/slp-live-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { withSlurpLiveShow } from "./slp-live-lock.js";
 
-export type SlurpLiveTipResult = "booked" | "ended" | "missing" | "processing" | "broke" | "taken";
+export type SlurpLiveTipResult = "booked" | "ended" | "missing" | "processing" | "broke" | "taken" | "hosting";
 
 /**
  * The player tips a live show (optionally for a menu item). The coins move like a profile tip, through a
@@ -35,6 +35,8 @@ export async function tipSlurpLiveShow(
   const show = await storage.get(input.showId);
   if (!show) return "missing";
   if (show.endedAt || at.getTime() >= Date.parse(show.endsAt)) return "ended";
+  // The host does not tip or book themselves on their own show.
+  if (show.hostKind === "player") return "hosting";
   const noodle = createSlurpStorage(db);
   const settings = await noodle.getSettings();
   const by = `persona:${input.personaId}`;

@@ -39,6 +39,7 @@ import { SlpPostSurfaceMenu } from "../../modules/post/SlpPostMenu";
 import { downloadSlpShareCard, toSlpShareCardInput } from "../../modules/post/slp-share-card";
 import { errorMessage, toSlpPostCardModel, LoadMoreFeedButton, SlurpPostDialog } from "./SlpHomeHelpers";
 import { SlpProfilePage } from "./SlpProfilePage";
+import { SlpLiveGoLive } from "../../features/live/SlpLiveGoLive";
 
 // ---------------------------------------------------------------------------
 // Local types
@@ -661,6 +662,7 @@ function SlpCreatorToolsCard({ model }: { model: ReturnType<typeof useStageProfi
               <Pencil size={14} aria-hidden="true" />
               {localizeUi("ui.slurp.profile.editProfile", { defaultValue: "Edit profile" })}
             </SlpButton>
+            <SlpLiveGoLive />
             {/* Automation used to open a dialog of its own here. It is a Creator setting like the
                 rest, so it opens the one place they all live now. */}
             {!personaBackedCreator && (

@@ -24,8 +24,8 @@ export async function shootSlurpLivePicture(db: DB, showId: string, at: number, 
   let hostId = "";
   await withSlurpLiveShow(showId, async () => {
     const show = await storage.get(showId);
-    // ponytail: Creator hosts only; the player as host (slice 6) brings the persona's appearance.
-    if (!show || show.endedAt || show.hostKind !== "creator") return;
+    // A player host's persona Creator draws from the persona's appearance; without one the draw fails quietly.
+    if (!show || show.endedAt) return;
     const why = slpLivePictureDue(show.state, at, live);
     if (!why) return;
     scene = slpLivePictureScene(show.state, at, why);

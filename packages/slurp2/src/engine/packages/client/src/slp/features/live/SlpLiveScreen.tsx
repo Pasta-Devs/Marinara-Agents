@@ -10,7 +10,7 @@ import { slpLiveFeedDelay, slpLiveFeedMerge, type SlpLiveLine } from "../../modu
 import type { SlpLiveEvent } from "../../../../../shared/src/slp/slp-live.js";
 import { useCreatorAccounts } from "../creators/slp-creators-contract";
 import { newRequestId, SlpThreadTaskLayer } from "../messages/slp-messages-contract";
-import { useSlpLiveBeat, useSlpLivePrivate, useSlpLiveShow, useSlpLiveTip } from "./slp-live-hooks";
+import { useSlpLiveBeat, useSlpLiveEnd, useSlpLivePrivate, useSlpLiveShow, useSlpLiveTip } from "./slp-live-hooks";
 
 const LIVE_STYLES = `
 @keyframes slp-live-drift { from { transform: scale(1.08) translate3d(-1.5%, -1%, 0); } to { transform: scale(1.16) translate3d(1.5%, 1%, 0); } }
@@ -67,6 +67,7 @@ export function SlpLiveScreen({
   const tip = useSlpLiveTip(showId, personaId);
   const beat = useSlpLiveBeat(showId, personaId);
   const privateBuy = useSlpLivePrivate(showId, personaId);
+  const end = useSlpLiveEnd(showId, personaId);
   const [said, setSaid] = useState("");
   const joined = useRef(false);
   const askedAt = useRef(0);
@@ -92,7 +93,7 @@ export function SlpLiveScreen({
     if (sinceAsk < (beat.isError ? 20_000 : 6_000)) return;
     const playing = show.elapsed + (Date.now() - loadedAt.current);
     // The welcome waits for the persona, so it greets the player by name once it has loaded.
-    const welcome = !joined.current && !!personaId;
+    const welcome = !joined.current && !!personaId && !show.hosting;
     if (!welcome && playing < show.beatTo - 10_000) return;
     askedAt.current = Date.now();
     beat.mutate(welcome ? { joined: true } : {});
@@ -332,6 +333,20 @@ export function SlpLiveScreen({
               )}
             </div>
           )}
+          {show.hosting && !ended && show.next.length > 0 && (
+            <div role="group" aria-label={t("ui.slurp.live.hostIdeas")} className="flex gap-2 overflow-x-auto pb-1">
+              {show.next.map((idea) => (
+                <button
+                  key={idea}
+                  type="button"
+                  onClick={() => setSaid(idea.slice(0, 300))}
+                  className={`max-w-64 shrink-0 truncate rounded-full px-3 py-1.5 text-xs font-semibold ${glass}`}
+                >
+                  {idea}
+                </button>
+              ))}
+            </div>
+          )}
           {ended ? (
             <div className={`rounded-2xl p-4 text-center ${glass}`}>
               <p className="font-bold">{t("ui.slurp.live.ended", { name })}</p>
@@ -359,40 +374,53 @@ export function SlpLiveScreen({
                     disabled={outside}
                     onChange={(event) => setSaid(event.target.value.slice(0, 300))}
                     enterKeyHint="send"
-                    placeholder={t("ui.slurp.live.say", { name })}
-                    aria-label={t("ui.slurp.live.say", { name })}
+                    placeholder={show.hosting ? t("ui.slurp.live.hostSay") : t("ui.slurp.live.say", { name })}
+                    aria-label={show.hosting ? t("ui.slurp.live.hostSay") : t("ui.slurp.live.say", { name })}
                     className={`h-12 w-full rounded-full px-4 text-base placeholder:text-white/60 ${glass}`}
                   />
                 </form>
               ) : (
                 <p className="min-w-0 flex-1 truncate text-sm text-white/70">{t("ui.slurp.live.pickPersona")}</p>
               )}
-              <button
-                type="button"
-                disabled={!personaId || outside || privateBuy.isPending}
-                onClick={() => setSheet("private")}
-                aria-label={t("ui.slurp.live.privateButton")}
-                className={`flex h-12 w-12 items-center justify-center rounded-full disabled:opacity-40 ${glass}`}
-              >
-                <Lock size={20} aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                disabled={!personaId || outside}
-                onClick={() => setSheet("menu")}
-                aria-label={t("ui.slurp.live.menuTitle")}
-                className={`flex h-12 w-12 items-center justify-center rounded-full disabled:opacity-40 ${glass}`}
-              >
-                <ListOrdered size={20} aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                disabled={!personaId || outside || tip.isPending}
-                onClick={() => setSheet("tip")}
-                className="h-12 rounded-full bg-[var(--noodle-accent)] px-5 text-sm font-black text-white shadow-[0_0_24px_color-mix(in_srgb,var(--noodle-accent)_60%,transparent)] disabled:opacity-40"
-              >
-                {t("ui.slurp.live.tip")}
-              </button>
+              {show.hosting ? (
+                <button
+                  type="button"
+                  disabled={end.isPending}
+                  onClick={() => end.mutate()}
+                  className={`h-12 rounded-full px-5 text-sm font-bold disabled:opacity-40 ${glass}`}
+                >
+                  {t("ui.slurp.live.endShow")}
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={!personaId || outside || privateBuy.isPending}
+                    onClick={() => setSheet("private")}
+                    aria-label={t("ui.slurp.live.privateButton")}
+                    className={`flex h-12 w-12 items-center justify-center rounded-full disabled:opacity-40 ${glass}`}
+                  >
+                    <Lock size={20} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!personaId || outside}
+                    onClick={() => setSheet("menu")}
+                    aria-label={t("ui.slurp.live.menuTitle")}
+                    className={`flex h-12 w-12 items-center justify-center rounded-full disabled:opacity-40 ${glass}`}
+                  >
+                    <ListOrdered size={20} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!personaId || outside || tip.isPending}
+                    onClick={() => setSheet("tip")}
+                    className="h-12 rounded-full bg-[var(--noodle-accent)] px-5 text-sm font-black text-white shadow-[0_0_24px_color-mix(in_srgb,var(--noodle-accent)_60%,transparent)] disabled:opacity-40"
+                  >
+                    {t("ui.slurp.live.tip")}
+                  </button>
+                </>
+              )}
             </div>
           )}
           {!ended && show.mine > 0 && (

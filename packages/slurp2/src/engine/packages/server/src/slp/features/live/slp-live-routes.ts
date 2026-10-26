@@ -6,7 +6,7 @@ import { slpLiveView, slpLiveViewers } from "../../../../../shared/src/slp/slp-l
 import { resolveCreatorMediaAbsolutePath, sendSlurpImageFile } from "../../base/media/slp-media.js";
 import { createSlurpLiveStorage } from "../../data/live/slp-live-storage.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
-import { simulateSlurpLiveShow } from "./slp-live-service.js";
+import { endSlurpLiveShow, hostSlurpLiveShow, simulateSlurpLiveShow } from "./slp-live-service.js";
 import { beatSlurpLiveShow } from "./slp-live-beat.js";
 import { tipSlurpLiveShow } from "./slp-live-tip.js";
 
@@ -17,6 +17,7 @@ const TIP_ERRORS = {
   processing: [409, "Tip payment is still processing."],
   broke: [402, "Not enough coins"],
   taken: [409, "The show is private right now"],
+  hosting: [409, "You host this show"],
 } as const;
 
 /** Live shows (LIVE-V3-PLAN.md): who is live now, one show for the screen, and the player's tips. */
@@ -147,5 +148,34 @@ export async function slpLiveRoutes(app: FastifyInstance, { noodle, resolveViewe
     return show
       ? slpLiveView(show, Date.now(), `persona:${parsed.data.personaId}`, (await noodle.getSettings()).live)
       : reply.code(404).send({ error: "No such show" });
+  });
+
+  // The player goes live: as their persona's own Creator, or as the Creator they play in Stir.
+  app.post("/slurp/live/host", async (req, reply) => {
+    if (!(await liveOn())) return reply.code(409).send({ error: LIVE_OFF });
+    const parsed = z
+      .object({
+        personaId: z.string().trim().min(1),
+        creatorId: z.string().trim().min(1).optional(),
+        minutes: z.number().int().min(1).max(240),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (!(await resolveViewerPersona(parsed.data.personaId)))
+      return reply.code(404).send({ error: "Slurp persona not found" });
+    const result = await hostSlurpLiveShow(app.db, parsed.data);
+    if (result === "missing") return reply.code(404).send({ error: "No such Creator" });
+    if (result === "live") return reply.code(409).send({ error: "This Creator is already live" });
+    const settings = await noodle.getSettings();
+    return slpLiveView(result.show, Date.now(), `persona:${parsed.data.personaId}`, settings.live);
+  });
+
+  app.post("/slurp/live/:id/end", async (req, reply) => {
+    const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const show = await endSlurpLiveShow(app.db, { showId: (req.params as { id: string }).id, ...parsed.data });
+    if (show === "missing") return reply.code(404).send({ error: "No such show" });
+    const settings = await noodle.getSettings();
+    return slpLiveView(show, Date.now(), `persona:${parsed.data.personaId}`, settings.live);
   });
 }

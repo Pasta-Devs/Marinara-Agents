@@ -68,3 +68,28 @@ export function useSlpLivePrivate(showId: string, personaId: string | null) {
     onSuccess: (view) => qc.setQueryData(liveKey("show", showId, personaId ?? ""), view),
   });
 }
+
+/** The player goes live: as their persona's own Creator, or (from Stir) as `creatorId`. */
+export function useSlpLiveHost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; creatorId?: string; minutes: number }) =>
+      api.post<SlpLiveView>(`/slurp2/slurp/live/host`, input),
+    onSuccess: (view, input) => {
+      qc.setQueryData(liveKey("show", view.id, input.personaId), view);
+      void qc.invalidateQueries({ queryKey: liveKey("now") });
+    },
+  });
+}
+
+/** The hosting player ends their show now. */
+export function useSlpLiveEnd(showId: string, personaId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<SlpLiveView>(`/slurp2/slurp/live/${encodeURIComponent(showId)}/end`, { personaId }),
+    onSuccess: (view) => {
+      qc.setQueryData(liveKey("show", showId, personaId ?? ""), view);
+      void qc.invalidateQueries({ queryKey: liveKey("now") });
+    },
+  });
+}
