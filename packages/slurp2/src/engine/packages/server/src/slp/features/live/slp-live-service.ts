@@ -18,6 +18,7 @@ import { createSlurpLiveStorage, type SlurpLiveShow } from "../../data/live/slp-
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { withSlurpLiveShow } from "./slp-live-lock.js";
 import { slurpIsCouplePage } from "../../modules/projects/slp-creator-couples.js";
+import { notifySlurpLiveStart, postSlurpLiveSummary } from "./slp-live-news.js";
 
 const MINUTE = 60_000;
 /** ponytail: a fixed cap keeps the code simulation cheap; make it a setting if players want busier evenings. */
@@ -70,6 +71,7 @@ async function startDueShows(db: DB, settings: Settings, open: SlurpLiveShow[], 
       createdAt: at.toISOString(),
     };
     if (!(await createIfFree(storage, show))) continue;
+    await notifySlurpLiveStart(db, show).catch((error: unknown) => logger.warn(error, "[slurp-live] Notify failed"));
     open.push(await simulateSlurpLiveShow(db, show, settings, at));
     busy.add(creator.id);
   }
@@ -159,6 +161,8 @@ async function simulateLocked(db: DB, show: SlurpLiveShow, settings: Settings, a
   const endedAt = at.getTime() >= Date.parse(show.endsAt) ? show.endsAt : null;
   const next = { ...show, state, endedAt };
   await createSlurpLiveStorage(db).save(show.id, { state, endedAt });
+  // The show just closed: a Creator thanks the room; a player host writes their own posts.
+  if (endedAt && !show.endedAt && show.hostKind === "creator") await postSlurpLiveSummary(db, next);
   return next;
 }
 

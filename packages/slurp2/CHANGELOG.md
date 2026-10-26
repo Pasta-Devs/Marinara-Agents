@@ -1,5 +1,19 @@
 # Slurp release notes
 
+## 0.4.12 — 2026-10-26
+
+- Live shows v3, rebuilt from staging. A code simulation runs every show minute by minute whether
+  anyone watches: fans join and leave, tip from their weekly budget, order from the spice-level menu
+  and push goals. Money, goals and the room are counted by code only.
+- While you watch, one model call writes the next 20 to 50 seconds of the host and the chat as JSON.
+  Your chat message or your arrival cuts in, and the host answers you by name within seconds.
+- Live pictures about once per minute (configurable), drawn from a scene built in code; private
+  shows at the Backstage price and length, extendable, with the room waiting outside.
+- You can host: as your persona's own Creator from your page, or as any Creator from Stir. The
+  model then writes only the room and three ideas for your next move.
+- "X is live" notification for subscribers, a thank-you post after each Creator show, and a
+  Backstage > Live shows page.
+
 ## 0.4.1 — 2026-10-24 [highlight]
 
 - Fixed Story viewer clicks passing through to the feed or Engine behind it. Close, Creator profile, menu, navigation and picture controls respond again.

@@ -11,6 +11,7 @@ export const SLP_BACKSTAGE_LABEL_KEYS: Partial<Record<keyof SlurpSettings, strin
   extWorld: "ui.slurp.settings.overview.yours.world",
   extStir: "ui.slurp.settings.overview.yours.stir",
   extSupportDesk: "ui.slurp.settings.overview.yours.desk",
+  extLive: "ui.slurp.settings.overview.yours.live",
   inlineAdsEnabled: "ui.slurp.settings.inlinePromotions",
   inlineAdsFrequency: "ui.slurp.settings.ads.frequency",
   brandDealsPace: "ui.slurp.settings.ads.dealsPace",
@@ -159,4 +160,5 @@ export const SLP_BACKSTAGE_LABEL_KEYS: Partial<Record<keyof SlurpSettings, strin
   polyamory: "ui.slurp.stir.settings.polyamory",
   paused: "ui.slurp.settings.overview.pause.label",
   drama: "ui.slurp.drama.settings.title",
+  live: "ui.slurp.settings.backstage.targets.live",
 };
