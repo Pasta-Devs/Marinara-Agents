@@ -1,5 +1,9 @@
 # Story Writer release notes
 
+## 0.1.1 — 2026-10-26
+
+- On a phone turned sideways, the closed settings drawer now hides completely behind its arrow, and the book no longer loses extra room beside the camera.
+
 ## 0.1.0 — 2026-10-25
 
 - New Home tab: Story Writer, a co-writing book where the model writes your story chapter by chapter.
