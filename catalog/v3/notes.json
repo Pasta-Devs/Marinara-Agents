@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.23.0",
+          "date": "2026-10-26",
+          "notes": "- Keep playing: leave a main chapter that is still forging. It keeps forging, the busy pill shows its progress, and a notice says when it is ready, could not be forged or was interrupted. Pre-forging starts once it is ready. Cancel on any story loader still stops it, and switching worlds waits for it.\n- Pre-forge \"Story and key images\" is now \"Story and images\". With Backgrounds on, it also paints the places each pre-forged scene visits, in main chapters and Character Stories. Worlds already on this setting start painting places ahead after updating.\n- Pre-forged art now paints alongside the text, so the chapter menu opens once the text is written. A scene opened before its art is ready joins the paint in progress.\n- Pre-forging no longer reports stopped, or lets Retry start a second chain, on chapters that take over 20 minutes.",
+          "highlight": true
+        },
+        {
           "version": "1.22.0",
           "date": "2026-10-26",
           "notes": "- Banner animations say why they failed, play on phones away from the server, and never offer a paid retry for a saved clip.\n- Water beats Fire, Fire beats Earth, Earth beats Wind, Wind beats Water, in both combat modes and on the Home chart.\n- Formation conversion handles five-star traits, converts one character at a time, explains failures and keeps ready kits.\n- The Vigor countdown always shows below full and stops flickering.\n- Story choices appear without reopening the story.\n- Letters fill the screen with a shorter reply box, and Read message lists your bonded units.\n- New messages show as a styled card on Home with the opening lines.\n- The story mute button and help marks match their neighbours.",
@@ -284,12 +290,6 @@
           "date": "2026-10-24",
           "notes": "### New\n\n- World-specific soundtrack briefs generated through the narration connection, cached for each music context and translated into original musical qualities.\n\n### Fixed\n\n- Audio failures show their HTTP status and, on newer Engine hosts, the provider's safe rejection reason while stock audio continues.\n- Unit and relic achievements count every gained level; capped duplicates do not count as gained facets, and Tower-shop facet gains count.\n- Existing worlds recover proven achievement progress without changing claimed rewards or pass progress.",
           "highlight": true
-        },
-        {
-          "version": "1.11.1",
-          "date": "2026-10-23",
-          "notes": "- Fixed generated music and effects for worlds using migrated legacy audio connections.\n- Recorded the merged Engine audio connection baseline.",
-          "highlight": false
         }
       ]
     },

@@ -1378,6 +1378,48 @@
               "replace": "var oy=[{version:null,changed:[\"Water beats Fire, Fire beats Earth, Earth beats Wind and Wind beats Water.\",\"Letters fill the screen below the stats bar, and new messages arrive as a card on Home.\"],fixed:[\"Banner animations explain failures and play on phones away from the server.\",\"Five-star units convert to Formation, and a character that needs a retry says why.\",\"The Vigor countdown stays visible below full.\",\"Story choices appear without reopening the story.\",\"Read message lists your bonded units.\"]},{version:\"1.15.0\",new:[\"Choose generated music for the Home menu in Visual Settings.\","
             }
           ]
+        },
+        {
+          "version": "1.23.0",
+          "commits": [],
+          "edits": [
+            {
+              "find": "{value:\"art\",label:\"Story and key images\"}",
+              "replace": "{value:\"art\",label:\"Story and images\"}"
+            },
+            {
+              "find": "hint:\"Writes a chapter's beats as soon as it is forged, so they open instantly. Its menu stays shut until the chain finishes, and you can cancel it.\"",
+              "replace": "hint:\"Writes a chapter's beats as soon as it is forged, so they open instantly. Story and images also paints their key images and, with Backgrounds on, the places they visit, alongside the text. Its menu stays shut until the text is written, and you can cancel it.\""
+            },
+            {
+              "find": ".then(i=>{if(!n())return;if(i&&i.ok&&i.plan){",
+              "replace": ".then(i=>{if(forgeChapterSettled(this,i,{runId:a,chapter:r,revision:forgeStoryRevision,label:op(r)},n()))return;if(i&&i.ok&&i.plan){"
+            },
+            {
+              "find": "this._openPrologueIfOwed(e),this._openPostponedScene(e)}this._run&&this._renderBrowser()}})",
+              "replace": "this._openPrologueIfOwed(e),this._openPostponedScene(e)}this._run&&this._renderBrowser()}else e&&forgeChapterSettled(this,{ok:!0,plan:e},{runId:a,chapter:r,revision:forgeStoryRevision,label:op(r),warmed:!0},!1)})"
+            },
+            {
+              "find": "_prewarmCombats(e){let forgeStoryRevision=this._forgeStoryRevision||0,forgeStoryRunId=this._run?.runId;let a=qa(e);if(!a||!this._run)return Promise.resolve();let r=this._planChapter,",
+              "replace": "_prewarmCombats(e,forgeChapter,forgeVersion){let forgeStoryRevision=this._forgeStoryRevision||0,forgeStoryRunId=this._run?.runId;let a=qa(e);if(!a||!this._run)return Promise.resolve();let r=forgeChapter??this._planChapter,"
+            },
+            {
+              "find": "return this._postJson(\"/combat-guide\",{runId:this._run.runId,chapter:r,combatIndex:n})",
+              "replace": "return this._postJson(\"/combat-guide\",{runId:this._run.runId,chapter:r,combatIndex:n,...Number.isSafeInteger(forgeVersion)?{storyRevision:forgeVersion}:{}})"
+            },
+            {
+              "find": "this._planState===\"idle\"&&this._plan==null&&!this._storyWaits()&&this._loadChapterPlan(),",
+              "replace": "this._planState===\"idle\"&&this._plan==null&&!this._planEscaped&&!this._storyWaits()&&this._loadChapterPlan(),"
+            },
+            {
+              "find": "ds=\"1.22.0\"",
+              "replace": "ds=\"1.23.0\""
+            },
+            {
+              "find": "var oy=[{version:null,changed:[\"Water beats Fire",
+              "replace": "var oy=[{version:null,new:[\"Keep playing leaves a chapter that is still forging, and a notice says when it is ready.\",\"Pre-forging with Story and images also paints the places each scene visits when Backgrounds is on.\"],changed:[\"Pre-forged art paints alongside the story, so the chapter menu opens as soon as the text is written.\"],fixed:[\"Pre-forging no longer reports stopped on chapters that take over 20 minutes.\"]},{version:\"1.22.0\",changed:[\"Water beats Fire"
+            }
+          ]
         }
       ]
     },
@@ -2645,6 +2687,30 @@
             {
               "find": "logger:r.logger,concurrency:3,generateKit:",
               "replace": "logger:r.logger,concurrency:1,generateKit:"
+            }
+          ]
+        },
+        {
+          "version": "1.23.0",
+          "commits": [],
+          "edits": [
+            {
+              "find": "function bgSlug(e,t){",
+              "replace": "",
+              "replaceFrom": "src/preforge-art-server.mjs",
+              "sourceId": "preforge-art-server"
+            },
+            {
+              "find": "let je=2,St=(p,u)=>",
+              "replace": "let je=2,forgePreforgeArt=createForgePreforgeArt({settings:async(p,u)=>{let{data:o}=await be(),i=Ae(o,p);if(!i||pd(i)!==\"art\"||nt(i).off)return null;let{data:g}=await pe(p),m=g&&g.preforge&&g.preforge[String(u)];return m&&m.cancelled===!0?null:{run:i,backgrounds:nt(i).backgrounds}},paintPlace:(p,u,o)=>q(p,u,o.slug,l(o.name),l(o.tags)),paintKeyImage:(p,u,o,i)=>B(u,p,o,i),assertActive:forgeStoryAssertActive,logger:r.logger}),St=(p,u)=>"
+            },
+            {
+              "find": "An(()=>ze(o,async()=>{for(let i=0;i<64;i+=1){",
+              "replace": "An(()=>ze(o,async()=>{let forgeArt=forgePreforgeArt(p,u);for(let i=0;i<64;i+=1){let forgeChainEntry=gn.get(o);forgeChainEntry&&(forgeChainEntry.at=Date.now());"
+            },
+            {
+              "find": "if(w.art)try{await B(p,m,u,b)}catch(_){r.logger.warn(\"[gacha-forge] pre-forge key image failed for %s %s/%s: %s\",p,u,b,l(_&&_.message))}",
+              "replace": "w.art&&forgeArt(b,S.places);"
             }
           ]
         }
