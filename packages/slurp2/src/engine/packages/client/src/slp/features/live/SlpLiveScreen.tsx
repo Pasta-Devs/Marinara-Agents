@@ -170,7 +170,7 @@ export function SlpLiveScreen({
                   src={`/api/slurp2/slurp/live/${encodeURIComponent(show.id)}/picture/${n}`}
                   mediaWidth={720}
                   alt=""
-                  className="slp-live-in slp-live-drift absolute inset-0 h-full w-full object-cover"
+                  className="slp-crop slp-live-in slp-live-drift absolute inset-0 h-full w-full object-cover"
                 />
               ))
           ) : host?.avatarUrl ? (
