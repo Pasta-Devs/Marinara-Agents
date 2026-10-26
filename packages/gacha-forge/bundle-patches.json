@@ -1522,6 +1522,24 @@
               "replace": "var oy=[{version:null,fixed:[\"Formation fights can no longer stall on immunity, Retreat Echo or summons.\",\"Remaking older Formation kits no longer locks battles; cancelling keeps your current kits, and a failed kit waits for Retry.\",\"Story, event and boss fights in Formation no longer fail over a slightly wrong kit.\",\"On phones the boss bar no longer covers the row tags, and team editor names are readable.\"]},{version:\"1.24.0\",new:[\"Formation is rebuilt"
             }
           ]
+        },
+        {
+          "version": "1.24.2",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.24.1\"",
+              "replace": "ds=\"1.24.2\""
+            },
+            {
+              "find": "var oy=[{version:null,fixed:[\"Formation fights can no longer stall",
+              "replace": "var oy=[{version:null,fixed:[\"Retrying a failed Formation kit pays only for the characters that still need one, and kits already paid for are never made twice.\",\"A Front Row fighter whose passive can never fire attacks with its Normal skill again, and an immunity Ultimate lands on the ally you pick.\",\"Retreating a fighter and summoning into its seat works in the same turn.\",\"A battle no longer asks for an element nobody in your world has.\",\"On phones enemy names show in full, an Echo describes itself, and keyboard focus comes back after Fight.\"]},{version:\"1.24.1\",fixed:[\"Formation fights can no longer stall"
+            },
+            {
+              "find": "return O?{...O,id:String(y)}:null},w={list:",
+              "replace": "return O?{...O,id:String(y),...(a&&a.combatMode===\"formation\"&&String(O.id)!==String(y)?{name:O.name+\" · Echo\",echoOwner:O.name,tier:void 0}:{})}:null},w={list:"
+            }
+          ]
         }
       ]
     },

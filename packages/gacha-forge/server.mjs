@@ -2660,13 +2660,19 @@ function normalizeForgeFormationKit(raw, { rarity, fallback } = {}) {
     ultimate = slot("ultimate", "ultimate", "ult"),
     passive = slot("passive", "passive");
   if (!standard || !ultimate || !passive) return null;
-  // The Front Row is there to fight: a fighter with nothing that reaches the enemy (its Normal, Ultimate or a
-  // striking passive) strikes with its Normal skill. A tank's taunt or shield pairs with an attacking Ultimate.
+  // The Front Row is there to fight: a fighter with nothing that reaches the enemy strikes with its Normal skill.
+  // A passive counts only when it deals damage in front without the unit attacking first: it has power, and
+  // it does not wait for an attack (on_attack) or a kill (on_kill), or fire only from the Back Row.
+  const strikingPassive =
+    forgeFormationStrikes.has(passive.effect) &&
+    passive.power > 0 &&
+    passive.row !== "back" &&
+    !["on_attack", "on_kill"].includes(passive.trigger);
   if (
     preferredRow !== "back" &&
     !forgeFormationOffense.has(standard.effect) &&
     !forgeFormationOffense.has(ultimate.effect) &&
-    !forgeFormationStrikes.has(passive.effect)
+    !strikingPassive
   ) {
     Object.assign(standard, { effect: "damage", target: "enemy", description: "" });
     delete standard.stat;
@@ -3001,12 +3007,10 @@ function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rules = []
       return pool.filter((actor) => actor.position === (ability.target === "front_row" ? "front" : "back"));
     const chosen = pool.find((actor) => actor.id === targetId);
     if (chosen) return [chosen];
-    if (["buff", "immune", "taunt"].includes(effect))
-      return [
-        fighters(side)
-          .filter((actor) => effect !== "immune" || wardable(actor))
-          .sort((a, b) => b.atk - a.atk || actors.indexOf(a) - actors.indexOf(b))[0] || source,
-      ];
+    const strongest = (list) => [...list].sort((a, b) => b.atk - a.atk || actors.indexOf(a) - actors.indexOf(b))[0];
+    if (effect === "immune")
+      return [strongest(fighters(side).filter(wardable)) || strongest(pool.filter(wardable)) || source];
+    if (["buff", "taunt"].includes(effect)) return [strongest(fighters(side)) || source];
     return [weakest(pool) || source];
   };
   const trigger = (actor, key, events, context) => {
@@ -3400,7 +3404,7 @@ function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rules = []
     }
     return true;
   };
-  const useful = (actor, skill) => {
+  const useful = (actor, skill, targetId = null) => {
     if (!skill) return false;
     const side = actor.side,
       foes = live(opponent(side));
@@ -3427,7 +3431,7 @@ function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rules = []
       case "summon":
         return fronts(side).length < 3;
       case "immune":
-        return targetsOf(actor, skill, null).some(wardable);
+        return targetsOf(actor, skill, targetId).some(wardable);
       default:
         return offensive(skill) ? foes.some((foe) => canTarget(actor, foe)) : true;
     }
@@ -3635,7 +3639,8 @@ function* forgeFormationBattle({ allies = [], enemies = [], seed = 1, rules = []
     } else if (!skill) held(actor, "hold", events);
     else if (status(actor, "silence")) held(actor, "silenced", events);
     else if (
-      (["revive", "swap", "summon", "immune"].includes(skill.effect) && !useful(actor, skill)) ||
+      // Immunity is tested on the planned target, which an earlier cast in the same plan may have warded.
+      (["revive", "swap", "summon", "immune"].includes(skill.effect) && !useful(actor, skill, entry.targetId)) ||
       (offensive(skill) && skill.effect !== "shuffle" && !targetsOf(actor, skill, entry.targetId).length)
     )
       held(actor, "target", events);
@@ -3838,7 +3843,7 @@ function forgeFormationKitMessages({ run, unit, cardContext = "" }) {
 ${forgeFormationRulesText()}
 ARCHETYPE. Choose "preferredRow" from canon first (how this character fights), then from role: Tanks, Warriors and Assassins usually "front", Supports "back", Mages either; "hybrid" for characters who thrive moving between rows.
 - front: a fighter that hits or protects. Normal costs 0-1 (damage power 80-100 at cost 0, up to 130 at cost 1, or a tank's taunt or shield); Ultimate costs 2-5 with elementCost 1-3 and helps it fight; passive row "front" or "both".
-A front or hybrid kit needs a Normal skill, Ultimate or passive that hits or controls enemies: a tank's taunt or shield Normal pairs with an attacking Ultimate or a striking passive.
+A front or hybrid kit needs a Normal skill or Ultimate that hits or controls enemies (damage, aoe_damage, drain, execute, dot, debuff, stun, silence, swap or shuffle), or a passive with power that deals damage (damage, aoe_damage, drain or execute) on a trigger other than on_attack or on_kill, in row "front" or "both": a tank's taunt or shield Normal pairs with an attacking Ultimate or such a passive. Otherwise its Normal skill becomes a plain strike.
 - back: a deliberately weak Normal (cost 1-3; a back character's Normal keeps only 60% of the power limit); a powerful but situational Ultimate that a team saves for, costing 5-8 with elementCost 2-4: revive, restore the party, team immunity, swap or shuffle the enemy board, or one devastating hit; and a VERY STRONG passive with row "back" using turn_start or an ally_* trigger, near the passive limit.
 - hybrid: Normal cost 0-2, Ultimate cost 3-6, and a perk and/or enter_front/enter_back passives that reward switching rows.
 Vary costs between characters: simple attackers may have a free Normal skill and a cheap Ultimate, while advanced characters need energy saved over several turns for devastating effects. Use effects that suit the character and the genre: damage over time, attack or defence up and down, regeneration, stun, silence, shields, taunts, immunity, and board control (swap, shuffle) for manipulators.
@@ -3905,11 +3910,13 @@ function forgeFormationNormalizeGuide(raw, guide, elements) {
  */
 function forgeFormationSeatedRules(enemies, rules = []) {
   const boss = enemies.findIndex((enemy) => enemy?.tier === "boss");
-  return rules.map((rule) =>
-    rule.kind === "defeat_order" && boss >= 0 && !rule.order.includes(boss) && rule.order.length > 2
-      ? { ...rule, order: rule.order.slice(0, 2) }
-      : rule,
-  );
+  return rules.map((rule) => {
+    if (rule.kind !== "defeat_order" || boss < 0 || rule.order.includes(boss) || rule.order.length <= 2) return rule;
+    const order = rule.order.slice(0, 2);
+    // The model's sentence still names the dropped step; say what the engine now enforces.
+    const names = order.map((index) => String(enemies[index]?.name || "").trim() || `enemy ${index + 1}`);
+    return { ...rule, order, description: `Defeat ${names.join(", then ")}.` };
+  });
 }
 
 /**
@@ -3971,10 +3978,21 @@ function forgeFormationEnemies(enemies, rules = []) {
   return result.map((enemy, index) => ({ ...enemy, position: front.has(index) ? "front" : "back" }));
 }
 
+// ponytail: a guarded route records the elements its Formation world owns before the handler reads a cached guide,
+// so a barrier nobody in the world can meet (a guide cached by 1.24.0) is dropped the way generation drops it.
+// Ceiling: one process-wide map keyed by world; upgrade path: pass the elements through every guide reader.
+const forgeFormationOwnedElements = new Map();
+
 function forgeFormationPrepare(run, allies, enemies, rules = []) {
   if (forgeFormationMode(run) !== "formation") return { allies, enemies, combatMode: "classic", formationRules: [] };
+  const owned = forgeFormationOwnedElements.get(run?.runId);
+  const meetable = owned
+    ? rules.filter(
+        (rule) => rule.kind !== "element_barrier" || rule.elements.some((element) => owned.includes(element)),
+      )
+    : rules;
   // The preview, the snapshot and the engine all read the same seated rules.
-  const seated = forgeFormationSeatedRules(enemies, rules);
+  const seated = forgeFormationSeatedRules(enemies, meetable);
   return { allies, enemies: forgeFormationEnemies(enemies, seated), combatMode: "formation", formationRules: seated };
 }
 
@@ -4025,6 +4043,8 @@ function forgeFormationRoutes(routes, { migration, readWorld, cancellation }) {
           if (ready && ready.ok === false) return ready;
           run = await readWorld(runId);
           if (!run) return { ok: false, error: "not-found" };
+          if (forgeFormationMode(run) === "formation" && typeof migration.elements === "function")
+            forgeFormationOwnedElements.set(runId, await migration.elements(runId));
           if (
             starting &&
             request.body?.expectedCombatMode != null &&
@@ -4173,14 +4193,15 @@ function createForgeFormationMigration({
     status: currentKit(row.data) ? "ready" : "pending",
     ...(currentKit(row.data) ? { kit: normalizeKit(row.data.formationKit), kitPrompt } : {}),
   });
-  // A ready kit for an unchanged character is kept, whether its job failed or was cancelled.
-  const reuse = (previous, row) =>
+  // A paid, ready kit for an unchanged character, written by the current kit prompt, is never paid for again.
+  const usable = (previous, row) =>
     previous?.status === "ready" &&
     previous.fingerprint === forgeFormationUnitFingerprint(row.data) &&
     previous.kitPrompt === kitPrompt &&
-    normalizeKit(previous.kit)
-      ? previous
-      : entry(row);
+    !!normalizeKit(previous.kit);
+  // A ready kit is kept, whether its job failed or was cancelled, and so is one an old kit stands in for.
+  const reuse = (previous, row) =>
+    usable(previous, row) ? previous : usable(previous?.staged, row) ? previous.staged : entry(row);
   async function updateJob(runId, id, mutate) {
     return transaction(async ({ documents: store }) => {
       const row = await store.getById(packageId, jobId(runId));
@@ -4378,14 +4399,20 @@ function createForgeFormationMigration({
   // waits for its explicit retry.
   const declinedRemake = (job) =>
     job?.kitPrompt === kitPrompt && (["failed", "cancelled"].includes(job.status) || job.declined === true);
-  const keep = (row) => ({
-    unitId: row.id,
-    name: String(row.data.name || "").slice(0, 160),
-    fingerprint: forgeFormationUnitFingerprint(row.data),
-    status: "ready",
-    kit: normalizeKit(row.data.formationKit),
-    kitPrompt: row.data.formationKitPrompt ?? null,
-  });
+  // A kept old kit carries the paid kit it stands in for (`staged`, which commit ignores), so a later remake
+  // or retry uses that one instead of paying again.
+  const keep = (row, previous) => {
+    const staged = [previous, previous?.staged].find((candidate) => usable(candidate, row));
+    return {
+      unitId: row.id,
+      name: String(row.data.name || "").slice(0, 160),
+      fingerprint: forgeFormationUnitFingerprint(row.data),
+      status: "ready",
+      kit: normalizeKit(row.data.formationKit),
+      kitPrompt: row.data.formationKitPrompt ?? null,
+      ...(staged ? { staged } : {}),
+    };
+  };
   async function start(body, { onlyMissing = false } = {}) {
     const runId = body?.runId;
     if (!validRunId(runId) || !forgeFormationModes.has(body?.targetMode) || body.confirmed !== true)
@@ -4426,7 +4453,7 @@ function createForgeFormationMigration({
           roster.map((row) => [
             row.id,
             onlyMissing && playableKit(row.data)
-              ? keep(row)
+              ? keep(row, job?.data?.targetMode === body.targetMode ? job.data.units?.[row.id] : null)
               : job?.data?.targetMode === body.targetMode
                 ? reuse(job.data.units?.[row.id], row)
                 : entry(row),
@@ -4458,7 +4485,7 @@ function createForgeFormationMigration({
       job.units = Object.fromEntries(
         current.map((row) => [
           row.id,
-          job.declined === true && playableKit(row.data) ? keep(row) : reuse(job.units[row.id], row),
+          job.declined === true && playableKit(row.data) ? keep(row, job.units[row.id]) : reuse(job.units[row.id], row),
         ]),
       );
       job.status = "preparing";
@@ -4504,6 +4531,18 @@ function createForgeFormationMigration({
     if (started.conversion?.status === "failed") return { ...started, ok: false, error: "combat-conversion-failed" };
     return { ...started, ok: false, error: started.error || "combat-conversion-in-progress" };
   }
+  // The elements a world's roster can bring, read the way guide generation reads them.
+  async function elements(runId) {
+    const roster = (await documents.getById(packageId, `${runId}:session`))?.data?.roster || {};
+    return [
+      ...new Set(
+        (await units(documents, runId))
+          .filter((row) => roster[row.id])
+          .map((row) => String(row.data.affinity || "").toLowerCase())
+          .filter(Boolean),
+      ),
+    ];
+  }
   return {
     start,
     status,
@@ -4511,6 +4550,7 @@ function createForgeFormationMigration({
     cancel,
     ensure,
     guard,
+    elements,
     settled: async (runId) => running.get(runId)?.promise,
     async removeWorld(runId) {
       running.get(runId)?.controller.abort();
