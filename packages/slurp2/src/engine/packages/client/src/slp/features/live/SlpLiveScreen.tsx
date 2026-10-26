@@ -89,11 +89,13 @@ export function SlpLiveScreen({
     const sinceAsk = Date.now() - askedAt.current;
     if (sinceAsk < (beat.isError ? 20_000 : 6_000)) return;
     const playing = show.elapsed + (Date.now() - loadedAt.current);
-    if (joined.current && playing < show.beatTo - 10_000) return;
+    // The welcome waits for the persona, so it greets the player by name once it has loaded.
+    const welcome = !joined.current && !!personaId;
+    if (!welcome && playing < show.beatTo - 10_000) return;
     askedAt.current = Date.now();
-    beat.mutate(joined.current ? {} : { joined: true });
-    joined.current = true;
-  }, [now, show, beat]);
+    beat.mutate(welcome ? { joined: true } : {});
+    if (welcome) joined.current = true;
+  }, [now, show, beat, personaId]);
   const name = host?.displayName ?? t("ui.slurp.live.creator");
   const me = personaId ? `persona:${personaId}` : null;
   const itemLabel = (id: string | undefined) =>

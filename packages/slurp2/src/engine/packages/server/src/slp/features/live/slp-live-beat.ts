@@ -29,7 +29,10 @@ import { simulateSlurpLiveShow } from "./slp-live-service.js";
 export type SlurpLiveBeatResult = "written" | "waiting" | "busy" | "failed" | "ended" | "missing";
 
 // ponytail: in-process guard, one beat call per show at a time; a second server process would need a row flag.
-const writing = new Set<string>();
+const writing = new Map<string, number>();
+/** The newest call per show that the player's message or join started: an older call's beat is dropped. */
+const cutIn = new Map<string, number>();
+let calls = 0;
 
 /** When the model fails, the Creator covers in a line so the room never goes silent (LIVE-V3-PLAN.md "Talk"). */
 const COVER_LINES = [
@@ -66,7 +69,9 @@ export async function beatSlurpLiveShow(
   const talking = !!(input.message || input.joined);
   if (!talking && (show.state.beatTo ?? 0) - at > (seconds * 1_000) / 3) return "waiting";
   if (writing.has(show.id) && !talking) return "busy";
-  writing.add(show.id);
+  const call = ++calls;
+  writing.set(show.id, call);
+  if (talking) cutIn.set(show.id, call);
   try {
     const host = await noodle.getAccountById(show.hostId);
     if (!host) return "missing";
@@ -103,30 +108,37 @@ export async function beatSlurpLiveShow(
         ? { by: `persona:${input.personaId}`, name: input.viewer.displayName, text: input.message }
         : undefined;
     let kept = 0;
+    let stale = false;
     await withSlurpLiveShow(show.id, async () => {
       const fresh = await storage.get(show.id);
       if (!fresh || fresh.endedAt) return;
       // The model took a few seconds: the beat starts now, not when it was asked for.
       const ready = at + (Date.now() - t0);
-      if (beat)
+      // A newer cut-in already wrote its answer; this beat would cut it away.
+      if ((cutIn.get(show.id) ?? 0) > call) {
+        if (you) slpLiveLog(fresh.state, { at: ready, kind: "you", by: you.by, name: you.name, text: you.text });
+        stale = true;
+      } else if (beat)
         kept = slpLiveApplyBeat(fresh.state, beat, {
           at: ready,
           seconds,
           host: host.displayName,
           ...(you ? { you } : {}),
         });
-      if (!kept) {
-        if (you) slpLiveLog(fresh.state, { at: ready, kind: "you", by: you.by, name: you.name, text: you.text });
+      if (!kept && !stale) {
+        // With a beat, the apply already logged the player's line.
+        if (you && !beat)
+          slpLiveLog(fresh.state, { at: ready, kind: "you", by: you.by, name: you.name, text: you.text });
         const line = COVER_LINES[Math.floor(ready / 1_000) % COVER_LINES.length]!;
         slpLiveLog(fresh.state, { at: ready + 1_000, kind: "say", by: "host", name: host.displayName, text: line });
-        // Try again in a short while instead of a whole beat later.
-        fresh.state.beatTo = ready + 12_000;
+        // Try again in a while, outside the client's ask window, so a broken connection is not called nonstop.
+        fresh.state.beatTo = ready + 30_000;
       }
       await storage.save(fresh.id, { state: fresh.state });
     });
-    return kept ? "written" : "failed";
+    return kept || stale ? "written" : "failed";
   } finally {
-    writing.delete(show.id);
+    if (writing.get(show.id) === call) writing.delete(show.id);
   }
 }
 
