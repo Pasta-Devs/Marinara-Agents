@@ -414,6 +414,7 @@ test("banned phrases in scripts written without spaces are found inside sentence
   assert.deepEqual(findBannedPhrases("他嘴角上扬地笑了", "嘴角上扬"), ["嘴角上扬"]);
   assert.deepEqual(findBannedPhrases("彼はにやりと笑った", "にやり"), ["にやり"]);
   assert.deepEqual(findBannedPhrases("Elaravel smiled.", "Elara"), []);
+  assert.deepEqual(findBannedPhrases("Elara说她会来。", "Elara"), ["Elara"], "a Latin word beside Han text is whole");
 });
 
 test("the system message stays under the route's limit when summaries fill it", () => {

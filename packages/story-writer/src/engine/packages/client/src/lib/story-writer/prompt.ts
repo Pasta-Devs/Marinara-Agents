@@ -508,17 +508,20 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** The banned words and phrases `text` uses. Single words match whole words only; phrases match anywhere. */
-const UNSPACED_SCRIPT =
-  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
+const UNSPACED_LETTERS =
+  "\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Thai}\\p{Script=Lao}\\p{Script=Khmer}\\p{Script=Myanmar}";
+const UNSPACED_SCRIPT = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
+// A letter that ends a word. Letters of unspaced scripts never do, so "Elara" is still a whole word in "Elara说".
+const WORD_LETTER = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{N}_]`;
 
+/** The banned words and phrases `text` uses. Single words match whole words only; phrases match anywhere. */
 export function findBannedPhrases(text: string, bannedPhrases: string): string[] {
   const flat = text.replace(/\s+/g, " ");
   const lower = flat.toLocaleLowerCase();
   return parseBannedPhrases(bannedPhrases).filter((phrase) => {
     // Phrases and scripts written without spaces between words match anywhere; single words match whole.
     if (phrase.includes(" ") || UNSPACED_SCRIPT.test(phrase)) return lower.includes(phrase.toLocaleLowerCase());
-    return new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRegExp(phrase)}(?![\\p{L}\\p{N}_])`, "iu").test(flat);
+    return new RegExp(`(?<!${WORD_LETTER})${escapeRegExp(phrase)}(?!${WORD_LETTER})`, "iu").test(flat);
   });
 }
 

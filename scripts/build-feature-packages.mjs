@@ -741,7 +741,7 @@ const features = [
     minEngineVersion: "2.5.1",
     // The browser tab's openConnection prop and the debugMode field of /generate/raw arrived in capability API 1.386.
     capabilityApi: Object.freeze({ major: 1, minor: 386 }),
-    builtAgainst: { engineVersion: "2.5.1", engineCommit: "e45386a5e8133836079139548bb585aa668ab73d" },
+    builtAgainst: { engineVersion: "2.5.1", engineCommit: "54e6848c818ae4150f108ab9614986bb7610891d" },
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Story Writer",
     description:
