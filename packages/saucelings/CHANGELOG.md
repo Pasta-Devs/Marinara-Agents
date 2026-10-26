@@ -1,5 +1,9 @@
 # Saucelings release notes
 
+## 0.21.5 — 2026-10-27
+
+- On a narrow screen, the number boxes in Settings no longer shrink until the value is cut off.
+
 ## 0.21.4 — 2026-10-26
 
 - The Journal says how many entries are new since you last looked.

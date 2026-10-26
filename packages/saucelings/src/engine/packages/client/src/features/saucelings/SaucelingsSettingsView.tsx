@@ -41,7 +41,7 @@ function NumberField({
       className="sl-input"
       min={min}
       max={max}
-      style={{ width: "5rem" }}
+      style={{ width: "5rem", flexShrink: 0 }}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
