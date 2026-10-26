@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import fsPromises from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -108,6 +111,113 @@ try {
   });
   assert.equal(forgeAnimationFailureMessage(await storage.generate(body)), forgeAnimationEnglish.storageFailed);
   assert.equal(storageCalls, 0, "Local storage failure is distinct from a provider request");
+  const clip = await readFile(new URL("./fixtures/gacha-banner-loop.mp4", import.meta.url));
+  const digest = (value) => createHash("sha256").update(value).digest("hex");
+  const storageFailure = { ok: false, error: "animation-failed", reason: "storage", retry: true };
+  for (const retainPrevious of [false, true]) {
+    const dataDir = join(directory, `clip-commit-${retainPrevious}`);
+    await mkdir(dataDir);
+    let calls = 0;
+    let returnedBytes = clip;
+    const options = {
+      dataDir,
+      readBanner: async () => banner,
+      runtime: {
+        logger: { warn() {} },
+        integrations: {
+          videos: {
+            animateGalleryImage: async () => {
+              calls++;
+              return { mimeType: "video/mp4", base64: returnedBytes.toString("base64") };
+            },
+          },
+        },
+      },
+    };
+    const service = createForgeBannerAnimations(options);
+    const previous = retainPrevious ? await service.generate(body) : null;
+    returnedBytes = Buffer.concat([clip, Buffer.from("commit-failure-candidate")]);
+    const folder = join(dataDir, "capability-package-data", "gacha-forge", "banner-animations", digest(body.runId));
+    const collision = join(folder, `${digest(returnedBytes)}.mp4`);
+    await mkdir(collision, { recursive: true });
+    assert.deepEqual(
+      await service.generate({ ...body, retry: retainPrevious }),
+      storageFailure,
+      "A valid returned clip that cannot be renamed over a directory reports storage failure",
+    );
+    assert.equal(forgeAnimationFailureMessage(storageFailure), forgeAnimationEnglish.storageFailed);
+    const markerName = (await readdir(folder)).find((name) => name.endsWith(".json"));
+    const marker = JSON.parse(await readFile(join(folder, markerName), "utf8"));
+    assert.equal(marker.state, "failed");
+    assert.equal(marker.reason, "storage");
+    service.dispose();
+    const reopened = createForgeBannerAnimations(options);
+    const beforeReopen = calls;
+    const saved = await reopened.generate(body);
+    assert.equal(calls, beforeReopen, "A failed clip commit cannot repeat a paid attempt on reopening");
+    if (retainPrevious) {
+      assert.equal(saved.cached, true);
+      assert.equal(saved.animation.url, previous.animation.url);
+      assert.deepEqual(await readFile(join(folder, `${digest(clip)}.mp4`)), clip);
+      assert.equal(marker.mediaKey, digest(clip));
+    } else assert.deepEqual(saved, storageFailure);
+    await rm(collision, { recursive: true });
+    assert.equal((await reopened.generate({ ...body, retry: true })).ok, true);
+    assert.equal(calls, beforeReopen + 1, "Only an explicit retry after the filesystem is repaired generates again");
+    reopened.dispose();
+  }
+  const fullDirectory = join(directory, "clip-write-full");
+  await mkdir(fullDirectory);
+  let fullCalls = 0,
+    faultRemaining = true;
+  const fullOptions = {
+    dataDir: fullDirectory,
+    readBanner: async () => banner,
+    runtime: {
+      logger: { warn() {} },
+      integrations: {
+        videos: {
+          animateGalleryImage: async () => {
+            fullCalls++;
+            return { mimeType: "video/mp4", base64: clip.toString("base64") };
+          },
+        },
+      },
+    },
+  };
+  const originalWrite = fsPromises.writeFile;
+  fsPromises.writeFile = async (path, ...args) => {
+    if (faultRemaining && String(path).endsWith(".tmp") && !String(path).endsWith(".status.tmp")) {
+      faultRemaining = false;
+      throw Object.assign(new Error("Synthetic ENOSPC after a valid provider result"), { code: "ENOSPC" });
+    }
+    return originalWrite(path, ...args);
+  };
+  syncBuiltinESMExports();
+  const fullService = createForgeBannerAnimations(fullOptions);
+  try {
+    assert.deepEqual(await fullService.generate(body), storageFailure);
+  } finally {
+    fsPromises.writeFile = originalWrite;
+    syncBuiltinESMExports();
+    fullService.dispose();
+  }
+  assert.equal(faultRemaining, false, "The fault must reach the temporary MP4 write, after the provider result");
+  const fullFolder = join(
+    fullDirectory,
+    "capability-package-data",
+    "gacha-forge",
+    "banner-animations",
+    digest(body.runId),
+  );
+  const fullMarker = (await readdir(fullFolder)).find((name) => name.endsWith(".json"));
+  assert.equal(JSON.parse(await readFile(join(fullFolder, fullMarker), "utf8")).reason, "storage");
+  const fullReopened = createForgeBannerAnimations(fullOptions);
+  assert.deepEqual(await fullReopened.generate(body), storageFailure);
+  assert.equal(fullCalls, 1, "A disk-full failure and reopen use only the original paid attempt");
+  assert.equal((await fullReopened.generate({ ...body, retry: true })).ok, true);
+  assert.equal(fullCalls, 2);
+  fullReopened.dispose();
   for (const providerStatus of ["400", 0, 399, 600, null, { toString: () => "SECRET" }])
     assert.equal(
       forgeAnimationFailureMessage({ reason: "provider", providerStatus, detail: "SECRET" }),

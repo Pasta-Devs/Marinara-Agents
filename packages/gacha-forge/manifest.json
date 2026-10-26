@@ -774,8 +774,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "a23ae4e7b2c15f30cb1d47760c86ab2c10ff1541ebfb6f86d44d2393d8786139",
-      "bytes": 856926
+      "sha256": "49ad8ac8f30df37ded5f299a8e1be1efa4d279c2d38fea340550bef69add44ce",
+      "bytes": 857027
     },
     {
       "path": "skill-aoe_damage-dark.webp",

@@ -227,6 +227,7 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
         });
         if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
         if (prepared) return prepared;
+        let storingClip = false;
         try {
           const video = await animate({
             connectionId: banner.connectionId,
@@ -248,6 +249,7 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
             bytes.toString("ascii", 4, 8) !== "ftyp"
           )
             throw new Error("Invalid banner animation video");
+          storingClip = true;
           return await mutate(runId, async () => {
             if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
             // Each successful replacement has its own immutable URL. Keep the previous file and pointer
@@ -273,7 +275,7 @@ export function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
         } catch (error) {
           if (superseded() || job.controller.signal.aborted) return { ok: false, error: "not-found" };
           runtime.logger?.warn(error, "[gacha-forge] Banner animation failed");
-          const failure = forgeAnimationFailure(error);
+          const failure = storingClip ? { reason: "storage" } : forgeAnimationFailure(error);
           await mutate(runId, async () => {
             if (superseded() || job.controller.signal.aborted) return;
             if ((await directory(forgeAnimationDigest(runId))) !== folder)
