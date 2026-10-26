@@ -29,10 +29,11 @@
     "lint": "eslint --concurrency auto \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"sources/*-overlay/**/*.{mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
     "test:browser:noodle": "node scripts/run-package-browser-tests.mjs noodle tests/package-noodle.e2e.ts tests/package-noodle-picker-scope.e2e.ts tests/package-noodle-keyboard.e2e.ts",
     "test:browser:slurp2": "node scripts/run-package-browser-tests.mjs slurp2 tests/package-slurp2.e2e.ts",
+    "test:browser:story-writer": "node scripts/run-package-browser-tests.mjs story-writer tests/package-story-writer.e2e.ts",
     "test:noodle:regressions": "sh -c 'for test in tests/noodle*.regression.ts tests/noodler-*.regression.ts tests/slurp-*.regression.ts tests/slurp2-*.regression.ts; do if [ \"$test\" = tests/slurp-phase1-durability.regression.ts ] || [ \"$test\" = tests/slurp2-reset-activity.regression.ts ] || [ \"$test\" = tests/slurp2-anchor-edits.regression.ts ] || [ \"$test\" = tests/slurp2-message-deep-details.regression.ts ] || [ \"$test\" = tests/slurp2-dm-write-again.regression.ts ] || [ \"$test\" = tests/slurp2-engine-avatar-variant.regression.ts ] || [ \"$test\" = tests/slurp2-restore-media.regression.ts ]; then tsx \"$test\"; else tsx --tsconfig tests/tsconfig.regressions.json \"$test\"; fi || exit 1; done'",
     "test:slurp:regressions": "node scripts/run-slurp-regressions.mjs",
     "test:noodle:quality": "node scripts/evaluate-noodle-generation.mjs tests/fixtures/noodle-generation-quality.samples.json",
     "test:security": "node scripts/tests/catalog-path-safety.regression.mjs && tsx tests/long-term-memory-index-keys.regression.ts",
-    "typecheck:packages": "node scripts/typecheck-packages.mjs noodle slurp2 long-term-memory memory-nag conversation-calls hierarchical-maps blackjack games"
+    "typecheck:packages": "node scripts/typecheck-packages.mjs noodle slurp2 long-term-memory memory-nag conversation-calls hierarchical-maps blackjack story-writer games"
   }
 }

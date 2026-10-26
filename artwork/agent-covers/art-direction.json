@@ -212,6 +212,12 @@
       "palette": "coral red, paper white, steel blue, sunny yellow"
     },
     {
+      "id": "story-writer",
+      "name": "Story Writer",
+      "concept": "Mari writes with a feather quill into a large open antique book by candlelight while ink sparkles and loose pages curl around her.",
+      "palette": "parchment cream, leather brown, ink navy, Marinara orange, warm gold"
+    },
+    {
       "id": "storyboard",
       "name": "Storyboard",
       "concept": "Mari leans over a storyboard board arranging three visual keyframes with a pencil while a colorful film strip curves around the sequence.",
