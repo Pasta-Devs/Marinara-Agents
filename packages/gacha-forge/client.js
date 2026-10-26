@@ -2633,7 +2633,7 @@ var ac=`
    of this bar. With a bar on screen the control belongs IN it. */
 /* Always present, both ways: appearing only WHILE fullscreen forced a second button in the gutter
    just to get in -- two controls for one toggle. */
-`,ds="1.21.0";function cc(t){if(!t)return"";let e=Array.isArray(t.items)?t.items:[];if(!e.length)return"";let a=Math.max(0,Math.round(Number(t.vigor)||0)),r=Math.max(1,Math.round(Number(t.vigorMax)||60)),s=e.map(n=>{let i=Math.max(0,Math.round(Number(n.held)||0));return'<div class="gf-vm-slot'+(i?" has":"")+'"><button class="gf-vm-card" type="button"'+(i?' data-vigor-use="'+u(n.id)+'"':" disabled")+">"+Eg+'<span class="amt">+'+(Number(n.vigor)||0)+'</span><span class="what">'+u(n.name)+'</span></button><span class="gf-vm-n">&times;'+i+"</span></div>"}).join(""),o=e.every(n=>!(Number(n.held)>0))?'<span class="gf-vm-none">Sold in the Shop</span>':"";return'<div class="gf-vm" data-vigor-menu-panel><div class="gf-vm-veil" data-vigor-close></div><div class="gf-vm-panel"><div class="gf-vm-top"><h3 class="gf-vm-title">Vigor Items</h3><span class="gf-vm-now">'+Xo+"<b>"+a+"</b><span>/ "+r+' Vigor</span></span><button class="gf-vm-x" type="button" data-vigor-close aria-label="Close">Close</button></div><div class="gf-vm-grid">'+s+"</div>"+o+"</div></div>"}function dc({username:t="",wallet:e=null,account:a=null,vigorNextMs:r=null}={}){let s=e&&typeof e=="object"?e:{},o=Number(s.aether)||0,n=Number(s.funds)||0,i=Number(s.vigor)||0,l=Number(s.vigorMax)||60,c=a||null,h=c?Math.max(1,Number(c.level)||1):1,d=c?c.xpNeeded?ta(Number(c.xp)||0)+" / "+ta(c.xpNeeded)+" XP":"MAX":"&mdash;",m=c&&Number(c.xpNeeded)||0,v=c?m>0?Math.max(0,Math.min(100,Math.round((Number(c.xp)||0)/m*1e3)/10)):100:0,f=Number.isFinite(r)?cs(r):"",g=t&&t.trim()||"Commander",b=g.split(/\s+/).filter(Boolean).slice(0,2).map(k=>k[0]).join("").toUpperCase()||"C";return`
+`,ds="1.21.1";function cc(t){if(!t)return"";let e=Array.isArray(t.items)?t.items:[];if(!e.length)return"";let a=Math.max(0,Math.round(Number(t.vigor)||0)),r=Math.max(1,Math.round(Number(t.vigorMax)||60)),s=e.map(n=>{let i=Math.max(0,Math.round(Number(n.held)||0));return'<div class="gf-vm-slot'+(i?" has":"")+'"><button class="gf-vm-card" type="button"'+(i?' data-vigor-use="'+u(n.id)+'"':" disabled")+">"+Eg+'<span class="amt">+'+(Number(n.vigor)||0)+'</span><span class="what">'+u(n.name)+'</span></button><span class="gf-vm-n">&times;'+i+"</span></div>"}).join(""),o=e.every(n=>!(Number(n.held)>0))?'<span class="gf-vm-none">Sold in the Shop</span>':"";return'<div class="gf-vm" data-vigor-menu-panel><div class="gf-vm-veil" data-vigor-close></div><div class="gf-vm-panel"><div class="gf-vm-top"><h3 class="gf-vm-title">Vigor Items</h3><span class="gf-vm-now">'+Xo+"<b>"+a+"</b><span>/ "+r+' Vigor</span></span><button class="gf-vm-x" type="button" data-vigor-close aria-label="Close">Close</button></div><div class="gf-vm-grid">'+s+"</div>"+o+"</div></div>"}function dc({username:t="",wallet:e=null,account:a=null,vigorNextMs:r=null}={}){let s=e&&typeof e=="object"?e:{},o=Number(s.aether)||0,n=Number(s.funds)||0,i=Number(s.vigor)||0,l=Number(s.vigorMax)||60,c=a||null,h=c?Math.max(1,Number(c.level)||1):1,d=c?c.xpNeeded?ta(Number(c.xp)||0)+" / "+ta(c.xpNeeded)+" XP":"MAX":"&mdash;",m=c&&Number(c.xpNeeded)||0,v=c?m>0?Math.max(0,Math.min(100,Math.round((Number(c.xp)||0)/m*1e3)/10)):100:0,f=Number.isFinite(r)?cs(r):"",g=t&&t.trim()||"Commander",b=g.split(/\s+/).filter(Boolean).slice(0,2).map(k=>k[0]).join("").toUpperCase()||"C";return`
 <header class="gf-bar">
   <div class="command">
     <div class="avatar">${u(b)}</div>
@@ -5849,6 +5849,14 @@ const forgeAnimationEnglish = {
   generating: "Animating banner…",
   retrying: "Retrying animation…",
   failed: "Banner animation unavailable. The illustration is still shown.",
+  hostUnavailable: "Update Marinara Engine to animate banners, then try again.",
+  sourceImageMissing: "Engine cannot find this banner's saved source image. Regenerate the illustration, then retry.",
+  connectionFailed: "Check the selected video connection and API key in Engine Settings → Connections, then retry.",
+  providerFailed:
+    "Video generation failed (HTTP {status}). Check this video connection and provider account, then retry.",
+  responseFailed:
+    "The video request or response could not be read. Update Engine and check the video connection, then retry.",
+  storageFailed: "Engine could not save the animation. Check available disk space and data-folder access, then retry.",
   seedanceSetup:
     'Seedance needs a public HTTPS banner image. In Engine Settings → Connections, edit this video connection and enable "Upload Seedance reference frames temporarily", then retry.',
   retry: "Retry animation",
@@ -5876,6 +5884,24 @@ function forgeAnimationFields() {
 }
 
 /* global Ze, forgeAnimationEnglish */
+function forgeAnimationFailureMessage(result) {
+  if (result?.error === "animation-unavailable") return forgeAnimationEnglish.hostUnavailable;
+  if (result?.error === "banner-image-missing" || result?.reason === "source-image")
+    return forgeAnimationEnglish.sourceImageMissing;
+  if (result?.reason === "seedance-reference-setup") return forgeAnimationEnglish.seedanceSetup;
+  if (result?.reason === "connection") return forgeAnimationEnglish.connectionFailed;
+  if (
+    result?.reason === "provider" &&
+    Number.isInteger(result.providerStatus) &&
+    result.providerStatus >= 400 &&
+    result.providerStatus <= 599
+  )
+    return forgeAnimationEnglish.providerFailed.replace("{status}", String(result.providerStatus));
+  if (result?.reason === "invalid-response") return forgeAnimationEnglish.responseFailed;
+  if (result?.reason === "storage") return forgeAnimationEnglish.storageFailed;
+  return result?.reason === "playback" ? forgeAnimationEnglish.playbackFailed : forgeAnimationEnglish.failed;
+}
+
 async function loadForgeAnimationConnections(root, values) {
   const select = root.querySelector('[data-input="animationConnectionId"]');
   if (!select || select.dataset.forgeAnimationLoading) return;
@@ -6066,14 +6092,7 @@ function wireForgeBannerAnimation(host) {
         result.animation?.url || "",
       )
     ) {
-      const message =
-        forgeAnimationEnglish[
-          result.reason === "seedance-reference-setup"
-            ? "seedanceSetup"
-            : result.reason === "playback"
-              ? "playbackFailed"
-              : "failed"
-        ];
+      const message = forgeAnimationFailureMessage(result);
       if (result.retry || result.ok) offerRetry(message);
       else {
         notice(message);

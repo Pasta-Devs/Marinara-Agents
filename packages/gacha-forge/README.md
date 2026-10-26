@@ -1,3 +1,9 @@
+## Banner animation diagnostics (1.21.1)
+
+When a banner animation cannot be generated, its status now explains whether the saved source image, selected connection, provider response or local storage needs attention. Provider failures show a safe HTTP status when available; private URLs, provider response bodies and credentials stay out of the status.
+
+The illustration remains available, and a failed replacement keeps the previous saved clip. Reopening does not automatically repeat a failed generation. **Retry animation** is an explicit request and may use provider credits. Keep Marinara Engine updated for its video-provider fixes.
+
 ## Home background downloads and scene unlocks (1.21.0)
 
 Open **Home → Background → Change**. Each image in **Story**, **Story CG**, **Banners** and **Bond** has its own download button. Downloading keeps the picker open and leaves the selected background unchanged. On iPhone, images prepare before the button becomes available; tapping opens the same native share sheet as Engine’s galleries. Cancelling does not report a failure. This feature requires Engine Capability API 1.385 or newer.

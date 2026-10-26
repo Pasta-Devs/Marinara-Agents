@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.21.1",
+          "date": "2026-10-26",
+          "notes": "- Explain banner animation failures with safe recovery hints and the provider HTTP status when available.\n- Keep failed attempts saved across reopening, retain existing clips, and require an explicit retry before another generation request.",
+          "highlight": false
+        },
+        {
           "version": "1.21.0",
           "date": "2026-10-26",
           "notes": "- Download individual images from every Home background picker category without selecting them. Reuse Engine gallery saving, including prepared iPhone sharing.\n- Unlock story and Character Story backgrounds and key images only after viewing their scenes, with a brief unlock notice. Future generated scenes stay out of the picker.\n- Preserve completed scenes, saved artwork and existing background choices across updates and chapter regeneration.",
@@ -283,12 +289,6 @@
           "version": "1.10.2",
           "date": "2026-10-23",
           "notes": "- New dialogue choices show intent labels instead of revealing the exact spoken line. Selected actions appear as narration; explicitly spoken choices remain protagonist dialogue.\n- Existing untyped saved choices remain playable as narration. First-play canon, replay alternatives and permanent big decisions are preserved.",
-          "highlight": false
-        },
-        {
-          "version": "1.10.1",
-          "date": "2026-10-23",
-          "notes": "- Fixed: the Welcome Gift rewards no longer overlap Claim on short mobile screens. The event scrolls when needed, and Claim has a larger touch target.",
           "highlight": false
         }
       ]

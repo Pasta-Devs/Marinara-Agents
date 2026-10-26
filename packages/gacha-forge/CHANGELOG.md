@@ -1,3 +1,8 @@
+## 1.21.1 — 2026-10-26
+
+- Explain banner animation failures with safe recovery hints and the provider HTTP status when available.
+- Keep failed attempts saved across reopening, retain existing clips, and require an explicit retry before another generation request.
+
 ## 1.21.0 — 2026-10-26
 
 - Download individual images from every Home background picker category without selecting them. Reuse Engine gallery saving, including prepared iPhone sharing.
