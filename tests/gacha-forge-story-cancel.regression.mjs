@@ -7,6 +7,7 @@ import {
   forgeChapterSettled,
   forgeStoryRequest,
   stepAwayFromForgeChapter,
+  stopForgeStoryRequests,
   wireForgeStoryCancel,
 } from "../packages/gacha-forge/src/story-cancel-client.mjs";
 import { forgeStoryCancelEnglish } from "../packages/gacha-forge/src/story-cancel-en.mjs";
@@ -15,6 +16,7 @@ import { forgeFormationStartRequest } from "../packages/gacha-forge/src/formatio
 import {
   forgeSeasonalRequest,
   adoptForgeSeasonalResponse,
+  openForgeSeasonalEvent,
 } from "../packages/gacha-forge/src/seasonal-events-client.mjs";
 import {
   adoptForgeChapterVersion,
@@ -358,8 +360,10 @@ try {
   const toasts = [],
     previousHost = globalThis.__MARINARA_HOST__,
     previousEnglish = globalThis.forgeStoryCancelEnglish,
-    previousDocument = globalThis.document;
+    previousDocument = globalThis.document,
+    previousStop = globalThis.stopForgeStoryRequests;
   globalThis.forgeStoryCancelEnglish = forgeStoryCancelEnglish;
+  globalThis.stopForgeStoryRequests = stopForgeStoryRequests;
   globalThis.__MARINARA_HOST__ = {
     modules: {
       sonner: {
@@ -554,6 +558,33 @@ try {
       assert.deepEqual(toasts, []);
       assert.equal(host._forgeAway.size, 0);
     }
+    // Two Keep playing and reopen cycles: three loads wait on one request, and exactly one adopts it.
+    for (const order of [
+      [0, 1, 2],
+      [2, 1, 0],
+      [1, 0, 2],
+      [2, 0, 1],
+    ]) {
+      reset();
+      const { host, prewarms, plans, answer, open } = world();
+      host._loadChapterPlan();
+      stepAwayFromForgeChapter(host);
+      open(3);
+      stepAwayFromForgeChapter(host);
+      open(3);
+      assert.equal(plans().length, 3);
+      const plan = { title: "Three", combats: 1, nodes: [] };
+      for (const index of order) {
+        answer(index, plan);
+        await settle();
+      }
+      assert.equal(host._plan, plan, `order ${order}`);
+      assert.equal(host.adopted, 1, `order ${order}`);
+      assert.equal(prewarms.length, 1, `order ${order}`);
+      assert.equal(host.checks, 1, `order ${order}`);
+      assert.deepEqual(toasts, []);
+      assert.equal(host._forgeAway.size, 0);
+    }
     // A second Keep playing on the reopened loader is still reported once.
     {
       reset();
@@ -595,6 +626,45 @@ try {
       assert.deepEqual(toasts, []);
       assert.equal(quiet.host._forgeAway.size, 0);
     }
+    // Entering a seasonal event only stops tracking the chapter, which keeps forging on the server: no notice.
+    {
+      reset();
+      const { host, prewarms, posted, answer } = world();
+      host._loadChapterPlan();
+      stepAwayFromForgeChapter(host);
+      openForgeSeasonalEvent(host, { chapter: "event-1", title: "Lantern Night" });
+      assert.equal(host._planChapter, "event-1");
+      assert.equal(host._forgeAway.size, 0, "the event stops tracking the chapter before its request settles");
+      answer(0, null);
+      await settle();
+      assert.deepEqual(toasts, []);
+      assert.deepEqual(prewarms, []);
+      assert.deepEqual(posted("/preforge/start"), []);
+      assert.deepEqual(posted("/story/cancel"), [], "the server is not asked to stop");
+      assert.equal(host._forgeAway.size, 0);
+    }
+    // A request the page stopped waiting on without a Cancel (for example the stale chapter's Reopen) is quiet;
+    // after a Cancel or a chapter reset, the same null is a real stop.
+    for (const [label, stop, expected] of [
+      ["page stopped waiting", (host) => stopForgeStoryRequests(host), []],
+      [
+        "chapter reset",
+        (host) => {
+          stopForgeStoryRequests(host);
+          host._forgeStoryStoppedAt = host._forgeStoryRevision; // as confirmForgeChapterReset marks it
+        },
+        [["info", "Chapter Three was interrupted. Open it to continue."]],
+      ],
+    ]) {
+      reset();
+      const { host, answer } = world();
+      host._loadChapterPlan();
+      stepAwayFromForgeChapter(host);
+      stop(host);
+      answer(0, null);
+      await settle();
+      assert.deepEqual(toasts, expected, label);
+    }
     // 7. Failures, stops and a Character Story holding the chapter.
     for (const [response, expected] of [
       [
@@ -602,7 +672,7 @@ try {
         [["error", "Chapter Three could not be forged. Open it to try again."]],
       ],
       [{ ok: false, error: "cancelled" }, [["info", "Chapter Three was interrupted. Open it to continue."]]],
-      [null, [["info", "Chapter Three was interrupted. Open it to continue."]]],
+      [null, []],
       [{ ok: false, error: "bond-chapter-open", heldById: "unit-1" }, []],
     ]) {
       reset();
@@ -712,7 +782,7 @@ try {
       keep.click();
       assert.equal(host._hudView, "home");
       assert.equal(home.focused, true, "focus moves to Home's Battle button");
-      assert.deepEqual([...host._forgeAway], ["keep-world|3|0"]);
+      assert.deepEqual([...host._forgeAway], [["keep-world|3|0", 1]]);
       for (const [label, overrides] of [
         ["the scene loader", { _state: () => "beat", _beatState: "loading" }],
         ["the prologue", { _prologue: true }],
@@ -744,5 +814,7 @@ try {
     else globalThis.forgeStoryCancelEnglish = previousEnglish;
     if (previousDocument === undefined) delete globalThis.document;
     else globalThis.document = previousDocument;
+    if (previousStop === undefined) delete globalThis.stopForgeStoryRequests;
+    else globalThis.stopForgeStoryRequests = previousStop;
   }
 }

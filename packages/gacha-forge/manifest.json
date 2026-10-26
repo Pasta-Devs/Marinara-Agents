@@ -299,8 +299,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "2a866f6b5c523c5ea2f7d8519af93b5675b0862be4c87c46fbeda806377500da",
-      "bytes": 1765928
+      "sha256": "b919be56c40c99413398b21660126f538fcc3bddf6a44b802d8ef61e89940ef5",
+      "bytes": 1766993
     },
     {
       "path": "farm-asc.webp",
@@ -774,8 +774,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "6873629c14df7856308b4793980cdba468a9dbad4bb36cd011213a852be48b1f",
-      "bytes": 863956
+      "sha256": "bb82de1259df1a76510340491412172f20a3000d7bb4b1f0b8909ef2092a5265",
+      "bytes": 865253
     },
     {
       "path": "skill-aoe_damage-dark.webp",

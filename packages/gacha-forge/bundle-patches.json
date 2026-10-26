@@ -1389,7 +1389,7 @@
             },
             {
               "find": "hint:\"Writes a chapter's beats as soon as it is forged, so they open instantly. Its menu stays shut until the chain finishes, and you can cancel it.\"",
-              "replace": "hint:\"Writes a chapter's beats as soon as it is forged, so they open instantly. Story and images also paints their key images and, with Backgrounds on, the places they visit, alongside the text. Its menu stays shut until the text is written, and you can cancel it.\""
+              "replace": "hint:\"Writes a chapter's beats as soon as it is forged, so they open instantly. Its menu stays shut until the text is written, and you can cancel it until then. Story and images also paints their key images and, with Backgrounds on, the places they visit; that art can keep painting after the menu opens.\""
             },
             {
               "find": ".then(i=>{if(!n())return;if(i&&i.ok&&i.plan){",
@@ -2711,6 +2711,18 @@
             {
               "find": "if(w.art)try{await B(p,m,u,b)}catch(_){r.logger.warn(\"[gacha-forge] pre-forge key image failed for %s %s/%s: %s\",p,u,b,l(_&&_.message))}",
               "replace": "w.art&&forgeArt(b,S.places);"
+            },
+            {
+              "find": "dt=(s,{force:c=!1,have:d,paint:v})=>mt(s,async()=>{if(!c){let k=await d();if(k)return k}return v()})",
+              "replace": "dt=(s,{force:c=!1,have:d,paint:v})=>mt(s,async()=>{if(!c){let k=await d();if(k)return k}if(!await forgePreforgeArtAllowed())return{ok:!1,error:\"stopped\"};return v()})"
+            },
+            {
+              "find": "return{ok:!1,error:\"write-conflict\"};forgeProactiveMessages?.invalidate(o);forgeStoryMemory.invalidate(o);",
+              "replace": "return{ok:!1,error:\"write-conflict\"};forgeStoryCancellation.cancel(o);forgeProactiveMessages?.invalidate(o);forgeStoryMemory.invalidate(o);"
+            },
+            {
+              "find": "v.promise=(async()=>{try{return await forgeStoryWork(c)}finally{",
+              "replace": "v.promise=(async()=>{try{await null;return await forgeStoryWork(c)}finally{"
             }
           ]
         }

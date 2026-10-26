@@ -81,6 +81,7 @@ async function harness({ story = { preforge: "art" }, images, chapters = [plan()
   const responses = [];
   const warnings = [];
   let pause = null;
+  let onRead = null;
   const seed = (id, kind, data) =>
     docs.set(id, {
       id,
@@ -106,6 +107,7 @@ async function harness({ story = { preforge: "art" }, images, chapters = [plan()
   for (const chapter of chapters) seed(`${runId}:chapter:${chapter.chapter}`, "chapter-plan", chapter);
   const documents = {
     async getById(_id, documentId) {
+      if (onRead) await onRead(documentId);
       return clone(docs.get(documentId) ?? null);
     },
     async list(_id, kind) {
@@ -196,6 +198,10 @@ async function harness({ story = { preforge: "art" }, images, chapters = [plan()
       pause = { at, promise, entered: false };
       return { release, entered: () => pause.entered };
     },
+    // Runs before every document read; lets a test land a request between a chain's reads.
+    onRead(hook) {
+      onRead = hook;
+    },
     async status(chapter = 1) {
       return (await post("/preforge", { runId, chapter })).preforge;
     },
@@ -218,6 +224,21 @@ async function settle(host) {
     last = now;
     await tick();
   }
+}
+// Holds the first read that matches until the test has landed its own request, which runs in the test's
+// context like a separate HTTP request, not inside the paused request's scope.
+function pauseRead(host, matches) {
+  let reached, resume;
+  const arrived = new Promise((resolve) => (reached = resolve)),
+    resumed = new Promise((resolve) => (resume = resolve));
+  let armed = true;
+  host.onRead(async (id) => {
+    if (!armed || !matches(id)) return;
+    armed = false;
+    reached();
+    await resumed;
+  });
+  return { arrived, resume };
 }
 const artWarnings = (host) => host.warnings.filter((warning) => warning.includes("pre-forge art"));
 
@@ -350,7 +371,6 @@ try {
     ["pre-forge Cancel", (host) => host.post("/preforge/cancel", { runId, chapter: 1 })],
     ["switching to Story only", (host) => host.setRun((run) => (run.story = { preforge: "story" }))],
     ["switching to Off", (host) => host.setRun((run) => (run.story = { preforge: "off" }))],
-    ["turning Backgrounds off", (host) => host.setRun((run) => (run.images = { ...run.images, backgrounds: false }))],
     ["removing the image connection", (host) => host.setRun((run) => (run.images = { connectionId: "" }))],
   ]) {
     await test(`${label} stops before the next paid image`, async () => {
@@ -366,6 +386,106 @@ try {
       assert.ok(host.data(`${runId}:locations`).places["old-mill"].url, "the paint already running is kept");
     });
   }
+
+  await test("turning Backgrounds off stops painting places ahead while key images keep painting", async () => {
+    const host = await harness();
+    host.keyImage(1, 0, "The Mill Key");
+    host.keyImage(1, 1, "The Cave Key");
+    host.responses.push(beat("First", ["Old Mill", "Harbor"]), beat("Second", ["Cave"]), beat("Third", []));
+    const held = holdNextPaint();
+    await host.post("/preforge/start", { runId, chapter: 1 });
+    await waitFor(held.entered, "the first paint");
+    host.setRun((run) => (run.images = { ...run.images, backgrounds: false }));
+    held.release();
+    await settle(host);
+    assert.deepEqual(engine.paints, ["Old Mill", "The Mill Key", "The Cave Key"]);
+    assert.deepEqual(artWarnings(host), []);
+  });
+
+  // The player keeps playing: a scene's own paint holds the image connection, and the pre-forge paint queues
+  // behind it. A stop that lands during that wait must still cost nothing.
+  for (const [label, stop] of [
+    ["pre-forge Cancel", (host) => host.post("/preforge/cancel", { runId, chapter: 1 })],
+    ["switching to Story only", (host) => host.setRun((run) => (run.story = { preforge: "story" }))],
+    ["switching to Off", (host) => host.setRun((run) => (run.story = { preforge: "off" }))],
+    ["turning Backgrounds off", (host) => host.setRun((run) => (run.images = { ...run.images, backgrounds: false }))],
+    ["deleting the world", (host) => host.post("/run/delete", { runId })],
+  ]) {
+    await test(`${label} while a pre-forge paint waits for the image connection pays for nothing more`, async () => {
+      const host = await harness();
+      host.responses.push(beat("First", ["Old Mill"]), beat("Second", []), beat("Third", []));
+      const held = holdNextPaint();
+      const foreground = host.post("/background", { runId, slug: "market", name: "Market" });
+      await waitFor(held.entered, "the scene's own paint");
+      await host.post("/preforge/start", { runId, chapter: 1 });
+      await waitFor(async () => (await host.status()).running === false, "the text chain");
+      await settle(host); // the art chain has queued Old Mill behind Market
+      await stop(host);
+      held.release();
+      await foreground;
+      await settle(host);
+      assert.deepEqual(engine.paints, ["Market"]);
+      assert.equal(host.data(`${runId}:locations`)?.places?.["old-mill"], undefined);
+      const failures = artWarnings(host).filter((warning) => warning.includes("art failed"));
+      assert.deepEqual(failures, [], "a stop is not a failure");
+      // Deleting the world is a hard stop and says so; the soft stops are silent.
+      if (!label.startsWith("deleting")) assert.deepEqual(artWarnings(host), []);
+    });
+  }
+
+  await test("deleting a world stops its art chain: the paint in flight is neither uploaded nor filed", async () => {
+    const host = await harness();
+    host.keyImage(1, 0, "The Mill Key");
+    host.responses.push(beat("First", ["Old Mill", "Harbor"]), beat("Second", ["Cave"]), beat("Third", []));
+    const held = holdNextPaint();
+    await host.post("/preforge/start", { runId, chapter: 1 });
+    await waitFor(held.entered, "the first paint");
+    await waitFor(async () => (await host.status()).running === false, "the text chain");
+    assert.equal((await host.post("/run/delete", { runId })).ok, true);
+    held.release();
+    await settle(host);
+    assert.deepEqual(engine.paints, ["Old Mill"], "nothing more is painted");
+    assert.deepEqual(engine.uploads, [], "the paint in flight is not uploaded");
+    assert.equal(host.data(`${runId}:locations`), undefined, "the swept locations document is not recreated");
+    assert.deepEqual(host.data("index").runs, []);
+  });
+
+  await test("a Cancel that lands while a scene's paint starts leaves that place paintable", async () => {
+    const host = await harness();
+    const read = pauseRead(host, (id) => id === `${runId}:locations`);
+    const first = host.post("/background", { runId, slug: "harbor", name: "Harbor" });
+    await read.arrived;
+    await host.post("/story/cancel", { runId, chapter: 2 }); // Cancel from another chapter's loader
+    read.resume();
+    assert.equal((await first).error, "cancelled");
+    await settle(host);
+    const again = await host.post("/background", { runId, slug: "harbor", name: "Harbor" });
+    assert.equal(again.ok, true, JSON.stringify(again));
+    assert.deepEqual(engine.paints, ["Harbor"]);
+  });
+
+  await test("a Cancel elsewhere between two pre-forge paints stops the chain and leaves the next place paintable", async () => {
+    const host = await harness();
+    host.responses.push(beat("First", ["Old Mill", "Harbor"]), beat("Second", []), beat("Third", []));
+    const held = holdNextPaint();
+    await host.post("/preforge/start", { runId, chapter: 1 });
+    await waitFor(held.entered, "the first paint");
+    await waitFor(async () => (await host.status()).running === false, "the text chain");
+    // The art chain reads the session for its setting after Old Mill is filed: the Cancel lands right then.
+    const read = pauseRead(
+      host,
+      (id) => id === sessionId && !!host.data(`${runId}:locations`)?.places?.["old-mill"]?.url,
+    );
+    held.release();
+    await read.arrived;
+    await host.post("/story/cancel", { runId, chapter: 2 });
+    read.resume();
+    await settle(host);
+    assert.deepEqual(engine.paints, ["Old Mill"]);
+    const opened = await host.post("/background", { runId, slug: "harbor", name: "Harbor" });
+    assert.equal(opened.ok, true, JSON.stringify(opened));
+    assert.deepEqual(engine.paints, ["Old Mill", "Harbor"]);
+  });
 
   await test("a hard Cancel discards the paint in flight, stops both chains, and Retry resumes the text", async () => {
     const host = await harness();

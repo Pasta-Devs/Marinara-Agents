@@ -2,7 +2,7 @@
 
 - Keep playing: leave a main chapter that is still forging. It keeps forging, the busy pill shows its progress, and a notice says when it is ready, could not be forged or was interrupted. Pre-forging starts once it is ready. Cancel on any story loader still stops it, and switching worlds waits for it.
 - Pre-forge "Story and key images" is now "Story and images". With Backgrounds on, it also paints the places each pre-forged scene visits, in main chapters and Character Stories. Worlds already on this setting start painting places ahead after updating.
-- Pre-forged art now paints alongside the text, so the chapter menu opens once the text is written. A scene opened before its art is ready joins the paint in progress.
+- Pre-forged art now paints alongside the text, so the chapter menu opens once the text is written. A scene opened before its art is ready joins the paint in progress. Art may keep painting for a while after the menu opens; switch to Story only or Off, or use the story Cancel, to stop it.
 - Pre-forging no longer reports stopped, or lets Retry start a second chain, on chapters that take over 20 minutes.
 
 ## 1.22.0 — 2026-10-26

@@ -88,9 +88,10 @@ export function forgeChapterCanStepAway(host) {
 // chapter list shows no forging state. Upgrade: report background chapter keys in generatingBackground
 // and give the chapter card a forging state.
 export function stepAwayFromForgeChapter(host) {
-  (host._forgeAway ??= new Set()).add(
-    forgeChapterAwayKey(host._run.runId, host._planChapter, host._forgeStoryRevision || 0),
-  );
+  // Counts the loads the player left, since each Keep playing and reopen waits on the same request.
+  const away = (host._forgeAway ??= new Map()),
+    key = forgeChapterAwayKey(host._run.runId, host._planChapter, host._forgeStoryRevision || 0);
+  away.set(key, (away.get(key) || 0) + 1);
   host._planEscaped = true;
   host._planState = "idle";
   host._forgeCancelAsking = false;
@@ -108,11 +109,17 @@ export function forgeChapterSettled(
   current,
   toast = globalThis.__MARINARA_HOST__?.modules?.sonner?.toast,
 ) {
-  const mine = host._forgeAway?.delete(forgeChapterAwayKey(origin.runId, origin.chapter, origin.revision)) === true;
-  // The player reopened the chapter, so two loads wait on the same request: the first to settle steps
-  // aside and the other adopts the plan, once.
-  if (mine && current) return true;
-  if (current || !mine) return !current;
+  const key = forgeChapterAwayKey(origin.runId, origin.chapter, origin.revision),
+    left = host._forgeAway?.get(key) || 0;
+  if (!left) return !current;
+  // The player reopened the chapter, so several loads wait on the same request: each one the player left
+  // steps aside, and the last one adopts the plan, once.
+  if (current) {
+    if (left > 1) host._forgeAway.set(key, left - 1);
+    else host._forgeAway.delete(key);
+    return true;
+  }
+  host._forgeAway.delete(key);
   if (host._run?.runId !== origin.runId) return true;
   const say = (kind, text) => {
     try {
@@ -123,9 +130,12 @@ export function forgeChapterSettled(
   };
   if (!response?.ok || !response.plan) {
     if (response?.error === "bond-chapter-open") return true;
-    // null: this page stopped waiting (a Cancel, or an opened seasonal event); the server may have finished.
+    // Only a Cancel or a chapter reset stops the server. A plain null (a dropped request, or a page that
+    // stopped waiting) says nothing: the server may still finish, and opening the chapter shows it.
+    // ponytail: no notice follows such a null. Upgrade: read the chapter plan again once.
     if (response && response.error !== "cancelled") say("error", forgeStoryCancelEnglish.chapterFailed);
-    else say("info", forgeStoryCancelEnglish.chapterStopped);
+    else if (response || (host._forgeStoryStoppedAt ?? -1) > origin.revision)
+      say("info", forgeStoryCancelEnglish.chapterStopped);
     return true;
   }
   const version = host._forgeChapterPlanVersions?.get(response.plan);
@@ -189,8 +199,10 @@ export function cancelForgeStoryGeneration(host) {
     chapter = host._preforgeKey?.() ?? host._planChapter;
   if (!runId) return;
   // Cancel on this chapter's own loader stops it quietly; Cancel elsewhere still stops it, and says so.
-  for (const key of host._forgeAway || []) if (key.startsWith(`${runId}|${chapter}|`)) host._forgeAway.delete(key);
+  for (const key of host._forgeAway?.keys() ?? [])
+    if (key.startsWith(`${runId}|${chapter}|`)) host._forgeAway.delete(key);
   stopForgeStoryRequests(host);
+  host._forgeStoryStoppedAt = host._forgeStoryRevision; // the server stops too, unlike a page that stops waiting
   if (host._bondUnit) {
     host._plan = null;
     host._leaveBond?.();

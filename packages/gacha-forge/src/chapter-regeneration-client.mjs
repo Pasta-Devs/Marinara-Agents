@@ -165,6 +165,7 @@ export async function confirmForgeChapterReset(host, request) {
   request.error = "";
   const displayedPlan = host._plan;
   stopForgeStoryRequests(host);
+  host._forgeStoryStoppedAt = host._forgeStoryRevision; // a reset stops the world's story work on the server
   const revision = host._forgeStoryRevision;
   wireForgeChapterRegeneration(host);
   let result;

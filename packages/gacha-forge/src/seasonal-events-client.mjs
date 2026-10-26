@@ -107,7 +107,10 @@ async function loadForgeSeasonalEvents(host, retry = false) {
   host._renderBrowser();
   if (host._hudView === "chapters") host._fillChapters?.();
 }
-function openForgeSeasonalEvent(host, event) {
+export function openForgeSeasonalEvent(host, event) {
+  // A chapter left forging keeps forging on the server; entering the event only stops tracking it, quietly.
+  for (const key of host._forgeAway?.keys() ?? [])
+    if (key.startsWith(`${host._run?.runId}|`)) host._forgeAway.delete(key);
   stopForgeStoryRequests(host);
   host._clearBeat?.();
   host._stopCombat?.();
