@@ -1816,6 +1816,14 @@
             {
               "find": "$=setTimeout(()=>{$=null,se(Be,ce)},ok)",
               "replace": "$=setTimeout(()=>{$=null,se(Be,forgeStoryFace)},ok)"
+            },
+            {
+              "find": "ds=\"1.24.6\"",
+              "replace": "ds=\"1.24.7\""
+            },
+            {
+              "find": "var oy=[{version:null,new:[\"Voice other characters, next to Read character dialogue, gives NPCs and units without an assigned voice a voice from the Engine's Random NPC Voices lists, matched to male or female when known. Each name keeps the same voice.\"],fixed:[\"Combat voice lines now play in Classic and Formation, start preparing when the battle screen opens, include your persona's voice, and say when nobody in the team can be voiced.\"]}",
+              "replace": "var oy=[{version:null,new:[\"Expression portraits: turn them on in World → Sources → Images. Story portraits then show anger, fear, sadness or joy line by line, painted in the background for characters who speak.\"]},{version:\"1.24.6\",new:[\"Voice other characters, next to Read character dialogue, gives NPCs and units without an assigned voice a voice from the Engine's Random NPC Voices lists, matched to male or female when known. Each name keeps the same voice.\"],fixed:[\"Combat voice lines now play in Classic and Formation, start preparing when the battle screen opens, include your persona's voice, and say when nobody in the team can be voiced.\"]}"
             }
           ]
         }
