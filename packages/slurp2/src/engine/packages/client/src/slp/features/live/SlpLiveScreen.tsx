@@ -174,54 +174,45 @@ export function SlpLiveScreen({
         <section className="relative isolate flex min-h-[70dvh] w-full flex-1 flex-col overflow-hidden text-white sm:max-w-md">
           <style>{LIVE_STYLES}</style>
 
-          {/* One slim bar: who, live stats, and the goal (its own line on a phone, inline on wider screens). */}
-          <header className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-black px-2 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-3">
-            {back}
-            <div className="flex min-w-0 flex-1 items-center gap-2">
+          {/* The bar: who is live, then the live stats, then the goal. */}
+          <header className="space-y-1.5 bg-black px-2 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-3">
+            <div className="flex items-center gap-2">
+              {back}
               <Avatar account={{ displayName: name, avatarUrl: host?.avatarUrl ?? null }} size="xs" />
-              <h1 className="truncate text-sm font-bold">{name}</h1>
-            </div>
-            <div className="flex shrink-0 items-center gap-2.5 text-xs font-semibold">
+              <h1 className="min-w-0 truncate text-sm font-bold">{name}</h1>
               <span
                 role="status"
                 aria-label={t("ui.slurp.live.liveNow")}
-                className="flex items-center gap-1 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-black tracking-wide"
+                className="flex shrink-0 items-center gap-1 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-black tracking-wide"
               >
                 <span className="slp-live-dot h-1.5 w-1.5 rounded-full bg-white" />
                 {t("ui.slurp.live.badge")}
               </span>
+            </div>
+            <div className="flex items-center gap-4 px-1 text-xs font-semibold text-white/90">
               <span className="flex items-center gap-1">
                 <Eye size={13} aria-hidden="true" />
                 {show.viewers}
               </span>
               <span className="flex items-center gap-1 tabular-nums">
                 <Clock size={13} aria-hidden="true" />
-                {mmss(left)}
+                {t("ui.slurp.live.left", { time: mmss(left) })}
               </span>
-              <span className="flex items-center gap-1" aria-label={t("ui.slurp.live.heat", { heat: show.heat })}>
+              <span className="flex items-center gap-1.5" aria-label={t("ui.slurp.live.heat", { heat: show.heat })}>
                 <Flame size={13} aria-hidden="true" className="text-orange-300" />
-                <span className="h-1 w-8 overflow-hidden rounded-full bg-white/20 sm:w-12">
+                <span className="h-1 w-12 overflow-hidden rounded-full bg-white/20">
                   <span
                     className="block h-full rounded-full bg-gradient-to-r from-amber-300 to-[var(--noodle-accent)]"
                     style={{ width: `${show.heat}%` }}
                   />
                 </span>
               </span>
-              {show.shooting && (
-                <span
-                  role="status"
-                  aria-label={t("ui.slurp.live.shooting")}
-                  className="flex items-center text-[var(--noodle-accent)]"
-                >
-                  <Camera size={13} aria-hidden="true" className="slp-live-dot" />
-                </span>
-              )}
             </div>
             <button
               type="button"
               onClick={() => setGoalOpen((value) => !value)}
               aria-expanded={goalOpen}
-              className="block basis-full px-1 text-start sm:basis-60"
+              className="block w-full px-1 text-start"
             >
               <span className="flex items-center justify-between gap-2 text-[11px] font-semibold text-white/85">
                 <span className="truncate">
@@ -268,6 +259,16 @@ export function SlpLiveScreen({
                   ))}
               <div className="absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
             </div>
+            {/* The next picture is on its way: said in the window, where it will land. */}
+            {show.shooting && !ended && (
+              <p
+                role="status"
+                className={`mx-3 mt-3 flex w-fit items-center gap-1.5 self-end rounded-full px-2.5 py-1 text-xs font-semibold ${glass}`}
+              >
+                <Camera size={13} aria-hidden="true" className="slp-live-dot text-[var(--noodle-accent)]" />
+                {t("ui.slurp.live.shooting")}
+              </p>
+            )}
             {!ended && cam ? (
               <p
                 key={cam}

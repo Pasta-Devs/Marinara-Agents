@@ -6,7 +6,7 @@
 - Live pictures about once per minute, and private shows at the Backstage price and length.
 - Go live yourself as your persona's Creator, or as any Creator from Stir; the room reacts and suggests your next move.
 - "X is live" notices, a thank-you post after each show, and a Backstage > Live shows page.
-- The cam is told in words on the stage, so a show works without pictures; pictures follow those words. A live Creator's Moments tile opens the show.
+- The cam is told in words on the stage, so a show works without pictures; pictures follow those words. A live Creator's Moments tile opens the show. Live is portrait on every screen, with a slim top bar.
 
 ## 0.4.3 — 2026-10-26
 
