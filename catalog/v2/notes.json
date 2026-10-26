@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.24.7",
+          "date": "2026-10-27",
+          "notes": "- New **Expression portraits** setting in World → Sources → Images, off by default. Story portraits then show anger, fear, sadness or joy line by line, marked in the same request that writes the scene. Four faces per look are painted in the background, only for characters who speak. A failed set is not retried on its own: turn the setting off and on to try once more.\n- Your persona keeps its own voice even when another character shares part of its name, and turning Voice other characters off and on again no longer asks to pay again for combat lines that were never made.",
+          "highlight": false
+        },
+        {
           "version": "1.24.6",
           "date": "2026-10-27",
           "notes": "- New **Voice other characters** toggle next to Read character dialogue. NPCs and units without an assigned voice speak with a voice from the Engine's Random NPC Voices lists (Connections → Text to Speech), matched to male or female when known. With both lists empty, any voice of the current connection is used. Each name keeps the same voice. Assigned voices still win, and your persona uses only its own.\n- Combat voice lines now play in Classic and Formation fights, start preparing when the battle screen opens, and include your persona's assigned voice. A short notice says when nobody in the team can be voiced.",
@@ -283,12 +289,6 @@
           "version": "1.16.0",
           "date": "2026-10-25",
           "notes": "- Punctuate choice labels. Keep the correct speaker portrait and prevent fullscreen/mute from advancing.\n- Tap Writing help on mobile; keep daily rewards clear of Claim and animate loaded unit art smoothly.\n- Use the current timezone for resets and new banner periods, including clock changes. Catch up automatic chapter memory on world open; retain manual controls and show compressed/combined counts.\n- Auto-select affordable character, weapon, relic and skill upgrades before confirmation. Auto-equip the best free gear and clear stale Units dots.\n- Open farming domains from upgrade materials and show their next rotation; Mandates open their Login Event.\n- Reuse matching dialogue audio; reveal fresh opening lines while preserving saved reading positions.\n- Generate richer music briefs with world motifs, varied arrangements and musical development.",
-          "highlight": true
-        },
-        {
-          "version": "1.15.2",
-          "date": "2026-10-24",
-          "notes": "- Show actionable Seedance setup guidance when a banner cannot be animated, and keep Retry visibly busy while generation is pending. Saved clips and the original banner illustration remain available.",
           "highlight": true
         }
       ]

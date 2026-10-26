@@ -337,14 +337,17 @@ export function createForgeCombatVoices({ dataDir, runtime, readUnit, generateLi
     },
     fail(body) {
       return safe(async () => {
-        const ctx = await context(body, ["slot", "token"], true);
-        if (!ctx || typeof body.token !== "string") return { ok: false, error: "bad-request" };
+        const ctx = await context(body, ["slot", "token", "released"], true);
+        if (!ctx || typeof body.token !== "string" || (body.released !== undefined && body.released !== true))
+          return { ok: false, error: "bad-request" };
         return mutate(body.runId, async () => {
           if (!current(ctx)) return { ok: false, error: "not-found" };
           const saved = await readySlot(ctx, body.slot);
           if (!saved || saved.record?.token !== body.token || saved.record.state !== "pending")
             return { ok: false, error: "stale-combat-voice" };
-          await write(saved.folder, saved.key, { state: "failed" });
+          // A released token was never synthesized, so its slot is missing again and needs no paid retry.
+          if (body.released) await forgeCombatVoiceUnlink(forgeCombatVoiceJoin(saved.folder, `${saved.key}.json`));
+          else await write(saved.folder, saved.key, { state: "failed" });
           return { ok: true };
         });
       });
