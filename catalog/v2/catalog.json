@@ -2659,7 +2659,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.4.94",
+        "version": "1.4.95",
         "description": "Remembers important things from your chat summaries, characters, and lorebooks, and brings them back when they matter. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.4.1",
@@ -2696,8 +2696,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "bedb0d2273dddb82d9379ca1a5479b27ab15648ca1b4391048b213349ced52fd",
-            "bytes": 695848
+            "sha256": "bfd590b6af5c0f8ba8b7556a3674d13b39c31b072ddeaea5e95790f64a19637d",
+            "bytes": 701335
           }
         ],
         "permissions": [
@@ -2713,9 +2713,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.4.94.zip",
-        "sha256": "e79a259e073e559d1427c75af1ecc7b0721da1be678d773076f060bee0557a55",
-        "bytes": 1187777
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.4.95.zip",
+        "sha256": "e02a5b7ca28eb342a6a74bffd1c1bff990adf6bfdd62fd35fa946ca8389e876a",
+        "bytes": 1193264
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -3218,7 +3218,7 @@
         },
         "id": "quartermaster",
         "name": "Quartermaster",
-        "version": "0.1.28",
+        "version": "0.1.31",
         "description": "An RPG character sheet and inventory for Roleplay: equip gear around your persona's portrait, save outfits, get AI art for items, and let it keep everything in step with the story. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.6",
@@ -3246,13 +3246,13 @@
           },
           {
             "path": "client.js",
-            "sha256": "acc3b1778a802799f9822aecb2077e138f8e04f5ca4a9d7802587450c1b8e43a",
-            "bytes": 306535
+            "sha256": "47fe5a9d36a3ce1d0d1f5bd2c7146548aba588345eade0e05a09fd1ce7758220",
+            "bytes": 344726
           },
           {
             "path": "server.mjs",
-            "sha256": "8a6b260e52068d0654723a75f98e95c84053491c3d9e3b812a5ab97ef3f073b1",
-            "bytes": 131685
+            "sha256": "04daa595ce98bb06673bda1b0a2f44e69336596f0039b91e748eba9834596662",
+            "bytes": 155502
           },
           {
             "path": "icons/armor_legs.webp",
@@ -3376,9 +3376,9 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/quartermaster.png",
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/quartermaster/README.md",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quartermaster-0.1.28.zip",
-        "sha256": "6eb40478ea7339318e6582b66a308f11547d35100c8c766851ced50fb3679a4e",
-        "bytes": 482700
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quartermaster-0.1.31.zip",
+        "sha256": "083daab29822838b27f3b6c7a7f30c21ba11cc8b4802b5cda3a8bcbf663ad71e",
+        "bytes": 544708
       }
     },
     {

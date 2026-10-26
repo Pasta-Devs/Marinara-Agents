@@ -364,6 +364,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.4.95",
+          "date": "2026-10-26",
+          "notes": "- Maintenance, Debug, setup and Chat Settings buttons keep keyboard focus while their work runs, so the result appears where you are.\n- Vault and Review controls stay reachable while they save or while identity edits are unsaved, and say why they are locked.\n- Sources re-extract and re-import buttons stay reachable during a run and explain why they are waiting.\n- Debug, Maintenance and source results are announced to screen readers, and Add section explains why a name was not accepted.\n- The setup guide picture and detail header follow the panel's width, and navigation and availability tabs are easier to tap.\n- Loading spinners stop spinning when reduced motion is on, and typing in Debug search stays smooth on long logs.",
+          "highlight": false
+        },
+        {
           "version": "1.4.94",
           "date": "2026-10-26",
           "notes": "- Long-Term Memory loads settings written by a newer version instead of failing to start, on Engines that use zod 4 or check a list's length before its entries.",
@@ -475,12 +481,6 @@
           "version": "1.4.76",
           "date": "2026-10-21",
           "notes": "- A few more unexpected failures no longer show their raw error text, which could include file paths. In Sources, a source that could not be saved or extracted now says \"Failed to write imported source note.\" or \"Failed to extract imported source.\", followed by \"Details are in the server log.\"; this includes the model provider rejecting the request during an import. In Review, a change that could not be checked says \"Long-term memory preflight failed. Details are in the server log.\" An identity repair in settings whose backup could not be restored says so without the cause. The full error is written to the server log. Messages written for you, such as a model reply that was cut off, show as before.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.75",
-          "date": "2026-10-21",
-          "notes": "- In the Memory Vault, opening another memory while an archive Undo, a save or a permanent delete is still running no longer leaves it half-finished: the buttons work again, the list reloads, an Undo that could only restore some memories archives them again, a memory reopened during its own save shows what was saved, and deleted memories leave the list and the selection, closing one you had opened with a message that says so. Escape no longer closes the Rename detail dialog while the rename is still running.",
           "highlight": false
         }
       ]
@@ -652,6 +652,24 @@
     "quartermaster": {
       "versions": [
         {
+          "version": "0.1.31",
+          "date": "2026-10-25",
+          "notes": "- No changes you'll notice: a code comment was corrected.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.30",
+          "date": "2026-10-25",
+          "notes": "- Accepting or keeping a pending item change and then switching chats before it finishes no\n  longer shows that chat's result in the chat you switched to.\n- The \"Only you can change it — becomes shown\" help now says removals are skipped too.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.29",
+          "date": "2026-10-25",
+          "notes": "- Hide items and outfits from their ⋯ menu. Hidden ones get their own Bag tab and are kept from\n  the agent: it only sees a hidden item while you're wearing it.\n- New Hidden Items settings choose what the agent may do to a hidden item, and whether it asks\n  first. Asking shows the change side by side so you can accept it or keep the old details.\n- Lock an item's description from the item editor so the agent can't change it.\n- Feed appearance has seven options, including equipped item names and descriptions. Outfit\n  portraits follow the same setting.\n- Build Wardrobe can use hidden items when you allow it, and always asks you about each one first.\n- Optional Delete button on item and outfit cards (Settings → Display, saved per device).\n- Re-equipping an outfit whose item was deleted now brings the item back with its default slot.",
+          "highlight": true
+        },
+        {
           "version": "0.1.28",
           "date": "2026-10-17",
           "notes": "- Build Wardrobe layers clothing properly: when two pieces of an outfit share a layer (tights and a\n  skirt over them), the outer one moves up a layer instead of being left out.\n- New artwork for the clothing layers, socks and Extra Wearable slots; the inner torso and legs\n  icons are now a shirt and leggings.",
@@ -752,24 +770,6 @@
           "date": "2026-09-14",
           "notes": "- Settings moved to its own tab instead of an accordion pushing inventory below the fold.\n- Settings regrouped into Appearance/Display/Image Generation/Data, with hover-and-tap tooltips\n  replacing permanent explanation text.\n- Recent Automatic Update (renamed Recent Agent Update) moved next to Restore Inventory, with a\n  colored +N/↑N/−N count summary and visible reasoning even on quiet turns.\n- Item and outfit cards collapse Edit/Update/Delete into a \"⋯\" menu, giving descriptions more\n  room.\n- Delete confirmations now also cover the item-image and outfit-portrait remove buttons.\n- Add Item is now a modal instead of an always-open form.",
           "highlight": true
-        },
-        {
-          "version": "0.1.11",
-          "date": "2026-09-13",
-          "notes": "- The tracking agent now targets specific changes instead of re-listing the whole inventory every\n  turn, so nothing gets dropped or cut off.\n- Added a \"Recent Automatic Update\" view showing what the last turn changed, with a per-item\n  Revert button.",
-          "highlight": true
-        },
-        {
-          "version": "0.1.10",
-          "date": "2026-09-13",
-          "notes": "- Rewrote the README's Features section for readability and documented several\n  previously-undocumented features.\n- Updated the in-app description to mention saved outfits, AI-generated art, and the tracker\n  agent.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.9",
-          "date": "2026-09-11",
-          "notes": "- Fixed equip-slot quick-fill only searching the Wearables tab, missing stashed wearable items.",
-          "highlight": false
         }
       ]
     },

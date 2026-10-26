@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.4.95 — 2026-10-26
 
 - Maintenance, Debug, setup and Chat Settings buttons keep keyboard focus while their work runs, so the result appears where you are.
 - Vault and Review controls stay reachable while they save or while identity edits are unsaved, and say why they are locked.
