@@ -101,6 +101,9 @@ export function SaucelingsWidgetView({
   // A tap on a resting care button says when it is ready again, in the strip where the caretaker's line sits.
   const [restNote, setRestNote] = useState<string | null>(null);
   const restTimer = useRef(0);
+  // The care buttons fold into one toggle in the card's corner.
+  const [careOpen, setCareOpen] = useState(false);
+  const careToggle = useRef<HTMLButtonElement>(null);
   const showRestNote = (text: string) => {
     setRestNote(text);
     window.clearTimeout(restTimer.current);
@@ -358,6 +361,7 @@ export function SaucelingsWidgetView({
             caretaker={standing}
             caretakerFlipped={state?.world.flippedCaretakers.includes(pet.caretakerId)}
             handle={stageHandle}
+            scaleByWidth
           />
         </div>
         <div className="sl-widget-remark" aria-live="polite">
@@ -372,39 +376,7 @@ export function SaucelingsWidgetView({
               <WidgetBar key={bar.key} icon={BAR_ICONS[bar.key]} label={bar.label} value={bar.value} gap={bar.gap} />
             ))}
           </div>
-          <div className="sl-widget-acts" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-            {actionsFor(pet)
-              .slice(0, 2)
-              .map((action) => {
-                const wait = cooldownMinutes(pet, action, nowMs);
-                const label = t(ACTION_LABEL_KEYS[action]);
-                const text = wait > 0 ? `${label} · ${t("saucelings.action.wait", { minutes: wait })}` : label;
-                return (
-                  <button
-                    key={action}
-                    type="button"
-                    className={`sl-btn sl-widget-act ${state && actionCoversGap(action, state.gaps) ? "sl-btn--gap" : ""}`}
-                    aria-label={text}
-                    title={text}
-                    disabled={actionMutation.isPending}
-                    // A resting button stays tappable, so a tap (or a screen reader) hears when it is ready.
-                    aria-disabled={wait > 0 || undefined}
-                    onClick={() =>
-                      wait > 0
-                        ? showRestNote(t("saucelings.action.resting", { action: label, minutes: wait }))
-                        : actionMutation.mutate(action)
-                    }
-                  >
-                    <span aria-hidden="true">{ACTION_ICONS[action]}</span>
-                    {/* A resting button has no room for words, so its minutes sit in the corner. */}
-                    {wait > 0 ? (
-                      <span className="sl-widget-act-wait" aria-hidden="true">
-                        {wait}
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
+          <div className="sl-widget-acts">
             <button
               type="button"
               className="sl-btn sl-widget-act"
@@ -414,11 +386,69 @@ export function SaucelingsWidgetView({
             >
               <span aria-hidden="true">↗</span>
             </button>
-            {actionMutation.error ? (
-              <span role="alert" className="sl-error">
-                <FriendlyError error={actionMutation.error} />
-              </span>
-            ) : null}
+          </div>
+        </div>
+        <div
+          className="sl-widget-care"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && careOpen) {
+              e.stopPropagation();
+              setCareOpen(false);
+              careToggle.current?.focus();
+            }
+          }}
+        >
+          {actionMutation.error ? (
+            <span role="alert" className="sl-error sl-widget-care-error">
+              <FriendlyError error={actionMutation.error} />
+            </span>
+          ) : null}
+          <div className="sl-widget-care-row">
+            {careOpen
+              ? actionsFor(pet).map((action) => {
+                  const wait = cooldownMinutes(pet, action, nowMs);
+                  const label = t(ACTION_LABEL_KEYS[action]);
+                  const text = wait > 0 ? `${label} · ${t("saucelings.action.wait", { minutes: wait })}` : label;
+                  return (
+                    <button
+                      key={action}
+                      type="button"
+                      className={`sl-btn sl-widget-act ${state && actionCoversGap(action, state.gaps) ? "sl-btn--gap" : ""}`}
+                      aria-label={text}
+                      title={text}
+                      disabled={actionMutation.isPending}
+                      // A resting button stays tappable, so a tap (or a screen reader) hears when it is ready.
+                      aria-disabled={wait > 0 || undefined}
+                      onClick={() =>
+                        wait > 0
+                          ? showRestNote(t("saucelings.action.resting", { action: label, minutes: wait }))
+                          : actionMutation.mutate(action)
+                      }
+                    >
+                      <span aria-hidden="true">{ACTION_ICONS[action]}</span>
+                      {/* A resting button has no room for words, so its minutes sit in the corner. */}
+                      {wait > 0 ? (
+                        <span className="sl-widget-act-wait" aria-hidden="true">
+                          {wait}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })
+              : null}
+            {/* Closed, the toggle still points at a gap, so the player knows to open it. */}
+            <button
+              ref={careToggle}
+              type="button"
+              className={`sl-btn sl-widget-act ${!careOpen && state && actionsFor(pet).some((a) => actionCoversGap(a, state.gaps)) ? "sl-btn--gap" : ""}`}
+              aria-expanded={careOpen}
+              aria-label={t("saucelings.widget.care")}
+              title={t("saucelings.widget.care")}
+              onClick={() => setCareOpen((open) => !open)}
+            >
+              <span aria-hidden="true">{careOpen ? "✕" : "🤲"}</span>
+            </button>
           </div>
         </div>
       </div>

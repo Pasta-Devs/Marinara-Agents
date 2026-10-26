@@ -102,6 +102,7 @@ export function SaucelingStage({
   listenKey = null,
   handle,
   onMoveEgg,
+  scaleByWidth = false,
 }: {
   pet: SaucelingPet;
   reaction: SaucelingSpriteReaction | null;
@@ -115,11 +116,14 @@ export function SaucelingStage({
   listenKey?: string | null;
   handle?: Ref<SaucelingStageHandle>;
   onMoveEgg?: (spot: Spot) => Promise<unknown>;
+  /** Size the sprites by the stage's width alone, so a tall, narrow card (the large Home widget) does not draw them
+   *  at the scale its height would ask for. */
+  scaleByWidth?: boolean;
 }) {
   const { t } = useSaucelingsTranslation();
   const [stageRef, { width, height }] = useElementSize<HTMLDivElement>();
   const actorRef = useRef<HTMLDivElement | null>(null);
-  const scale = stageScale(width, height);
+  const scale = scaleByWidth ? stageScale(width) : stageScale(width, height);
   const stageArtWidth = width / scale;
   const sprite = spriteStateForPet(pet);
   const isEgg = pet.stage === "egg";

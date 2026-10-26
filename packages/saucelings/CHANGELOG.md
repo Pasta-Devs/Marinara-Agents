@@ -1,5 +1,10 @@
 # Saucelings release notes
 
+## 0.22.1 — 2026-10-27
+
+- On the large Home widget, the caretaker no longer towers over the card: both figures are sized to the card's width.
+- Feed, Play, Rest and Cuddle (or Warm, Talk and Listen for an egg) are behind one "Care" button in the bottom-right corner. Tap it and the buttons open to its left; tap it again, or press Escape, to put them away. The button glows when a care would help.
+
 ## 0.22.0 — 2026-10-27
 
 - The Nook's top bar holds one "⋯" button: Rename, Background and Tour are inside it. "Name it" stays in view until your sauceling has a name.

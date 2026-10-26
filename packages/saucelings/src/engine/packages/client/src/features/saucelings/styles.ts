@@ -1324,6 +1324,19 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
 .sl-widget-bar { flex: 1; min-width: 0; height: 0.45rem; border-radius: 999px; background: rgba(255,255,255,0.22); overflow: hidden; }
 /* The column starts under the move handle Home puts in the card's top-right corner. */
 .sl-widget-acts { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 2.25rem; pointer-events: auto; }
+/* The care buttons fold into one toggle in the bottom-right corner, above the caretaker's strip; open, they fan out
+   to its left. */
+.sl-widget-care {
+  position: absolute;
+  inset: auto 0.5rem calc(var(--sl-remark-h) + 0.5rem) auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+  max-width: calc(100% - 1rem);
+}
+.sl-widget-care-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem; }
+.sl-widget-care-error { padding: 0.25rem 0.5rem; border-radius: 0.5rem; background: rgba(0,0,0,0.6); font-size: 0.72rem; }
 .sl-widget-act { position: relative; width: 2.25rem; height: 2.25rem; padding: 0; border-radius: 50%; font-size: 1.05rem; background: rgba(0,0,0,0.5); }
 .sl-widget-act-wait { position: absolute; top: -0.3rem; right: -0.3rem; min-width: 1.1rem; padding: 0.1rem 0.25rem; border-radius: 999px; background: var(--sl-amber); color: #000; font-size: 0.6rem; font-weight: 700; line-height: 1; }
 .sl-btn.sl-widget-act:disabled, .sl-btn.sl-widget-act[aria-disabled="true"] { opacity: 1; }
