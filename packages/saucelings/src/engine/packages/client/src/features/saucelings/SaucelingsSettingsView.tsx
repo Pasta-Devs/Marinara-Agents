@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type {
   SaucelingSettings,
   SaucelingStateResponse,
@@ -52,6 +52,34 @@ function NumberField({
   );
 }
 
+/** One setting: its name, a short note and a saved tick on the left, the control on the right; a picker takes the
+ *  row's width on a phone. */
+function SettingRow({
+  title,
+  note,
+  tick,
+  stack,
+  children,
+}: {
+  title: string;
+  note: string | null;
+  tick: ReactNode;
+  stack?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <label className={`sl-setting ${stack ? "sl-setting--stack" : ""}`}>
+      <span className="sl-setting-text">
+        <span className="sl-setting-title">
+          {title} {tick}
+        </span>
+        {note ? <span className="sl-setting-note">{note}</span> : null}
+      </span>
+      {children}
+    </label>
+  );
+}
+
 export function SaucelingsSettingsView({ state }: { state: SaucelingStateResponse }) {
   const { t } = useSaucelingsTranslation();
   const queryClient = useQueryClient();
@@ -89,150 +117,127 @@ export function SaucelingsSettingsView({ state }: { state: SaucelingStateRespons
     },
   });
 
+  const checkbox = (key: "writeEveryLine" | "portraitEnabled" | "threeDrawingFallback" | "eggHunting") => (
+    <input type="checkbox" checked={settings[key]} onChange={(e) => patch({ [key]: e.target.checked })} />
+  );
+
   return (
-    <div className="sl-card" style={{ display: "grid", gap: "1.15rem" }}>
-      <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
-            {t("saucelings.settings.careWindow")} {savedTick("careWindowHours")}
-          </div>
-          <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.settings.careWindowNote")}</div>
-        </div>
-        <NumberField
-          value={settings.careWindowHours}
-          min={1}
-          max={24}
-          onSave={(careWindowHours) => patch({ careWindowHours })}
-        />
-      </label>
-
-      <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
-            {t("saucelings.settings.dailyBudget")} {savedTick("dailyGenerationBudget")}
-          </div>
-          <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>
-            {t("saucelings.settings.budgetUsed", {
-              used: budget.used,
-              limit: settings.dailyGenerationBudget,
-            })}{" "}
-            — {t("saucelings.settings.budgetNote")}
-          </div>
-        </div>
-        <NumberField
-          value={settings.dailyGenerationBudget}
-          min={0}
-          max={30}
-          onSave={(dailyGenerationBudget) => patch({ dailyGenerationBudget })}
-        />
-      </label>
-
-      <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
-            {t("saucelings.settings.connection")} {savedTick("connectionId")}
-          </div>
-          <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.settings.connectionNote")}</div>
-        </div>
-        <select
-          className="sl-input"
-          value={settings.connectionId ?? ""}
-          onChange={(e) => patch({ connectionId: e.target.value || null })}
+    <div className="sl-card sl-settings">
+      <section className="sl-settings-group">
+        <h3>{t("saucelings.settings.visitsGroup")}</h3>
+        <SettingRow
+          title={t("saucelings.settings.careWindow")}
+          note={t("saucelings.settings.careWindowNote")}
+          tick={savedTick("careWindowHours")}
         >
-          <option value="">{t("saucelings.settings.connectionDefault")}</option>
-          {textConnections.map((connection) => (
-            <option key={connection.id} value={connection.id}>
-              {connection.name}
-            </option>
-          ))}
-          {/* A saved connection that has since been deleted stays visible, so the select tells the truth. */}
-          {settings.connectionId && connections.data && !textConnections.some((c) => c.id === settings.connectionId) ? (
-            <option value={settings.connectionId}>{t("saucelings.settings.connectionMissing")}</option>
-          ) : null}
-        </select>
-      </label>
-
-      <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
-            {t("saucelings.settings.writeEveryLine")} {savedTick("writeEveryLine")}
-          </div>
-          <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.settings.writeEveryLineNote")}</div>
-        </div>
-        <input
-          type="checkbox"
-          checked={settings.writeEveryLine}
-          onChange={(e) => patch({ writeEveryLine: e.target.checked })}
-        />
-      </label>
-
-      <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
-            {t("saucelings.settings.images")} {savedTick("portraitEnabled")}
-          </div>
-          <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.settings.imagesNote")}</div>
-        </div>
-        <input
-          type="checkbox"
-          checked={settings.portraitEnabled}
-          onChange={(e) => patch({ portraitEnabled: e.target.checked })}
-        />
-      </label>
-
-      {settings.portraitEnabled ? (
-        <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
-            {t("saucelings.settings.imageConnection")} {savedTick("portraitConnectionId")}
-          </div>
-          {imageConnections && imageConnections.length === 0 ? (
-            <span style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.settings.imageConnectionEmpty")}</span>
-          ) : (
-            <select
-              className="sl-input"
-              value={settings.portraitConnectionId ?? ""}
-              onChange={(e) => patch({ portraitConnectionId: e.target.value || null })}
-            >
-              <option value="">{t("saucelings.settings.imageConnectionPick")}</option>
-              {(imageConnections ?? []).map((connection) => (
-                <option key={connection.id} value={connection.id}>
-                  {connection.name}
-                </option>
-              ))}
-            </select>
-          )}
-        </label>
-      ) : null}
-
-      {settings.portraitEnabled ? (
-        <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
-              {t("saucelings.settings.threeDrawingFallback")} {savedTick("threeDrawingFallback")}
-            </div>
-            <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.settings.threeDrawingFallbackNote")}</div>
-          </div>
-          <input
-            type="checkbox"
-            checked={settings.threeDrawingFallback}
-            onChange={(e) => patch({ threeDrawingFallback: e.target.checked })}
+          <NumberField
+            value={settings.careWindowHours}
+            min={1}
+            max={24}
+            onSave={(careWindowHours) => patch({ careWindowHours })}
           />
-        </label>
-      ) : null}
+        </SettingRow>
+        <SettingRow
+          title={t("saucelings.settings.eggHunting")}
+          note={t("saucelings.settings.eggHuntingNote")}
+          tick={savedTick("eggHunting")}
+        >
+          {checkbox("eggHunting")}
+        </SettingRow>
+      </section>
 
-      <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>
-            {t("saucelings.settings.eggHunting")} {savedTick("eggHunting")}
-          </div>
-          <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t("saucelings.settings.eggHuntingNote")}</div>
-        </div>
-        <input
-          type="checkbox"
-          checked={settings.eggHunting}
-          onChange={(e) => patch({ eggHunting: e.target.checked })}
-        />
-      </label>
+      <section className="sl-settings-group">
+        <h3>{t("saucelings.settings.writingGroup")}</h3>
+        <SettingRow
+          stack
+          title={t("saucelings.settings.connection")}
+          note={t("saucelings.settings.connectionNote")}
+          tick={savedTick("connectionId")}
+        >
+          <select
+            className="sl-input"
+            value={settings.connectionId ?? ""}
+            onChange={(e) => patch({ connectionId: e.target.value || null })}
+          >
+            <option value="">{t("saucelings.settings.connectionDefault")}</option>
+            {textConnections.map((connection) => (
+              <option key={connection.id} value={connection.id}>
+                {connection.name}
+              </option>
+            ))}
+            {/* A saved connection that has since been deleted stays visible, so the select tells the truth. */}
+            {settings.connectionId &&
+            connections.data &&
+            !textConnections.some((c) => c.id === settings.connectionId) ? (
+              <option value={settings.connectionId}>{t("saucelings.settings.connectionMissing")}</option>
+            ) : null}
+          </select>
+        </SettingRow>
+        <SettingRow
+          title={t("saucelings.settings.dailyBudget")}
+          note={`${t("saucelings.settings.budgetUsed", { used: budget.used, limit: settings.dailyGenerationBudget })} — ${t("saucelings.settings.budgetNote")}`}
+          tick={savedTick("dailyGenerationBudget")}
+        >
+          <NumberField
+            value={settings.dailyGenerationBudget}
+            min={0}
+            max={30}
+            onSave={(dailyGenerationBudget) => patch({ dailyGenerationBudget })}
+          />
+        </SettingRow>
+        <SettingRow
+          title={t("saucelings.settings.writeEveryLine")}
+          note={t("saucelings.settings.writeEveryLineNote")}
+          tick={savedTick("writeEveryLine")}
+        >
+          {checkbox("writeEveryLine")}
+        </SettingRow>
+      </section>
+
+      <section className="sl-settings-group">
+        <h3>{t("saucelings.settings.picturesGroup")}</h3>
+        <SettingRow
+          title={t("saucelings.settings.images")}
+          note={t("saucelings.settings.imagesNote")}
+          tick={savedTick("portraitEnabled")}
+        >
+          {checkbox("portraitEnabled")}
+        </SettingRow>
+        {settings.portraitEnabled ? (
+          <SettingRow
+            stack={!imageConnections || imageConnections.length > 0}
+            title={t("saucelings.settings.imageConnection")}
+            note={
+              imageConnections && imageConnections.length === 0 ? t("saucelings.settings.imageConnectionEmpty") : null
+            }
+            tick={savedTick("portraitConnectionId")}
+          >
+            {imageConnections && imageConnections.length === 0 ? null : (
+              <select
+                className="sl-input"
+                value={settings.portraitConnectionId ?? ""}
+                onChange={(e) => patch({ portraitConnectionId: e.target.value || null })}
+              >
+                <option value="">{t("saucelings.settings.imageConnectionPick")}</option>
+                {(imageConnections ?? []).map((connection) => (
+                  <option key={connection.id} value={connection.id}>
+                    {connection.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </SettingRow>
+        ) : null}
+        {settings.portraitEnabled ? (
+          <SettingRow
+            title={t("saucelings.settings.threeDrawingFallback")}
+            note={t("saucelings.settings.threeDrawingFallbackNote")}
+            tick={savedTick("threeDrawingFallback")}
+          >
+            {checkbox("threeDrawingFallback")}
+          </SettingRow>
+        ) : null}
+      </section>
 
       {(patchMutation.error ?? resetMutation.error) ? (
         <span role="alert" className="sl-error">

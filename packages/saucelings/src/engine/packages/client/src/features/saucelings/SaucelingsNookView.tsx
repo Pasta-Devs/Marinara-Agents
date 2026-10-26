@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type {
   SaucelingCharacterSummary,
   SaucelingStateResponse,
@@ -182,6 +182,40 @@ const NEWS_KINDS = ["hatch", "stage-up", "evolve-offer", "evolve"];
 
 /** The panel width at which the care card moves beside the stage; the same as the styles' container query. */
 const SIDE_BY_SIDE_REM = 48;
+
+/** Rename, Background and Tour behind one "⋯" button, so the stage bar holds a single control. */
+function NookMenu({ label, children }: { label: string; children: ReactNode }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const away = (event: Event) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) ref.current.open = false;
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, []);
+  const close = () => {
+    if (ref.current) ref.current.open = false;
+  };
+  return (
+    <details
+      ref={ref}
+      className="sl-menu"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        close();
+        ref.current?.querySelector("summary")?.focus();
+      }}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest(".sl-menu-list button")) close();
+      }}
+    >
+      <summary className="sl-btn sl-btn--small" aria-label={label} title={label}>
+        ⋯
+      </summary>
+      <div className="sl-menu-list">{children}</div>
+    </details>
+  );
+}
 
 export function SaucelingsNookView({
   state,
@@ -477,6 +511,11 @@ export function SaucelingsNookView({
   // While a painted figure loads, nobody stands and the box leaves its picture out, so neither flashes before it.
   const standing = standingCaretaker(figure, caretakerSprites, pose, motion);
 
+  const startRename = () => {
+    setRenameValue(unnamed ? "" : pet.name);
+    setEditingName(true);
+  };
+
   // Check in and Ask: in the caretaker's box beside a wide panel's care card, under the care buttons otherwise.
   const talk = (
     <>
@@ -493,34 +532,38 @@ export function SaucelingsNookView({
         </button>
       </div>
 
-      <div className="sl-care-row sl-ask-row" data-sl-tour="caretaker">
-        <label htmlFor="sl-nudge-pick" className="sl-care-ask">
-          {t("saucelings.nudge.heading", { name: caretakerName })}
-        </label>
-        <select
-          id="sl-nudge-pick"
-          className="sl-select sl-select--small"
-          value={nudge}
-          onChange={(e) => setNudgePick(e.target.value as SaucelingTendencyKey)}
-        >
-          {nudges.map((option) => (
-            <option key={option.tendency} value={option.tendency}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          className="sl-btn sl-btn--small"
-          disabled={nudgeMutation.isPending}
-          onClick={() => nudgeMutation.mutate(nudge)}
-        >
-          {t("saucelings.nudge.ask")}
-        </button>
-        <span className="sl-care-note">
-          {asked.length > 0 ? t("saucelings.nudge.active", { asks: asked.join(", ") }) : t("saucelings.nudge.note")}
-        </span>
-      </div>
+      <details className="sl-ask" data-sl-tour="caretaker">
+        <summary>
+          {t("saucelings.nudge.heading", { name: caretakerName })}…
+          {asked.length > 0 ? (
+            <span className="sl-care-note"> {t("saucelings.nudge.active", { asks: asked.join(", ") })}</span>
+          ) : null}
+        </summary>
+        <div className="sl-care-row sl-ask-row">
+          <select
+            id="sl-nudge-pick"
+            className="sl-select sl-select--small"
+            aria-label={t("saucelings.nudge.heading", { name: caretakerName })}
+            value={nudge}
+            onChange={(e) => setNudgePick(e.target.value as SaucelingTendencyKey)}
+          >
+            {nudges.map((option) => (
+              <option key={option.tendency} value={option.tendency}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="sl-btn sl-btn--small"
+            disabled={nudgeMutation.isPending}
+            onClick={() => nudgeMutation.mutate(nudge)}
+          >
+            {t("saucelings.nudge.ask")}
+          </button>
+          <span className="sl-care-note">{t("saucelings.nudge.note")}</span>
+        </div>
+      </details>
     </>
   );
   return (
@@ -598,16 +641,9 @@ export function SaucelingsNookView({
                     {isEgg ? t("saucelings.egg.name") : pet.name}
                   </h2>
                   {isEgg ? null : <RareMark pet={pet} />}
-                  {isEgg ? null : (
-                    <button
-                      type="button"
-                      className={`sl-btn sl-btn--small ${unnamed ? "sl-btn--primary" : ""}`}
-                      onClick={() => {
-                        setRenameValue(unnamed ? "" : pet.name);
-                        setEditingName(true);
-                      }}
-                    >
-                      {unnamed ? t("saucelings.pet.nameIt") : `✏️ ${t("saucelings.pet.rename")}`}
+                  {isEgg || !unnamed ? null : (
+                    <button type="button" className="sl-btn sl-btn--small sl-btn--primary" onClick={startRename}>
+                      {t("saucelings.pet.nameIt")}
                     </button>
                   )}
                 </div>
@@ -624,19 +660,26 @@ export function SaucelingsNookView({
                 )}
               </div>
             )}
-            <button
-              type="button"
-              className="sl-btn sl-btn--small"
-              aria-expanded={pickerOpen}
-              aria-label={t("saucelings.nook.background")}
-              title={t("saucelings.nook.background")}
-              onClick={() => setPickerOpen((open) => !open)}
-            >
-              🖼<span className="sl-btn-label"> {t("saucelings.nook.background")}</span>
-            </button>
-            <button type="button" className="sl-btn sl-btn--small" onClick={() => setTour({})}>
-              {t("saucelings.tour.link")}
-            </button>
+            {editingName ? null : (
+              <NookMenu label={t("saucelings.nook.menu")}>
+                {isEgg || unnamed ? null : (
+                  <button type="button" className="sl-btn sl-btn--small" onClick={startRename}>
+                    ✏️ {t("saucelings.pet.rename")}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="sl-btn sl-btn--small"
+                  aria-expanded={pickerOpen}
+                  onClick={() => setPickerOpen((open) => !open)}
+                >
+                  🖼 {t("saucelings.nook.background")}
+                </button>
+                <button type="button" className="sl-btn sl-btn--small" onClick={() => setTour({})}>
+                  {t("saucelings.tour.link")}
+                </button>
+              </NookMenu>
+            )}
           </div>
 
           <div className="sl-scene">

@@ -1,5 +1,13 @@
 # Saucelings release notes
 
+## 0.22.0 — 2026-10-27
+
+- The Nook's top bar holds one "⋯" button: Rename, Background and Tour are inside it. "Name it" stays in view until your sauceling has a name.
+- Ask is one line until you open it, under Check in.
+- When your caretaker has offered an evolution, the reason is written beside the Evolve button instead of behind a "?".
+- Settings are grouped under Visits, Writing and Pictures, with shorter notes and a narrower column on a wide screen. On a phone, pickers take the full width instead of being cut off.
+- A caretaker with a long name no longer pushes the buttons in About off the edge of a phone screen.
+
 ## 0.21.5 — 2026-10-27
 
 - On a narrow screen, the number boxes in Settings no longer shrink until the value is cut off.

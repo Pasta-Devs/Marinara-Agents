@@ -839,7 +839,7 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
-.sl-box-line, .sl-box-nav, .sl-box > .sl-care-row { grid-column: 1 / -1; }
+.sl-box-line, .sl-box-nav, .sl-box > .sl-care-row, .sl-box > .sl-ask { grid-column: 1 / -1; }
 .sl-box--joined {
   padding: 0.75rem 1rem 0.85rem;
   border: 2px solid var(--sl-sauce-accent, #e05246);
@@ -864,7 +864,39 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
   padding-top: 0.5rem;
   border-top: 1px solid var(--border, rgba(255,255,255,0.08));
 }
-.sl-care-ask { font-size: 0.8rem; }
+/* Settings: three groups of rows, name and note on the left and the control on the right. */
+.sl-settings { display: grid; gap: 1.15rem; max-width: 40rem; margin: 0 auto; }
+.sl-settings-group { display: grid; gap: 0.85rem; }
+.sl-settings-group + .sl-settings-group { padding-top: 0.85rem; border-top: 1px solid var(--border, rgba(255,255,255,0.1)); }
+.sl-settings-group > h3 { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.7; }
+.sl-setting { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.sl-setting-text { display: grid; gap: 0.1rem; min-width: 0; }
+.sl-setting-title { font-weight: 600; font-size: 0.875rem; }
+.sl-setting-note { font-size: 0.75rem; opacity: 0.7; }
+.sl-setting > select { flex: 0 1 14rem; min-width: 0; }
+/* Ask is one line until it is opened. */
+.sl-ask { padding-top: 0.5rem; border-top: 1px solid var(--border, rgba(255,255,255,0.08)); }
+.sl-ask > summary { cursor: pointer; font-size: 0.8rem; }
+.sl-ask > .sl-care-row { border-top: 0; padding-top: 0.45rem; }
+/* Rename, Background and Tour in one menu under the stage bar's "⋯". */
+.sl-menu { position: relative; flex-shrink: 0; }
+.sl-menu > summary { list-style: none; cursor: pointer; }
+.sl-menu > summary::-webkit-details-marker { display: none; }
+.sl-menu-list {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  display: grid;
+  gap: 0.25rem;
+  min-width: 9rem;
+  padding: 0.35rem;
+  border: 1px solid var(--border, rgba(255,255,255,0.15));
+  border-radius: 0.6rem;
+  background: var(--popover, var(--card, #1c1c22));
+  box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+}
+.sl-menu-list > .sl-btn { justify-content: flex-start; }
 .sl-care-note { font-size: 0.72rem; opacity: 0.7; }
 .sl-pill {
   display: inline-flex;
@@ -887,6 +919,8 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
 .sl-about-body p { margin: 0; opacity: 0.85; }
 .sl-about-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .sl-about-row .sl-select { min-width: 0; max-width: 100%; }
+/* A caretaker's name has no break points to wrap on, so the words in these rows may break anywhere. */
+.sl-about-row, .sl-about-row > label { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .sl-about-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr)); gap: 0.75rem; margin-top: 0.25rem; }
 .sl-about-group { display: grid; align-content: start; gap: 0.5rem; min-width: 0; padding-top: 0.6rem; border-top: 1px solid var(--border, rgba(255,255,255,0.1)); }
 .sl-about-group > h3 { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.7; }
@@ -896,7 +930,7 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
 /* A hint behind a "?", as in the Engine: muted until it is pointed at, and a 24px target for a finger. It stays
    beside the button it explains; on a narrow row the button's words wrap instead. */
 .sl-with-help { display: inline-flex; align-items: center; gap: 0.35rem; min-width: 0; max-width: 100%; }
-.sl-with-help > .sl-btn { min-width: 0; }
+.sl-with-help > .sl-btn { min-width: 0; overflow-wrap: anywhere; }
 .sl-help {
   flex-shrink: 0;
   display: inline-flex;
@@ -1334,17 +1368,17 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
   .sl-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
   /* An odd last button (an egg's third, or Paint) takes the whole row. */
   .sl-actions > :last-child:nth-child(odd) { grid-column: 1 / -1; }
-  /* The caretaker's picture is smaller, the Background button is its icon, and Ask's picker and button share
-     the row under its label. */
+  /* The caretaker's picture is smaller, and Ask's picker and button share a row. */
   .sl-box { grid-template-columns: 4rem minmax(0, 1fr); column-gap: 0.7rem; }
   .sl-box--joined { padding: 0.65rem 0.75rem 0.75rem; }
-  .sl-btn-label { display: none; }
-  .sl-ask-row > .sl-care-ask { flex-basis: 100%; }
   .sl-ask-row > .sl-select { flex: 1 1 0; min-width: 0; }
   .sl-avatar--box { width: 4rem; height: 4rem; }
   /* The caretaker's avatar stays beside the picker; the buttons share the row below. */
   .sl-egg-form > .sl-select, .sl-egg-form > .sl-input { flex: 1 1 calc(100% - 3.5rem); min-width: 0; }
   .sl-egg-form > .sl-btn { flex: 1 1 auto; }
+  /* A picker gets the row's width under its words. */
+  .sl-setting--stack { flex-direction: column; align-items: stretch; }
+  .sl-setting--stack > select { flex: none; width: 100%; }
   /* The tour card docks across the bottom. */
   .sl-tour { left: 0.5rem; right: 0.5rem; bottom: 0.5rem; width: auto; }
   .sl-tour-mari { width: 3.5rem; }

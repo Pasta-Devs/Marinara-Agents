@@ -27,14 +27,10 @@ export function EvolveButton({
   if (!pet || pet.stage === "egg" || pet.evolution.offer !== "offered" || pet.evolution.look) return null;
   return (
     <div className="sl-about-row">
-      <HelpTip
-        text={t("saucelings.evolve.note", { name: pet.name })}
-        label={t("saucelings.help.label", { action: t("saucelings.evolve.button") })}
-      >
-        <button type="button" className="sl-btn sl-btn--primary" onClick={() => setOpen(true)}>
-          ✨ {t("saucelings.evolve.button")}
-        </button>
-      </HelpTip>
+      <button type="button" className="sl-btn sl-btn--primary" onClick={() => setOpen(true)}>
+        ✨ {t("saucelings.evolve.button")}
+      </button>
+      <span className="sl-care-note">{t("saucelings.evolve.note", { name: pet.name })}</span>
       {open ? <EvolveDialog pet={pet} assetUrl={assetUrl} onClose={() => setOpen(false)} /> : null}
     </div>
   );
