@@ -81,6 +81,7 @@ jobs:
           shopt -s nullglob
           suites=()
           if [[ "$GACHA_BROWSER_SUITE" == "audio" ]]; then
+            export TTS_LOCAL_URLS_ENABLED=true
             suites=(tests/package-gacha-forge-audio.e2e.ts)
           else
             for suite in tests/package-gacha-forge-seasonal-events.e2e.ts tests/package-gacha-forge-formation*.e2e.ts tests/package-gacha-forge-editors.e2e.ts tests/package-gacha-forge-proactive-messages.e2e.ts tests/package-gacha-forge-backgrounds.e2e.ts; do
