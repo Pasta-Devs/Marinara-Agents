@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { slpFilledDefault } from "./slp-schema-defaults.js";
 
 export const SLURP_MODEL_JOB_KINDS = [
   "dm_reply",
@@ -105,8 +106,8 @@ function migrateSlurpModelBudget(raw: unknown): unknown {
   return { ...record, customLimits, raisedNotice: true };
 }
 
-export const slurpModelBudgetSchema = z
-  .preprocess(
+export const slurpModelBudgetSchema = slpFilledDefault(
+  z.preprocess(
     migrateSlurpModelBudget,
     z.object({
       mode: z.enum(["off", "present", "background"]).default("present"),
@@ -114,8 +115,8 @@ export const slurpModelBudgetSchema = z
       // The numbers below are the sizing for no Creators; `resolveSlurpModelBudget` sizes them for the real count.
       callsPerHour: z.number().int().min(0).max(100).default(6),
       callsPerDay: z.number().int().min(0).max(500).default(40),
-      jobs: z
-        .object({
+      jobs: slpFilledDefault(
+        z.object({
           dm_reply: jobPolicy(1, 15),
           rewrite: jobPolicy(2, 3),
           // Sized so the shipped audience is not capped below its "Runs per day" (R1-104).
@@ -136,15 +137,15 @@ export const slurpModelBudgetSchema = z
           plan: jobPolicy(2, 20),
           // Creator Pages (design and refresh). Low priority: a page can wait for a quiet hour.
           page: jobPolicy(7, 4),
-        })
-        .default({}),
+        }),
+      ),
       /** Limits the player set by hand. Every other limit follows the number of active Creators. */
       customLimits: z.array(z.string()).default([]),
       /** Set once when an older budget moved to the sized defaults; Pulse tells the player, then clears it. */
       raisedNotice: z.boolean().default(false),
     }),
-  )
-  .default({});
+  ),
+);
 
 export type SlurpModelBudget = z.infer<typeof slurpModelBudgetSchema>;
 

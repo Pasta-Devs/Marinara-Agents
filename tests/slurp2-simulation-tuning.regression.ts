@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { z as z4 } from "zod/v4";
+
+import { slpFilledDefault } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-schema-defaults.js";
+import { slpSettingsUpdateSchema } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-social.schema.js";
 
 import { slurpCreatorReach } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-reach.js";
 import {
@@ -90,5 +94,13 @@ assert.equal(partial.prompts.replyMaxChars, 90);
 assert.deepEqual({ ...partial, reach: realistic.reach, prompts: realistic.prompts }, SLURP_REALISTIC_TUNING);
 assert.deepEqual(slurpSimulationTuningSchema.parse({}), SLURP_REALISTIC_TUNING);
 assert.notEqual(slurpTuningForPreset("realistic"), slurpTuningForPreset("realistic"), "presets are copies");
+
+// Zod 4 returns a `.default({})` value unparsed, so nested defaults stayed unset and the
+// server crashed at load reading `world.commission.curve`. The helper fills them on zod 3 and 4.
+assert.equal(typeof SLURP_REALISTIC_TUNING.world.commission.curve, "number");
+const nested = z4.object({ inner: slpFilledDefault(z4.object({ a: z4.number().default(1) }) as never) });
+assert.deepEqual(nested.parse({}), { inner: { a: 1 } }, "zod 4 fills nested defaults");
+// Zod 4 `.partial()` would fill every unsent settings field with its default and reset it on save.
+assert.deepEqual(slpSettingsUpdateSchema.parse({}), {}, "a settings update leaves unsent fields out");
 
 console.log("slurp2 simulation tuning regression passed");

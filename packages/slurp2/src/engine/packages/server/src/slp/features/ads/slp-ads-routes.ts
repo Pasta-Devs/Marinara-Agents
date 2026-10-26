@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { slpPartialInput } from "../../../../../shared/src/slp/slp-schema-defaults.js";
 import { SLURP_GARNISH_PLATFORM, garnishContextForViewer } from "./slp-garnish-context.js";
 import { newId } from "../../../utils/id-generator.js";
 import { unlinkGarnishAdImage, resolveGarnishAdImageAbsolutePath } from "./slp-garnish-image.js";
@@ -185,10 +186,9 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     return { ok: true };
   });
 
-  const garnishAdPatchSchema = garnishAdInputSchema
-    .omit({ id: true })
-    .partial()
-    .extend({ retiredAt: z.null().optional() });
+  const garnishAdPatchSchema = slpPartialInput(garnishAdInputSchema.omit({ id: true })).extend({
+    retiredAt: z.null().optional(),
+  });
 
   app.patch("/slurp/ads/pool/:id", async (req, reply) => {
     const { id } = req.params as { id: string };

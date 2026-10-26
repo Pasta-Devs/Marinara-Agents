@@ -15,6 +15,7 @@
  * the whole audience away.
  */
 import { z } from "zod";
+import { slpFilledDefault } from "./slp-schema-defaults.js";
 
 import type { SlpCreatorFanArchetype } from "./slp-social.types.js";
 import type { SlurpSpendTier } from "./slp-population.js";
@@ -65,9 +66,9 @@ export const slurpFanTypeSchema = z.object({
     .default("ordinary"),
   voice: z.string().max(SLURP_FAN_VOICE_MAX).default(""),
   traits: z.array(z.string().trim().min(1).max(48)).max(12).default([]),
-  activeHours: z.object({ peak: int(0, 23, 12), spread: int(1, 12, 6) }).default({}),
-  behavior: z
-    .object({
+  activeHours: slpFilledDefault(z.object({ peak: int(0, 23, 12), spread: int(1, 12, 6) })),
+  behavior: slpFilledDefault(
+    z.object({
       activity: weight(),
       like: weight(),
       follow: weight(),
@@ -77,28 +78,28 @@ export const slurpFanTypeSchema = z.object({
       commission: weight(),
       tip: weight(),
       unlock: weight(),
-    })
-    .default({}),
-  spend: z
-    .object({
+    }),
+  ),
+  spend: slpFilledDefault(
+    z.object({
       /** What this person will pay for one Creator in a week. Zero means they never subscribe. */
       weeklyBudget: range(99_999).default([0, 0]),
       /** What they will pay for one commissioned piece. */
       commissionBudget: range(99_999).default([0, 0]),
       tipChance: num(0, 1, 0),
-    })
-    .default({}),
-  funnel: z
-    .object({
+    }),
+  ),
+  funnel: slpFilledDefault(
+    z.object({
       /** Share of this person's reactions that are a follow rather than a like or a comment. */
       followChance: num(0, 1, 0.16),
       subConversionPerDay: num(0, 1, 0),
       loyaltyDays: int(1, 3650, 60),
       renewChance: num(0, 1, 1),
-    })
-    .default({}),
+    }),
+  ),
   tone: z.string().trim().max(48).optional(),
-  bank: z.object({ targetSize: int(0, 500, 24) }).default({}),
+  bank: slpFilledDefault(z.object({ targetSize: int(0, 500, 24) })),
 });
 
 export type SlurpFanType = z.infer<typeof slurpFanTypeSchema>;
