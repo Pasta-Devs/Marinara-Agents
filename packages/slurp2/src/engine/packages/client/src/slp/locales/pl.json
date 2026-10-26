@@ -3172,6 +3172,7 @@
   "ui.slurp.live.privateExtend": "Jeszcze {{minutes}} minut za {{amount}} <coin/>",
   "ui.slurp.live.privateFailed": "Pokaz prywatny się nie zaczął. Spróbuj ponownie.",
   "ui.slurp.live.goLive": "Wejdź na żywo",
+  "ui.slurp.live.goLiveLine": "Nadaj pokaz na kamerce jako swój Twórca albo ten, którego grasz.",
   "ui.slurp.live.goLiveTitle": "Wejdź na żywo",
   "ui.slurp.live.goLiveAs": "Prowadź jako",
   "ui.slurp.live.goLiveOwn": "{{name}} (ty)",

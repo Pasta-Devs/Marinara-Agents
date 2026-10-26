@@ -3136,6 +3136,7 @@
   "ui.slurp.live.privateExtend": "{{minutes}} Minuten länger für {{amount}} <coin/>",
   "ui.slurp.live.privateFailed": "Die Privatshow hat nicht begonnen. Versuch es noch einmal.",
   "ui.slurp.live.goLive": "Live gehen",
+  "ui.slurp.live.goLiveLine": "Streame eine Camshow als dein Creator oder als einer, den du spielst.",
   "ui.slurp.live.goLiveTitle": "Live gehen",
   "ui.slurp.live.goLiveAs": "Moderieren als",
   "ui.slurp.live.goLiveOwn": "{{name}} (du)",
