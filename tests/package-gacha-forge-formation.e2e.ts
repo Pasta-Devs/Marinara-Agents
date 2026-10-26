@@ -709,11 +709,13 @@ for (const theme of ["dark", "light"]) {
         await page.screenshot({ path: testInfo.outputPath(`formation-next-turn-1920-${theme}.png`) });
         await page.setViewportSize({ width: 1440, height: 900 });
       }
-      // Enemies open their sheet, with the kit that actually fights.
+      // Enemies open their sheet, with the kit that actually fights. The Caster started in the Back Row and
+      // has stepped into a fallen fighter's seat, so its sheet now describes a Front Row unit.
+      await expect(forge.locator('.side.enemies .row.front .cbt[data-id="enemy-2"]')).toHaveCount(1);
       await forge.locator('.cbt[data-id="enemy-2"]').click();
       const sheet = forge.locator("[data-foe-sheet]");
       await expect(sheet).toContainText("Lighthouse dawn");
-      await expect(sheet).toContainText("Makes +1 Water energy each turn");
+      await expect(sheet).toContainText("Front line");
       await page.screenshot({ path: testInfo.outputPath(`formation-foe-${theme}.png`) });
       await sheet.getByRole("button", { name: "Close" }).click();
       await expect(sheet).toHaveCount(0);
