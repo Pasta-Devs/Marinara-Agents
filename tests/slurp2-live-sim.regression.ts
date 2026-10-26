@@ -24,6 +24,10 @@ import {
   slpLiveApplyBeat,
   slpLiveParseBeat,
 } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-live-beat.ts";
+import {
+  slpLivePictureDue,
+  slpLivePictureScene,
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-live-picture.ts";
 import { slpExtensionFromLegacy } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-extensions.ts";
 
 // The menu follows the spice level: no strip items for a clean Creator, all of them for an explicit one.
@@ -181,5 +185,42 @@ const shown = slpLiveView(
   null,
 );
 assert.equal(shown.log.at(-1)?.kind, "you", "the answer waits for its moment");
+
+// Pictures: an opening shot first, then one per `pictureSeconds`, event moments first, all under the cap.
+const pics = slpLiveStart({ level: "nudity", fans: 10 });
+const rate = { pictureSeconds: 60, pictureMax: 2 };
+assert.equal(slpLivePictureDue(pics, 0, rate), "opening");
+pics.pictureAt = 0;
+pics.shooting = 0;
+assert.equal(slpLivePictureDue(pics, 90_000, rate), null, "one picture at a time");
+pics.shooting = null;
+pics.pictures = [{ at: 20_000, path: "a.png" }];
+assert.equal(slpLivePictureDue(pics, 30_000, rate), null, "the rate holds");
+assert.equal(slpLivePictureDue(pics, 61_000, rate), "rate");
+pics.log.push({ at: 50_000, kind: "order", by: "f1", name: "a", amount: 60, itemId: "closeUp" });
+assert.equal(slpLivePictureDue(pics, 61_000, rate), "order", "a visual order goes first");
+pics.shooting = -4 * 60_000;
+assert.equal(slpLivePictureDue(pics, 61_000, rate), "order", "a lost picture does not block the show");
+pics.pictures.push({ at: 70_000, path: "b.png" });
+assert.equal(slpLivePictureDue(pics, 200_000, rate), null, "the cap holds");
+pics.queue.push({ id: "q", itemId: "closeUp", by: "f1", name: "a", at: 50_000, doneAt: null });
+assert.match(slpLivePictureScene(pics, 61_000, "order"), /close-up/);
+const picView = (at: number) =>
+  slpLiveView(
+    {
+      id: "s",
+      hostId: "h",
+      hostKind: "creator",
+      startedAt: new Date(0).toISOString(),
+      endsAt: new Date(3_600_000).toISOString(),
+      endedAt: null,
+      state: pics,
+    },
+    at,
+    null,
+  );
+assert.deepEqual(picView(30_000).picture, { n: 0, at: 20_000 }, "a picture shows only once it has landed");
+assert.deepEqual(picView(80_000).picture, { n: 1, at: 70_000 });
+assert.equal(JSON.stringify(picView(80_000)).includes("b.png"), false, "media paths stay on the server");
 
 console.log("slurp2 live sim: ok");

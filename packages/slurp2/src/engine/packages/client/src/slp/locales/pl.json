@@ -3165,6 +3165,7 @@
   "ui.slurp.live.tipBanner": "{{name}} daje {{amount}} <coin/>",
   "ui.slurp.live.tipFailed": "Napiwek nie przeszedł. Spróbuj ponownie.",
   "ui.slurp.live.say": "Napisz coś do {{name}}",
+  "ui.slurp.live.shooting": "Zaraz nowe zdjęcie",
   "ui.slurp.live.tipTitle": "Napiwek dla {{name}}",
   "ui.slurp.live.topTipper": "Top fan: {{name}}",
   "ui.slurp.live.watch": "Oglądaj {{name}} na żywo",

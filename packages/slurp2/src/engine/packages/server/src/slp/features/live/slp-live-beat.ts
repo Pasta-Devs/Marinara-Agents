@@ -24,6 +24,7 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import { slurpSpiceBriefLines } from "../../modules/creators/slp-spice.js";
 import { slpLivePrompt } from "../../modules/live/slp-live-prompt.js";
 import { withSlurpLiveShow } from "./slp-live-lock.js";
+import { shootSlurpLivePicture } from "./slp-live-picture.js";
 import { simulateSlurpLiveShow } from "./slp-live-service.js";
 
 export type SlurpLiveBeatResult = "written" | "waiting" | "busy" | "failed" | "ended" | "missing";
@@ -136,6 +137,10 @@ export async function beatSlurpLiveShow(
       }
       await storage.save(fresh.id, { state: fresh.state });
     });
+    // Pictures follow the talk: a beat that just landed is what the camera shows.
+    void shootSlurpLivePicture(db, show.id, at + (Date.now() - t0), settings.live).catch((error: unknown) =>
+      logger.warn(error, "[slurp-live] Picture failed"),
+    );
     return kept || stale ? "written" : "failed";
   } finally {
     if (writing.get(show.id) === call) writing.delete(show.id);

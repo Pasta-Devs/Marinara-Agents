@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { ChevronLeft, Clock, Eye, Flame, ListOrdered } from "lucide-react";
+import { Camera, ChevronLeft, Clock, Eye, Flame, ListOrdered } from "lucide-react";
 import { Avatar, SlurpMediaImg } from "../../base/chrome/SlpChrome";
 import { SlpSheet } from "../../modules/chrome/SlpSheet";
 import { SlpErrorState, SlpSkeleton } from "../../modules/chrome/SlpStateKit";
@@ -158,9 +158,22 @@ export function SlpLiveScreen({
     <SlpThreadTaskLayer>
       <section className="relative isolate flex min-h-[70dvh] flex-1 flex-col overflow-hidden text-white">
         <style>{LIVE_STYLES}</style>
-        {/* The stage. Live pictures come in slice 4; until then the Creator's own picture, alive with a slow drift. */}
+        {/* The stage: the newest live picture, else the Creator's own picture, alive with a slow drift. */}
         <div aria-hidden="true" className="absolute inset-0 -z-10 overflow-hidden">
-          {host?.avatarUrl ? (
+          {show.picture ? (
+            // The last picture stays under the new one until it has loaded and faded in.
+            [show.picture.n - 1, show.picture.n]
+              .filter((n) => n >= 0)
+              .map((n) => (
+                <SlurpMediaImg
+                  key={n}
+                  src={`/api/slurp2/slurp/live/${encodeURIComponent(show.id)}/picture/${n}`}
+                  mediaWidth={720}
+                  alt=""
+                  className="slp-live-in slp-live-drift absolute inset-0 h-full w-full object-cover"
+                />
+              ))
+          ) : host?.avatarUrl ? (
             <SlurpMediaImg
               src={host.avatarUrl}
               mediaWidth={720}
@@ -210,6 +223,12 @@ export function SlpLiveScreen({
                 />
               </span>
             </span>
+            {show.shooting && (
+              <span role="status" className="flex items-center gap-1 text-[var(--noodle-accent)]">
+                <Camera size={14} aria-hidden="true" className="slp-live-dot" />
+                {t("ui.slurp.live.shooting")}
+              </span>
+            )}
           </div>
           <button
             type="button"

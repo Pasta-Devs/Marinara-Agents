@@ -104,6 +104,12 @@ export type SlpLiveState = {
   place?: string;
   /** Milliseconds since the start where the last written beat runs out. */
   beatTo?: number;
+  /** Live pictures, oldest first: when each one landed and its staged media path (never sent to clients). */
+  pictures?: { at: number; path: string }[];
+  /** When the last picture was asked for. */
+  pictureAt?: number;
+  /** When the picture being made now was asked for; null when none is. */
+  shooting?: number | null;
 };
 export type SlpLiveTip = { by: string; name: string; amount: number; itemId?: string };
 
@@ -282,6 +288,16 @@ export function slurpLiveSlot(hostId: string, live: SlpLiveSettings, at: number)
   return { id: `live:${hostId}:${slot}`, startAt, endsAt: startAt + minutes * MINUTE };
 }
 
+/** A picture is being made; after 3 minutes it counts as lost (a failed or restarted server). */
+export const slpLiveShooting = (state: SlpLiveState, at: number) =>
+  state.shooting !== undefined && state.shooting !== null && at - state.shooting < 3 * 60_000;
+
+function slpLivePictureView(state: SlpLiveState, elapsed: number) {
+  const pictures = state.pictures ?? [];
+  const n = pictures.findLastIndex((picture) => picture.at <= elapsed);
+  return n < 0 ? null : { n, at: pictures[n]!.at };
+}
+
 /** What a viewer's screen gets: the show without the bookkeeping. `me` is the viewer's tipper key. */
 export function slpLiveView(
   show: {
@@ -321,6 +337,9 @@ export function slpLiveView(
       .sort((a, b) => a.at - b.at)
       .slice(-80),
     beatTo: state.beatTo ?? 0,
+    // Only the newest landed picture, by number; the media path stays on the server.
+    picture: slpLivePictureView(state, Math.max(0, now - Date.parse(show.startedAt))),
+    shooting: slpLiveShooting(state, Math.max(0, now - Date.parse(show.startedAt))),
     top: slpLiveTopTipper(state),
     mine: me ? (state.tippers[me] ?? 0) : 0,
   };
