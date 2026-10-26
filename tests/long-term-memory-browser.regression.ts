@@ -158,6 +158,8 @@ async function main() {
         version: 1,
       };
       const availabilityPatches: Array<Record<string, unknown>> = [];
+      // Set to hold the next legacy-global availability PATCH open, so a test can act while Save is running.
+      let availabilityGate: Promise<void> | null = null;
       const branchAvailabilityPatches: Array<Record<string, unknown>> = [];
       const batchNotesCalls: Array<Record<string, unknown>> = [];
       const batchNotesFailure = false;
@@ -988,6 +990,7 @@ async function main() {
           for await (const chunk of request) chunks.push(Buffer.from(chunk));
           const patch = JSON.parse(Buffer.concat(chunks).toString("utf8"));
           availabilityPatches.push(patch);
+          if (availabilityGate) await availabilityGate;
           legacyGlobalNote = {
             ...legacyGlobalNote,
             ...patch,
@@ -2154,7 +2157,43 @@ async function main() {
       await page.locator("[data-ltm-availability-workbench]").waitFor();
       const availability = page.locator("[data-ltm-availability-workbench]");
       await availability.getByRole("checkbox", { name: "Conversation" }).check();
-      await availability.getByRole("button", { name: "Save availability" }).click();
+      // Save keeps keyboard focus while the request is held: it and Cancel are aria-disabled instead of
+      // `disabled`, and a second Enter sends no second request.
+      let releaseAvailability = () => {};
+      availabilityGate = new Promise<void>((resolve) => {
+        releaseAvailability = resolve;
+      });
+      const saveAvailability = availability.getByRole("button", { name: /^Save availability$|^Saving/u });
+      const cancelAvailability = availability.getByRole("button", { name: "Cancel", exact: true });
+      const patchesBeforeSave = availabilityPatches.length;
+      await saveAvailability.focus();
+      await page.keyboard.press("Enter");
+      await page.waitForFunction(
+        () =>
+          document
+            .querySelector("[data-ltm-availability-workbench] .mari-editor-action--primary")
+            ?.getAttribute("aria-disabled") === "true",
+      );
+      assert.equal(
+        await saveAvailability.evaluate((el) => el === document.activeElement),
+        true,
+        "Save availability keeps focus while it saves",
+      );
+      assert.equal(await saveAvailability.getAttribute("disabled"), null);
+      assert.equal(await cancelAvailability.getAttribute("aria-disabled"), "true");
+      assert.equal(await cancelAvailability.getAttribute("disabled"), null);
+      await page.keyboard.press("Enter");
+      await cancelAvailability.focus();
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(150);
+      assert.equal(availabilityPatches.length, patchesBeforeSave + 1, "a second Enter sends no second save");
+      assert.equal(
+        await page.locator("[data-ltm-availability-workbench]").count(),
+        1,
+        "a locked Cancel does not close",
+      );
+      availabilityGate = null;
+      releaseAvailability();
       await page.waitForFunction(() => document.querySelector("[data-ltm-availability-workbench]") === null);
       assert.deepEqual(availabilityPatches.at(-1), {
         scope: {},
@@ -6570,15 +6609,47 @@ async function main() {
       await identitySelects.nth(0).press("Enter");
       assert.equal(await identitySelects.nth(0).inputValue(), "character:character-a");
       await identitySelects.nth(1).selectOption("different");
+      // Unsaved identity decisions lock the source list without dropping keyboard focus: the button is
+      // aria-disabled (not `disabled`), names its reason, and a click leaves the selection where it was.
+      const lockedSource = page.locator('[data-ltm-review-source-select="source_mobile_single"]');
       assert.equal(
-        await page.locator('[data-ltm-review-source-select="source_mobile_single"]').isDisabled(),
-        true,
+        await lockedSource.getAttribute("aria-disabled"),
+        "true",
         "changing source cannot silently discard unsaved identity decisions",
+      );
+      assert.equal(await lockedSource.getAttribute("disabled"), null, "a locked source stays focusable");
+      await lockedSource.focus();
+      assert.equal(await lockedSource.evaluate((el) => el === document.activeElement), true);
+      const lockReasonId = await lockedSource.getAttribute("aria-describedby");
+      assert.ok(lockReasonId, "a locked source names its reason");
+      assert.equal(
+        (await page.locator(`[id="${lockReasonId}"]`).textContent())?.trim(),
+        "Save or discard identity edits first.",
+      );
+      const activeSourceBefore = await page
+        .locator('[data-ltm-review-source-select][aria-current="true"]')
+        .getAttribute("data-ltm-review-source-select");
+      const expandedBefore = await lockedSource.getAttribute("aria-expanded");
+      await page.keyboard.press("Enter");
+      assert.equal(
+        await lockedSource.getAttribute("aria-expanded"),
+        expandedBefore,
+        "a locked source does not collapse or expand",
+      );
+      assert.equal(
+        await page
+          .locator('[data-ltm-review-source-select][aria-current="true"]')
+          .getAttribute("data-ltm-review-source-select"),
+        activeSourceBefore,
+        "a locked source does not change the selection",
       );
       await identityReview.getByRole("button", { name: "Discard identity choices" }).click();
       assert.equal(await identitySelects.nth(0).inputValue(), "");
       assert.equal(await identitySelects.nth(1).inputValue(), "");
-      assert.equal(await page.locator('[data-ltm-review-source-select="source_mobile_single"]').isEnabled(), true);
+      assert.equal(
+        await page.locator('[data-ltm-review-source-select="source_mobile_single"]').getAttribute("aria-disabled"),
+        null,
+      );
       await identitySelects.nth(0).selectOption("character:character-a");
       await identitySelects.nth(1).selectOption("different");
       const saveIdentityChoices = identityReview.getByRole("button", { name: "Save choices and review memory" });

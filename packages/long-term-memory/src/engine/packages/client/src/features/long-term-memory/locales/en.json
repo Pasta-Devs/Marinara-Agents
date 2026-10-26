@@ -1181,6 +1181,8 @@
   "ui.longTermMemory.reviewqueue.invalidEditedMutationOther": "Fix {{count}} invalid edited changes before applying: {{labels}}.",
   "ui.longTermMemory.reviewqueue.acceptNeedsText": "Can't apply yet: an edited section is empty.",
   "ui.longTermMemory.reviewqueue.acceptNeedsShorterText": "Can't apply yet: the edited text is over its character limit.",
+  "ui.longTermMemory.reviewqueue.acceptRowNotEligible": "Can't apply this change: its proposal is blocked or out of date.",
+  "ui.longTermMemory.reviewqueue.identityLockReason": "Save or discard identity edits first.",
   "ui.longTermMemory.reviewqueue.acceptNoEligibleSelection": "Can't apply the selected changes: their proposals are blocked or out of date.",
   "ui.longTermMemory.reviewqueue.noDraftSummary": "No draft summary.",
   "ui.longTermMemory.reviewqueue.reportDismissalFailed": "Report dismissal failed: {{message}}",

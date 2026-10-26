@@ -1053,6 +1053,36 @@ assert.match(maintenance, /const lock = lockedActionProps\(busy\)/u);
 assert.doesNotMatch(maintenance, /disabled=\{[^}]*\b(?:busy|pending)\b/u);
 assert.doesNotMatch(vault, /className: "opacity-50"/u);
 assert.doesNotMatch(readFileSync(ltmSourcePaths.settings, "utf8"), /className: "opacity-50"/u);
+// Vault and Review locks: unsaved identity edits and running saves never feed a native `disabled`; the source
+// list names one reason node, and a stale or blocked row says why on the row itself.
+const availabilityWorkbench = readFileSync(
+  join(dirname(ltmSourcePaths.vault), "MemoryAvailabilityWorkbench.tsx"),
+  "utf8",
+);
+const subjectIdentityReview = readFileSync(
+  join(dirname(ltmSourcePaths.reviewQueue), "SubjectIdentityReview.tsx"),
+  "utf8",
+);
+assert.doesNotMatch(reviewQueue, /(?<!aria-)disabled=\{[^}]*identityDirtyIds/u);
+assert.doesNotMatch(
+  reviewQueue,
+  /(?<!aria-)disabled=\{[^}]*\b(?:dismissingId|clearingSourceId|extractingSourceId|isFetching|running !== null)\b/u,
+);
+assert.equal(
+  (reviewQueue.match(/lockedActionProps\(identityLocked, identityLockReasonId\)/gu) ?? []).length,
+  2,
+  "the source select and the rejected-count button share the identity lock reason",
+);
+assert.match(reviewQueue, /id=\{identityLockReasonId\}/u);
+assert.ok((reviewQueue.match(/if \(identityLocked\) return;/gu) ?? []).length >= 2);
+assert.match(reviewQueue, /const acceptReason = !valid[\s\S]*?acceptRowNotEligible/u);
+assert.doesNotMatch(availabilityWorkbench, /(?<!aria-)disabled=\{busy\}/u);
+assert.match(availabilityWorkbench, /\{\.\.\.lockedActionProps\(busy\)\}/u);
+assert.doesNotMatch(subjectIdentityReview, /(?<!aria-)disabled=\{busy/u);
+assert.match(subjectIdentityReview, /aria-disabled=\{busy \|\| undefined\}/u);
+assert.doesNotMatch(vault, /(?<!aria-)disabled=\{Boolean\(busy\)/u);
+assert.ok(locale["ui.longTermMemory.reviewqueue.identityLockReason"]);
+assert.ok(locale["ui.longTermMemory.reviewqueue.acceptRowNotEligible"]);
 // #1636: Save keeps its label and tone, stays focusable while off and reports Saving and Saved in a polite region
 // beside it; a save that waits on a recall rebuild is a warning, not an error.
 assert.match(vault, /aria-disabled=\{!dirty \|\| busy === "save" \? true : undefined\}/u);

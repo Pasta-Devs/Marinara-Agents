@@ -206,7 +206,12 @@ A control that starts work stays focusable while the work runs: spread
 `aria-describedby` for a reason line; `Button` and `IconButton` dim on `aria-disabled`
 themselves) and make its handler return early, because Enter and Space still fire
 `onClick` and a submit button still submits (see the activation switch, Reindex, Chat
-Settings, Maintenance and the Debug toolbar). Native `disabled` is for permanent
+Settings, Maintenance and the Debug toolbar). The same holds in the Vault and Review:
+availability Save and Cancel, the rename dialog, and the Review source, re-extract,
+clear-rejected, Retry and delete controls stay focusable while they run. While identity
+edits are unsaved, the source select, rejected count, re-extract and clear-rejected share
+one linked reason ("Save or discard identity edits first."), and a stale or blocked change
+names why Apply is unavailable on its row, even when the row is collapsed. Native `disabled` is for permanent
 unavailability, such as a host that owns the setting, or input validity such as an empty
 name or nothing selected, because it drops keyboard focus.
 
