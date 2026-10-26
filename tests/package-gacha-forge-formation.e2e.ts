@@ -319,7 +319,19 @@ async function readable(item: Locator) {
 }
 
 async function startBattle(forge: Locator, runtime: any, plan: any) {
-  const response = (await runtime.post("/battle", { chapter: 2, combatIndex: 1, difficulty: "normal" })).body;
+  // The preview names the engine and rules, as the game's own request does.
+  const { FORGE_FORMATION_ENGINE, FORGE_FORMATION_RULES } = await nativeImport(
+    pathToFileURL(resolve(__dirname, "../packages/gacha-forge/src/formation-combat-shared.mjs")).href,
+  );
+  const response = (
+    await runtime.post("/battle", {
+      chapter: 2,
+      combatIndex: 1,
+      difficulty: "normal",
+      expectedFormationEngine: FORGE_FORMATION_ENGINE,
+      expectedFormationRules: FORGE_FORMATION_RULES,
+    })
+  ).body;
   expect(response.ok, JSON.stringify(response)).toBe(true);
   await forge.evaluate(
     (node, input) => {
