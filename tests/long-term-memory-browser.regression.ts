@@ -1591,7 +1591,7 @@ async function main() {
       // The Engine's unlayered .mari-editor-tab and --compact min-heights beat the min-h-11 utilities.
       const shortTouchTargets = (surface: string) =>
         page.locator(surface).evaluate((root) =>
-          [...root.querySelectorAll<HTMLElement>('[role="tab"], .mari-editor-action--compact')]
+          [...root.querySelectorAll<HTMLElement>('[role="tab"], .mari-editor-tab, .mari-editor-action--compact')]
             .filter((element) => element.getClientRects().length > 0)
             .map(
               (element) =>
@@ -2232,6 +2232,11 @@ async function main() {
       assert.equal(await branchPill.count(), 1);
       await branchAvailability.locator("[data-ltm-availability-picker] > summary").click();
       const branchRail = branchAvailability.locator("[data-ltm-availability-tabs]");
+      assert.deepEqual(
+        await shortTouchTargets("[data-ltm-availability-workbench]"),
+        [],
+        "the availability tabs fit 2.75rem",
+      );
       assert.deepEqual(
         await branchRail
           .locator("[data-ltm-availability-tab]")
@@ -2976,6 +2981,17 @@ async function main() {
         [],
         "Sources tabs and actions fit 2.75rem",
       );
+      // #1714: the destination tabs sit under the same Engine min-height rule as the Sources and Settings tabs.
+      assert.equal(
+        await page.locator('[data-ltm-navigation="desktop"] .mari-editor-tab:visible').count(),
+        4,
+        "the four destination tabs are on screen",
+      );
+      assert.deepEqual(
+        await shortTouchTargets('[data-ltm-navigation="desktop"]'),
+        [],
+        "the destination tabs fit 2.75rem",
+      );
       assert.equal(
         scopeTargetQueries.slice(scopeTargetQueryCount).includes("?includeAllChats=true&chatId=desktop-chat"),
         true,
@@ -3067,6 +3083,15 @@ async function main() {
       await narrowAdd.waitFor();
       assert.equal(await touchTargetSize(narrowAdd), "fits", "a 24rem panel keeps the add control at 2.75rem");
       assert.equal(await page.locator("[data-ltm-add-label]").isVisible(), false, "a 24rem panel shows the icon only");
+      // #1714: the header icon and content padding follow the panel too, not the window.
+      assert.deepEqual(
+        await page.evaluate(() => ({
+          icon: getComputedStyle(document.querySelector("[data-ltm-detail-icon]")!).width,
+          padding: getComputedStyle(document.querySelector("[data-ltm-detail-content]")!).paddingLeft,
+        })),
+        { icon: "14px", padding: "16px" },
+        "a 24rem panel uses the compact header icon and padding",
+      );
       await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="settings"]').click();
       assert.equal(
         await page
@@ -5540,6 +5565,20 @@ async function main() {
       const restoredGuide = page.locator('[data-ltm-surface="onboarding"]');
       await restoredGuide.waitFor();
       assert.equal(await restoredGuide.getByText("Step 4 of 7 · Import").count(), 1);
+      // #1714: the sprite follows the guide's container, so a narrow panel on a wide window shows the phone sprite.
+      const shownSprite = () =>
+        page.evaluate(() =>
+          [...document.querySelectorAll<HTMLImageElement>("[data-ltm-onboarding-sprite]")]
+            .filter((image) => image.getClientRects().length > 0)
+            .map((image) => image.getAttribute("data-ltm-onboarding-sprite")),
+        );
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await dockDetailPanel(page, "24rem");
+      assert.deepEqual(await shownSprite(), ["basic/pose-point-down.webp"], "a 24rem panel shows the phone sprite");
+      await dockDetailPanel(page, null);
+      assert.deepEqual(await shownSprite(), ["basic/pose-point-middle.webp"], "a wide panel shows the wide sprite");
+      await page.setViewportSize({ width: 390, height: 844 });
+      assert.deepEqual(await shownSprite(), ["basic/pose-point-down.webp"], "a phone window shows the phone sprite");
       await restoredGuide.getByRole("button", { name: "Not now" }).click();
       await restoredGuide.waitFor({ state: "detached" });
       // #1611: Not now keeps the saved step for the next visit.

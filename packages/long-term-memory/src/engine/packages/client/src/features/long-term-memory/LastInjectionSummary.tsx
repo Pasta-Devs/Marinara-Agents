@@ -99,7 +99,7 @@ export function LastInjectionSummary({
             {onRetry ? (
               <button
                 type="button"
-                className={`inline-flex items-center underline ${loading || retryPending ? "opacity-50" : ""} ${compact ? "min-h-6" : "min-h-11"}`}
+                className={`inline-flex items-center underline ${loading || retryPending ? "opacity-50" : ""} ${compact ? "min-h-7" : "min-h-11"}`}
                 onClick={() => {
                   if (!loading && !retryPending) onRetry();
                 }}

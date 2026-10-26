@@ -92,7 +92,15 @@ the health pill's detail text appears from `40rem`. Below `48rem` the header
 tightens its gaps and padding and the activation switch keeps a `3rem` minimum
 width; below `22.5rem` it also hides the icon tile. The setup guide pads more
 from `40rem` and puts its illustration beside the text from `48rem` of its own
-container. The Vault and Debug lists cap at the window height minus `12rem`
+container, which also picks the setup guide's sprite (the phone sprite below
+`48rem`, the wide one from it, both at whole-pixel scale). The detail header's
+icon shrinks and the content padding drops to `1rem` below `48rem` of the detail
+container, not of the window. The destination tabs, the availability tabs and
+their rows keep `2.75rem` against the Engine's `2.25rem` tab height. Chat
+Settings keeps the host drawer's own control sizes as named exceptions: the
+recall-style select (`min-h-8`) and the number fields (`compactInputClass`,
+`min-h-9`) match the drawer's neighbouring fields, and the compact Retry
+(`min-h-7`) matches its action floor. The Vault and Debug lists cap at the window height minus `12rem`
 (`dvh`, with a `vh` fallback and a `10rem` floor), so a zoomed or short window
 scrolls the list instead of the page.
 

@@ -726,7 +726,7 @@ for (const file of sourceFiles) {
 assert.deepEqual([...usedKeys].filter((key) => !(key in locale)).sort(), []);
 // #1673: every underlined text button anywhere in the package meets the 2.75rem floor, whatever its markup.
 // The floor is `min-h-11` or an inline `minHeight: 44` on the same element. LastInjectionSummary keeps a
-// smaller target in its compact strip only (it predates #1673).
+// 1.75rem target in its compact strip only, the host drawer's own action floor (#1714).
 const underlinedBelowFloor = sourceFiles.flatMap((file) => {
   const text = readFileSync(file, "utf8");
   return [...text.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/gu)]
@@ -735,11 +735,23 @@ const underlinedBelowFloor = sourceFiles.flatMap((file) => {
     .filter(({ classes, after }) => !/(?:^|\s)min-h-11(?:\s|$)/u.test(classes) && !/minHeight: 44/u.test(after))
     .filter(
       ({ classes }) =>
-        !(basename(file) === "LastInjectionSummary.tsx" && /compact \? "min-h-6" : "min-h-11"/u.test(classes)),
+        !(basename(file) === "LastInjectionSummary.tsx" && /compact \? "min-h-7" : "min-h-11"/u.test(classes)),
     )
     .map(({ classes }) => `${basename(file)}: ${classes}`);
 });
 assert.deepEqual(underlinedBelowFloor, []);
+// #1714: the container, not the window, picks the setup-guide sprite and the detail header sizes.
+const onboardingSource = readFileSync(join(ltmClientRoot, "Onboarding.tsx"), "utf8");
+assert.doesNotMatch(onboardingSource, /<picture|<source/u);
+assert.match(
+  onboardingSource,
+  /@container ltm-onboarding \(min-width: 48rem\) \{[\s\S]*?\[data-ltm-onboarding-sprite-wide\] \{\s*display: block/u,
+);
+assert.doesNotMatch(detail, /max-md:/u);
+assert.match(
+  detail,
+  /@container ltm-detail \(max-width: 47\.99rem\) \{\s*\[data-ltm-surface="detail"\] \[data-ltm-detail-icon\]/u,
+);
 const vaultLocaleValues = Object.entries(locale)
   .filter(([key]) => key.startsWith("ui.longTermMemory.memoryvault."))
   .map(([, value]) => value)
