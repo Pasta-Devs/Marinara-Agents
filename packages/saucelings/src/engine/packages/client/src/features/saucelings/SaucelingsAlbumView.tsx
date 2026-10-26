@@ -194,7 +194,8 @@ export function SaucelingsAlbumView({
           ? null
           : spriteReference(assetUrl(sprite.path), sprite.row);
       const reference = source ? await source.catch(() => null) : null;
-      const wish = instructions.replace(/\s+/gu, " ").trim();
+      // Hidden instructions keep their words for next time but are not sent.
+      const wish = instructionsOpen ? instructions.replace(/\s+/gu, " ").trim() : "";
       const prompt = portraitAppearance(target, reference !== null, wish);
       const generated = await marinaraRequest<{ image: string }>("/api/characters/avatar-generation", "POST", {
         connectionId: settings.portraitConnectionId,
@@ -297,10 +298,7 @@ export function SaucelingsAlbumView({
               type="button"
               className="sl-link"
               disabled={paintMutation.isPending}
-              onClick={() => {
-                if (instructionsOpen) setInstructions("");
-                setInstructionsOpen(!instructionsOpen);
-              }}
+              onClick={() => setInstructionsOpen(!instructionsOpen)}
             >
               {instructionsOpen ? t("saucelings.album.removeInstructions") : t("saucelings.album.addInstructions")}
             </button>
@@ -342,6 +340,7 @@ export function SaucelingsAlbumView({
               date: openKeepsake.at ? new Date(openKeepsake.at).toLocaleDateString() : "",
             })}
           </div>
+          <div style={{ fontSize: "0.8rem", opacity: 0.75 }}>{t("saucelings.album.keepsakeNote")}</div>
           <button type="button" className="sl-btn" onClick={() => setKeepsakeId(null)}>
             {t("saucelings.album.close")}
           </button>
@@ -406,6 +405,7 @@ export function SaucelingsAlbumView({
       ) : ordered.length === 0 ? (
         <div className="sl-card" style={{ textAlign: "center", padding: "2rem", opacity: 0.75 }}>
           {t("saucelings.album.empty")}
+          {pet && !paintNote ? ` ${t("saucelings.album.emptyHint")}` : null}
         </div>
       ) : (
         ordered.map((group) => (

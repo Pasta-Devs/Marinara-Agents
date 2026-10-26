@@ -16,6 +16,7 @@ import {
 import { packageAssetUrl, saucelingsRequest } from "./api.js";
 import { FriendlyError } from "./care-ui.js";
 import { EggPaintNote } from "./FormPainter.js";
+import { HelpTip } from "./HelpTip.js";
 import { useSaucelingsTranslation } from "./localization.js";
 import { PetSprite } from "./PetSprite.js";
 import { RareMark, rareKind } from "./RareMark.js";
@@ -54,11 +55,14 @@ export function SaucelingsMenagerieView({
       : activePet.name
     : "";
   const [stagePickById, setStagePickById] = useState<Record<string, SaucelingPostEggStage>>({});
-  // A pet that lived in the nook comes back to its caretaker unless another is picked; one that never did (an egg
-  // found while chatting) waits for the player to pick.
+  // A pet that lived in the nook comes back to its caretaker unless another is picked; an egg found while chatting
+  // comes with its finder picked while that character is still there, and otherwise waits for the player to pick.
   const [caretakerPickById, setCaretakerPickById] = useState<Record<string, string>>({});
   const caretakerFor = (entry: SaucelingMenagerieEntry) =>
-    caretakerPickById[entry.id] ?? (entry.farewellScene ? entry.caretakerId : "");
+    caretakerPickById[entry.id] ??
+    (entry.farewellScene
+      ? entry.caretakerId
+      : (state.characters.find((character) => character.id === entry.foundBy)?.id ?? ""));
   // One pet is open at a time, in a card above the sections, as a painting is in the Album.
   const [openId, setOpenId] = useState<string | null>(null);
   // Releasing, or bringing one back over the pet in the nook, waits for a second click.
@@ -123,8 +127,9 @@ export function SaucelingsMenagerieView({
 
   if (menagerie.length === 0 && !failure) {
     return (
-      <div className="sl-card" style={{ textAlign: "center", padding: "2.5rem", opacity: 0.75 }}>
-        {t("saucelings.menagerie.empty")}
+      <div className="sl-card" style={{ display: "grid", gap: "0.5rem", textAlign: "center", padding: "2.5rem" }}>
+        <span style={{ opacity: 0.75 }}>{t("saucelings.menagerie.empty")}</span>
+        <span style={{ fontSize: "0.8rem", opacity: 0.65 }}>{t("saucelings.menagerie.emptyHow")}</span>
       </div>
     );
   }
@@ -408,20 +413,25 @@ function MenagerieCard({
             </div>
           </>
         ) : entry.reachedElder ? (
-          <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.8rem" }}>
-            <span>{t("saucelings.menagerie.lockStage")}</span>
-            <select
-              className="sl-select"
-              value={chosenStage}
-              onChange={(e) => onPickStage(e.target.value as SaucelingPostEggStage)}
-            >
-              {SAUCELING_POST_EGG_STAGES.map((st) => (
-                <option key={st} value={st}>
-                  {t(`saucelings.stage.${st}`)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <HelpTip
+            text={t("saucelings.menagerie.lockStageHelp")}
+            label={t("saucelings.help.label", { action: t("saucelings.menagerie.lockStage") })}
+          >
+            <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.8rem" }}>
+              <span>{t("saucelings.menagerie.lockStage")}</span>
+              <select
+                className="sl-select"
+                value={chosenStage}
+                onChange={(e) => onPickStage(e.target.value as SaucelingPostEggStage)}
+              >
+                {SAUCELING_POST_EGG_STAGES.map((st) => (
+                  <option key={st} value={st}>
+                    {t(`saucelings.stage.${st}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </HelpTip>
         ) : entry.farewellScene ? null : (
           // Only when no "Retired as <stage>" line above already says where it comes back.
           <span style={{ fontSize: "0.75rem", opacity: 0.7 }}>

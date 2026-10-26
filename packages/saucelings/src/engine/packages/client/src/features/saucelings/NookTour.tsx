@@ -26,7 +26,8 @@ export function mariPose(pose: string): string {
   return `/sprites/mari/basic/pose-${pose}.webp?v=39c2`;
 }
 
-/** Each step points at the part of the page marked with its `data-sl-tour`; the first is about the whole nook. */
+/** Each step points at the part of the page marked with its `data-sl-tour`; the first is about the whole nook, and
+ *  `HATCHED_FIRST` takes its place once the egg has hatched. */
 const STEPS = [
   { title: "saucelings.tour.eggTitle", body: "saucelings.tour.eggBody", target: null, pose: "greet" },
   { title: "saucelings.tour.metersTitle", body: "saucelings.tour.metersBody", target: "meters", pose: "point-up" },
@@ -40,15 +41,24 @@ const STEPS = [
   { title: "saucelings.tour.aboutTitle", body: "saucelings.tour.aboutBody", target: "about", pose: "point-down" },
   { title: "saucelings.tour.tabsTitle", body: "saucelings.tour.tabsBody", target: "tabs", pose: "point-up" },
 ] as const;
+const HATCHED_FIRST = { ...STEPS[0], title: "saucelings.tour.petTitle", body: "saucelings.tour.petBody" } as const;
 
 /** Mari's walk through the nook: a card docked at the bottom, with the part each step is about outlined. */
-export function NookTour({ caretaker, onClose }: { caretaker: string; onClose: () => void }) {
+export function NookTour({
+  caretaker,
+  hatched,
+  onClose,
+}: {
+  caretaker: string;
+  hatched: boolean;
+  onClose: () => void;
+}) {
   const { t } = useSaucelingsTranslation();
   const [index, setIndex] = useState(0);
   const [mariShown, setMariShown] = useState(true);
   const cardRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
-  const step = STEPS[index];
+  const step = index === 0 && hatched ? HATCHED_FIRST : STEPS[index];
   const last = index === STEPS.length - 1;
 
   useEffect(markTourSeen, []);

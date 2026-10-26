@@ -1,5 +1,14 @@
 # Saucelings release notes
 
+## 0.21.1 — 2026-10-26
+
+- The Menagerie explains what comes to it, shows a dot on its tab when a character finds an egg, and picks the finder to look after a found egg.
+- Lock stage has a help tip. Replaying the tour on a hatched sauceling starts with a step about it.
+- The Journal groups lines by day; with no sauceling it offers a button to the Nook.
+- The Album says how to paint the first picture and what a keepsake is. Hiding "Add instructions" keeps what you typed.
+- Rename is spelled out, the care window setting reads more plainly, and with no characters the Nook says who looks after the egg.
+- Saved backgrounds say they're shared by all your saucelings, and their delete button is easier to tap.
+
 ## 0.21.0 — 2026-10-26
 
 - Easier first steps. Mari greets you in an empty nook and gives a short tour after your first egg; the Tour button replays it.

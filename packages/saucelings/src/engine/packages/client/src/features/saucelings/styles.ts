@@ -55,6 +55,16 @@ export const SAUCELINGS_STYLES = `
   background: var(--secondary, rgba(255,255,255,0.1));
   border-color: var(--border, rgba(255,255,255,0.16));
 }
+/* A found egg is waiting in the Menagerie. */
+.sl-tab-dot {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-left: 0.3rem;
+  border-radius: 999px;
+  background: var(--primary, #e05246);
+  vertical-align: 0.1em;
+}
 
 .sl-body {
   flex: 1 1 0%;
@@ -1037,8 +1047,8 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
   position: absolute;
   top: 0.3rem;
   right: 0.3rem;
-  width: 1.6rem;
-  height: 1.6rem;
+  width: 1.75rem;
+  height: 1.75rem;
   padding: 0;
   border: 1px solid var(--border, rgba(255,255,255,0.16));
   border-radius: 999px;
@@ -1296,6 +1306,7 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
   .sl-btn, .sl-tab-btn { min-height: 2.75rem; }
   .sl-btn--small { min-height: 2.25rem; }
   .sl-widget-act { width: 2.75rem; height: 2.75rem; }
+  .sl-gallery-remove { width: 2.25rem; height: 2.25rem; }
   .sl-input, .sl-select { min-height: 2.75rem; font-size: max(16px, 1rem); }
 }
 `;

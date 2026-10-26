@@ -111,6 +111,11 @@ function EggForm({
           {t("saucelings.common.cancel")}
         </button>
       ) : null}
+      {characters.length === 0 ? (
+        <p style={{ flexBasis: "100%", margin: 0, fontSize: "0.8rem", opacity: 0.7, textAlign: "center" }}>
+          {t("saucelings.empty.houseCaretakerNote")}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -597,14 +602,12 @@ export function SaucelingsNookView({
                     <button
                       type="button"
                       className={`sl-btn sl-btn--small ${unnamed ? "sl-btn--primary" : ""}`}
-                      aria-label={unnamed ? undefined : t("saucelings.pet.rename")}
-                      title={unnamed ? undefined : t("saucelings.pet.rename")}
                       onClick={() => {
                         setRenameValue(unnamed ? "" : pet.name);
                         setEditingName(true);
                       }}
                     >
-                      {unnamed ? t("saucelings.pet.nameIt") : "✏️"}
+                      {unnamed ? t("saucelings.pet.nameIt") : `✏️ ${t("saucelings.pet.rename")}`}
                     </button>
                   )}
                 </div>
@@ -926,6 +929,7 @@ export function SaucelingsNookView({
       {tour ? (
         <NookTour
           caretaker={caretakerName}
+          hatched={pet.stage !== "egg"}
           onClose={() => {
             setTour(null);
             tour.then?.();

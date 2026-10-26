@@ -75,6 +75,18 @@ class SaucelingsErrorBoundary extends React.Component<
 const TABS = ["nook", "journal", "album", "menagerie", "settings"] as const;
 type BrowserSubTab = (typeof TABS)[number];
 
+// ponytail: the day of the last found egg the Menagerie was opened after, kept per browser rather than per Engine,
+// so another browser shows the dot again. A seen-day field in the world save is the upgrade.
+const MENAGERIE_SEEN_KEY = "saucelings-menagerie-seen";
+
+function readMenagerieSeen(): string | null {
+  try {
+    return localStorage.getItem(MENAGERIE_SEEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
 function SaucelingsBrowserApp({ props }: { props: CapabilityProps }) {
   const { t } = useSaucelingsTranslation();
   const [tab, setTab] = useState<BrowserSubTab>("nook");
@@ -100,6 +112,20 @@ function SaucelingsBrowserApp({ props }: { props: CapabilityProps }) {
   // The server routes are only there after a restart, so a package installed a moment ago answers 404.
   const restartNeeded = (stateQuery.error as { status?: number } | null)?.status === 404;
 
+  // A dot on the Menagerie tab while an egg a character found is waiting there unseen.
+  const lastFind = stateQuery.data?.world.lastEggFindDay ?? null;
+  const [menagerieSeen, setMenagerieSeen] = useState(readMenagerieSeen);
+  const newEgg = lastFind !== null && lastFind !== menagerieSeen && tab !== "menagerie";
+  useEffect(() => {
+    if (tab !== "menagerie" || !lastFind) return;
+    setMenagerieSeen(lastFind);
+    try {
+      localStorage.setItem(MENAGERIE_SEEN_KEY, lastFind);
+    } catch {
+      // A private window keeps no storage; the dot then shows again next time.
+    }
+  }, [tab, lastFind]);
+
   return (
     <div className="sl-shell">
       <header className="sl-header">
@@ -114,6 +140,7 @@ function SaucelingsBrowserApp({ props }: { props: CapabilityProps }) {
               type="button"
               className={`sl-tab-btn ${tab === item ? "sl-tab-btn--active" : ""}`}
               aria-current={tab === item ? "page" : undefined}
+              aria-label={item === "menagerie" && newEgg ? t("saucelings.tab.menagerieNew") : undefined}
               onClick={() => setTab(item)}
             >
               {t(`saucelings.tab.${item}`)}
@@ -123,6 +150,7 @@ function SaucelingsBrowserApp({ props }: { props: CapabilityProps }) {
               {item === "menagerie" && stateQuery.data?.menagerieCount ? (
                 <span className="sl-tab-count"> ({stateQuery.data.menagerieCount})</span>
               ) : null}
+              {item === "menagerie" && newEgg ? <span className="sl-tab-dot" aria-hidden="true" /> : null}
             </button>
           ))}
         </nav>
@@ -160,7 +188,7 @@ function SaucelingsBrowserApp({ props }: { props: CapabilityProps }) {
               askVoice={voice.ask}
             />
           ) : tab === "journal" ? (
-            <SaucelingsJournalView state={stateQuery.data} />
+            <SaucelingsJournalView state={stateQuery.data} onOpenNook={() => setTab("nook")} />
           ) : tab === "album" ? (
             <SaucelingsAlbumView
               state={stateQuery.data}

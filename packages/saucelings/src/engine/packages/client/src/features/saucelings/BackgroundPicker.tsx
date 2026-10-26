@@ -231,6 +231,7 @@ export function BackgroundPicker({
           </div>
         ))}
       </div>
+      <span className="sl-box-note">{t("saucelings.background.sharedNote")}</span>
 
       {confirmDelete ? (
         <div
