@@ -84,6 +84,8 @@ async function drawLivePicture(db: DB, creatorId: string, scene: string) {
     imageConnection,
     db,
     debugMode: false,
+    // Portrait like a Story: the live screen is a portrait column on every screen size.
+    story: true,
     previewOnly: false,
   });
   const mediaPath = image.metadata.noodlerMediaPath;

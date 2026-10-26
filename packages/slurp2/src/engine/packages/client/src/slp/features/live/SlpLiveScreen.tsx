@@ -109,9 +109,9 @@ export function SlpLiveScreen({
       type="button"
       onClick={onBack}
       aria-label={t("ui.slurp.live.back")}
-      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${glass}`}
+      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${glass}`}
     >
-      <ChevronLeft size={22} aria-hidden="true" />
+      <ChevronLeft size={20} aria-hidden="true" />
     </button>
   );
 
@@ -169,371 +169,382 @@ export function SlpLiveScreen({
 
   return (
     <SlpThreadTaskLayer>
-      <section className="relative isolate flex min-h-[70dvh] flex-1 flex-col overflow-hidden text-white">
-        <style>{LIVE_STYLES}</style>
+      {/* Portrait on every screen, like the Story viewer: pictures are drawn at the Story size. */}
+      <div className="flex flex-1 justify-center bg-black">
+        <section className="relative isolate flex min-h-[70dvh] w-full flex-1 flex-col overflow-hidden text-white sm:max-w-md">
+          <style>{LIVE_STYLES}</style>
 
-        <header className="space-y-2 bg-black px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
-          <div className="flex items-center gap-2">
-            {back}
-            <div className={`flex min-w-0 items-center gap-2 rounded-full py-1 pe-4 ps-1 ${glass}`}>
-              <Avatar account={{ displayName: name, avatarUrl: host?.avatarUrl ?? null }} size="sm" />
-              <h1 className="truncate text-sm font-bold">{name}</h1>
+          {/* The bar: who is live, then the live stats, then the goal. */}
+          <header className="space-y-1.5 bg-black px-2 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-3">
+            <div className="flex items-center gap-2">
+              {back}
+              <Avatar account={{ displayName: name, avatarUrl: host?.avatarUrl ?? null }} size="xs" />
+              <h1 className="min-w-0 truncate text-sm font-bold">{name}</h1>
+              <span
+                role="status"
+                aria-label={t("ui.slurp.live.liveNow")}
+                className="flex shrink-0 items-center gap-1 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-black tracking-wide"
+              >
+                <span className="slp-live-dot h-1.5 w-1.5 rounded-full bg-white" />
+                {t("ui.slurp.live.badge")}
+              </span>
             </div>
-          </div>
-          <div
-            className={`flex w-fit max-w-full items-center gap-3 rounded-full py-1 pe-3 ps-1 text-xs font-semibold ${glass}`}
-          >
-            <span
-              role="status"
-              aria-label={t("ui.slurp.live.liveNow")}
-              className="flex items-center gap-1.5 rounded-full bg-red-600 px-2.5 py-1 font-black tracking-wide"
+            <div className="flex items-center gap-4 px-1 text-xs font-semibold text-white/90">
+              <span className="flex items-center gap-1">
+                <Eye size={13} aria-hidden="true" />
+                {show.viewers}
+              </span>
+              <span className="flex items-center gap-1 tabular-nums">
+                <Clock size={13} aria-hidden="true" />
+                {t("ui.slurp.live.left", { time: mmss(left) })}
+              </span>
+              <span className="flex items-center gap-1.5" aria-label={t("ui.slurp.live.heat", { heat: show.heat })}>
+                <Flame size={13} aria-hidden="true" className="text-orange-300" />
+                <span className="h-1 w-12 overflow-hidden rounded-full bg-white/20">
+                  <span
+                    className="block h-full rounded-full bg-gradient-to-r from-amber-300 to-[var(--noodle-accent)]"
+                    style={{ width: `${show.heat}%` }}
+                  />
+                </span>
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setGoalOpen((value) => !value)}
+              aria-expanded={goalOpen}
+              className="block w-full px-1 text-start"
             >
-              <span className="slp-live-dot h-2 w-2 rounded-full bg-white" />
-              {t("ui.slurp.live.badge")}
-            </span>
-            <span className="flex items-center gap-1">
-              <Eye size={14} aria-hidden="true" />
-              {show.viewers}
-            </span>
-            <span className="flex items-center gap-1">
-              <Clock size={14} aria-hidden="true" />
-              {t("ui.slurp.live.left", { time: mmss(left) })}
-            </span>
-            <span className="flex items-center gap-1.5" aria-label={t("ui.slurp.live.heat", { heat: show.heat })}>
-              <Flame size={14} aria-hidden="true" className="text-orange-300" />
-              <span className="h-1.5 w-12 overflow-hidden rounded-full bg-white/20">
+              <span className="flex items-center justify-between gap-2 text-[11px] font-semibold text-white/85">
+                <span className="truncate">
+                  {goal ? t("ui.slurp.live.goal", { item: itemLabel(goal.reward) }) : t("ui.slurp.live.allGoals")}
+                </span>
+                {goal && (
+                  <span className="shrink-0">
+                    <SlpCoinText>
+                      {t("ui.slurp.live.goalProgress", { raised: show.raised, goal: goal.target })}
+                    </SlpCoinText>
+                  </span>
+                )}
+              </span>
+              <span className="mt-1 block h-1 overflow-hidden rounded-full bg-white/20">
                 <span
-                  className="block h-full rounded-full bg-gradient-to-r from-amber-300 to-[var(--noodle-accent)]"
-                  style={{ width: `${show.heat}%` }}
+                  className="block h-full rounded-full bg-gradient-to-r from-[var(--noodle-accent)] to-[var(--slurp-warning)] transition-[width] duration-700"
+                  style={{ width: `${percent}%` }}
                 />
               </span>
-            </span>
-            {show.shooting && (
-              <span role="status" className="flex items-center gap-1 text-[var(--noodle-accent)]">
-                <Camera size={14} aria-hidden="true" className="slp-live-dot" />
-                {t("ui.slurp.live.shooting")}
-              </span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => setGoalOpen((value) => !value)}
-            aria-expanded={goalOpen}
-            className={`block w-full max-w-sm rounded-2xl px-3 py-2 text-start ${glass}`}
-          >
-            <span className="flex items-center justify-between gap-2 text-xs font-semibold">
-              <span className="truncate">
-                {goal ? t("ui.slurp.live.goal", { item: itemLabel(goal.reward) }) : t("ui.slurp.live.allGoals")}
-              </span>
-              {goal && (
-                <span className="shrink-0">
-                  <SlpCoinText>
-                    {t("ui.slurp.live.goalProgress", { raised: show.raised, goal: goal.target })}
-                  </SlpCoinText>
+              {goalOpen && goal && (
+                <span className="mt-1 block text-[11px] text-white/75">
+                  {t("ui.slurp.live.goalHint", { name, item: itemLabel(goal.reward) })}
                 </span>
               )}
-            </span>
-            <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-white/20">
-              <span
-                className="block h-full rounded-full bg-gradient-to-r from-[var(--noodle-accent)] to-[var(--slurp-warning)] transition-[width] duration-700"
-                style={{ width: `${percent}%` }}
-              />
-            </span>
-            {goalOpen && goal && (
-              <span className="mt-1.5 block text-xs text-white/80">
-                {t("ui.slurp.live.goalHint", { name, item: itemLabel(goal.reward) })}
-              </span>
-            )}
-          </button>
-        </header>
-        {/* Below the bar: the picture never runs under it. */}
-        <div className="relative isolate flex min-h-0 flex-1 flex-col">
-          {/* The stage: the newest live picture of the Creator; a drifting glow until the cam's first picture lands. */}
-          <div aria-hidden="true" className="absolute inset-0 -z-10 overflow-hidden">
-            <div className="slp-live-drift h-full w-full bg-[radial-gradient(circle_at_40%_30%,var(--noodle-accent),transparent_60%),radial-gradient(circle_at_70%_80%,var(--slurp-violet),transparent_55%)]" />
-            {show.picture &&
-              // The last picture stays under the new one until it has loaded and faded in.
-              [show.picture.n - 1, show.picture.n]
-                .filter((n) => n >= 0)
-                .map((n) => (
-                  <SlurpMediaImg
-                    key={n}
-                    src={`/api/slurp2/slurp/live/${encodeURIComponent(show.id)}/picture/${n}`}
-                    mediaWidth={720}
-                    alt=""
-                    className="slp-crop slp-live-in slp-live-drift absolute inset-0 h-full w-full object-cover"
-                  />
-                ))}
-            <div className="absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
-          </div>
-          {!ended && cam ? (
-            <p
-              key={cam}
-              aria-live="polite"
-              className={`slp-live-in mx-3 mt-3 rounded-2xl px-3 py-2 text-sm italic leading-snug ${glass}`}
-            >
-              {cam}
-            </p>
-          ) : (
-            !show.picture &&
-            !ended && (
-              <p role="status" className="slp-live-dot absolute inset-x-0 top-1/3 text-center text-sm font-semibold text-white/80">
-                {t("ui.slurp.live.starting")}
-              </p>
-            )
-          )}
-
-        {banner && (
-          <div className="pointer-events-none flex justify-center px-4 pt-4" aria-live="polite">
-            <p
-              key={banner.key}
-              className={`slp-live-pop rounded-2xl px-4 py-2.5 text-center font-extrabold shadow-xl ${banner.kind === "goal" ? "bg-gradient-to-br from-[var(--noodle-accent)] to-[var(--slurp-violet)] text-lg" : "bg-[var(--slurp-warning)] text-sm text-neutral-950"}`}
-            >
-              {banner.kind === "goal" ? (
-                t("ui.slurp.live.goalHit", { item: itemLabel(banner.itemId) })
-              ) : (
-                <SlpCoinText>
-                  {t("ui.slurp.live.tipBanner", { name: banner.name ?? "", amount: banner.amount ?? 0 })}
-                </SlpCoinText>
-              )}
-            </p>
-          </div>
-        )}
-
-        <div className="min-h-0 flex-1" />
-
-        <div className="slp-nav-live mb-[var(--slp-nav-live,0px)] space-y-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <SlpLiveChat lines={lines} me={me} host={name} itemLabel={itemLabel} t={t} />
-          {open.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
-              <span className="rounded-full bg-emerald-500/25 px-3 py-1 ring-1 ring-emerald-300/40">
-                {t("ui.slurp.live.now", {
-                  item: itemLabel(open[0]!.itemId),
-                  name: open[0]!.name || t("ui.slurp.live.everyone"),
-                })}
-              </span>
-              {open[1] && (
-                <span className={`rounded-full px-3 py-1 ${glass}`}>
-                  {t("ui.slurp.live.next", {
-                    item: itemLabel(open[1].itemId),
-                    name: open[1].name || t("ui.slurp.live.everyone"),
-                  })}
-                </span>
-              )}
-            </div>
-          )}
-          {show.private && !ended && (
-            <div
-              role="status"
-              className={`flex items-center justify-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ${glass}`}
-            >
-              <Lock size={14} aria-hidden="true" className="text-[var(--noodle-accent)]" />
-              {show.private.mine
-                ? t("ui.slurp.live.privateMine", { time: mmss(privateLeft) })
-                : t("ui.slurp.live.privateOther", { name })}
-              {show.private.mine && privateLeft < 60_000 && (
-                <button
-                  type="button"
-                  onClick={() => setSheet("private")}
-                  className="rounded-full bg-[var(--noodle-accent)] px-3 py-1 text-xs font-bold text-white"
-                >
-                  {t("ui.slurp.live.privateStay")}
-                </button>
-              )}
-            </div>
-          )}
-          {show.hosting && !ended && show.next.length > 0 && (
-            <div role="group" aria-label={t("ui.slurp.live.hostIdeas")} className="flex gap-2 overflow-x-auto pb-1">
-              {show.next.map((idea) => (
-                <button
-                  key={idea}
-                  type="button"
-                  onClick={() => setSaid(idea.slice(0, 300))}
-                  className={`w-56 shrink-0 rounded-2xl px-3 py-1.5 text-start text-xs font-semibold ${glass}`}
-                >
-                  <span className="line-clamp-2">{idea.replaceAll("*", "")}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {ended ? (
-            <div className={`rounded-2xl p-4 text-center ${glass}`}>
-              <p className="font-bold">{t("ui.slurp.live.ended", { name })}</p>
-              <p className="mt-1 text-sm text-white/80">
-                <SlpCoinText>{t("ui.slurp.live.endedRaised", { amount: show.raised })}</SlpCoinText>
-                {show.top ? ` · ${t("ui.slurp.live.topTipper", { name: show.top.name })}` : ""}
-              </p>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              {personaId ? (
-                <form
-                  className="min-w-0 flex-1"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    const message = said.trim();
-                    if (!message) return;
-                    setSaid("");
-                    askedAt.current = Date.now();
-                    beat.mutate({ message });
-                  }}
-                >
-                  <input
-                    value={said}
-                    disabled={outside}
-                    onChange={(event) => setSaid(event.target.value.slice(0, 300))}
-                    enterKeyHint="send"
-                    placeholder={show.hosting ? t("ui.slurp.live.hostSay") : t("ui.slurp.live.say", { name })}
-                    aria-label={show.hosting ? t("ui.slurp.live.hostSay") : t("ui.slurp.live.say", { name })}
-                    className={`h-12 w-full rounded-full px-4 text-base placeholder:text-white/60 ${glass}`}
-                  />
-                </form>
-              ) : (
-                <p className="min-w-0 flex-1 truncate text-sm text-white/70">{t("ui.slurp.live.pickPersona")}</p>
-              )}
-              {show.hosting ? (
-                <button
-                  type="button"
-                  disabled={end.isPending}
-                  onClick={() => end.mutate()}
-                  className={`h-12 rounded-full px-5 text-sm font-bold disabled:opacity-40 ${glass}`}
-                >
-                  {t("ui.slurp.live.endShow")}
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    disabled={!personaId || outside || privateBuy.isPending}
-                    onClick={() => setSheet("private")}
-                    aria-label={t("ui.slurp.live.privateButton")}
-                    className={`flex h-12 w-12 items-center justify-center rounded-full disabled:opacity-40 ${glass}`}
-                  >
-                    <Lock size={20} aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!personaId || outside}
-                    onClick={() => setSheet("menu")}
-                    aria-label={t("ui.slurp.live.menuTitle")}
-                    className={`flex h-12 w-12 items-center justify-center rounded-full disabled:opacity-40 ${glass}`}
-                  >
-                    <ListOrdered size={20} aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!personaId || outside || tip.isPending}
-                    onClick={() => setSheet("tip")}
-                    className="h-12 rounded-full bg-[var(--noodle-accent)] px-5 text-sm font-black text-white shadow-[0_0_24px_color-mix(in_srgb,var(--noodle-accent)_60%,transparent)] disabled:opacity-40"
-                  >
-                    {t("ui.slurp.live.tip")}
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-          {!ended && show.mine > 0 && (
-            <p className="text-sm text-white/70">
-              <SlpCoinText>{t("ui.slurp.live.mine", { amount: show.mine })}</SlpCoinText>
-            </p>
-          )}
-          {privateBuy.isError && (
-            <p role="alert" className="text-center text-sm text-red-300">
-              {t("ui.slurp.live.privateFailed")}
-            </p>
-          )}
-          {tip.isError && (
-            <p role="alert" className="text-center text-sm text-red-300">
-              {t("ui.slurp.live.tipFailed")}
-            </p>
-          )}
-        </div>
-
-        <SlpSheet open={sheet === "tip"} onClose={() => setSheet(null)} title={t("ui.slurp.live.tipTitle", { name })}>
-          <div className="grid grid-cols-4 gap-2">
-            {QUICK_TIPS.map((amount) => (
-              <button
-                key={amount}
-                type="button"
-                onClick={() => pay(amount)}
-                className="h-12 rounded-xl bg-[var(--card)] font-bold ring-1 ring-[var(--border)]"
-              >
-                <SlpCoinText>{t("ui.slurp.live.amount", { amount })}</SlpCoinText>
-              </button>
-            ))}
-          </div>
-          <form
-            className="mt-3 flex gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const amount = Number(custom);
-              if (Number.isInteger(amount) && amount > 0) pay(amount);
-            }}
-          >
-            <input
-              inputMode="numeric"
-              value={custom}
-              onChange={(event) => setCustom(event.target.value.replace(/\D/g, ""))}
-              placeholder={t("ui.slurp.live.customTip")}
-              aria-label={t("ui.slurp.live.customTip")}
-              className="h-12 min-w-0 flex-1 rounded-xl bg-[var(--card)] px-3 text-base ring-1 ring-[var(--border)]"
-            />
-            <button
-              type="submit"
-              disabled={!custom}
-              className="h-12 rounded-xl bg-[var(--noodle-accent)] px-5 font-bold text-white disabled:opacity-40"
-            >
-              {t("ui.slurp.live.send")}
             </button>
-          </form>
-        </SlpSheet>
+          </header>
+          {/* Below the bar: the picture never runs under it. */}
+          <div className="relative isolate flex min-h-0 flex-1 flex-col">
+            {/* The stage: the newest live picture of the Creator; a drifting glow until the cam's first picture lands. */}
+            <div aria-hidden="true" className="absolute inset-0 -z-10 overflow-hidden">
+              <div className="slp-live-drift h-full w-full bg-[radial-gradient(circle_at_40%_30%,var(--noodle-accent),transparent_60%),radial-gradient(circle_at_70%_80%,var(--slurp-violet),transparent_55%)]" />
+              {show.picture &&
+                // The last picture stays under the new one until it has loaded and faded in.
+                [show.picture.n - 1, show.picture.n]
+                  .filter((n) => n >= 0)
+                  .map((n) => (
+                    <SlurpMediaImg
+                      key={n}
+                      src={`/api/slurp2/slurp/live/${encodeURIComponent(show.id)}/picture/${n}`}
+                      mediaWidth={720}
+                      alt=""
+                      className="slp-crop slp-live-in slp-live-drift absolute inset-0 h-full w-full object-cover"
+                    />
+                  ))}
+              <div className="absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
+            </div>
+            {/* The next picture is on its way: said in the window, where it will land. */}
+            {show.shooting && !ended && (
+              <p
+                role="status"
+                className={`mx-3 mt-3 flex w-fit items-center gap-1.5 self-end rounded-full px-2.5 py-1 text-xs font-semibold ${glass}`}
+              >
+                <Camera size={13} aria-hidden="true" className="slp-live-dot text-[var(--noodle-accent)]" />
+                {t("ui.slurp.live.shooting")}
+              </p>
+            )}
+            {!ended && cam ? (
+              <p
+                key={cam}
+                aria-live="polite"
+                className={`slp-live-in mx-3 mt-3 rounded-2xl px-3 py-2 text-sm italic leading-snug ${glass}`}
+              >
+                {cam}
+              </p>
+            ) : (
+              !show.picture &&
+              !ended && (
+                <p
+                  role="status"
+                  className="slp-live-dot absolute inset-x-0 top-1/3 text-center text-sm font-semibold text-white/80"
+                >
+                  {t("ui.slurp.live.starting")}
+                </p>
+              )
+            )}
 
-        <SlpSheet open={sheet === "menu"} onClose={() => setSheet(null)} title={t("ui.slurp.live.menuTitle")}>
-          <ul className="space-y-2 p-0.5">
-            {show.menu
-              .filter((item) => !item.strip || show.strip < show.stripMax)
-              .map((item) => (
-                <li key={item.id}>
+            {banner && (
+              <div className="pointer-events-none flex justify-center px-4 pt-4" aria-live="polite">
+                <p
+                  key={banner.key}
+                  className={`slp-live-pop rounded-2xl px-4 py-2.5 text-center font-extrabold shadow-xl ${banner.kind === "goal" ? "bg-gradient-to-br from-[var(--noodle-accent)] to-[var(--slurp-violet)] text-lg" : "bg-[var(--slurp-warning)] text-sm text-neutral-950"}`}
+                >
+                  {banner.kind === "goal" ? (
+                    t("ui.slurp.live.goalHit", { item: itemLabel(banner.itemId) })
+                  ) : (
+                    <SlpCoinText>
+                      {t("ui.slurp.live.tipBanner", { name: banner.name ?? "", amount: banner.amount ?? 0 })}
+                    </SlpCoinText>
+                  )}
+                </p>
+              </div>
+            )}
+
+            <div className="min-h-0 flex-1" />
+
+            <div className="slp-nav-live mb-[var(--slp-nav-live,0px)] space-y-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              <SlpLiveChat lines={lines} me={me} host={name} itemLabel={itemLabel} t={t} />
+              {open.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
+                  <span className="rounded-full bg-emerald-500/25 px-3 py-1 ring-1 ring-emerald-300/40">
+                    {t("ui.slurp.live.now", {
+                      item: itemLabel(open[0]!.itemId),
+                      name: open[0]!.name || t("ui.slurp.live.everyone"),
+                    })}
+                  </span>
+                  {open[1] && (
+                    <span className={`rounded-full px-3 py-1 ${glass}`}>
+                      {t("ui.slurp.live.next", {
+                        item: itemLabel(open[1].itemId),
+                        name: open[1].name || t("ui.slurp.live.everyone"),
+                      })}
+                    </span>
+                  )}
+                </div>
+              )}
+              {show.private && !ended && (
+                <div
+                  role="status"
+                  className={`flex items-center justify-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ${glass}`}
+                >
+                  <Lock size={14} aria-hidden="true" className="text-[var(--noodle-accent)]" />
+                  {show.private.mine
+                    ? t("ui.slurp.live.privateMine", { time: mmss(privateLeft) })
+                    : t("ui.slurp.live.privateOther", { name })}
+                  {show.private.mine && privateLeft < 60_000 && (
+                    <button
+                      type="button"
+                      onClick={() => setSheet("private")}
+                      className="rounded-full bg-[var(--noodle-accent)] px-3 py-1 text-xs font-bold text-white"
+                    >
+                      {t("ui.slurp.live.privateStay")}
+                    </button>
+                  )}
+                </div>
+              )}
+              {show.hosting && !ended && show.next.length > 0 && (
+                <div role="group" aria-label={t("ui.slurp.live.hostIdeas")} className="flex gap-2 overflow-x-auto pb-1">
+                  {show.next.map((idea) => (
+                    <button
+                      key={idea}
+                      type="button"
+                      onClick={() => setSaid(idea.slice(0, 300))}
+                      className={`w-56 shrink-0 rounded-2xl px-3 py-1.5 text-start text-xs font-semibold ${glass}`}
+                    >
+                      <span className="line-clamp-2">{idea.replaceAll("*", "")}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {ended ? (
+                <div className={`rounded-2xl p-4 text-center ${glass}`}>
+                  <p className="font-bold">{t("ui.slurp.live.ended", { name })}</p>
+                  <p className="mt-1 text-sm text-white/80">
+                    <SlpCoinText>{t("ui.slurp.live.endedRaised", { amount: show.raised })}</SlpCoinText>
+                    {show.top ? ` · ${t("ui.slurp.live.topTipper", { name: show.top.name })}` : ""}
+                  </p>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  {personaId ? (
+                    <form
+                      className="min-w-0 flex-1"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        const message = said.trim();
+                        if (!message) return;
+                        setSaid("");
+                        askedAt.current = Date.now();
+                        beat.mutate({ message });
+                      }}
+                    >
+                      <input
+                        value={said}
+                        disabled={outside}
+                        onChange={(event) => setSaid(event.target.value.slice(0, 300))}
+                        enterKeyHint="send"
+                        placeholder={show.hosting ? t("ui.slurp.live.hostSay") : t("ui.slurp.live.say", { name })}
+                        aria-label={show.hosting ? t("ui.slurp.live.hostSay") : t("ui.slurp.live.say", { name })}
+                        className={`h-12 w-full rounded-full px-4 text-base placeholder:text-white/60 ${glass}`}
+                      />
+                    </form>
+                  ) : (
+                    <p className="min-w-0 flex-1 truncate text-sm text-white/70">{t("ui.slurp.live.pickPersona")}</p>
+                  )}
+                  {show.hosting ? (
+                    <button
+                      type="button"
+                      disabled={end.isPending}
+                      onClick={() => end.mutate()}
+                      className={`h-12 rounded-full px-5 text-sm font-bold disabled:opacity-40 ${glass}`}
+                    >
+                      {t("ui.slurp.live.endShow")}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled={!personaId || outside || privateBuy.isPending}
+                        onClick={() => setSheet("private")}
+                        aria-label={t("ui.slurp.live.privateButton")}
+                        className={`flex h-12 w-12 items-center justify-center rounded-full disabled:opacity-40 ${glass}`}
+                      >
+                        <Lock size={20} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!personaId || outside}
+                        onClick={() => setSheet("menu")}
+                        aria-label={t("ui.slurp.live.menuTitle")}
+                        className={`flex h-12 w-12 items-center justify-center rounded-full disabled:opacity-40 ${glass}`}
+                      >
+                        <ListOrdered size={20} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!personaId || outside || tip.isPending}
+                        onClick={() => setSheet("tip")}
+                        className="h-12 rounded-full bg-[var(--noodle-accent)] px-5 text-sm font-black text-white shadow-[0_0_24px_color-mix(in_srgb,var(--noodle-accent)_60%,transparent)] disabled:opacity-40"
+                      >
+                        {t("ui.slurp.live.tip")}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+              {!ended && show.mine > 0 && (
+                <p className="text-sm text-white/70">
+                  <SlpCoinText>{t("ui.slurp.live.mine", { amount: show.mine })}</SlpCoinText>
+                </p>
+              )}
+              {privateBuy.isError && (
+                <p role="alert" className="text-center text-sm text-red-300">
+                  {t("ui.slurp.live.privateFailed")}
+                </p>
+              )}
+              {tip.isError && (
+                <p role="alert" className="text-center text-sm text-red-300">
+                  {t("ui.slurp.live.tipFailed")}
+                </p>
+              )}
+            </div>
+
+            <SlpSheet
+              open={sheet === "tip"}
+              onClose={() => setSheet(null)}
+              title={t("ui.slurp.live.tipTitle", { name })}
+            >
+              <div className="grid grid-cols-4 gap-2">
+                {QUICK_TIPS.map((amount) => (
                   <button
+                    key={amount}
                     type="button"
-                    onClick={() => pay(item.price, item.id)}
-                    className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl bg-[var(--card)] px-4 py-2 text-start ring-1 ring-[var(--border)]"
+                    onClick={() => pay(amount)}
+                    className="h-12 rounded-xl bg-[var(--card)] font-bold ring-1 ring-[var(--border)]"
                   >
-                    <span>
-                      <b className="block">{itemLabel(item.id)}</b>
-                    </span>
-                    <span className="shrink-0 font-bold">
-                      <SlpCoinText>{t("ui.slurp.live.amount", { amount: item.price })}</SlpCoinText>
-                    </span>
+                    <SlpCoinText>{t("ui.slurp.live.amount", { amount })}</SlpCoinText>
                   </button>
-                </li>
-              ))}
-          </ul>
-        </SlpSheet>
-        <SlpSheet
-          open={sheet === "private"}
-          onClose={() => setSheet(null)}
-          title={t("ui.slurp.live.privateTitle", { name })}
-        >
-          <p className="text-sm text-[var(--muted-foreground)]">
-            {t("ui.slurp.live.privateBody", { name, minutes: show.offer?.minutes ?? 10 })}
-          </p>
-          <button
-            type="button"
-            onClick={goPrivate}
-            disabled={!show.offer}
-            className="mt-3 h-12 w-full rounded-xl bg-[var(--noodle-accent)] text-base font-bold text-white disabled:opacity-40"
-          >
-            <SlpCoinText>
-              {t(show.private?.mine ? "ui.slurp.live.privateExtend" : "ui.slurp.live.privateGo", {
-                amount: show.offer?.price ?? 0,
-                minutes: show.offer?.minutes ?? 10,
-              })}
-            </SlpCoinText>
-          </button>
-        </SlpSheet>
-        </div>
-      </section>
+                ))}
+              </div>
+              <form
+                className="mt-3 flex gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const amount = Number(custom);
+                  if (Number.isInteger(amount) && amount > 0) pay(amount);
+                }}
+              >
+                <input
+                  inputMode="numeric"
+                  value={custom}
+                  onChange={(event) => setCustom(event.target.value.replace(/\D/g, ""))}
+                  placeholder={t("ui.slurp.live.customTip")}
+                  aria-label={t("ui.slurp.live.customTip")}
+                  className="h-12 min-w-0 flex-1 rounded-xl bg-[var(--card)] px-3 text-base ring-1 ring-[var(--border)]"
+                />
+                <button
+                  type="submit"
+                  disabled={!custom}
+                  className="h-12 rounded-xl bg-[var(--noodle-accent)] px-5 font-bold text-white disabled:opacity-40"
+                >
+                  {t("ui.slurp.live.send")}
+                </button>
+              </form>
+            </SlpSheet>
+
+            <SlpSheet open={sheet === "menu"} onClose={() => setSheet(null)} title={t("ui.slurp.live.menuTitle")}>
+              <ul className="space-y-2 p-0.5">
+                {show.menu
+                  .filter((item) => !item.strip || show.strip < show.stripMax)
+                  .map((item) => (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        onClick={() => pay(item.price, item.id)}
+                        className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl bg-[var(--card)] px-4 py-2 text-start ring-1 ring-[var(--border)]"
+                      >
+                        <span>
+                          <b className="block">{itemLabel(item.id)}</b>
+                        </span>
+                        <span className="shrink-0 font-bold">
+                          <SlpCoinText>{t("ui.slurp.live.amount", { amount: item.price })}</SlpCoinText>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+            </SlpSheet>
+            <SlpSheet
+              open={sheet === "private"}
+              onClose={() => setSheet(null)}
+              title={t("ui.slurp.live.privateTitle", { name })}
+            >
+              <p className="text-sm text-[var(--muted-foreground)]">
+                {t("ui.slurp.live.privateBody", { name, minutes: show.offer?.minutes ?? 10 })}
+              </p>
+              <button
+                type="button"
+                onClick={goPrivate}
+                disabled={!show.offer}
+                className="mt-3 h-12 w-full rounded-xl bg-[var(--noodle-accent)] text-base font-bold text-white disabled:opacity-40"
+              >
+                <SlpCoinText>
+                  {t(show.private?.mine ? "ui.slurp.live.privateExtend" : "ui.slurp.live.privateGo", {
+                    amount: show.offer?.price ?? 0,
+                    minutes: show.offer?.minutes ?? 10,
+                  })}
+                </SlpCoinText>
+              </button>
+            </SlpSheet>
+          </div>
+        </section>
+      </div>
     </SlpThreadTaskLayer>
   );
 }

@@ -32,7 +32,10 @@ export function SlpLiveMomentTiles({ shows }: { shows: readonly SlpLiveListEntry
         ) : (
           <span className="block h-full w-full bg-[radial-gradient(circle_at_40%_30%,var(--noodle-accent),transparent_60%),radial-gradient(circle_at_70%_80%,var(--slurp-violet),transparent_55%)]" />
         )}
-        <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/80 to-transparent" />
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/80 to-transparent"
+        />
         <span className="absolute start-1.5 top-1.5 rounded bg-red-600 px-1.5 text-[10px] font-black leading-4 tracking-wide text-white">
           {t("ui.slurp.live.badge")}
         </span>
