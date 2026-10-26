@@ -17,6 +17,7 @@ import { resolveSlurpCreatorSpice } from "../../data/creators/slp-spice-storage.
 import { createSlurpLiveStorage, type SlurpLiveShow } from "../../data/live/slp-live-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { withSlurpLiveShow } from "./slp-live-lock.js";
+import { slurpIsCouplePage } from "../../modules/projects/slp-creator-couples.js";
 
 const MINUTE = 60_000;
 /** ponytail: a fixed cap keeps the code simulation cheap; make it a setting if players want busier evenings. */
@@ -68,7 +69,7 @@ async function startDueShows(db: DB, settings: Settings, open: SlurpLiveShow[], 
       watchedAt: null,
       createdAt: at.toISOString(),
     };
-    if (!(await storage.create(show))) continue;
+    if (!(await createIfFree(storage, show))) continue;
     open.push(await simulateSlurpLiveShow(db, show, settings, at));
     busy.add(creator.id);
   }
@@ -161,6 +162,13 @@ async function simulateLocked(db: DB, show: SlurpLiveShow, settings: Settings, a
   return next;
 }
 
+/** One open show per host: the world tick and the player's Go live check and create under one host lock. */
+function createIfFree(storage: ReturnType<typeof createSlurpLiveStorage>, show: SlurpLiveShow) {
+  return withSlurpLiveShow(`host:${show.hostId}`, async () =>
+    (await storage.listOpen()).some((open) => open.hostId === show.hostId) ? false : storage.create(show),
+  );
+}
+
 export type SlurpLiveHostResult = { show: SlurpLiveShow } | "missing" | "live";
 
 /**
@@ -180,8 +188,8 @@ export async function hostSlurpLiveShow(
   if (!host || host.kind === "viewer") return "missing";
   // Another persona's Creator is not the player's to run.
   if (host.kind === "persona" && host.sourceEntityId !== input.personaId) return "missing";
+  if (slurpIsCouplePage(host)) return "missing";
   const storage = createSlurpLiveStorage(db);
-  if ((await storage.listOpen()).some((show) => show.hostId === host.id)) return "live";
   const live = normalizeSlpLiveSettings(settings.live);
   const minutes = Math.min(live.maxMinutes, Math.max(live.minMinutes, Math.round(input.minutes)));
   const spice = await resolveSlurpCreatorSpice(db, host);
@@ -199,7 +207,7 @@ export async function hostSlurpLiveShow(
     watchedAt: at.toISOString(),
     createdAt: at.toISOString(),
   };
-  if (!(await storage.create(show))) return "live";
+  if (!(await createIfFree(storage, show))) return "live";
   return { show };
 }
 

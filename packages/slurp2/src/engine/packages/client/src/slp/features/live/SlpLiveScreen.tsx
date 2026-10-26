@@ -159,8 +159,8 @@ export function SlpLiveScreen({
     setSheet(null);
     privateBuy.mutate({ requestId: newRequestId() });
   };
-  // Somebody else's private block: the room waits outside, so no talk or tips.
-  const outside = !!show.private && !show.private.mine;
+  // Somebody else's private block, or a show another persona hosts: no talk or tips from here.
+  const outside = (!!show.private && !show.private.mine) || (show.hostKind === "player" && !show.hosting);
   const privateLeft = show.private ? Math.max(0, show.private.to - elapsed) : 0;
   const mmss = (ms: number) =>
     `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1_000)).padStart(2, "0")}`;
