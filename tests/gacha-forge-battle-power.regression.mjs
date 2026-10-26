@@ -30,10 +30,7 @@ test("player-facing text says Battle Power (BP), never CP or Combat Power", () =
   );
   assert.deepEqual(left, []);
   assert.match(client, /q:"What is BP\?"/u);
-  assert.match(
-    client,
-    /var oy=\[\{version:null,changed:\["Combat Power \(CP\) is now called Battle Power \(BP\)\."\]/u,
-  );
+  assert.match(client, /\{version:"1\.24\.3",changed:\["Combat Power \(CP\) is now called Battle Power \(BP\)\."\]/u);
   // Only the words change: the sort id and the data fields keep their names, so no saved data moves.
   assert.match(client, /\["cp","BP"\],\["level","Level"\]/u);
   assert.match(client, /var vw=\[\["cp","BP gain"\]/u);
