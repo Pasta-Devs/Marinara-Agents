@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { Camera, ChevronLeft, Clock, Eye, Flame, ListOrdered } from "lucide-react";
+import { Camera, ChevronLeft, Clock, Eye, Flame, ListOrdered, Lock } from "lucide-react";
 import { Avatar, SlurpMediaImg } from "../../base/chrome/SlpChrome";
 import { SlpSheet } from "../../modules/chrome/SlpSheet";
 import { SlpErrorState, SlpSkeleton } from "../../modules/chrome/SlpStateKit";
@@ -10,7 +10,7 @@ import { slpLiveFeedDelay, slpLiveFeedMerge, type SlpLiveLine } from "../../modu
 import type { SlpLiveEvent } from "../../../../../shared/src/slp/slp-live.js";
 import { useCreatorAccounts } from "../creators/slp-creators-contract";
 import { newRequestId, SlpThreadTaskLayer } from "../messages/slp-messages-contract";
-import { useSlpLiveBeat, useSlpLiveShow, useSlpLiveTip } from "./slp-live-hooks";
+import { useSlpLiveBeat, useSlpLivePrivate, useSlpLiveShow, useSlpLiveTip } from "./slp-live-hooks";
 
 const LIVE_STYLES = `
 @keyframes slp-live-drift { from { transform: scale(1.08) translate3d(-1.5%, -1%, 0); } to { transform: scale(1.16) translate3d(1.5%, 1%, 0); } }
@@ -66,13 +66,14 @@ export function SlpLiveScreen({
   const query = useSlpLiveShow(showId, personaId);
   const tip = useSlpLiveTip(showId, personaId);
   const beat = useSlpLiveBeat(showId, personaId);
+  const privateBuy = useSlpLivePrivate(showId, personaId);
   const [said, setSaid] = useState("");
   const joined = useRef(false);
   const askedAt = useRef(0);
   const show = query.data;
   const host = useCreatorAccounts().data?.find((account) => account.id === show?.hostId) ?? null;
   const lines = useLiveFeed(show?.log);
-  const [sheet, setSheet] = useState<null | "tip" | "menu">(null);
+  const [sheet, setSheet] = useState<null | "tip" | "menu" | "private">(null);
   const [custom, setCustom] = useState("");
   const [goalOpen, setGoalOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -152,6 +153,14 @@ export function SlpLiveScreen({
     setSheet(null);
     tip.mutate({ amount, ...(itemId ? { itemId } : {}), requestId: newRequestId() });
   };
+  const goPrivate = () => {
+    if (!personaId) return;
+    setSheet(null);
+    privateBuy.mutate({ requestId: newRequestId() });
+  };
+  // Somebody else's private block: the room waits outside, so no talk or tips.
+  const outside = !!show.private && !show.private.mine;
+  const privateLeft = show.private ? Math.max(0, show.private.to - elapsed) : 0;
   const mmss = (ms: number) =>
     `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1_000)).padStart(2, "0")}`;
 
@@ -303,6 +312,26 @@ export function SlpLiveScreen({
               )}
             </div>
           )}
+          {show.private && !ended && (
+            <div
+              role="status"
+              className={`flex items-center justify-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ${glass}`}
+            >
+              <Lock size={14} aria-hidden="true" className="text-[var(--noodle-accent)]" />
+              {show.private.mine
+                ? t("ui.slurp.live.privateMine", { time: mmss(privateLeft) })
+                : t("ui.slurp.live.privateOther", { name })}
+              {show.private.mine && privateLeft < 60_000 && (
+                <button
+                  type="button"
+                  onClick={() => setSheet("private")}
+                  className="rounded-full bg-[var(--noodle-accent)] px-3 py-1 text-xs font-bold text-white"
+                >
+                  {t("ui.slurp.live.privateStay")}
+                </button>
+              )}
+            </div>
+          )}
           {ended ? (
             <div className={`rounded-2xl p-4 text-center ${glass}`}>
               <p className="font-bold">{t("ui.slurp.live.ended", { name })}</p>
@@ -327,6 +356,7 @@ export function SlpLiveScreen({
                 >
                   <input
                     value={said}
+                    disabled={outside}
                     onChange={(event) => setSaid(event.target.value.slice(0, 300))}
                     enterKeyHint="send"
                     placeholder={t("ui.slurp.live.say", { name })}
@@ -339,7 +369,16 @@ export function SlpLiveScreen({
               )}
               <button
                 type="button"
-                disabled={!personaId}
+                disabled={!personaId || outside || privateBuy.isPending}
+                onClick={() => setSheet("private")}
+                aria-label={t("ui.slurp.live.privateButton")}
+                className={`flex h-12 w-12 items-center justify-center rounded-full disabled:opacity-40 ${glass}`}
+              >
+                <Lock size={20} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                disabled={!personaId || outside}
                 onClick={() => setSheet("menu")}
                 aria-label={t("ui.slurp.live.menuTitle")}
                 className={`flex h-12 w-12 items-center justify-center rounded-full disabled:opacity-40 ${glass}`}
@@ -348,7 +387,7 @@ export function SlpLiveScreen({
               </button>
               <button
                 type="button"
-                disabled={!personaId || tip.isPending}
+                disabled={!personaId || outside || tip.isPending}
                 onClick={() => setSheet("tip")}
                 className="h-12 rounded-full bg-[var(--noodle-accent)] px-5 text-sm font-black text-white shadow-[0_0_24px_color-mix(in_srgb,var(--noodle-accent)_60%,transparent)] disabled:opacity-40"
               >
@@ -359,6 +398,11 @@ export function SlpLiveScreen({
           {!ended && show.mine > 0 && (
             <p className="text-sm text-white/70">
               <SlpCoinText>{t("ui.slurp.live.mine", { amount: show.mine })}</SlpCoinText>
+            </p>
+          )}
+          {privateBuy.isError && (
+            <p role="alert" className="text-center text-sm text-red-300">
+              {t("ui.slurp.live.privateFailed")}
             </p>
           )}
           {tip.isError && (
@@ -428,6 +472,28 @@ export function SlpLiveScreen({
                 </li>
               ))}
           </ul>
+        </SlpSheet>
+        <SlpSheet
+          open={sheet === "private"}
+          onClose={() => setSheet(null)}
+          title={t("ui.slurp.live.privateTitle", { name })}
+        >
+          <p className="text-sm text-[var(--muted-foreground)]">
+            {t("ui.slurp.live.privateBody", { name, minutes: show.offer?.minutes ?? 10 })}
+          </p>
+          <button
+            type="button"
+            onClick={goPrivate}
+            disabled={!show.offer}
+            className="mt-3 h-12 w-full rounded-xl bg-[var(--noodle-accent)] text-base font-bold text-white disabled:opacity-40"
+          >
+            <SlpCoinText>
+              {t(show.private?.mine ? "ui.slurp.live.privateExtend" : "ui.slurp.live.privateGo", {
+                amount: show.offer?.price ?? 0,
+                minutes: show.offer?.minutes ?? 10,
+              })}
+            </SlpCoinText>
+          </button>
         </SlpSheet>
       </section>
     </SlpThreadTaskLayer>

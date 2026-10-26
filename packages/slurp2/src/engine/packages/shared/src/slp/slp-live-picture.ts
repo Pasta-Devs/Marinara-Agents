@@ -1,4 +1,10 @@
-import { slpLiveCurrentGoal, slpLiveShooting, type SlpLiveSettings, type SlpLiveState } from "./slp-live.js";
+import {
+  slpLiveCurrentGoal,
+  slpLivePrivateOn,
+  slpLiveShooting,
+  type SlpLiveSettings,
+  type SlpLiveState,
+} from "./slp-live.js";
 
 /** Menu items the camera can show; a shout-out or a song is talk, not a picture. */
 const VISUAL = new Set(["dance", "pose", "outfit", "closeUp", "layer", "flash", "toy"]);
@@ -12,7 +18,7 @@ const SHOWS: Record<string, string> = {
   toy: "playing with a toy on camera",
 };
 
-export type SlpLivePictureWhy = "opening" | "goal" | "order" | "tip" | "rate";
+export type SlpLivePictureWhy = "opening" | "goal" | "order" | "tip" | "private" | "rate";
 
 /**
  * Why the show takes a picture now, or null (LIVE-V3-PLAN.md "Pictures"). The first look gets an opening
@@ -27,9 +33,14 @@ export function slpLivePictureDue(
   if (slpLiveShooting(state, at) || (state.pictures?.length ?? 0) >= live.pictureMax) return null;
   const last = state.pictureAt;
   if (last === undefined) return "opening";
+  const since = state.log.filter((event) => event.at > last && event.at <= at);
+  // A private block opens with a picture, then takes one every few minutes.
+  if (slpLivePrivateOn(state, at)) {
+    if (since.some((event) => event.kind === "private" && event.at === state.private!.from)) return "private";
+    return at - last < live.pictureSeconds * 3_000 ? null : "rate";
+  }
   if (at - last < live.pictureSeconds * 1_000) return null;
   const goal = slpLiveCurrentGoal(state);
-  const since = state.log.filter((event) => event.at > last && event.at <= at);
   if (since.some((event) => event.kind === "goal")) return "goal";
   if (since.some((event) => event.kind === "order" && event.itemId && VISUAL.has(event.itemId))) return "order";
   const big = goal ? goal.target * 0.25 : Infinity;
@@ -50,6 +61,7 @@ export function slpLivePictureScene(state: SlpLiveState, at: number, why: SlpLiv
       ? `${state.strip} of ${state.stripMax} layers of clothing are off so far.`
       : "",
     order ? `Right now: ${SHOWS[order.itemId]}.` : said?.action ? `Right now: ${said.action}.` : "",
+    slpLivePrivateOn(state, at) ? "A private show for one viewer: closer to the camera, more intimate." : "",
     why === "goal" ? "The room just hit a tip goal; the Creator celebrates." : "",
     why === "tip" ? "Somebody just sent a big tip; the Creator reacts to the camera." : "",
   ]
