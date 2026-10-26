@@ -10,7 +10,6 @@ import { slpLiveFeedDelay, slpLiveFeedMerge, type SlpLiveLine } from "../../modu
 import type { SlpLiveEvent } from "../../../../../shared/src/slp/slp-live.js";
 import { useCreatorAccounts } from "../creators/slp-creators-contract";
 import { newRequestId, SlpThreadTaskLayer } from "../messages/slp-messages-contract";
-import { useSlurpSettings } from "../settings/slp-settings-contract";
 import { useSlpLiveBeat, useSlpLivePrivate, useSlpLiveShow, useSlpLiveTip } from "./slp-live-hooks";
 
 const LIVE_STYLES = `
@@ -68,7 +67,6 @@ export function SlpLiveScreen({
   const tip = useSlpLiveTip(showId, personaId);
   const beat = useSlpLiveBeat(showId, personaId);
   const privateBuy = useSlpLivePrivate(showId, personaId);
-  const live = useSlurpSettings().data?.live;
   const [said, setSaid] = useState("");
   const joined = useRef(false);
   const askedAt = useRef(0);
@@ -160,6 +158,8 @@ export function SlpLiveScreen({
     setSheet(null);
     privateBuy.mutate({ requestId: newRequestId() });
   };
+  // Somebody else's private block: the room waits outside, so no talk or tips.
+  const outside = !!show.private && !show.private.mine;
   const privateLeft = show.private ? Math.max(0, show.private.to - elapsed) : 0;
   const mmss = (ms: number) =>
     `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1_000)).padStart(2, "0")}`;
@@ -356,6 +356,7 @@ export function SlpLiveScreen({
                 >
                   <input
                     value={said}
+                    disabled={outside}
                     onChange={(event) => setSaid(event.target.value.slice(0, 300))}
                     enterKeyHint="send"
                     placeholder={t("ui.slurp.live.say", { name })}
@@ -368,7 +369,7 @@ export function SlpLiveScreen({
               )}
               <button
                 type="button"
-                disabled={!personaId || (!!show.private && !show.private.mine) || privateBuy.isPending}
+                disabled={!personaId || outside || privateBuy.isPending}
                 onClick={() => setSheet("private")}
                 aria-label={t("ui.slurp.live.privateButton")}
                 className={`flex h-12 w-12 items-center justify-center rounded-full disabled:opacity-40 ${glass}`}
@@ -377,7 +378,7 @@ export function SlpLiveScreen({
               </button>
               <button
                 type="button"
-                disabled={!personaId}
+                disabled={!personaId || outside}
                 onClick={() => setSheet("menu")}
                 aria-label={t("ui.slurp.live.menuTitle")}
                 className={`flex h-12 w-12 items-center justify-center rounded-full disabled:opacity-40 ${glass}`}
@@ -386,7 +387,7 @@ export function SlpLiveScreen({
               </button>
               <button
                 type="button"
-                disabled={!personaId || tip.isPending}
+                disabled={!personaId || outside || tip.isPending}
                 onClick={() => setSheet("tip")}
                 className="h-12 rounded-full bg-[var(--noodle-accent)] px-5 text-sm font-black text-white shadow-[0_0_24px_color-mix(in_srgb,var(--noodle-accent)_60%,transparent)] disabled:opacity-40"
               >
@@ -478,18 +479,18 @@ export function SlpLiveScreen({
           title={t("ui.slurp.live.privateTitle", { name })}
         >
           <p className="text-sm text-[var(--muted-foreground)]">
-            {t("ui.slurp.live.privateBody", { name, minutes: live?.privateMinutes ?? 10 })}
+            {t("ui.slurp.live.privateBody", { name, minutes: show.offer?.minutes ?? 10 })}
           </p>
           <button
             type="button"
             onClick={goPrivate}
-            disabled={!live}
+            disabled={!show.offer}
             className="mt-3 h-12 w-full rounded-xl bg-[var(--noodle-accent)] text-base font-bold text-white disabled:opacity-40"
           >
             <SlpCoinText>
               {t(show.private?.mine ? "ui.slurp.live.privateExtend" : "ui.slurp.live.privateGo", {
-                amount: live?.privatePrice ?? 0,
-                minutes: live?.privateMinutes ?? 10,
+                amount: show.offer?.price ?? 0,
+                minutes: show.offer?.minutes ?? 10,
               })}
             </SlpCoinText>
           </button>

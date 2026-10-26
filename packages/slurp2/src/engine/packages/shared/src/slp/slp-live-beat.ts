@@ -45,7 +45,14 @@ export function slpLiveParseBeat(raw: unknown): SlpLiveBeat | null {
 export function slpLiveApplyBeat(
   state: SlpLiveState,
   beat: SlpLiveBeat,
-  input: { at: number; seconds: number; host: string; you?: { by: string; name: string; text: string } },
+  input: {
+    at: number;
+    seconds: number;
+    host: string;
+    you?: { by: string; name: string; text: string };
+    /** The private block the beat was written for: its lines never outlive the block. */
+    alone?: { to: number } | null;
+  },
 ): number {
   const { at, seconds } = input;
   state.log = state.log.filter((event) => !((event.kind === "say" || event.kind === "chat") && event.at > at));
@@ -53,7 +60,7 @@ export function slpLiveApplyBeat(
   const inRoom = new Map(state.room.map((id) => [(state.names[id] ?? "").toLowerCase(), id]));
   const host = input.host.toLowerCase();
   // In a private block only the Creator talks, and nothing private is said after the block ends.
-  const alone = slpLivePrivateOn(state, at) ? state.private! : null;
+  const alone = input.alone ?? (slpLivePrivateOn(state, at) ? state.private! : null);
   // The first line comes a second after the player's words, so an answer reads as an answer.
   const start = at + (input.you ? 1_000 : 0);
   let last = start;

@@ -262,11 +262,17 @@ assert.equal(
   "no fan chat in private",
 );
 assert.equal(slpLivePictureDue(priv, 200_000, { pictureSeconds: 60, pictureMax: 5 }), "opening");
-priv.pictureAt = 61_000;
+priv.pictureAt = 59_000;
 assert.equal(
   slpLivePictureDue(priv, 130_000, { pictureSeconds: 60, pictureMax: 5 }),
   "private",
   "a private block opens with a picture",
+);
+priv.pictureAt = 125_000;
+assert.equal(
+  slpLivePictureDue(priv, 130_000, { pictureSeconds: 60, pictureMax: 5 }),
+  null,
+  "an extension is no new opening",
 );
 const privView = (me: string) =>
   slpLiveView(
@@ -283,6 +289,12 @@ const privView = (me: string) =>
     me,
   );
 assert.equal(privView("persona:p").private?.mine, true);
+// A private beat that comes back after its block ended is dropped, not said to the room.
+const lateBeat = slpLiveParseBeat({ lines: [{ t: 0, who: "host", text: "still just us" }] })!;
+assert.equal(
+  slpLiveApplyBeat(priv, lateBeat, { at: priv.private!.to + 1_000, seconds: 20, host: "Rowan", alone: priv.private }),
+  0,
+);
 assert.equal(privView("persona:q").private?.mine, false);
 
 console.log("slurp2 live sim: ok");

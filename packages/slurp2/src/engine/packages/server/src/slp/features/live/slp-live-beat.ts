@@ -134,8 +134,10 @@ export async function beatSlurpLiveShow(
           seconds,
           host: host.displayName,
           ...(you ? { you } : {}),
+          alone,
         });
-      if (!kept && !stale) {
+      // A private beat that came back after its block ended is simply dropped: the room is back.
+      if (!kept && !stale && !(alone && ready >= alone.to)) {
         // With a beat, the apply already logged the player's line.
         if (you && !beat)
           slpLiveLog(fresh.state, { at: ready, kind: "you", by: you.by, name: you.name, text: you.text });

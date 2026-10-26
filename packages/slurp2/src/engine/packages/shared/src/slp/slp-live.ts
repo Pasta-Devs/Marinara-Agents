@@ -330,6 +330,8 @@ export function slpLiveView(
   },
   now: number,
   me: string | null,
+  /** Backstage live settings, for the private offer (price and minutes). */
+  live?: Pick<SlpLiveSettings, "privatePrice" | "privateMinutes">,
 ) {
   const { state } = show;
   return {
@@ -358,6 +360,7 @@ export function slpLiveView(
     beatTo: state.beatTo ?? 0,
     // Only the newest landed picture, by number; the media path stays on the server.
     picture: slpLivePictureView(state, Math.max(0, now - Date.parse(show.startedAt))),
+    offer: live ? { price: live.privatePrice, minutes: live.privateMinutes } : null,
     private: slpLivePrivateView(state, Math.max(0, now - Date.parse(show.startedAt)), me),
     shooting: slpLiveShooting(state, Math.max(0, now - Date.parse(show.startedAt))),
     top: slpLiveTopTipper(state),

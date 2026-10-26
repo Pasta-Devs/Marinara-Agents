@@ -36,7 +36,7 @@ export function slpLivePictureDue(
   const since = state.log.filter((event) => event.at > last && event.at <= at);
   // A private block opens with a picture, then takes one every few minutes.
   if (slpLivePrivateOn(state, at)) {
-    if (since.some((event) => event.kind === "private" && event.at >= state.private!.from)) return "private";
+    if (since.some((event) => event.kind === "private" && event.at === state.private!.from)) return "private";
     return at - last < live.pictureSeconds * 3_000 ? null : "rate";
   }
   if (at - last < live.pictureSeconds * 1_000) return null;
