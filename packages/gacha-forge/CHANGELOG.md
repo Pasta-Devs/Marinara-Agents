@@ -1,3 +1,7 @@
+## 1.24.2 — 2026-10-26
+
+- Personas use their assigned Engine voice for story dialogue and newly sent character messages when dialogue audio is enabled.
+
 ## 1.24.1 — 2026-10-26
 
 - Formation fights can no longer stall. An enemy that keeps turning immune can be hit again after two turns, Retreat Echo repeats one real cast only once, and a summon with no free Front Row seat waits without spending energy.
