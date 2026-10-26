@@ -5,6 +5,11 @@
 - Pre-forged art now paints alongside the text, so the chapter menu opens once the text is written. A scene opened before its art is ready joins the paint in progress. Art may keep painting for a while after the menu opens; switch to Story only or Off, or use the story Cancel, to stop it.
 - Pre-forging no longer reports stopped, or lets Retry start a second chain, on chapters that take over 20 minutes.
 
+## 1.22.1 — 2026-10-26
+
+- In Formation, a unit's Skills tab shows its Formation kit (abilities, costs, triggers and special mechanics) instead of the classic skills, and the kit no longer appears as plain text on every tab.
+- Chapter plans, Character Story plans, story beats and event chapters request 16,384 answer tokens on top of the reasoning reserve.
+
 ## 1.22.0 — 2026-10-26
 
 - Banner animations say why they failed, play on phones away from the server, and never offer a paid retry for a saved clip.

@@ -1380,6 +1380,40 @@
           ]
         },
         {
+          "version": "1.22.1",
+          "commits": [],
+          "edits": [
+            {
+              "find": "function Df({unit:t,level:e=1,",
+              "replace": "function Df({formation:forgeFormationKit=null,unit:t,level:e=1,"
+            },
+            {
+              "find": "D===\"skills\"?_l(t,m,v,b,g,c)",
+              "replace": "D===\"skills\"?_l(t,m,v,b,g,c,forgeFormationKit)"
+            },
+            {
+              "find": "Df({unit:this._unit,",
+              "replace": "Df({formation:forgeFormationActiveKit(this),unit:this._unit,"
+            },
+            {
+              "find": "e.innerHTML=_l(this._unit,this._growthView(),a.gear,a.fx||null,a.facets,this._skillOpen);",
+              "replace": "e.innerHTML=_l(this._unit,this._growthView(),a.gear,a.fx||null,a.facets,this._skillOpen,forgeFormationActiveKit(this));"
+            },
+            {
+              "find": "function _l(t,e,a,r,s,o){return r=",
+              "replace": "function _l(t,e,a,r,s,o,forgeFormationKit){if(forgeFormationKit&&t&&t.kind!==\"weapon\")return forgeFormationSkillList(t,forgeFormationKit,Jr,Tf);return r="
+            },
+            {
+              "find": "ds=\"1.22.0\"",
+              "replace": "ds=\"1.22.1\""
+            },
+            {
+              "find": "var oy=[{version:null,changed:[\"Water beats Fire",
+              "replace": "var oy=[{version:null,fixed:[\"In Formation, a unit's Skills tab shows its Formation kit instead of the classic skills, and other tabs stay clean.\",\"Chapters, Character Stories and event chapters have more room to write.\"]},{version:\"1.22.0\",changed:[\"Water beats Fire"
+            }
+          ]
+        },
+        {
           "version": "1.23.0",
           "commits": [],
           "edits": [
@@ -1412,12 +1446,12 @@
               "replace": "this._planState===\"idle\"&&this._plan==null&&!this._planEscaped&&!this._storyWaits()&&this._loadChapterPlan(),"
             },
             {
-              "find": "ds=\"1.22.0\"",
+              "find": "ds=\"1.22.1\"",
               "replace": "ds=\"1.23.0\""
             },
             {
-              "find": "var oy=[{version:null,changed:[\"Water beats Fire",
-              "replace": "var oy=[{version:null,new:[\"Keep playing leaves a chapter that is still forging, and a notice says when it is ready.\",\"Pre-forging with Story and images also paints the places each scene visits when Backgrounds is on.\"],changed:[\"Pre-forged art paints alongside the story, so the chapter menu opens as soon as the text is written.\"],fixed:[\"Pre-forging no longer reports stopped on chapters that take over 20 minutes.\"]},{version:\"1.22.0\",changed:[\"Water beats Fire"
+              "find": "var oy=[{version:null,fixed:[\"In Formation, a unit's Skills tab",
+              "replace": "var oy=[{version:null,new:[\"Keep playing leaves a chapter that is still forging, and a notice says when it is ready.\",\"Pre-forging with Story and images also paints the places each scene visits when Backgrounds is on.\"],changed:[\"Pre-forged art paints alongside the story, so the chapter menu opens as soon as the text is written.\"],fixed:[\"Pre-forging no longer reports stopped on chapters that take over 20 minutes.\"]},{version:\"1.22.1\",fixed:[\"In Formation, a unit's Skills tab"
             }
           ]
         }
@@ -2687,6 +2721,24 @@
             {
               "find": "logger:r.logger,concurrency:3,generateKit:",
               "replace": "logger:r.logger,concurrency:1,generateKit:"
+            }
+          ]
+        },
+        {
+          "version": "1.22.1",
+          "commits": [],
+          "edits": [
+            {
+              "find": "forgeChoicesEnabled(m)),options:{temperature:.8,maxTokens:It(2500)},parse:Vt(r,ne=>yS(ne,i)),label:\"chapter-plan\"",
+              "replace": "forgeChoicesEnabled(m)),options:{temperature:.8,maxTokens:It(16384)},parse:Vt(r,ne=>yS(ne,i)),label:\"chapter-plan\""
+            },
+            {
+              "find": "forgeChoicesEnabled(w)),options:{temperature:.8,maxTokens:It(2e3)},parse:Vt(r,J=>pS(J)),label:\"bond-chapter-plan\"",
+              "replace": "forgeChoicesEnabled(w)),options:{temperature:.8,maxTokens:It(16384)},parse:Vt(r,J=>pS(J)),label:\"bond-chapter-plan\""
+            },
+            {
+              "find": "options:{temperature:.85,maxTokens:It(forgeChoiceEnabled?8192:4096)}",
+              "replace": "options:{temperature:.85,maxTokens:It(16384)}"
             }
           ]
         },
