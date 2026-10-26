@@ -1,7 +1,7 @@
 import type { SlpLiveEvent } from "../../../../../shared/src/slp/slp-live.js";
 
 /** Events the chat shows; leaves stay out, they would only clutter the room. */
-const SHOWN = new Set<SlpLiveEvent["kind"]>(["join", "tip", "order", "goal", "done", "strip"]);
+const SHOWN = new Set<SlpLiveEvent["kind"]>(["join", "tip", "order", "goal", "done", "strip", "say", "chat", "you"]);
 
 /** A chat line: the event plus a key that stays the same across polls. */
 export type SlpLiveLine = SlpLiveEvent & { key: string };
