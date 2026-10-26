@@ -593,8 +593,24 @@ for (const theme of ["dark", "light"]) {
       await expect(forge.locator('.cbt[data-id="enemy-0"] .gf-fprot')).toHaveText("Defeat ① first");
       await expect(forge.locator('.cbt[data-id="enemy-2"] .gf-fprot')).toHaveText("Back Row");
       await expect(forge.locator("[data-turn-label]")).toHaveText("Choose a target");
+      // Enemy names read in full, and a protection chip stays clear of the name below it.
+      const fit = await forge.locator(".side.enemies .cbt:not(.dead)").evaluateAll((cards) =>
+        cards.map((card) => {
+          const name = card.querySelector(".nm") as HTMLElement,
+            chip = card.querySelector(".gf-fprot"),
+            box = name.getBoundingClientRect();
+          return {
+            id: (card as HTMLElement).dataset.id,
+            full: name.scrollWidth <= name.clientWidth + 1 && name.scrollHeight <= name.clientHeight + 1,
+            clear: !chip || chip.getBoundingClientRect().bottom <= box.top + 1,
+          };
+        }),
+      );
+      for (const card of fit) expect(card, JSON.stringify(card)).toEqual({ ...card, full: true, clear: true });
       await page.screenshot({ path: testInfo.outputPath(`formation-aim-${theme}.png`) });
       await forge.locator('.cbt[data-id="enemy-1"]').click();
+      // Aiming is over: no card keeps the "Choose …" name it had as a target.
+      await expect(forge.locator('.cbt[aria-label^="Choose"]')).toHaveCount(0);
       await expect(forge.locator(`.cbt[data-id="${leader}"] .gf-fbadge`)).toContainText("①");
       await expect(forge.locator('.cbt[data-id="enemy-1"] .gf-ftargets')).toContainText("①");
       // 2. Kaveh is selected next: Hold.
@@ -675,6 +691,15 @@ for (const theme of ["dark", "light"]) {
       await expect(echo).toBeVisible();
       await expect(echo.locator(".nm")).toHaveText("Leyshell Warden · Echo");
       await expect(echo.locator(".gf-forder, .gf-enemy-tier")).toHaveCount(0);
+      // Its sheet says what an Echo is, under the Echo's own name, instead of listing the Warden's kit.
+      await echo.click();
+      const echoSheet = forge.locator("[data-foe-sheet]");
+      await expect(echoSheet).toContainText("Leyshell Warden · Echo");
+      await expect(echoSheet).toContainText("An Echo of Leyshell Warden");
+      await expect(echoSheet).not.toContainText("Lighthouse dawn");
+      await page.screenshot({ path: testInfo.outputPath(`formation-echo-${theme}.png`) });
+      await echoSheet.getByRole("button", { name: "Close" }).click();
+      await expect(echoSheet).toHaveCount(0);
       if (!testInfo.project.name.includes("mobile")) {
         // A large desktop keeps the same layout, scaled up.
         await page.setViewportSize({ width: 1920, height: 1080 });
@@ -736,14 +761,16 @@ for (const theme of ["dark", "light"]) {
       await forge.locator(`.cbt[data-id="${arden}"]`).click();
       const plan = turn.locator("[data-formation-plan]");
       await expect(plan.locator("li").first()).toContainText("Brings Arden forward");
-      await plan.locator("[data-formation-fight]").click();
+      await plan.locator("[data-formation-fight]").focus();
+      await page.keyboard.press("Enter");
       await expect(forge.locator(`.side.allies .row.front .cbt[data-id="${arden}"]`)).toHaveCount(1, {
         timeout: 20000,
       });
       await expect(forge.locator("[data-turn-label]")).toHaveText(/Plan your turn/, { timeout: 30000 });
-      // Next turn Arden fights too, and a keyboard alone can plan: button, then the target card.
+      // Next turn Arden fights too, and a keyboard alone can plan: focus comes back to the first action after
+      // Fight, then Enter opens it and Enter picks the target card.
       await expect(forge.locator(`.cbt[data-id="${arden}"]`)).toHaveClass(/gf-ready/);
-      await turn.locator('[data-act="normal"]').focus();
+      await expect(turn.locator('[data-act="normal"]')).toBeFocused();
       await page.keyboard.press("Enter");
       await expect(forge.locator('.cbt[data-id="enemy-0"]')).toBeFocused();
       await page.keyboard.press("Enter");

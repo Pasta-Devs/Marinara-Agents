@@ -31,6 +31,7 @@ export const forgeFormationCombatEnglish = {
   "combat.formation.cancel": "Cancel",
   "combat.formation.choose": "Choose {name}",
   "combat.formation.reinforcements": "Reinforcements",
+  "combat.formation.echo": "Echo",
   "combat.formation.echoInfo":
     "An Echo of {owner}: a weaker copy that holds a Front Row seat, strikes for free at the end of its team's turn and vanishes when {owner} falls.",
   "combat.formation.confirm": "Confirm",
