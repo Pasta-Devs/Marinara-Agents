@@ -7,9 +7,12 @@ const forgeFormationSettingsStyle = `
 .gf-combat-mode button{min-block-size:44px;white-space:normal}
 .gf-combat-mode ul{max-block-size:14rem;overflow:auto;padding-inline-start:20px;margin-block:8px}
 .gf-combat-mode li{margin-block:4px;overflow-wrap:anywhere}
-.gf-combat-mode-setup{display:flex;flex-wrap:wrap;gap:8px;border:0;padding:0;margin-block:12px}
+.gf-combat-mode-setup{min-inline-size:0;grid-column:1/-1;border:0;padding:0;margin-block:12px}
+.gf-combat-mode-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr));gap:12px}
+.gf-combat-mode-option{min-inline-size:0}
 .gf-combat-mode-setup label{display:flex;align-items:center;gap:8px;min-block-size:44px;padding:4px 8px;cursor:pointer}
 .gf-combat-mode-setup input{accent-color:var(--coral)}
+.gf-combat-mode-hint{margin:0;padding-inline:8px;max-inline-size:70ch;color:var(--steel-faint);font:max(12px,var(--t-xs))/1.5 var(--body);overflow-wrap:anywhere}
 `;
 
 export function forgeFormationSettings() {
@@ -18,9 +21,9 @@ export function forgeFormationSettings() {
 
 export function forgeFormationSetup(values = {}) {
   const selected = values.combatMode || values.combat?.mode || "classic";
-  const label = (mode) =>
-    `<label><input type="radio" name="forge-combat-mode" data-forge-combat-mode value="${mode}"${selected === mode ? " checked" : ""}>${forgeFormationEnglish[`combat.mode.${mode}`]}</label>`;
-  return `<style>${forgeFormationSettingsStyle}</style><fieldset class="gf-combat-mode-setup"><legend>${forgeFormationEnglish["combat.mode.title"]}</legend>${label("classic")}${label("formation")}</fieldset><p class="ob-help">${forgeFormationEnglish["combat.mode.formationHint"]}</p>`;
+  const option = (mode) =>
+    `<div class="gf-combat-mode-option"><label><input type="radio" name="forge-combat-mode" data-forge-combat-mode value="${mode}" aria-describedby="forge-combat-mode-${mode}-hint"${selected === mode ? " checked" : ""}>${forgeFormationEnglish[`combat.mode.${mode}`]}</label><p id="forge-combat-mode-${mode}-hint" class="gf-combat-mode-hint">${forgeFormationEnglish[`combat.mode.${mode}Hint`]}</p></div>`;
+  return `<style>${forgeFormationSettingsStyle}</style><fieldset class="gf-combat-mode-setup"><legend>${forgeFormationEnglish["combat.mode.title"]}</legend><div class="gf-combat-mode-options">${option("classic")}${option("formation")}</div></fieldset>`;
 }
 
 export function readForgeFormationSetup(root) {

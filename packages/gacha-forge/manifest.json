@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "capabilityApi": {
     "major": 1,
-    "minor": 384
+    "minor": 385
   },
   "builtAgainst": {
     "engineVersion": "2.5.1",
@@ -10,7 +10,7 @@
   },
   "id": "gacha-forge",
   "name": "Gacha Forge",
-  "version": "1.19.0",
+  "version": "1.21.0",
   "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
   "engine": {
     "min": "2.5.1",
@@ -299,8 +299,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "e633990c763bfd3731383f4ab2ac5e187b4771275ce5cb4ba161877dccb6a7b7",
-      "bytes": 1712357
+      "sha256": "11b1dbe5ba1b01ad3984dba85026720dd1a550c250c9e7cd134c30596a3ff45f",
+      "bytes": 1741872
     },
     {
       "path": "farm-asc.webp",
@@ -774,8 +774,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "58a5e74ce0d9c0dd07f4754d9e57768685ee3bf3a422ee9e99fa14f1c8c8ff43",
-      "bytes": 824294
+      "sha256": "e84035770f8d776f6a4cf002d3e3cd0aeca410e3fa9462a6c4c0e12e0038c9a0",
+      "bytes": 855552
     },
     {
       "path": "skill-aoe_damage-dark.webp",
@@ -1554,8 +1554,8 @@
     },
     {
       "path": "src/formation-settings-client.mjs",
-      "sha256": "4643636a538cfcf224b461c6150fc2d6770cac798447fbd6ef18e790bc9d9a6c",
-      "bytes": 7802
+      "sha256": "70dac0a5b945dc7d97e3da117d87d71282bc1159ecb795301ce2df8c94e940a6",
+      "bytes": 8301
     },
     {
       "path": "src/formation-settings-en.mjs",
@@ -1581,6 +1581,41 @@
       "path": "src/combat-voices-server.mjs",
       "sha256": "4b677f85aad0cf033c2f699573a76c5dcc2b8bb6d5c86dbbe658b7f7238e9635",
       "bytes": 18271
+    },
+    {
+      "path": "src/proactive-messages-en.mjs",
+      "sha256": "b3267859a9afd60574694848b90b41a3ab91a0f1d089f88f80a95a35c2e3e0e4",
+      "bytes": 885
+    },
+    {
+      "path": "src/proactive-messages-client.mjs",
+      "sha256": "ba4cef01a431147aa5310cbdb8d248a6793c8152b74e32bfc4bcf5a1e0f63b1e",
+      "bytes": 7552
+    },
+    {
+      "path": "src/proactive-messages-server.mjs",
+      "sha256": "2ac0079fc45e446b83c73d787a289b3aa7ec659a3083a3c2a10e4ca056b8f5c1",
+      "bytes": 14954
+    },
+    {
+      "path": "src/proactive-messages-adapter.mjs",
+      "sha256": "f508d2f3b013f8c0ffac15014c16c26a8787f8887cd5db31b25f46ec04838b01",
+      "bytes": 3158
+    },
+    {
+      "path": "src/background-download-client.mjs",
+      "sha256": "2ef9e96e3c243f6a5d4ed6b815e89cdfc7412ef3cb8983818dae061e406d9e26",
+      "bytes": 6420
+    },
+    {
+      "path": "src/background-unlocks-server.mjs",
+      "sha256": "af782ce72612652b2dc34af0a30e3a0397c785981b0b40fc9f8e45d5aabbe508",
+      "bytes": 11417
+    },
+    {
+      "path": "src/background-unlocks-client.mjs",
+      "sha256": "2c8a37d92eda1ef08389e5f0ae4af2b9a5d5d7f8d6843b31b3555099a4f646b2",
+      "bytes": 5215
     }
   ]
 }
