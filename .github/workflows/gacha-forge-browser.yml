@@ -29,7 +29,11 @@ permissions:
 
 jobs:
   gacha-forge-browser:
-    name: Gacha Forge feature browser
+    name: Gacha Forge feature browser (${{ matrix.suite }})
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [core, audio]
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -71,13 +75,18 @@ jobs:
       - name: Run installed Gacha Forge feature browser proofs
         env:
           MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+          GACHA_BROWSER_SUITE: ${{ matrix.suite }}
         shell: bash
         run: |
           shopt -s nullglob
           suites=()
-          for suite in tests/package-gacha-forge-seasonal-events.e2e.ts tests/package-gacha-forge-formation*.e2e.ts tests/package-gacha-forge-editors.e2e.ts tests/package-gacha-forge-proactive-messages.e2e.ts tests/package-gacha-forge-backgrounds.e2e.ts tests/package-gacha-forge-audio.e2e.ts; do
-            if [[ -f "$suite" ]]; then suites+=("$suite"); fi
-          done
+          if [[ "$GACHA_BROWSER_SUITE" == "audio" ]]; then
+            suites=(tests/package-gacha-forge-audio.e2e.ts)
+          else
+            for suite in tests/package-gacha-forge-seasonal-events.e2e.ts tests/package-gacha-forge-formation*.e2e.ts tests/package-gacha-forge-editors.e2e.ts tests/package-gacha-forge-proactive-messages.e2e.ts tests/package-gacha-forge-backgrounds.e2e.ts; do
+              if [[ -f "$suite" ]]; then suites+=("$suite"); fi
+            done
+          fi
           test "${#suites[@]}" -gt 0
           node scripts/run-package-browser-tests.mjs gacha-forge "${suites[@]}" --workers=2
 
@@ -85,7 +94,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: gacha-forge-browser-proof-${{ github.run_attempt }}
+          name: gacha-forge-browser-proof-${{ matrix.suite }}-${{ github.run_attempt }}
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
