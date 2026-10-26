@@ -1,5 +1,9 @@
 # Saucelings release notes
 
+## 0.21.3 — 2026-10-26
+
+- On the Home widgets, a meter that needs care now shows its amber fill, and the waiting badge on a care button has its colour back.
+
 ## 0.21.2 — 2026-10-26
 
 - The large Nook widget shows the caretaker's latest line under the stage, with the AI label when a model wrote it. The small widget carries the label too.

@@ -1206,6 +1206,10 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
 }
 
 .sl-widget {
+  /* The widgets sit on Home, outside .sl-shell, so they carry the colour tokens themselves. */
+  --sl-accent: #e05246;
+  --sl-amber: #f59e0b;
+  --sl-green: #10b981;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
