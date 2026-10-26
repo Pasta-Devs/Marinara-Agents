@@ -52,7 +52,7 @@ export function wireForgeFormationSettings(host) {
   }
   if (host._forgeFormationSettingsView?.section === section) return;
   disposeForgeFormationSettings(host);
-  const state = { pending: true, asking: false, error: "", conversion: null };
+  const state = { pending: true, asking: false, remaking: false, error: "", conversion: null, staleKits: 0 };
   let timer,
     disposed = false,
     sequence = 0;
@@ -98,7 +98,11 @@ export function wireForgeFormationSettings(host) {
     if (state.error) append("p", state.error).setAttribute("role", "alert");
     const job = state.conversion;
     if (job && ["preparing", "committing", "failed"].includes(job.status)) {
-      append("p", text(`combat.mode.${job.status}`)).setAttribute("role", job.status === "failed" ? "alert" : "status");
+      const remake = job.sourceMode === job.targetMode;
+      append(
+        "p",
+        text(remake && job.status === "failed" ? "combat.mode.remakeFailed" : `combat.mode.${job.status}`),
+      ).setAttribute("role", job.status === "failed" ? "alert" : "status");
       if (job.error === "reset-drain-timeout") append("p", text("combat.mode.drainTimeout"));
       const units = job.units || [];
       append(
@@ -120,6 +124,17 @@ export function wireForgeFormationSettings(host) {
       if (job.status === "failed")
         button("combat.mode.retry", () => request("/combat-mode/retry", { jobId: job.id, confirmed: true }));
       button("combat.mode.cancel", () => request("/combat-mode/cancel", { jobId: job.id }));
+    } else if (state.remaking) {
+      append("h4", text("combat.mode.remakeTitle"));
+      append("p", text("combat.mode.remakeWarning"));
+      button("combat.mode.keep", () => {
+        state.remaking = false;
+        render();
+      }).dataset.forgeCombatKeep = "";
+      button("combat.mode.confirm", () => {
+        state.remaking = false;
+        void request("/combat-mode/switch", { targetMode: "formation", confirmed: true });
+      }).dataset.forgeCombatRemakeConfirm = "";
     } else if (state.asking) {
       append("h4", text("combat.mode.confirmTitle"));
       append("p", text(mode() === "classic" ? "combat.mode.warning" : "combat.mode.classicWarning"));
@@ -137,6 +152,15 @@ export function wireForgeFormationSettings(host) {
         });
       }).dataset.forgeCombatConfirm = "";
     } else {
+      if (mode() === "formation" && state.staleKits > 0) {
+        append("h4", text("combat.mode.remakeTitle"));
+        append("p", text("combat.mode.remakeHint").replace("{count}", String(state.staleKits)));
+        button("combat.mode.remake", () => {
+          state.remaking = true;
+          state.error = "";
+          render();
+        }).dataset.forgeCombatRemake = "";
+      }
       button(mode() === "classic" ? "combat.mode.switchFormation" : "combat.mode.switchClassic", () => {
         state.asking = true;
         state.error = "";
@@ -169,6 +193,7 @@ export function wireForgeFormationSettings(host) {
     else {
       state.error = "";
       state.conversion = response.conversion;
+      if (Number.isInteger(response.staleKits)) state.staleKits = response.staleKits;
       if (response.combat) host._run = { ...host._run, combat: response.combat };
     }
     render();
