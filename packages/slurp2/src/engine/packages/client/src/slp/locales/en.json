@@ -6690,6 +6690,7 @@
   "ui.slurp.live.privateExtend": "Stay {{minutes}} more minutes for {{amount}} <coin/>",
   "ui.slurp.live.privateFailed": "The private show did not start. Try again.",
   "ui.slurp.live.goLive": "Go live",
+  "ui.slurp.live.goLiveLine": "Stream a cam show as your Creator or one you play.",
   "ui.slurp.live.goLiveTitle": "Go live",
   "ui.slurp.live.goLiveAs": "Host as",
   "ui.slurp.live.goLiveOwn": "{{name}} (you)",

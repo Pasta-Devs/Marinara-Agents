@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { Radio } from "lucide-react";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { useSlurpUIStore } from "../../base/state/slp-package-store";
 import { SlpButton, SlpChip, SlpPrimaryButton } from "../../modules/chrome/SlpButton";
 import { SlpSheet } from "../../modules/chrome/SlpSheet";
+import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js";
+import { useSlurpSettings } from "../settings/slp-settings-contract";
 import { useSlpLiveHost } from "./slp-live-hooks";
 
 const LENGTHS = [15, 30, 60];
@@ -15,7 +17,16 @@ export type SlpLiveHostChoice = { id: string; name: string; avatarUrl: string | 
  * Go live (LIVE-V3-PLAN.md "The player hosts"). Without `hosts` the player hosts as their persona's own
  * Creator; with `hosts` (Stir) they pick their own Creator or a Creator to play.
  */
-export function SlpLiveGoLive({ hosts, className }: { hosts?: readonly SlpLiveHostChoice[]; className?: string }) {
+export function SlpLiveGoLive({
+  hosts,
+  className,
+  trigger,
+}: {
+  hosts?: readonly SlpLiveHostChoice[];
+  className?: string;
+  /** Draws the opener (the Stir tile); the default is a small button. */
+  trigger?: (open: () => void) => ReactNode;
+}) {
   const { t } = useUiTranslation();
   const [open, setOpen] = useState(false);
   const [pick, setPick] = useState<string | null>(null);
@@ -25,7 +36,8 @@ export function SlpLiveGoLive({ hosts, className }: { hosts?: readonly SlpLiveHo
   const navigation = useSlurpUIStore((state) => state.navigation);
   const setNavigation = useSlurpUIStore((state) => state.setNavigation);
   const choice = hosts?.find((entry) => entry.id === pick) ?? hosts?.find((entry) => entry.own) ?? null;
-  if (!personaId) return null;
+  const settings = useSlurpSettings().data;
+  if (!personaId || !settings || !slpExtensionOn(settings, "live")) return null;
   const go = () =>
     host.mutate(
       { personaId, minutes, ...(choice && !choice.own ? { creatorId: choice.id } : {}) },
@@ -38,10 +50,14 @@ export function SlpLiveGoLive({ hosts, className }: { hosts?: readonly SlpLiveHo
     );
   return (
     <>
-      <SlpButton variant="quiet" onClick={() => setOpen(true)} className={className ?? "min-h-10 px-3.5 text-xs"}>
-        <Radio size={14} aria-hidden="true" />
-        {t("ui.slurp.live.goLive")}
-      </SlpButton>
+      {trigger ? (
+        trigger(() => setOpen(true))
+      ) : (
+        <SlpButton variant="quiet" onClick={() => setOpen(true)} className={className ?? "min-h-10 px-3.5 text-xs"}>
+          <Radio size={14} aria-hidden="true" />
+          {t("ui.slurp.live.goLive")}
+        </SlpButton>
+      )}
       <SlpSheet
         open={open}
         onClose={() => setOpen(false)}
