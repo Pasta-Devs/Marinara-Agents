@@ -1258,9 +1258,12 @@ test("A deferred response cannot attach a previous same-art banner rotation", as
     game._renderBrowser();
   });
   await expect.poll(() => releases.length).toBe(2);
+  const newClip = page.waitForRequest((request) => request.url().endsWith(`${"c".repeat(64)}.mp4`));
   releases[1]();
   const video = await decodedBannerVideo(forge);
-  await expect(video).toHaveAttribute("src", new RegExp(`${"c".repeat(64)}\\.mp4$`));
+  // The clip plays from an authenticated fetch, so the element holds a blob URL of the new rotation's file.
+  await newClip;
+  await expect(video).toHaveAttribute("src", /^blob:/u);
   expect(state.browserErrors).toEqual([]);
 });
 

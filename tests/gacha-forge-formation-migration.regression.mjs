@@ -498,3 +498,46 @@ test("optional inactive-event cleanup runs before confirmed admission, never bef
   assert.equal((await f.service.status({ runId })).mode, "formation");
   f.dispose();
 });
+
+test("a failed character keeps its error code, and starting again after a cancel reuses ready kits", async () => {
+  const calls = new Map();
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const f = fixture({
+    count: 3,
+    generate: async ({ unit, signal }) => {
+      calls.set(unit.name, (calls.get(unit.name) || 0) + 1);
+      if (unit.name === "Hero 1" && calls.get(unit.name) === 1) throw new Error("generation-output-capacity");
+      if (unit.name === "Hero 2" && calls.get(unit.name) === 1) {
+        await gate;
+        signal.throwIfAborted();
+      }
+      return kit;
+    },
+  });
+  const started = await f.service.start({ runId, targetMode: "formation", confirmed: true });
+  let units = [];
+  for (let attempt = 0; attempt < 100; attempt++) {
+    units = (await f.service.status({ runId })).conversion.units;
+    if (units.find((unit) => unit.name === "Hero 0").status === "ready" && units[1].status === "failed") break;
+    await tick();
+  }
+  assert.deepEqual(
+    units.map(({ status, error }) => [status, error]),
+    [
+      ["ready", ""],
+      ["failed", "generation-output-capacity"],
+      ["generating", ""],
+    ],
+  );
+  assert.equal((await f.service.cancel({ runId, jobId: started.conversion.id })).conversion.status, "cancelled");
+  release();
+  await f.service.settled(runId);
+  await f.service.start({ runId, targetMode: "formation", confirmed: true });
+  await f.service.settled(runId);
+  assert.equal((await f.service.status({ runId })).conversion.status, "committed");
+  assert.deepEqual(Object.fromEntries(calls), { "Hero 0": 1, "Hero 1": 2, "Hero 2": 2 });
+  f.dispose();
+});

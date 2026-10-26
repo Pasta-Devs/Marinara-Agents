@@ -30,6 +30,14 @@ export function readForgeFormationSetup(root) {
   return root?.querySelector("[data-forge-combat-mode]:checked")?.value === "formation" ? "formation" : "classic";
 }
 
+/** Why a character's kit is missing, in words the player can act on. */
+export function forgeFormationReason(error) {
+  if (error === "generation-output-capacity") return "combat.mode.reason.capacity";
+  if (error === "invalid-kit" || error === "invalid-shape") return "combat.mode.reason.invalid";
+  if (error === "truncated") return "combat.mode.reason.truncated";
+  return "combat.mode.reason.failed";
+}
+
 export function disposeForgeFormationSettings(host) {
   host._forgeFormationSettingsView?.dispose();
   host._forgeFormationSettingsView = null;
@@ -104,6 +112,8 @@ export function wireForgeFormationSettings(host) {
         const row = document.createElement("li");
         row.textContent = `${unit.name}: ${text(`combat.mode.unit.${unit.status}`) || text("combat.mode.unit.failed")}`;
         if (unit.error === "generation-interrupted") row.textContent += ` (${text("combat.mode.interrupted")})`;
+        else if (unit.status === "failed" && unit.error)
+          row.textContent += ` (${text(forgeFormationReason(unit.error))})`;
         list.append(row);
       }
       section.append(list);

@@ -28,6 +28,14 @@ const incoming = (unitId = "world:unit:arden", id = "incoming-1", unitName = "Ar
   said: { id, who: "unit", text: "How has your day been?", proactive: true },
 });
 
+const deep = (item) => [item, ...(item?.children || []).flatMap(deep)];
+const noticeText = (notice) =>
+  deep(notice)
+    .filter((item) => item.tag === "p")
+    .map((item) => item.textContent)
+    .join(" ");
+const noticeButtons = (notice) => deep(notice).filter((item) => item.tag === "button");
+
 function fixture({ count = 2, view = "browser", field = false } = {}) {
   let clock = 0;
   let serial = 0;
@@ -42,6 +50,7 @@ function fixture({ count = 2, view = "browser", field = false } = {}) {
       this.dataset = {};
       this.isConnected = false;
       this.textContent = "";
+      this.style = {};
     }
     append(...items) {
       for (const item of items) {
@@ -65,6 +74,8 @@ function fixture({ count = 2, view = "browser", field = false } = {}) {
   }
   const stage = new Element("stage");
   stage.isConnected = true;
+  // The mocked view is always the Home screen.
+  stage.querySelector = (selector) => (selector === ".hm-screen" ? {} : null);
   const input = field ? new Element("input") : null;
   if (input) {
     input.value = "0";
@@ -75,7 +86,7 @@ function fixture({ count = 2, view = "browser", field = false } = {}) {
   const root = {
     activeElement: null,
     querySelector(selector) {
-      if (selector === ".gf-stage") return stage;
+      if (selector === ".gf-stage > .gf-view") return stage;
       if (selector === "[data-chat-log]") return log;
       if (selector === '[data-field="story.dailyUnitMessages"] input') return input;
       return null;
@@ -333,11 +344,13 @@ test("a second pending delivery updates the notice name and Read action together
   f.transport(async () => deliveries.shift());
   f.wire();
   await f.advance(60_000);
-  assert.match(f.notice().children.find((item) => item.tag === "p").textContent, /Arden/u);
+  assert.match(noticeText(f.notice()), /Arden/u);
   await f.advance(60_000);
   const notice = f.notice();
-  assert.match(notice.children.find((item) => item.tag === "p").textContent, /Vale/u);
-  notice.children.find((item) => item.tag === "button" && item.textContent === "Read message").click();
+  assert.match(noticeText(notice), /Vale/u);
+  noticeButtons(notice)
+    .find((item) => item.textContent === "Read message")
+    .click();
   assert.deepEqual(f.navigation, ["world:unit:vale"]);
   assert.equal(f.notice(), undefined);
   f.dispose();
@@ -351,7 +364,7 @@ test("explicitly reading a same-unit notification leaves the archive and preserv
   f.wire();
   await f.advance(60_000);
   assert.equal(f.host._chat.messages.length, 0, "passive delivery must not replace the archive");
-  const read = f.notice().children.find((item) => item.tag === "button" && item.textContent === "Read message");
+  const read = noticeButtons(f.notice()).find((item) => item.textContent === "Read message");
   assert.ok(read, "the player can explicitly read the incoming message without losing their draft");
   read.click();
   assert.equal(f.host._chatArchive, null);
@@ -396,8 +409,8 @@ test("a failed paid attempt offers a dismissible explanation without a misleadin
   f.wire();
   await f.advance(60_000);
   const notice = f.notice();
-  assert.match(notice.children.find((item) => item.tag === "p").textContent, /could not be prepared/u);
-  const buttons = notice.children.filter((item) => item.tag === "button");
+  assert.match(noticeText(notice), /could not be prepared/u);
+  const buttons = noticeButtons(notice);
   assert.deepEqual(
     buttons.map((item) => item.textContent),
     ["Dismiss"],
@@ -421,11 +434,11 @@ test("a proactive capacity notice explains settings and preserves the draft with
   f.wire();
   await f.advance(60_000);
   const notice = f.notice();
-  const text = notice.children.find((item) => item.tag === "p").textContent;
+  const text = noticeText(notice);
   for (const expected of ["8192", "7000", "4096", "context", "Max Output Tokens Override"])
     assert.ok(text.includes(expected), expected);
   assert.deepEqual(
-    notice.children.filter((item) => item.tag === "button").map((item) => item.textContent),
+    noticeButtons(notice).map((item) => item.textContent),
     ["Dismiss"],
   );
   assert.equal(f.host._chatDraft, "Keep my draft.");
@@ -498,4 +511,37 @@ test("story and audio saves share one queue without injecting audio into a story
   await stale;
   assert.equal(calls.length, 3, "a queued story update must not follow the player into another world");
   assert.equal(host._run.story.dailyUnitMessages, 0);
+});
+
+test("a letter waits for Home, then shows its channel, sender and opening lines", async () => {
+  const f = fixture();
+  f.host._chat = null;
+  f.host._run.chatChannel = { name: "Letters", blurb: "An older saved channel record." };
+  let screen = "summon";
+  f.host._state = () => screen;
+  f.transport(async () => incoming("world:unit:arden", "incoming-1", "Arden"));
+  f.wire();
+  await f.advance(60_000);
+  assert.equal(f.notice(), undefined, "no card over Banners, a fight or a story");
+  screen = "hud";
+  f.wire();
+  const notice = f.notice();
+  assert.ok(notice, "the pending letter appears once the player is Home");
+  const text = noticeText(notice);
+  assert.match(text, /^Letters /u);
+  assert.match(text, /Arden sent you a message\. How has your day been\?$/u);
+  assert.deepEqual(
+    noticeButtons(notice).map((item) => [item.textContent, item.className || ""]),
+    [
+      ["Dismiss", ""],
+      ["Read message", "go"],
+    ],
+  );
+  screen = "summon";
+  f.wire();
+  assert.equal(f.notice(), undefined, "leaving Home hides the card but keeps the letter");
+  screen = "hud";
+  f.wire();
+  assert.equal(f.notice().style.animation, "none", "the same letter does not replay its arrival");
+  f.dispose();
 });

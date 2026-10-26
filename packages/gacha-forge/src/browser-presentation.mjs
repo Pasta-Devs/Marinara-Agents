@@ -47,10 +47,14 @@ const forgeBrowserLayout = `
   font-size: 0.9rem; box-shadow: none; clip-path: none;
 }
 .vn-top:has(.gf-mute-chapter) { padding-right: 88px; }
+/* Matches the fullscreen button beside it. */
 .gf-stage > .gf-mute, .gf-rot > .gf-mute {
   position: absolute; z-index: 9; top: 0.55rem; right: 3rem;
-  width: 1.9rem; height: 1.9rem; background: var(--ink); color: var(--text);
+  width: 1.9rem; height: 1.9rem; background: color-mix(in srgb, var(--ink) 66%, transparent); color: var(--text);
   border: 1px solid var(--steel-dark); clip-path: none;
+}
+.gf-stage > .gf-mute:hover, .gf-rot > .gf-mute:hover {
+  border-color: var(--coral); color: color-mix(in srgb, var(--coral) 78%, #FFFFFF);
 }
 .gf-audio-status {
   position: absolute; z-index: 8; inset: 3.5rem 0.75rem auto auto; max-width: min(36ch, calc(100% - 1.5rem)); padding: 0.5rem 0.75rem;
@@ -72,6 +76,13 @@ const forgeBrowserLayout = `
 }
 .u-fav { display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
 .cp-fav svg, .cp-tabs > .sv-q svg, .u-fav svg { display: block; flex: none; margin: 0; }
+/* Help marks sit on their title's centre line; an icon-only button's baseline is its bottom edge. */
+.gf-arena .gf-guide-q.sv-q {
+  appearance: none; align-self: center; align-items: center; justify-content: center; padding: 0; line-height: 1;
+}
+.gf-arena .gf-guide-q.sv-q svg { display: block; flex: none; margin: 0; }
+/* Letters use the whole screen below the stats bar. */
+.hm-pk.chat { width: 100%; height: 100%; clip-path: none; border-radius: 0; border-width: 2px 0 0; }
 .u-type {
   position: absolute; top: calc(var(--f) * 0.3); right: calc(var(--f) * 0.4); z-index: 1;
   display: grid; place-items: center; width: 1em; height: 1em;
