@@ -10,12 +10,23 @@ import { forgeAudioEnglish, forgeAudioFields } from "../packages/gacha-forge/src
 import {
   ForgeAudioController,
   forgeExplicitVoice,
+  forgeVoicePool,
+  forgeStableVoice,
+  forgeSpeakerVoice,
+  forgeConnectionVoices,
   forgeAudioCue,
   forgeMusicContextKey,
   loadForgeAudioConnections,
   saveForgeAudioSources,
 } from "../packages/gacha-forge/src/audio-client.mjs";
 import { createForgeVoiceLine, forgeVoiceCharacter } from "../packages/gacha-forge/src/audio-story.mjs";
+import {
+  forgeChoiceMessages,
+  forgeNormalizeChoiceBeat,
+  forgeRememberSpeakerGenders,
+  forgeRunSpeakerGenders,
+} from "../packages/gacha-forge/src/player-choices-server.mjs";
+import { forgeChoiceLabel } from "../packages/gacha-forge/src/player-choice-text.mjs";
 
 const before = {
   forgeSoundtrackContextKey: globalThis.forgeSoundtrackContextKey,
@@ -26,7 +37,9 @@ const before = {
   Ze: globalThis.Ze,
   fetch: globalThis.fetch,
   Option: globalThis.Option,
+  forgeChoiceLabel: globalThis.forgeChoiceLabel,
 };
+globalThis.forgeChoiceLabel = forgeChoiceLabel;
 globalThis.forgeSoundtrackContextKey = forgeSoundtrackContextKey;
 globalThis.normalizeForgeAudio = normalizeForgeAudio;
 globalThis.normalizeForgeMusicMood = normalizeForgeMusicMood;
@@ -54,6 +67,16 @@ const musicBriefResponse = () => ({
   ok: true,
   json: async () => ({ ok: true, prompt: "Original instrumental fantasy theme with woodwinds and harp." }),
 });
+// Marinara Engine packages/client/src/lib/tts-dialogue.ts (staging): stableTTSIndex over normalizeTTSCharacterName.
+const engineStableIndex = (name, length) => {
+  const seed = name.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim() || name;
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash << 5) - hash + seed.charCodeAt(index);
+    hash |= 0;
+  }
+  return Math.abs(hash) % length;
+};
 let cases = 0;
 async function test(name, callback) {
   await callback();
@@ -147,6 +170,220 @@ try {
     assert.equal(value.autoplayPauseSeconds, 30);
     assert.equal("credentials" in value, false);
     assert.equal(normalizeForgeAudio({ musicVolume: NaN }).musicVolume, 0.5);
+    assert.equal(defaults.otherVoices, false, "Voice other characters is opt-in");
+    assert.equal(normalizeForgeAudio({ otherVoices: true }).otherVoices, true);
+    assert.equal(normalizeForgeAudio({ otherVoices: "true" }).otherVoices, false);
+    assert.equal(normalizeForgeAudio({ ...normalizeForgeAudio({ otherVoices: true }), muted: true }).otherVoices, true);
+    const fields = forgeAudioFields().map((field) => field.id);
+    assert.equal(fields[fields.indexOf("audio.tts") + 1], "audio.otherVoices", "the toggle sits next to dialogue");
+    const toggle = forgeAudioFields().find((field) => field.id === "audio.otherVoices");
+    assert.equal(toggle.label, "Voice other characters");
+    assert.equal(toggle.default, false);
+    assert.match(toggle.hint, /Male NPC defaults and Female NPC defaults/u);
+    assert.match(
+      toggle.hint,
+      /turn on Use default voices for random NPCs under Random NPC Voices in Connections → Text to Speech/u,
+      "the Engine shows the lists only while its switch is on",
+    );
+    assert.doesNotMatch(forgeAudioEnglish["audio.settings.combatVoicesHint"], /Formation combat only/u);
+  });
+
+  await test("other voices come from the Engine NPC pool by gender, stay stable per name, and never beat explicit", async () => {
+    const pools = {
+      enabled: true,
+      connectionId: "speech",
+      npcDefaultMaleVoices: ["legacy-only"],
+      connectionProfiles: {
+        speech: {
+          voiceAssignments: [{ characterId: "card", voice: "assigned" }],
+          npcDefaultMaleVoices: ["m1", "m2", "m3"],
+          npcDefaultFemaleVoices: ["f1", "f2"],
+        },
+      },
+    };
+    assert.deepEqual(forgeVoicePool(pools, "male"), ["m1", "m2", "m3"], "the selected connection's pool is used");
+    assert.deepEqual(forgeVoicePool(pools, "female"), ["f1", "f2"]);
+    assert.deepEqual(forgeVoicePool(pools, ""), ["f1", "f2", "m1", "m2", "m3"], "unknown gender uses both lists");
+    const one = { ...pools, connectionProfiles: { speech: { npcDefaultMaleVoices: ["m1"] } } };
+    assert.deepEqual(forgeVoicePool(one, "female"), ["m1"], "a missing gender list borrows the other one");
+    const same = { enabled: true, npcDefaultMaleVoices: ["a", "b"], npcDefaultFemaleVoices: ["b", "a"] };
+    assert.deepEqual(forgeVoicePool(same, "male"), ["b", "a"], "identical lists are one unpartitioned pool");
+    assert.equal(forgeVoicePool({ enabled: false, npcDefaultMaleVoices: ["m"] }, "male"), null, "speech off");
+    assert.deepEqual(forgeVoicePool({ enabled: true }, "male"), []);
+    for (const name of ["Old Station Keeper", "Bryn", "The_Ferry-Man", "月"]) {
+      const pool = forgeVoicePool(pools, "male");
+      assert.equal(forgeStableVoice(pool, name), pool[engineStableIndex(name, pool.length)], `Engine parity: ${name}`);
+      assert.equal(forgeStableVoice(pool, name), forgeStableVoice(pool, `  ${name.toUpperCase()} `));
+    }
+    assert.equal(forgeStableVoice([], "Bryn"), null);
+    let lists = 0;
+    const listVoices = async (config) => {
+      lists += 1;
+      assert.equal(config.connectionId, "speech");
+      return ["v1", "v2", "v3", "v4"];
+    };
+    const keeper = { name: "Old Station Keeper", gender: "male" };
+    assert.equal(
+      await forgeSpeakerVoice(pools, keeper, true, listVoices),
+      forgeStableVoice(["m1", "m2", "m3"], keeper.name),
+    );
+    assert.equal(lists, 0, "a filled pool never lists provider voices");
+    assert.equal(await forgeSpeakerVoice(pools, { ...keeper, characterId: "card" }, true, listVoices), "assigned");
+    assert.equal(await forgeSpeakerVoice(pools, keeper, false, listVoices), null, "the toggle is off");
+    assert.equal(await forgeSpeakerVoice(pools, { ...keeper, persona: true }, true, listVoices), null, "persona");
+    assert.equal(await forgeSpeakerVoice(pools, { name: " " }, true, listVoices), null);
+    const empty = { enabled: true, connectionId: "speech", connectionProfiles: { speech: {} } };
+    const fallback = await forgeSpeakerVoice(empty, keeper, true, listVoices);
+    assert.equal(fallback, forgeStableVoice(["v1", "v2", "v3", "v4"], keeper.name), "empty pools use any voice");
+    assert.equal(await forgeSpeakerVoice(empty, keeper, true, listVoices), fallback, "and stay stable per name");
+    assert.equal(lists, 2);
+    assert.equal(await forgeSpeakerVoice({ enabled: false }, keeper, true, listVoices), null);
+    assert.equal(lists, 2, "disabled speech never lists voices");
+    const requests = [];
+    globalThis.Ze = async (path) => {
+      requests.push(path);
+      return { ok: true, json: async () => ({ voices: ["zeta", "alpha", "zeta", "", 3] }) };
+    };
+    assert.deepEqual(await forgeConnectionVoices({ connectionId: "speech/a" }), ["alpha", "zeta"]);
+    assert.deepEqual(await forgeConnectionVoices({ connectionId: "speech/a" }), ["alpha", "zeta"]);
+    assert.deepEqual(requests, ["/api/tts/voices?connectionId=speech%2Fa"], "one list per connection");
+  });
+
+  await test("the connection voice list is keyed by source and a failed read rejects without being kept", async () => {
+    const requests = [];
+    let source = "openai";
+    let fail = false;
+    globalThis.Ze = async (path) => {
+      requests.push(path);
+      return fail
+        ? { ok: false, status: 502, json: async () => ({}) }
+        : { ok: true, json: async () => ({ voices: [source === "openai" ? "alloy" : "rachel"] }) };
+    };
+    const legacy = { connectionId: "", source: "openai", baseUrl: "https://api.openai.com/v1" };
+    assert.deepEqual(await forgeConnectionVoices(legacy), ["alloy"]);
+    source = "elevenlabs";
+    const switched = { ...legacy, source, baseUrl: "https://api.elevenlabs.io/v1" };
+    assert.deepEqual(await forgeConnectionVoices(switched), ["rachel"], "a legacy source switch lists its own voices");
+    assert.deepEqual(await forgeConnectionVoices(legacy), ["alloy"], "each source keeps its own list");
+    assert.equal(requests.length, 2);
+    fail = true;
+    const other = { connectionId: "speech/b" };
+    await assert.rejects(forgeConnectionVoices(other), "an error is not an empty list");
+    fail = false;
+    source = "openai";
+    assert.deepEqual(await forgeConnectionVoices(other), ["alloy"], "a failed read is retried");
+    assert.equal(requests.length, 4);
+  });
+
+  await test("an NPC keeps the first known gender, and so one voice, across beats of the run", async () => {
+    const pools = { enabled: true, npcDefaultMaleVoices: ["m1", "m2", "m3"], npcDefaultFemaleVoices: ["f1", "f2"] };
+    let session = { progress: {} };
+    let writes = 0;
+    const read = async () => ({ data: structuredClone(session) });
+    const update = async (change) => {
+      writes += 1;
+      const next = structuredClone(session);
+      change(next);
+      session = next;
+      return next;
+    };
+    const voiceOf = (segment) => forgeSpeakerVoice(pools, { name: segment.speaker, gender: segment.gender }, true);
+    const first = {
+      segments: [
+        { speaker: "Gareth", text: "Halt.", gender: "male" },
+        { speaker: "", text: "Rain." },
+      ],
+    };
+    await forgeRememberSpeakerGenders(read, update, first);
+    assert.deepEqual(session.speakerGenders, { gareth: "male" }, "saved by normalized name when a beat is saved");
+    const voice = await voiceOf(first.segments[0]);
+    assert.equal(voice, forgeStableVoice(["m1", "m2", "m3"], "Gareth"));
+    const omitted = {
+      segments: [{ speaker: "  GARETH ", text: "Again." }],
+      choices: [{ options: [{ segments: [{ speaker: "Gareth", text: "Branch." }] }] }],
+    };
+    await forgeRememberSpeakerGenders(read, update, omitted);
+    assert.equal(writes, 1, "nothing new, nothing written");
+    assert.equal(await voiceOf(omitted.segments[0]), voice, "a later beat that leaves him out keeps his voice");
+    assert.equal(omitted.choices[0].options[0].segments[0].gender, "male", "choice branches too");
+    const contradicted = { segments: [{ speaker: "Gareth", text: "Hm.", gender: "female" }] };
+    await forgeRememberSpeakerGenders(read, update, contradicted);
+    assert.equal(contradicted.segments[0].gender, "male", "the first value wins");
+    const cached = { segments: [{ speaker: "Gareth", text: "Old beat from before the toggle." }] };
+    await forgeRememberSpeakerGenders(read, null, cached);
+    assert.equal(await voiceOf(cached.segments[0]), voice, "a stored beat read back uses the run's gender");
+    assert.equal(writes, 1, "reading a stored beat never writes");
+    const many = Object.fromEntries(Array.from({ length: 205 }, (_, index) => [`npc ${index}`, "female"]));
+    assert.equal(Object.keys(forgeRunSpeakerGenders(many, first)).length, 200, "the run map is capped");
+    assert.deepEqual(forgeRunSpeakerGenders({ x: "robot", "": "male" }, {}), {}, "only male or female is kept");
+    const server = await readFile(new URL("../packages/gacha-forge/server.mjs", import.meta.url), "utf8");
+    assert.match(server, /L=async Y=>\(await forgeRememberSpeakerGenders\(\(\)=>pe\(p\),null,Y\.data\),/u);
+    assert.match(server, /await forgeRememberSpeakerGenders\(\(\)=>pe\(p\),forgeSave=>xn\(p,forgeSave\),ge\.value\);/u);
+  });
+
+  await test("the beat writer names NPC voice genders in the same call and they are saved on each segment", () => {
+    const system = [
+      { role: "system", content: "Narrate." },
+      { role: "user", content: "Beat." },
+    ];
+    const voiced = forgeChoiceMessages(system, { enabled: false, audio: { tts: true, otherVoices: true } });
+    assert.equal(voiced.length, 2, "no extra message or request");
+    assert.match(voiced[0].content, /SPEAKER VOICES/u);
+    assert.match(voiced[0].content, /"voices":\{"The Old Station Keeper":"male"\}/u);
+    assert.equal(system[0].content, "Narrate.", "the caller's messages are not mutated");
+    for (const audio of [undefined, { tts: true }, { otherVoices: true }])
+      assert.doesNotMatch(
+        forgeChoiceMessages(system, { enabled: true, terminal: false, audio })[0].content,
+        /SPEAKER/u,
+      );
+    const normalizeBeat = (raw) => ({
+      musicMood: "happy",
+      places: [],
+      segments: raw.segments.map((segment) => ({ speaker: segment.speaker, text: segment.text })),
+    });
+    const raw = {
+      voices: { "the old  station keeper": "Male", Mira: "female", Ghost: "other", "": "male" },
+      segments: [
+        { speaker: "The Old Station Keeper", text: "Tickets." },
+        { speaker: "Mira", text: "Here." },
+        { speaker: "Ghost", text: "Boo." },
+        { speaker: "", text: "Steam rises." },
+      ],
+      choices: [
+        {
+          kind: "small",
+          at: 0,
+          options: [
+            {
+              text: "Pay.",
+              selection: { kind: "action", text: "You pay." },
+              segments: [{ speaker: "Mira", text: "Thanks." }],
+            },
+            {
+              text: "Refuse.",
+              selection: { kind: "action", text: "You refuse." },
+              segments: [{ speaker: "The Old Station Keeper", text: "Then walk." }],
+            },
+          ],
+        },
+      ],
+    };
+    const beat = forgeNormalizeChoiceBeat(raw, {}, normalizeBeat, { enabled: true, terminal: false });
+    assert.deepEqual(
+      beat.segments.map((segment) => segment.gender),
+      ["male", "female", undefined, undefined],
+    );
+    assert.deepEqual(
+      beat.choices[0].options.map((option) => option.segments[0].gender),
+      ["female", "male"],
+    );
+    const plain = forgeNormalizeChoiceBeat({ segments: raw.segments }, {}, normalizeBeat, { enabled: false });
+    assert(
+      plain.segments.every((segment) => !("gender" in segment)),
+      "no map, no gender",
+    );
+    const odd = forgeNormalizeChoiceBeat({ ...raw, voices: ["male"] }, {}, normalizeBeat, { enabled: false });
+    assert(odd.segments.every((segment) => !("gender" in segment)));
   });
 
   await test("explicit voices use the chosen profile and exact ID, never name or default fallback", () => {
@@ -1050,6 +1287,64 @@ try {
     reopened.controller.dispose();
   });
 
+  await test("Voice other characters reads NPCs and voiceless units; explicit voices and the persona keep theirs", async () => {
+    const config = {
+      enabled: true,
+      connectionId: "speech-source",
+      connectionProfiles: {
+        "speech-source": {
+          voiceAssignments: [{ characterId: "engine-char", voice: "voice-a" }],
+          npcDefaultMaleVoices: ["m1", "m2"],
+          npcDefaultFemaleVoices: ["f1", "f2", "f3"],
+        },
+      },
+    };
+    let reads = 0;
+    globalThis.Ze = async (path) => {
+      assert.equal(path, "/api/tts/config", "filled pools never list provider voices");
+      reads += 1;
+      return { ok: true, json: async () => structuredClone(config) };
+    };
+    const npc = { speaker: "The Old Station Keeper", text: "Tickets, please.", gender: "male" };
+    const off = fixture();
+    off.controller.configure({ tts: true });
+    await off.controller.speak(npc, null, new AbortController().signal);
+    await off.controller.speak({ speaker: "Bryn", text: "Hi." }, { name: "Bryn", characterId: null }, undefined);
+    assert.equal(reads, 0, "off keeps 1.24.5 behaviour: no config read for unassigned speakers");
+    assert.equal(off.voices.length, 0);
+    off.controller.dispose();
+    const { controller, voices } = fixture();
+    controller.configure({ tts: true, otherVoices: true });
+    await controller.speak(npc, null, new AbortController().signal);
+    await controller.speak(
+      { speaker: "Bryn", text: "A unit without a card.", gender: "male" },
+      { name: "Bryn", characterId: null, gender: "female", prota: false },
+      new AbortController().signal,
+    );
+    await controller.speak({ speaker: "Arden", text: "assigned line" }, { characterId: "engine-char" }, undefined);
+    await controller.speak(
+      { speaker: "Mari", text: "persona line" },
+      { name: "Mari", characterId: "persona", prota: true },
+    );
+    await controller.speak({ speaker: "Mari", text: "persona thought", thought: true }, null);
+    assert.equal(voices.length, 3, "NPC, voiceless unit and explicit character speak; the voiceless persona does not");
+    const [keeper, bryn, arden] = voices.map((call) => call[0][0]);
+    assert.equal(keeper.voice, ["m1", "m2"][engineStableIndex(npc.speaker, 2)]);
+    assert.equal("characterId" in keeper, false);
+    assert.match(keeper.cacheKey, /^gacha-voice-v1:world-/u);
+    assert.equal(
+      bryn.voice,
+      ["f1", "f2", "f3"][engineStableIndex("Bryn", 3)],
+      "the unit's own sex beats the beat hint",
+    );
+    assert.equal(arden.voice, "voice-a", "explicit assignments always win");
+    assert.equal(arden.characterId, "engine-char");
+    assert.equal(voices[0][2].audioConnectionId, "speech-source");
+    await controller.speak({ ...npc, text: "Again." }, null, undefined);
+    assert.equal(voices[3][0][0].voice, keeper.voice, "a name keeps its voice");
+    controller.dispose();
+  });
+
   await test("queued audio writes preserve other fields and never follow the player into another world", async () => {
     const pause = deferred();
     let writes = 0;
@@ -1108,6 +1403,7 @@ try {
       protagonist: { name: "Mari" },
       story: { choices: false },
       images: { connectionId: "" },
+      audio: { tts: true, otherVoices: true },
     };
     seed("index", "index", { runs: [run], activeRunId: runId });
     seed(`${runId}:session`, "session", { progress: {} });
@@ -1180,7 +1476,11 @@ try {
                     content: JSON.stringify({
                       musicMood: "tense",
                       places: [],
-                      segments: [{ speaker: "Arden", text: "A generated line." }],
+                      voices: { "Gate Warden": "male" },
+                      segments: [
+                        { speaker: "Arden", text: "A generated line." },
+                        { speaker: "Gate Warden", text: "Halt." },
+                      ],
                     }),
                     finishReason: "stop",
                   };
@@ -1238,6 +1538,18 @@ try {
     assert.equal(generated.musicMood, "tense");
     assert.equal(docs.get(`${runId}:beat:1:1`).data.musicMood, "tense");
     assert.match(prompts.flatMap((messages) => messages.map((message) => message.content)).join("\n"), /musicMood/u);
+    const beats = prompts.filter((messages) => /Narrate ONE story beat/u.test(messages[0].content));
+    assert.equal(beats.length, 1);
+    assert.match(beats[0][0].content, /SPEAKER VOICES/u, "NPC voice genders come from the same beat request");
+    assert.equal(prompts.filter((messages) => /SPEAKER VOICES/u.test(messages[0].content)).length, 1);
+    assert.deepEqual(
+      docs.get(`${runId}:beat:1:1`).data.segments.map((segment) => segment.gender),
+      [undefined, "male"],
+      "the normalized beat saves each NPC's voice gender",
+    );
+    assert.equal(generated.segments[1].gender, "male");
+    assert.equal(generated.cast.find((character) => character.name === "Arden").gender, "female");
+    assert.equal(generated.cast.find((character) => character.name === "Generated").gender, "female");
   });
 } finally {
   for (const [key, value] of Object.entries(before)) {

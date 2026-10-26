@@ -9,13 +9,29 @@ import {
   currentCardCanon,
 } from "./fixtures/gacha-forge-chapter-runtime.mjs";
 import { createForgeCombatVoiceController } from "../packages/gacha-forge/src/combat-voices-client.mjs";
-import { forgeExplicitVoice, forgeVoiceCacheKey } from "../packages/gacha-forge/src/audio-client.mjs";
+import {
+  forgeExplicitVoice,
+  forgeSpeakerVoice,
+  forgeVoiceCacheKey,
+} from "../packages/gacha-forge/src/audio-client.mjs";
 import { forgeSoundtrackContextKey, normalizeForgeAudio } from "../packages/gacha-forge/src/audio-settings.mjs";
 
 const original = Object.fromEntries(
-  ["forgeExplicitVoice", "forgeVoiceCacheKey", "forgeSoundtrackContextKey"].map((key) => [key, globalThis[key]]),
+  [
+    "forgeExplicitVoice",
+    "forgeSpeakerVoice",
+    "forgeConnectionVoices",
+    "forgeVoiceCacheKey",
+    "forgeSoundtrackContextKey",
+  ].map((key) => [key, globalThis[key]]),
 );
-Object.assign(globalThis, { forgeExplicitVoice, forgeVoiceCacheKey, forgeSoundtrackContextKey });
+Object.assign(globalThis, {
+  forgeExplicitVoice,
+  forgeSpeakerVoice,
+  forgeConnectionVoices: async () => [],
+  forgeVoiceCacheKey,
+  forgeSoundtrackContextKey,
+});
 const lines = {
   death: "I will return.",
   kill: "The path is clear.",
@@ -222,6 +238,40 @@ try {
     assert.equal((await post("/combat-voices/commit", { ...request, token: retry.token, base64 })).body.ok, true);
     assert.equal(fixture.calls.length, 1, "voice configuration changes reuse the original fixed text set");
     assert.equal(fixture.errors.length, 0, JSON.stringify(fixture.errors));
+  });
+  await test("actual routes voice the persona by its persona ID and card-less units only with Voice other characters", async () => {
+    const world = () => fixture.docs.get("index").data.runs.find((item) => item.runId === chapterRunId);
+    const protagonistId = `${chapterRunId}:unit:protagonist`;
+    const brynId = `${chapterRunId}:unit:bryn`;
+    for (const [id, data] of [
+      [protagonistId, { name: "Mari", rarity: 5, isProtagonist: true, personality: "Steady." }],
+      [brynId, { name: "Bryn", rarity: 4 }],
+    ])
+      fixture.docs.set(id, {
+        id,
+        packageId: "gacha-forge",
+        kind: "unit",
+        revision: 1,
+        name: id,
+        description: "Synthetic voice proof",
+        data: { unitId: id, kind: "character", ...data },
+      });
+    world().protagonist = { ...world().protagonist, personaId: "persona-mari" };
+    world().combat = { mode: "classic", revision: 1 };
+    const calls = fixture.calls.length;
+    const prepare = async (unitId, voiceOwner) =>
+      (await post("/combat-voices/prepare", { unitId, characterId: voiceOwner, voiceIdentity: "proof" })).body;
+    assert.equal((await prepare(protagonistId, protagonistId)).ok, false, "the persona never uses a unit-keyed pool");
+    assert.equal((await prepare(brynId, brynId)).error, "combat-voices-off", "card-less units need the toggle");
+    assert.equal(fixture.calls.length, calls);
+    const persona = await prepare(protagonistId, "persona-mari");
+    assert.equal(persona.ok, true, JSON.stringify(persona));
+    const saved = await post("/run/sources", { sources: { audio: { combatVoices: true, otherVoices: true } } });
+    assert.equal(saved.body.run.audio.otherVoices, true, "the World Sources route keeps the new toggle");
+    const bryn = await prepare(brynId, brynId);
+    assert.equal(bryn.ok, true, JSON.stringify(bryn));
+    assert.equal((await prepare(brynId, characterId)).ok, false, "a unit cannot borrow another card's identity");
+    assert.equal(fixture.calls.length, calls + 2, "one fixed line set each, in a Classic world");
   });
   await fixture.close();
   fixture = null;

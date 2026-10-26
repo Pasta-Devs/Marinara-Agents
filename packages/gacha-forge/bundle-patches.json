@@ -1726,6 +1726,48 @@
               "replace": "var oy=[{version:null,changed:[\"When a Front Row unit falls in Formation, a Back Row unit on its side steps into the empty seat and acts from its next turn. A fight now ends only when one side has nobody left.\"]},{version:\"1.24.4\",fixed:[\"Messages you send in character chats are no longer read aloud. Your persona's assigned voice still reads its story dialogue.\"]}"
             }
           ]
+        },
+        {
+          "version": "1.24.6",
+          "commits": [],
+          "edits": [
+            {
+              "find": "{op:\"death\",id:me.id}),Ke(me,E),pt(p,E)",
+              "replace": "{op:\"death\",id:me.id,killerId:p.id}),Ke(me,E),pt(p,E)"
+            },
+            {
+              "find": "{op:\"death\",id:ee.id}),Ke(ee,E),pt(p,E)",
+              "replace": "{op:\"death\",id:ee.id,killerId:p.id}),Ke(ee,E),pt(p,E)"
+            },
+            {
+              "find": "{op:\"death\",id:j.id}),Ke(j,E),pt(p,E)",
+              "replace": "{op:\"death\",id:j.id,killerId:p.id}),Ke(j,E),pt(p,E)"
+            },
+            {
+              "find": "A.push({op:\"death\",id:p.id});let R=i.get(_.get(p.id+\"|burn\"));",
+              "replace": "A.push({op:\"death\",id:p.id,killerId:i.get(_.get(p.id+\"|burn\"))?.id||\"\"});let R=i.get(_.get(p.id+\"|burn\"));"
+            },
+            {
+              "find": "(R.push({op:\"death\",id:E.id}),Ke(E,R),pt(p,R))",
+              "replace": "(R.push({op:\"death\",id:E.id,killerId:p.id}),Ke(E,R),pt(p,R))"
+            },
+            {
+              "find": "{op:\"death\",id:L.id}),Ke(L,R),pt(p,R)",
+              "replace": "{op:\"death\",id:L.id,killerId:p.id}),Ke(L,R),pt(p,R)"
+            },
+            {
+              "find": "{op:\"death\",id:U.id}),Ke(U,R),pt(p,R)",
+              "replace": "{op:\"death\",id:U.id,killerId:p.id}),Ke(U,R),pt(p,R)"
+            },
+            {
+              "find": "{op:\"death\",id:N.id}),Ke(N,R),pt(p,R)",
+              "replace": "{op:\"death\",id:N.id,killerId:p.id}),Ke(N,R),pt(p,R)"
+            },
+            {
+              "find": "this._combatPhase=\"prebattle\",this._autoStarting=r)",
+              "replace": "this._combatPhase=\"prebattle\",this._autoStarting=r,forgeWarmCombatVoices(this))"
+            }
+          ]
         }
       ]
     },
@@ -3120,6 +3162,32 @@
             {
               "find": "formationRules:s.formationRules,formationEngine:s.formationEngine}",
               "replace": "formationRules:s.formationRules,formationEngine:s.formationEngine,formationRevision:s.formationRevision}"
+            }
+          ]
+        },
+        {
+          "version": "1.24.6",
+          "commits": [],
+          "edits": [
+            {
+              "find": "v.push({name:N.name,art:sn(N)||null,prota:!1,characterId:l(N.cardId)||null})",
+              "replace": "v.push({name:N.name,art:sn(N)||null,prota:!1,characterId:l(N.cardId)||null,gender:Er(N)})"
+            },
+            {
+              "find": "characterId:l(he.cardId)||null,isLeader:J===fn",
+              "replace": "characterId:l(J===fn&&u.protagonist&&u.protagonist.personaId||he.cardId)||null,gender:Er(he),isLeader:J===fn"
+            },
+            {
+              "find": "event:await forgeSeasonalEvents.narrationContext(p,w)}",
+              "replace": "event:await forgeSeasonalEvents.narrationContext(p,w),audio:g.audio}"
+            },
+            {
+              "find": "L=async Y=>({ok:!0,resumeAt:await x(),segments:Y.data.segments,",
+              "replace": "L=async Y=>(await forgeRememberSpeakerGenders(()=>pe(p),null,Y.data),{ok:!0,resumeAt:await x(),segments:Y.data.segments,"
+            },
+            {
+              "find": "let Ye=new Date().toISOString();if(await a.create({id:A(p,u,o)",
+              "replace": "await forgeRememberSpeakerGenders(()=>pe(p),forgeSave=>xn(p,forgeSave),ge.value);let Ye=new Date().toISOString();if(await a.create({id:A(p,u,o)"
             }
           ]
         }

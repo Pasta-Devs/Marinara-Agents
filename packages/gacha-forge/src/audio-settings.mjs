@@ -8,6 +8,7 @@ export function normalizeForgeAudio(value) {
   };
   return {
     tts: input.tts === true,
+    otherVoices: input.otherVoices === true,
     combatVoices: input.combatVoices === true,
     generate: input.generate === true,
     homeMusic:

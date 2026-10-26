@@ -141,13 +141,20 @@ export function createForgeCombatVoices({ dataDir, runtime, readUnit, generateLi
         return null;
     const ownEpoch = epoch(body.runId);
     const found = await readUnit(body.runId, body.unitId);
+    // The server derives the identity: the persona's own ID for the protagonist (never a pool voice), the card for a
+    // card unit, and the unit itself for a unit without one, which only "Voice other characters" can voice.
+    const card = String(found?.unit?.characterId || found?.unit?.cardId || "").trim();
+    const persona = found?.unit?.isProtagonist === true;
+    const identity = persona ? String(found.run?.protagonist?.personaId || "").trim() || card : card || body.unitId;
     if (
       !found?.run ||
       !found.unit ||
       disposed ||
       ownEpoch !== epoch(body.runId) ||
-      body.characterId !== (found.unit.characterId || found.unit.cardId) ||
-      (!allowDisabled && (found.run.audio?.combatVoices !== true || found.run.combat?.mode !== "formation"))
+      !identity ||
+      body.characterId !== identity ||
+      (!allowDisabled &&
+        (found.run.audio?.combatVoices !== true || (!persona && !card && found.run.audio?.otherVoices !== true)))
     )
       return null;
     return {
