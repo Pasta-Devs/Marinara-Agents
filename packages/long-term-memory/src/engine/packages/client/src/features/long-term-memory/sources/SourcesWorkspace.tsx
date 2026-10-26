@@ -117,6 +117,10 @@ const sourceTabs: Array<{ id: Source; labelKey: string }> = [
     labelKey: "ui.longTermMemory.sourcesworkspace.chatSummaries",
   },
   {
+    id: "messages",
+    labelKey: "ui.longTermMemory.sourcesworkspace.chatMessages",
+  },
+  {
     id: "characters",
     labelKey: "ui.longTermMemory.sourcesworkspace.characters",
   },
@@ -320,25 +324,34 @@ export default function SourcesWorkspace({
   const [selectionMode, setSelectionMode] = useState(false);
   const [sourceGroupsOpen, setSourceGroupsOpen] = useState<Record<Source, { ready: boolean; imported: boolean }>>({
     chats: { ready: false, imported: false },
+    messages: { ready: false, imported: false },
     characters: { ready: false, imported: false },
     lorebooks: { ready: false, imported: false },
   });
   const sourceGroupsBeforeSearch = useRef<Record<Source, { ready: boolean; imported: boolean }> | null>(null);
   const sourceSearchContext = useRef<Source | null>(null);
-  const sourceQueryByType = useRef<Record<Source, string>>({ chats: "", characters: "", lorebooks: "" });
+  const sourceQueryByType = useRef<Record<Source, string>>({ chats: "", messages: "", characters: "", lorebooks: "" });
   const sourceStatusByType = useRef<Record<Source, SourceStatusFilter>>({
     chats: "all",
+    messages: "all",
     characters: "all",
     lorebooks: "all",
   });
-  const focusedSourceByType = useRef<Record<Source, string | null>>({ chats: null, characters: null, lorebooks: null });
+  const focusedSourceByType = useRef<Record<Source, string | null>>({
+    chats: null,
+    messages: null,
+    characters: null,
+    lorebooks: null,
+  });
   const focusedLorebookByType = useRef<Record<Source, string | null>>({
     chats: null,
+    messages: null,
     characters: null,
     lorebooks: null,
   });
   const openLorebookEntryByType = useRef<Record<Source, string | null>>({
     chats: null,
+    messages: null,
     characters: null,
     lorebooks: null,
   });
@@ -442,7 +455,7 @@ export default function SourcesWorkspace({
   const defaultAvailabilityMode: LtmMode =
     modeFilter !== "all"
       ? modeFilter
-      : source === "chats"
+      : source === "chats" || source === "messages"
         ? ltmModeForChatMode(props.chatMode ?? "conversation")
         : DEFAULT_LTM_IMPORTED_SOURCE_MODE;
   const effectiveAvailabilityModes: LtmMode[] =
@@ -615,7 +628,7 @@ export default function SourcesWorkspace({
     ? selectedDestinationTargets.map((target) => targetDisplayLabel(target, true)).join(", ")
     : localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination");
   const sourceScope = sourceTarget?.sourceScope;
-  const previewScope = source === "chats" ? sourceScope : undefined;
+  const previewScope = source === "chats" || source === "messages" ? sourceScope : undefined;
   const effectiveImportScope = `${sourceTargetId}:${[...selectedDestinationTargetIds].sort().join(",")}`;
   const previewQueryKey = [...queryKeys.preview, "pages", source, previewScope, modeFilter, committedSourceQuery];
   const lorebookPreviewQueryKey = [
@@ -679,6 +692,18 @@ export default function SourcesWorkspace({
       ),
     enabled: lorebookPreviewEnabled,
   });
+  // Messages and summaries of one chat tell the same story, so the messages list says when summaries exist too.
+  const summaryCheck = useQuery({
+    queryKey: [...queryKeys.preview, "summary-check", previewScope],
+    queryFn: ({ signal }) =>
+      request<LtmInteropPreviewResponse, { source: Source; limit: number; sourceScope?: LtmScope }>(
+        "/import/preview",
+        "POST",
+        { source: "chats", limit: 1, sourceScope: previewScope },
+        signal,
+      ),
+    enabled: previewEnabled && source === "messages" && previewScope !== undefined,
+  });
   const sourceDetails = useQuery({
     queryKey: [...queryKeys.preview, "details", source, previewScope, modeFilter, focusedFlatSourceId],
     queryFn: () =>
@@ -708,7 +733,7 @@ export default function SourcesWorkspace({
   const lorebookPreviewData = sourceContextMatchesProps && sourceTargetResolved ? mergedLorebookPreview : undefined;
   const sourceDetailsData = sourceContextMatchesProps && sourceTargetResolved ? sourceDetails.data : undefined;
   const rows = [...(previewData?.samples ?? [])].sort((left, right) => {
-    if (source !== "chats" || !props.chatId) return 0;
+    if ((source !== "chats" && source !== "messages") || !props.chatId) return 0;
     return (
       Number(!left.sourceId.startsWith(`${props.chatId}:`)) - Number(!right.sourceId.startsWith(`${props.chatId}:`))
     );
@@ -2365,6 +2390,11 @@ export default function SourcesWorkspace({
                         </Button>
                       </div>
                     </div>
+                    {source === "messages" && summaryCheck.data?.totals.matches ? (
+                      <p className="text-xs text-[var(--muted-foreground)]" data-ltm-messages-summary-hint>
+                        {localizeUi("ui.longTermMemory.sourcesworkspace.chatAlsoHasSummaries")}
+                      </p>
+                    ) : null}
                     {preview.hasNextPage ? (
                       <Button
                         disabled={preview.isFetching}

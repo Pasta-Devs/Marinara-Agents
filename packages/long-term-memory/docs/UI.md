@@ -160,6 +160,9 @@ in typing and keeps the current rows, marked busy, until its results arrive.
 Long-running source tasks expose running, completed, cancelled, partial-failure,
 and failed states through the Sources navigation and workspace feedback. A
 running task can be cancelled and its latest result can be revisited.
+The Chat Messages tab imports a chat's own messages in pieces of up to 24,000
+characters; when the selected chat also has summaries, it says that importing
+both can repeat memories in review.
 
 ### Settings and Chat Settings
 

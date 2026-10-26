@@ -1,5 +1,14 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Sources has a Chat Messages tab that learns from a chat's own messages, so a chat without summaries can have memories too. It warns when the chat also has summaries, because importing both can repeat memories in review.
+- Whispers, and messages hidden from the AI or from some characters, are left out of chat messages, because a memory can reach every character.
+- Needs Marinara Engine 2.5.1 with capability API 1.387, which no longer runs its own memory recall in chats where Long-Term Memory is on.
+- Chats with Long-Term Memory on and nothing imported in Sources have no memories on that Engine. Import their messages or summaries from Sources.
+- If you used the Engine's old built-in memory, switch Long-Term Memory on in each chat's settings; the package no longer turns it on for those chats.
+- The package no longer asks to change chat settings.
+
 ## 1.4.95 — 2026-10-26
 
 - Maintenance, Debug, setup and Chat Settings buttons keep keyboard focus while their work runs, so the result appears where you are.

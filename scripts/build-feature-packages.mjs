@@ -85,6 +85,9 @@ const PACKAGE_BUILT_AGAINST = Object.freeze({
   engineVersion: "2.5.0",
   engineCommit: "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed",
 });
+// Capability API 1.387 ships Engine E2 (no built-in recall where Long-Term Memory is on) with E3, so only an Engine
+// that leaves recall to this package installs the version that learns from chat messages (Pasta-Devs/Marinara-Agents#1744).
+const LONG_TERM_MEMORY_CAPABILITY_API = Object.freeze({ major: 1, minor: 387 });
 const hierarchicalMapsOwnedSourcePaths = [
   "packages/server/src/routes/spatial-context.routes.ts",
   "packages/server/src/services/spatial-context",
@@ -532,15 +535,15 @@ const features = [
   {
     id: "long-term-memory",
     version: "1.4.95",
-    minEngineVersion: "2.4.1",
+    minEngineVersion: "2.5.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
     description:
-      "Remembers important things from your chat summaries, characters, and lorebooks, and brings them back when they matter.",
+      "Remembers important things from your chats, characters, and lorebooks, and brings them back when they matter.",
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
-    permissions: ["agent-runtime", "chat-read", "chat-write", "routes", "storage", "ui"],
+    permissions: ["agent-runtime", "chat-read", "routes", "storage", "ui"],
     serverImport: "packages/server/src/services/long-term-memory/server-entry.ts",
     serverEntry: true,
     clientImport: "packages/client/src/features/long-term-memory/client-entry.tsx",
@@ -548,7 +551,7 @@ const features = [
     ownedSourcePaths: longTermMemoryOwnedSourcePaths,
     engineBoundaryPath: join(packagesDir, "long-term-memory/engine-boundary.json"),
     boundaryDisplayName: "Long-Term Memory",
-    capabilityApi: PACKAGE_CAPABILITY_API,
+    capabilityApi: LONG_TERM_MEMORY_CAPABILITY_API,
     contributions: {
       agentDetail: { agentIds: ["long-term-memory"] },
       slots: ["chat-settings"],
@@ -796,7 +799,7 @@ const longTermMemoryBoundary = selectedFeatures.some((feature) => feature.id ===
       sourceRoot: longTermMemorySourceRoot,
       boundaryPath: join(packagesDir, "long-term-memory/engine-boundary.json"),
       displayName: "Long-Term Memory",
-      capabilityApi: PACKAGE_CAPABILITY_API,
+      capabilityApi: LONG_TERM_MEMORY_CAPABILITY_API,
     })
   : null;
 const memoryNagBoundary = selectedFeatures.some((feature) => feature.id === "memory-nag")

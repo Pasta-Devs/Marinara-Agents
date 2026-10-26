@@ -12,7 +12,7 @@ Primary: Marinara Engine end users — chat and roleplay users who curate durabl
 
 ## Product Purpose
 
-Long-Term Memory extracts durable memories from chat summaries, character records, and lorebooks into a package-owned vault, and recalls relevant context into generation under per-chat enablement; users review proposed memory changes before they land. Success means users can inspect extraction evidence, accept or reject proposed changes with visible diagnostics, and trust that recalled context comes from reviewed, scoped memories — not silent autowrites. It is an Agent capability package (kind `agent`, category `misc`, phase `pre_generation`) published through the Marinara catalog; this record is package-scoped and sits alongside the repo-level PRODUCT.md, which governs the catalog as a whole.
+Long-Term Memory extracts durable memories from chat summaries, chat messages, character records, and lorebooks into a package-owned vault, and recalls relevant context into generation under per-chat enablement; users review proposed memory changes before they land. Success means users can inspect extraction evidence, accept or reject proposed changes with visible diagnostics, and trust that recalled context comes from reviewed, scoped memories — not silent autowrites. It is an Agent capability package (kind `agent`, category `misc`, phase `pre_generation`) published through the Marinara catalog; this record is package-scoped and sits alongside the repo-level PRODUCT.md, which governs the catalog as a whole.
 
 ## Positioning
 

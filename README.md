@@ -54,7 +54,7 @@ Across its Engine compatibility lanes, the stable catalog currently contains **4
 | Illustrator | [`illustrator`](packages/illustrator/manifest.json) | Creates images and videos, with optional automatic Roleplay backgrounds for new scene locations. |
 | Immersive HTML | [`html`](packages/html/manifest.json) | Adds HTML/CSS/JS visual effects to AI messages. |
 | Lorebook Keeper | [`lorebook-keeper`](packages/lorebook-keeper/manifest.json) | Saves important story facts, characters, places, and world changes to the chat's lorebook as you play. |
-| Long-Term Memory | [`long-term-memory`](packages/long-term-memory/manifest.json) | Remembers important things from your chat summaries, characters, and lorebooks, and brings them back when they matter. |
+| Long-Term Memory | [`long-term-memory`](packages/long-term-memory/manifest.json) | Remembers important things from your chats, characters, and lorebooks, and brings them back when they matter. |
 | Music DJ | [`spotify`](packages/spotify/manifest.json) | Plays music that fits the mood of the story, from Spotify, YouTube, or your own Game Assets music. |
 | Noodle | [`noodle`](packages/noodle/manifest.json) | A pretend social network where your characters post, share photos, and talk about your chats, available after installation from **Home → Noodle**. |
 | Slurp | [`slurp2`](packages/slurp2/manifest.json) | A private social app for your characters: turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them, from **Home → Slurp**. Tuned for an adult experience by default. |

@@ -6,12 +6,12 @@
   },
   "package": {
     "name": "Long-Term Memory",
-    "description": "Remembers important things from your chat summaries, characters, and lorebooks, and brings them back when they matter. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents."
+    "description": "Remembers important things from your chats, characters, and lorebooks, and brings them back when they matter. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents."
   },
   "agents": {
     "long-term-memory": {
       "name": "Long-Term Memory",
-      "description": "Remembers important things from your chat summaries, characters, and lorebooks, and brings them back when they matter."
+      "description": "Remembers important things from your chats, characters, and lorebooks, and brings them back when they matter."
     }
   }
 }

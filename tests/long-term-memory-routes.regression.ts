@@ -170,14 +170,7 @@ async function main(routeScenario: RouteScenario) {
   let shortNameRosterEnabled = false;
   let scenarioError: unknown;
   try {
-    assert.deepEqual(installed.manifest.permissions, [
-      "agent-runtime",
-      "chat-read",
-      "chat-write",
-      "routes",
-      "storage",
-      "ui",
-    ]);
+    assert.deepEqual(installed.manifest.permissions, ["agent-runtime", "chat-read", "routes", "storage", "ui"]);
     assert.equal(installed.manifest.permissions.includes("network"), false);
     await assert.rejects(
       registerCapabilityPrivilegedRoutes(
@@ -512,6 +505,22 @@ async function main(routeScenario: RouteScenario) {
             },
             async listChats() {
               return chats;
+            },
+            async listMessages(chatId: string) {
+              return chatId === "chat-a"
+                ? [
+                    {
+                      id: "message-a1",
+                      chatId,
+                      role: "user",
+                      characterId: null,
+                      content: "Mara asks about the observatory gate.",
+                      activeSwipeIndex: 0,
+                      extra: {},
+                      createdAt: "2026-10-27T00:00:00.000Z",
+                    },
+                  ]
+                : [];
             },
           },
         },
@@ -4139,6 +4148,18 @@ async function main(routeScenario: RouteScenario) {
         payload: { source: "chats", limit: 10 },
       });
       assert.equal(preview.statusCode, 200, preview.body);
+      const messagesPreview = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/import/preview",
+        headers,
+        payload: { source: "messages", limit: 10, scope: { chatId: "chat-a" } },
+      });
+      assert.equal(messagesPreview.statusCode, 200, messagesPreview.body);
+      assert.deepEqual(
+        messagesPreview.json().samples.map((sample: any) => sample.sourceId),
+        ["chat-a:messages:message-a1"],
+        "the messages source previews a chat's own messages through the route",
+      );
       assert.equal(
         preview
           .json()

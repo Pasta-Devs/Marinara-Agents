@@ -236,7 +236,7 @@ const longTermMemoryBoundary = await assertPackagePrivateImportBoundary({
   sourceRoot: longTermMemorySourceRoot,
   boundaryPath: join(repoRoot, "packages/long-term-memory/engine-boundary.json"),
   displayName: "Long-Term Memory",
-  capabilityApi: { major: 1, minor: 341 },
+  capabilityApi: { major: 1, minor: 387 },
 });
 for (const relativePath of [
   "packages/shared/src/features/agents/long-term-memory",

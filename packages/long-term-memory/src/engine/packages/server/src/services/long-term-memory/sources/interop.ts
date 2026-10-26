@@ -151,6 +151,46 @@ function chunks(value: string) {
   if (remaining) result.push(remaining);
   return result;
 }
+type TranscriptMessage = Awaited<ReturnType<ReturnType<typeof getPackagePersistence>["listMessages"]>>[number];
+type TranscriptPiece = { entryId: string; first: number; last: number; content: string };
+// A piece is named by its first message, so new messages only grow or follow the last piece and earlier pieces keep
+// their ids and text. Numbers count every message, hidden ones too, so they match the chat's message numbers. Memories
+// reach every character, so like the Engine's own memory this reads the public content, never agentContent with its
+// whispers, and skips messages hidden from the AI or from some characters.
+export function transcriptPieces(messages: TranscriptMessage[], speaker: (message: TranscriptMessage) => string) {
+  const pieces: TranscriptPiece[] = [];
+  let current: TranscriptPiece | undefined;
+  for (const [index, message] of messages.entries()) {
+    const extra = object(message.extra);
+    if (extra.hiddenFromAI === true || extra.commandOnly === true) continue;
+    if (Array.isArray(extra.hiddenFromAICharacterIds) && extra.hiddenFromAICharacterIds.length) continue;
+    const body = text(message.content);
+    if (!body) continue;
+    const number = index + 1,
+      line = `${speaker(message)}: ${body}`;
+    if (current && current.content.length + 2 + line.length <= 24_000) {
+      current.content += `\n\n${line}`;
+      current.last = number;
+      continue;
+    }
+    if (current) pieces.push(current);
+    current = undefined;
+    if (line.length <= 24_000) current = { entryId: message.id, first: number, last: number, content: line };
+    else
+      for (const [part, content] of chunks(line).entries())
+        pieces.push({
+          entryId: part ? `${message.id}:part:${part + 1}` : message.id,
+          first: number,
+          last: number,
+          content,
+        });
+  }
+  if (current) pieces.push(current);
+  return pieces;
+}
+function boundedId(value: string, prefix: string) {
+  return value.length <= 120 ? value : `${prefix}_${hash(value, 32)}`;
+}
 function conversationDate(value: string) {
   const match = value.match(/^(\d{2})\.(\d{2})\.(\d{4})$/u);
   if (!match) return null;
@@ -287,8 +327,11 @@ function mode(candidate: Candidate, value?: LtmMode, availabilityModes?: LtmMode
   const extractionMode = value ?? candidate.extractionMode ?? candidate.modes[0] ?? "roleplay";
   return { ...candidate, modes, extractionMode };
 }
+function isChatSource(kind: LtmSourceProvenance["kind"]) {
+  return kind === "chat_summary" || kind === "chat_transcript";
+}
 function importedSourceMode(source: Candidate["provenance"]["kind"], requested?: LtmMode) {
-  return requested ?? (source === "chat_summary" ? undefined : DEFAULT_LTM_IMPORTED_SOURCE_MODE);
+  return requested ?? (isChatSource(source) ? undefined : DEFAULT_LTM_IMPORTED_SOURCE_MODE);
 }
 function candidateFingerprintForNote(candidate: Candidate, note: LtmNote) {
   return extractionFingerprintForLtmSourceMaterial({
@@ -322,7 +365,7 @@ function scopeKey(scope: LtmScope | undefined) {
 }
 
 function matchesScope(candidate: Candidate, scope?: LtmScope) {
-  return !scope || candidate.provenance.kind !== "chat_summary" || matchesChatSummaryScope(candidate.scope, scope);
+  return !scope || !isChatSource(candidate.provenance.kind) || matchesChatSummaryScope(candidate.scope, scope);
 }
 
 function candidateVisibleInScope(candidate: Candidate, scope: LtmScope | undefined) {
@@ -336,11 +379,14 @@ function resolvePreviewCandidates(rows: Candidate[], matchExisting: (row: Candid
     // distinct chat ids; keep the first identical chat-summary candidate so
     // shared branch summaries do not repeat in the Sources preview, preferring
     // an already-imported sibling so the row reflects imported state instead of
-    // offering a duplicate import.
+    // offering a duplicate import. A branch copies messages under new ids, so
+    // identical message pieces match by the chat group instead.
     const key =
       row.provenance.kind === "chat_summary"
         ? `chat_summary\0${row.provenance.entryId ?? ""}\0${row.sourceText}`
-        : row.sourceId;
+        : row.provenance.kind === "chat_transcript"
+          ? `chat_transcript\0${getLtmScopeGroupIds(row.scope)[0] ?? row.provenance.sourceId}\0${row.sourceText}`
+          : row.sourceId;
     const previous = resolved.get(key);
     if (!previous || (!matchExisting(previous) && matchExisting(row))) resolved.set(key, row);
   }
@@ -468,9 +514,21 @@ function normalizeLorebooks(books: Array<{ id: string; data: unknown; entries: u
   });
 }
 
+async function requestedChats(request: { sourceScope?: LtmScope; chatId?: string; includeOutOfScope?: boolean }) {
+  const scopeIds = new Set(getLtmScopeChatIds(request.sourceScope));
+  const scopeGroupIds = new Set<string | null>(getLtmScopeGroupIds(request.sourceScope));
+  const broaderScope = scopeGroupIds.size > 0 || scopeIds.size > 1;
+  return (await getPackagePersistence().listChats()).filter((chat) => {
+    if (normalizeLtmChatCharacterIds(chat.characterIds).includes(PROFESSOR_MARI_CHARACTER_ID)) return false;
+    if (request.includeOutOfScope) return true;
+    if (!request.sourceScope && request.chatId && !broaderScope && chat.id !== request.chatId) return false;
+    return !(scopeGroupIds.size ? !scopeGroupIds.has(chat.groupId) : scopeIds.size && !scopeIds.has(chat.id));
+  });
+}
+
 async function candidates(
   request: {
-    source: "characters" | "lorebooks" | "chats";
+    source: "characters" | "lorebooks" | "chats" | "messages";
     sourceScope?: LtmScope;
     mode?: LtmMode;
     modes?: LtmMode[];
@@ -510,15 +568,7 @@ async function candidates(
   if (request.source === "lorebooks")
     for (const book of normalizeLorebooks(await getPackageResources().listLorebooks())) result.push(...book.candidates);
   if (request.source === "chats") {
-    const scopeIds = new Set(getLtmScopeChatIds(request.sourceScope));
-    const scopeGroupIds = new Set<string | null>(getLtmScopeGroupIds(request.sourceScope));
-    const broaderScope = scopeGroupIds.size > 0 || scopeIds.size > 1;
-    for (const chat of await getPackagePersistence().listChats()) {
-      if (normalizeLtmChatCharacterIds(chat.characterIds).includes(PROFESSOR_MARI_CHARACTER_ID)) continue;
-      if (!request.includeOutOfScope) {
-        if (!request.sourceScope && request.chatId && !broaderScope && chat.id !== request.chatId) continue;
-        if (scopeGroupIds.size ? !scopeGroupIds.has(chat.groupId) : scopeIds.size && !scopeIds.has(chat.id)) continue;
-      }
+    for (const chat of await requestedChats(request)) {
       const metadata = parseLtmChatMetadata(chat.metadata),
         chatMode = ltmModeForChatMode(chat.mode),
         chatDisplayName = getLtmChatDisplayName(chat) || "Chat";
@@ -562,6 +612,59 @@ async function candidates(
           mutationCount: 1,
           summary: `Import ${title}`,
           ...(entry.deterministicSourceText ? { deterministicSourceText: entry.deterministicSourceText } : {}),
+        });
+      }
+    }
+  }
+  if (request.source === "messages") {
+    const chats = await requestedChats(request),
+      characterIds = [...new Set(chats.flatMap((chat) => normalizeLtmChatCharacterIds(chat.characterIds)))],
+      characterNames = new Map(
+        (characterIds.length ? await getPackageResources().listCharacters(characterIds) : []).map((row) => [
+          row.id,
+          text(object(row.data).name),
+        ]),
+      );
+    for (const chat of chats) {
+      const scope = resolveChatLtmScope(chat);
+      // Callers drop out-of-scope chat rows anyway; skipping them here avoids reading every chat's messages.
+      if (request.sourceScope && !matchesChatSummaryScope(scope, request.sourceScope)) continue;
+      const chatMode = ltmModeForChatMode(chat.mode),
+        chatDisplayName = getLtmChatDisplayName(chat) || "Chat",
+        speaker = (message: TranscriptMessage) =>
+          message.role === "user"
+            ? text(object(object(message.extra).personaSnapshot).name) || "User"
+            : message.role === "assistant"
+              ? characterNames.get(message.characterId ?? "") || "Assistant"
+              : message.role === "narrator"
+                ? "Narrator"
+                : "System";
+      for (const piece of transcriptPieces(await getPackagePersistence().listMessages(chat.id), speaker)) {
+        const entryId = boundedId(piece.entryId, "message"),
+          provenance = { kind: "chat_transcript" as const, sourceId: chat.id, entryId },
+          range = piece.first === piece.last ? `${piece.first}` : `${piece.first}-${piece.last}`,
+          title = `${chatDisplayName}, ${piece.first === piece.last ? "message" : "messages"} ${range}`.slice(0, 240);
+        result.push({
+          sourceId: boundedId(`${chat.id}:messages:${entryId}`, `${chat.id.slice(0, 60)}:messages`),
+          previewOrder: `${chat.id}\0${String(piece.first).padStart(8, "0")}\0${entryId}`,
+          title,
+          sourceText: piece.content,
+          sourceNoteId: sourceNoteIdForProvenance(provenance),
+          legacySourceNoteIds: [],
+          sourceTag: "imported_chat_messages",
+          importTags: [],
+          evidence: [
+            `chat:${chat.id}`,
+            `chat_name:${chatDisplayName}`,
+            `message_entry:${entryId}`,
+            `message_range:${range}`,
+          ],
+          provenance,
+          scope,
+          modes: [chatMode],
+          extractionMode: chatMode,
+          mutationCount: 1,
+          summary: `Import ${title}`,
         });
       }
     }
@@ -951,8 +1054,7 @@ export async function importPackageInterop(
   for (const row of rows) {
     if (conflictingSourceIds.has(row.sourceId)) continue;
     try {
-      const sourceNoteScope =
-          row.provenance.kind === "chat_summary" ? { chatIds: [row.provenance.sourceId] } : row.scope,
+      const sourceNoteScope = isChatSource(row.provenance.kind) ? { chatIds: [row.provenance.sourceId] } : row.scope,
         scope = withMergedLtmScopeLinks(sourceNoteScope, destinationScope ?? row.scope),
         input = {
           id: row.sourceNoteId,
