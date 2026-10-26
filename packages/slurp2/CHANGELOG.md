@@ -1,5 +1,10 @@
 # Slurp release notes
 
+## 0.4.2 — 2026-10-26 [highlight]
+
+- Slurp starts again on Engine builds with zod 4. Settings sections with nested defaults are filled in again, so the server no longer stops at load with "Cannot read properties of undefined (reading 'curve')".
+- On zod 4 Engines, saving part of the Slurp settings, a Garnish ad or a creator account no longer resets the fields you did not send to their defaults. Creator access and auto-posting defaults are filled in again too.
+
 ## 0.4.1 — 2026-10-24 [highlight]
 
 - Fixed Story viewer clicks passing through to the feed or Engine behind it. Close, Creator profile, menu, navigation and picture controls respond again.

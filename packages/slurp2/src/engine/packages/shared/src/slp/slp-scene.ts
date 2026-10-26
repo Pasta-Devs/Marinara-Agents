@@ -7,6 +7,7 @@
  * preset, moment and action ids and the turn shape, so they live here.
  */
 import { z } from "zod";
+import { slpFilledDefault } from "./slp-schema-defaults.js";
 
 export const SLP_SCENE_PRESETS = ["support", "friend", "seat"] as const;
 export type SlpScenePreset = (typeof SLP_SCENE_PRESETS)[number];
@@ -132,7 +133,7 @@ export const slpSceneTurnRequestSchema = z
       z.object({ kind: z.literal("open") }).strict(),
     ]),
     transcript: z.array(slpSceneLineSchema).max(SLP_SCENE_TRANSCRIPT_MAX).default([]),
-    draft: slpSceneDraftSchema.default({}),
+    draft: slpFilledDefault(slpSceneDraftSchema),
     locked: z.array(z.enum(SLP_SCENE_FIELDS)).max(SLP_SCENE_FIELDS.length).default([]),
     /** The player's steer for the whole session ("keep it casual"). Never written into a line. */
     direction: z.string().trim().max(300).default(""),

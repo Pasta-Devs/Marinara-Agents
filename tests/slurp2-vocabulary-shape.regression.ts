@@ -27,6 +27,18 @@ const BACK = new Map(Object.entries(MAP).map(([engine, slp]) => [slp, engine]));
 // where Slurp is meant. Every other difference is a shape difference and must fail.
 const INTENDED_DELTAS: Record<string, [string, string][]> = {
   slpAccountIdentityUpdateShape: [['"Enter a Slurp handle."', '"Enter a Noodle handle."']],
+  // Engine `.prefault()` is zod 4 only; Slurp also runs on zod 3 Engines, so it uses the
+  // portable `slpFilledDefault` with the same result.
+  slpAccountPrivacySettingsSchema: [
+    ["slpFilledDefault(noodleAccountAccessSettingsSchema, {", "noodleAccountAccessSettingsSchema.prefault({"],
+  ],
+  slpBulkCreatorAccountCreateSchema: [
+    ["noodleIdentityDisclosureSchema).default({})", "noodleIdentityDisclosureSchema).prefault({})"],
+    [
+      "slpFilledDefault(noodleAutoPostingSettingsSchema, { enabled: true, imagesEnabled: false })",
+      "noodleAutoPostingSettingsSchema.prefault({ enabled: true, imagesEnabled: false })",
+    ],
+  ],
   // 0.2.0: per-Creator posting strategy is Slurp-only.
   // 0.3.2: Creator Pages add two Slurp-only profile fields.
   SlpAccountProfileSettings: [

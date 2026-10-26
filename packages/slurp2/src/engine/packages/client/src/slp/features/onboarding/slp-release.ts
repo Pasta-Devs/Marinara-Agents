@@ -1,7 +1,7 @@
 import { SLURP2_LEGACY_RELEASES } from "./slp-release-archive";
 
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.4.1";
+export const SLURP2_VERSION = "0.4.2";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -14,6 +14,11 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.4.2",
+    date: "2026-10-26",
+    notes: ["Slurp opens again after the latest Marinara update instead of failing to start."],
+  },
   {
     version: "0.4.1",
     date: "2026-10-24",
