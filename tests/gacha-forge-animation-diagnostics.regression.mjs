@@ -38,11 +38,50 @@ const cases = [
     "responseFailed",
   ],
   ["Invalid banner animation video", { reason: "invalid-response" }, "responseFailed"],
-  ["Invalid URL SECRET", { reason: "invalid-response" }, "responseFailed", "ERR_INVALID_URL"],
-  ["Unknown failure with SECRET raw provider details", {}, "failed"],
+  ["Invalid URL SECRET", { reason: "invalid-response" }, "responseFailed", { code: "ERR_INVALID_URL" }],
+  ["OpenRouter returned a non-MP4 video payload", { reason: "invalid-response" }, "responseFailed"],
+  // Engine messages that previously fell through to the generic notice.
+  ["OpenRouter video generation failed: SECRET upstream rejected input", { reason: "provider" }, "providerRejected"],
+  ["OpenRouter video generation expired", { reason: "provider" }, "providerRejected"],
+  [
+    "Failed to download OpenRouter video (403): SECRET https://private.example/?key=PRIVATE",
+    { reason: "provider", providerStatus: 403 },
+    "providerFailed",
+  ],
+  ["Seedance video generation failed: SECRET content policy", { reason: "provider" }, "providerRejected"],
+  [
+    "Seedance video generation failed after retrying an opaque provider task failure",
+    { reason: "provider" },
+    "providerRejected",
+  ],
+  ["Google Veo returned 400: SECRET", { reason: "provider", providerStatus: 400 }, "providerFailed"],
+  ["Gemini Omni returned 429: SECRET", { reason: "provider", providerStatus: 429 }, "providerFailed"],
+  ["ComfyUI video queue failed (400): SECRET", { reason: "provider", providerStatus: 400 }, "providerFailed"],
+  ["Temporary Seedance reference upload returned 500: SECRET", { reason: "seedance-reference-setup" }, "seedanceSetup"],
+  [
+    "Seedance first frame reference has no public HTTPS URL. Converted images, such as WebP illustrations prepared as PNG, require Upload Seedance reference frames temporarily to be enabled.",
+    { reason: "seedance-reference-setup" },
+    "seedanceSetup",
+  ],
+  ["This picture can't be read as a video first frame.", { reason: "source-image" }, "sourceImageMissing"],
+  [
+    "This ToAPIs adapter currently supports 4-second, 480p, 16:9 video only",
+    { reason: "connection" },
+    "connectionFailed",
+  ],
+  [
+    "Refused to fetch https://private.example/v1/videos: hostname 'private.example' did not resolve to any address.",
+    { reason: "connection" },
+    "connectionFailed",
+  ],
+  ["fetch failed", { reason: "connection" }, "connectionFailed", { cause: { code: "ECONNREFUSED" } }],
+  ["fetch failed", { reason: "timeout" }, "timeoutFailed", { cause: { code: "UND_ERR_CONNECT_TIMEOUT" } }],
+  ["Video generation timed out after 1800 seconds", { reason: "timeout" }, "timeoutFailed"],
+  ["Media generation queue is saturated: waited 600s for one of 4 slots", { reason: "timeout" }, "timeoutFailed"],
+  ["Unknown failure with SECRET raw provider details", { reason: "unknown" }, "unknownFailed"],
 ];
 try {
-  for (const [index, [message, failure, englishKey, code]] of cases.entries()) {
+  for (const [index, [message, failure, englishKey, extra]] of cases.entries()) {
     const dataDir = join(directory, String(index));
     await mkdir(dataDir);
     let calls = 0;
@@ -52,7 +91,7 @@ try {
         videos: {
           animateGalleryImage: async () => {
             calls++;
-            throw Object.assign(new Error(message), code ? { code } : {});
+            throw Object.assign(new Error(message), extra);
           },
         },
       },
@@ -218,11 +257,46 @@ try {
   assert.equal((await fullReopened.generate({ ...body, retry: true })).ok, true);
   assert.equal(fullCalls, 2);
   fullReopened.dispose();
+  // Invalid statuses are never interpolated; the player still learns that the provider failed the clip.
   for (const providerStatus of ["400", 0, 399, 600, null, { toString: () => "SECRET" }])
     assert.equal(
       forgeAnimationFailureMessage({ reason: "provider", providerStatus, detail: "SECRET" }),
-      forgeAnimationEnglish.failed,
+      forgeAnimationEnglish.providerRejected,
     );
+  // An Engine restart or package update aborts the paid request without writing a failed marker.
+  const interruptedDirectory = join(directory, "interrupted");
+  await mkdir(interruptedDirectory);
+  let interruptedCalls = 0;
+  const interruptedStarted = Promise.withResolvers();
+  const interruptedOptions = {
+    dataDir: interruptedDirectory,
+    readBanner: async () => banner,
+    runtime: {
+      logger: { warn() {} },
+      integrations: {
+        videos: {
+          animateGalleryImage: async ({ signal }) => {
+            if (++interruptedCalls > 1) throw new Error("Video generation timed out after 1800 seconds");
+            interruptedStarted.resolve();
+            return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
+          },
+        },
+      },
+    },
+  };
+  const restarting = createForgeBannerAnimations(interruptedOptions);
+  const abandoned = restarting.generate(body);
+  await interruptedStarted.promise;
+  restarting.dispose();
+  assert.equal((await abandoned).error, "not-found");
+  const interrupted = { ok: false, error: "animation-failed", reason: "interrupted", retry: true };
+  const restarted = createForgeBannerAnimations(interruptedOptions);
+  assert.deepEqual(await restarted.generate(body), interrupted, "A pending marker without a job explains itself");
+  assert.equal(interruptedCalls, 1, "An interrupted paid attempt is never resubmitted automatically");
+  assert.equal(forgeAnimationFailureMessage(interrupted), forgeAnimationEnglish.interruptedFailed);
+  assert.equal((await restarted.generate({ ...body, retry: true })).reason, "timeout");
+  assert.equal(interruptedCalls, 2, "Only an explicit retry submits the interrupted attempt again");
+  restarted.dispose();
   assert.equal(forgeAnimationFailureMessage({ reason: "SECRET", detail: "SECRET" }), forgeAnimationEnglish.failed);
   assert.equal(forgeAnimationFailureMessage(null), forgeAnimationEnglish.failed);
 } finally {

@@ -1,3 +1,14 @@
+## 1.22.0 — 2026-10-26
+
+- Banner animations say why they failed, play on phones away from the server, and never offer a paid retry for a saved clip.
+- Water beats Fire, Fire beats Earth, Earth beats Wind, Wind beats Water, in both combat modes and on the Home chart.
+- Formation conversion handles five-star traits, converts one character at a time, explains failures and keeps ready kits.
+- The Vigor countdown always shows below full and stops flickering.
+- Story choices appear without reopening the story.
+- Letters fill the screen with a shorter reply box, and Read message lists your bonded units.
+- New messages show as a styled card on Home with the opening lines.
+- The story mute button and help marks match their neighbours.
+
 ## 1.21.2 — 2026-10-26
 
 - Keep an unchanged, decoded unit portrait mounted while switching unit tabs. Replace it normally when the unit or artwork changes.

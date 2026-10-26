@@ -43,7 +43,7 @@ const kit = () => ({
   },
   traits: [],
 });
-const baseAnswerTokens = 8192;
+const baseAnswerTokens = 16384;
 const existingReasoningReserve = 16000;
 const expectedBudget = baseAnswerTokens + existingReasoningReserve;
 
@@ -98,7 +98,7 @@ async function fixture(mode = "classic") {
     const options = f.transport.completionOptions.slice(from);
     assert.ok(options.length, "Actual package called the selected resolved model");
     for (const request of options) {
-      assert.equal(request.maxTokens, expectedBudget, "8192 answer tokens plus the existing16000 reasoning reserve");
+      assert.equal(request.maxTokens, expectedBudget, "16384 answer tokens plus the existing16000 reasoning reserve");
       assert.equal(request.reasoningEffort, reasoning, "Preserve the selected connection's current reasoning setting");
       assert.equal(request.verbosity, "high");
       assert.ok(
@@ -112,7 +112,7 @@ async function fixture(mode = "classic") {
   return { ...f, run, parameters, status, assertRequests };
 }
 
-test("actual initial Formation conversion reserves8192 answer tokens plus existing reasoning headroom", async () => {
+test("actual initial Formation conversion reserves16384 answer tokens plus existing reasoning headroom", async () => {
   const f = await fixture();
   try {
     const before = structuredClone(f.docs.get(unitId).data);

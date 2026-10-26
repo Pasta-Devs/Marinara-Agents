@@ -1053,7 +1053,9 @@ test("Banner generation and actual video decode failures retain the still artwor
 });
 
 for (const theme of ["aurora", "bloom"]) {
-  test(`Failed banner playback offers explicit replacement and recovers in ${theme}`, async ({ page }, testInfo) => {
+  test(`Failed banner playback keeps the saved clip without a paid retry and recovers in ${theme}`, async ({
+    page,
+  }, testInfo) => {
     const hostTheme = theme === "bloom" ? "light" : "dark";
     const { forge, state } = await animationProof(page, testInfo, { selected: true, hostTheme });
     await expect(page.locator("html")).toHaveAttribute("data-theme", hostTheme);
@@ -1067,8 +1069,8 @@ for (const theme of ["aurora", "bloom"]) {
     const status = forge.locator("[data-banner-animation-status]");
     const retry = forge.locator("[data-animation-retry]");
     await expect(status).toContainText("could not play");
-    await expect(status).toContainText("provider credits");
-    await expect(retry).toBeVisible();
+    // The clip is saved, so a playback failure never offers a paid replacement.
+    await expect(retry).toHaveCount(0);
     await expect(forge.locator("video[data-banner-animation]")).toHaveCount(0);
     const still = forge.locator('[data-screen="banner"] .show > .art.wide');
     await expect(still).toBeVisible();
@@ -1076,21 +1078,17 @@ for (const theme of ["aurora", "bloom"]) {
     await settleBannerCapture(forge);
     await page.screenshot({ path: testInfo.outputPath(`banner-playback-recovery-${theme}.png`) });
     expect(state.posts).toHaveLength(1);
-    state.generationFailed = true;
-    await retry.click();
-    await expect(retry).toBeEnabled();
-    await expect(status).toContainText("animation unavailable");
-    await expect(still).toBeVisible();
-    expect(state.posts).toHaveLength(2);
-    expect(state.posts[1].retry).toBe(true);
-    state.generationFailed = false;
+    // Reopening after a reload reads the saved clip again for free.
     state.playbackFailed = false;
-    await retry.click();
+    await page.reload();
+    await page.getByRole("tab", { name: "Open Gacha Forge" }).click();
+    await showHome(forge);
+    await openAnimatedBanner(forge);
     await decodedBannerVideo(forge);
     await expect(retry).toHaveCount(0);
     await expect(status).toHaveCount(0);
-    expect(state.posts).toHaveLength(3);
-    expect(state.posts[2].retry).toBe(true);
+    expect(state.posts).toHaveLength(2);
+    expect(state.posts[1].retry).not.toBe(true);
     expect(state.browserErrors).toEqual([]);
     // Distinctive geometric artwork makes a neutral head/torso overlay visually obvious.
     // These are synthetic fixtures, not a claim about provider-generated image quality.
@@ -1258,9 +1256,12 @@ test("A deferred response cannot attach a previous same-art banner rotation", as
     game._renderBrowser();
   });
   await expect.poll(() => releases.length).toBe(2);
+  const newClip = page.waitForRequest((request) => request.url().endsWith(`${"c".repeat(64)}.mp4`));
   releases[1]();
   const video = await decodedBannerVideo(forge);
-  await expect(video).toHaveAttribute("src", new RegExp(`${"c".repeat(64)}\\.mp4$`));
+  // The clip plays from an authenticated fetch, so the element holds a blob URL of the new rotation's file.
+  await newClip;
+  await expect(video).toHaveAttribute("src", /^blob:/u);
   expect(state.browserErrors).toEqual([]);
 });
 

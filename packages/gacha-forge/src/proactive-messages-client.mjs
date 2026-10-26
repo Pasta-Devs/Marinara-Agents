@@ -1,8 +1,17 @@
 /* global forgeUnitMessagesEnglish, forgeChatGenerationError */
+// A letter card in the Home panel style. It lives in .gf-view, below the stats bar, where the type scale is defined.
 const forgeUnitMessageStyle = `
-.gf-unit-message-notice{position:absolute;inset:8px 8px auto auto;z-index:12;max-inline-size:min(42ch,calc(100% - 16px));max-block-size:45%;overflow:auto;box-sizing:border-box;padding:8px 12px;background:var(--ink);color:var(--text);border:1px solid var(--steel-dark);font:var(--t-sm)/1.4 var(--body)}
-.gf-unit-message-notice p{margin:0 0 4px;overflow-wrap:anywhere}
-.gf-unit-message-notice button{min-block-size:44px;margin-inline-end:8px;padding:4px 8px;font:inherit;cursor:pointer}
+.gf-unit-message-notice{position:absolute;z-index:12;top:calc(var(--f) * 1);left:50%;translate:-50% 0;box-sizing:border-box;inline-size:min(calc(var(--f) * 44),calc(100% - var(--f) * 2));max-block-size:calc(100% - var(--f) * 2);overflow:auto;display:grid;gap:calc(var(--f) * 0.5);padding:calc(var(--f) * 0.9) calc(var(--f) * 1.2);background:linear-gradient(0deg,var(--ink-2),var(--ink-2)),var(--ink);color:var(--text);border:1px solid var(--ink-3);border-top:2px solid var(--coral);--cut:1em;clip-path:var(--clip-card);border-radius:var(--radius);box-shadow:var(--panel-shadow),var(--panel-bevel);font-family:var(--body);font-size:var(--t-sm);line-height:1.4;animation:gf-unit-message-in 300ms ease-out backwards}
+.gf-unit-message-notice .kick{margin:0;font-family:var(--display);font-size:var(--t-tiny);letter-spacing:0.2em;text-transform:var(--case);color:var(--coral)}
+.gf-unit-message-notice .who{margin:0;font-family:var(--title);font-stretch:var(--stretch);font-weight:var(--title-weight);font-size:var(--t-md);line-height:1.2;overflow-wrap:anywhere}
+.gf-unit-message-notice .said{margin:0;font-style:italic;color:var(--porcelain-3);overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.gf-unit-message-notice .acts{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:calc(var(--f) * 0.5)}
+.gf-unit-message-notice button{min-block-size:44px;padding:calc(var(--f) * 0.32) calc(var(--f) * 1.1);cursor:pointer;font-family:var(--display);font-weight:700;font-size:var(--t-xs);letter-spacing:0.08em;text-transform:var(--case);background:transparent;color:var(--text);border:1px solid var(--steel-dark);--cut:0.45em;clip-path:var(--clip-btn);border-radius:var(--radius-sm)}
+.gf-unit-message-notice button:hover{border-color:var(--coral);color:var(--coral)}
+.gf-unit-message-notice button.go{border-color:var(--coral);color:var(--coral)}
+.gf-unit-message-notice button:focus-visible{outline:2px solid var(--coral);outline-offset:2px}
+@keyframes gf-unit-message-in{from{opacity:0;translate:-50% calc(var(--f) * -0.6)}}
+@media (prefers-reduced-motion:reduce){.gf-unit-message-notice{animation:none}}
 `;
 
 function forgeUnitMessageCount(value) {
@@ -117,58 +126,82 @@ export function wireForgeUnitMessages(host) {
   const renderNotice = () => {
     if (!current() || !pending || !forgeUnitMessageVisible(host)) return;
     if (adoptForgeUnitMessage(host, pending)) pending = null;
-    if (!pending) {
+    // Letters open on Home, so the card waits there instead of covering a fight, a story or another screen.
+    if (!pending || (typeof host._state === "function" && host._state() !== "hud")) {
       notice?.remove();
       notice = null;
       return;
     }
-    const stage = root.querySelector(".gf-stage");
-    if (!stage || notice?.isConnected) return;
+    const view = root.querySelector(".gf-stage > .gf-view");
+    if (!view || notice?.isConnected) return;
     notice = document.createElement("aside");
     notice.className = "gf-unit-message-notice";
     const style = document.createElement("style");
     style.textContent = forgeUnitMessageStyle;
-    const text = document.createElement("p");
-    text.setAttribute("role", "status");
-    const name = pending.unitName || forgeUnitMessagesEnglish["messages.someone"];
-    text.textContent = pending.failed
-      ? forgeChatGenerationError(
-          pending,
-          forgeUnitMessagesEnglish["messages.failed"],
-          forgeUnitMessagesEnglish["messages.capacity"],
-        )
-      : forgeUnitMessagesEnglish["messages.incoming"].replace("{name}", name);
-    notice.append(style, text);
-    const button = (key, action) => {
+    const line = (className, value) => {
+      const item = document.createElement("p");
+      item.className = className;
+      item.textContent = value;
+      return item;
+    };
+    const kick = line("kick", host._run?.chatChannel || forgeUnitMessagesEnglish["messages.kick"]);
+    const status = document.createElement("div");
+    status.setAttribute("role", "status");
+    if (pending.failed)
+      status.append(
+        line(
+          "said",
+          forgeChatGenerationError(
+            pending,
+            forgeUnitMessagesEnglish["messages.failed"],
+            forgeUnitMessagesEnglish["messages.capacity"],
+          ),
+        ),
+      );
+    else {
+      const name = pending.unitName || forgeUnitMessagesEnglish["messages.someone"];
+      status.append(line("who", forgeUnitMessagesEnglish["messages.incoming"].replace("{name}", name)));
+      const said = String(pending.said?.text || "").trim();
+      if (said) status.append(line("said", said));
+    }
+    const actions = document.createElement("div");
+    actions.className = "acts";
+    notice.append(style, kick, status, actions);
+    const button = (key, action, primary = false) => {
       const item = document.createElement("button");
       item.type = "button";
+      if (primary) item.className = "go";
       item.textContent = forgeUnitMessagesEnglish[key];
       item.addEventListener("click", (event) => {
         event.stopPropagation();
         action();
       });
-      notice.append(item);
+      actions.append(item);
     };
-    // A notification must not discard a draft in a different conversation.
-    if (!pending.failed && (!host._chatDraft?.trim() || host._chat?.unit?.id === pending.unitId))
-      button("messages.read", () => {
-        const unitId = pending?.unitId;
-        if (!unitId || (host._chatDraft?.trim() && host._chat?.unit?.id !== unitId)) return;
-        pending = null;
-        notice?.remove();
-        notice = null;
-        if (host._chat?.unit?.id === unitId) {
-          host._chatArchive = null;
-          host._chatPhoto = "";
-          host._chatReload();
-        } else host._chatWith(unitId);
-      });
     button("messages.dismiss", () => {
       pending = null;
       notice?.remove();
       notice = null;
     });
-    stage.append(notice);
+    // A notification must not discard a draft in a different conversation.
+    if (!pending.failed && (!host._chatDraft?.trim() || host._chat?.unit?.id === pending.unitId))
+      button(
+        "messages.read",
+        () => {
+          const unitId = pending?.unitId;
+          if (!unitId || (host._chatDraft?.trim() && host._chat?.unit?.id !== unitId)) return;
+          pending = null;
+          notice?.remove();
+          notice = null;
+          if (host._chat?.unit?.id === unitId) {
+            host._chatArchive = null;
+            host._chatPhoto = "";
+            host._chatReload();
+          } else host._chatWith(unitId);
+        },
+        true,
+      );
+    view.append(notice);
   };
   const poll = async () => {
     if (!current()) return;

@@ -1314,6 +1314,50 @@
               "replace": "ds=\"1.21.2\""
             }
           ]
+        },
+        {
+          "version": "1.22.0",
+          "commits": [],
+          "edits": [
+            {
+              "find": "function fc(",
+              "replace": "",
+              "replaceFrom": "src/vigor-clock-client.mjs",
+              "sourceId": "vigor-clock-client"
+            },
+            {
+              "find": "this._bannerState=\"idle\",this._wallet=null,",
+              "replace": "this._bannerState=\"idle\",wireForgeVigorWallet(this),"
+            },
+            {
+              "find": "this._stopVigorClock=fc(this._root,{nextMs:this._wallet?this._wallet.vigorNextMs:null,periodMs:this._wallet&&this._wallet.vigorPerMs||this._run&&this._run.vigorPerMs,onLanded:",
+              "replace": "this._stopVigorClock=startForgeVigorClock(this._root,{format:cs,read:()=>this._wallet?this._wallet.vigorNextMs:null,onLanded:"
+            },
+            {
+              "find": "var ao={fire:\"water\",water:\"wind\",wind:\"earth\",earth:\"fire\",",
+              "replace": "var ao={fire:\"earth\",earth:\"wind\",wind:\"water\",water:\"fire\","
+            },
+            {
+              "find": "ds=\"1.21.2\"",
+              "replace": "ds=\"1.22.0\""
+            },
+            {
+              "find": "if(!a)return this._openChat();this._chatArchive=null,this._chat={...this._chat||{open:!0},open:!0,opening:!0,unit:{id:a,name:\"\",bond:0},messages:[]},this._chatRev+=1,this._renderBrowser(),this._chatDraft=\"\",",
+              "replace": "if(!a)return this._openChat();let forgeChatList=!this._chat;this._chatArchive=null,this._chat={...this._chat||{open:!0,loading:!0,channel:this._run&&this._run.chatChannel||\"\",contacts:[]},open:!0,opening:!0,unit:{id:a,name:\"\",bond:0},messages:[]},this._chatRev+=1,this._renderBrowser(),this._chatDraft=\"\",forgeChatList&&this._postJson(\"/chat/list\",{runId:forgeChatRunId}).then(r=>{!this._chat||!this._chat.open||(this._run?this._run.runId:\"\")!==forgeChatRunId||(this._chat={...this._chat,loading:!1,...r&&r.ok!==!1?{channel:r.channel||this._chat.channel||\"\",contacts:r.contacts||[]}:{}},this._chatRev+=1,this._renderBrowser())}),"
+            },
+            {
+              "find": "<textarea class=\"ch-box\" data-chat-text maxlength=\"${Number(n)||jn}\" rows=\"2\"",
+              "replace": "<textarea class=\"ch-box\" data-chat-text maxlength=\"${Number(n)||jn}\" rows=\"1\""
+            },
+            {
+              "find": "<textarea class=\"ch-box ch-hold\" rows=\"2\" disabled>",
+              "replace": "<textarea class=\"ch-box ch-hold\" rows=\"1\" disabled>"
+            },
+            {
+              "find": "if(this._planState!==\"error\"&&e){this._plan=e,this._rememberPlan(),",
+              "replace": "if(this._planState!==\"error\"&&e){this._plan&&JSON.stringify(this._plan)===JSON.stringify(e)?this._forgeChapterPlanVersions?.has(e)&&this._forgeChapterPlanVersions.set(this._plan,this._forgeChapterPlanVersions.get(e)):this._plan=e,this._rememberPlan(),"
+            }
+          ]
         }
       ]
     },
@@ -2567,6 +2611,24 @@
             {
               "find": "s.post(\"/home-options\",",
               "replace": "s.post(\"/artwork/witness\",p=>forgeBackgrounds.witness(p&&p.body)),s.post(\"/home-options\","
+            }
+          ]
+        },
+        {
+          "version": "1.22.0",
+          "commits": [],
+          "edits": [
+            {
+              "find": "var pc={fire:\"water\",water:\"wind\",wind:\"earth\",earth:\"fire\",",
+              "replace": "var pc={fire:\"earth\",earth:\"wind\",wind:\"water\",water:\"fire\","
+            },
+            {
+              "find": "logger:r.logger,concurrency:3,generateKit:",
+              "replace": "logger:r.logger,concurrency:1,generateKit:"
+            },
+            {
+              "find": "options:{temperature:.8,maxTokens:It(8192),signal},parse:Vt(r,normalizeForgeFormationKit)",
+              "replace": "options:{temperature:.8,maxTokens:It(16384),signal},parse:Vt(r,normalizeForgeFormationKit)"
             }
           ]
         }

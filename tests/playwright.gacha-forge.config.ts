@@ -16,6 +16,7 @@ export default defineConfig({
     "package-gacha-forge-units.e2e.ts",
     "package-gacha-forge-unit-art.e2e.ts",
     "package-gacha-forge-choices.e2e.ts",
+    "package-gacha-forge-choice-plan-reload.e2e.ts",
     "package-gacha-forge-welcome-gift.e2e.ts",
     "package-gacha-forge-audio.e2e.ts",
     "package-gacha-forge-boss-dialogue.e2e.ts",
