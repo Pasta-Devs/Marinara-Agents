@@ -134,7 +134,8 @@ export async function forgeSpeakerVoice(config, speaker, others, listVoices = fo
 }
 
 // The story cast resolver's protagonist aliases. A speaker the cast cannot settle (for example two cast entries share
-// the persona's name) who is named like the run protagonist is the persona: its own voice or silence, never the pool.
+// the persona's name or surname) whom that resolver would match to the run protagonist alone is the persona: its own
+// voice or silence, never the pool. Like the resolver, one word may be any word of the name; more words share its first.
 const forgeStoryPersonaAliases = new Set(["you", "yourself", "me", "myself", "i", "player", "protagonist"]);
 export function forgeStoryPersona(protagonist, speaker) {
   const normalized = (value) =>
@@ -145,9 +146,9 @@ export function forgeStoryPersona(protagonist, speaker) {
       .replace(/[^\p{L}\p{N}]+/gu, " ")
       .trim();
   const name = normalized(speaker);
-  const own = normalized(protagonist?.name);
-  if (!name || !(forgeStoryPersonaAliases.has(name) || (own && (name === own || name === own.split(" ")[0]))))
-    return null;
+  const own = normalized(protagonist?.name).split(" ");
+  const named = name.includes(" ") ? name.split(" ")[0] === own[0] : own.includes(name);
+  if (!name || !(forgeStoryPersonaAliases.has(name) || (own[0] && named))) return null;
   return {
     name: protagonist?.name || speaker,
     characterId: String(protagonist?.personaId || "").trim() || null,

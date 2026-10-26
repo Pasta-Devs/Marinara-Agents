@@ -440,9 +440,32 @@ test("an ambiguous persona name still speaks only in the persona's own voice, ne
     host._run.protagonist = { personaId: "persona", name: "Mari Rossi" };
     await controller.speak({ speaker: "Mari", text: "First name only." }, null);
     assert.equal(calls.at(-1).requests[0].voice, "persona-voice");
+    // The bundle's own cast resolver ties on a shared surname or first word, yet either could be the persona.
+    const source = await readFile(new URL("../packages/gacha-forge/client.js", import.meta.url), "utf8");
+    const resolve = new Function(
+      source.slice(source.indexOf("function Kl("), source.indexOf("function Vo(")) + ";return Xl;",
+    )();
+    host._run.protagonist = { personaId: "persona", name: "Alex Rivera" };
+    const ties = [
+      ["Rivera", { name: "Maria Rivera", prota: false }],
+      ["Alex R.", { name: "Alex Chen", prota: false, characterId: "card-alex" }],
+    ];
+    for (const [speaker, other] of ties) {
+      const tie = forgeVoiceCharacter(
+        [other, { name: "Alex Rivera", prota: true, characterId: "persona" }],
+        speaker,
+        resolve,
+      );
+      assert.equal(tie, null, `${speaker} ties in the cast`);
+      await controller.speak({ speaker, text: "Possibly the protagonist." }, tie);
+      assert.equal(calls.at(-1).requests[0].voice, "persona-voice", speaker);
+    }
     config.voiceAssignments = [];
     calls.length = 0;
-    await controller.speak({ speaker: "Mari", text: "No persona voice." }, null);
+    for (const speaker of ["Mari", "Rivera", "Alex R."]) {
+      host._run.protagonist = { personaId: "persona", name: speaker === "Mari" ? "Mari Rossi" : "Alex Rivera" };
+      await controller.speak({ speaker, text: "No persona voice." }, null);
+    }
     assert.equal(calls.length, 0, "a persona without its own voice stays silent");
     await controller.speak({ speaker: "Bryn", text: "An NPC." }, null);
     assert.equal(calls[0]?.requests[0].voice, "pool-voice", "other unresolved speakers still use the pool");

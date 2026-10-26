@@ -4,9 +4,9 @@
 
 Combat voice lines now play in Classic and Formation fights. Preparation starts when the battle screen opens, not when the fight starts. Your persona speaks its lines in its assigned voice. With Voice other characters on, every other team member can speak too. When combat voice lines are on but nobody in the team can be voiced, a short notice says so; it costs nothing. Classic battle rules are unchanged.
 
-## Expression portraits (1.24.6)
+## Expression portraits (1.24.7)
 
-**Settings → World → Sources → Images → Expression portraits** sits with the other image toggles and appears once an image connection is set. It is off by default. When it is on, story portraits follow each line: the scene writer tags a dialogue or thought line with anger, fear, sadness or joy in the same request that writes the scene, and the normal portrait is the neutral face. Untagged lines, including every scene written before 1.24.6, stay neutral.
+**Settings → World → Sources → Images → Expression portraits** sits with the other image toggles and appears once an image connection is set. It is off by default. When it is on, story portraits follow each line: the scene writer tags a dialogue or thought line with anger, fear, sadness or joy in the same request that writes the scene, and the normal portrait is the neutral face. Untagged lines, including every scene written before 1.24.7, stay neutral.
 
 Each look gets one set of four faces: a character's worn outfit, or their default portrait, and your persona's Engine avatar. Every face is painted from that image as the only reference, with a prompt that changes only the expression; on a connection that cannot take a reference picture it is a fresh drawing instead. Painting runs in the background on the image connection's low-priority queue, never delays a scene, and starts only for characters who speak in a scene that is written, pre-forged or opened. Portraits are painted at the portrait size; a persona avatar is painted square at the portrait width. The busy pill shows **Painting expressions**, and the normal portrait shows until a set is ready.
 

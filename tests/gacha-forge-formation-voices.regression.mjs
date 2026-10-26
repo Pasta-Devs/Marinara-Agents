@@ -1022,6 +1022,67 @@ try {
       false,
     );
   });
+  await test("an unspent reservation released by Voice other characters is reserved and voiced once when it returns", async () => {
+    const card = { id: "world:unit:a", name: "Card a", characterId: "card-a", gender: "female" };
+    const run = { combat: { mode: "formation" }, audio: { combatVoices: true, otherVoices: true } };
+    const readUnit = async (_runId, unitId) => (unitId === card.id ? { run, unit: card } : null);
+    const config = {
+      connectionId: "tts-selected",
+      connectionProfiles: { "tts-selected": { npcDefaultFemaleVoices: ["f1"] } },
+    };
+    const s = await server({ run, readUnit });
+    const c = client(s, { config, audio: { otherVoices: true } });
+    const post = c.host._postJson;
+    const reserving = deferred();
+    const release = deferred();
+    const paths = [];
+    const spoken = [];
+    c.services.tts.ttsService.generateAudio = async (text) => {
+      spoken.push(text);
+      return new Blob([wav], { type: "audio/wav" });
+    };
+    c.host._postJson = async (path, body) => {
+      paths.push(path.split("/").at(-1) + (body.slot ? `:${body.slot}` : "") + (body.released ? ":released" : ""));
+      const result = await post(path, body);
+      if (paths.length === 2) {
+        reserving.resolve();
+        await release.promise;
+      }
+      return result;
+    };
+    const first = c.controller.warm([card]);
+    await reserving.promise;
+    run.audio.otherVoices = false;
+    c.audio.settings.otherVoices = false;
+    c.controller.configure();
+    release.resolve();
+    await first;
+    assert.deepEqual(paths, ["prepare", "reserve:death", "fail:death:released"]);
+    assert.equal(
+      (await s.manager.fail({ ...context, slot: "death", token: "x", released: "yes" })).error,
+      "bad-request",
+      "released is only ever the literal true",
+    );
+    run.audio.otherVoices = true;
+    c.audio.settings.otherVoices = true;
+    c.controller.configure();
+    paths.length = 0;
+    await c.controller.warm([card]);
+    for (let index = 0; index < 5; index += 1) await tick();
+    assert.equal(
+      c.stage.children.some((element) => !element.hidden),
+      false,
+      "never synthesized, so no paid retry banner",
+    );
+    assert.equal(c.prompts, 0);
+    assert.deepEqual(
+      paths.filter((path) => path.startsWith("reserve")),
+      ["reserve:death", "reserve:kill", "reserve:ultimateA", "reserve:ultimateB"],
+    );
+    assert.deepEqual(spoken, [lines.death, lines.kill, lines.ultimateA, lines.ultimateB], "each clip voiced once");
+    await c.controller.play(card, "death");
+    assert.equal(c.played.length, 1);
+  });
 } finally {
   for (const controller of controllers) controller.dispose();
   for (const manager of managers) manager.dispose();
