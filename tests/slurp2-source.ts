@@ -420,6 +420,9 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/server/src/services/slurp/slurp-public-images.service.ts": [
     "packages/server/src/slp/features/media/slp-public-images-service.ts",
   ],
+  "packages/server/src/services/slurp/slurp-live-beat.service.ts": [
+    "packages/server/src/slp/features/live/slp-live-beat.ts",
+  ],
   "packages/server/src/services/slurp/slurp-media.ts": ["packages/server/src/slp/base/media/slp-media.ts"],
   "packages/server/src/services/slurp/slurp-vision.ts": ["packages/server/src/slp/base/media/slp-vision.ts"],
   "packages/server/src/services/slurp/slurp-post-image-context.ts": [
