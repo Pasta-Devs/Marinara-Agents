@@ -3,7 +3,7 @@
 // above an open Letters panel (z-index 20) and below dialogs.
 const forgeUnitMessageStyle = `
 .gf-unit-message-notice{position:absolute;z-index:25;top:calc(var(--f) * 1);left:50%;translate:-50% 0;box-sizing:border-box;inline-size:min(calc(var(--f) * 44),calc(100% - var(--f) * 2));max-block-size:calc(100% - var(--f) * 2);overflow:auto;display:grid;gap:calc(var(--f) * 0.5);padding:calc(var(--f) * 0.9) calc(var(--f) * 1.2);background:linear-gradient(0deg,var(--ink-2),var(--ink-2)),var(--ink);color:var(--text);border:1px solid var(--ink-3);border-top:2px solid var(--coral);--cut:1em;clip-path:var(--clip-card);border-radius:var(--radius);box-shadow:var(--panel-shadow),var(--panel-bevel);font-family:var(--body);font-size:var(--t-sm);line-height:1.4;animation:gf-unit-message-in 300ms ease-out backwards}
-.gf-unit-message-notice .kick{margin:0;font-family:var(--display);font-size:var(--t-tiny);letter-spacing:0.2em;text-transform:var(--case);color:var(--coral)}
+.gf-unit-message-notice .kick{margin:0;overflow-wrap:anywhere;font-family:var(--display);font-size:var(--t-tiny);letter-spacing:0.2em;text-transform:var(--case);color:var(--coral)}
 .gf-unit-message-notice .who{margin:0;font-family:var(--title);font-stretch:var(--stretch);font-weight:var(--title-weight);font-size:var(--t-md);line-height:1.2;overflow-wrap:anywhere}
 .gf-unit-message-notice .said{margin:0;font-style:italic;color:var(--porcelain-3);overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
 .gf-unit-message-notice .why{margin:0;overflow-wrap:anywhere}
@@ -148,7 +148,10 @@ export function wireForgeUnitMessages(host) {
       item.textContent = value;
       return item;
     };
-    const kick = line("kick", host._run?.chatChannel || forgeUnitMessagesEnglish["messages.kick"]);
+    // The run carries the channel's name; older saves may still hold the { name, blurb } record.
+    const channel = host._run?.chatChannel;
+    const channelName = String((typeof channel === "string" ? channel : channel?.name) || "").trim();
+    const kick = line("kick", channelName || forgeUnitMessagesEnglish["messages.kick"]);
     const status = document.createElement("div");
     status.setAttribute("role", "status");
     if (pending.failed)

@@ -516,7 +516,7 @@ test("story and audio saves share one queue without injecting audio into a story
 test("a letter waits for Home, then shows its channel, sender and opening lines", async () => {
   const f = fixture();
   f.host._chat = null;
-  f.host._run.chatChannel = "Letters";
+  f.host._run.chatChannel = { name: "Letters", blurb: "An older saved channel record." };
   let screen = "summon";
   f.host._state = () => screen;
   f.transport(async () => incoming("world:unit:arden", "incoming-1", "Arden"));
