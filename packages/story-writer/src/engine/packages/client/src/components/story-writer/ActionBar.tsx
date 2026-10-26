@@ -3,7 +3,17 @@
 // ──────────────────────────────────────────────
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
-import { Feather, Library, Loader2, Maximize2, Minimize2, RotateCcw, Square, StepForward } from "lucide-react";
+import {
+  CheckCheck,
+  Feather,
+  Library,
+  Loader2,
+  Maximize2,
+  Minimize2,
+  RotateCcw,
+  Square,
+  StepForward,
+} from "lucide-react";
 import type { GenerationStatus } from "../../hooks/use-story-generation";
 import { useNumberFormat } from "./sidebar/fields";
 
@@ -31,6 +41,8 @@ export function ActionBar(props: {
   onRewrite(): void;
   onStop(): void;
   onOpenLibrary(): void;
+  /** Marks the draft last chapter finished and writes the next one. */
+  onFinishChapter(): void;
 }) {
   const { t } = useTranslation();
   const hintId = useId();
@@ -112,6 +124,18 @@ export function ActionBar(props: {
               {t("actions.noConnection")}
             </span>
           )}
+          {props.lastChapterDraft ? (
+            <button
+              type="button"
+              className="sw-action-icon"
+              disabled={!props.canWrite}
+              aria-label={t("actions.finishChapter", { number: props.chapterCount })}
+              title={t("actions.finishChapter", { number: props.chapterCount })}
+              onClick={props.onFinishChapter}
+            >
+              <CheckCheck size={19} aria-hidden="true" />
+            </button>
+          ) : null}
           {props.chapterCount > 0 && !props.lastChapterDraft ? (
             <button
               type="button"

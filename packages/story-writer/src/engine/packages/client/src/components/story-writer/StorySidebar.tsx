@@ -3,7 +3,7 @@
 // ──────────────────────────────────────────────
 // An overlay drawer on the side the author picks. Its handle stays glued to that edge and travels with the drawer.
 // Closed, the panel is inert, so neither focus nor screen readers reach into it.
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { BookOpen, ChevronRight, Library, Palette, PenLine, Users, Wand2, X } from "lucide-react";
 import type { ConnectionOption } from "../../hooks/use-engine-resources";
@@ -168,7 +168,8 @@ export function StorySidebar(props: StorySidebarProps) {
               />
             </Section>
             {settings ? (
-              <>
+              // Keyed by story: the text fields keep drafts, and one story's draft must never land in another.
+              <Fragment key={doc.data?.story.id}>
                 <Section
                   title={t("sidebar.sections.story")}
                   icon={<BookOpen size={18} />}
@@ -222,7 +223,7 @@ export function StorySidebar(props: StorySidebarProps) {
                     onJump={props.onJumpToChapter}
                   />
                 </Section>
-              </>
+              </Fragment>
             ) : null}
             <Section
               title={t("sidebar.sections.appearance")}

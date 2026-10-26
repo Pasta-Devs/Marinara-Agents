@@ -296,8 +296,8 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
     (open as (id: string) => void)(connectionId);
   };
   const saveNow = async () => {
-    await flush();
-    toast.success(t("stories.savedToast"));
+    if (await flush()) toast.success(t("stories.savedToast"));
+    else toast.warning(t("stories.saveFailed"));
   };
   const openLibrary = () => {
     setSidebarOpen(true);
@@ -317,6 +317,12 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
       return;
     }
     toast.error(t("errors.openConnection"));
+  };
+  const finishChapter = async () => {
+    // A draft that is done as it is: mark it finished, then the next Write starts a new chapter.
+    if (!lastChapter) return;
+    await saveChapter(lastChapter.id, { status: "complete" }, { immediate: true });
+    void generation.write("next");
   };
   const rewriteLastChapter = async () => {
     const number = chapters.length;
@@ -406,6 +412,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
         {data && settings ? (
           <>
             <StickyNote
+              key={data.story.id}
               side={preferences.noteSide}
               text={settings.authorNote}
               clearAfterChapter={settings.clearNoteAfterChapter}
@@ -431,6 +438,7 @@ export function StoryWriterView({ capabilityProps }: { capabilityProps: Record<s
               onRewrite={() => void rewriteLastChapter()}
               onStop={generation.stop}
               onOpenLibrary={openLibrary}
+              onFinishChapter={() => void finishChapter()}
             />
           </>
         ) : null}

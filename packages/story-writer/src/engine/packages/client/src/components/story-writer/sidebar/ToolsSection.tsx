@@ -4,7 +4,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowDown, ArrowUp, ChevronDown, Layers, Plus, Sparkles, Trash2, X } from "lucide-react";
-import type { StoryGenerationApi } from "../../../hooks/use-story-generation";
+import { chaptersToSummarize, type StoryGenerationApi } from "../../../hooks/use-story-generation";
 import { generateClientId } from "../../../lib/utils";
 import {
   LIMITS,
@@ -32,13 +32,8 @@ export function ToolsSection(props: {
   const { t } = useTranslation();
   const { settings, onChange, chapters, generation, canGenerate } = props;
   const keep = settings.keepFullChapters;
-  const unsummarized = useMemo(
-    () =>
-      chapters
-        .slice(0, Math.max(0, chapters.length - keep))
-        .filter((chapter) => !chapter.summary.trim() && chapter.text.trim()).length,
-    [chapters, keep],
-  );
+  // The same rule the button runs, so the hint never offers chapters it would skip.
+  const unsummarized = useMemo(() => chaptersToSummarize(chapters, keep).length, [chapters, keep]);
   return (
     <>
       <h4 className="sw-subheading">{t("tools.chapters")}</h4>

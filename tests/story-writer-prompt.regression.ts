@@ -417,7 +417,43 @@ test("cut-off detection and the chapter token budget", () => {
   assert.equal(endsMidSentence('"Run," she said.'), false);
   assert.equal(endsMidSentence('He left."\n'), false);
   assert.equal(endsMidSentence("***"), false);
+  // Sentence ends of other scripts and quotation styles are endings, not cut-offs.
+  for (const ending of [
+    "„Wir müssen gehen.“",
+    "»Ja.«",
+    "वह चला गया।",
+    "یہ ٹھیک ہے۔",
+    "هل أنت بخير؟",
+    "Τι κάνεις;",
+    "ፍቅር ነው።",
+    "「はい」",
+    "สวัสดีครับ",
+  ]) {
+    assert.equal(endsMidSentence(ending), false, ending);
+  }
+  assert.equal(endsMidSentence("Она пошла в"), true);
   assert.equal(chapterTokenBudget(2_000, null), 3_600);
   assert.equal(chapterTokenBudget(2_000, 8_000), 8_000);
   assert.equal(chapterTokenBudget(20_000, 500_000), 200_000);
+});
+
+test("no message outgrows the 500,000 characters /generate/raw accepts", () => {
+  const long = "word ".repeat(2_400);
+  const messages = build({
+    settings: settings({ keepFullChapters: 50 }),
+    chapters: Array.from({ length: 160 }, (_, index) => chapter(index + 1, { text: `${index + 1} ${long}` })),
+  });
+  assert.ok(messages.length <= 200);
+  for (const message of messages) assert.ok(message.content.length <= 500_000, `${message.role} fits`);
+  // The newest chapters stay whole; only the oldest folded text is cut.
+  assert.equal(messages.at(-2)?.content, `160 ${long}`.trimEnd());
+  const summarized = build({
+    settings: settings({ keepFullChapters: 0 }),
+    chapters: Array.from({ length: 300 }, (_, index) => chapter(index + 1, { summary: "S".repeat(2_000) })),
+  });
+  assert.ok(summarized[0]!.content.length <= 500_000, "the summaries section fits too");
+});
+
+test("an unclosed reasoning block is not read as a timeline", () => {
+  assert.deepEqual(parseTimelineResponse("<think>\n1. Plan the heist\n2. Escape", []), []);
 });

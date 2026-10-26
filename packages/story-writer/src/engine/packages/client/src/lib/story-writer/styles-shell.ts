@@ -795,7 +795,10 @@ const LAYOUT_RULES = `
   ${R} .sw-action-primary { justify-content: center; width: 48px; height: 48px; min-height: 0; padding: 0; }
   ${R} .sw-action-primary :is(.sw-action-label-long, .sw-action-label-short) { display: none; }
   ${R} .sw-action-divider { align-self: auto; width: auto; height: 1px; margin: 2px 8px; }
-  ${R} .sw-action-status, ${R} .sw-wordcount { display: none; }
+  ${R} .sw-action-status, ${R} .sw-wordcount, ${R} .sw-action-hint { display: none; }
+  /* The upright bar sits on the side away from the drawer; a note on that side moves in beside it, not over it. */
+  ${R} .sw-root[data-sw-sidebar="left"] .sw-note-anchor[data-side="right"] { right: calc(84px + ${SAFE_RIGHT}); }
+  ${R} .sw-root[data-sw-sidebar="right"] .sw-note-anchor[data-side="left"] { left: calc(84px + ${SAFE_LEFT}); }
 }`;
 
 const DEVICE_RULES = `

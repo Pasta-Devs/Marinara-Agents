@@ -61,6 +61,7 @@ The note works like **Author's Notes** in Roleplay: it is sent as one of your me
 - **Write next chapter**: writes a new chapter. When the last chapter is a draft, it reads **Continue chapter N** and finishes that chapter instead.
 - **Stop**: shown while the model writes, with a live word count.
 - **Continue the last chapter**: asks the model for more of a finished chapter, for example when it ended too soon.
+- **Finish this chapter** (shown while the last chapter is a draft): marks it finished and writes the next chapter, for when a draft is done as it is.
 - **Rewrite the last chapter**: throws the last chapter away and writes it again. Story Writer asks first.
 - **Your stories**: opens your story list.
 - **Fullscreen**: hides the rest of Marinara Engine.
@@ -196,6 +197,8 @@ Everything the model reads goes to the connection you pick: your prompt, the sel
 **A chapter fails with an error.** The message comes from the Engine or the provider, so it usually says what went wrong: a wrong API key, an unavailable model, a request that is too large. Open **Edit connection** to check the connection. If the problem only happens while streaming, try turning **Stream text** off. If the request is too large, summarize older chapters or lower **Keep the last N chapters in full**.
 
 **Chapters stop in the middle.** The connection ran out of room for the answer. Press **Continue chapter N**, or raise the maximum tokens in the connection's settings.
+
+**A finished chapter is still marked as a draft.** Story Writer guesses that a chapter was cut off when it ends without a sentence ending. If the chapter is really done, press **Finish this chapter** to move on to the next one.
 
 **"403" or "not allowed" when using Story Writer from another device.** Story Writer saves through the Engine's protected package routes. On the computer running Marinara Engine this just works, but from another device on your network (or through a tunnel) those routes need the admin secret: set `ADMIN_SECRET` in the server's `.env`, then paste the same value into **Settings → Advanced → Admin Access** on that device and click **Save**.
 

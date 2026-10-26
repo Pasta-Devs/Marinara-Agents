@@ -26,7 +26,6 @@ import {
   findBannedPhrases,
   joinContinuation,
   parseTimelineResponse,
-  stripLeadingThinking,
   tokenBudget,
   visibleStreamingText,
   type ChatMessage,
@@ -117,7 +116,7 @@ function loreScanText(settings: StorySettings, chapters: StoryChapter[]): string
 }
 
 /** Older chapters (outside the last N the next chapter sees in full) that have text but no summary yet. */
-function chaptersToSummarize(chapters: StoryChapter[], keepFullChapters: number): StoryChapter[] {
+export function chaptersToSummarize(chapters: StoryChapter[], keepFullChapters: number): StoryChapter[] {
   const prior = chapters[chapters.length - 1]?.status === "draft" ? chapters.slice(0, -1) : chapters;
   return prior
     .slice(0, Math.max(0, prior.length - keepFullChapters))
@@ -196,11 +195,14 @@ async function summarizeOne(context: OperationContext, chapterId: string): Promi
   const messages = buildSummaryMessages({ settings: story.story.settings, chapter, chapterNumber });
   const result = await complete(context, messages, tokenBudget(SUMMARY_MAX_TOKENS, context.connection.savedMaxTokens));
   if (result.aborted) return false;
-  const summary = stripLeadingThinking(result.content).trim().slice(0, LIMITS.summary);
+  const summary = visibleStreamingText(result.content).trim().slice(0, LIMITS.summary);
   if (!summary) {
     toast.error(context.t("generation.errors.summaryEmpty", { number: chapterNumber }));
     return false;
   }
+  // The author may have written a summary while this one was being made: theirs wins.
+  const current = context.readStory()?.chapters.find((candidate) => candidate.id === chapter.id);
+  if (!current || current.summary !== chapter.summary) return false;
   await context.run.doc.saveChapter(chapter.id, { summary }, { immediate: true });
   return true;
 }
@@ -227,6 +229,12 @@ async function refreshTimeline(context: OperationContext): Promise<number | null
   const events = parseTimelineResponse(result.content, settings.timeline);
   if (events.length === 0) {
     toast.error(context.t("generation.errors.timelineUnreadable"));
+    return null;
+  }
+  // The author edited the timeline while it was being planned: keep their version rather than overwrite it.
+  const current = context.readStory()?.story.settings.timeline;
+  if (JSON.stringify(current) !== JSON.stringify(settings.timeline)) {
+    toast.info(context.t("generation.timelineChanged"));
     return null;
   }
   context.run.doc.updateSettings({ timeline: events }, { immediate: true });
@@ -313,7 +321,8 @@ async function writeChapter(context: OperationContext, requested: "next" | "cont
     cancelFrame?.();
   }
 
-  const stripped = stripLeadingThinking(result.content);
+  // An unclosed reasoning block (cut off by the token limit) is not prose: it counts as nothing written.
+  const stripped = visibleStreamingText(result.content);
   const addition = base ? stripped.trimEnd() : stripped.trim();
   if (!addition.trim()) {
     // Nothing was written: put the story back the way it was.

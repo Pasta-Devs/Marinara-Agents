@@ -20,12 +20,13 @@ const HEADING = /^\s{0,3}(#{1,3})\s+(.+?)(?:\s+#+)?\s*$/;
 const HR = /^\s{0,3}(?:(?:\*\s*){3,}|(?:-\s*){3,}|(?:_\s*){3,})$/;
 const QUOTE = /^\s{0,3}>\s?(.*)$/;
 
-// [pattern, HTML replacement, plain-text replacement]. Order matters: the longer markers go first.
+// [pattern, HTML replacement, plain-text replacement]. Order matters: the longer markers go first. Emphasis never starts
+// or ends on an asterisk, so a censored "f***" stays literal instead of becoming an empty emphasis.
 const INLINE_RULES: Array<[RegExp, string, string]> = [
-  [/\*\*\*(?!\s)(.+?)(?<!\s)\*\*\*/g, "<strong><em>$1</em></strong>", "$1"],
-  [/\*\*(?!\s)(.+?)(?<!\s)\*\*/g, "<strong>$1</strong>", "$1"],
+  [/\*\*\*(?![\s*])(.+?)(?<![\s*])\*\*\*/g, "<strong><em>$1</em></strong>", "$1"],
+  [/\*\*(?![\s*])(.+?)(?<![\s*])\*\*/g, "<strong>$1</strong>", "$1"],
   [/(^|[^\p{L}\p{N}_])__(?!\s)(.+?)(?<!\s)__(?![\p{L}\p{N}_])/gu, "$1<u>$2</u>", "$1$2"],
-  [/\*(?!\s)(.+?)(?<!\s)\*/g, "<em>$1</em>", "$1"],
+  [/\*(?![\s*])(.+?)(?<![\s*])\*/g, "<em>$1</em>", "$1"],
   [/(^|[^\p{L}\p{N}_])_(?!\s)(.+?)(?<!\s)_(?![\p{L}\p{N}_])/gu, "$1<em>$2</em>", "$1$2"],
   [/~~(?!\s)(.+?)(?<!\s)~~/g, "<s>$1</s>", "$1"],
 ];
@@ -42,8 +43,11 @@ function inlinePlain(text: string): string {
   return INLINE_RULES.reduce((plain, [pattern, , replacement]) => plain.replace(pattern, replacement), text);
 }
 
+// Deeper "> > >" nesting renders as text: each level recurses, and thousands of them would overflow the stack.
+const MAX_QUOTE_DEPTH = 8;
+
 /** Renders chapter Markdown as HTML: paragraphs, h1–h3, scene breaks, blockquotes and inline emphasis. */
-export function markdownToHtml(markdown: string): string {
+export function markdownToHtml(markdown: string, depth = 0): string {
   const html: string[] = [];
   let paragraph: string[] = [];
   let quote: string[] | null = null;
@@ -52,12 +56,12 @@ export function markdownToHtml(markdown: string): string {
     paragraph = [];
   };
   const flushQuote = () => {
-    if (quote) html.push(`<blockquote>${markdownToHtml(quote.join("\n"))}</blockquote>`);
+    if (quote) html.push(`<blockquote>${markdownToHtml(quote.join("\n"), depth + 1)}</blockquote>`);
     quote = null;
   };
 
   for (const line of markdown.replace(/\r\n?/g, "\n").split("\n")) {
-    const quoted = QUOTE.exec(line);
+    const quoted = depth < MAX_QUOTE_DEPTH ? QUOTE.exec(line) : null;
     if (quoted) {
       flushParagraph();
       if (!quote) quote = [];

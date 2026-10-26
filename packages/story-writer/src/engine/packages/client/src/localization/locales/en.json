@@ -60,7 +60,8 @@
     "words_other": "{{formatted}} words",
     "wordsOfTarget": "{{words}} / {{target}}",
     "targetProgress": "{{percent}}% of the target length",
-    "library": "Your stories"
+    "library": "Your stories",
+    "finishChapter": "Finish chapter {{number}} and write the next one"
   },
   "stories": {
     "list": "Your stories",
@@ -82,7 +83,8 @@
     "saveNow": "Save now",
     "savedAll": "Everything is saved",
     "savedHint": "Every story saves itself as you write. Open any of them from this list at any time.",
-    "savedToast": "Story saved"
+    "savedToast": "Story saved",
+    "saveFailed": "Some changes could not be saved yet. Story Writer keeps trying."
   },
   "story": {
     "title": "Title",
@@ -283,6 +285,7 @@
     "timeline": {
       "updated_one": "Timeline updated: {{count}} event.",
       "updated_other": "Timeline updated: {{count}} events."
-    }
+    },
+    "timelineChanged": "You changed the timeline while it was being planned, so your version was kept."
   }
 }

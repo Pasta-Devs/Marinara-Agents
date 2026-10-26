@@ -117,14 +117,34 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
   await expect(root.locator(".sw-title-text")).toContainText("The Long Walk Home");
   await page.screenshot({ path: testInfo.outputPath("01-empty-book.png") });
 
-  // Click the empty page and start the story yourself.
+  // Click the empty page and start the story yourself. The first create and the first save fail as a dropped
+  // connection would: the text must still reach the server, not vanish with the failed request.
+  const failedOnce = new Set<string>();
+  await page.route("**/api/story-writer/stories/*/chapters**", async (route) => {
+    const method = route.request().method();
+    if ((method === "POST" || method === "PATCH") && !failedOnce.has(method)) {
+      failedOnce.add(method);
+      await route.fulfill({ status: 503, json: { error: "Service unavailable" } });
+      return;
+    }
+    await route.continue();
+  });
   if (mobile) await root.getByRole("button", { name: "Start writing" }).click();
   const ghost = root.locator(".sw-block--ghost .sw-body");
   await ghost.click();
-  await page.keyboard.type(OPENING);
+  const storyChapters = async () =>
+    (await engineRequest(request, base, "GET", `/story-writer/stories/${fresh.story.id}`)).chapters;
+  const firstHalf = "It was a dark";
+  await page.keyboard.type(firstHalf);
   await expect
-    .poll(async () => (await engineRequest(request, base, "GET", `/story-writer/stories/${fresh.story.id}`)).chapters)
+    .poll(storyChapters, { timeout: 30_000 })
+    .toEqual([expect.objectContaining({ status: "draft", text: firstHalf })]);
+  await page.keyboard.type(OPENING.slice(firstHalf.length));
+  await expect
+    .poll(storyChapters, { timeout: 30_000 })
     .toEqual([expect.objectContaining({ status: "draft", text: OPENING })]);
+  expect([...failedOnce].sort()).toEqual(["PATCH", "POST"]);
+  await page.unroute("**/api/story-writer/stories/*/chapters**");
 
   // The author's note, at depth 0, goes right before the continue message.
   await root.getByRole("button", { name: /^Open the author's note/ }).click();
@@ -230,6 +250,20 @@ test("Story Writer writes, edits, turns pages, keeps stories and returns from th
     // Landscape phones get the two-page spread.
     await page.setViewportSize({ width: 844, height: 390 });
     await expect(page.locator("marinara-capability-story-writer .sw-reader")).toHaveAttribute("data-pps", "2");
+    // The sticky note never covers the upright action bar's Write button.
+    const host = page.locator("marinara-capability-story-writer");
+    if (await host.locator(".sw-drawer[data-open='true']").count()) {
+      await host.getByRole("button", { name: "Hide story settings" }).click();
+    }
+    const note = await host.locator(".sw-note-collapsed").boundingBox();
+    const writeButton = await host.locator(".sw-action-primary").boundingBox();
+    expect(note && writeButton).toBeTruthy();
+    const overlaps =
+      note!.x < writeButton!.x + writeButton!.width &&
+      writeButton!.x < note!.x + note!.width &&
+      note!.y < writeButton!.y + writeButton!.height &&
+      writeButton!.y < note!.y + note!.height;
+    expect(overlaps).toBe(false);
     await page.waitForTimeout(600);
     await page.screenshot({ path: testInfo.outputPath("08-landscape.png") });
   }

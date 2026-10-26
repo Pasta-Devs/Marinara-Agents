@@ -598,6 +598,8 @@ export const StoryReader = forwardRef<StoryReaderHandle, StoryReaderProps>(funct
       // Only when focus is in Story Writer (or nowhere), never in the Engine's own chrome.
       const scope = root.closest("marinara-capability-story-writer") ?? root;
       if (target && target !== document.body && !scope.contains(target)) return;
+      // The drawer and the note scroll with these keys; they turn pages only from the book itself.
+      if (target?.closest(".sw-drawer, .sw-note-anchor")) return;
       const { current: active, totalSpreads: total } = live.current;
       const next =
         event.key === "ArrowRight" || event.key === "PageDown"

@@ -195,3 +195,13 @@ test("exports print the title once and each chapter under its own heading", () =
   assert.equal(storyFileName('Zażółć: "gęślą"/jaźń', "md"), "Zażółć_ _gęślą_jaźń.md");
   assert.equal(storyFileName("  ", "txt"), "story.txt");
 });
+
+test("censored words stay literal, and deep quote nesting cannot overflow the stack", () => {
+  assert.equal(markdownToHtml('"What the f***?" she asked.'), "<p>&quot;What the f***?&quot; she asked.</p>");
+  assert.equal(markdownToPlainText("F*** this."), "F*** this.");
+  assert.equal(markdownToHtml("***a*** **b** *c*"), "<p><strong><em>a</em></strong> <strong>b</strong> <em>c</em></p>");
+  const deep = `${"> ".repeat(20_000)}deep`;
+  const html = markdownToHtml(deep);
+  assert.equal(html.match(/<blockquote>/g)?.length, 8);
+  assert.ok(html.endsWith("</blockquote>".repeat(8)));
+});

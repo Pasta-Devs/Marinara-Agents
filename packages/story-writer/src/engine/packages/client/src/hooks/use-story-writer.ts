@@ -44,6 +44,8 @@ interface SaveTarget {
   errorKey: string;
   request(storyId: string, patch: Patch): Promise<unknown>;
   apply(qc: QueryClient, storyId: string, result: unknown): void;
+  /** Undoes a write the server refused. Without it, the document loads again. */
+  refuse?(): void;
 }
 
 interface PendingSave extends SaveTarget {
@@ -61,10 +63,15 @@ interface PendingSave extends SaveTarget {
 const edits = new Map<string, number>();
 const confirmed = new Map<string, number>();
 const queues = new Map<string, Promise<void>>();
+/** Requests queued per key so far, so a failed request can tell whether a later one waits behind it. */
+const requestCounts = new Map<string, number>();
+/** The patch of a failed request with a later one queued behind it: that one sends it under its own patch. */
+const carried = new Map<string, Patch>();
 const pendingSaves = new Map<string, PendingSave>();
 /** Keys whose last save failed with a network or server error: reported once until a save succeeds. */
 const failing = new Set<string>();
-const creatingChapters = new Set<string>();
+/** Chapters the server may not have yet, by save key: until one is created, its key's requests create it. */
+const creatingChapters = new Map<string, SaveTarget>();
 const deletingChapters = new Set<string>();
 const savingListeners = new Set<() => void>();
 let requestsInFlight = 0;
@@ -107,8 +114,10 @@ function reportError(error: unknown, key: string) {
   toast.error(getApiErrorMessage(error, translate(key)));
 }
 
+const errorStatus = (error: unknown) => (error as { status?: unknown } | null)?.status;
+
 function isClientError(error: unknown): boolean {
-  const status = (error as { status?: unknown } | null)?.status;
+  const status = errorStatus(error);
   return typeof status === "number" && status >= 400 && status < 500;
 }
 
@@ -117,9 +126,11 @@ function pickKeys(source: object, keys: object): Patch {
   return Object.fromEntries(Object.keys(keys).map((key) => [key, values[key]]));
 }
 
-/** Runs `task` after every earlier request for `key`. The returned promise rejects when the task does. */
-function enqueue<T>(key: string, task: () => Promise<T>): Promise<T> {
-  const run = (queues.get(key) ?? Promise.resolve()).then(task);
+/** Runs `task` after every earlier request for `key`, with its number in that line. Rejects when the task does. */
+function enqueue<T>(key: string, task: (request: number) => Promise<T>): Promise<T> {
+  const request = (requestCounts.get(key) ?? 0) + 1;
+  requestCounts.set(key, request);
+  const run = (queues.get(key) ?? Promise.resolve()).then(() => task(request));
   const settled = run.then(
     () => undefined,
     () => undefined,
@@ -174,28 +185,37 @@ function flushSave(key: string, now = false): Promise<void> {
   pendingSaves.delete(key);
   if (save.timer) clearTimeout(save.timer);
   const sent = edits.get(key) ?? 0;
-  const done = enqueue(key, async () => {
+  const done = enqueue(key, async (request) => {
+    // A failed earlier request's patch goes out under this newer one, never after it.
+    const patch = { ...carried.get(key), ...save.patch };
+    carried.delete(key);
+    // A chapter the server may not have yet is created by whichever of its saves goes out first.
+    const target = creatingChapters.get(key) ?? save;
     try {
-      const result = await save.request(save.storyId, save.patch);
+      const result = await target.request(target.storyId, patch);
       confirmEdit(key, sent);
       failing.delete(key);
-      save.apply(save.qc, save.storyId, result);
+      target.apply(target.qc, target.storyId, result);
     } catch (error) {
       if (isClientError(error)) {
         // The server refused this write: show its version again instead of retrying forever.
         confirmEdit(key, sent);
-        reportError(error, save.errorKey);
-        void save.qc.invalidateQueries({
-          queryKey: key === PREFERENCES_KEY ? storyWriterKeys.preferences : storyWriterKeys.story(save.storyId),
-        });
+        failing.delete(key);
+        reportError(error, target.errorKey);
+        if (target.refuse) target.refuse();
+        else
+          void target.qc.invalidateQueries({
+            queryKey: key === PREFERENCES_KEY ? storyWriterKeys.preferences : storyWriterKeys.story(target.storyId),
+          });
         return;
       }
-      if (!failing.has(key)) reportError(error, save.errorKey);
+      if (!failing.has(key)) reportError(error, target.errorKey);
       failing.add(key);
-      // Keep the edit and try again; whatever was typed since is newer and wins.
+      // Keep the edit and try again under anything newer: a request queued behind this one, else what was typed since.
       const newer = pendingSaves.get(key);
-      if (newer) newer.patch = { ...save.patch, ...newer.patch };
-      else void scheduleSave(key, save, save.patch, RETRY_DELAY);
+      if ((requestCounts.get(key) ?? 0) > request) carried.set(key, patch);
+      else if (newer) newer.patch = { ...patch, ...newer.patch };
+      else void scheduleSave(key, save, patch, RETRY_DELAY);
     }
   });
   void done.then(() => {
@@ -209,14 +229,20 @@ function dropSaves(match: (key: string, save: PendingSave) => boolean) {
     if (!match(key, save)) continue;
     if (save.timer) clearTimeout(save.timer);
     pendingSaves.delete(key);
+    failing.delete(key);
     for (const resolve of save.waiters) resolve();
   }
   notifySaving();
 }
 
-async function flushAllSaves(): Promise<void> {
+/**
+ * Sends every pending save now. Resolves to false while a save is failing (it keeps retrying); edits made while this
+ * runs are not failures.
+ */
+async function flushAllSaves(): Promise<boolean> {
   for (const key of [...pendingSaves.keys()]) void flushSave(key, true);
   await Promise.all([...queues.values()]);
+  return failing.size === 0;
 }
 
 // ── Cache helpers ──
@@ -245,7 +271,7 @@ function mergeDocument(local: StoryWithChapters | undefined, server: StoryWithCh
     });
   const known = new Set(chapters.map((chapter) => chapter.id));
   for (const chapter of local.chapters) {
-    if (!known.has(chapter.id) && creatingChapters.has(chapter.id)) chapters.push(chapter);
+    if (!known.has(chapter.id) && creatingChapters.has(chapterKey(chapter.id))) chapters.push(chapter);
   }
   const story = mergeRecord(local.story, server.story);
   return { story: { ...story, chapterIds: chapters.map((chapter) => chapter.id) }, chapters };
@@ -319,6 +345,38 @@ function chapterTarget(qc: QueryClient, storyId: string, chapterId: string): Sav
           : doc.chapters.map((chapter) => (chapter.id === chapterId ? saved.chapter : chapter)),
       }));
       syncStorySummary(client, id);
+    },
+  };
+}
+
+/** Saves for a chapter the server may not have yet. Each attempt creates it as it is now, so it carries every edit. */
+function chapterCreateTarget(qc: QueryClient, storyId: string, chapter: StoryChapter): SaveTarget {
+  const key = chapterKey(chapter.id);
+  const saves = chapterTarget(qc, storyId, chapter.id);
+  let attempts = 0;
+  return {
+    ...saves,
+    errorKey: "errors.createChapter",
+    request: async (id) => {
+      const doc = qc.getQueryData<StoryWithChapters>(storyWriterKeys.story(id));
+      const local = doc?.chapters.find((item) => item.id === chapter.id) ?? chapter;
+      const fields = normalizeChapterPatch(local);
+      attempts += 1;
+      try {
+        const result = await api.post<StoryWithChapters>(`${storyPath(id)}/chapters`, { ...fields, id: chapter.id });
+        creatingChapters.delete(key);
+        return { story: result.story, chapter: result.chapters.find((item) => item.id === chapter.id) ?? local };
+      } catch (error) {
+        // "Already exists" on a retry: an earlier attempt got through and only its response was lost.
+        if (attempts === 1 || errorStatus(error) !== 409) throw error;
+        creatingChapters.delete(key);
+        return saves.request(id, { ...fields });
+      }
+    },
+    refuse: () => {
+      creatingChapters.delete(key);
+      dropSaves((saveKey) => saveKey === key);
+      updateStoryCache(qc, storyId, (doc) => removeChapter(doc, chapter.id));
     },
   };
 }
@@ -473,7 +531,8 @@ export interface StoryDocumentApi {
   saveChapter(chapterId: string, patch: ChapterPatch, options?: { immediate?: boolean }): Promise<void>;
   createChapter(create: ChapterCreate): Promise<StoryChapter>;
   deleteChapter(chapterId: string): Promise<void>;
-  flush(): Promise<void>;
+  /** Sends every pending save now; resolves to false while a save is failing (it keeps retrying). */
+  flush(): Promise<boolean>;
 }
 
 export function useStoryDocument(storyId: string | null): StoryDocumentApi {
@@ -582,32 +641,21 @@ export function useStoryDocument(storyId: string | null): StoryDocumentApi {
         updatedAt: now,
       };
       const key = chapterKey(id);
-      const sent = bump(key);
-      creatingChapters.add(id);
+      bump(key);
+      creatingChapters.set(key, chapterCreateTarget(qc, owner, chapter));
       updateStoryCache(qc, owner, (doc) => ({
         story: { ...doc.story, chapterIds: [...doc.story.chapterIds, id] },
         chapters: [...doc.chapters, chapter],
       }));
-      try {
-        // Saves for this chapter queue behind the POST, so typing on while it runs never reaches a missing chapter.
-        const result = await enqueue(key, () =>
-          api.post<StoryWithChapters>(`${storyPath(owner)}/chapters`, { ...fields, id }),
-        );
-        creatingChapters.delete(id);
-        confirmEdit(key, sent);
-        qc.setQueryData<StoryWithChapters>(storyWriterKeys.story(owner), (current) => mergeDocument(current, result));
-        syncStorySummary(qc, owner);
-        const cached = qc.getQueryData<StoryWithChapters>(storyWriterKeys.story(owner));
-        return (
-          cached?.chapters.find((item) => item.id === id) ?? result.chapters.find((item) => item.id === id) ?? chapter
-        );
-      } catch (error) {
-        creatingChapters.delete(id);
-        dropSaves((saveKey) => saveKey === key);
-        updateStoryCache(qc, owner, (doc) => removeChapter(doc, id));
-        reportError(error, "errors.createChapter");
-        throw error;
-      }
+      // The create is this key's first save: saves made while it runs queue behind it, so typing on never reaches a
+      // missing chapter. A network or server error keeps the chapter and retries it like any other save.
+      await scheduleSave(key, chapterTarget(qc, owner, id), {}, null);
+      const saved = qc
+        .getQueryData<StoryWithChapters>(storyWriterKeys.story(owner))
+        ?.chapters.find((item) => item.id === id);
+      // Already reported by the save queue.
+      if (!saved || creatingChapters.has(key)) throw new Error("The chapter is not stored yet.");
+      return saved;
     },
     [qc, storyId],
   );
@@ -618,17 +666,23 @@ export function useStoryDocument(storyId: string | null): StoryDocumentApi {
       if (!owner) return;
       const key = chapterKey(chapterId);
       dropSaves((saveKey) => saveKey === key);
+      const uncreated = creatingChapters.delete(key);
       deletingChapters.add(chapterId);
       updateStoryCache(qc, owner, (doc) => removeChapter(doc, chapterId));
       try {
-        const result = await enqueue(key, () =>
-          api.delete<StoryWithChapters>(`${storyPath(owner)}/chapters/${encodeURIComponent(chapterId)}`),
-        );
+        const result = await enqueue(key, () => {
+          // A save that failed before the delete goes with the chapter.
+          carried.delete(key);
+          failing.delete(key);
+          return api.delete<StoryWithChapters>(`${storyPath(owner)}/chapters/${encodeURIComponent(chapterId)}`);
+        });
         deletingChapters.delete(chapterId);
         qc.setQueryData<StoryWithChapters>(storyWriterKeys.story(owner), (current) => mergeDocument(current, result));
         syncStorySummary(qc, owner);
       } catch (error) {
         deletingChapters.delete(chapterId);
+        // Its create never got through, so there is nothing to delete.
+        if (uncreated && errorStatus(error) === 404) return;
         reportError(error, "errors.deleteChapter");
         void qc.invalidateQueries({ queryKey: storyWriterKeys.story(owner) });
       }

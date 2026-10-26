@@ -37,6 +37,8 @@ export interface ChatMessage {
 
 /** The Engine's raw generation route accepts at most this many messages. */
 const MAX_MESSAGES = 200;
+// /generate/raw refuses a message over 500,000 characters before it fits the prompt to the model; stay under it.
+const MAX_MESSAGE_CHARS = 490_000;
 const MAX_TOKENS = 200_000;
 const PROTAGONIST = "the protagonist";
 const TIMELINE_INTRO =
@@ -218,6 +220,11 @@ interface ChapterTurn {
   text: string;
 }
 
+/** The newest part of an over-long message: the Engine would trim the oldest context first anyway. */
+function keepTail(text: string): string {
+  return text.length > MAX_MESSAGE_CHARS ? text.slice(text.length - MAX_MESSAGE_CHARS) : text;
+}
+
 export function buildChapterMessages(input: {
   settings: StorySettings;
   chapters: StoryChapter[];
@@ -256,7 +263,7 @@ export function buildChapterMessages(input: {
   if (full.length > maxTurns) {
     const folded = full.slice(0, full.length - maxTurns + 1);
     full = [
-      { request: folded[0]!.request, text: folded.map((turn) => turn.text).join("\n\n") },
+      { request: folded[0]!.request, text: keepTail(folded.map((turn) => turn.text).join("\n\n")) },
       ...full.slice(full.length - maxTurns + 1),
     ];
   }
@@ -272,7 +279,7 @@ export function buildChapterMessages(input: {
     section("personas", personas.map((persona) => formatPersona(persona, names.char)).join("\n")),
     section("story_notes", replaceMacros(settings.notes, names)),
     settings.timeline.length ? section("timeline", `${TIMELINE_INTRO}\n${timelineList(settings.timeline)}`) : "",
-    section("earlier_chapters", summaries.join("\n\n")),
+    section("earlier_chapters", keepTail(summaries.join("\n\n"))),
     section("length", lengthSection(settings, chapters, number, partial)),
     section("banned_phrases", banned.length ? `Never use these words or phrases: ${banned.join(", ")}` : ""),
     section("language", language ? `Write the story in ${language}.` : ""),
@@ -432,7 +439,8 @@ function parseListEvents(text: string): ParsedEvent[] {
 
 /** Reads the planner's reply; events whose text did not change keep their ids. Returns [] when nothing is readable. */
 export function parseTimelineResponse(text: string, previous: TimelineEvent[]): TimelineEvent[] {
-  const cleaned = stripLeadingThinking(text)
+  // An unclosed reasoning block (cut off by the token limit) holds no answer, only numbered lines that look like one.
+  const cleaned = visibleStreamingText(text)
     .replace(/```[a-z]*/gi, "")
     .trim();
   const parsed = parseJsonEvents(cleaned) ?? parseListEvents(cleaned);
@@ -518,8 +526,9 @@ export function visibleStreamingText(raw: string): string {
 }
 
 // ponytail: the raw route reports no finish reason, so a chapter that stops mid-sentence counts as cut off by the
-// token limit. Upgrade to the provider's finish reason once the route returns it.
-const SENTENCE_END = /[.!?…"”»’'*_)\]~。！？」』）]$/u;
+// token limit. Thai, Lao and Khmer mark no sentence end, so their text always counts as finished. Upgrade to the
+// provider's finish reason once the route returns it.
+const SENTENCE_END = /[\p{Pi}\p{Pf}\p{Pe}.!?…"'*_~;;։।॥۔؟።။།。！？\u0E00-\u0EFF\u1780-\u17FF]$/u;
 
 /** True when the text stops mid-sentence, as a reply cut off by the token limit does. */
 export function endsMidSentence(text: string): boolean {
