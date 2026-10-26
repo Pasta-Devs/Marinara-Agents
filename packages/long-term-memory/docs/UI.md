@@ -177,6 +177,13 @@ form. A finished identity repair names the backup it saved first (the first eigh
 Success messages (`StatusSurface` with the success tone) use the `--ltm-success` token (the accent mixed toward
 the editor text, measured at no less than 10.0:1 in the light and 9.1:1 in the dark default theme) and a check
 icon, never the bare accent color.
+A result that appears after an action (Debug export and clear, each Maintenance group, the source workbench preview
+summary) is read out from a region that is always mounted: `LiveResult` keeps a hidden `role="status"` copy in the
+page and shows the visible `StatusSurface` without its own live role, so one action speaks once (a failure is read politely, not as an alert). A live region that
+mounts together with its text is often not announced. Counts use the One/Other catalog keys with
+`selectLtmPluralForm`, name lists go through `Intl.ListFormat`, and stored codes map to catalog labels instead of
+`replaceAll("_", " ")`. Add section refuses an empty key (a name with no letters A-Z or numbers) or a duplicate on
+the name field itself: the reason is linked with `aria-describedby` and focus returns to the field.
 
 Debug operation details lead with recorded problems and guidance, then extraction,
 recall, or apply outcomes before diagnostic facts and the timeline. Dropped

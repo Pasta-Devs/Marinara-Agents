@@ -356,14 +356,17 @@ export function SourceOperationWorkbench({
         )}
         {localizeUi("ui.longTermMemory.sourceoperation.preview")}
       </Button>
-      {previewed ? (
-        <div data-ltm-source-operation-preview className="space-y-2 text-xs">
-          <p role="status">
-            {localizeUi("ui.longTermMemory.sourceoperation.previewSummary", {
+      {/* Always mounted, so a finished preview is read out instead of mounting with its text. */}
+      <p role="status" data-ltm-source-operation-preview-summary className={previewed ? "text-xs" : "sr-only"}>
+        {previewed
+          ? localizeUi("ui.longTermMemory.sourceoperation.previewSummary", {
               selected: selectedMemories.length,
               excluded: excludedMemories.length,
-            })}
-          </p>
+            })
+          : null}
+      </p>
+      {previewed ? (
+        <div data-ltm-source-operation-preview className="space-y-2 text-xs">
           {operation === "delete" && excludedMemories.length ? (
             <StatusSurface tone="warning">
               {localizeUi("ui.longTermMemory.sourceoperation.deleteDetachment", { count: excludedMemories.length })}

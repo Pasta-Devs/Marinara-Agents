@@ -405,3 +405,26 @@ export function StatusSurface({
     </div>
   );
 }
+
+/**
+ * A result line read out when its text changes. The hidden copy stays mounted, because a live region that
+ * mounts together with its text is often not announced; the visible surface is not live, so one save speaks once.
+ */
+export function LiveResult({
+  text,
+  tone = "success",
+  ...props
+}: { text: string; tone?: "neutral" | "success" | "warning" | "danger" } & HTMLAttributes<HTMLDivElement>) {
+  return (
+    <>
+      <p role="status" className="sr-only">
+        {text}
+      </p>
+      {text ? (
+        <StatusSurface tone={tone} {...props} role={undefined} aria-live={undefined}>
+          {text}
+        </StatusSurface>
+      ) : null}
+    </>
+  );
+}

@@ -8,9 +8,9 @@ import type {
   LtmIntegrityResponse,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { errorMessage, failedResponseError, invalidateLtmQueries, queryKeys, request, requestRaw } from "../api";
-import { Button, InfoPopover, StatusSurface, lockedActionProps } from "../shared-controls";
+import { Button, InfoPopover, LiveResult, StatusSurface, lockedActionProps } from "../shared-controls";
 import type { LongTermMemoryDestinationProps } from "../types";
-import { useLtmTranslation } from "../localization";
+import { selectLtmPluralForm, useLtmTranslation } from "../localization";
 import { labelKeys, localizedLabel } from "../display-labels";
 import { confirm, Toggle, type SettingsRebuildOutcome } from "./settings-shared";
 
@@ -64,6 +64,13 @@ export function MaintenancePanel({
   onBusyChange: (busy: boolean) => void;
 }) {
   const { t: localizeUi, locale } = useLtmTranslation();
+  const joinList = (items: string[], type: "conjunction" | "unit" = "conjunction") => {
+    try {
+      return new Intl.ListFormat(locale, { style: "long", type }).format(items);
+    } catch {
+      return items.join(type === "unit" ? ", " : " and ");
+    }
+  };
   const queryClient = useQueryClient();
   const integrity = useQuery({
     queryKey: queryKeys.integrity,
@@ -78,12 +85,14 @@ export function MaintenancePanel({
   }>({ text: "", tone: "success", area: "backup" });
   const setMessage = (text: string, tone: "success" | "danger" = "success", area?: MaintenanceArea) =>
     setMessageState((current) => ({ text, tone, area: area ?? current.area }));
-  const resultFor = (area: MaintenanceArea, className = "") =>
-    messageState.text && messageState.area === area ? (
-      <StatusSurface tone={messageState.tone} className={className} data-ltm-maintenance-result={area}>
-        {messageState.text}
-      </StatusSurface>
-    ) : null;
+  const resultFor = (area: MaintenanceArea, className = "") => (
+    <LiveResult
+      text={messageState.area === area ? messageState.text : ""}
+      tone={messageState.tone}
+      className={className}
+      data-ltm-maintenance-result={area}
+    />
+  );
   // Running work and the parent's save lock keep focus (`aria-disabled`), so each handler returns early on `busy`.
   const busy = pending !== "" || disabled;
   const lock = lockedActionProps(busy);
@@ -305,15 +314,25 @@ export function MaintenancePanel({
         props,
         localizeUi("ui.longTermMemory.memorysettings.applyIdentityRepairs"),
         localizeUi("ui.longTermMemory.memorysettings.applyIdentityRepairsDescription", {
-          repairCount: repairs.length,
-          repairSuffix: repairs.length === 1 ? "" : "s",
-          duplicateCount: includedDuplicateCount,
-          duplicateSuffix: includedDuplicateCount === 1 ? "" : "s",
+          repairs: localizeUi(
+            selectLtmPluralForm(locale, repairs.length) === "one"
+              ? "ui.longTermMemory.memorysettings.selectedIdentityRepairsOne"
+              : "ui.longTermMemory.memorysettings.selectedIdentityRepairsOther",
+            { count: repairs.length },
+          ),
+          duplicates: localizeUi(
+            selectLtmPluralForm(locale, includedDuplicateCount) === "one"
+              ? "ui.longTermMemory.memorysettings.includedDuplicateNotesOne"
+              : "ui.longTermMemory.memorysettings.includedDuplicateNotesOther",
+            { count: includedDuplicateCount },
+          ),
         }),
-        localizeUi("ui.longTermMemory.memorysettings.applyIdentityRepairsAction", {
-          count: repairs.length,
-          suffix: repairs.length === 1 ? "" : "s",
-        }),
+        localizeUi(
+          selectLtmPluralForm(locale, repairs.length) === "one"
+            ? "ui.longTermMemory.memorysettings.applyIdentityRepairsActionOne"
+            : "ui.longTermMemory.memorysettings.applyIdentityRepairsActionOther",
+          { count: repairs.length },
+        ),
         true,
       );
     } catch (error) {
@@ -747,13 +766,19 @@ export function MaintenancePanel({
                     }}
                   />
                   <span>
-                    <span className="block font-semibold">{candidate.subjectNames.join(" and ")}</span>
+                    <span className="block font-semibold">{joinList(candidate.subjectNames)}</span>
                     <span className="block text-[var(--muted-foreground)]">
                       {candidate.noteType === "relationship"
                         ? localizeUi("ui.longTermMemory.memorysettings.relationship")
                         : localizeUi("ui.longTermMemory.memorysettings.character")}{" "}
                       {localizeUi("ui.longTermMemory.memorysettings.matchVia")}{" "}
-                      {candidate.matchBasis.join(", ").replaceAll("_", " ")}.
+                      {joinList(
+                        candidate.matchBasis.map((basis) =>
+                          localizedLabel(basis, localizeUi, labelKeys.identityMatchBasis),
+                        ),
+                        "unit",
+                      )}
+                      .
                     </span>
                   </span>
                 </label>
@@ -807,7 +832,7 @@ export function MaintenancePanel({
                               : {note.title}
                             </span>
                             <span className="block">
-                              {note.basis.replaceAll("_", " ")}
+                              {localizedLabel(note.basis, localizeUi, labelKeys.identityMatchBasis)}
                               {note.alreadyBound ? localizeUi("ui.longTermMemory.memorysettings.alreadyBound") : ""}
                               {note.exactFullName ? localizeUi("ui.longTermMemory.memorysettings.exactFullName") : ""}
                               {localizeUi("ui.longTermMemory.memorysettings.created")}{" "}

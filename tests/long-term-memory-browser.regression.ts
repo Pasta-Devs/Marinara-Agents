@@ -3743,11 +3743,21 @@ async function main() {
         );
         const download = await downloadPromise;
         assert.match(download.suggestedFilename(), /^ltm-debug-log-\d{4}/u);
-        await activity.getByText("Full Activity log exported.").waitFor();
+        await activity.locator("[data-ltm-status]", { hasText: "Full Activity log exported." }).waitFor();
+        // The same text is also in a region that stays mounted, which is what a screen reader announces.
+        assert.equal(
+          await activity.locator('p[role="status"].sr-only', { hasText: "Full Activity log exported." }).count(),
+          1,
+        );
+        assert.equal(
+          await activity.locator('[data-ltm-status][role="status"]').count(),
+          0,
+          "the visible copy is not live",
+        );
         // D07: a failed export surfaces the server's JSON error text.
         debugExportError = true;
         await exportButton.click();
-        await activity.getByText("Export fixture failed.").waitFor();
+        await activity.locator("[data-ltm-status]", { hasText: "Export fixture failed." }).waitFor();
         debugExportError = false;
         // D32: Clear confirms its all-chat scope and permanent, memory-safe behavior;
         // cancelling makes no DELETE request.
@@ -3789,7 +3799,7 @@ async function main() {
           (window as unknown as { __ltmConfirmResult?: boolean }).__ltmConfirmResult = true;
         });
         await clearButton.click();
-        await activity.getByText("Activity log cleared.").waitFor();
+        await activity.locator("[data-ltm-status]", { hasText: "Activity log cleared." }).waitFor();
         assert.equal(debugClearDeletes, clearDeletesBefore + 1);
         // D06: focus returns to the initiating control after the host confirmation.
         await activityPage.waitForFunction(() =>
@@ -5051,13 +5061,14 @@ async function main() {
           await loadRetry.click();
         }
         await maintenancePanel
-          .getByText(
-            failure === "reset"
-              ? "Memory settings reset to defaults."
-              : failure === "import"
-                ? "Memory backup imported, but settings could not be refreshed."
-                : "Memory backup imported.",
-          )
+          .locator("[data-ltm-status]", {
+            hasText:
+              failure === "reset"
+                ? "Memory settings reset to defaults."
+                : failure === "import"
+                  ? "Memory backup imported, but settings could not be refreshed."
+                  : "Memory backup imported.",
+          })
           .waitFor({ timeout: 5000 });
         if (failure === "import-integrity") {
           // The failed integrity read shows only its error, not the report cached before the import.
@@ -5241,7 +5252,9 @@ async function main() {
           settingsGate = null;
           releaseSettings();
           await maintenancePanel
-            .getByText(action === "reset" ? "Memory settings reset to defaults." : "Memory backup imported.")
+            .locator("[data-ltm-status]", {
+              hasText: action === "reset" ? "Memory settings reset to defaults." : "Memory backup imported.",
+            })
             .waitFor({ timeout: 5000 });
           await focusPage
             .waitForFunction(() => document.activeElement !== document.body, undefined, { timeout: 2000 })
@@ -5289,7 +5302,30 @@ async function main() {
           () => document.activeElement?.textContent?.trim() === "Create new memory detail",
         );
         await createDetail.click();
-        await detailPage.locator("[data-ltm-details]").getByLabel("New detail name").fill("habits");
+        const detailName = detailPage.locator("[data-ltm-details]").getByLabel("New detail name");
+        // A refused name is explained on the field, which keeps focus and links the reason.
+        await detailName.fill("日本語");
+        await detailPage.getByRole("button", { name: "Create detail", exact: true }).click();
+        await detailPage.locator("#ltm-new-section-error").waitFor();
+        assert.match(await detailPage.locator("#ltm-new-section-error").innerText(), /letter A-Z or a number/u);
+        await detailPage.waitForFunction(
+          () => document.activeElement?.getAttribute("aria-label") === "New detail name",
+        );
+        assert.match((await detailName.getAttribute("aria-describedby")) ?? "", /ltm-new-section-error/u);
+        await detailName.fill("Facts");
+        assert.equal(await detailPage.locator("#ltm-new-section-error").count(), 0, "typing clears the reason");
+        const existingKey = await detailPage
+          .locator("[data-ltm-details] textarea[data-ltm-field='section']")
+          .first()
+          .getAttribute("id");
+        await detailName.fill(existingKey?.replace("ltm-section-", "") ?? "facts");
+        await detailPage.getByRole("button", { name: "Create detail", exact: true }).click();
+        await detailPage.locator("#ltm-new-section-error").waitFor();
+        assert.match(await detailPage.locator("#ltm-new-section-error").innerText(), /already exists/u);
+        await detailPage.waitForFunction(
+          () => document.activeElement?.getAttribute("aria-label") === "New detail name",
+        );
+        await detailName.fill("habits");
         await detailPage.getByRole("button", { name: "Create detail", exact: true }).click();
         await detailPage.waitForFunction(() => document.activeElement?.id === "ltm-section-habits");
         await detailPage.close();

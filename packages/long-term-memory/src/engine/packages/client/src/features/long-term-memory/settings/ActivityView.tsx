@@ -33,7 +33,7 @@ import {
   requestRaw,
   scopeTargetsQueryOptions,
 } from "../api";
-import { Button, InfoPopover, StatusSurface, inputClass } from "../shared-controls";
+import { Button, InfoPopover, LiveResult, StatusSurface, inputClass } from "../shared-controls";
 import { humanizeLabel, labelKeys, localizedLabel, rejectionReasonLabels } from "../display-labels";
 import type { LongTermMemoryDestinationProps } from "../types";
 import { confirm } from "./settings-shared";
@@ -1687,7 +1687,7 @@ export default function ActivityView({
         </div>
       </div>
 
-      {actionState.text ? <StatusSurface tone={actionState.tone}>{actionState.text}</StatusSurface> : null}
+      <LiveResult text={actionState.text} tone={actionState.tone} />
       {activity.isLoading ? (
         <StatusSurface busy>{localizeUi("ui.longTermMemory.activityview.loadingActivity")}</StatusSurface>
       ) : null}

@@ -1189,6 +1189,58 @@ assert.match(workspaceScreen, /aria-describedby=\{disabled \? `\$\{labelId\}-loc
 assert.match(workspaceScreen, /if \(availabilityDisabled \|\| disabled\) return;/u);
 assert.doesNotMatch(workspaceScreen, /disabled=\{availabilityDisabled \|\| isLastSelected\}/u);
 
+// Results are read out from regions that stay mounted, so a result that mounts with its text is not missed.
+assert.match(sharedControls, /export function LiveResult[\s\S]*<p role="status" className="sr-only">\s*\{text\}/u);
+assert.match(
+  sharedControls,
+  /<StatusSurface tone=\{tone\} \{\.\.\.props\} role=\{undefined\} aria-live=\{undefined\}>/u,
+);
+assert.match(activity, /<LiveResult text=\{actionState\.text\} tone=\{actionState\.tone\} \/>/u);
+assert.doesNotMatch(activity, /\{actionState\.text \? <StatusSurface/u);
+assert.match(maintenance, /<LiveResult\s+text=\{messageState\.area === area \? messageState\.text : ""\}/u);
+assert.doesNotMatch(maintenance, /messageState\.text && messageState\.area === area \?/u);
+assert.match(
+  sourceOperationWorkbench,
+  /<p role="status" data-ltm-source-operation-preview-summary className=\{previewed \? "text-xs" : "sr-only"\}>/u,
+);
+assert.doesNotMatch(sourceOperationWorkbench, /<div data-ltm-source-operation-preview[^>]*>\s*<p role="status">/u);
+// Counts use the package's One/Other pattern and the list join follows the locale; no hand-built plurals.
+assert.doesNotMatch(maintenance, /\? "" : "s"/u);
+assert.doesNotMatch(maintenance, /\.join\(" and "\)/u);
+assert.doesNotMatch(maintenance, /replaceAll\("_", " "\)/u);
+assert.match(maintenance, /new Intl\.ListFormat\(locale/u);
+assert.match(maintenance, /labelKeys\.identityMatchBasis/u);
+for (const key of [
+  "applyIdentityRepairsActionOne",
+  "applyIdentityRepairsActionOther",
+  "selectedIdentityRepairsOne",
+  "selectedIdentityRepairsOther",
+  "includedDuplicateNotesOne",
+  "includedDuplicateNotesOther",
+  "basisBoundSubjects",
+  "basisExactName",
+  "basisUniqueAlias",
+  "basisQualifiedAlias",
+  "basisSpellingVariation",
+  "basisUnorderedPair",
+]) {
+  assert.ok(locale[`ui.longTermMemory.memorysettings.${key}`], `${key} is in the catalog`);
+}
+assert.equal(locale["ui.longTermMemory.memorysettings.applyIdentityRepairsAction"], undefined);
+assert.doesNotMatch(locale["ui.longTermMemory.memorysettings.applyIdentityRepairsDescription"], /Suffix/u);
+// Add section says why a name was refused, on the field, and keeps focus there.
+assert.match(
+  vault,
+  /const refuse = \(messageKey: string\) => \{[\s\S]*requestAnimationFrame\(\(\) => sectionInputRef\.current\?\.focus\(\)\)/u,
+);
+assert.match(vault, /refuse\("ui\.longTermMemory\.memoryvault\.detailNameNoLetters"\)/u);
+assert.match(vault, /refuse\("ui\.longTermMemory\.memoryvault\.detailNameAlreadyExists"\)/u);
+assert.match(
+  vault,
+  /aria-describedby=\{\s*sectionError \? "ltm-new-section-error ltm-new-section-key" : "ltm-new-section-key"/u,
+);
+assert.match(vault, /<span id="ltm-new-section-error"/u);
+
 assert.doesNotMatch(detail, /#000\b/u);
 assert.match(
   detail,
