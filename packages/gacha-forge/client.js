@@ -83,6 +83,7 @@ function speakForgeSavedPlayer(host, attempt, row) {
     attempt.intent?.retry ||
     attempt.intent?.ask === "photo" ||
     row?.who !== "player" ||
+    attempt.playerMessageId !== row.id ||
     typeof row.id !== "string" ||
     !row.id ||
     row.id.startsWith("local-") ||
@@ -133,14 +134,33 @@ function forgeChatMergeRows(earlier, later, freshest = later) {
 
 function forgeChatFindSaved(snapshot, attempt, used = new Set()) {
   const previous = new Set((attempt.previous || []).map((row) => row?.id));
+  const id = typeof attempt.playerMessageId === "string" ? attempt.playerMessageId : "";
   return (snapshot.messages || []).find(
     (row) =>
       row?.who === "player" &&
       !previous.has(row.id) &&
       !used.has(row.id) &&
-      String(row.text || "").trim() === attempt.text.trim().slice(0, 600) &&
-      (row.ask === "photo") === (attempt.intent?.ask === "photo"),
+      (id
+        ? row.id === id
+        : String(row.text || "").trim() === attempt.text.trim().slice(0, 600) &&
+          (row.ask === "photo") === (attempt.intent?.ask === "photo")),
   );
+}
+
+function forgeChatSavedAttempts(snapshot, attempts, runId, unitId) {
+  const pending = attempts.filter((attempt) => attempt.runId === runId && attempt.unitId === unitId);
+  // Only this send's response can prove row ownership. Resolve exact IDs before UI-only text recovery.
+  pending.sort((left, right) => Number(!!right.playerMessageId) - Number(!!left.playerMessageId));
+  const used = new Set();
+  const saved = new Map();
+  for (const attempt of pending) {
+    const row = forgeChatFindSaved(snapshot, attempt, used);
+    if (row) {
+      used.add(row.id);
+      saved.set(attempt, row);
+    }
+  }
+  return saved;
 }
 
 function removeForgeChatOptimistic(messages, optimistic) {
@@ -159,7 +179,12 @@ function retainForgeChatSuccess(host, attempt, response) {
   const reply = response?.said?.id && response.said.who === "unit" ? response.said : null;
   // Success is known, but the canonical player ID may still be unavailable. Keep the
   // existing local text until a later snapshot can replace it, including after reopening.
-  const pending = { ...attempt, confirmed: true, ...(reply ? { reply } : {}) };
+  const pending = {
+    ...attempt,
+    playerMessageId: response?.playerMessageId,
+    confirmed: true,
+    ...(reply ? { reply } : {}),
+  };
   host._chatStash = {
     ...host._chatStash,
     runId: attempt.runId,
@@ -183,23 +208,22 @@ function adoptForgeChatSnapshot(host, snapshot, { runId, unitId, opening = false
   if (!snapshot?.ok || !forgeChatIsCurrent(host, runId, unitId)) return false;
   const stash = host._chatStash;
   const matches = stash?.unitId === unitId && (!stash.runId || stash.runId === runId);
-  const used = new Set();
+  const savedRows = forgeChatSavedAttempts(snapshot, stash?.unknowns || [], runId, unitId);
   const resolvedLocalRows = new Map();
   const unresolved = [];
   const unknowns = (stash?.unknowns || []).filter((attempt) => {
     if (attempt.runId !== runId || attempt.unitId !== unitId) return true;
-    const saved = forgeChatFindSaved(snapshot, attempt, used);
+    const saved = savedRows.get(attempt);
     const replied = attempt.reply?.id && snapshot.messages?.some((row) => row.id === attempt.reply.id);
     if (saved || replied) {
-      if (saved) {
-        used.add(saved.id);
-        if (!opening) speakForgeSavedPlayer(host, attempt, saved);
-      }
+      if (saved && !opening) speakForgeSavedPlayer(host, attempt, saved);
       for (const row of attempt.optimistic || []) {
         resolvedLocalRows.set(row.id, row.who === "player" ? saved : null);
       }
       return false;
     }
+    // Keep another attempt's proven canonical rows excluded on later refreshes too.
+    attempt.previous = forgeChatMergeRows(attempt.previous || [], [...savedRows.values()]);
     unresolved.push(attempt);
     return true;
   });
@@ -232,11 +256,12 @@ function adoptForgeChatSnapshot(host, snapshot, { runId, unitId, opening = false
   };
   if (matches && stash.draft) host._chatDraft = stash.draft;
   // Keep attempts until their canonical row IDs are known. This stash never sends a request itself.
-  host._chatStash = unknowns.length ? { ...(matches ? {} : stash), unknowns } : matches ? null : stash;
+  host._chatStash = unknowns.length ? { ...(matches ? { runId, unitId } : stash), unknowns } : matches ? null : stash;
   return true;
 }
 
 async function reconcileForgeChatFailure(host, attempt) {
+  attempt = { ...attempt, playerMessageId: attempt.response?.playerMessageId };
   const { runId, unitId } = attempt;
   const failure = forgeChatGenerationError(attempt.response, attempt.error);
   let snapshot = null;
@@ -247,15 +272,6 @@ async function reconcileForgeChatFailure(host, attempt) {
   }
   if (host._run?.runId !== runId) return;
   const unknowns = host._chatStash?.unknowns || [];
-  const used = new Set();
-  if (snapshot?.ok) {
-    for (const pending of unknowns) {
-      if (pending.runId !== runId || pending.unitId !== unitId) continue;
-      const saved = forgeChatFindSaved(snapshot, pending, used);
-      if (saved) used.add(saved.id);
-    }
-  }
-  const saved = snapshot?.ok && (attempt.intent?.retry || forgeChatFindSaved(snapshot, attempt, used));
   const rejected = new Set([
     "bad-request",
     "no-vigor",
@@ -265,16 +281,20 @@ async function reconcileForgeChatFailure(host, attempt) {
     "generation-in-progress",
   ]);
   const definitelyRejected = rejected.has(attempt.response?.error);
-  const unknown = !saved && !definitelyRejected && (attempt.optimistic || []).length > 0;
+  const pending = definitelyRejected ? unknowns : [...unknowns, attempt];
+  const saved =
+    !definitelyRejected &&
+    snapshot?.ok &&
+    (attempt.intent?.retry || forgeChatSavedAttempts(snapshot, pending, runId, unitId).get(attempt));
+  const retain = !definitelyRejected && (attempt.optimistic || []).length > 0;
   host._chatStash = {
     runId,
     unitId,
     error: failure,
     draft: definitelyRejected ? attempt.text : "",
-    unknowns: unknown ? [...unknowns, attempt] : unknowns,
+    unknowns: retain ? pending : unknowns,
   };
   if (!forgeChatIsCurrent(host, runId, unitId)) return;
-  if (saved && !definitelyRejected) speakForgeSavedPlayer(host, attempt, saved);
   if (saved || definitelyRejected) {
     host._chat = { ...host._chat, messages: removeForgeChatOptimistic(host._chat.messages, attempt.optimistic) };
   }
@@ -2719,7 +2739,7 @@ var ac=`
    of this bar. With a bar on screen the control belongs IN it. */
 /* Always present, both ways: appearing only WHILE fullscreen forced a second button in the gutter
    just to get in -- two controls for one toggle. */
-`,ds="1.24.0";function cc(t){if(!t)return"";let e=Array.isArray(t.items)?t.items:[];if(!e.length)return"";let a=Math.max(0,Math.round(Number(t.vigor)||0)),r=Math.max(1,Math.round(Number(t.vigorMax)||60)),s=e.map(n=>{let i=Math.max(0,Math.round(Number(n.held)||0));return'<div class="gf-vm-slot'+(i?" has":"")+'"><button class="gf-vm-card" type="button"'+(i?' data-vigor-use="'+u(n.id)+'"':" disabled")+">"+Eg+'<span class="amt">+'+(Number(n.vigor)||0)+'</span><span class="what">'+u(n.name)+'</span></button><span class="gf-vm-n">&times;'+i+"</span></div>"}).join(""),o=e.every(n=>!(Number(n.held)>0))?'<span class="gf-vm-none">Sold in the Shop</span>':"";return'<div class="gf-vm" data-vigor-menu-panel><div class="gf-vm-veil" data-vigor-close></div><div class="gf-vm-panel"><div class="gf-vm-top"><h3 class="gf-vm-title">Vigor Items</h3><span class="gf-vm-now">'+Xo+"<b>"+a+"</b><span>/ "+r+' Vigor</span></span><button class="gf-vm-x" type="button" data-vigor-close aria-label="Close">Close</button></div><div class="gf-vm-grid">'+s+"</div>"+o+"</div></div>"}function dc({username:t="",wallet:e=null,account:a=null,vigorNextMs:r=null}={}){let s=e&&typeof e=="object"?e:{},o=Number(s.aether)||0,n=Number(s.funds)||0,i=Number(s.vigor)||0,l=Number(s.vigorMax)||60,c=a||null,h=c?Math.max(1,Number(c.level)||1):1,d=c?c.xpNeeded?ta(Number(c.xp)||0)+" / "+ta(c.xpNeeded)+" XP":"MAX":"&mdash;",m=c&&Number(c.xpNeeded)||0,v=c?m>0?Math.max(0,Math.min(100,Math.round((Number(c.xp)||0)/m*1e3)/10)):100:0,f=Number.isFinite(r)?cs(r):"",g=t&&t.trim()||"Commander",b=g.split(/\s+/).filter(Boolean).slice(0,2).map(k=>k[0]).join("").toUpperCase()||"C";return`
+`,ds="1.24.1";function cc(t){if(!t)return"";let e=Array.isArray(t.items)?t.items:[];if(!e.length)return"";let a=Math.max(0,Math.round(Number(t.vigor)||0)),r=Math.max(1,Math.round(Number(t.vigorMax)||60)),s=e.map(n=>{let i=Math.max(0,Math.round(Number(n.held)||0));return'<div class="gf-vm-slot'+(i?" has":"")+'"><button class="gf-vm-card" type="button"'+(i?' data-vigor-use="'+u(n.id)+'"':" disabled")+">"+Eg+'<span class="amt">+'+(Number(n.vigor)||0)+'</span><span class="what">'+u(n.name)+'</span></button><span class="gf-vm-n">&times;'+i+"</span></div>"}).join(""),o=e.every(n=>!(Number(n.held)>0))?'<span class="gf-vm-none">Sold in the Shop</span>':"";return'<div class="gf-vm" data-vigor-menu-panel><div class="gf-vm-veil" data-vigor-close></div><div class="gf-vm-panel"><div class="gf-vm-top"><h3 class="gf-vm-title">Vigor Items</h3><span class="gf-vm-now">'+Xo+"<b>"+a+"</b><span>/ "+r+' Vigor</span></span><button class="gf-vm-x" type="button" data-vigor-close aria-label="Close">Close</button></div><div class="gf-vm-grid">'+s+"</div>"+o+"</div></div>"}function dc({username:t="",wallet:e=null,account:a=null,vigorNextMs:r=null}={}){let s=e&&typeof e=="object"?e:{},o=Number(s.aether)||0,n=Number(s.funds)||0,i=Number(s.vigor)||0,l=Number(s.vigorMax)||60,c=a||null,h=c?Math.max(1,Number(c.level)||1):1,d=c?c.xpNeeded?ta(Number(c.xp)||0)+" / "+ta(c.xpNeeded)+" XP":"MAX":"&mdash;",m=c&&Number(c.xpNeeded)||0,v=c?m>0?Math.max(0,Math.min(100,Math.round((Number(c.xp)||0)/m*1e3)/10)):100:0,f=Number.isFinite(r)?cs(r):"",g=t&&t.trim()||"Commander",b=g.split(/\s+/).filter(Boolean).slice(0,2).map(k=>k[0]).join("").toUpperCase()||"C";return`
 <header class="gf-bar">
   <div class="command">
     <div class="avatar">${u(b)}</div>

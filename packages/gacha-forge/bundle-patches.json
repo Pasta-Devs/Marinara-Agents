@@ -1540,6 +1540,10 @@
             {
               "find": "reconcileForgeChatFailure(this,{runId:forgeChatRunId,unitId:a.unit.id,previous:",
               "replace": "reconcileForgeChatFailure(this,{runId:forgeChatRunId,unitId:a.unit.id,voiceSession:forgeChatVoiceAtSend,previous:"
+            },
+            {
+              "find": "ds=\"1.24.0\"",
+              "replace": "ds=\"1.24.1\""
             }
           ]
         }
@@ -2884,6 +2888,26 @@
             {
               "find": "v.push({name:k.name,art:E||null,prota:!0})",
               "replace": "v.push({name:k.name,art:E||null,prota:!0,characterId:l(k.personaId)||null})"
+            },
+            {
+              "find": "let x=_&&l(u.ask)===\"photo\",L=null;if(!M)",
+              "replace": "let x=_&&l(u.ask)===\"photo\",L=null,forgeChatPlayerMessageId=null;if(!M)"
+            },
+            {
+              "find": ";await xn(o,Ye=>Xt(Ye,o,\"chat-message\",1,Date.now()))}let{data:O}=await Za(o,i)",
+              "replace": ";forgeChatPlayerMessageId=Fe.id;await xn(o,Ye=>Xt(Ye,o,\"chat-message\",1,Date.now()))}let{data:O}=await Za(o,i)"
+            },
+            {
+              "find": "wallet:L,retry:!0};let ee=ov(Y.value)",
+              "replace": "...(forgeChatPlayerMessageId?{playerMessageId:forgeChatPlayerMessageId}:{}),wallet:L,retry:!0};let ee=ov(Y.value)"
+            },
+            {
+              "find": "{ok:!0,wallet:L,said:Z,count:ue.messages.length}",
+              "replace": "{ok:!0,wallet:L,said:Z,count:ue.messages.length,...(forgeChatPlayerMessageId?{playerMessageId:forgeChatPlayerMessageId}:{})}"
+            },
+            {
+              "find": "):{ok:!1,error:\"write-conflict\",wallet:L,retry:!0}})),s.post(\"/chat/close\"",
+              "replace": "):{ok:!1,error:\"write-conflict\",...(forgeChatPlayerMessageId?{playerMessageId:forgeChatPlayerMessageId}:{}),wallet:L,retry:!0}})),s.post(\"/chat/close\""
             }
           ]
         }

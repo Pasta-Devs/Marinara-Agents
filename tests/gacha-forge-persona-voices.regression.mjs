@@ -6,6 +6,8 @@ import { ForgeAudioController } from "../packages/gacha-forge/src/audio-client.m
 import { forgeVoiceCharacter } from "../packages/gacha-forge/src/audio-story.mjs";
 import { normalizeForgeAudio, forgeSoundtrackContextKey } from "../packages/gacha-forge/src/audio-settings.mjs";
 
+import { createChatRuntime } from "./fixtures/gacha-forge-chat-runtime.mjs";
+
 const chat = await import(
   process.env.GACHA_PERSONA_CHAT_UNDER_TEST
     ? pathToFileURL(process.env.GACHA_PERSONA_CHAT_UNDER_TEST).href
@@ -78,7 +80,7 @@ function fixture() {
   return { host, config, controller, calls };
 }
 function confirm(host, row = savedPlayer(), values = {}) {
-  chat.retainForgeChatSuccess(host, attempt(values, host), { ok: true });
+  chat.retainForgeChatSuccess(host, attempt(values, host), { ok: true, playerMessageId: row.id });
   chat.adoptForgeChatSnapshot(host, snapshot(row), { runId: "world", unitId: "unit" });
 }
 
@@ -135,7 +137,11 @@ for (const outcome of ["success", "failed-reply"]) {
         } else host._chatReload();
         await settle();
         committed = true;
-        finish(outcome === "success" ? { ok: true } : { ok: false, error: "generation-failed" });
+        finish(
+          outcome === "success"
+            ? { ok: true, playerMessageId: savedPlayer().id }
+            : { ok: false, error: "generation-failed", playerMessageId: savedPlayer().id },
+        );
         await settle();
         assert.equal(calls.length, reopen ? 0 : 1, "voice belongs only to the session that admitted Send");
       } finally {
@@ -205,6 +211,177 @@ test("a successful sent message speaks its canonical player row once across dupl
   }
 });
 
+for (const outcome of ["success", "failed-reply"]) {
+  test(`a stale unresolved same-text attempt cannot claim the ${outcome} current send`, async () => {
+    const { host, controller, calls } = fixture();
+    const old = attempt({ response: { error: "generation-failed" } }, host);
+    try {
+      host._postJson = async () => ({ ...snapshot(), messages: [] });
+      await chat.reconcileForgeChatFailure(host, old);
+      chat.stopForgeChatVoice(host);
+      chat.adoptForgeChatSnapshot(
+        host,
+        { ...snapshot(), messages: [] },
+        { runId: "world", unitId: "unit", opening: true },
+      );
+      const current = savedPlayer({ id: "current-saved" });
+      if (outcome === "success") confirm(host, current);
+      else {
+        host._postJson = async () => snapshot(current);
+        await chat.reconcileForgeChatFailure(
+          host,
+          attempt({ response: { error: "generation-failed", playerMessageId: current.id } }, host),
+        );
+      }
+      await settle();
+      assert.equal(calls.length, 1, "the current session's committed send is voiced");
+      assert.equal(host._chatStash.unknowns.length, 1, "unproven older delivery remains recoverable");
+      chat.adoptForgeChatSnapshot(host, snapshot(current), { runId: "world", unitId: "unit" });
+      assert.equal(
+        host._chatStash.unknowns.length,
+        1,
+        "the current canonical ID cannot be claimed on the next refresh",
+      );
+      const historical = savedPlayer({ id: "older-saved" });
+      chat.adoptForgeChatSnapshot(
+        host,
+        { ...snapshot(), messages: [historical, current] },
+        { runId: "world", unitId: "unit" },
+      );
+      await settle();
+      assert.equal(host._chatStash, null);
+      assert.equal(calls.length, 1, "late historical delivery is recovered without replaying the old session");
+      assert.ok(host._chat.messages.some((row) => row.id === historical.id));
+      assert.ok(host._chat.messages.some((row) => row.id === current.id));
+    } finally {
+      controller.dispose();
+    }
+  });
+}
+
+test("an ambiguous current failure cannot voice an identical late row from an older chat session", async () => {
+  const { host, controller, calls } = fixture();
+  try {
+    host._postJson = async () => ({ ...snapshot(), messages: [] });
+    await chat.reconcileForgeChatFailure(host, attempt({ response: { error: "network" } }, host));
+    chat.stopForgeChatVoice(host);
+    chat.adoptForgeChatSnapshot(
+      host,
+      { ...snapshot(), messages: [] },
+      { runId: "world", unitId: "unit", opening: true },
+    );
+    const older = savedPlayer({ id: "late-old-player" });
+    host._postJson = async () => snapshot(older);
+    await chat.reconcileForgeChatFailure(host, attempt({ response: { error: "network" } }, host));
+    await settle();
+    assert.equal(calls.length, 0, "text and a current voice session do not prove this send owns the saved row");
+    assert.equal(host._chatStash.unknowns.length, 1, "the current unproven attempt remains recoverable");
+    assert.equal(host._chatStash.unknowns[0].voiceSession, chat.forgeChatVoiceSession(host));
+    assert.ok(host._chat.messages.some((row) => row.id === older.id));
+  } finally {
+    controller.dispose();
+  }
+});
+
+test("a response-proven player ID cannot fall back to an identical historical row", async () => {
+  const { host, controller, calls } = fixture();
+  try {
+    const actual = savedPlayer({ id: "this-send-player" });
+    const historical = savedPlayer({ id: "same-text-historical" });
+    host._postJson = async () => snapshot(historical);
+    await chat.reconcileForgeChatFailure(
+      host,
+      attempt({ response: { error: "generation-failed", playerMessageId: actual.id } }, host),
+    );
+    await settle();
+    assert.equal(calls.length, 0);
+    assert.equal(host._chatStash.unknowns.length, 1);
+    chat.adoptForgeChatSnapshot(
+      host,
+      { ...snapshot(), messages: [historical, actual] },
+      { runId: "world", unitId: "unit" },
+    );
+    await settle();
+    assert.equal(calls.length, 1, "only the acknowledged row is spoken when it becomes visible");
+    assert.equal(host._chatStash, null);
+  } finally {
+    controller.dispose();
+  }
+});
+
+test("a legacy success without canonical response identity recovers text without authorizing speech", async () => {
+  const { host, controller, calls } = fixture();
+  try {
+    chat.retainForgeChatSuccess(host, attempt({}, host), { ok: true });
+    chat.adoptForgeChatSnapshot(host, snapshot(), { runId: "world", unitId: "unit" });
+    await settle();
+    assert.equal(calls.length, 0);
+    assert.ok(host._chat.messages.some((row) => row.id === savedPlayer().id));
+    assert.equal(host._chatStash, null);
+  } finally {
+    controller.dispose();
+  }
+});
+
+test("a failed reply adopts older unresolved player speech before the current committed line", async () => {
+  const { host, controller, calls } = fixture();
+  try {
+    host._postJson = async () => ({ ...snapshot(), messages: [] });
+    await chat.reconcileForgeChatFailure(
+      host,
+      attempt({ response: { error: "generation-failed", playerMessageId: savedPlayer().id } }, host),
+    );
+    const current = savedPlayer({ id: "later-player", text: "Later saved text." });
+    host._postJson = async () => ({ ...snapshot(), messages: [savedPlayer(), current] });
+    await chat.reconcileForgeChatFailure(
+      host,
+      attempt({ text: current.text, response: { error: "generation-failed", playerMessageId: current.id } }, host),
+    );
+    await settle();
+    assert.deepEqual(
+      calls.map((call) => call.requests[0].text),
+      [savedPlayer().text, current.text],
+    );
+    chat.adoptForgeChatSnapshot(
+      host,
+      { ...snapshot(), messages: [savedPlayer(), current] },
+      { runId: "world", unitId: "unit" },
+    );
+    await settle();
+    assert.equal(calls.length, 2);
+  } finally {
+    controller.dispose();
+  }
+});
+
+test("a rejected same-text send keeps its error when an older session's reply arrives", async () => {
+  const { host, controller, calls } = fixture();
+  try {
+    host._postJson = async () => ({ ...snapshot(), messages: [] });
+    await chat.reconcileForgeChatFailure(host, attempt({ response: { error: "generation-failed" } }, host));
+    chat.stopForgeChatVoice(host);
+    chat.adoptForgeChatSnapshot(
+      host,
+      { ...snapshot(), messages: [] },
+      { runId: "world", unitId: "unit", opening: true },
+    );
+    host._postJson = async () => ({
+      ...snapshot(),
+      messages: [savedPlayer(), { id: "old-answer", who: "unit", text: "Earlier reply." }],
+    });
+    await chat.reconcileForgeChatFailure(
+      host,
+      attempt({ response: { error: "no-vigor" }, error: "Not enough Vigor." }, host),
+    );
+    await settle();
+    assert.equal(host._chat.error, "Not enough Vigor.");
+    assert.equal(host._chatDraft, savedPlayer().text);
+    assert.equal(calls.length, 0);
+  } finally {
+    controller.dispose();
+  }
+});
+
 test("a failed model reply voices only the matching newly committed player row, never rejected or unknown sends", async () => {
   for (const outcome of ["saved", "unknown", "rejected"]) {
     const { host, controller, calls } = fixture();
@@ -213,7 +390,15 @@ test("a failed model reply voices only the matching newly committed player row, 
         snapshot(outcome === "saved" ? savedPlayer() : savedPlayer({ id: "other", text: "Other text." }));
       await chat.reconcileForgeChatFailure(
         host,
-        attempt({ response: { error: outcome === "rejected" ? "no-vigor" : "generation-failed" } }, host),
+        attempt(
+          {
+            response: {
+              error: outcome === "rejected" ? "no-vigor" : "generation-failed",
+              ...(outcome === "saved" ? { playerMessageId: savedPlayer().id } : {}),
+            },
+          },
+          host,
+        ),
       );
       await settle();
       assert.equal(calls.length, outcome === "saved" ? 1 : 0, outcome);
@@ -262,7 +447,7 @@ test("history open, old rows, retry, photo, hidden and report rows never trigger
           },
           host,
         ),
-        { ok: true },
+        { ok: true, playerMessageId: row.id },
       );
       chat.adoptForgeChatSnapshot(host, snapshot(row), {
         runId: "world",
@@ -320,3 +505,45 @@ test("closing the chat cancels pending voice config and later worlds cannot rece
     controller.dispose();
   }
 });
+
+for (const outcome of ["success", "failed-reply", "reply-write-conflict", "player-write-conflict", "rejected"]) {
+  test(`actual SDK ${outcome} response exposes only this request's persisted player identity`, async () => {
+    const runtime = await createChatRuntime();
+    try {
+      if (outcome === "failed-reply") runtime.transport.mode = "fail";
+      if (outcome === "rejected") runtime.session().wallet.vigor = 0;
+      if (outcome.endsWith("write-conflict")) {
+        for (const method of ["create", "update"]) {
+          const persist = runtime.persistence.documents[method];
+          runtime.persistence.documents[method] = async (document) => {
+            const messages = document.data?.messages;
+            const blocks =
+              Array.isArray(messages) &&
+              messages.some((row) => row.who === (outcome === "player-write-conflict" ? "player" : "unit"));
+            return blocks ? null : persist(document);
+          };
+        }
+      }
+      const result = (await runtime.post("/chat/send", { text: "The acknowledged player message." })).body;
+      assert.equal(result.ok, outcome === "success", JSON.stringify(result));
+      const persisted = runtime.chatDoc()?.data?.messages?.find((row) => row.who === "player");
+      if (outcome === "rejected" || outcome === "player-write-conflict") {
+        assert.equal(result.error, outcome === "rejected" ? "no-vigor" : "write-conflict");
+        assert.equal(persisted, undefined);
+        assert.equal(Object.hasOwn(result, "playerMessageId"), false, "no row was committed for this request");
+      } else {
+        assert.equal(typeof persisted?.id, "string");
+        assert.equal(result.playerMessageId, persisted.id, "the response identifies the exact committed row");
+        if (outcome === "failed-reply") {
+          runtime.transport.mode = "reply";
+          const retry = (await runtime.post("/chat/send", { retry: true })).body;
+          assert.equal(retry.ok, true, JSON.stringify(retry));
+          assert.equal(Object.hasOwn(retry, "playerMessageId"), false, "retry did not create another player row");
+          assert.equal(runtime.chatDoc().data.messages.filter((row) => row.who === "player").length, 1);
+        }
+      }
+    } finally {
+      await runtime.close();
+    }
+  });
+}
