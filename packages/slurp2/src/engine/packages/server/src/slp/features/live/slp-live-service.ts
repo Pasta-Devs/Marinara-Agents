@@ -7,6 +7,7 @@ import {
   slpLiveApplyTip,
   slpLiveMinute,
   slpLiveStart,
+  slpLiveUnit,
   slurpLiveSlot,
   slpLiveWorkQueue,
   type SlpLiveFan,
@@ -26,6 +27,8 @@ const MAX_OPEN_SHOWS = 3;
 /** A world that was off for hours catches up at most this much per show in one pass. */
 const MAX_CATCH_UP_MINUTES = 240;
 const FANS_MAX = 120;
+/** A room with fewer live fans fills up with passers-by from the population. */
+const ROOM_MIN = 8;
 
 type Settings = Awaited<ReturnType<ReturnType<typeof createSlurpStorage>["getSettings"]>>;
 
@@ -84,12 +87,10 @@ async function liveFans(db: DB, hostId: string, settings: Settings): Promise<Arr
     .sort((a, b) => Number(b.spent) - Number(a.spent))
     .slice(0, FANS_MAX);
   const fans: Array<SlpLiveFan & { budget: number }> = [];
-  for (const tie of ties) {
-    const member = await population.get(tie.memberId);
-    if (!member) continue;
+  const add = (member: Awaited<ReturnType<typeof population.listAll>>[number]) => {
     const type = slurpResolveFanType(settings.fanTypes, member);
     const budget = slurpFanTypeWeeklyBudget(type, member.id);
-    if (!type.enabled || budget <= 0) continue;
+    if (!type.enabled || budget <= 0) return;
     fans.push({
       id: member.id,
       name: member.displayName,
@@ -98,6 +99,20 @@ async function liveFans(db: DB, hostId: string, settings: Settings): Promise<Arr
       maxTip: Math.max(5, Math.round(budget / 3)),
       budget,
     });
+  };
+  for (const tie of ties) {
+    const member = await population.get(tie.memberId);
+    if (member) add(member);
+  }
+  if (fans.length >= ROOM_MIN) return fans;
+  // Seeded per host, so the same passers-by stay from minute to minute; a tip ties them to the Creator.
+  const seen = new Set(ties.map((tie) => tie.memberId));
+  const walkers = (await population.listAll(200))
+    .filter((member) => !seen.has(member.id))
+    .sort((a, b) => slpLiveUnit(`${hostId}:${a.id}:walk`) - slpLiveUnit(`${hostId}:${b.id}:walk`));
+  for (const member of walkers) {
+    if (fans.length >= ROOM_MIN) break;
+    add(member);
   }
   return fans;
 }
@@ -185,7 +200,6 @@ export async function hostSlurpLiveShow(
   at = new Date(),
 ): Promise<SlurpLiveHostResult> {
   const noodle = createSlurpStorage(db);
-  const settings = await noodle.getSettings();
   const host = input.creatorId
     ? await noodle.getAccountById(input.creatorId)
     : await noodle.getSlurpAccountForEntity("persona", input.personaId, "creator").catch(() => null);
@@ -194,8 +208,8 @@ export async function hostSlurpLiveShow(
   if (host.kind === "persona" && host.sourceEntityId !== input.personaId) return "missing";
   if (slurpIsCouplePage(host)) return "missing";
   const storage = createSlurpLiveStorage(db);
-  const live = normalizeSlpLiveSettings(settings.live);
-  const minutes = Math.min(live.maxMinutes, Math.max(live.minMinutes, Math.round(input.minutes)));
+  // The player picks the length; the Backstage show length only shapes Creator shows.
+  const minutes = Math.min(240, Math.max(10, Math.round(input.minutes)));
   const spice = await resolveSlurpCreatorSpice(db, host);
   const fans = (await createSlurpPopulationStorage(db).listTiesForCreator(host.id)).filter(
     (tie) => tie.stage !== "lapsed",

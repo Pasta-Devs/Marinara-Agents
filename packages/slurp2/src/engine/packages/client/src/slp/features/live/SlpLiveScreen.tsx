@@ -293,7 +293,7 @@ export function SlpLiveScreen({
 
         <div className="min-h-0 flex-1" />
 
-        <div className="space-y-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="slp-nav-live mb-[var(--slp-nav-live,0px)] space-y-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <SlpLiveChat lines={lines} me={me} host={name} itemLabel={itemLabel} t={t} />
           {open.length > 0 && (
             <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
@@ -340,9 +340,9 @@ export function SlpLiveScreen({
                   key={idea}
                   type="button"
                   onClick={() => setSaid(idea.slice(0, 300))}
-                  className={`max-w-64 shrink-0 truncate rounded-full px-3 py-1.5 text-xs font-semibold ${glass}`}
+                  className={`w-56 shrink-0 rounded-2xl px-3 py-1.5 text-start text-xs font-semibold ${glass}`}
                 >
-                  {idea}
+                  <span className="line-clamp-2">{idea.replaceAll("*", "")}</span>
                 </button>
               ))}
             </div>
