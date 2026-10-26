@@ -1712,6 +1712,20 @@
               "replace": "var oy=[{version:null,fixed:[\"Messages you send in character chats are no longer read aloud. Your persona's assigned voice still reads its story dialogue.\"]},{version:\"1.24.3\",changed:[\"Combat Power (CP) is now called Battle Power (BP)."
             }
           ]
+        },
+        {
+          "version": "1.24.5",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.24.4\"",
+              "replace": "ds=\"1.24.5\""
+            },
+            {
+              "find": "var oy=[{version:null,fixed:[\"Messages you send in character chats are no longer read aloud. Your persona's assigned voice still reads its story dialogue.\"]}",
+              "replace": "var oy=[{version:null,changed:[\"When a Front Row unit falls in Formation, a Back Row unit on its side steps into the empty seat and acts from its next turn. A fight now ends only when one side has nobody left.\"]},{version:\"1.24.4\",fixed:[\"Messages you send in character chats are no longer read aloud. Your persona's assigned voice still reads its story dialogue.\"]}"
+            }
+          ]
         }
       ]
     },
@@ -3092,6 +3106,20 @@
             {
               "find": "):{ok:!1,error:\"write-conflict\",wallet:L,retry:!0}})),s.post(\"/chat/close\"",
               "replace": "):{ok:!1,error:\"write-conflict\",...(forgeChatPlayerMessageId?{playerMessageId:forgeChatPlayerMessageId}:{}),wallet:L,retry:!0}})),s.post(\"/chat/close\""
+            }
+          ]
+        },
+        {
+          "version": "1.24.5",
+          "commits": [],
+          "edits": [
+            {
+              "find": "{formationEngine:FORGE_FORMATION_ENGINE}:{})}",
+              "replace": "{formationEngine:FORGE_FORMATION_ENGINE,formationRevision:FORGE_FORMATION_RULES}:{})}"
+            },
+            {
+              "find": "formationRules:s.formationRules,formationEngine:s.formationEngine}",
+              "replace": "formationRules:s.formationRules,formationEngine:s.formationEngine,formationRevision:s.formationRevision}"
             }
           ]
         }

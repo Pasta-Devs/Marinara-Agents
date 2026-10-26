@@ -305,6 +305,49 @@ test("Materials and Tower freeze Formation snapshots and verify their own action
   }
 });
 
+test("a saved fight is claimed under the rules revision it started on", async () => {
+  const f = await fixture();
+  try {
+    const farm = { stage: "funds", difficulty: 1 };
+    assert.equal((await f.post("/farm/start", starting(farm))).body.ok, true);
+    const pending = structuredClone(f.session().farmPending);
+    assert.equal(pending.fight.formationEngine, FORGE_FORMATION_ENGINE);
+    assert.equal(pending.fight.formationRevision, FORGE_FORMATION_RULES);
+    // The only fighter falls on the first enemy turn; under the current rules its support steps up and wins.
+    const member = (id, position, stats) => ({
+      id,
+      name: id,
+      affinity: "Fire",
+      position,
+      power: 1,
+      stats: { spd: 50, crit: 0, ...stats },
+      formationKit: kit(),
+    });
+    const fight = {
+      ...pending.fight,
+      allies: [
+        member("lead", "front", { hp: 1, atk: 1, def: 1 }),
+        member("heir", "back", { hp: 1000, atk: 200, def: 100 }),
+      ],
+      enemies: [member("foe", "front", { hp: 100, atk: 500, def: 50 })],
+    };
+    const played = replayForgeFormationBattle(fight);
+    assert.equal(played.result, "win");
+    // A fight saved before 1.24.5 carries no revision and keeps the rule it was played under.
+    for (const [formationRevision, ok] of [
+      [undefined, false],
+      [FORGE_FORMATION_RULES, true],
+    ]) {
+      f.session().farmPending = { ...structuredClone(pending), fight: { ...fight, formationRevision } };
+      const claim = (await f.post("/farm/claim", { log: played.log })).body;
+      assert.equal(claim.ok, ok, JSON.stringify(claim));
+      if (!ok) assert.equal(claim.error, "lost");
+    }
+  } finally {
+    await f.close();
+  }
+});
+
 test("boss objectives reach frozen snapshots and an impossible elemental team is refused before charging", async () => {
   const f = await fixture();
   try {
@@ -475,6 +518,15 @@ test("an older tab in a world with outdated kits is told to reload before any ki
       ["/battle", request],
       ["/battle/start", { ...request, expectedFormationEngine: FORGE_FORMATION_ENGINE }],
       ["/farm/battle", { stage: "funds", difficulty: 1 }],
+      // A 1.24.4 tab names the previous rules revision.
+      [
+        "/battle/start",
+        {
+          ...request,
+          expectedFormationEngine: FORGE_FORMATION_ENGINE,
+          expectedFormationRules: FORGE_FORMATION_RULES - 1,
+        },
+      ],
     ])
       assert.equal((await f.post(path, body)).body.error, "formation-engine-changed", path);
     assert.equal(f.docs.has(job), false, "no remake job is written");

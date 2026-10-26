@@ -253,7 +253,7 @@ export const forgeFormationCombatEnglish = {
     "Each Back Row support adds one energy of its element every turn, and energy is never lost. Skills cost energy; an Ultimate needs some of its own element, and Light or Dark can stand in. Every point spent adds a small bonus.",
   "combat.formation.guide.combat.rows": "Front and Back Row",
   "combat.formation.guide.combat.rowsText":
-    "Only the Front Row acts and can be attacked. Supports behind are safe and carry passives. Move / Swap changes rows, and whoever arrives in front acts next turn. If your whole Front Row falls, the fight is lost.",
+    "Only the Front Row acts and can be attacked. Supports behind are safe and carry passives. Move / Swap changes rows, and whoever arrives in front acts next turn. When a Front Row fighter falls, a support steps into its seat. The fight is lost only when your whole team has fallen.",
   "combat.formation.guide.combat.elements": "Elements",
   "combat.formation.guide.combat.elementsText":
     "Water beats Fire beats Earth beats Wind beats Water, and Light and Dark beat each other. A good matchup hits harder; a bad one, softer.",

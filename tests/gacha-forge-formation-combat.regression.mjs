@@ -7,6 +7,7 @@ import { forgeFormationLegacyReplay } from "../packages/gacha-forge/src/formatio
 
 const {
   FORGE_FORMATION_ENGINE,
+  FORGE_FORMATION_RULES,
   forgeFormationBattle,
   forgeFormationEnemyKit,
   forgeFormationPayment,
@@ -609,9 +610,8 @@ test("traits: advance_ult, retreat_echo, solo_front and Echo tokens", () => {
       enemies: [unit("foe", { stats: { ...strong, atk: 2000 } })],
     },
     (prompt) => {
-      assert.deepEqual(
-        prompt.options.formation.fighters.map((fighter) => fighter.id),
-        ["summoner"],
+      assert.ok(
+        prompt.options.formation.fighters.every((fighter) => !fighter.id.startsWith("summoner~")),
         "tokens never take an action",
       );
       return hold();
@@ -627,8 +627,8 @@ test("traits: advance_ult, retreat_echo, solo_front and Echo tokens", () => {
   const deaths = events(tokens)
     .filter((event) => event.op === "death")
     .map((event) => event.id);
-  assert.ok(deaths.includes("summoner"));
-  assert.equal(tokens.result, "lose", "Echoes do not keep a Front Row alive");
+  assert.ok(deaths.includes("summoner") && deaths.includes("s"), "the support steps up and falls too");
+  assert.equal(tokens.result, "lose", "Echoes do not keep a team alive");
   const solo = (allies) =>
     events(
       drive({ allies, enemies: [unit("foe", { stats: { ...strong, atk: 1, hp: 9000 } })], seed: 2 }, () =>
@@ -696,7 +696,7 @@ test("Auto plays a whole turn and replays from its one-record log; control canno
   assert.ok(stuns > 0 && resisted > 0, "a stunned fighter shrugs off the next stun");
 });
 
-test("defeat order protects later enemies, element barriers bind every action, and a fallen Front Row loses", () => {
+test("defeat order protects later enemies, element barriers bind every action, and a side with nobody left loses", () => {
   const hero = unit("hero", { stats: strong, formationKit: kit({ standard: ability({ power: 100 }) }) });
   const foes = [unit("left", { stats: weak }), unit("right", { stats: weak })];
   const ordered = drive(
@@ -1577,4 +1577,238 @@ test("unplanned immunity never wards a Back Row support: it holds unpaid, while 
       .flatMap((step) => step.events)
       .some((event) => event.op === "buff" && event.id === "B" && event.text === "IMMUNE"),
   );
+});
+
+// Rules 3 (1.24.5): a support steps into each Front Row seat a fallen fighter leaves, and a side loses only when
+// nobody is left.
+const deathStep = (battle, id) =>
+  battle.steps.find((step) => step.events.some((event) => event.op === "death" && event.id === id));
+const rowsOf = (step) => step.events.filter((event) => event.op === "row").map((event) => event.id);
+const back = (id, overrides = {}) => unit(id, { position: "back", ...overrides });
+const support = (id, standard, overrides = {}) =>
+  back(id, {
+    formationKit: kit({
+      preferredRow: "back",
+      standard: ability({ effect: standard, target: standard === "heal" ? "allies" : "enemy", cost: 0 }),
+      ultimate: ability({ effect: "shield", target: "allies", cost: 5, elementCost: 2 }),
+    }),
+    ...overrides,
+  });
+
+test("a support steps into a fallen fighter's seat in the same step, on either side, and acts next turn", () => {
+  const hero = unit("hero", { stats: strong });
+  const won = drive(
+    {
+      allies: [hero],
+      enemies: [unit("f1", { stats: weak }), back("b1", { stats: weak }), back("b2", { stats: weak })],
+    },
+    (prompt) => plan({ actorId: "hero", action: "normal", targetId: prompt.options.formation.foes[0].id }),
+  );
+  assert.deepEqual(rowsOf(deathStep(won, "f1")), ["b1"], "exactly one support steps up, in the death's own step");
+  assert.deepEqual(rowsOf(deathStep(won, "b1")), ["b2"]);
+  assert.ok(
+    events(won).some((event) => event.op === "act" && event.id === "b1"),
+    "it acts on its side's next turn",
+  );
+  assert.deepEqual(
+    events(won)
+      .filter((event) => event.op === "death")
+      .map((event) => event.id),
+    ["f1", "b1", "b2"],
+  );
+  assert.equal(won.result, "win", "the fight ends only when nobody is left");
+  // An ally killed on the enemy's turn is replaced by a support that acts on the very next ally turn.
+  const lost = drive(
+    {
+      allies: [unit("lead", { stats: weak }), back("s1"), back("s2", { stats: weak })],
+      enemies: [unit("foe", { stats: { ...strong, atk: 2000 } })],
+    },
+    () => hold(),
+  );
+  const step = deathStep(lost, "lead");
+  assert.deepEqual(rowsOf(step), ["s1"]);
+  assert.ok(
+    step.events.findIndex((event) => event.op === "death") < step.events.findIndex((event) => event.op === "row"),
+  );
+  assert.deepEqual(
+    lost.prompts[1].options.formation.fighters.map((fighter) => fighter.id),
+    ["s1"],
+  );
+  assert.equal(lost.result, "lose");
+  assert.ok(
+    ["lead", "s1", "s2"].every((id) => deathStep(lost, id)),
+    "the player loses only with nobody left",
+  );
+});
+
+test("a support stepping up on its own turn start waits a turn, and an AoE frees one seat per death", () => {
+  const burn = drive(
+    {
+      allies: [unit("lead", { stats: weak }), unit("tank", { stats: { ...strong, hp: 9000 } }), back("s1")],
+      enemies: [
+        unit("foe", { stats: { ...strong, atk: 2000 }, formationKit: kit({ standard: ability({ effect: "dot" }) }) }),
+      ],
+    },
+    () => hold(),
+  );
+  const step = deathStep(burn, "lead");
+  assert.ok(
+    step.events.some((event) => event.op === "formation-bank") && !step.events.some((event) => event.op === "act"),
+    "the burn kills at the ally turn start",
+  );
+  assert.deepEqual(rowsOf(step), ["s1"]);
+  const after = burn.prompts.find((prompt) => prompt.at > burn.steps.indexOf(step));
+  assert.deepEqual(
+    after.options.formation.fighters.map((fighter) => fighter.id),
+    ["tank"],
+  );
+  assert.deepEqual(after.options.formation.waiting, [{ id: "s1", reason: "arrived" }]);
+  const next = burn.prompts[burn.prompts.indexOf(after) + 1];
+  assert.ok(
+    next.options.formation.fighters.some((fighter) => fighter.id === "s1"),
+    "it acts the turn after",
+  );
+  const blast = drive(
+    {
+      allies: [unit("x", { stats: weak }), unit("y", { stats: weak }), back("s1"), back("s2"), back("s3")],
+      enemies: [
+        unit("foe", {
+          stats: { ...strong, atk: 2000 },
+          formationKit: kit({ standard: ability({ effect: "aoe_damage", target: "all_enemies" }) }),
+        }),
+      ],
+    },
+    () => hold(),
+  );
+  const both = deathStep(blast, "x");
+  assert.equal(both, deathStep(blast, "y"));
+  assert.deepEqual(rowsOf(both), ["s1", "s2"], "two deaths, two seats, s3 stays back");
+});
+
+test("death triggers resolve before the step-up: a back passive fires, a revive refills, an Echo makes way", () => {
+  const foe = unit("foe", { stats: { ...strong, atk: 2000 } });
+  const passive = (effect, target) => ({
+    name: effect,
+    description: "",
+    effect,
+    target,
+    power: 50,
+    duration: 2,
+    trigger: "ally_death",
+    row: "back",
+  });
+  const guard = drive(
+    {
+      allies: [
+        unit("lead", { stats: weak }),
+        support("s1", "damage", { formationKit: kit({ preferredRow: "back", passive: passive("shield", "self") }) }),
+      ],
+      enemies: [foe],
+    },
+    () => hold(),
+  );
+  const fired = deathStep(guard, "lead").events;
+  assert.ok(
+    fired.findIndex((event) => event.op === "passive" && event.id === "s1") <
+      fired.findIndex((event) => event.op === "row" && event.id === "s1"),
+    "the Back Row passive fires while s1 is still behind",
+  );
+  const raised = drive(
+    {
+      allies: [
+        unit("lead", { stats: weak }),
+        back("s1", { formationKit: kit({ preferredRow: "back", passive: passive("revive", "ally") }) }),
+      ],
+      enemies: [foe],
+    },
+    () => hold(),
+  );
+  const refilled = deathStep(raised, "lead").events;
+  assert.ok(refilled.some((event) => event.op === "revive" && event.id === "lead"));
+  assert.deepEqual(rowsOf({ events: refilled }), [], "the revived fighter keeps its seat and nobody steps up");
+  const echoed = drive(
+    {
+      allies: [
+        unit("lead", { stats: weak }),
+        unit("mate", { stats: { ...strong, hp: 9000 } }),
+        unit("third", { stats: { ...strong, hp: 9000 } }),
+        back("s1", { formationKit: kit({ preferredRow: "back", passive: passive("summon", "self") }) }),
+      ],
+      enemies: [foe],
+    },
+    () => hold(),
+  );
+  const made = deathStep(echoed, "lead").events.map((event) => `${event.op}:${event.id}`);
+  const echo = made.find((entry) => entry.startsWith("summon:s1~"));
+  assert.ok(echo, "the passive summons into the free seat");
+  assert.ok(
+    made.indexOf(echo) < made.indexOf(`death:${echo.slice(7)}`) &&
+      made.indexOf(`death:${echo.slice(7)}`) < made.indexOf("row:s1"),
+    "the Echo is dismissed so the support can take the seat",
+  );
+});
+
+test("the step-up prefers the next in a defeat order, then a support that can strike, then seat order", () => {
+  const hero = unit("hero", { stats: strong });
+  const pinned = drive(
+    {
+      allies: [hero],
+      enemies: [
+        unit("f", { stats: weak }),
+        unit("x", { stats: strong }),
+        unit("y", { stats: strong }),
+        back("keen"),
+        back("p", { stats: weak }),
+      ],
+      rules: [{ kind: "defeat_order", description: "f, then p", order: [0, 4] }],
+    },
+    () => plan({ actorId: "hero", action: "normal", targetId: "f" }),
+  );
+  assert.deepEqual(rowsOf(deathStep(pinned, "f")), ["p"]);
+  const striking = drive(
+    {
+      allies: [unit("lead", { stats: weak }), support("healer", "heal"), support("striker", "damage")],
+      enemies: [unit("foe", { stats: { ...strong, atk: 2000 } })],
+    },
+    () => hold(),
+  );
+  assert.deepEqual(rowsOf(deathStep(striking, "lead")), ["striker"]);
+  assert.deepEqual(rowsOf(deathStep(striking, "striker")), ["healer"], "then whoever is left");
+});
+
+test("only stamped snapshots step up: an unstamped fight replays under the old rule, and client and server agree", async () => {
+  const snapshot = {
+    allies: [unit("hero", { stats: strong }), back("ally-s")],
+    enemies: [unit("f1", { stats: weak }), back("b1", { stats: weak })],
+    seed: 9,
+    formationEngine: FORGE_FORMATION_ENGINE,
+  };
+  const old = replayForgeFormationBattle(snapshot);
+  assert.equal(old.result, "win");
+  assert.ok(!events(old).some((event) => event.op === "row"), "a fight saved before 1.24.5 ends when its front falls");
+  const current = replayForgeFormationBattle({ ...snapshot, formationRevision: FORGE_FORMATION_RULES });
+  assert.deepEqual(rowsOf(deathStep(current, "f1")), ["b1"]);
+  assert.ok(deathStep(current, "b1"));
+  // The client runs the loaded rules on the snapshot it holds, which carries no stamp; the server replays the
+  // saved, stamped snapshot. Both agree for the same log, and an unstamped claim matches a revision-2 run.
+  for (const [client, saved] of [
+    [
+      { ...snapshot, formationEngine: undefined },
+      { ...snapshot, formationRevision: FORGE_FORMATION_RULES },
+    ],
+    [{ ...snapshot, formationRevision: 2 }, snapshot],
+  ]) {
+    const played = drive(client, (prompt) =>
+      plan({ actorId: "hero", action: "normal", targetId: prompt.options.formation.foes[0].id }),
+    );
+    const replayed = replayForgeFormationBattle(saved, played.log);
+    assert.equal(replayed.result, played.result);
+    assert.deepEqual(replayed.steps, played.steps);
+    assert.deepEqual(replayed.log, played.log);
+  }
+  // The shipped client starts its battle from the preview's units and seed with no stamp, so it plays the rules
+  // revision it was loaded with, which the server's start guard has just matched and stamped into the snapshot.
+  const client = await readFile(new URL("../packages/gacha-forge/client.js", import.meta.url), "utf8");
+  assert.ok(client.includes("forgeFormationBattle({allies:t,enemies:e,seed:a,rules:formationRules||[]})"));
+  assert.ok(client.includes("formationRevision = FORGE_FORMATION_RULES"));
 });

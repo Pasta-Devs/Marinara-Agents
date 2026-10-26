@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.24.5",
+          "date": "2026-10-26",
+          "notes": "- When a Front Row unit falls in Formation, a Back Row unit on its side steps into the empty seat at once and acts from its next turn. This works for your team and for enemies, and a fight now ends only when one side has nobody left. Moving and retreating never pull a support forward. A fight started before this update is still scored by the rules it was played under.",
+          "highlight": false
+        },
+        {
           "version": "1.24.4",
           "date": "2026-10-26",
           "notes": "- Messages you send in character chats are no longer read aloud. Your persona's assigned voice still reads its story dialogue.",
@@ -283,12 +289,6 @@
           "version": "1.15.1",
           "date": "2026-10-24",
           "notes": "- Cancel chapter and story generation from the loading screen and return to Gacha Home without deleting the world or saved progress. Active story requests and chapter preforging stop, and late responses cannot reopen the cancelled screen.",
-          "highlight": true
-        },
-        {
-          "version": "1.15.0",
-          "date": "2026-10-24",
-          "notes": "- Choose a generated song for the Home menu in Settings → Look → Visual. Saved songs remain playable when generation is off.\n- Generate a distinct soundtrack for each summon banner and collect it for Home music when pulling any 5-star from that banner.\n- Keep banner rotations separate and reuse generated songs after reload.\n- Select an optional Animations video connection in Sources to generate saved looping banner clips. Portraits remain still.\n- Reuse clips after reload, keep the illustration on failures or reduced motion, and offer pause, play and explicit generation retry controls.",
           "highlight": true
         }
       ]
