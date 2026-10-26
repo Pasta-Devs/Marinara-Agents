@@ -6,9 +6,10 @@ import { SlpSheet } from "../../modules/chrome/SlpSheet";
 import { SlpErrorState, SlpSkeleton } from "../../modules/chrome/SlpStateKit";
 import { SlpCoinText } from "../../modules/coin/SlpCoin";
 import { SlpLiveChat } from "../../modules/live/SlpLiveChat";
-import { slpLiveFeedDelay, slpLiveFeedMerge } from "../../modules/live/slp-live-feed";
+import { slpLiveFeedDelay, slpLiveFeedMerge, type SlpLiveLine } from "../../modules/live/slp-live-feed";
 import type { SlpLiveEvent } from "../../../../../shared/src/slp/slp-live.js";
 import { useCreatorAccounts } from "../creators/slp-creators-contract";
+import { newRequestId } from "../messages/slp-messages-contract";
 import { useSlpLiveShow, useSlpLiveTip } from "./slp-live-hooks";
 
 const LIVE_STYLES = `
@@ -28,8 +29,8 @@ const glass = "bg-black/40 text-white ring-1 ring-white/10 backdrop-blur-md";
 /** The chat as a flowing room: new events from a poll come in one by one (`slp-live-feed.ts`). */
 function useLiveFeed(events: readonly SlpLiveEvent[] | undefined) {
   const [feed, setFeed] = useState(() => ({
-    shown: [] as SlpLiveEvent[],
-    queue: [] as SlpLiveEvent[],
+    shown: [] as SlpLiveLine[],
+    queue: [] as SlpLiveLine[],
     seen: new Set<string>(),
   }));
   useEffect(() => {
@@ -83,15 +84,28 @@ export function SlpLiveScreen({
   const itemLabel = (id: string | undefined) =>
     show?.menu.find((item) => item.id === id)?.label ?? (id ? t(`ui.slurp.live.menu.${id}`) : "");
 
+  const back = (
+    <button
+      type="button"
+      onClick={onBack}
+      aria-label={t("ui.slurp.live.back")}
+      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${glass}`}
+    >
+      <ChevronLeft size={22} aria-hidden="true" />
+    </button>
+  );
+
   if (query.isError && !show)
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--slurp-canvas)] p-6">
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[var(--slurp-canvas)] p-6">
+        <div className="absolute start-3 top-[max(0.75rem,env(safe-area-inset-top))]">{back}</div>
         <SlpErrorState title={t("ui.slurp.live.loadFailed")} onRetry={() => void query.refetch()} />
       </div>
     );
   if (!show)
     return (
-      <div className="fixed inset-0 z-50 bg-[var(--slurp-canvas)] p-6">
+      <div className="fixed inset-0 z-50 bg-[var(--slurp-canvas)] p-6 pt-16">
+        <div className="absolute start-3 top-[max(0.75rem,env(safe-area-inset-top))]">{back}</div>
         <SlpSkeleton label={t("ui.slurp.live.loading")} />
       </div>
     );
@@ -107,16 +121,14 @@ export function SlpLiveScreen({
     ? Math.min(100, Math.round(((show.raised - goalStart) / Math.max(1, goal.target - goalStart)) * 100))
     : 100;
   const open = show.queue.filter((order) => order.doneAt === null);
-  const banner = [...show.log]
+  // The newest money line the chat has shown, so a fan tip pops when it reaches the screen; the pop fades itself out.
+  const banner = [...lines]
     .reverse()
-    .find(
-      (event) =>
-        (event.kind === "tip" || event.kind === "order" || event.kind === "goal") && elapsed - event.at < 4_000,
-    );
+    .find((event) => event.kind === "tip" || event.kind === "order" || event.kind === "goal");
   const pay = (amount: number, itemId?: string) => {
     if (!personaId) return;
     setSheet(null);
-    tip.mutate({ amount, ...(itemId ? { itemId } : {}), requestId: crypto.randomUUID() });
+    tip.mutate({ amount, ...(itemId ? { itemId } : {}), requestId: newRequestId() });
   };
   const mmss = (ms: number) =>
     `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1_000)).padStart(2, "0")}`;
@@ -142,14 +154,7 @@ export function SlpLiveScreen({
 
       <header className="space-y-2 px-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onBack}
-            aria-label={t("ui.slurp.live.back")}
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${glass}`}
-          >
-            <ChevronLeft size={22} aria-hidden="true" />
-          </button>
+          {back}
           <div className={`flex min-w-0 items-center gap-2 rounded-full py-1 pe-4 ps-1 ${glass}`}>
             <Avatar account={{ displayName: name, avatarUrl: host?.avatarUrl ?? null }} size="sm" />
             <h1 className="truncate text-sm font-bold">{name}</h1>
@@ -217,7 +222,7 @@ export function SlpLiveScreen({
       {banner && (
         <div className="pointer-events-none flex justify-center px-4 pt-4" aria-live="polite">
           <p
-            key={`${banner.at}:${banner.by}`}
+            key={banner.key}
             className={`slp-live-pop rounded-2xl px-4 py-2.5 text-center font-extrabold shadow-xl ${banner.kind === "goal" ? "bg-gradient-to-br from-[var(--noodle-accent)] to-[var(--slurp-violet)] text-lg" : "bg-[var(--slurp-warning)] text-sm text-neutral-950"}`}
           >
             {banner.kind === "goal" ? (

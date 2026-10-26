@@ -430,6 +430,9 @@ const addedCalls = [
   "get /slurp2/slurp/ads/lorebooks",
   "get /slurp2/slurp/desk?personaId=${encodeURIComponent(personaId!)}",
   "get /slurp2/slurp/drama",
+  "get /slurp2/slurp/live",
+  "get /slurp2/slurp/live/${encodeURIComponent(showId)}${query}",
+  "post /slurp2/slurp/live/${encodeURIComponent(showId)}/tip",
   "get /slurp2/slurp/eligible-accounts?limit=100&offset=${pageParam}&search=${encodeURIComponent(normalizedSearch)}${kind === ",
   "get /slurp2/slurp/fan-activity/status",
   "get /slurp2/slurp/first-posts/status?executionId=${encodeURIComponent(executionId!)}",
@@ -567,17 +570,18 @@ assert.deepEqual(
     // 0.3.27 "Suggest page style": one mutation, its two error states, and the strategy save now
     // refreshes the list when settled (a refused apply also means the list is stale).
     // 0.3.63: +1 (useStartSlurpSexting buys a sexting session).
-    useMutation: 225,
+    // 0.4.12: Live v3 hooks: +2 useMutation, +5 useQuery, +1 setQueryData (a tip returns the fresh show).
+    useMutation: 227,
     // 0.3.28: +2 (the import and the one query of SlpMessageDeepDetails). 0.3.42: +1 (carryover reach).
     // 0.3.44: +2 (the import and the trends row query).
     // 0.3.63: +1 (its useQueryClient).
-    useQuery: 300,
+    useQuery: 305,
     useInfiniteQuery: 9,
     // 0.3.35: +2 (adding a Creator refreshes the settings, which now hold the image name choice).
     // Configurator: +1 (an extension switch drops the cached feed, trend and Stir reads).
     // Life panel: +3 useMutation, +4 useQuery, +1 invalidateQueries, +3 onError.
     invalidateQueries: 157,
-    setQueryData: 27,
+    setQueryData: 28,
     cancelQueries: 7,
     removeQueries: 1,
     refetchQueries: 0,

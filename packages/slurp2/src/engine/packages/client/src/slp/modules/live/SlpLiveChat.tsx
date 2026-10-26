@@ -1,6 +1,5 @@
 import { SlpCoinText } from "../coin/SlpCoin";
-import type { SlpLiveEvent } from "../../../../../shared/src/slp/slp-live.js";
-import { slpLiveEventKey } from "./slp-live-feed";
+import type { SlpLiveLine } from "./slp-live-feed";
 
 /** A stable colour per name, so a regular reads as the same person all show long. */
 const NAME_COLOURS = ["#f9a8d4", "#a5b4fc", "#86efac", "#fcd34d", "#67e8f9", "#fca5a5", "#c4b5fd", "#fdba74"];
@@ -21,7 +20,7 @@ export function SlpLiveChat({
   itemLabel,
   t,
 }: {
-  lines: readonly SlpLiveEvent[];
+  lines: readonly SlpLiveLine[];
   me: string | null;
   host: string;
   itemLabel: (id: string | undefined) => string;
@@ -37,7 +36,6 @@ export function SlpLiveChat({
         const mine = !!me && event.by === me;
         const name = event.name ?? "";
         const item = itemLabel(event.itemId);
-        const key = slpLiveEventKey(event);
         if (event.kind === "goal" || event.kind === "done" || event.kind === "strip") {
           const text =
             event.kind === "goal"
@@ -49,7 +47,7 @@ export function SlpLiveChat({
                   : t("ui.slurp.live.feed.done", { host, item, name });
           return (
             <li
-              key={key}
+              key={event.key}
               className="slp-live-in self-start rounded-xl bg-black/45 px-3 py-1.5 text-sm font-semibold text-[var(--noodle-accent)] backdrop-blur-sm"
             >
               {text}
@@ -59,7 +57,7 @@ export function SlpLiveChat({
         if (event.kind === "tip" || event.kind === "order") {
           return (
             <li
-              key={key}
+              key={event.key}
               className={`slp-live-in self-start rounded-full px-3 py-1 text-sm font-semibold text-white shadow ${mine ? "bg-[var(--slurp-violet)]" : "bg-[color-mix(in_srgb,var(--noodle-accent)_80%,black)]"}`}
             >
               <SlpCoinText>
@@ -71,7 +69,7 @@ export function SlpLiveChat({
           );
         }
         return (
-          <li key={key} className="slp-live-in text-sm text-white/75 drop-shadow-[0_1px_2px_rgb(0_0_0/0.9)]">
+          <li key={event.key} className="slp-live-in text-sm text-white/75 drop-shadow-[0_1px_2px_rgb(0_0_0/0.9)]">
             <b style={{ color: slpLiveNameColour(name) }}>{name}</b> {t("ui.slurp.live.feed.join")}
           </li>
         );

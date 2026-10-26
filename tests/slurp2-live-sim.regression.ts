@@ -120,6 +120,10 @@ assert.deepEqual(
   feedSecond.queue.map((event) => event.at),
   [5],
 );
+const twice = { at: 7, kind: "tip" as const, by: "fan:7", name: "Fan 7", amount: 5 };
+const feedTwice = slpLiveFeedMerge(feedSecond, [twice, twice]);
+assert.equal(feedTwice.queue.length, 3, "two equal tips in one minute are two lines");
+assert.equal(slpLiveFeedMerge(feedTwice, [twice, twice]).queue.length, 3, "and never repeat");
 assert.equal(slpLiveFeedDelay(1), 3_000);
 assert.equal(slpLiveFeedDelay(100), 600);
 
