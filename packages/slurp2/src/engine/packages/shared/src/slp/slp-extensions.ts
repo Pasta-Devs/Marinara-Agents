@@ -5,7 +5,7 @@
  */
 import type { SlpActionName } from "./slp-actions.js";
 
-export const SLP_EXTENSIONS = ["ads", "storylines", "world", "stir", "supportDesk", "engineLink"] as const;
+export const SLP_EXTENSIONS = ["ads", "storylines", "world", "stir", "supportDesk", "engineLink", "live"] as const;
 export type SlpExtensionId = (typeof SLP_EXTENSIONS)[number];
 
 /** The settings key of each switch. */
@@ -16,6 +16,7 @@ export const SLP_EXTENSION_KEYS = {
   stir: "extStir",
   supportDesk: "extSupportDesk",
   engineLink: "extEngineLink",
+  live: "extLive",
 } as const satisfies Record<SlpExtensionId, string>;
 export type SlpExtensionKey = (typeof SLP_EXTENSION_KEYS)[SlpExtensionId];
 export type SlpExtensionSettings = Partial<Record<SlpExtensionKey, boolean>>;
