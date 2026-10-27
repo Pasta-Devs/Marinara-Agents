@@ -73,12 +73,18 @@ for (const lane of ["main", "bond"])
       release();
       const [a, b] = await Promise.all([lead, follow]);
       assert.equal(a.body.ok, true, JSON.stringify(a));
-      assert.equal(b.body.ok, false, JSON.stringify(b));
-      assert.equal(b.body.error, first === "event" ? "story-event-open" : "event-needs-chapter-boundary");
-      assert.deepEqual(providers, [first], "Denied queued admission must not spend a second provider request");
+      if (first === "event") {
+        assert.equal(b.body.ok, false, JSON.stringify(b));
+        assert.equal(b.body.error, "story-event-open");
+        assert.deepEqual(providers, ["event"], "Denied queued admission must not spend a second provider request");
+      } else {
+        // A story forged but not started yet is no story in progress, so the event still opens, in turn after it.
+        assert.equal(b.body.ok, true, JSON.stringify(b));
+        assert.deepEqual(providers, ["ordinary", "event"], "The queued event calls the provider only after the first");
+      }
       const ordinaryKey = lane === "main" ? 2 : "bond-arden";
       assert.equal(f.docs.has(`${runId}:chapter:${ordinaryKey}`), first !== "event");
-      assert.equal(f.docs.has(`${runId}:chapter:event-1`), first === "event");
+      assert.equal(f.docs.has(`${runId}:chapter:event-1`), true);
       if (lane === "bond" && first === "event") {
         f.seed(`${runId}:chapter:bond-arden`, "chapter-plan", {
           ...freshBondPlan,
@@ -104,5 +110,5 @@ for (const lane of ["main", "bond"])
     }
   }
 console.info(
-  "Actual SDK shared story admission passed both orderings for main chapters and Character Stories without a second paid generation.",
+  "Actual SDK shared story admission passed both orderings for main chapters and Character Stories: serialized, and never a denied paid generation.",
 );

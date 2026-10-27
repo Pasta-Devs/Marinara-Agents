@@ -2290,6 +2290,8 @@ function createForgeSeasonalEvents({
       .filter((row) => row.id.startsWith(`${runId}:story-event:`) && Number.isSafeInteger(row.data?.seq))
       .sort((left, right) => right.data.seq - left.data.seq);
   const progress = (session, chapter) => forgeEventCount(session?.progress?.[chapter]?.normal);
+  // Only a story in progress closes the window: a main chapter or a Character Story part with some, but not all, of
+  // it played. One forged but not started yet does not; it waits behind the open event (guardMain).
   const frontier = async (runId, session, store = documents) => {
     const plans = (await store.list(packageId, "chapter-plan"))
       .filter((row) => row.id.startsWith(`${runId}:chapter:`))
@@ -2298,14 +2300,17 @@ function createForgeSeasonalEvents({
       .sort((left, right) => left.chapter - right.chapter);
     let after = 0;
     for (const row of plans) {
-      if (row.chapter !== after + 1 || progress(session, row.chapter) < allNodes(row.plan).length)
-        return { after, ready: false };
+      const played = progress(session, row.chapter);
+      if (!played) continue;
+      if (row.chapter !== after + 1 || played < allNodes(row.plan).length)
+        return { after, ready: false, blockedBy: { kind: "chapter", chapter: row.chapter } };
       after = row.chapter;
     }
-    const bond = Object.values(session?.bondChapters || {}).some((entry) =>
-      Object.keys(entry || {}).some((key) => /^beats\d*$/u.test(key) && forgeEventCount(entry[key]) < 3),
-    );
-    return { after, ready: !bond && after > 0 };
+    for (const [unitId, entry] of Object.entries(session?.bondChapters || {}))
+      for (const [key, value] of Object.entries(entry || {}))
+        if (/^beats\d*$/u.test(key) && forgeEventCount(value) > 0 && forgeEventCount(value) < 3)
+          return { after, ready: false, blockedBy: { kind: "character-story", unitId } };
+    return after > 0 ? { after, ready: true } : { after, ready: false, blockedBy: { kind: "chapter", chapter: 1 } };
   };
 
   async function ensure(runId, retry = false) {
@@ -2401,6 +2406,12 @@ function createForgeSeasonalEvents({
     const session = await readSession(runId),
       boundary = await frontier(runId, session),
       events = [];
+    // The card names what to finish first, so a closed window is never a mystery.
+    if (boundary.blockedBy?.kind === "character-story")
+      boundary.blockedBy.name = forgeEventText(
+        (await documents.getById(packageId, boundary.blockedBy.unitId))?.data?.name,
+        80,
+      );
     for (const row of await rows(runId)) {
       const event = row.data,
         played = progress(session, event.chapter),
@@ -2412,6 +2423,7 @@ function createForgeSeasonalEvents({
         played,
         live,
         canStart: live && forgeSeasonalEnabled(run) && boundary.ready,
+        ...(boundary.ready ? {} : { blockedBy: boundary.blockedBy }),
         archived: !live,
       });
     }

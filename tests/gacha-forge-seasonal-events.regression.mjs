@@ -211,11 +211,37 @@ assert.equal(
   assert.equal((await f.service.plan(f.body)).cached, true);
 }
 {
+  // A chapter forged but not started yet holds no story in progress: the event slots in after chapter 1.
+  const f = fixture();
+  f.put(`${runId}:chapter:2`, "chapter-plan", { title: "Forged, not started", nodes });
+  const open = (await f.service.list({ runId })).events[0];
+  assert.equal(open.canStart, true);
+  assert.equal(open.blockedBy, undefined);
+  const opened = await f.service.plan(f.body);
+  assert.equal(opened.ok, true, JSON.stringify(opened));
+  assert.equal(opened.plan.after, 1);
+}
+{
+  // Only a story in progress keeps it closed, and the card names it.
   const f = fixture();
   f.put(`${runId}:chapter:2`, "chapter-plan", { title: "Ongoing main chapter", nodes });
-  await f.service.list({ runId });
+  f.session().progress[2] = { normal: 3 };
+  const chapter = (await f.service.list({ runId })).events[0];
+  assert.equal(chapter.canStart, false);
+  assert.deepEqual(chapter.blockedBy, { kind: "chapter", chapter: 2 });
   assert.equal((await f.service.plan(f.body)).error, "event-needs-chapter-boundary");
   assert.equal(f.counts().planCalls, 0);
+  delete f.session().progress[2];
+  f.docs.delete(`${runId}:chapter:2`);
+  f.put(`${runId}:unit:arden`, "unit", { name: "Arden" });
+  f.session().bondChapters = { [`${runId}:unit:arden`]: { beats: 0, after: 1, opened: 1 } };
+  assert.equal((await f.service.list({ runId })).events[0].canStart, true, "an opened, unplayed Character Story");
+  f.session().bondChapters[`${runId}:unit:arden`].beats = 1;
+  const story = (await f.service.list({ runId })).events[0];
+  assert.equal(story.canStart, false);
+  assert.deepEqual(story.blockedBy, { kind: "character-story", unitId: `${runId}:unit:arden`, name: "Arden" });
+  f.session().bondChapters[`${runId}:unit:arden`].beats = 3;
+  assert.equal((await f.service.list({ runId })).events[0].canStart, true, "a finished Character Story");
 }
 {
   const f = fixture();
@@ -234,7 +260,9 @@ assert.equal(
   });
   const opening = f.service.plan(f.body);
   await started;
+  // The main story moves on while the event is being written: chapter 2 is now in progress.
   f.put(`${runId}:chapter:2`, "chapter-plan", { title: "Concurrent new main chapter", nodes });
+  f.session().progress[2] = { normal: 1 };
   release();
   assert.equal((await opening).error, "event-needs-chapter-boundary");
   assert.equal(
