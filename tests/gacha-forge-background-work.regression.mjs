@@ -103,6 +103,19 @@ test("a battle reads the team only after the last edit is saved", async () => {
   await settle();
   assert.equal(loads, 1, "a battle left while it waited is never loaded");
   assert.equal(forge._farmBusy, false, "leaving it does not keep the farm locked");
+  // A save that fails while the battle waits must not start it with the older team the server kept.
+  let renders = 0;
+  forge._renderBrowser = () => (renders += 1);
+  forge._hudView = "combat";
+  saveForgeFormation(forge, team("C"), 0);
+  waitForgeFormationSave(forge, resume);
+  forge.posts[2].reply.resolve({ ok: false, error: "write-conflict" });
+  await settle();
+  assert.equal(loads, 1, "the battle is not loaded");
+  assert.equal(forge._hudView, "formation", "Formation opens again with the saved team");
+  assert.equal(forge._formationBattleMode, true);
+  assert.equal(forge._formationState, "idle", "so the next render reads the team from the server");
+  assert.equal(renders, 1);
 });
 
 test("reopening Formation waits for edits still being saved", async () => {

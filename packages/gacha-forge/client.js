@@ -9434,8 +9434,9 @@ function saveForgeFormation(host, presets, active) {
       reply = await host._postJson("/formation/save", { runId, ...edit });
     }
     saves.delete(runId);
-    if (host._run?.runId !== runId) return;
-    if (reply?.ok && Array.isArray(reply.presets)) {
+    const saved = reply?.ok === true && Array.isArray(reply.presets);
+    if (host._run?.runId !== runId) return saved;
+    if (saved) {
       if (host._formation) host._formation = { ...host._formation, presets: reply.presets, active: reply.active };
     } else if (host._hudView === "formation" || host._hudView === "tower") {
       // The server kept an older team: show the one a battle will actually use.
@@ -9444,6 +9445,7 @@ function saveForgeFormation(host, presets, active) {
       host._formation = null;
       host._formationState = "idle";
     }
+    return saved;
   })();
 }
 
@@ -9455,12 +9457,18 @@ function waitForgeFormationSave(host, resume) {
   if (!pending) return false;
   if (host._formationSaveWait !== pending) {
     host._formationSaveWait = pending;
-    pending.then(() => {
+    pending.then((saved) => {
       host._formationSaveWait = null;
       // Load whichever battle is open now. One the player backed out of is never loaded, so nothing is left
       // to release the farm lock that its load would have released.
-      if (host._hudView === "combat" && host._combatPhase === "loading") resume();
-      else if (!host._battleLoading) host._farmBusy = false;
+      const waiting = host._hudView === "combat" && host._combatPhase === "loading";
+      if (waiting && saved) return resume();
+      if (!host._battleLoading) host._farmBusy = false;
+      if (!waiting) return;
+      // The edit was not saved, so the battle would use an older team. Formation shows the saved one instead.
+      host._formationBattleMode = true;
+      host._hudView = "formation";
+      host._renderBrowser();
     });
   }
   return true;
