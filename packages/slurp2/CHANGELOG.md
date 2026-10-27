@@ -1,5 +1,13 @@
 # Slurp release notes
 
+## 0.4.4 — 2026-10-26
+
+- Live shows, rebuilt: code runs every show minute by minute (fans, tips, menu orders, goals); while you watch, the model writes the host and the chat, and the host answers you by name.
+- Live pictures about once per minute, and private shows at the Backstage price and length.
+- Go live yourself as your persona's Creator, or as any Creator from Stir; the room reacts and suggests your next move.
+- "X is live" notices, a thank-you post after each show, and a Backstage > Live shows page.
+- The cam is told in words on the stage, so a show works without pictures; pictures follow those words. A live Creator's Moments tile opens the show. Live is portrait on every screen, with a slim top bar.
+
 ## 0.4.3 — 2026-10-26
 
 - Slurp starts again on Engine builds with zod 4. The feed post and Creator generation routes no longer stop at load with "Right-hand side of 'instanceof' is not an object" (zod 4 has no `ZodEffects`); they extend the plain object schemas instead.

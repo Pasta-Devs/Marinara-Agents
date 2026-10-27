@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import { ChevronRight, Clapperboard, Users, X } from "lucide-react";
+import { ChevronRight, Clapperboard, Radio, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
@@ -37,6 +37,7 @@ import { slpExtensionOn } from "../../../../../shared/src/slp/slp-extensions.js"
 import { SLP_STIR_DECK, SLP_STIR_DECK_ORDER, slpStirDeckOn } from "./slp-stir-deck";
 import { slpStirDeckNeed, slpStirLiveLever } from "./slp-stir-screen-model";
 import { SlpStirRecentPlays } from "./SlpStirRecentPlays";
+import { SlpLiveGoLive } from "../live/slp-live-contract";
 
 const HINT_KEY = "slurp2:stir-hint-seen";
 
@@ -487,6 +488,24 @@ function StartAStory({
               </div>
             </li>
           ))}
+        {category === "work" && view && (
+          <SlpLiveGoLive
+            hosts={view.creators.filter((creator) => !creator.couplePage)}
+            trigger={(open) => (
+              <li>
+                <button type="button" onClick={open} className={cardClass}>
+                  <span className={iconClass}>
+                    <Radio size={20} aria-hidden="true" />
+                  </span>
+                  <span className={cn(SLP_TYPE.body, "font-bold")}>{t("ui.slurp.live.goLive")}</span>
+                  <span className={cn(SLP_TYPE.meta, "text-[var(--slurp-muted)]")}>
+                    {t("ui.slurp.live.goLiveLine")}
+                  </span>
+                </button>
+              </li>
+            )}
+          />
+        )}
         {cards.map((action) => {
           const card = SLP_STIR_DECK[action];
           const Icon = card.icon;

@@ -29,7 +29,9 @@ const defaults = { inlineAdsEnabled: true, brandDealsPace: "normal" };
 // Migration: a fresh install starts on Basic; older settings keep what they had.
 for (const id of SLP_EXTENSIONS) assert.equal(slpExtensionFromLegacy(id, {}, defaults), false, `fresh ${id}`);
 const legacy = { postsPerDay: 4 };
-for (const id of SLP_EXTENSIONS) assert.equal(slpExtensionFromLegacy(id, legacy, defaults), true, `legacy ${id}`);
+// Live is new in 0.4.12: an older install keeps it off until the player turns it on.
+for (const id of SLP_EXTENSIONS)
+  assert.equal(slpExtensionFromLegacy(id, legacy, defaults), id !== "live", `legacy ${id}`);
 assert.equal(slpExtensionFromLegacy("ads", { inlineAdsEnabled: false, brandDealsPace: "off" }, defaults), false);
 assert.equal(slpExtensionFromLegacy("ads", { inlineAdsEnabled: false }, defaults), true, "deals still on");
 assert.equal(slpExtensionFromLegacy("ads", { brandDealsPace: "off" }, defaults), true, "inline ads still on");

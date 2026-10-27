@@ -34,6 +34,7 @@ assert.deepEqual(SLP_BACKSTAGE_SECTIONS, [
   "world",
   // 0.3.5: Settings › Stir, now labelled Support desk; polyamory and drama moved to Storylines.
   "stir",
+  "live",
   "engine",
 ]);
 // A page shows under the section that holds it, whatever section an older caller or saved state names.
