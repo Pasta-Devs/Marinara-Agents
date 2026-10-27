@@ -1,5 +1,9 @@
 # Saucelings release notes
 
+## 0.23.1 — 2026-10-27
+
+- On a wide screen, Background, Caretaker, Looks and New egg open in their own box under the meters and care buttons, instead of across the bottom of the Nook.
+
 ## 0.23.0 — 2026-10-27
 
 - One new egg a day. Once one has come, the egg button says what time the next one is ready. Eggs found in chat and saucelings brought back from the Menagerie don't count.
