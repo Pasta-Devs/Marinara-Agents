@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   SAUCELING_BACKGROUND_LIMIT,
   type SaucelingBackground,
@@ -84,6 +84,11 @@ export function BackgroundPicker({
   const { t } = useSaucelingsTranslation();
   const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
+  // Like the Nook's other panels, it takes focus as it opens, so it scrolls into view on a phone.
+  const section = useRef<HTMLElement>(null);
+  useEffect(() => {
+    section.current?.focus();
+  }, []);
   const [prompt, setPrompt] = useState(() => startingScene(pet));
   const [confirmDelete, setConfirmDelete] = useState<SaucelingBackground | null>(null);
   const library = useQuery({
@@ -195,7 +200,15 @@ export function BackgroundPicker({
       : null;
 
   return (
-    <section className="sl-card sl-picker" aria-label={t("saucelings.background.title")}>
+    <section
+      ref={section}
+      className="sl-card sl-picker"
+      tabIndex={-1}
+      aria-label={t("saucelings.background.title")}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") onClose();
+      }}
+    >
       <strong>{t("saucelings.background.title")}</strong>
 
       <div className="sl-gallery sl-gallery--wide" role="group" aria-label={t("saucelings.background.library")}>

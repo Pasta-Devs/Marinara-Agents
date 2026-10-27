@@ -48,6 +48,15 @@ import { SaucelingSprite, useSpriteReaction } from "./SaucelingSprite.js";
 import { RareMark } from "./RareMark.js";
 import { SaucelingStage, type SaucelingStageHandle } from "./SaucelingStage.js";
 
+/** When the next new egg can come, in local time: one a UTC day (the server's `lastNewEggDay`), so null until one has
+ *  come today. */
+function nextEggTime(lastNewEggDay: string | null, nowMs: number): string | null {
+  const now = new Date(nowMs);
+  if (lastNewEggDay !== now.toISOString().slice(0, 10)) return null;
+  now.setUTCHours(24, 0, 0, 0);
+  return now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
 /** Caretaker and the button that brings an egg; used for the first egg and for a swap. The egg has no
  *  name: the player names it once it hatches. */
 function EggForm({
@@ -55,6 +64,7 @@ function EggForm({
   defaultCaretakerId,
   submitLabel,
   pending,
+  readyAt,
   onSubmit,
   onCancel,
 }: {
@@ -62,6 +72,8 @@ function EggForm({
   defaultCaretakerId: string;
   submitLabel: string;
   pending: boolean;
+  /** Set while today's new egg has already come: the button waits and says when the next one is ready. */
+  readyAt: string | null;
   onSubmit: (input: { characterId: string }) => void;
   onCancel?: () => void;
 }) {
@@ -101,7 +113,7 @@ function EggForm({
       <button
         type="button"
         className="sl-btn sl-btn--primary"
-        disabled={pending}
+        disabled={pending || readyAt !== null}
         onClick={() => onSubmit({ characterId: caretakerId })}
       >
         {pending ? t("saucelings.empty.bringingEgg") : submitLabel}
@@ -110,6 +122,11 @@ function EggForm({
         <button type="button" className="sl-btn" onClick={onCancel}>
           {t("saucelings.common.cancel")}
         </button>
+      ) : null}
+      {readyAt ? (
+        <p style={{ flexBasis: "100%", margin: 0, fontSize: "0.8rem", opacity: 0.7, textAlign: "center" }}>
+          {t("saucelings.swap.wait", { time: readyAt })}
+        </p>
       ) : null}
       {characters.length === 0 ? (
         <p style={{ flexBasis: "100%", margin: 0, fontSize: "0.8rem", opacity: 0.7, textAlign: "center" }}>
@@ -503,6 +520,7 @@ export function SaucelingsNookView({
           defaultCaretakerId={characters[0]?.id ?? "caretaker"}
           submitLabel={t("saucelings.empty.bringEgg")}
           pending={adoptMutation.isPending}
+          readyAt={nextEggTime(state.world.lastNewEggDay, nowMs)}
           onSubmit={adopt}
         />
         <SpecialEggs unlocks={state.unlocks} />
@@ -982,6 +1000,7 @@ export function SaucelingsNookView({
             defaultCaretakerId={isCharacter ? pet.caretakerId : (characters[0]?.id ?? "caretaker")}
             submitLabel={t("saucelings.swap.confirm")}
             pending={adoptMutation.isPending}
+            readyAt={nextEggTime(state.world.lastNewEggDay, nowMs)}
             onSubmit={(input) => adopt({ ...input, swap: true })}
             onCancel={closePanel}
           />
