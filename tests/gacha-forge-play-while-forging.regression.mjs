@@ -79,11 +79,14 @@ function host(reply) {
     _root: {},
     view: "chapter",
     reads: 0,
+    drawn: [],
     _state() {
       return this.view;
     },
     _renderBrowser() {
-      if (this.view === "chapter") this._wireChapter();
+      if (this.view !== "chapter") return;
+      this.drawn.push(this._preforge?.next);
+      this._wireChapter();
     },
     _postJson() {
       this.reads += 1;
@@ -123,7 +126,8 @@ test("returning to the chapter map reads pre-forge once and resumes its poll, wi
     h._renderBrowser();
     await timers.tick();
     assert.equal(h.reads - before, 1, "one read on return");
-    assert.equal(h._preforge.next, 2, "the scene written meanwhile turns into Play");
+    assert.equal(h._preforge.next, 2);
+    assert.equal(h.drawn.at(-1), 2, "the map is drawn again from that read, so the scene written meanwhile is Play");
     assert.equal(timers.running, true, "the poll resumes while the chain still writes");
     state = writing({ done: 3, next: -1, running: false, locked: false });
     await timers.tick();
