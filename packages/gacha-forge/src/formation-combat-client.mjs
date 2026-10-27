@@ -72,6 +72,90 @@ export function forgeFormationStartRequest(host, path, body) {
   };
 }
 
+// Team edits save one at a time and only the newest waits, so a save slowed by a story being written in the
+// background can never land after a newer edit and undo it.
+export function saveForgeFormation(host, presets, active) {
+  const runId = host._run?.runId;
+  if (!runId) return;
+  const saves = (host._formationSaves ||= new Map());
+  const queue = saves.get(runId) || { next: null, running: null };
+  saves.set(runId, queue);
+  queue.next = { presets, active };
+  queue.running ||= (async () => {
+    let reply = null;
+    while (queue.next) {
+      const edit = queue.next;
+      queue.next = null;
+      // A request that throws counts as a failed save rather than leaving this world's queue stuck.
+      reply = await Promise.resolve(host._postJson("/formation/save", { runId, ...edit })).catch(() => null);
+    }
+    saves.delete(runId);
+    const saved = reply?.ok === true && Array.isArray(reply.presets);
+    if (host._run?.runId !== runId) return saved;
+    if (saved) {
+      if (host._formation) host._formation = { ...host._formation, presets: reply.presets, active: reply.active };
+    } else if (host._hudView === "formation" || host._hudView === "tower") {
+      // The server kept an older team: show the one a battle will actually use.
+      host._loadFormation();
+    } else {
+      host._formation = null;
+      host._formationState = "idle";
+    }
+    return saved;
+  })();
+}
+
+const forgeFormationSaving = (host) => host._formationSaves?.get(host._run?.runId)?.running;
+
+// A battle reads its team from the server, so it waits until the last team edit is saved.
+export function waitForgeFormationSave(host, resume) {
+  const pending = forgeFormationSaving(host);
+  if (!pending) return false;
+  if (host._formationSaveWait !== pending) {
+    const runId = host._run?.runId;
+    host._formationSaveWait = pending;
+    pending.then((saved) => {
+      if (host._formationSaveWait === pending) host._formationSaveWait = null;
+      // A save from a world the player has since left never touches this one.
+      if (host._run?.runId !== runId) return;
+      // Load whichever battle is open now. One the player backed out of is never loaded, so nothing is left
+      // to release the farm lock that its load would have released.
+      const waiting = host._hudView === "combat" && host._combatPhase === "loading";
+      if (waiting && saved) return resume();
+      if (host._battleLoading) return;
+      host._farmBusy = false;
+      if (!waiting) return;
+      // The edit was not saved, so the battle would use an older team. Show the saved team where it is picked.
+      if (host._combatNode?.tower) host._hudView = "tower";
+      else {
+        host._formationBattleMode = true;
+        host._hudView = "formation";
+      }
+      host._renderBrowser();
+    });
+  }
+  return true;
+}
+
+// Reopening Formation reads the team from the server too, so it waits once for edits still being saved.
+export function waitForgeFormationLoad(host) {
+  const pending = forgeFormationSaving(host);
+  if (!pending) {
+    // A read that starts now makes any read still queued for an earlier save redundant.
+    host._formationLoadWait = null;
+    return false;
+  }
+  if (host._formationLoadWait !== pending) {
+    host._formationLoadWait = pending;
+    pending.then(() => {
+      if (host._formationLoadWait !== pending) return;
+      host._formationLoadWait = null;
+      if (host._formationState === "loading") host._loadFormation();
+    });
+  }
+  return true;
+}
+
 /** One sentence of what an ability does, with its real numbers. Plain text; escape before inserting. */
 export function forgeFormationDescribe(ability, affinity = "") {
   if (!ability) return "";

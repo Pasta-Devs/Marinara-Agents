@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.5.1 — 2026-10-27
 
 - Sources lists imported memories whose character, lorebook entry, chat summary or chat message was deleted under "Source gone", so you can remove them with their source or leave them as they are.
 

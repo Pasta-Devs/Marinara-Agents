@@ -2283,6 +2283,65 @@ test("Autoplay waits three seconds after revealed text and voice end, and Skip c
   expect(speech).toHaveLength(2);
 });
 
+test("Auto keeps playing while background work starts and ends, and after the tab is hidden", async ({
+  page,
+}, testInfo) => {
+  const now = new Date();
+  await page.clock.install({ time: now });
+  const { forge } = await openForge(page, testInfo);
+  await page.clock.pauseAt(new Date(now.getTime() + 60_000));
+  await seedScene(forge);
+  const auto = forge.locator("[data-auto]");
+  const count = forge.locator("[data-count]");
+  await auto.click();
+  await expect(auto).toHaveAttribute("data-on", "");
+  // The reader that is on screen now must be the one still playing after background work changes.
+  await forge.evaluate((node) => ((node as any)._root.querySelector("[data-vn]").dataset.probe = "kept"));
+  const busy = await forge.evaluate((node) =>
+    (node as any)._busyStart({ cost: "images", label: "Painting expressions" }),
+  );
+  await expect(forge.locator("[data-busy]")).toContainText("Painting expressions");
+  await expect(forge.locator('[data-vn][data-probe="kept"]')).toHaveCount(1);
+  await page.clock.runFor(4000);
+  await expect(count).toHaveText("02 / 05");
+  await forge.evaluate((node, id) => (node as any)._busyEnd(id), busy);
+  await expect(forge.locator("[data-busy]")).toHaveCount(0);
+  await expect(forge.locator('[data-vn][data-probe="kept"]')).toHaveCount(1);
+  await expect(auto).toHaveAttribute("data-on", "");
+
+  // Hiding the tab saves the line without showing a writing chip or rebuilding the scene.
+  const marks: string[] = [];
+  await page.route("**/api/gacha-forge/beat/mark", (route) => {
+    marks.push(route.request().postData() || "");
+    return route.fulfill({ json: { ok: true } });
+  });
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect.poll(() => marks.length).toBe(1);
+  await expect(forge.locator("[data-busy]")).toHaveCount(0);
+  await page.evaluate(() => {
+    delete (document as any).visibilityState;
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect(forge.locator('[data-vn][data-probe="kept"]')).toHaveCount(1);
+  await page.clock.runFor(4000);
+  await expect(count).toHaveText("03 / 05");
+
+  // Any other rebuild of the same scene keeps Auto on and keeps advancing.
+  await forge.evaluate((node) => {
+    (node as any)._renderKey = null;
+    (node as any)._renderBrowser();
+  });
+  await expect(forge.locator('[data-vn][data-probe="kept"]')).toHaveCount(0);
+  await expect(auto).toHaveAttribute("data-on", "");
+  await page.clock.runFor(4000);
+  await expect(count).toHaveText("04 / 05");
+  await auto.click();
+  await expect(auto).not.toHaveAttribute("data-on");
+});
+
 test("Story Cancel exits delayed chapter generation without losing progress", async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
