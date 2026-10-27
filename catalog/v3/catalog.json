@@ -2878,8 +2878,8 @@
         "schemaVersion": 1,
         "id": "director",
         "name": "Narrative Director",
-        "version": "1.0.3",
-        "description": "Gives the story a push in a new direction when you ask for it. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
+        "version": "1.0.5",
+        "description": "Evaluates each turn and hands the narrator one direction for where the story goes next. Off by default; opt in per chat. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
           "maxExclusive": "4.0.0"
@@ -2893,8 +2893,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "2b12d574eb46695f047173340f000f02752c45a3b1f9fe8f1fe20fb4c2fd30d8",
-            "bytes": 1559
+            "sha256": "75b695876eee289e11da554f0803661e150bb787e3ef1445bc3d285f7c6ba3dd",
+            "bytes": 4457
           }
         ],
         "permissions": [
@@ -2909,9 +2909,9 @@
       "category": "writer",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/director.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/director-1.0.3.zip",
-        "sha256": "3e364ccdad2360f5663bc659c21647372b39463eeae99b81203c82174ccab838",
-        "bytes": 1415
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/director-1.0.5.zip",
+        "sha256": "c05a07b00b5e9554995c5dd41fc9bcb72f294feab7303424023f5cec390add41",
+        "bytes": 2662
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#narrative-director"
     },

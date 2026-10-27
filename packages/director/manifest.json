@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "director",
   "name": "Narrative Director",
-  "version": "1.0.3",
-  "description": "Gives the story a push in a new direction when you ask for it. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
+  "version": "1.0.5",
+  "description": "Evaluates each turn and hands the narrator one direction for where the story goes next. Off by default; opt in per chat. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode.",
   "engine": {
     "min": "2.3.0",
     "maxExclusive": "4.0.0"
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "2b12d574eb46695f047173340f000f02752c45a3b1f9fe8f1fe20fb4c2fd30d8",
-      "bytes": 1559
+      "sha256": "75b695876eee289e11da554f0803661e150bb787e3ef1445bc3d285f7c6ba3dd",
+      "bytes": 4457
     }
   ],
   "permissions": [

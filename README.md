@@ -16,7 +16,7 @@ Across its Engine compatibility lanes, the stable catalog currently contains **4
 | Continuity Checker | [`continuity`](packages/continuity/manifest.json) | Fixes mistakes about places, time, and physical details in AI messages without changing the story. |
 | Knowledge Retrieval | [`knowledge-retrieval`](packages/knowledge-retrieval/manifest.json) | Finds what matters for the current scene in your lorebooks and gives the AI a short summary of it. |
 | Knowledge Router | [`knowledge-router`](packages/knowledge-router/manifest.json) | A cheaper Knowledge Retrieval: picks the lorebook entries that fit the scene and gives them to the AI as they are. Works best with big lorebooks whose entries have short descriptions. |
-| Narrative Director | [`director`](packages/director/manifest.json) | Gives the story a push in a new direction when you ask for it. |
+| Narrative Director | [`director`](packages/director/manifest.json) | Evaluates each turn and hands the narrator one direction for where the story goes next. |
 | Prose Guardian | [`prose-guardian`](packages/prose-guardian/manifest.json) | Removes banned words, repetition, and unwanted writing habits from AI messages without changing what they say. |
 
 ### Tracker Agents
