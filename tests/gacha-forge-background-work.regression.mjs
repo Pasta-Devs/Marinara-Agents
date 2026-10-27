@@ -5,7 +5,11 @@ import { test } from "node:test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { saveForgeFormation, waitForgeFormationSave } from "../packages/gacha-forge/src/formation-combat-client.mjs";
+import {
+  saveForgeFormation,
+  waitForgeFormationLoad,
+  waitForgeFormationSave,
+} from "../packages/gacha-forge/src/formation-combat-client.mjs";
 
 const deferred = () => {
   let resolve;
@@ -77,33 +81,44 @@ test("a failed last save shows the saved team instead of a team no battle will u
 test("a battle reads the team only after the last edit is saved", async () => {
   const forge = host();
   let loads = 0;
+  const resume = () => (loads += 1);
+  forge._hudView = "combat";
   forge._combatNode = { combatIndex: 1 };
   forge._combatPhase = "loading";
   saveForgeFormation(forge, team("A"), 0);
-  assert.equal(
-    waitForgeFormationSave(forge, () => (loads += 1)),
-    true,
-  );
-  assert.equal(
-    waitForgeFormationSave(forge, () => (loads += 1)),
-    true,
-    "a repeated render does not queue another load",
-  );
+  assert.equal(waitForgeFormationSave(forge, resume), true);
+  // The player backs out and enters the fight again while the same save is still running.
+  forge._combatNode = { combatIndex: 1 };
+  assert.equal(waitForgeFormationSave(forge, resume), true, "a repeated render does not queue another load");
   forge.posts[0].reply.resolve({ ok: true, presets: team("A"), active: 0 });
   await settle();
-  assert.equal(loads, 1);
-  assert.equal(
-    waitForgeFormationSave(forge, () => (loads += 1)),
-    false,
-    "nothing waits once saved",
-  );
+  assert.equal(loads, 1, "the battle open now is loaded once");
+  assert.equal(waitForgeFormationSave(forge, resume), false, "nothing waits once saved");
 
+  forge._farmBusy = true;
   saveForgeFormation(forge, team("B"), 0);
-  waitForgeFormationSave(forge, () => (loads += 1));
-  forge._combatNode = { combatIndex: 2 };
+  waitForgeFormationSave(forge, resume);
+  forge._hudView = "farm";
   forge.posts[1].reply.resolve({ ok: true, presets: team("B"), active: 0 });
   await settle();
-  assert.equal(loads, 1, "a battle left while it waited is not loaded");
+  assert.equal(loads, 1, "a battle left while it waited is never loaded");
+  assert.equal(forge._farmBusy, false, "leaving it does not keep the farm locked");
+});
+
+test("reopening Formation waits for edits still being saved", async () => {
+  const forge = host();
+  saveForgeFormation(forge, team("A"), 0);
+  saveForgeFormation(forge, team("B"), 0);
+  forge._formation = null;
+  forge._formationState = "loading";
+  assert.equal(waitForgeFormationLoad(forge), true, "the read waits instead of missing B");
+  forge.posts[0].reply.resolve({ ok: true, presets: team("A"), active: 0 });
+  await settle();
+  assert.equal(forge.loads, 0, "B is still being saved");
+  forge.posts[1].reply.resolve({ ok: true, presets: team("B"), active: 0 });
+  await settle();
+  assert.equal(forge.loads, 1, "the team is read once B is saved");
+  assert.equal(waitForgeFormationLoad(forge), false);
 });
 
 test("the shipped server retries a Formation save and skips the history count on refreshes", async () => {

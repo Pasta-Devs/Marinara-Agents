@@ -102,19 +102,30 @@ export function saveForgeFormation(host, presets, active) {
   })();
 }
 
+const forgeFormationSaving = (host) => host._formationSaves?.get(host._run?.runId)?.running;
+
 // A battle reads its team from the server, so it waits until the last team edit is saved.
 export function waitForgeFormationSave(host, resume) {
-  const pending = host._formationSaves?.get(host._run?.runId)?.running;
+  const pending = forgeFormationSaving(host);
   if (!pending) return false;
   if (host._formationSaveWait !== pending) {
-    const node = host._combatNode;
     host._formationSaveWait = pending;
     pending.then(() => {
       host._formationSaveWait = null;
-      if (host._combatNode === node && host._combatPhase === "loading") resume();
+      // Load whichever battle is open now. One the player backed out of is never loaded, so nothing is left
+      // to release the farm lock that its load would have released.
+      if (host._hudView === "combat" && host._combatPhase === "loading") resume();
+      else if (!host._battleLoading) host._farmBusy = false;
     });
   }
   return true;
+}
+
+// Reopening Formation reads the team from the server too, so it waits for edits still being saved.
+export function waitForgeFormationLoad(host) {
+  const pending = forgeFormationSaving(host);
+  pending?.then(() => host._formationState === "loading" && host._loadFormation());
+  return !!pending;
 }
 
 /** One sentence of what an ability does, with its real numbers. Plain text; escape before inserting. */
