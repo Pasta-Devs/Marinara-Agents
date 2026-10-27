@@ -1295,6 +1295,14 @@ for (const key of catalogKeys(locale)) {
   assert.ok(koLocale[key].trim(), `${key} Korean text is blank`);
   assert.deepEqual(placeholders(koLocale[key]), placeholders(locale[key]), `${key} placeholders differ from en`);
 }
+// The add-detail placeholder must be a name the A-Z/digit key rule accepts, and discard is never labeled delete.
+for (const name of koLocale["ui.longTermMemory.memoryvault.detailNameExample"].replace(/^[^:]*:/u, "").split(",")) {
+  assert.ok(/[a-z0-9]/iu.test(name), `detailNameExample name "${name.trim()}" has no A-Z or digit for the stored key`);
+}
+assert.ok(
+  !koLocale["ui.longTermMemory.memoryvault.discardAndContinue"].includes("삭제"),
+  "discardAndContinue must not read as delete",
+);
 const localization = readFileSync(ltmSourcePaths.localization, "utf8");
 assert.match(localization, /import koreanCatalog from "\.\/locales\/ko\.json"/u);
 assert.match(localization, /ko: stringEntries\(koreanCatalog\)/u);
