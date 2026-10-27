@@ -585,6 +585,8 @@ export interface SaucelingWorldDocument {
   backgrounds: SaucelingBackground[];
   /** The day (see `currentDayKey`) a caretaker last found an egg while chatting; one a day at most. */
   lastEggFindDay: string | null;
+  /** The day (see `currentDayKey`) the player last brought in a new egg; one a day at most. */
+  lastNewEggDay: string | null;
   profileCache: Record<string, SaucelingCareProfile>;
   /** Each painted caretaker's pixel figure for the Nook, by character id: the id of its figure document. */
   caretakerFigures: Record<string, string>;
