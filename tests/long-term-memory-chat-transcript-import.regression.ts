@@ -45,12 +45,14 @@ const conversationChat = { ...roleplayChat, id: "chat-conversation", name: "Kitc
 const mariChat = { ...roleplayChat, id: "chat-mari", name: "Lesson", characterIds: ["__professor_mari__"] };
 const branchChat = { ...roleplayChat, id: "chat-branch", name: "Branch", groupId: "group-branches" };
 const branchSiblingChat = { ...branchChat, id: "chat-branch-sibling", name: "Branch sibling" };
+const divergedChatA = { ...roleplayChat, id: "chat-diverged-a", name: "Draft A", groupId: "group-diverged" };
+const divergedChatB = { ...divergedChatA, id: "chat-diverged-b", name: "Draft B" };
 
 async function main() {
   const [
     { configurePackageRuntime },
     { previewPackageInterop, sourcePackageDetails, importPackageInterop, transcriptPieces },
-    { ltmImportSourceNotesResponseSchema, ltmInteropPreviewResponseSchema },
+    { ltmImportSourceNotesResponseSchema, ltmInteropPreviewRequestSchema, ltmInteropPreviewResponseSchema },
   ] = await Promise.all([
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/interop.ts"),
@@ -121,7 +123,9 @@ async function main() {
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-chat-transcript-"));
   const root = join(dataDir, "long-term-memory");
-  const chats = [roleplayChat, conversationChat, mariChat, branchChat, branchSiblingChat];
+  const chats = [roleplayChat, conversationChat, mariChat, branchChat, branchSiblingChat, divergedChatA, divergedChatB];
+  // A first message this long closes its piece, so each ending below is a piece of its own.
+  const sharedOpening = "x".repeat(23_990);
   const messages = new Map<string, FixtureMessage[]>([
     [
       roleplayChat.id,
@@ -136,6 +140,20 @@ async function main() {
     [mariChat.id, [message(mariChat.id, "p1", "user", "Teach me.")]],
     [branchChat.id, [message(branchChat.id, "b1", "user", "The shared beginning.")]],
     [branchSiblingChat.id, [message(branchSiblingChat.id, "b1-copy", "user", "The shared beginning.")]],
+    [
+      divergedChatA.id,
+      [
+        message(divergedChatA.id, "d1", "user", sharedOpening),
+        message(divergedChatA.id, "d2", "assistant", "Ending A."),
+      ],
+    ],
+    [
+      divergedChatB.id,
+      [
+        message(divergedChatB.id, "d1-copy", "user", sharedOpening),
+        message(divergedChatB.id, "d2-b", "assistant", "Ending B."),
+      ],
+    ],
   ]);
   let releaseRuntime: (() => void) | undefined;
   let messageReads = 0;
@@ -244,6 +262,54 @@ async function main() {
         root,
       );
       assert.equal(branchPreview.samples.length, 1, "identical branch messages preview once per chat group");
+
+      const diverged = (branchChatId?: string, extra: { cursor?: string; limit?: number } = {}) =>
+        previewPackageInterop(
+          ltmInteropPreviewRequestSchema.parse({
+            source: "messages",
+            sourceScope: { groupIds: ["group-diverged"] },
+            branchChatId,
+            ...extra,
+          }),
+          root,
+        );
+      const sharedRow = "chat-diverged-a:messages:d1";
+      assert.deepEqual(
+        (await diverged()).samples.map((sample) => sample.sourceId),
+        [sharedRow, "chat-diverged-a:messages:d2", "chat-diverged-b:messages:d2-b"],
+        "without a branch the group lists the shared piece once and both endings",
+      );
+      const branchA = await diverged(divergedChatA.id);
+      assert.deepEqual(
+        branchA.samples.map((sample) => sample.sourceId),
+        [sharedRow, "chat-diverged-a:messages:d2"],
+        "a branch lists the shared piece and its own ending only",
+      );
+      assert.deepEqual(branchA.totals, { matches: 2, ready: 2, imported: 0 }, "totals follow the branch filter");
+      assert.deepEqual(
+        (await diverged(divergedChatB.id)).samples.map((sample) => sample.sourceId),
+        [sharedRow, "chat-diverged-b:messages:d2-b"],
+        "the shared piece also lists under the other branch, next to that branch's own ending",
+      );
+      assert.equal((await diverged(conversationChat.id)).totals.matches, 0, "a chat outside the group has no rows");
+      const firstPage = await diverged(divergedChatA.id, { limit: 1 });
+      assert.deepEqual(
+        firstPage.samples.map((sample) => sample.sourceId),
+        [sharedRow],
+      );
+      assert.ok(firstPage.nextCursor, "a branch page that has more returns a cursor");
+      await assert.rejects(
+        diverged(divergedChatB.id, { limit: 1, cursor: firstPage.nextCursor! }),
+        /cursor is invalid/,
+        "a cursor belongs to the branch it was issued for",
+      );
+      assert.deepEqual(
+        (await diverged(divergedChatA.id, { limit: 1, cursor: firstPage.nextCursor! })).samples.map(
+          (sample) => sample.sourceId,
+        ),
+        ["chat-diverged-a:messages:d2"],
+        "the same branch continues from its cursor",
+      );
 
       const imported = ltmImportSourceNotesResponseSchema.parse(
         await importPackageInterop(

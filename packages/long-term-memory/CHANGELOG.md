@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.5.2 — 2026-10-27
+
+- The Chat Messages tab in Sources has a Branch menu for a chat with branches. It starts on this branch, so another branch's messages no longer mix into the list. Choose a branch or All branches; importing still goes to the whole chat.
+
 ## 1.5.1 — 2026-10-27
 
 - Sources lists imported memories whose character, lorebook entry, chat summary or chat message was deleted under "Source gone", so you can remove them with their source or leave them as they are.

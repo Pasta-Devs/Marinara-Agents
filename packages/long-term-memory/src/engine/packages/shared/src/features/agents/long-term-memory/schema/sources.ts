@@ -29,6 +29,8 @@ export const ltmInteropPreviewRequestSchema = z
     mode: ltmModeSchema.optional(),
     query: ltmPreviewQuerySchema,
     cursor: z.string().min(1).max(2048).optional(),
+    // Chat Messages only: list the history of one branch of the scoped chat group.
+    branchChatId: z.string().min(1).max(200).optional(),
   })
   .strict();
 
