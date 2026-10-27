@@ -1,8 +1,8 @@
 ## 1.24.9 — 2026-10-27
 
-- A new chapter opens as soon as its plan is written. Its fights are no longer all designed before the chapter map appears: with pre-forge on, each fight is designed in the background in story order beside the scenes written ahead, and otherwise when you reach it.
-- Story memory summarizes only in the background. Writing a plan, scene, fight or chat never waits for summaries: it uses the overview and chapter summaries saved so far, plus the previous chapter in full and the current chapter. The overview is sized once for the smallest of your story, narration and chat models.
-- Long chapters can be summarized again. Summaries now get at least 10k tokens of output room for thinking models; before, a chapter too long for one request always failed and memory fell back to the old history.
+- A new chapter opens as soon as its plan is written. Its fights are no longer all designed before the chapter map appears: each fight is designed in the background right after the scene before it is written (by pre-forge or when you open it), so it is ready, with its enemy art, when you reach it.
+- Story memory summarizes only in the background, so writing a plan, scene, fight or chat no longer waits for it to catch up. Canon the saved overview does not cover yet is sent beside it as its summary, or as written for a fresh side story or chat. A summary already running on the same connection still finishes first; a separate summary connection avoids that.
+- Long chapters can be summarized again: summaries get at least 10k tokens of output room for thinking models (or the model's maximum, never below 8,192).
 
 ## 1.24.8 — 2026-10-27
 

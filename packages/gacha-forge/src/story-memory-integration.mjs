@@ -350,7 +350,8 @@ export function createForgeStoryMemoryIntegration({
     if (!context.maxContext) throw new Error("compress-context-unknown");
     messages = await prepareMessages(messages, runId);
     // Thinking models reason before they write, so every summary leaves at least 10k tokens of output room.
-    const reserve = Math.min(Math.max(10240, tokenBudget || 0), context.maxOutput || Infinity);
+    // Never below the 8192 every generation needs: a model with less fails at no cost and the fallback has room.
+    const reserve = Math.max(8192, Math.min(Math.max(10240, tokenBudget || 0), context.maxOutput || Infinity));
     const available = (input) =>
       context.maxContext -
       input.reduce(
@@ -536,20 +537,23 @@ export function createForgeStoryMemoryIntegration({
           connectionId,
           debugMode,
         });
-        // Memory that fell behind catches up in the background; a failed summary waits for Retry.
+        // Memory that fell behind catches up in the background; a failed summary waits for Retry. Generation adds
+        // no canon, so it never re-arms a job that is already running.
         const lagging =
           result.status?.phase === "ready" ? result.lagging : ["stale", "pending"].includes(result.status?.phase);
-        if (useCurrent && lagging) schedule(runId);
+        if (useCurrent && lagging && !scheduled.has(runId)) schedule(runId);
         if (result.status?.phase !== "ready") return legacy();
         const partial = useCurrent
           ? await partialBondHistory(runId, current || Number.isInteger(chapter) ? null : chapter)
           : "";
-        // Required recent canon, in story order: the previous chapter and any side canon not summarized yet.
-        const recent = [...(result.unsummarized || []), ...(lastChapter ? [lastChapter] : [])]
-          .sort((left, right) => left.order - right.order)
-          .map((source) =>
-            source === lastChapter ? previous : `# Recent canon in full: ${source.title}\n${source.content}`,
-          );
+        // Required recent canon in story order: the previous chapter in full, and around it whatever the overview
+        // does not cover yet, as its saved summary or, for side canon not summarized yet, as written.
+        const recent = (result.recent || []).map((source) =>
+          source.latest
+            ? previous
+            : `# ${source.summary ? "Recent canon summary" : "Recent canon in full"}: ${source.title}\n${source.content}`,
+        );
+        if (previous && !result.recent?.some((source) => source.latest)) recent.push(previous);
         return renderContext(result, { prefix: [...recent, prefix, partial].filter(Boolean).join("\n\n"), fate });
       } catch (error) {
         logger?.warn?.(

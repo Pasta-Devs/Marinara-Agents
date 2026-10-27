@@ -230,6 +230,9 @@ export function createForgeStoryMemory({
       ...(saved.phase === "pending" && !active.has(runId)
         ? { phase: "stale", retryable: true, reason: "interrupted" }
         : {}),
+      ...(saved.phase === "ready" && saved.unknownReaders?.length
+        ? { phase: "context-unknown", retryable: false, reason: "configure-context" }
+        : {}),
       recordCount: data.records.length,
     };
   }
@@ -251,6 +254,13 @@ export function createForgeStoryMemory({
         : await Promise.all(forgeMemoryReaders.map((reader) => resolveContext(runId, { job: reader })));
     const known = contexts.map((context) => context?.maxContext).filter((value) => Number.isFinite(value) && value > 0);
     const maxContext = known.length ? Math.floor(Math.min(...known)) : null;
+    // A reader with no known context cannot use memory; Continuity says so instead of reporting Ready.
+    const unknownReaders =
+      job || connectionId
+        ? []
+        : forgeMemoryReaders.filter(
+            (_reader, index) => !(Number.isFinite(contexts[index]?.maxContext) && contexts[index].maxContext > 0),
+          );
     const budget = maxContext == null ? null : Math.floor(maxContext * 0.1);
     const operationId = randomUUID();
     Object.assign(frame, { budget, maxContext, operationId });
@@ -280,7 +290,7 @@ export function createForgeStoryMemory({
       });
       return { overview: "", details: [], status: unavailable, budget: null, maxContext };
     }
-    const state = { maxContext, overviewBudget: budget };
+    const state = { maxContext, overviewBudget: budget, ...(unknownReaders.length ? { unknownReaders } : {}) };
     const stale = async () => ({
       status: await setStatus({ ...state, phase: "stale", retryable: true, reason: "source-changed" }),
       budget,
@@ -556,20 +566,26 @@ export function createForgeStoryMemory({
         };
       const sources = sourcesFrom(await readSources(options.runId, options.target), orderSources);
       const records = validRecords(data, sources);
-      const currentStamps = sourceStamp(sources);
+      const stamps = new Set(sourceStamp(sources).map((stamp) => JSON.stringify(stamp)));
+      // The saved overview stays usable while everything it covers is still canon here, even when newer
+      // canon sorts before part of it; whatever it does not cover is sent beside it.
       const saved =
         Array.isArray(data.overview?.sources) &&
-        same(data.overview.sources, currentStamps.slice(0, data.overview.sources.length))
+        data.overview.sources.every((stamp) => stamps.has(JSON.stringify(stamp)))
           ? data.overview
           : null;
-      const covered = new Set((saved?.sources || []).map(([key]) => key));
-      // The latest chapter is sent in full, so the overview may lag it by that one chapter and lose no canon.
-      const latest = sources.findLast((source) => source.kind === "chapter");
-      const behind = sources.some(
-        (source) => source.kind === "chapter" && source !== latest && !covered.has(source.key),
-      );
       const overview = saved && estimateTokens(`${overviewHeading}${saved.content}`) <= budget ? saved.content : "";
-      if (behind || (saved?.sources.length && !overview) || !current(options.runId, epoch))
+      const covered = new Set(overview ? saved.sources.map(([key]) => key) : []);
+      // The caller sends the latest chapter in full. Other canon the overview misses goes in as its saved
+      // summary, or as written for side canon not summarized yet; an earlier chapter with neither needs the
+      // full history.
+      const latest = sources.findLast((source) => source.kind === "chapter");
+      const summaries = new Map(records.map((record) => [record.key, record]));
+      const uncovered = sources.filter((source) => source !== latest && !covered.has(source.key));
+      if (
+        uncovered.some((source) => source.kind === "chapter" && !summaries.has(source.key)) ||
+        !current(options.runId, epoch)
+      )
         return {
           ...result,
           status: { ...result.status, phase: result.status.phase === "ready" ? "stale" : result.status.phase },
@@ -586,23 +602,31 @@ export function createForgeStoryMemory({
       }
       if (!current(options.runId, epoch))
         return { status: { phase: "stale", retryable: true }, overview: "", details: [], text: "" };
-      const details = rankForgeStoryMemories(records, options.query || "", {
-        ...options,
-        vector,
-        spaceId: host?.spaceId,
-      });
-      // Side canon finished since the last summary is sent as written, like the latest chapter, until its
-      // summary lands; nothing played waits for, or goes missing behind, background work.
-      const summarized = new Set(records.map((record) => record.key));
-      const unsummarized = sources.filter((source) => source.kind !== "chapter" && !summarized.has(source.key));
+      const sent = new Set(uncovered.map((source) => source.key));
+      const details = rankForgeStoryMemories(
+        records.filter((record) => !sent.has(record.key)),
+        options.query || "",
+        { ...options, vector, spaceId: host?.spaceId },
+      );
+      // Required recent canon in story order, for the caller to place the latest chapter among it.
+      const recent = sources
+        .filter((source) => source === latest || sent.has(source.key))
+        .map(({ id, kind, title, content, key }) =>
+          key === latest?.key
+            ? { id, kind, title, latest: true }
+            : summaries.has(key)
+              ? { id, kind, title, content: summaries.get(key).content, summary: true }
+              : { id, kind, title, content },
+        );
       return {
         ...result,
         status: { ...result.status, phase: "ready" },
-        unsummarized,
-        // Work still owed in the background; a failed summary keeps its saved phase and waits for Retry.
+        recent,
+        // Work still owed in the background. A failed summary, or a summary model with no known context, waits
+        // for Retry or configuration instead of being queued again by every generation.
         lagging:
-          result.status.phase !== "error" &&
-          (unsummarized.length > 0 || sources.some((source) => !covered.has(source.key))),
+          !["error", "context-unknown"].includes(result.status.phase) &&
+          sources.some((source) => !covered.has(source.key)),
         overview,
         details,
         text: forgeStoryMemoryText({ overview, details }),

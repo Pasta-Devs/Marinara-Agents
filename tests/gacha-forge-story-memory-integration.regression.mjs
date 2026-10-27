@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import {
+  fitForgeMemoryPrompt,
+  forgeComposeMemoryPrompt,
+  forgeMemoryContext,
+} from "../packages/gacha-forge/src/story-memory-fit.mjs";
 import { createForgeStoryMemoryIntegration } from "../packages/gacha-forge/src/story-memory-integration.mjs";
-import { createForgeStoryMemory } from "../packages/gacha-forge/src/story-memory.mjs";
+import { createForgeStoryMemory, forgeStoryMemoryText } from "../packages/gacha-forge/src/story-memory.mjs";
 
 // Summaries keep 10240 output tokens free, so tests that really compress need more than the 10k default window.
 const summaryConnections = async () => [{ id: "main", provider: "custom", model: "fixture", maxContext: 32768 }];
@@ -13,6 +18,26 @@ const deferred = () => {
   return { promise, resolve };
 };
 const settle = () => new Promise((resolve) => setImmediate(resolve));
+// A revisioned memory document for tests that run the real memory core.
+const memoryDocuments = () => {
+  let saved;
+  let revision = 0;
+  return {
+    getById: async () => (saved ? { data: structuredClone(saved), revision } : null),
+    create: async ({ data }) => {
+      if (saved) return false;
+      saved = structuredClone(data);
+      revision += 1;
+      return true;
+    },
+    update: async ({ expectedRevision, data }) => {
+      if (expectedRevision !== revision) return false;
+      saved = structuredClone(data);
+      revision += 1;
+      return true;
+    },
+  };
+};
 
 function fixture(options = {}) {
   const realMemory = options.realMemory;
@@ -310,7 +335,7 @@ test("a known consumer with unknown compression context requests configuration a
   assert.equal(generations, 2);
 });
 
-test("summary requests leave thinking models at least 10240 output tokens, or the model's smaller maximum", async () => {
+test("summary requests leave thinking models at least 10240 output tokens, or the model's smaller maximum but never under 8192", async () => {
   let compressor = { maxContext: 10855 };
   const f = fixture({
     run: { compressConnectionId: "compressor" },
@@ -331,12 +356,21 @@ test("summary requests leave thinking models at least 10240 output tokens, or th
   assert.equal(await budget(20000), null, "a larger overview budget raises the reserve");
   compressor = { maxContext: 32768 };
   assert.equal((await budget(undefined)).maxTokens, 32152, "detail requests keep every token that remains");
-  compressor = { maxContext: 4711, maxOutputTokens: 4096 };
+  compressor = { maxContext: 9615, maxOutputTokens: 9000 };
   assert.equal(await budget(2000), null);
-  compressor = { maxContext: 4712, maxOutputTokens: 4096 };
+  compressor = { maxContext: 9616, maxOutputTokens: 9000 };
   const capped = await budget(20000);
-  assert.equal(capped.maxTokens, 4096, "a model that cannot write 10240 tokens needs only its own maximum");
-  assert.equal(capped.requestBudget(messages), 4096);
+  assert.equal(capped.maxTokens, 9000, "a model that cannot write 10240 tokens needs only its own maximum");
+  assert.equal(capped.requestBudget(messages), 9000);
+  // Every generation needs 8192, so a smaller maximum still reserves that: its own attempt fails at no cost,
+  // and a fallback model has room.
+  compressor = { maxContext: 8807, maxOutputTokens: 4096 };
+  assert.equal(await budget(20000), null);
+  compressor = { maxContext: 8808, maxOutputTokens: 4096 };
+  const floor = await budget(20000);
+  assert.equal(floor.maxTokens, 8192);
+  assert.equal(floor.requestBudget(messages), 8192);
+  assert.equal(floor.requestBudget([...messages, { role: "user", content: "x" }]), 0);
 });
 
 test("the full previous canonical chapter precedes current beats and does not spend a recall slot", async () => {
@@ -457,7 +491,7 @@ test("live-chat recovery deduplicates played text across different legacy headin
 });
 
 test("memory that fell behind answers with legacy history at once and catches up once in the background", async () => {
-  const gate = deferred();
+  let gate = deferred();
   const f = fixture({ phase: "stale", maintain: () => gate.promise });
   f.plan(1);
   f.plan(2);
@@ -474,10 +508,19 @@ test("memory that fell behind answers with legacy history at once and catches up
     "One background job, sized for every reader rather than this job",
   );
   assert.equal((await f.memory.status(f.runId)).phase, "pending");
+  await f.context(2);
   gate.resolve();
   await settle();
-  assert.equal(f.maintained.length, 2, "Generations during the job coalesce into one fresh snapshot");
+  assert.equal(f.maintained.length, 1, "Generation adds no canon, so it never re-arms the running job");
   assert.equal((await f.memory.status(f.runId)).phase, "ready");
+  // Completions during a running job still coalesce into one fresh snapshot.
+  gate = deferred();
+  for (let completion = 0; completion < 3; completion += 1) f.memory.schedule(f.runId);
+  await settle();
+  assert.equal(f.maintained.length, 2);
+  gate.resolve();
+  await settle();
+  assert.equal(f.maintained.length, 3, "Completions during the job coalesce into one fresh snapshot");
   for (const phase of ["error", "context-unknown"]) {
     const failed = fixture({ phase });
     failed.plan(1);
@@ -494,6 +537,105 @@ test("memory that fell behind answers with legacy history at once and catches up
   assert.deepEqual(replay.requests.at(-1).target, { chapter: 2, storyIndex: 0 });
   await settle();
   assert.deepEqual(replay.maintained, [], "A replay neither builds its own overview nor schedules maintenance");
+});
+
+test("generation never re-arms a running memory job, so a failing summary is tried once and then waits for Retry", async () => {
+  const started = deferred();
+  const gate = deferred();
+  let attempts = 0;
+  const f = fixture({
+    realMemory: true,
+    readConnections: summaryConnections,
+    documents: memoryDocuments(),
+    generate: async () => {
+      attempts += 1;
+      started.resolve();
+      await gate.promise;
+      return { ok: false, error: "fixture summary offline" };
+    },
+  });
+  f.plan(1);
+  f.plan(2);
+  f.session.progress = { 1: { normal: 3 } };
+  // Chapter 1 has no summary yet, so the first current generation queues the background job.
+  assert.match(await f.context(2), /^# Previous chapter in full: Chapter 1\n/u);
+  await started.promise;
+  assert.equal((await f.memory.status(f.runId)).phase, "pending");
+  for (let generation = 0; generation < 3; generation += 1) await f.context(2);
+  gate.resolve();
+  await settle();
+  assert.equal(attempts, 1, "generations during the job did not queue the failing summary again");
+  assert.equal((await f.memory.status(f.runId)).phase, "error");
+  await f.context(2);
+  await settle();
+  assert.equal(attempts, 1, "an idle generation leaves the failed summary for Retry");
+  assert.equal((await f.memory.status(f.runId)).phase, "error");
+});
+
+test("canon the overview does not cover surrounds the previous chapter in story order, as required text that survives fitting", async () => {
+  let failOverview = false;
+  let generations = 0;
+  const f = fixture({
+    realMemory: true,
+    readConnections: summaryConnections,
+    documents: memoryDocuments(),
+    generate: async ({ kind, messages }) => {
+      generations += 1;
+      if (kind === "overview" && failOverview) return { ok: false, error: "fixture overview offline" };
+      const input = JSON.parse(messages[1].content);
+      return { ok: true, value: kind === "detail" ? `SUMMARY ${input.source.id}` : "OVERVIEW of chapter 1." };
+    },
+    renderContext: (result, options) => forgeMemoryContext(result, { ...options, renderMemory: forgeStoryMemoryText }),
+  });
+  for (let chapter = 1; chapter <= 4; chapter += 1) f.plan(chapter);
+  f.session.progress = { 1: { normal: 3 } };
+  assert.equal((await f.memory.maintain({ runId: f.runId })).status.phase, "ready");
+  // An event opened after chapter 1, and chapters 2 and 3, are summarized, but folding them into the overview fails.
+  Object.assign(f.plan("event-1", ["story"]), { eventId: "event-record", after: 1, opened: 100 });
+  Object.assign(f.session.progress, { 2: { normal: 3 }, 3: { normal: 3 }, "event-1": { normal: 1 } });
+  failOverview = true;
+  assert.equal((await f.memory.maintain({ runId: f.runId })).status.phase, "error");
+  // A Character Story opened after chapter 3, the latest chapter, has no summary yet.
+  f.plan("bond-keeper", ["story", "story", "story"]);
+  f.session.bondChapters.keeper = { after: 3, opened: 200, beats: 3 };
+  const paid = generations;
+  const context = await f.memory.context({
+    runId: f.runId,
+    chapter: 4,
+    storyIndex: 0,
+    query: "summary",
+    job: "structured",
+    prefix: "# Current chapter so far\nCURRENT_BEAT",
+    fallback: () => "legacy fallback",
+  });
+  await settle();
+  assert.equal(generations, paid, "generation pays for no summary, and the failed fold waits for Retry");
+  const required = [
+    "# Recent canon summary: Story event: Chapter event-1\nSUMMARY event-1",
+    "# Recent canon summary: Chapter 2\nSUMMARY 2",
+    "# Previous chapter in full: Chapter 3\nCanonical 3:0\n\nCanonical 3:1",
+    "# Recent canon in full: Chapter bond-keeper\nCanonical bond-keeper:0\n\nCanonical bond-keeper:1\n\nCanonical bond-keeper:2",
+    "# Current chapter so far\nCURRENT_BEAT",
+  ].join("\n\n");
+  assert.equal(context.prefix, required);
+  assert.deepEqual(
+    context.details.map((record) => record.id),
+    ["1"],
+    "only canon the overview covers is optional recall",
+  );
+  // Fitting drops optional recall first; the recent canon stays whole and in story order.
+  const estimate = (messages) => messages.reduce((sum, message) => sum + [...message.content].length + 4, 0);
+  const messages = forgeComposeMemoryPrompt(
+    (history) => [
+      { role: "system", content: "FIXED_LORE" },
+      { role: "user", content: history },
+    ],
+    [context],
+  );
+  const fit = fitForgeMemoryPrompt(messages, { maxContext: estimate(messages) + 511, estimateMessages: estimate });
+  assert.equal(fit.fits, true);
+  assert.equal(fit.droppedDetails, 1);
+  assert.equal(fit.messages[1].content, `# Canon to date\nOVERVIEW of chapter 1.\n\n${required}`);
 });
 
 for (const failAt of [1, 3])
