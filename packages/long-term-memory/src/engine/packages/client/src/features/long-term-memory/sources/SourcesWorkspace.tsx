@@ -1532,7 +1532,7 @@ export default function SourcesWorkspace({
       <p className="text-xs text-[var(--muted-foreground)]">
         {localizeUi("ui.longTermMemory.sourcesworkspace.sourceGoneHelp")}
       </p>
-      <ul className="space-y-1">
+      <ul className="max-h-52 space-y-1 overflow-y-auto">
         {outdatedNotes.map((note) => (
           <li
             key={note.noteId}
