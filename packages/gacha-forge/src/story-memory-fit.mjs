@@ -2,11 +2,12 @@ const forgeMemoryDescriptor = Symbol("gacha-forge-memory-context");
 const forgeMemoryPrompt = Symbol("gacha-forge-memory-prompt");
 
 function renderForgeMemory(context, count, dropped = 0) {
-  let prefix = context.prefix;
+  // A closing separator lets the last block of the prefix go like any other.
+  let prefix = `${context.prefix}\n\n`;
   for (const block of context.optional.slice(0, dropped)) prefix = prefix.replace(`${block}\n\n`, "");
   return [
     context.renderMemory({ overview: context.overview, details: context.details.slice(0, count) }),
-    prefix,
+    prefix.slice(0, -2),
     context.fate,
   ]
     .filter(Boolean)
@@ -111,11 +112,23 @@ export function fitForgeMemoryPrompt(
   }
   // Summaries standing in for an overview that is behind or set aside are canon, not recall: the oldest are left out
   // only while the writer would otherwise get less than the generation floor (_t's 8192), never the newest.
-  while (ceiling - safetyTokens - estimateMessages(fitted) < Math.min(minOutputTokens, reserve || 1)) {
+  const short = () => ceiling - safetyTokens - estimateMessages(fitted) < Math.min(minOutputTokens, reserve || 1);
+  while (short()) {
     const state = states.find((entry) => entry.dropped < entry.context.optional.length);
     if (!state) break;
-    if (!shrink(state, state.count, state.dropped + 1)) return ambiguous;
-    droppedSummaries += 1;
+    // The fewest oldest blocks that restore the floor, found by halving: the estimate only falls as blocks go, so
+    // a long legacy history costs a few re-estimates instead of one per block.
+    const from = state.dropped;
+    let low = from + 1,
+      high = state.context.optional.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (!shrink(state, state.count, middle)) return ambiguous;
+      if (short()) low = middle + 1;
+      else high = middle;
+    }
+    if (state.dropped !== low && !shrink(state, state.count, low)) return ambiguous;
+    droppedSummaries += low - from;
   }
   const remaining = Math.floor(ceiling - safetyTokens - estimateMessages(fitted));
   if (!(remaining > 0)) return { messages, maxTokens, fits: false, droppedDetails: 0, reason: "context-too-large" };

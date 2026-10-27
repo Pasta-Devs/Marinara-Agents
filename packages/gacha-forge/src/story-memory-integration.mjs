@@ -538,7 +538,8 @@ export function createForgeStoryMemoryIntegration({
       listed = [],
     }) => {
       let previous = "",
-        previousContent = "";
+        previousContent = "",
+        previousTurn = Infinity;
       const legacy = async () => {
         let eventRows = [];
         try {
@@ -549,9 +550,11 @@ export function createForgeStoryMemoryIntegration({
             error?.message || "failed",
           );
         }
-        const history = [await fallback(), ...eventRows.map((row) => `# ${row.title}\n${row.content}`)]
-          .filter(Boolean)
-          .join("\n\n");
+        // The bundle's history comes as its blocks and where each chapter's turn starts; a plain string is one block.
+        const fallen = await fallback();
+        const { blocks, starts = [] } = Array.isArray(fallen?.blocks) ? fallen : { blocks: [fallen] };
+        const events = eventRows.map((row) => ({ text: `# ${row.title}\n${row.content}`, after: row.opening?.after }));
+        const history = [...blocks, ...events.map((event) => event.text)].filter(Boolean).join("\n\n");
         const currentBody = prefix.replace(/^# Current chapter so far\n/u, "");
         const missingCurrent = current && currentBody && !history.includes(currentBody);
         if (!previous && !missingCurrent) return history;
@@ -567,9 +570,26 @@ export function createForgeStoryMemoryIntegration({
           .join("\n\n");
         const context = await resolveContext(runId, { job, connectionId });
         if (!context.maxContext) return required;
+        // Canon before the previous chapter's turn, and events opened before it, may be left out by the prompt
+        // fitter only while the reply would otherwise get less than its floor: older chapters first, then Character
+        // Stories and events, each oldest first. The previous chapter, everything after it, the scene so far and
+        // locked decisions always stay.
+        const turns = starts.flatMap((at, turn) => [{ at, turn }]).slice(0, -1);
+        const keep = turns.findLast((entry) => entry.turn <= previousTurn) || { at: 0, turn: 0 };
+        const optional = [];
+        let taken = 0;
+        for (const event of events.filter((entry) => entry.after < keep.turn)) {
+          const until = Math.max(taken, turns.find((entry) => entry.turn > event.after).at);
+          optional.push(...blocks.slice(taken, until), event.text);
+          taken = until;
+        }
+        optional.push(...blocks.slice(taken, keep.at));
+        // Older chapters go before any Character Story or event, as with the summaries the overview misses.
+        const main = new Set(turns.map(({ at }) => blocks[at]).filter((block) => /^# Chapters? \d/u.test(block ?? "")));
+        optional.sort((left, right) => main.has(right) - main.has(left));
         return renderContext(
           { overview: "", details: [], maxContext: context.maxContext },
-          { prefix: required, fate: "" },
+          { prefix: required, fate: "", optional },
         );
       };
       try {
@@ -582,6 +602,7 @@ export function createForgeStoryMemoryIntegration({
         const shown = new Set(((await listed) || []).map((item) => [item.name, item.at, item.memory].join("\n")));
         if (lastChapter) {
           previousContent = lastChapter.content;
+          previousTurn = Number(lastChapter.id);
           previous = `# Previous chapter in full: ${lastChapter.title}\n${previousContent}`;
         }
         // Recall searches with what was just played: the end of the current chapter so far (or of the previous

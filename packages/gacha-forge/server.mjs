@@ -7433,6 +7433,18 @@ function memoryFrom(value) {
   };
 }
 
+// First canon stays canon: once a source has a saved record, the record's fingerprint stands for it. A source that
+// later reads differently (a package update, edited data) keeps its first record, the overview built over it and
+// recall, and never stops later canon from being summarized. Canon replaced on purpose deletes the record first.
+function keepFirstCanon(sources, records) {
+  const first = new Map();
+  for (const record of records)
+    if (typeof record?.key === "string" && typeof record.fingerprint === "string" && !first.has(record.key))
+      first.set(record.key, record.fingerprint);
+  for (const source of sources) if (first.has(source.key)) source.fingerprint = first.get(source.key);
+  return sources;
+}
+
 function validRecords(memory, sources) {
   return sources.flatMap((source) => {
     const record = memory.records.find(
@@ -7807,12 +7819,17 @@ function createForgeStoryMemory({
       budget,
       maxContext,
     });
-    const sources = sourcesFrom(await readSources(runId, target), orderSources);
+    let prepared = (await read(runId)).data;
+    const sources = keepFirstCanon(sourcesFrom(await readSources(runId, target), orderSources), prepared.records);
     const stamps = sourceStamp(sources);
+    // Only canon without a record can change under a paid summary; a summary of a source that changed is never saved.
     const stillCurrent = async () =>
       current(runId, epoch) &&
       !signal.aborted &&
-      same(sourceStamp(sourcesFrom(await readSources(runId, target), orderSources)), stamps);
+      same(
+        sourceStamp(keepFirstCanon(sourcesFrom(await readSources(runId, target), orderSources), prepared.records)),
+        stamps,
+      );
     async function fold(kind, source, initial, messagesFor) {
       const text = [...source.content];
       const id = hash([
@@ -7880,14 +7897,9 @@ function createForgeStoryMemory({
       return { id, value };
     }
     await setStatus({ ...state, phase: "pending", retryable: false });
-    let prepared = (await read(runId)).data;
     for (const source of sources) {
-      const existing = prepared.records.find((record) => record.key === source.key);
-      if (existing && existing.fingerprint !== source.fingerprint) {
-        const stale = await setStatus({ ...state, phase: "stale", retryable: true, reason: "source-changed" });
-        return { status: stale, budget, maxContext };
-      }
-      if (validRecords(prepared, [source]).length) continue;
+      // A record is never summarized again, so a replay or a later rendering cannot rewrite first canon.
+      if (prepared.records.some((record) => record.key === source.key)) continue;
       if (!(await stillCurrent())) return stale();
       // A conversation is already a short model-written memory: it is its own record, with no second summary.
       const folded =
@@ -8139,7 +8151,10 @@ function createForgeStoryMemory({
           details: [],
           text: "",
         };
-      const sources = sourcesFrom(await readSources(options.runId, options.target), orderSources);
+      const sources = keepFirstCanon(
+        sourcesFrom(await readSources(options.runId, options.target), orderSources),
+        data.records,
+      );
       // Who may know what: a private conversation reaches only its own unit's chat and scenes that unit is in; a
       // Character Story reaches another unit's chat only through the shared overview.
       const readable = (source) => {
@@ -8804,7 +8819,8 @@ function createForgeStoryMemoryIntegration({
       listed = [],
     }) => {
       let previous = "",
-        previousContent = "";
+        previousContent = "",
+        previousTurn = Infinity;
       const legacy = async () => {
         let eventRows = [];
         try {
@@ -8815,9 +8831,11 @@ function createForgeStoryMemoryIntegration({
             error?.message || "failed",
           );
         }
-        const history = [await fallback(), ...eventRows.map((row) => `# ${row.title}\n${row.content}`)]
-          .filter(Boolean)
-          .join("\n\n");
+        // The bundle's history comes as its blocks and where each chapter's turn starts; a plain string is one block.
+        const fallen = await fallback();
+        const { blocks, starts = [] } = Array.isArray(fallen?.blocks) ? fallen : { blocks: [fallen] };
+        const events = eventRows.map((row) => ({ text: `# ${row.title}\n${row.content}`, after: row.opening?.after }));
+        const history = [...blocks, ...events.map((event) => event.text)].filter(Boolean).join("\n\n");
         const currentBody = prefix.replace(/^# Current chapter so far\n/u, "");
         const missingCurrent = current && currentBody && !history.includes(currentBody);
         if (!previous && !missingCurrent) return history;
@@ -8833,9 +8851,26 @@ function createForgeStoryMemoryIntegration({
           .join("\n\n");
         const context = await resolveContext(runId, { job, connectionId });
         if (!context.maxContext) return required;
+        // Canon before the previous chapter's turn, and events opened before it, may be left out by the prompt
+        // fitter only while the reply would otherwise get less than its floor: older chapters first, then Character
+        // Stories and events, each oldest first. The previous chapter, everything after it, the scene so far and
+        // locked decisions always stay.
+        const turns = starts.flatMap((at, turn) => [{ at, turn }]).slice(0, -1);
+        const keep = turns.findLast((entry) => entry.turn <= previousTurn) || { at: 0, turn: 0 };
+        const optional = [];
+        let taken = 0;
+        for (const event of events.filter((entry) => entry.after < keep.turn)) {
+          const until = Math.max(taken, turns.find((entry) => entry.turn > event.after).at);
+          optional.push(...blocks.slice(taken, until), event.text);
+          taken = until;
+        }
+        optional.push(...blocks.slice(taken, keep.at));
+        // Older chapters go before any Character Story or event, as with the summaries the overview misses.
+        const main = new Set(turns.map(({ at }) => blocks[at]).filter((block) => /^# Chapters? \d/u.test(block ?? "")));
+        optional.sort((left, right) => main.has(right) - main.has(left));
         return renderContext(
           { overview: "", details: [], maxContext: context.maxContext },
-          { prefix: required, fate: "" },
+          { prefix: required, fate: "", optional },
         );
       };
       try {
@@ -8848,6 +8883,7 @@ function createForgeStoryMemoryIntegration({
         const shown = new Set(((await listed) || []).map((item) => [item.name, item.at, item.memory].join("\n")));
         if (lastChapter) {
           previousContent = lastChapter.content;
+          previousTurn = Number(lastChapter.id);
           previous = `# Previous chapter in full: ${lastChapter.title}\n${previousContent}`;
         }
         // Recall searches with what was just played: the end of the current chapter so far (or of the previous
@@ -8918,11 +8954,12 @@ const forgeMemoryDescriptor = Symbol("gacha-forge-memory-context");
 const forgeMemoryPrompt = Symbol("gacha-forge-memory-prompt");
 
 function renderForgeMemory(context, count, dropped = 0) {
-  let prefix = context.prefix;
+  // A closing separator lets the last block of the prefix go like any other.
+  let prefix = `${context.prefix}\n\n`;
   for (const block of context.optional.slice(0, dropped)) prefix = prefix.replace(`${block}\n\n`, "");
   return [
     context.renderMemory({ overview: context.overview, details: context.details.slice(0, count) }),
-    prefix,
+    prefix.slice(0, -2),
     context.fate,
   ]
     .filter(Boolean)
@@ -9027,11 +9064,23 @@ function fitForgeMemoryPrompt(
   }
   // Summaries standing in for an overview that is behind or set aside are canon, not recall: the oldest are left out
   // only while the writer would otherwise get less than the generation floor (_t's 8192), never the newest.
-  while (ceiling - safetyTokens - estimateMessages(fitted) < Math.min(minOutputTokens, reserve || 1)) {
+  const short = () => ceiling - safetyTokens - estimateMessages(fitted) < Math.min(minOutputTokens, reserve || 1);
+  while (short()) {
     const state = states.find((entry) => entry.dropped < entry.context.optional.length);
     if (!state) break;
-    if (!shrink(state, state.count, state.dropped + 1)) return ambiguous;
-    droppedSummaries += 1;
+    // The fewest oldest blocks that restore the floor, found by halving: the estimate only falls as blocks go, so
+    // a long legacy history costs a few re-estimates instead of one per block.
+    const from = state.dropped;
+    let low = from + 1,
+      high = state.context.optional.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (!shrink(state, state.count, middle)) return ambiguous;
+      if (short()) low = middle + 1;
+      else high = middle;
+    }
+    if (state.dropped !== low && !shrink(state, state.count, low)) return ambiguous;
+    droppedSummaries += low - from;
   }
   const remaining = Math.floor(ceiling - safetyTokens - estimateMessages(fitted));
   if (!(remaining > 0)) return { messages, maxTokens, fits: false, droppedDetails: 0, reason: "context-too-large" };
@@ -9055,7 +9104,7 @@ async function lT(e){let{api:t,package:n}=e,r=t.runtime,a=forgeStoryDocuments(r.
 ${H.digest}`}let q=[];for(let K=0;K<Math.min(d,zt);K+=1){let ae=await nr(s,P,K);ae&&q.push(jo(ae))}return q.length?`# ${B}
 ${q.join(`
 
-`)}`:""}async function _r(s,c,d,forgeMemoryOptions,forgeReader){if(forgeMemoryOptions)return forgeMemoryHistory(s,c,d,forgeMemoryOptions);let forgeLegacyTarget=Number.isInteger(c)?null:(await a.getById(n.id,f(s,c)))?.data;let forgeMemoryBefore=Number.isInteger(c)?c:(Number(forgeLegacyTarget?.after)||Ka((await pe(s)).data).find(row=>T(row.unitId,row.part)===c)?.after||0)+1;let v=[],k=await tl(s,forgeLegacyTarget),E=await ha(s,forgeMemoryBefore),N=Number.isInteger(c)?null:await Gr(s,c),P=async ae=>{for(let re of k.get(ae)||[]){if(N&&re.unitId===N.unitId&&re.part===N.part||forgeReader&&re.unitId!==forgeReader)continue;let oe=await Va(s,re.unitId,re.beats,re.part,E);oe&&v.push(oe)}},B=forgeMemoryBefore;await P(0);let H=1;for(;H<B;){let ae=await rr(s,H);if(ae&&ae.to<B){let oe=Math.min(ae.to,B-1),ye=[];for(let Me of ae.bonds)ye.push((await Ir(s,Me)).label);let we=ye.length?`, including ${ye.join(", ")}`:"";v.push(oe>H?`# Chapters ${H}-${oe}${we} (summary)
+`)}`:""}async function _r(s,c,d,forgeMemoryOptions,forgeReader,forgeBlocks){let forgeTurnStarts=[];if(forgeMemoryOptions)return forgeMemoryHistory(s,c,d,forgeMemoryOptions);let forgeLegacyTarget=Number.isInteger(c)?null:(await a.getById(n.id,f(s,c)))?.data;let forgeMemoryBefore=Number.isInteger(c)?c:(Number(forgeLegacyTarget?.after)||Ka((await pe(s)).data).find(row=>T(row.unitId,row.part)===c)?.after||0)+1;let v=[],k=await tl(s,forgeLegacyTarget),E=await ha(s,forgeMemoryBefore),N=Number.isInteger(c)?null:await Gr(s,c),P=async ae=>{for(let re of k.get(ae)||[]){if(N&&re.unitId===N.unitId&&re.part===N.part||forgeReader&&re.unitId!==forgeReader)continue;let oe=await Va(s,re.unitId,re.beats,re.part,E);oe&&v.push(oe)}},B=forgeMemoryBefore;await P(0);let H=1;for(;forgeTurnStarts[H]=v.length,H<B;){let ae=await rr(s,H);if(ae&&ae.to<B){let oe=Math.min(ae.to,B-1),ye=[];for(let Me of ae.bonds)ye.push((await Ir(s,Me)).label);let we=ye.length?`, including ${ye.join(", ")}`:"";v.push(oe>H?`# Chapters ${H}-${oe}${we} (summary)
 ${ae.digest}`:`# Chapter ${H}${we} (summary)
 ${ae.digest}`);for(let Me=H;Me<=oe;Me+=1)await P(Me);H=Math.max(H+1,oe+1);continue}let re=[];for(let oe=0;oe<mn;oe+=1){let ye=await nr(s,H,oe);ye&&re.push(jo(ye))}re.length&&v.push(`# Chapter ${H}
 ${re.join(`
@@ -9063,7 +9112,7 @@ ${re.join(`
 `)}`),await P(H),H+=1}let q=[];for(let ae=0;ae<d;ae+=1){let re=await nr(s,c,ae);re&&q.push(jo(re))}let K=N?`# ${N.name}'s bond chapter${N.part>1?` (part ${N.part})`:""} so far`:`# Chapter ${c} so far`;q.length&&v.push(`${K}
 ${q.join(`
 
-`)}`);let forgeDecisions=await forgeChoices.continuity(s,c,d,forgeReader);forgeDecisions&&v.push(forgeDecisions);return v.join(`
+`)}`);let forgeDecisions=await forgeChoices.continuity(s,c,d,forgeReader);forgeDecisions&&v.push(forgeDecisions);return forgeBlocks?{blocks:v,starts:forgeTurnStarts}:v.join(`
 
 `)}async function Gr(s,c){let d=Ta(c);if(!d)return null;let{data:v}=await pe(s),k=Object.keys(v&&v.bondChapters||{}).find(N=>T(N,d)===c);if(!k)return null;let E=await a.getById(n.id,k);return{unitId:k,part:d,name:l(E&&E.data&&E.data.name)||"a companion"}}async function ts(s,c){let d=[];for(let v=1;v<c;v+=1){let k=await a.getById(n.id,f(s,v)),E=k&&k.data?k.data:null;E&&(d.push(`Chapter ${v} \u2014 ${l(E.title)}: ${l(E.premise)}`),d.push(`  recorded: ${l(E.arcNote)||"-"}`))}return d.join(`
 `)}async function be(){let s=await a.getById(n.id,Lf),c=s&&s.data&&typeof s.data=="object"?s.data:null;return{doc:s,data:c||{runs:[],activeRunId:null}}}async function qt(s,c){let d=new Date().toISOString();return s?a.update({id:Lf,packageId:n.id,expectedRevision:s.revision,name:"index",description:"gacha runs",data:c,updatedAt:d}):a.create({id:Lf,packageId:n.id,kind:_y,name:"index",description:"gacha runs",data:c,createdAt:d,updatedAt:d})}function Ae(s,c){return(Array.isArray(s.runs)?s.runs:[]).find(d=>d&&d.runId===c)||null}async function pe(s){let c=await a.getById(n.id,h(s)),d=c&&c.data&&typeof c.data=="object"?c.data:null;return d&&Wp(d),{doc:c,data:d||{progress:{}}}}async function xn(s,c,d=3){for(let v=0;v<d;v+=1){let{doc:k,data:E}=await pe(s);if(c(E),await Pe(s,k,E))return E}return null}async function Wn(s,c,d=3){for(let v=0;v<d;v+=1){let k=await a.getById(n.id,s);if(!k||!k.data)return null;let E={...k.data};if(c(E),await a.update({id:s,packageId:n.id,expectedRevision:k.revision,name:k.name,description:k.description,data:E,updatedAt:new Date().toISOString()}))return E}return null}async function Pe(s,c,d){let v=h(s),k=new Date().toISOString();return c?a.update({id:v,packageId:n.id,expectedRevision:c.revision,name:"session",description:"gacha run progress",data:d,updatedAt:k}):a.create({id:v,packageId:n.id,kind:Iy,name:"session",description:"gacha run progress",data:d,createdAt:k,updatedAt:k})}async function qr(s,c){if(!c||!c.startedAt)return[];if(!lo)return[];let{doc:d,data:v}=await pe(s),k=v&&v.minis,E=!!k&&Math.round(Number(k.seq)||0)===c.seq&&Array.isArray(k.picks),N;if(E)N=k.picks;else{N=wp(s,c.seq,c.days).map(P=>({id:P.id,startDay:P.startDay,days:P.days})),v.minis={seq:c.seq,picks:N};try{await Pe(s,d,v)}catch(P){r.logger.warn("[gacha-forge] could not stamp the mini-event schedule: %s",l(P&&P.message))}}return pa(N)}function ns(s,c,d){let v=ht(s,d);if(!v.startedAt)return null;let k=ar(s,v.seq).find(N=>N.id==="bingo");if(!k||!Fn(k,$n(v.startedAt,d)))return null;let E=si(s,v.seq,d,_n(v.startedAt,k));if(E.closed||E.marked.length>=Qr)return null;for(E.runs+=1;E.runs>=Hl;)E.runs-=Hl,E.marks+=1;return Kf(s,E),{period:v,entry:k}}async function Xa(s){try{let c=await Le().portraitProfile(nt(s).styleProfileId);return oa(c&&c.promptMode)}catch{return!1}}function Ai(s,c,d,v){let k=qf(s,c.seq,v,_n(c.startedAt,d)),E=$n(c.startedAt,v);return{...k,label:d.label,live:Fn(d,E),endsInDays:Math.max(0,d.endDay-E)}}function za(s,c,d,v,k){let E=_n(d.startedAt,v),N=si(s,d.seq,k,E),P=Yf(c,d.seq),B=new Set(N.marked),H=$n(d.startedAt,k);return{label:v.label,tiles:P.map((q,K)=>B.has(K)?q:null),marked:N.marked.slice(),marks:N.marks,runs:N.runs,live:Fn(v,H),closed:N.closed,endsInDays:Math.max(0,v.endDay-H)}}function rs(s,c,d,v,k){let E=ii(s,c.seq,v,_n(c.startedAt,d)),N=$n(c.startedAt,v);return{label:d.label,art:k&&k.url||"",used:E.used,perDay:E.perDay,left:E.left,mult:fo,resetsAt:v+ui(v),excluded:$c.relic,seen:E.seen,live:Fn(d,N),closed:E.closed,endsInDays:Math.max(0,d.endDay-N)}}function Ja(s,c,d){if(z(s,c,c&&c.account,"seasonal"))return null;let v=ht(c,d);if(!v.startedAt)return null;let k=ar(c,v.seq).find(N=>N.id==="supply");if(!k||!Fn(k,$n(v.startedAt,d)))return null;let E=ii(c,v.seq,d,_n(v.startedAt,k));return E.closed?null:{period:v,entry:k,rec:E}}function ar(s,c){let d=s&&s.minis;return!d||Math.round(Number(d.seq)||0)!==c||!Array.isArray(d.picks)?[]:pa(d.picks)}function pa(s){if(!lo)return[];let c=[];for(let d of Array.isArray(s)?s:[]){let v=yp(d&&d.id);if(!v)continue;let k=Math.max(0,Math.round(Number(d.startDay)||0)),E=Math.max(1,Math.round(Number(d.days)||1));c.push({id:v.id,kind:v.kind,label:v.label,startDay:k,days:E,endDay:k+E})}return c}function nt(s){let c=s&&s.images;if(!c||typeof c!="object")return{auto:!0,off:!1,connectionId:"",styleProfileId:"",portraits:!0,backgrounds:!1,outfits:!0,enemyArt:!1,battleBackgrounds:!1,...$r(null)};let d=l(c.connectionId);return{...c,auto:!1,off:!d,connectionId:d,styleProfileId:l(c.styleProfileId),portraits:c.portraits!==!1,backgrounds:c.backgrounds===!0,outfits:c.outfits!==!1,enemyArt:c.enemyArt===!0,battleBackgrounds:c.battleBackgrounds===!0,...$r(c)}}function ma(s){let c=nt(s);return!c.off&&c.outfits!==!1}async function nn(s){let c=nt(s);return c.off?null:Ng(await Le().listConnections(),c.connectionId)}function Si(s,c){let d=`${c}:unit:`,v=[];for(let k of s){if(!k||typeof k.id!="string"||!k.id.startsWith(d))continue;let E=k.data;!E||E.kind!=="character"||E.isProtagonist||v.push({unitId:k.id,name:l(E.name),done:!!l(E.portrait)})}return v.sort((k,E)=>k.unitId<E.unitId?-1:k.unitId>E.unitId?1:0),v}async function nl(s){let c=await Nr(s);return c<1?1:await a.getById(n.id,A(s,c,0))?c+1:c}async function Yr(s){let c=`${s}:chapter:`,v=(await a.list(n.id,ia)).filter(E=>E&&typeof E.id=="string"&&E.id.startsWith(c)).map(E=>Number(E.id.slice(c.length))).filter(E=>Number.isInteger(E)&&E>=1);if(!v.length)return 0;let k=await _r(s,Math.max(...v)+1,0);return Math.ceil(k.length/4)}function rl(s,c){let d=(s||[]).find(E=>String(E&&E.id)===`${c}:relics`),v=d&&d.data&&d.data.items||{},k={total:0,r5:0,r4:0,r3:0};for(let E of Object.keys(v)){let N=Math.max(3,Math.min(5,Math.round(Number(v[E]&&v[E].rarity)||3)));k.total+=1,k[`r${N}`]+=1}return k}/* forge-background-unlocks-server-source:start */
@@ -9421,7 +9470,7 @@ async function forgeMemoryHistory(runId,chapter,storyIndex,options){
   let count=tr(plan).slice(0,position.nodeIndex).filter(node=>node.type==="story").length;
   for(let index=0;index<count;index++){let segments=await nr(runId,position.chapter,index);if(segments)prefix.push(jo(segments))}
  }else for(let index=0;index<storyIndex;index++){let segments=await nr(runId,chapter,index);if(segments)prefix.push(jo(segments))}
- return forgeStoryMemory.context({runId,chapter,storyIndex,...options,prefix:prefix.length?"# Current chapter so far\n"+prefix.join("\n\n"):"",fate:await forgeChoices.continuity(runId,chapter,storyIndex,options.reader),fallback:()=>_r(runId,chapter,storyIndex,null,options.reader)});
+ return forgeStoryMemory.context({runId,chapter,storyIndex,...options,prefix:prefix.length?"# Current chapter so far\n"+prefix.join("\n\n"):"",fate:await forgeChoices.continuity(runId,chapter,storyIndex,options.reader),fallback:()=>_r(runId,chapter,storyIndex,null,options.reader,true)});
 }
 const forgeChoices=forgeCreateChoiceRuntime({documents:a,packageId:n.id,readSession:pe,beatId:A,planId:f,storyNodes:wy,allNodes:tr,bondHistory:Ka,readRun:async runId=>Ae((await be()).data,runId),choiceChapterActive:(runId,chapter)=>forgeSeasonalEvents?.choiceActive(runId,chapter)??true,resolveChapter:body=>{let runId=l(body&&body.runId),unitId=l(body&&body.unitId);if(unitId){let part=R(body.part);return runId&&unitId.startsWith(`${runId}:unit:`)&&part?T(unitId,part):null}if(forgeSeasonalChapter(body?.chapter))return body.chapter;let chapter=Number(body&&body.chapter);return Number.isInteger(chapter)&&chapter>=1?chapter:null}});let forgeSeasonalEvents;let forgeProactiveMessages;const forgeBannerAnimations=createForgeBannerAnimations({dataDir:e.dataDir,runtime:r,readBanner:async(runId,bannerId)=>{if(/^story-event-[1-9]\d{0,8}$/u.test(bannerId))return forgeSeasonalEvents?.mediaBanner(runId,bannerId);const rule=Uf(bannerId);if(!rule||!rule.live)return null;const{data:index}=await be(),run=Ae(index,runId);if(!run)return null;const{data:session}=await pe(runId),account=await Zt(runId);if(z(run,session,account,"summon")||(rule.pool==="featured"&&z(run,session,account,"featured")))return null;const identity=le(runId,rule.pool==="featured"?`${rule.cat}:${ht(session,Date.now()).key}`:Bt),doc=await a.getById(n.id,identity),art=doc?.data?.art?.[bannerId],ref=doc?.data?.artRef?.[bannerId],match=typeof ref==="string"?/^global-gallery:([A-Za-z0-9_-]{1,100})$/u.exec(ref):null;return{connectionId:run.animationConnectionId||"",identity,art,galleryImageId:match?.[1]||""}}});const forgeChapterRegeneration=createForgeChapterRegeneration({packageId:n.id,persistence:r.persistence,cancellation:forgeStoryCancellation,allNodes:tr,bondChapterId:T,bondLength:zt,openBond:session=>tc(session.roster,session.bondChapters),isCharacter:Os,invalidateMemory:runId=>{forgeProactiveMessages?.invalidate(runId);forgeStoryMemory.invalidate(runId)}});const forgeFormationMigration=createForgeFormationMigration({packageId:n.id,persistence:r.persistence,cancellation:forgeStoryCancellation,retireInactiveFight:runId=>typeof forgeSeasonalEvents!=="undefined"?forgeSeasonalEvents.retireInactiveFight(runId):undefined,normalizeKit:normalizeForgeFormationKit,logger:r.logger,concurrency:1,generateKit:async({runId,run,unit,signal})=>{signal.throwIfAborted();const hydrated=(await forgeHydrateStoryCharacters([unit],id=>Le().characterCard(id),r.logger))[0];const answer=await _t({runtime:r,runId,run,job:"structured",messages:forgeFormationKitMessages({run,unit,cardContext:hydrated?.forgeCardCanon||""}),options:{temperature:.8,maxTokens:It(8192),signal},parse:Vt(r,normalizeForgeFormationKit),label:"formation-unit "+unit.name});signal.throwIfAborted();if(!answer.ok)throw new Error(answer.error||"generation-failed");return answer.value}});const forgeCombatVoices=createForgeCombatVoices({dataDir:e.dataDir,runtime:r,readUnit:async(runId,unitId)=>{const run=Ae((await be()).data,runId);const doc=await a.getById(n.id,unitId);if(!run||!doc?.id?.startsWith(`${runId}:unit:`)||doc.data?.kind!=="character")return null;const unit=(await forgeHydrateStoryCharacters([doc.data],id=>Le().characterCard(id),r.logger))[0];return{run,unit:{...unit,id:unitId,characterId:l(unit.cardId)||null}}},generateLines:async({runId,run,unit,messages,debugMode,signal})=>_t({runtime:r,runId,run,job:"structured",messages,options:{temperature:.8,maxTokens:It(600),debugMode,signal},parse:Vt(r,normalizeForgeCombatVoiceLines),label:"combat-voice-lines "+unit.name})});await t.registerPrivilegedRoutes(async s=>{s=forgeFormationRoutes(forgeTimeZoneRoutes(s),{migration:forgeFormationMigration,cancellation:forgeStoryCancellation,readWorld:async runId=>Ae((await be()).data,runId)});/* forge-proactive-messages-adapter-source:start */
 /* global forgeProactiveMessages:writable, createForgeProactiveMessages, forgeChatRecallQuery, n, r, Os, gr, Ea, withForgeChatSend, forgeDayKey, forgeResetIn, forgeHydrateStoryCharacters, Le, Ti, K0, ss, _r, Nr, l, $g, go, Hp, Ei, forgeComposeMemoryPrompt, forgeProactiveChatMessages, cv, _t, It, ov, s, forgeStoryCancellation */

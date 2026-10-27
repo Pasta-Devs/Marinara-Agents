@@ -2035,7 +2035,7 @@
             },
             {
               "find": "var oy=[{version:null,fixed:[\"Scenes that are already written can be played while pre-forge writes the rest of the chapter, and the next one turns into Play as soon as it is written.\",\"Opening a weapon or relic to upgrade it no longer cuts to an empty screen while it loads, and the relic you are upgrading is no longer faded out.\"]},{version:\"1.25.0\"",
-              "replace": "var oy=[{version:null,fixed:[\"Backing out of a fight while it loads and entering another one now loads the new fight, instead of showing the one you left.\",\"In Formation, a swap now seats both units before either one's passive fires, so a revive, Swap or Echo it sets off never puts a fourth unit in a row.\",\"On a small model, a reply is much less likely to fail while story memory catches up: older chapter summaries are left out, oldest first, only when the reply would not fit otherwise.\"]},{version:\"1.25.1\",fixed:[\"Scenes that are already written can be played while pre-forge writes the rest of the chapter, and the next one turns into Play as soon as it is written.\",\"Opening a weapon or relic to upgrade it no longer cuts to an empty screen while it loads, and the relic you are upgrading is no longer faded out.\"]},{version:\"1.25.0\""
+              "replace": "var oy=[{version:null,fixed:[\"Backing out of a fight while it loads and entering another one now loads the new fight, instead of showing the one you left.\",\"In Formation, a swap now seats both units before either one's passive fires, so a revive, Swap or Echo it sets off never puts a fourth unit in a row.\",\"On a small model, a reply is much less likely to fail while story memory catches up: the oldest chapters are left out first, only when the reply would not fit otherwise.\",\"Story memory no longer stops for good when a chapter it already remembers reads differently later: it keeps its first memory and goes on.\"]},{version:\"1.25.1\",fixed:[\"Scenes that are already written can be played while pre-forge writes the rest of the chapter, and the next one turns into Play as soon as it is written.\",\"Opening a weapon or relic to upgrade it no longer cuts to an empty screen while it loads, and the relic you are upgrading is no longer faded out.\"]},{version:\"1.25.0\""
             },
             {
               "find": "_pickCombatPreset(e){!this._run||this._combatPreset===e||(this._combatPreset=e,this._loadBattle())}",
@@ -3682,6 +3682,28 @@
             {
               "find": "\"has happened and what you feel; you cannot decide events, hand over items or start a journey.\",h?\"HARD RULE: never narrate the story or tell it back. You are one of the people who was there, writing about it afterwards.\":\"\"",
               "replace": "\"has happened and what you feel; you cannot decide events, hand over items or start a journey.\",forgeKnowledgeBoundary,h?\"HARD RULE: never narrate the story or tell it back. You are one of the people in this story, writing to them afterwards.\":\"\""
+            }
+          ]
+        },
+        {
+          "version": "1.25.2",
+          "commits": [],
+          "edits": [
+            {
+              "find": "async function _r(s,c,d,forgeMemoryOptions,forgeReader){",
+              "replace": "async function _r(s,c,d,forgeMemoryOptions,forgeReader,forgeBlocks){let forgeTurnStarts=[];"
+            },
+            {
+              "find": "let H=1;for(;H<B;){let ae=await rr(s,H);",
+              "replace": "let H=1;for(;forgeTurnStarts[H]=v.length,H<B;){let ae=await rr(s,H);"
+            },
+            {
+              "find": "forgeDecisions&&v.push(forgeDecisions);return v.join(`\n\n`)}",
+              "replace": "forgeDecisions&&v.push(forgeDecisions);return forgeBlocks?{blocks:v,starts:forgeTurnStarts}:v.join(`\n\n`)}"
+            },
+            {
+              "find": "fallback:()=>_r(runId,chapter,storyIndex,null,options.reader)",
+              "replace": "fallback:()=>_r(runId,chapter,storyIndex,null,options.reader,true)"
             }
           ]
         }

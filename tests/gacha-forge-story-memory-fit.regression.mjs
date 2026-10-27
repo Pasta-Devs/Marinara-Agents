@@ -220,3 +220,51 @@ test("summaries standing in for the overview go oldest first, and only when the 
   assert.equal(full.reason, "context-too-large");
   assert.equal(full.messages, messages);
 });
+
+test("an optional block that ends the prefix is left out like any other, with no separator left behind", () => {
+  const context = forgeMemoryContext(
+    { overview: "", details: [], maxContext: 100000 },
+    {
+      prefix: [previousChapter, "CURRENT_BEATS", `OLD_EVENT ${"x".repeat(400)}`].join("\n\n"),
+      optional: [`OLD_EVENT ${"x".repeat(400)}`],
+      renderMemory: forgeStoryMemoryText,
+    },
+  );
+  const messages = prompt(context);
+  const size = estimateMessages(messages);
+  const tight = fitForgeMemoryPrompt(messages, {
+    maxContext: size + 512 + 8192 - 1,
+    maxTokens: 20000,
+    estimateMessages,
+  });
+  assert.equal(tight.fits, true);
+  assert.equal(tight.droppedSummaries, 1);
+  assert.equal(
+    tight.messages[1].content,
+    `SCENARIO\n${previousChapter}\n\nCURRENT_BEATS`,
+    "no separator is left behind",
+  );
+});
+
+test("a long optional history drops exactly the oldest blocks it must, with a handful of estimates", () => {
+  const blocks = Array.from({ length: 200 }, (_, index) => `# Chapter ${index + 1}\n${"x".repeat(400)}`);
+  const context = forgeMemoryContext(
+    { overview: "", details: [], maxContext: 1000000 },
+    { prefix: [...blocks, previousChapter].join("\n\n"), optional: blocks, renderMemory: forgeStoryMemoryText },
+  );
+  const messages = prompt(context);
+  const removed = blocks.slice(0, 37).reduce((sum, block) => sum + [...block].length + 2, 0);
+  let estimates = 0;
+  const fit = fitForgeMemoryPrompt(messages, {
+    maxContext: estimateMessages(messages) + 512 + 8192 - removed,
+    maxTokens: 20000,
+    estimateMessages: (input) => {
+      estimates += 1;
+      return estimateMessages(input);
+    },
+  });
+  assert.equal(fit.droppedSummaries, 37);
+  assert.equal(fit.maxTokens, 8192);
+  assert.ok(!fit.messages[1].content.includes("# Chapter 37\n") && fit.messages[1].content.includes("# Chapter 38\n"));
+  assert.ok(estimates <= 12, `${estimates} estimates for 200 blocks`);
+});

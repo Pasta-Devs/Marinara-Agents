@@ -1,10 +1,14 @@
-## Fight loading, Formation swaps and memory on small models (1.25.2)
+## Fight loading, Formation swaps and memory that keeps going (1.25.2)
 
 Backing out of a fight while it is still loading and entering another one now loads the new fight. Before, the first fight's late reply replaced it, so the fight you left was shown and could be started. A fight request that never answers no longer blocks every later fight either, and Back from a loading Materials or event fight frees those screens at once.
 
 In Formation, a two-unit move (a planned swap, or a Swap effect) seats both units before either one's passive fires, so a revive, Swap, Shuffle or Echo it sets off never sees the seat the mover left as free, and no row ever holds four. A revive returns the fallen unit to the row it fell in when that row has room, otherwise to the other row, or not at all when both are full; a unit revived in another row, or moved by a Shuffle and then defeated, is now drawn where it really is. Fights started before 1.25.2 are scored by the rules they started under.
 
 While the shared overview is behind or set aside, the chapters it does not cover are sent as their summaries. On a small model these could leave too little room for the reply, which then failed. Now older chapter summaries are left out, oldest first, only when the reply would otherwise get less than its 8,192-token minimum. The newest chapter summary, and every Character Story and story event, always stay. A prompt that fits keeps every summary, unchanged.
+
+When an earlier chapter has no summary yet (memory is still catching up, or waits for Retry), the full story history is sent instead. It grew with every chapter, so after a few dozen chapters most models refused it. Now its oldest chapters are left out first, then its oldest Character Stories and story events, only when the reply would otherwise get less than its 8,192-token minimum. The previous chapter and everything after it, the scene so far and your saved decisions always stay, and a history that fits is sent unchanged. Without a known context window the history is still sent whole.
+
+Story memory also no longer stops for good when a chapter, Character Story or event it already summarized reads differently later, for example after an update changes how stored scenes are rendered. Before, it stopped summarizing at that source, so a few chapters later every prompt fell back to the full history. Now the first memory of that source stays canon, the overview built over it stays valid, and later chapters keep being summarized. A replay still never rewrites first play, and a chapter reset on purpose (regenerating an unfinished chapter) still replaces its memory.
 
 ## Play while pre-forging and smoother upgrades (1.25.1)
 

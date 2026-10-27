@@ -287,16 +287,90 @@ test("failed overview restarts from persisted detail, and interrupted status is 
   assert.equal(f.calls.at(-1).kind, "overview");
 });
 
-test("first canonical records cannot be rewritten by replay and late generation cannot publish after source drift/deletion", async () => {
-  const f = fixture();
+test("first canon stays canon when its source reads differently, memory carries on, and late generation cannot publish after source drift/deletion", async () => {
+  const oath = { kind: "character-story", title: "Arden's oath", order: 1.5 };
+  const f = fixture([
+    source("1", "Mira saved the lighthouse keeper at Harborfall."),
+    source("oath", "Arden swore an oath to guard the keeper.", oath),
+  ]);
   await f.create().maintain({ runId: "world" });
   const original = f.memory();
-  f.setRows([source("1", "REPLAY chose to abandon the keeper.")]);
+  const paid = f.calls.length;
+  // A replay, a package update or edited data that renders summarized canon differently.
+  const drifted = source("1", "REPLAY chose to abandon the keeper.");
+  const driftedStory = source("oath", "REPLAY Arden broke the oath.", oath);
+  f.setRows([drifted, driftedStory]);
   const replay = await f.create().maintain({ runId: "world" });
-  assert.equal(replay.status.phase, "stale");
-  assert.equal(replay.status.reason, "source-changed");
+  assert.equal(replay.status.phase, "ready");
   assert.deepEqual(f.memory().records, original.records);
   assert.deepEqual(f.memory().overview, original.overview);
+  assert.equal(f.calls.length, paid, "the changed sources are neither summarized nor folded again");
+  // Later canon is still summarized and folded onto the overview built over the first records.
+  const moonstone = source("2", "Arden returned the moonstone.");
+  f.setRows([drifted, driftedStory, moonstone]);
+  assert.equal((await f.create().maintain({ runId: "world" })).status.phase, "ready");
+  assert.deepEqual(f.memory().records.slice(0, 2), original.records);
+  assert.equal(f.memory().records[2].content, "Arden returned the moonstone.");
+  const extension = f.calls.slice(paid);
+  assert.deepEqual(
+    extension.map((call) => call.kind),
+    ["detail", "overview"],
+  );
+  assert.equal(JSON.parse(extension[0].messages[1].content).source.id, "2");
+  assert.equal(JSON.parse(extension[1].messages[1].content).previousOverview, original.overview.content);
+  assert.deepEqual(
+    f.memory().overview.sources,
+    f.memory().records.map((record) => [record.key, record.fingerprint]),
+  );
+  const caughtUp = await f.create().recall({ runId: "world", query: "keeper" });
+  assert.equal(caughtUp.lagging, false, "changed canon owes no background work");
+  // Recall stays on memory: the overview and the first records, never the changed text.
+  f.setRows([drifted, driftedStory, moonstone, source("3", "Mira left Harborfall.")]);
+  const recalled = await f.create().recall({ runId: "world", query: "keeper oath moonstone" });
+  assert.equal(recalled.status.phase, "ready");
+  assert.equal(recalled.overview, f.memory().overview.content);
+  assert.deepEqual(recalled.recent, [{ id: "3", kind: "chapter", title: "Chapter 3", latest: true }]);
+  for (const [index, id] of ["1", "oath"].entries())
+    assert.equal(recalled.details.find((record) => record.id === id)?.content, original.records[index].content);
+  assert.doesNotMatch(JSON.stringify(recalled), /REPLAY/u);
+  // A replay's historical recall keeps first canon too, and still sees nothing after its target.
+  const historical = await f.create().recall({ runId: "world", target: { chapter: 3 }, query: "keeper oath" });
+  assert.equal(historical.status.phase, "ready");
+  assert.equal(historical.overview, f.memory().overview.content, "the overview covers only canon before chapter 3");
+  assert.deepEqual(historical.recent, [{ id: "2", kind: "chapter", title: "Chapter 2", latest: true }]);
+  assert.doesNotMatch(JSON.stringify(historical), /REPLAY|left Harborfall/u);
+
+  // While later canon is summarized, a change to canon that has a record does not cancel it; a change to the
+  // source being summarized still discards the paid summary.
+  for (const changed of ["1", "2"]) {
+    const isolated = fixture();
+    await isolated.create().maintain({ runId: "world" });
+    const keeper = source("1", "Mira saved the lighthouse keeper at Harborfall.");
+    isolated.setRows([keeper, moonstone]);
+    const started = deferred();
+    const gate = deferred();
+    const service = isolated.create({
+      summarize: async (request) => {
+        if (request.kind === "detail") {
+          started.resolve();
+          await gate.promise;
+        }
+        return isolated.io.summarize(request);
+      },
+    });
+    const work = service.maintain({ runId: "world" });
+    await started.promise;
+    isolated.setRows(changed === "1" ? [drifted, moonstone] : [keeper, source("2", "REPLAY lost the moonstone.")]);
+    gate.resolve();
+    const result = await work;
+    assert.equal(result.status.phase, changed === "1" ? "ready" : "stale", changed);
+    assert.deepEqual(
+      isolated.memory().records.map((record) => record.content),
+      changed === "1"
+        ? ["Mira saved the lighthouse keeper at Harborfall.", "Arden returned the moonstone."]
+        : ["Mira saved the lighthouse keeper at Harborfall."],
+    );
+  }
 
   for (const invalidate of [false, true]) {
     const isolated = fixture();
@@ -558,10 +632,17 @@ test("unknown context avoids embedding calls, and unavailable memory I/O cannot 
   assert.deepEqual(result.details, []);
 });
 
-test("a source changed after maintenance is rechecked before the returned prompt adopts its overview", async () => {
+test("a source changed after maintenance keeps its first canon, and one whose record is gone is rechecked before the prompt adopts its overview", async () => {
   const f = fixture();
   await f.create().maintain({ runId: "world" });
+  const saved = f.memory();
   f.setRows([source("1", "A different source superseded this history.")]);
+  const drifted = await f.create().recall({ runId: "world", query: "keeper" });
+  assert.equal(drifted.status.phase, "ready");
+  assert.equal(drifted.overview, saved.overview.content);
+  assert.doesNotMatch(drifted.text, /superseded/u);
+  // Canon replaced on purpose loses its record first, as chapter regeneration does.
+  f.seed({ ...saved, records: [] });
   const result = await f.create().recall({ runId: "world", query: "keeper" });
   assert.equal(result.overview, "");
   assert.equal(result.text, "");
@@ -703,12 +784,14 @@ test("newer side canon inserted before covered canon keeps the saved overview an
       ["story", "Mira trusted Arden with the moonstone."],
     ],
   );
-  // Changed covered canon disables the overview, and the rewritten chapter has no summary of its own yet.
+  // Covered canon that reads differently keeps its first record, so the overview stays and the changed text never
+  // reaches the prompt.
   f.setRows([source("1", "REPLAY abandoned the keeper."), story, rows[1]]);
   const changed = await service.recall({ runId: "world", query: "moonstone" });
-  assert.equal(changed.status.phase, "stale");
-  assert.equal(changed.overview, "");
-  assert.equal(changed.text, "");
+  assert.equal(changed.status.phase, "ready");
+  assert.equal(changed.overview, saved.content);
+  assert.deepEqual(changed.recent, inserted.recent);
+  assert.doesNotMatch(JSON.stringify(changed), /REPLAY/u);
   assert.equal(f.calls.length, calls, "recall never pays for summaries");
   // Until the rebuilt overview lands, the inserted canon goes in as its saved summary.
   f.setRows([rows[0], story, rows[1]]);
