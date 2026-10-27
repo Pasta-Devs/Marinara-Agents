@@ -157,7 +157,8 @@ test("Keep playing leaves a forging chapter running and reports it ready", async
   await expect(page.getByText("Chapter Two is ready.")).toBeVisible();
   await expect.poll(() => preforgeStarts.length).toBe(1);
   expect(preforgeStarts[0]).toMatchObject({ runId: run.runId, chapter: 2 });
-  expect(guideRequests).toEqual([expect.objectContaining({ runId: run.runId, chapter: 2, combatIndex: 0 })]);
+  // Fights are designed beside the scenes on the server (1.24.9), never by the client before the chapter opens.
+  expect(guideRequests).toEqual([]);
   expect(cancels).toEqual([]);
   expect(planRequests).toHaveLength(1);
   expect(await forge.evaluate((node) => (node as any)._plan)).toBeNull();

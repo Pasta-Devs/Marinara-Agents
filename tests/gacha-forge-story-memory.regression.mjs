@@ -159,17 +159,19 @@ test("unknown context never fabricates a cap or pays for summaries; oversized ou
     source("1", "Mira saved the lighthouse keeper at Harborfall."),
     source("2", "Arden returned the moonstone."),
   ]);
-  const failed = await f
-    .create({
-      summarize: async (request) => (request.kind === "detail" ? "Arden returned the moonstone." : "x".repeat(201)),
-    })
-    .recall({ runId: "world", query: "keeper" });
+  const oversized = f.create({
+    summarize: async (request) => (request.kind === "detail" ? "Arden returned the moonstone." : "x".repeat(201)),
+  });
+  const failed = await oversized.maintain({ runId: "world" });
   assert.equal(failed.status.phase, "error");
   assert.equal(failed.status.retryable, true);
   assert.deepEqual(f.memory().overview, good);
   assert.equal(f.memory().records.length, 2, "completed detail work survives an overview failure");
-  assert.equal(failed.overview, good.content);
-  assert.ok(f.io.estimateTokens(forgeStoryMemoryText({ overview: failed.overview })) <= failed.budget);
+  // The good overview lags only the latest chapter, which generation sends in full.
+  const recalled = await oversized.recall({ runId: "world", query: "keeper" });
+  assert.equal(recalled.status.phase, "ready");
+  assert.equal(recalled.overview, good.content);
+  assert.ok(f.io.estimateTokens(forgeStoryMemoryText({ overview: recalled.overview })) <= recalled.budget);
 });
 
 test("unknown compression capacity stops before chunk probes and preserves reusable memory until configured", async () => {
@@ -201,8 +203,12 @@ test("unknown compression capacity stops before chunk probes and preserves reusa
   assert.equal(f.calls.length, callsBefore, "Restoring context reuses the complete canonical overview");
 });
 
-test("a smaller eligible source projection rebuilds its overview without deleting archived originals", async () => {
-  const rows = [source("1", "Keeper saved at Harborfall."), source("2", "Arden returned the moonstone.")];
+test("a smaller eligible source projection is rebuilt in the background without deleting archived originals", async () => {
+  const rows = [
+    source("1", "Keeper saved at Harborfall."),
+    source("2", "Arden returned the moonstone."),
+    source("3", "FUTURE_SECRET: the Frost River bridge fell."),
+  ];
   const f = fixture(rows);
   const service = f.create({
     summarize: async (request) => {
@@ -215,20 +221,44 @@ test("a smaller eligible source projection rebuilds its overview without deletin
   });
   assert.equal((await service.maintain({ runId: "world" })).status.phase, "ready");
   const archives = f.memory().records;
-  f.setRows(rows.slice(0, 1));
+  const newer = f.memory().overview;
+  f.setRows(rows.slice(0, 2));
+  // The saved overview covers a source outside this projection, so it is not sent; chapter 1 goes in as its
+  // saved summary until the rebuild.
+  const callsBefore = f.calls.length;
+  const behind = await service.recall({ runId: "world", query: "Harborfall moonstone" });
+  assert.equal(behind.status.phase, "ready");
+  assert.equal(behind.overview, "");
+  assert.doesNotMatch(JSON.stringify(behind), /FUTURE_SECRET|bridge/u);
+  assert.deepEqual(behind.recent, [
+    { id: "1", kind: "chapter", title: "Chapter 1", content: "Keeper saved at Harborfall.", summary: true },
+    { id: "2", kind: "chapter", title: "Chapter 2", latest: true },
+  ]);
+  assert.deepEqual(
+    behind.details.map((record) => record.id),
+    ["2"],
+  );
+  assert.equal(behind.lagging, true);
+  assert.equal(f.calls.length, callsBefore, "recall never rebuilds the projection in the foreground");
+  assert.deepEqual(f.memory().overview, newer);
+  assert.equal((await service.maintain({ runId: "world" })).status.phase, "ready");
+  assert.deepEqual(f.memory().records, archives);
+  assert.deepEqual(
+    f.memory().overview.sources,
+    archives.slice(0, 2).map((record) => [record.key, record.fingerprint]),
+  );
   const smaller = await service.recall({ runId: "world", query: "Harborfall moonstone" });
   assert.equal(smaller.status.phase, "ready");
   assert.match(smaller.overview, /Keeper saved/);
-  assert.doesNotMatch(smaller.overview, /Arden|moonstone/);
-  assert.deepEqual(f.memory().records, archives);
-  assert.deepEqual(f.memory().overview.sources, [[archives[0].key, archives[0].fingerprint]]);
+  assert.match(smaller.overview, /moonstone/);
+  assert.doesNotMatch(smaller.text, /FUTURE_SECRET|bridge/);
   assert.deepEqual(
     smaller.details.map((record) => record.id),
-    ["1"],
+    ["2", "1"],
   );
-  const callsBefore = f.calls.length;
+  const rebuilt = f.calls.length;
   assert.equal((await service.maintain({ runId: "world" })).status.phase, "ready");
-  assert.equal(f.calls.length, callsBefore, "The smaller projection remains reusable across subsequent updates");
+  assert.equal(f.calls.length, rebuilt, "The smaller projection remains reusable across subsequent updates");
 });
 
 test("failed overview restarts from persisted detail, and interrupted status is recoverable without a UI model call", async () => {
@@ -290,8 +320,12 @@ test("first canonical records cannot be rewritten by replay and late generation 
   }
 });
 
-test("historical generation never sees later memory or replaces the newer overview", async () => {
-  const f = fixture([source("1", "Keeper saved at Harborfall."), source("2", "FUTURE_SECRET: Arden is a dragon.")]);
+test("historical recall never sees later memory, builds no overview of its own and never replaces the newer one", async () => {
+  const f = fixture([
+    source("1", "Keeper saved at Harborfall."),
+    source("2", "Arden crossed the Harborfall bridge."),
+    source("3", "FUTURE_SECRET: Arden is a dragon."),
+  ]);
   const service = f.create({
     summarize: async (request) => {
       f.calls.push(request);
@@ -300,25 +334,41 @@ test("historical generation never sees later memory or replaces the newer overvi
     },
   });
   await service.maintain({ runId: "world" });
-  const newer = f.memory().overview;
+  const newer = f.memory();
+  const calls = f.calls.length;
+  // Chapter 1 is this replay's previous chapter, which the caller sends in full.
   const historical = await service.recall({
     runId: "world",
     target: { chapter: 2, storyIndex: 0 },
     query: "Arden dragon Harborfall",
   });
-  assert.match(historical.overview, /Keeper/u);
-  assert.doesNotMatch(historical.text, /FUTURE_SECRET|dragon/u);
+  assert.equal(historical.status.phase, "ready");
+  assert.equal(historical.overview, "", "the newer overview covers chapters after the replay");
+  assert.doesNotMatch(historical.text, /FUTURE_SECRET|dragon|bridge/u);
   assert.deepEqual(
     historical.details.map((record) => record.id),
     ["1"],
   );
-  assert.deepEqual(f.memory().overview, newer);
-  const request = JSON.parse(f.calls.at(-1).messages[1].content);
-  assert.equal(request.previousOverview, "");
+  assert.deepEqual(historical.recent, [{ id: "1", kind: "chapter", title: "Chapter 1", latest: true }]);
+  // Without an eligible overview, the replay's earlier chapter goes in as its own saved summary.
+  const earlier = await service.recall({
+    runId: "world",
+    target: { chapter: 3, storyIndex: 0 },
+    query: "Arden dragon Harborfall",
+  });
+  assert.equal(earlier.status.phase, "ready");
+  assert.equal(earlier.overview, "");
+  assert.doesNotMatch(JSON.stringify(earlier), /FUTURE_SECRET|dragon/u);
+  assert.deepEqual(earlier.recent, [
+    { id: "1", kind: "chapter", title: "Chapter 1", content: "Keeper saved at Harborfall.", summary: true },
+    { id: "2", kind: "chapter", title: "Chapter 2", latest: true },
+  ]);
   assert.deepEqual(
-    request.records.map((record) => record.id),
-    ["1"],
+    earlier.details.map((record) => record.id),
+    ["2"],
   );
+  assert.equal(f.calls.length, calls, "a replay pays for no summary of its own");
+  assert.deepEqual(f.memory(), newer);
 });
 
 test("up to3 main chapters are recalled separately from all relevant character memories, with lexical/semantic fallback", async () => {
@@ -347,6 +397,7 @@ test("up to3 main chapters are recalled separately from all relevant character m
       throw new Error("fixture no embeddings");
     },
   });
+  await service.maintain({ runId: "world" });
   const result = await service.recall({ runId: "world", query: "Harborfall captain" });
   assert.equal(result.details.filter((record) => record.kind === "chapter").length, 3);
   assert.deepEqual(
@@ -432,6 +483,7 @@ test("embeddings use document/query intent and only current-space vectors are us
       },
     }),
   });
+  await service.maintain({ runId: "world" });
   const result = await service.recall({ runId: "world", query: "coastal rescue" });
   assert.deepEqual(intents, ["document", "query"]);
   assert.equal(f.memory().records[0].embeddingSpaceId, "fixture-space");
@@ -504,18 +556,377 @@ test("unknown context avoids embedding calls, and unavailable memory I/O cannot 
 test("a source changed after maintenance is rechecked before the returned prompt adopts its overview", async () => {
   const f = fixture();
   await f.create().maintain({ runId: "world" });
-  let reads = 0;
-  const service = f.create({
-    readSources: async () => {
-      reads += 1;
-      return reads > 2
-        ? [source("1", "A different source superseded this history.")]
-        : [source("1", "Mira saved the lighthouse keeper at Harborfall.")];
-    },
-  });
-  const result = await service.recall({ runId: "world", query: "keeper" });
+  f.setRows([source("1", "A different source superseded this history.")]);
+  const result = await f.create().recall({ runId: "world", query: "keeper" });
+  assert.equal(result.overview, "");
   assert.equal(result.text, "");
   assert.deepEqual(result.details, []);
+});
+
+// A recall that waited for the gated summary would deadlock, so the timeout turns that regression into a failure.
+test(
+  "recall answers from saved memory without summarizing or waiting for in-flight maintenance",
+  { timeout: 5000 },
+  async () => {
+    const rows = [source("1", "Keeper saved at Harborfall."), source("2", "Arden returned the moonstone.")];
+    const f = fixture(rows);
+    await f.create().maintain({ runId: "world" });
+    const saved = f.memory().overview;
+    f.setRows([...rows, source("3", "The Frost River bridge opened.")]);
+    const started = deferred();
+    const gate = deferred();
+    let requests = 0;
+    const service = f.create({
+      summarize: async (request) => {
+        requests += 1;
+        started.resolve();
+        await gate.promise;
+        return f.io.summarize(request);
+      },
+    });
+    let finished = false;
+    const work = service.maintain({ runId: "world" }).then((result) => {
+      finished = true;
+      return result;
+    });
+    await started.promise;
+    const recalled = await service.recall({ runId: "world", query: "moonstone" });
+    assert.equal(finished, false, "recall resolved while the background summary was still running");
+    assert.equal(requests, 1, "only the background job asked for a summary");
+    assert.equal(recalled.status.phase, "ready");
+    assert.equal(recalled.overview, saved.content);
+    assert.deepEqual(
+      recalled.details.map((record) => record.id),
+      ["2"],
+    );
+    gate.resolve();
+    assert.equal((await work).status.phase, "ready");
+    const background = requests;
+    const caughtUp = await service.recall({ runId: "world", query: "bridge" });
+    assert.equal(requests, background);
+    assert.equal(caughtUp.overview, f.memory().overview.content);
+    assert.equal(f.memory().overview.sources.length, 3);
+    assert.deepEqual(
+      caughtUp.details.map((record) => record.id),
+      ["3"],
+    );
+  },
+);
+
+test("recall stays ready when memory lags the latest chapter or side canon, but not an earlier chapter with no summary", async () => {
+  const rows = [source("1", "Keeper saved at Harborfall."), source("2", "Arden returned the moonstone.")];
+  const f = fixture(rows);
+  const service = f.create();
+  await service.maintain({ runId: "world" });
+  const overview = f.memory().overview.content;
+  const calls = f.calls.length;
+  const chat = source("chat", "Arden promised to guard the moonstone.", { kind: "chat", order: 2.5 });
+  const story = source("story", "Mira trusted Arden with the moonstone.", { kind: "character-story", order: 2.6 });
+  // Side canon with no summary yet is handed over as written, beside the latest chapter the caller sends in full.
+  const written = [
+    { id: "chat", kind: "chat", title: "Chapter chat", content: "Arden promised to guard the moonstone." },
+    { id: "story", kind: "character-story", title: "Chapter story", content: "Mira trusted Arden with the moonstone." },
+  ];
+  // Side canon reaches the overview later; recall still has every archived chapter.
+  f.setRows([...rows, chat, story]);
+  const side = await service.recall({ runId: "world", query: "moonstone" });
+  assert.equal(side.status.phase, "ready");
+  assert.equal(side.overview, overview);
+  assert.deepEqual(side.recent, [{ id: "2", kind: "chapter", title: "Chapter 2", latest: true }, ...written]);
+  // The caller sends the latest chapter in full, so it may also be missing from memory.
+  f.setRows([...rows, chat, story, source("3", "The Frost River bridge opened.")]);
+  const latest = await service.recall({ runId: "world", query: "moonstone" });
+  assert.equal(latest.status.phase, "ready");
+  assert.equal(latest.overview, overview);
+  assert.equal(latest.lagging, true, "the background job still owes summaries");
+  assert.deepEqual(
+    latest.details.map((record) => record.id),
+    ["2"],
+  );
+  assert.deepEqual(latest.recent, [...written, { id: "3", kind: "chapter", title: "Chapter 3", latest: true }]);
+  // Once chapter 3 is no longer the latest, its canon would be missing from the prompt: it has no summary yet.
+  f.setRows([...rows, chat, story, source("3", "The Frost River bridge opened."), source("4", "Mira left.")]);
+  const behind = await service.recall({ runId: "world", query: "moonstone" });
+  assert.equal(behind.status.phase, "stale");
+  assert.equal(behind.overview, "");
+  assert.equal(behind.text, "");
+  assert.deepEqual(behind.details, []);
+  assert.equal(f.calls.length, calls, "recall never pays for summaries");
+});
+
+// A background job whose detail summaries land but whose overview fold fails.
+const recapOnly = (f) =>
+  f.create({
+    summarize: async (request) => {
+      f.calls.push(request);
+      if (request.kind === "overview") throw new Error("fixture overview offline");
+      return `Recap: ${JSON.parse(request.messages[1].content).source.content}`;
+    },
+  });
+
+test("newer side canon inserted before covered canon keeps the saved overview and is sent beside it without model calls", async () => {
+  const rows = [source("1", "Keeper saved at Harborfall."), source("2", "Arden returned the moonstone.")];
+  const f = fixture(rows);
+  await f.create().maintain({ runId: "world" });
+  const saved = f.memory().overview;
+  const calls = f.calls.length;
+  // A Character Story opened after chapter 1 but finished now sorts before the covered chapter 2.
+  const story = source("story", "Mira trusted Arden with the moonstone.", {
+    kind: "character-story",
+    title: "Trust",
+    order: 1.5,
+  });
+  f.setRows([rows[0], story, rows[1]]);
+  const service = f.create();
+  const inserted = await service.recall({ runId: "world", query: "moonstone" });
+  assert.equal(inserted.status.phase, "ready");
+  assert.equal(inserted.overview, saved.content, "everything the overview covers is still canon");
+  assert.deepEqual(inserted.recent, [
+    { id: "story", kind: "character-story", title: "Trust", content: "Mira trusted Arden with the moonstone." },
+    { id: "2", kind: "chapter", title: "Chapter 2", latest: true },
+  ]);
+  assert.equal(inserted.lagging, true, "the background job still owes the rebuilt chronology");
+  // An overview that covers canon after a replay's target is future memory there.
+  const replay = await service.recall({ runId: "world", target: { chapter: 2, storyIndex: 0 }, query: "moonstone" });
+  assert.equal(replay.status.phase, "ready");
+  assert.equal(replay.overview, "");
+  assert.doesNotMatch(JSON.stringify(replay), /returned the moonstone|harbor alliance/u);
+  assert.deepEqual(
+    replay.recent.map((entry) => [entry.id, entry.latest ? "latest" : entry.content]),
+    [
+      ["1", "latest"],
+      ["story", "Mira trusted Arden with the moonstone."],
+    ],
+  );
+  // Changed covered canon disables the overview, and the rewritten chapter has no summary of its own yet.
+  f.setRows([source("1", "REPLAY abandoned the keeper."), story, rows[1]]);
+  const changed = await service.recall({ runId: "world", query: "moonstone" });
+  assert.equal(changed.status.phase, "stale");
+  assert.equal(changed.overview, "");
+  assert.equal(changed.text, "");
+  assert.equal(f.calls.length, calls, "recall never pays for summaries");
+  // Until the rebuilt overview lands, the inserted canon goes in as its saved summary.
+  f.setRows([rows[0], story, rows[1]]);
+  assert.equal((await recapOnly(f).maintain({ runId: "world" })).status.phase, "error");
+  assert.deepEqual(f.memory().overview, saved, "a failed rebuild keeps the saved overview");
+  const background = f.calls.length;
+  const summarized = await service.recall({ runId: "world", query: "moonstone" });
+  assert.equal(summarized.overview, saved.content);
+  assert.deepEqual(summarized.recent, [
+    {
+      id: "story",
+      kind: "character-story",
+      title: "Trust",
+      content: "Recap: Mira trusted Arden with the moonstone.",
+      summary: true,
+    },
+    { id: "2", kind: "chapter", title: "Chapter 2", latest: true },
+  ]);
+  assert.equal(f.calls.length, background, "recall never pays for summaries");
+});
+
+test(
+  "summarized side canon not yet in the overview is sent once as its summary, and stays there when the fold fails",
+  { timeout: 5000 },
+  async () => {
+    const rows = [source("1", "Keeper saved at Harborfall."), source("2", "Arden returned the moonstone.")];
+    const f = fixture(rows);
+    await f.create().maintain({ runId: "world" });
+    const saved = f.memory().overview;
+    const chat = source("chat", "Arden promised to guard the moonstone.", {
+      kind: "chat",
+      title: "Arden conversation",
+      order: 3,
+    });
+    f.setRows([...rows, chat]);
+    const started = deferred();
+    const gate = deferred();
+    const service = f.create({
+      summarize: async (request) => {
+        f.calls.push(request);
+        if (request.kind === "detail") return `Recap: ${JSON.parse(request.messages[1].content).source.content}`;
+        started.resolve();
+        await gate.promise;
+        throw new Error("fixture overview offline");
+      },
+    });
+    const work = service.maintain({ runId: "world" });
+    await started.promise;
+    const calls = f.calls.length;
+    const expected = [
+      { id: "2", kind: "chapter", title: "Chapter 2", latest: true },
+      {
+        id: "chat",
+        kind: "chat",
+        title: "Arden conversation",
+        content: "Recap: Arden promised to guard the moonstone.",
+        summary: true,
+      },
+    ];
+    // The chat's summary is saved while its overview fold is still running.
+    const folding = await service.recall({ runId: "world", query: "moonstone" });
+    assert.equal(folding.status.phase, "ready");
+    assert.equal(folding.overview, saved.content);
+    assert.deepEqual(folding.recent, expected);
+    assert.deepEqual(
+      folding.details.map((record) => record.id),
+      ["2"],
+      "the relevant chat summary is sent once, as recent canon, not ranked again",
+    );
+    assert.equal(folding.lagging, true);
+    gate.resolve();
+    assert.equal((await work).status.phase, "error");
+    const failed = await service.recall({ runId: "world", query: "moonstone" });
+    assert.equal(failed.status.phase, "ready");
+    assert.equal(failed.overview, saved.content);
+    assert.deepEqual(failed.recent, expected);
+    assert.deepEqual(
+      failed.details.map((record) => record.id),
+      ["2"],
+    );
+    assert.equal(failed.lagging, false, "a failed fold waits for Retry");
+    assert.equal(f.calls.length, calls, "recall never pays for summaries");
+    assert.deepEqual(f.memory().overview, saved);
+  },
+);
+
+test("earlier chapters behind the overview go in as their summaries in story order, unless one has no summary yet", async () => {
+  const chapters = [
+    "Keeper saved at Harborfall.",
+    "Arden returned the moonstone.",
+    "The Frost River bridge opened.",
+    "Mira left Harborfall.",
+  ].map((content, index) => source(String(index + 1), content));
+  const f = fixture(chapters.slice(0, 1));
+  await f.create().maintain({ runId: "world" });
+  const saved = f.memory().overview;
+  // Chapters 2-4 are summarized, but folding them into the overview fails.
+  f.setRows(chapters);
+  assert.equal((await recapOnly(f).maintain({ runId: "world" })).status.phase, "error");
+  const calls = f.calls.length;
+  // A chat finished since then has no summary yet and goes in as written, in its place in the story.
+  const chat = source("chat", "Arden promised to guard the moonstone.", {
+    kind: "chat",
+    title: "Arden conversation",
+    order: 2.5,
+  });
+  f.setRows([...chapters.slice(0, 2), chat, ...chapters.slice(2)]);
+  const service = f.create();
+  const behind = await service.recall({ runId: "world", query: "moonstone bridge" });
+  assert.equal(behind.status.phase, "ready");
+  assert.equal(behind.overview, saved.content);
+  assert.deepEqual(behind.recent, [
+    { id: "2", kind: "chapter", title: "Chapter 2", content: "Recap: Arden returned the moonstone.", summary: true },
+    { id: "chat", kind: "chat", title: "Arden conversation", content: "Arden promised to guard the moonstone." },
+    { id: "3", kind: "chapter", title: "Chapter 3", content: "Recap: The Frost River bridge opened.", summary: true },
+    { id: "4", kind: "chapter", title: "Chapter 4", latest: true },
+  ]);
+  assert.deepEqual(behind.details, [], "summaries sent as recent canon are not ranked again");
+  assert.equal(behind.lagging, false, "a failed fold waits for Retry");
+  // Chapter 4 also has a summary once chapter 5 is the latest, but chapter 5 has none once chapter 6 is.
+  f.setRows([...chapters.slice(0, 2), chat, ...chapters.slice(2), source("5", "Arden followed.")]);
+  assert.equal((await service.recall({ runId: "world", query: "moonstone" })).status.phase, "ready");
+  f.setRows([
+    ...chapters.slice(0, 2),
+    chat,
+    ...chapters.slice(2),
+    source("5", "Arden followed."),
+    source("6", "Dawn."),
+  ]);
+  const missing = await service.recall({ runId: "world", query: "moonstone" });
+  assert.notEqual(missing.status.phase, "ready");
+  assert.equal(missing.overview, "");
+  assert.equal(missing.text, "");
+  assert.equal(missing.recent, undefined);
+  assert.equal(f.calls.length, calls, "recall never pays for summaries");
+});
+
+test("memory waiting for Retry or a summary context is not queued again by every generation", async () => {
+  const rows = [source("1", "Keeper saved at Harborfall.")];
+  const f = fixture(rows);
+  const service = f.create();
+  await service.maintain({ runId: "world" });
+  f.setRows([...rows, source("2", "Arden returned the moonstone.")]);
+  for (const phase of ["error", "context-unknown"]) {
+    f.seed({ ...f.memory(), status: { phase, retryable: phase === "error", reason: "fixture" } });
+    const result = await service.recall({ runId: "world", query: "moonstone" });
+    assert.equal(result.status.phase, "ready", phase);
+    assert.equal(result.lagging, false, `${phase} waits for Retry or configuration`);
+  }
+  f.seed({ ...f.memory(), status: { phase: "ready", retryable: false } });
+  assert.equal((await service.recall({ runId: "world", query: "moonstone" })).lagging, true);
+});
+
+test("background maintenance sizes the overview for the smallest reader, so narration reuses it without model calls", async () => {
+  const f = fixture();
+  const windows = { structured: 2000, narration: 600, chat: 1000, compress: 2000 };
+  const asked = [];
+  const service = f.create({
+    resolveContext: async (_runId, { job } = {}) => {
+      asked.push(job);
+      return { maxContext: windows[job] };
+    },
+    async summarize(request) {
+      f.calls.push(request);
+      const input = JSON.parse(request.messages[1].content);
+      return request.kind === "detail"
+        ? input.source.content
+        : request.tokenBudget < 100
+          ? "Keeper saved."
+          : "Mira saved the keeper. The harbor alliance endures.";
+    },
+  });
+  // An explicit job still sizes the overview for that job alone.
+  assert.equal((await service.maintain({ runId: "world", job: "structured" })).budget, 200);
+  // Recall never resizes the overview; narration goes without it until the background job does.
+  const tooLarge = await service.recall({ runId: "world", job: "narration", query: "keeper" });
+  assert.equal(tooLarge.status.phase, "ready");
+  assert.equal(tooLarge.overview, "", "an overview over narration's 10% is not sent");
+  assert.doesNotMatch(tooLarge.text, /alliance/u);
+  assert.equal(tooLarge.lagging, true, "the background job still owes narration an overview that fits");
+  asked.length = 0;
+  const background = await service.maintain({ runId: "world" });
+  assert.deepEqual(asked, ["structured", "narration", "chat", "compress"]);
+  assert.equal(background.status.phase, "ready");
+  assert.equal(background.budget, 60);
+  assert.ok(background.status.overviewTokens <= 60);
+  const calls = f.calls.length;
+  const narration = await service.recall({ runId: "world", job: "narration", query: "keeper" });
+  assert.equal(narration.status.phase, "ready");
+  assert.equal(narration.overview, "Keeper saved.");
+  for (const job of ["structured", "chat"])
+    assert.equal((await service.recall({ runId: "world", job, query: "keeper" })).overview, narration.overview);
+  assert.equal(f.calls.length, calls, "every reader uses the background overview without model calls");
+});
+
+test("a reader with unknown context keeps background memory saved as ready but reports that it needs configuration", async () => {
+  const f = fixture();
+  const windows = { structured: 2000, narration: null, chat: 1000, compress: 2000 };
+  const service = f.create({ resolveContext: async (_runId, { job } = {}) => ({ maxContext: windows[job] }) });
+  const background = await service.maintain({ runId: "world" });
+  assert.equal(background.status.phase, "ready");
+  assert.equal(background.budget, 100, "the overview is sized for the smallest known reader");
+  assert.equal(f.memory().status.phase, "ready", "the saved overview stays usable by the known readers");
+  assert.deepEqual(f.memory().status.unknownReaders, ["narration"]);
+  const reported = await service.status("world");
+  assert.deepEqual(
+    [reported.phase, reported.retryable, reported.reason],
+    ["context-unknown", false, "configure-context"],
+    "Continuity asks for narration's context instead of reporting Ready",
+  );
+  assert.equal(
+    (await service.recall({ runId: "world", job: "narration", query: "keeper" })).status.phase,
+    "context-unknown",
+  );
+  const structured = await service.recall({ runId: "world", job: "structured", query: "keeper" });
+  assert.equal(structured.status.phase, "ready");
+  assert.equal(structured.overview, f.memory().overview.content);
+  const calls = f.calls.length;
+  windows.narration = 1000;
+  assert.equal((await service.maintain({ runId: "world" })).status.phase, "ready");
+  assert.equal(f.calls.length, calls, "configuring the reader reuses the saved overview");
+  assert.equal(f.memory().status.unknownReaders, undefined);
+  assert.equal((await service.status("world")).phase, "ready");
 });
 
 test("oversized raw sources and archived recaps use actual fit-tested Unicode chunks without marking partial work complete", async () => {
@@ -737,13 +1148,14 @@ test("a later opening extends a prefix overview without repeating paid detail or
   assert.equal(JSON.parse(extension[1].messages[1].content).previousOverview, overview.content);
 });
 
-test("inserting an earlier opening cannot reuse a covered suffix overview, including fallback recall", async () => {
+test("inserting an earlier opening rebuilds the overview in the background, while recall keeps it and sends the inserted canon beside it", async () => {
   const bond = sideSource("bond", "character-story", 20, 5000);
   const event = sideSource("event", "story-event", 30, 6000);
   const earlier = sideSource("earlier", "story-event", 10, 6001);
   const f = fixture([bond, event]);
   await f.create().maintain({ runId: "world" });
   const paid = f.memory().records;
+  const saved = f.memory().overview;
   f.setRows([bond, event, earlier]);
   const failed = await f
     .create({
@@ -752,10 +1164,18 @@ test("inserting an earlier opening cannot reuse a covered suffix overview, inclu
         throw new Error("fixture offline before inserted detail");
       },
     })
-    .recall({ runId: "world", query: "keeper" });
+    .maintain({ runId: "world" });
   assert.equal(failed.status.phase, "error");
-  assert.equal(failed.overview, "", "the saved suffix is not an eligible chronology prefix");
   const previousCalls = f.calls.length;
+  const recalled = await f.create({ orderSources: orderForgeStorySources }).recall({ runId: "world", query: "keeper" });
+  assert.equal(recalled.status.phase, "ready");
+  assert.equal(recalled.overview, saved.content, "everything the saved overview covers is still canon");
+  assert.deepEqual(recalled.recent, [
+    { id: "earlier", kind: "story-event", title: "Keeper", content: "The keeper returned safely." },
+  ]);
+  assert.equal(recalled.lagging, false, "the failed rebuild waits for Retry");
+  assert.equal(f.calls.length, previousCalls);
+  assert.deepEqual(f.memory().overview, saved);
   await f.create({ orderSources: orderForgeStorySources }).maintain({ runId: "world" });
   const rebuild = f.calls.slice(previousCalls).filter((call) => call.kind === "overview");
   assert.deepEqual(

@@ -23,6 +23,21 @@ export function forgePreforgeArtAllowed() {
   return gate ? gate() : true;
 }
 
+// Fights are designed in node order beside the scenes written ahead, never before the chapter map opens.
+// Before the text chain writes story node nextStory (-1 once every scene is written), it designs each
+// fight that comes first; one already designed returns from its cache without a model call. A fight with
+// pre-forge off, or one this chain could not design, is still designed when its battle opens.
+export async function forgePreforgeFights({ nodes, nextStory, design }) {
+  let stories = 0,
+    fights = 0;
+  for (const node of nodes) {
+    if (node?.type === "story" && stories++ === nextStory) break;
+    if (node?.type !== "combat") continue;
+    if (!(await design(fights++))?.ok) return false;
+  }
+  return true;
+}
+
 export function createForgePreforgeArt({ settings, paintPlace, paintKeyImage, assertActive, logger }) {
   const chains = new Map();
   return (runId, chapter) => {
