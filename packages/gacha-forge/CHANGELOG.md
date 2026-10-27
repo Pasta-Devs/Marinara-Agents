@@ -1,3 +1,9 @@
+## 1.25.2 — 2026-10-27
+
+- Backing out of a fight while it loads and entering another one now loads the new fight instead of showing the one you left. A fight request that never answers no longer blocks every later fight.
+- In Formation, a swap (planned, or a Swap effect) seats both units before either one's passive fires, so a revive, Swap, Shuffle or Echo it sets off never puts a fourth unit in a row. Fights started before 1.25.2 keep their rules.
+- On a small model, a reply no longer fails while story memory catches up: the oldest chapter summaries standing in for the overview are left out only when the reply would not fit otherwise, and never the newest.
+
 ## 1.25.1 — 2026-10-27
 
 - Scenes that are already written can be played while pre-forge writes the rest of the chapter. Cleared scenes keep **Read again**, and a fight or a written scene you have reached keeps **Play** or **Start**. Only a scene that is not written yet waits for pre-forge, which writes it at no Vigor cost. Back on the chapter map, it turns into Play as soon as it is written.

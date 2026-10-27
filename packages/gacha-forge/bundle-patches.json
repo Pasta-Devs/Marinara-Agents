@@ -2024,6 +2024,48 @@
               "replace": ".tile[disabled] { cursor: default; opacity: 0.34; } .tile.target[disabled] { opacity: 1; }"
             }
           ]
+        },
+        {
+          "version": "1.25.2",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.25.1\"",
+              "replace": "ds=\"1.25.2\""
+            },
+            {
+              "find": "var oy=[{version:null,fixed:[\"Scenes that are already written can be played while pre-forge writes the rest of the chapter, and the next one turns into Play as soon as it is written.\",\"Opening a weapon or relic to upgrade it no longer cuts to an empty screen while it loads, and the relic you are upgrading is no longer faded out.\"]},{version:\"1.25.0\"",
+              "replace": "var oy=[{version:null,fixed:[\"Backing out of a fight while it loads and entering another one now loads the new fight, instead of showing the one you left.\",\"In Formation, a swap now seats both units before either one's passive fires, so a revive, Swap or Echo it sets off never puts a fourth unit in a row.\",\"On a small model, a reply no longer fails while story memory catches up: the oldest chapter summaries are left out only when the reply would not fit otherwise.\"]},{version:\"1.25.1\",fixed:[\"Scenes that are already written can be played while pre-forge writes the rest of the chapter, and the next one turns into Play as soon as it is written.\",\"Opening a weapon or relic to upgrade it no longer cuts to an empty screen while it loads, and the relic you are upgrading is no longer faded out.\"]},{version:\"1.25.0\""
+            },
+            {
+              "find": "_pickCombatPreset(e){!this._run||this._combatPreset===e||(this._combatPreset=e,this._loadBattle())}",
+              "replace": "_pickCombatPreset(e){!this._run||this._combatPreset===e||(this._combatPreset=e,this._battleLoading=!1,this._loadBattle())}"
+            },
+            {
+              "find": "_enterBattle(){let e=this._pendingCombat;e&&(this._formationBattleMode=!1,",
+              "replace": "_enterBattle(){let e=this._pendingCombat;e&&(this._battleLoading=!1,this._formationBattleMode=!1,"
+            },
+            {
+              "find": "this._combatPhase=\"loading\",this._hudView=\"combat\",this._renderBrowser())}_loadBattle(){",
+              "replace": "this._combatPhase=\"loading\",this._hudView=\"combat\",this._renderBrowser(),this._loadBattle())}_loadBattle(){"
+            },
+            {
+              "find": "_leaveCombat(e){this._stopCombat(),",
+              "replace": "_leaveCombat(e){this._stopCombat(),this._battleLoading=!1,"
+            },
+            {
+              "find": "this._battleLoading=!0;let e=this._combatNode;",
+              "replace": "let forgeBattleLoad=this._battleLoading={},e=this._combatNode;"
+            },
+            {
+              "find": "a.then(s=>{s&&s.ok&&Array.isArray(s.allies)",
+              "replace": "a.then(s=>{if(this._battleLoading!==forgeBattleLoad)return;s&&s.ok&&Array.isArray(s.allies)"
+            },
+            {
+              "find": "}).then(()=>{this._battleLoading=!1,this._farmBusy=!1,",
+              "replace": "}).then(()=>{if(this._battleLoading!==forgeBattleLoad){this._battleLoading||(this._farmBusy=!1);return}this._battleLoading=!1,this._farmBusy=!1,"
+            }
+          ]
         }
       ]
     },

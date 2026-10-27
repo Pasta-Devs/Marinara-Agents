@@ -185,3 +185,38 @@ test("a known descriptor bound works when the saved connection override is unset
   assert.equal(result.fits, true);
   assert.ok(estimateMessages(result.messages) + result.maxTokens + 512 <= 2000);
 });
+
+test("summaries standing in for the overview go oldest first, and only when the reply would fall below its floor", () => {
+  const blocks = [1, 2, 3].map(
+    (chapter) => `# Recent canon summary: Chapter ${chapter}\nRECAP_${chapter} ${"x".repeat(400)}`,
+  );
+  const context = forgeMemoryContext(
+    { overview: "", details: [], maxContext: 100000 },
+    {
+      prefix: [...blocks, previousChapter, "CURRENT_BEATS"].join("\n\n"),
+      optional: blocks.slice(0, -1),
+      renderMemory: forgeStoryMemoryText,
+    },
+  );
+  const messages = prompt(context);
+  const size = estimateMessages(messages);
+  const roomy = fitForgeMemoryPrompt(messages, { maxContext: size + 512 + 8192, maxTokens: 20000, estimateMessages });
+  assert.equal(roomy.messages, messages, "a request that already leaves the floor keeps every byte");
+  assert.equal(roomy.droppedSummaries, 0);
+  const tight = fitForgeMemoryPrompt(messages, {
+    maxContext: size + 512 + 8192 - 1,
+    maxTokens: 20000,
+    estimateMessages,
+  });
+  assert.equal(tight.fits, true);
+  assert.equal(tight.droppedSummaries, 1);
+  assert.ok(tight.maxTokens >= 8192);
+  const body = tight.messages.map((message) => message.content).join("\n");
+  assert.doesNotMatch(body, /RECAP_1/u);
+  for (const kept of ["RECAP_2", "RECAP_3", previousChapter, "CURRENT_BEATS", "FIXED_LORE"])
+    assert.ok(body.includes(kept));
+  const full = fitForgeMemoryPrompt(messages, { maxContext: 1000, maxTokens: 20000, estimateMessages });
+  assert.equal(full.fits, false, "the newest summary and required canon are never removed");
+  assert.equal(full.reason, "context-too-large");
+  assert.equal(full.messages, messages);
+});

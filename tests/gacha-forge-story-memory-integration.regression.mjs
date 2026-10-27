@@ -46,6 +46,7 @@ const memoryDocuments = () => {
 function fixture(options = {}) {
   const realMemory = options.realMemory;
   const onMaintain = options.maintain;
+  const recallOverride = options.recall;
   const runId = "memory-frontier";
   const phase = options.phase || "ready";
   const plans = new Map();
@@ -70,6 +71,7 @@ function fixture(options = {}) {
         },
         async recall(options) {
           requests.push(options);
+          if (recallOverride) return recallOverride(options);
           const sources = await adapters.readSources(runId, options.target);
           return {
             status: { phase },
@@ -901,4 +903,33 @@ test("the knowledge boundary keeps in-world knowledge and the fiction's own boun
   assert.match(forgeKnowledgeBoundary, /learned inside the story from the protagonist or another in-world source/u);
   assert.match(forgeKnowledgeBoundary, /another character's private conversations/u);
   assert.match(forgeKnowledgeBoundary, /no player, game, prompt, instructions or memory notes/u);
+});
+
+test("summaries other than the newest are offered to the fitter oldest first; canon in full never is", async () => {
+  let rendered;
+  const f = fixture({
+    renderContext: (result, options) => (rendered = options),
+    recall: async () => ({
+      status: { phase: "ready" },
+      recent: [
+        { id: "1", kind: "chapter", title: "Chapter 1", content: "RECAP_1", summary: true },
+        { id: "festival", kind: "story-event", title: "Story event: Festival", content: "EVENT_IN_FULL" },
+        { id: "2", kind: "chapter", title: "Chapter 2", content: "RECAP_2", summary: true },
+        { id: "3", kind: "chapter", title: "Chapter 3", content: "RECAP_3", summary: true },
+        { id: "4", kind: "chapter", title: "Chapter 4", latest: true },
+      ],
+    }),
+  });
+  for (let chapter = 1; chapter <= 5; chapter += 1) f.plan(chapter);
+  f.session.progress = { 1: { normal: 3 }, 2: { normal: 3 }, 3: { normal: 3 }, 4: { normal: 3 } };
+  await f.context(5);
+  assert.deepEqual(rendered.optional, [
+    "# Recent canon summary: Chapter 1\nRECAP_1",
+    "# Recent canon summary: Chapter 2\nRECAP_2",
+  ]);
+  for (const block of rendered.optional) assert.ok(rendered.prefix.includes(`${block}\n\n`));
+  assert.match(
+    rendered.prefix,
+    /# Recent canon summary: Chapter 3\nRECAP_3\n\n# Previous chapter in full: Chapter 4\n/u,
+  );
 });

@@ -518,7 +518,7 @@ test("an older tab in a world with outdated kits is told to reload before any ki
       ["/battle", request],
       ["/battle/start", { ...request, expectedFormationEngine: FORGE_FORMATION_ENGINE }],
       ["/farm/battle", { stage: "funds", difficulty: 1 }],
-      // A 1.24.4 tab names the previous rules revision.
+      // A tab from before the current rules revision (1.24.5 to 1.25.1 for revision 4) names the previous one.
       [
         "/battle/start",
         {

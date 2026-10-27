@@ -626,7 +626,13 @@ export function createForgeStoryMemoryIntegration({
             : `# ${source.summary ? "Recent canon summary" : "Recent canon in full"}: ${source.title}\n${source.content}`,
         );
         if (previous && !result.recent?.some((source) => source.latest)) recent.push(previous);
-        return renderContext(result, { prefix: [...recent, prefix, partial].filter(Boolean).join("\n\n"), fate });
+        // Older summaries the overview misses may be left out by the prompt fitter, oldest first; the newest stays.
+        const summaries = (result.recent || []).flatMap((source, index) => (source.summary ? [recent[index]] : []));
+        return renderContext(result, {
+          prefix: [...recent, prefix, partial].filter(Boolean).join("\n\n"),
+          fate,
+          optional: summaries.slice(0, -1),
+        });
       } catch (error) {
         logger?.warn?.(
           "[gacha-forge] story memory unavailable; using canonical history: %s",
