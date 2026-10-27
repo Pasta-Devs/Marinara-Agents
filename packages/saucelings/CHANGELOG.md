@@ -1,6 +1,6 @@
 # Saucelings release notes
 
-## Unreleased
+## 0.23.0 — 2026-10-27
 
 - One new egg a day. Once one has come, the egg button says what time the next one is ready. Eggs found in chat and saucelings brought back from the Menagerie don't count.
 - On a phone, Background scrolls into view when it opens, like Caretaker, Looks and New egg, and Escape closes it.

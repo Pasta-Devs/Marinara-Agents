@@ -136,6 +136,12 @@
     "saucelings": {
       "versions": [
         {
+          "version": "0.23.0",
+          "date": "2026-10-27",
+          "notes": "- One new egg a day. Once one has come, the egg button says what time the next one is ready. Eggs found in chat and saucelings brought back from the Menagerie don't count.\n- On a phone, Background scrolls into view when it opens, like Caretaker, Looks and New egg, and Escape closes it.",
+          "highlight": true
+        },
+        {
           "version": "0.22.3",
           "date": "2026-10-27",
           "notes": "- Background: an error belongs to the last thing you tried and clears once something works. The description box waits while a place is suggested, so it never replaces what you typed.\n- Evolve: Keep works while the new looks are still being written; only a choice already sent has to finish.\n- After a repaint, your sauceling no longer drops to a silhouette while its new pictures load.\n- Settings: a number that fails to save goes back to the saved one, and a picture connection that was deleted shows as missing instead of blank.\n- Album: a sauceling brought back from the Menagerie is no longer shown twice.\n- Moving the egg no longer closes a rename or a hand-over you were in the middle of.\n- Painted sheets with two or three touching rows of drawings are read correctly.\n- An egg find that fails (the writing connection does not answer) no longer uses up the day's find.\n- Talking with the caretaker counts toward an evolution offer on the day the egg hatches or after a hand-over.",
