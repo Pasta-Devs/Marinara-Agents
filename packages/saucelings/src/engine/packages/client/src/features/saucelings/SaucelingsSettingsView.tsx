@@ -14,7 +14,7 @@ type ConnectionSummary = { id: string; name: string; provider: string };
 const NON_TEXT_PROVIDERS = new Set(["image_generation", "video_generation", "audio", "decision"]);
 
 /** A whole-number field that keeps what is being typed and saves it once, when the player leaves it or presses Enter;
- *  an empty or invalid entry goes back to the saved number. */
+ *  an empty or invalid entry, or a save that fails (`onSave` is given `revert` for it), goes back to the saved number. */
 function NumberField({
   value,
   min,
@@ -24,7 +24,7 @@ function NumberField({
   value: number;
   min: number;
   max: number;
-  onSave: (next: number) => void;
+  onSave: (next: number, revert: () => void) => void;
 }) {
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
@@ -33,7 +33,7 @@ function NumberField({
     if (!Number.isFinite(typed)) return setDraft(String(value));
     const next = Math.min(max, Math.max(min, Math.round(typed)));
     setDraft(String(next));
-    if (next !== value) onSave(next);
+    if (next !== value) onSave(next, () => setDraft(String(value)));
   };
   return (
     <input
@@ -100,8 +100,14 @@ export function SaucelingsSettingsView({ state }: { state: SaucelingStateRespons
   });
   // Each change saves on its own, so the row that changed says so for a moment.
   const [saved, showSaved] = useForAMoment<keyof SaucelingSettings>(2000);
-  const patch = (change: Partial<SaucelingSettings>) =>
-    patchMutation.mutate(change, { onSuccess: () => showSaved(Object.keys(change)[0] as keyof SaucelingSettings) });
+  const patch = (change: Partial<SaucelingSettings>, onFailed?: () => void) => {
+    // Only a finished failure is cleared: reset() would also let go of a reset still in flight.
+    if (resetMutation.isError) resetMutation.reset();
+    patchMutation.mutate(change, {
+      onSuccess: () => showSaved(Object.keys(change)[0] as keyof SaucelingSettings),
+      onError: onFailed,
+    });
+  };
   const savedTick = (key: keyof SaucelingSettings) =>
     saved === key ? (
       <span className="sl-saved" role="status">
@@ -134,7 +140,7 @@ export function SaucelingsSettingsView({ state }: { state: SaucelingStateRespons
             value={settings.careWindowHours}
             min={1}
             max={24}
-            onSave={(careWindowHours) => patch({ careWindowHours })}
+            onSave={(careWindowHours, revert) => patch({ careWindowHours }, revert)}
           />
         </SettingRow>
         <SettingRow
@@ -182,7 +188,7 @@ export function SaucelingsSettingsView({ state }: { state: SaucelingStateRespons
             value={settings.dailyGenerationBudget}
             min={0}
             max={30}
-            onSave={(dailyGenerationBudget) => patch({ dailyGenerationBudget })}
+            onSave={(dailyGenerationBudget, revert) => patch({ dailyGenerationBudget }, revert)}
           />
         </SettingRow>
         <SettingRow
@@ -224,6 +230,12 @@ export function SaucelingsSettingsView({ state }: { state: SaucelingStateRespons
                     {connection.name}
                   </option>
                 ))}
+                {/* A saved connection that has since been deleted stays visible, as in the writing select. */}
+                {settings.portraitConnectionId &&
+                connections.data &&
+                !imageConnections?.some((c) => c.id === settings.portraitConnectionId) ? (
+                  <option value={settings.portraitConnectionId}>{t("saucelings.settings.connectionMissing")}</option>
+                ) : null}
               </select>
             )}
           </SettingRow>
@@ -263,7 +275,10 @@ export function SaucelingsSettingsView({ state }: { state: SaucelingStateRespons
               type="button"
               className="sl-btn sl-btn--danger"
               disabled={resetMutation.isPending}
-              onClick={() => resetMutation.mutate()}
+              onClick={() => {
+                if (patchMutation.isError) patchMutation.reset();
+                resetMutation.mutate();
+              }}
             >
               {t("saucelings.settings.resetConfirm")}
             </button>

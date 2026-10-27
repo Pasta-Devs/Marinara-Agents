@@ -436,8 +436,9 @@ export function SaucelingsNookView({
     mutationFn: (payload: { name?: string; caretakerId?: string; eggSpot?: { x: number; y: number } }) =>
       saucelingsRequest<SaucelingStateResponse>("/pet", "PATCH", payload),
     onSuccess: (data, payload) => {
-      setEditingName(false);
-      setHandOverTo(null);
+      // Moving the egg must not discard a rename or a hand-over pick still being made.
+      if (payload.name !== undefined) setEditingName(false);
+      if (payload.caretakerId !== undefined) setHandOverTo(null);
       updateState(data);
       // A new caretaker with no voice of their own is offered one once they have said hello.
       if (payload.caretakerId) askVoice(payload.caretakerId);

@@ -57,6 +57,7 @@ export function NookTour({
   const [index, setIndex] = useState(0);
   const [mariShown, setMariShown] = useState(true);
   const cardRef = useRef<HTMLDivElement>(null);
+  const nextRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const step = index === 0 && hatched ? HATCHED_FIRST : STEPS[index];
   const last = index === STEPS.length - 1;
@@ -103,11 +104,20 @@ export function NookTour({
             </button>
           )}
           {index > 0 ? (
-            <button type="button" className="sl-btn sl-btn--small" onClick={() => setIndex(index - 1)}>
+            <button
+              type="button"
+              className="sl-btn sl-btn--small"
+              onClick={() => {
+                // Back leaves the first step, where it is not shown, so the keyboard moves on to Next with it.
+                if (index === 1) nextRef.current?.focus();
+                setIndex(index - 1);
+              }}
+            >
               {t("saucelings.tour.back")}
             </button>
           ) : null}
           <button
+            ref={nextRef}
             type="button"
             className="sl-btn sl-btn--small sl-btn--primary"
             // The card takes focus as it opens, so the keyboard can walk it straight away.

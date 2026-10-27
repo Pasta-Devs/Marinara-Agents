@@ -100,6 +100,11 @@ export function BackgroundPicker({
     void queryClient.invalidateQueries({ queryKey: ["saucelings", "backgrounds"] });
   };
 
+  // One report for all five actions: starting any of them clears the last failure, and a failure replaces it, so an
+  // earlier failed action never hides a later one or lingers after a success.
+  const [actionError, setActionError] = useState<unknown>(null);
+  const reporting = { onMutate: () => setActionError(null), onError: (error: unknown) => setActionError(error) };
+
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
       if (file.size > MAX_FILE_BYTES) throw new Error(t("saucelings.background.tooBig"));
@@ -117,6 +122,7 @@ export function BackgroundPicker({
       }
     },
     onSuccess: saved,
+    ...reporting,
   });
 
   const generateMutation = useMutation({
@@ -142,12 +148,15 @@ export function BackgroundPicker({
       });
     },
     onSuccess: saved,
+    ...reporting,
   });
 
   // The writing connection suggests a place that suits the sauceling; without one, the box gets the starting prompt.
+  // The box is locked while it answers (see below), so the answer never replaces something typed meanwhile.
   const suggestMutation = useMutation({
     mutationFn: () => saucelingsRequest<{ scene: string | null }>("/background/suggest", "POST", {}),
     onSuccess: ({ scene }) => setPrompt(scene ?? startingScene(pet)),
+    ...reporting,
   });
 
   // null is the species' built-in background.
@@ -159,6 +168,7 @@ export function BackgroundPicker({
         {},
       ),
     onSuccess: saved,
+    ...reporting,
   });
 
   const deleteMutation = useMutation({
@@ -168,6 +178,7 @@ export function BackgroundPicker({
       setConfirmDelete(null);
       saved(next);
     },
+    ...reporting,
   });
 
   const busy =
@@ -176,13 +187,7 @@ export function BackgroundPicker({
     suggestMutation.isPending ||
     selectMutation.isPending ||
     deleteMutation.isPending;
-  const failure =
-    uploadMutation.error ??
-    generateMutation.error ??
-    suggestMutation.error ??
-    selectMutation.error ??
-    deleteMutation.error ??
-    library.error;
+  const failure = actionError ?? library.error;
   const cannotGenerate = !settings.portraitEnabled
     ? t("saucelings.background.off")
     : !settings.portraitConnectionId
@@ -289,6 +294,7 @@ export function BackgroundPicker({
         rows={3}
         maxLength={600}
         value={prompt}
+        disabled={suggestMutation.isPending}
         onChange={(event) => {
           setPrompt(event.target.value);
           suggestMutation.reset();

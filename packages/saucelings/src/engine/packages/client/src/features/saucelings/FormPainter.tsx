@@ -165,7 +165,13 @@ function usePaint(job: FormJob | null, state: SaucelingStateResponse, assetUrl: 
       // The server refuses a picture another page is painting.
       await saucelingsRequest("/form/start", "POST", { petId: target.petId, key: paintOf(target), token: PAGE_TOKEN });
       const paint = target.kind === "sheet" ? paintSheet : paintForm;
-      return paint(target, connectionId, queryClient, assetUrl, t("saucelings.form.failed"));
+      const next = await paint(target, connectionId, queryClient, assetUrl, t("saucelings.form.failed"));
+      // A repaint gives each stage a new form id; the pictures are loaded before the swap shows (as in FormRepaint's
+      // undo), so the sauceling does not drop to its silhouette while they come. One that fails loads later.
+      await Promise.all(
+        Object.values(next.world.activePet?.forms ?? {}).map((id) => queryClient.prefetchQuery(formQuery(id))),
+      );
+      return next;
     },
     // These run even when the component that started the painting has gone, such as a tab that was closed.
     onSuccess: (next) => {

@@ -2093,6 +2093,22 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
   assert.deepEqual(flameRead.cells[3]![2], { x: 520, y: flame[1], width: 90, height: 520 + 160 - flame[1] });
   assert.deepEqual(flameRead.cells[2], boxes(touching)[2]);
 
+  // With only two or three rows to find, touching rows still split: the tall band is measured against the other bands,
+  // or, when it is alone, against its own ink at the cut. A lone row that does not thin is one row, so a row is missing.
+  const trio = baseRects().slice(2);
+  const trioRead = readSheet(sheetOf(trio, [flame]), [4, 4, 4])!;
+  assert.deepEqual(trioRead.cells[0], boxes(trio)[0]);
+  assert.deepEqual(trioRead.cells[2], boxes(trio)[2]);
+  const pair = baseRects().slice(3);
+  const pairFlame: Rect = [600, TOPS[3]! + HEIGHTS[3]!, 2, 730 - (TOPS[3]! + HEIGHTS[3]!)];
+  const pairRead = readSheet(sheetOf(pair, [pairFlame]), [4, 4])!;
+  assert.deepEqual(pairRead.cells[0], boxes(pair)[0]);
+  assert.deepEqual(
+    pairRead.cells.map((row) => row.length),
+    [4, 4],
+  );
+  assert.equal(readSheet(sheetOf(baseRects().slice(4)), [4, 4]), null);
+
   // Only four rows, no row to find: null. So is a blank sheet.
   assert.equal(readSheet(sheetOf(baseRects().slice(0, 4)), COLS), null);
   assert.equal(readSheet(sheetOf([]), COLS), null);

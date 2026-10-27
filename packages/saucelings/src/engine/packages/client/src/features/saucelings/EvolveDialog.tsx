@@ -134,6 +134,8 @@ function EvolveDialog({
   const choices = pet.evolution.choices;
   const acts = useMoveLoop(choices?.map((look) => look.move) ?? []);
   const busy = options.isPending || choose.isPending || decline.isPending;
+  // Writing the looks can be left: `done` still stores them when they arrive. A choice in flight cannot.
+  const locked = choose.isPending || decline.isPending;
   const error = options.error ?? choose.error ?? decline.error;
 
   useEffect(() => {
@@ -157,8 +159,10 @@ function EvolveDialog({
       onCancel={(e) => {
         e.preventDefault();
         if (confirming) setConfirming(false);
-        else if (!busy) onClose();
+        else if (!locked) onClose();
       }}
+      // A browser can close the dialog itself (a second Escape with no click between); the button must know.
+      onClose={onClose}
     >
       <h2 id="sl-evolve-title">
         {confirming
@@ -225,7 +229,7 @@ function EvolveDialog({
                 {t("saucelings.error.retry")}
               </button>
             ) : null}
-            <button type="button" className="sl-btn" disabled={busy} onClick={onClose}>
+            <button type="button" className="sl-btn" disabled={locked} onClick={onClose}>
               {t("saucelings.evolve.keep")}
             </button>
           </div>

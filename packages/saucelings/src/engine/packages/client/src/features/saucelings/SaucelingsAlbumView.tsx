@@ -158,9 +158,11 @@ export function SaucelingsAlbumView({
       at: pet.evolution.at,
     });
   }
-  for (const entry of menagerieQuery.data?.menagerie ?? []) {
+  // A query that is switched off keeps what it last held, so a Menagerie that has since emptied (the last one restored
+  // or released) is read as empty, and a restored pet is the nook's own keepsake, not its old Menagerie entry.
+  for (const entry of state.menagerieCount > 0 ? (menagerieQuery.data?.menagerie ?? []) : []) {
     const stage = entry.reachedElder ? "elder" : (entry.lockedStage ?? entry.stageAtRetirement);
-    if (!entry.evolution.look || stage === "egg") continue;
+    if (!entry.evolution.look || stage === "egg" || entry.id === pet?.id) continue;
     keepsakes.push({
       petId: entry.id,
       name: entry.name,
@@ -288,7 +290,11 @@ export function SaucelingsAlbumView({
               type="button"
               className="sl-btn sl-btn--primary"
               disabled={paintMutation.isPending}
-              onClick={() => paintMutation.mutate(pet)}
+              onClick={() => {
+                // Only a finished failure is cleared: reset() would also let go of a delete still in flight.
+                if (deleteMutation.isError) deleteMutation.reset();
+                paintMutation.mutate(pet);
+              }}
             >
               {paintMutation.isPending
                 ? t("saucelings.album.painting")
@@ -375,7 +381,10 @@ export function SaucelingsAlbumView({
                   type="button"
                   className="sl-btn sl-btn--danger"
                   disabled={deleteMutation.isPending}
-                  onClick={() => deleteMutation.mutate(open.id)}
+                  onClick={() => {
+                    if (paintMutation.isError) paintMutation.reset();
+                    deleteMutation.mutate(open.id);
+                  }}
                 >
                   {t("saucelings.album.deleteConfirm")}
                 </button>

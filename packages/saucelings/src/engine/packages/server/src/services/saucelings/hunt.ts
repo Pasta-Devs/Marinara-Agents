@@ -65,9 +65,19 @@ export async function runHunt(
     return claimed ? { ...current, lastEggFindDay: currentDayKey(nowIso) } : current;
   });
   if (!claimed) return;
-  const design = await generateDesign({ characterId: finder, connectionId: before.settings.connectionId });
-  const profile = await careProfileNow(finder, before.profileCache[finder]);
-  await saveFind(finder, profile, design, nowIso);
+  try {
+    const design = await generateDesign({ characterId: finder, connectionId: before.settings.connectionId });
+    const profile = await careProfileNow(finder, before.profileCache[finder]);
+    await saveFind(finder, profile, design, nowIso);
+  } catch (error) {
+    // No egg was saved, so today's find is given back; a later reply may still find one.
+    await updateSaucelingWorld((current) =>
+      current.lastEggFindDay === currentDayKey(nowIso)
+        ? { ...current, lastEggFindDay: before.lastEggFindDay }
+        : current,
+    ).catch(() => undefined);
+    throw error;
+  }
 }
 
 /** Notes that the hatched pet's caretaker replied in a chat today, which makes an evolution offer likelier (see
@@ -115,7 +125,9 @@ async function saveFind(
 }
 
 let hunting = false;
-/** The day and targets last checked for `markChatDay`, so the rest of a day's replies by them never read storage. */
+/** The day and targets last checked for `markChatDay`, so the rest of a day's replies by them never read storage.
+ *  Cleared again when that check could not settle the day: it failed, or the nook pet was still an egg or had another
+ *  caretaker, which can change before the day ends (those replies read, but do not write). */
 let chatMarked = "";
 
 /**
@@ -135,7 +147,18 @@ export function noteChatReply(request: { targetCharacterIds?: string[] }): null 
   const marked = `${Math.floor(nowMs / DAY_MS)}:${[...targetIds].sort().join(",")}`;
   if (marked !== chatMarked) {
     chatMarked = marked;
-    void updateSaucelingWorld((current) => markChatDay(current, targetIds, nowMs)).catch(() => undefined);
+    const unsettled = () => {
+      if (chatMarked === marked) chatMarked = "";
+    };
+    // A read first, so a day with nothing to note never writes; the write checks again in the save queue.
+    void readSaucelingWorld()
+      .then((world) => {
+        const pet = world.activePet;
+        if (pet && (pet.stage === "egg" || !targetIds.includes(pet.caretakerId))) return unsettled();
+        if (markChatDay(world, targetIds, nowMs) === world) return;
+        return updateSaucelingWorld((current) => markChatDay(current, targetIds, nowMs)).then(() => undefined);
+      })
+      .catch(unsettled);
   }
   const rolls = { find: Math.random(), pick: Math.random() };
   // Most replies miss the roll whatever the world holds, so they never read storage for it.

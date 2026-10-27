@@ -605,13 +605,24 @@ export function readSheet(
       if (b - a > bands[tall]![1] - bands[tall]![0]) tall = i;
     });
     const [top, bottom] = bands[tall]!;
-    // Two touching rows make a band about twice the usual height; a band that is not clearly taller is a row, so a row is missing.
-    if (bottom - top < 1.4 * medianHeight()) return null;
     const lo = top + Math.floor(0.3 * (bottom - top));
     const hi = top + Math.floor(0.7 * (bottom - top));
     if (hi <= lo) return null;
     const cut = argmin(allRows, lo, hi);
     if (cut <= top) return null;
+    // Two touching rows make a band about twice the usual height of the other bands (not counting itself); a band that
+    // is not clearly taller is a row, so a row is missing. A lone band has no other to be measured against, so it is
+    // two rows only where its ink thins clearly at the cut.
+    const others = bands
+      .filter((_, i) => i !== tall)
+      .map(([a, b]) => b - a)
+      .sort((a, b) => a - b);
+    if (others.length) {
+      if (bottom - top < 1.4 * others[Math.floor(others.length / 2)]!) return null;
+    } else {
+      const typical = Array.from(allRows.subarray(top, bottom)).sort((a, b) => a - b)[Math.floor((bottom - top) / 2)]!;
+      if (allRows[cut]! >= 0.25 * typical) return null;
+    }
     bands.splice(tall, 1, [top, cut], [cut, bottom]);
   }
   if (bands.length !== layout.length) return null;
