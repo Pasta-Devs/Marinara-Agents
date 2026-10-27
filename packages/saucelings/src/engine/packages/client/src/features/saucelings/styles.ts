@@ -700,7 +700,8 @@ html[data-marinara-reduced-effects="true"] .sl-meter-fill { transition: none; }
   grid-template-areas: "stage" "care";
 }
 .sl-stage-card { grid-area: stage; display: grid; gap: 0.75rem; }
-.sl-care-card { grid-area: care; display: grid; gap: 0.75rem; }
+.sl-nook-side { grid-area: care; display: grid; gap: 1rem; align-content: start; min-width: 0; }
+.sl-care-card { display: grid; gap: 0.75rem; }
 .sl-stage-bar {
   display: flex;
   align-items: flex-start;
@@ -1353,16 +1354,21 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
 }
 
 /* A wide panel: the care card in its own column beside the stage, its meters one under another and its buttons
-   two by two, kept in view while you scroll. */
+   two by two, kept in view while you scroll. An open panel sits under it in the same column, and the column
+   scrolls with the page so a tall panel is never pinned out of reach. */
 @container sl-shell (min-width: 48rem) {
   .sl-nook-main {
     grid-template-columns: minmax(0, 1fr) 17rem;
     grid-template-areas: "stage care";
   }
-  .sl-care-card { position: sticky; top: 0; align-self: start; }
+  .sl-nook-side { position: sticky; top: 0; align-self: start; }
+  .sl-nook-side:has(> .sl-panel, > .sl-picker) { position: static; }
   .sl-care-card .sl-meters--strip { grid-template-columns: minmax(0, 1fr); }
   .sl-care-card .sl-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sl-care-card .sl-actions > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+  /* The column is as narrow as a phone: the egg form wraps the same way. */
+  .sl-nook-side .sl-egg-form > .sl-select { flex: 1 1 calc(100% - 3.5rem); min-width: 0; }
+  .sl-nook-side .sl-egg-form > .sl-btn { flex: 1 1 auto; }
 }
 
 /* Phones and narrow panels: tabs in one row, the stage the width of the card, care buttons two by two. */
@@ -1375,7 +1381,7 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
   .sl-tab-count { display: none; }
   .sl-body { padding: 0.75rem; }
   .sl-card { padding: 0.85rem; }
-  .sl-nook, .sl-nook-main { gap: 0.75rem; }
+  .sl-nook, .sl-nook-main, .sl-nook-side { gap: 0.75rem; }
   .sl-stage-card, .sl-care-card { gap: 0.6rem; }
   /* Three meters across: a gap's words move to its tooltip, and the box and bar turn amber. */
   .sl-meters--strip { gap: 0.35rem; }

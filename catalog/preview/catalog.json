@@ -237,7 +237,7 @@
         },
         "id": "saucelings",
         "name": "Saucelings",
-        "version": "0.23.0",
+        "version": "0.23.1",
         "description": "A Tamagotchi-style pet in Home: pick a character to look after an egg, let their personality drive their care schedule, cover the gaps they miss, watch its sauce temperament shift, retire elders to a Menagerie, and let the caretaker find eggs of their own invention while you chat. Install it, restart Marinara Engine when prompted, then open Home → Saucelings.",
         "engine": {
           "min": "2.5.0",
@@ -351,8 +351,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "2bc8ecee4c3fda489811a8fecfa728f9e326d94c2c434bfdb079c2b7355b1998",
-            "bytes": 256006
+            "sha256": "fdeb4f4816ba1269a9e56d8ab543ad5a291e1f8e166a9d10a6a1412d1a47c916",
+            "bytes": 256578
           },
           {
             "path": "saucelings-icon.png",
@@ -611,9 +611,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/saucelings.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/saucelings-0.23.0.zip",
-        "sha256": "2f6fb5d8f1ce01afcd2bb1a6321a4f327c80d7246c772bb4fa750c020c7a4cba",
-        "bytes": 823701
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/saucelings-0.23.1.zip",
+        "sha256": "4ac87c782c6670d1c53fc332b616fd0516ef221d7b939fc03b6d4ec80474d35b",
+        "bytes": 824273
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#saucelings"
     }
