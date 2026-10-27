@@ -1826,6 +1826,114 @@
               "replace": "var oy=[{version:null,new:[\"Expression portraits: turn them on in World → Sources → Images. Story portraits then show anger, fear, sadness or joy line by line, painted in the background for characters who speak.\"],fixed:[\"Your persona keeps its own voice even when another character shares part of its name, and turning Voice other characters off and on again no longer asks to pay again for combat lines that were never made.\"]},{version:\"1.24.6\",new:[\"Voice other characters, next to Read character dialogue, gives NPCs and units without an assigned voice a voice from the Engine's Random NPC Voices lists, matched to male or female when known. Each name keeps the same voice.\"],fixed:[\"Combat voice lines now play in Classic and Formation, start preparing when the battle screen opens, include your persona's voice, and say when nobody in the team can be voiced.\"]}"
             }
           ]
+        },
+        {
+          "version": "1.24.8",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.24.7\"",
+              "replace": "ds=\"1.24.8\""
+            },
+            {
+              "find": "var oy=[{version:null,new:[\"Expression portraits: turn them on in World → Sources → Images. Story portraits then show anger, fear, sadness or joy line by line, painted in the background for characters who speak.\"],fixed:[\"Your persona keeps its own voice even when another character shares part of its name, and turning Voice other characters off and on again no longer asks to pay again for combat lines that were never made.\"]},{version:\"1.24.6\"",
+              "replace": "var oy=[{version:null,changed:[\"In character chats, Enter now adds a new line. Only Send sends your message.\"],fixed:[\"Auto in story scenes stays on when something starts or finishes in the background, or when you switch tabs and come back.\",\"While a story is written in the background, Formation changes stick, and screens no longer stutter or redraw every few seconds.\"]},{version:\"1.24.7\",new:[\"Expression portraits: turn them on in World → Sources → Images. Story portraits then show anger, fear, sadness or joy line by line, painted in the background for characters who speak.\"],fixed:[\"Your persona keeps its own voice even when another character shares part of its name, and turning Voice other characters off and on again no longer asks to pay again for combat lines that were never made.\"]},{version:\"1.24.6\""
+            },
+            {
+              "find": "\"|busy:\"+Fm(s);if(this._syncBar(),_a(this._root,this._contextTokens,this._warnTokens),this._drawnView===\"browser\"&&this._renderKey===o)return;",
+              "replace": "(e===\"runs\"?\"|busy:\"+Fm(s):\"\");if(this._syncBar(),_a(this._root,this._contextTokens,this._warnTokens),this._drawnView===\"browser\"&&this._renderKey===o){e===\"chapters\"&&this._busyChipKey!==Fm(s)&&this._loadChapters();syncForgeBusyChip(this,Fm(s),()=>Hm(s));return}"
+            },
+            {
+              "find": "this._renderKey=o,this._stopForge()",
+              "replace": "this._renderKey=o,this._busyChipKey=Fm(s),this._stopForge()"
+            },
+            {
+              "find": "Px=[\"/portrait/select\"]",
+              "replace": "Px=[\"/portrait/select\",\"/beat/mark\"]"
+            },
+            {
+              "find": "this._preforgeRead(e,a).then(s=>{this._renderBrowser(),(!s||!s.running)&&this._stopPreforgeWatch()})",
+              "replace": "let forgeBefore=JSON.stringify(this._preforge);this._preforgeRead(e,a).then(s=>{JSON.stringify(s)!==forgeBefore&&this._renderBrowser(),(!s||!s.running)&&this._stopPreforgeWatch()})"
+            },
+            {
+              "find": "I=!1,M=null,T=!1,C=null;function B(){",
+              "replace": "I=!1,M=null,T=e.autoplay===!0,C=null;T&&v&&v.setAttribute(\"data-on\",\"\");function B(){"
+            },
+            {
+              "find": "T=!(e.choicePlayback&&e.choicePlayback.blocked(_))&&!T,T?v.setAttribute(\"data-on\",\"\"):v.removeAttribute(\"data-on\"),",
+              "replace": "T=!(e.choicePlayback&&e.choicePlayback.blocked(_))&&!T,e.onAutoplay&&e.onAutoplay(T),T?v.setAttribute(\"data-on\",\"\"):v.removeAttribute(\"data-on\"),"
+            },
+            {
+              "find": "P(),T=!1,v&&v.removeAttribute(\"data-on\")",
+              "replace": "P(),T=!1,e.onAutoplay&&e.onAutoplay(!1),v&&v.removeAttribute(\"data-on\")"
+            },
+            {
+              "find": "startAt:Math.max(this._beatStartAt,this._beatAt),",
+              "replace": "startAt:Math.max(this._beatStartAt,this._beatAt),autoplay:!!this._beat&&this._beatAutoFor===this._beat,onAutoplay:S=>{this._beatAutoFor=S?this._beat:null},"
+            },
+            {
+              "find": "_saveFormation(e,a){this._run&&(this._formation&&(this._formation={...this._formation,presets:e,active:a}),this._postJson(\"/formation/save\",{runId:this._run.runId,presets:e,active:a}).then(r=>{r&&r.ok&&Array.isArray(r.presets)&&this._formation&&(this._formation={...this._formation,presets:r.presets,active:r.active})}))}",
+              "replace": "_saveFormation(e,a){this._run&&(this._formation&&(this._formation={...this._formation,presets:e,active:a}),saveForgeFormation(this,e,a))}"
+            },
+            {
+              "find": "_loadBattle(){if(this._battleLoading)return;",
+              "replace": "_loadBattle(){if(this._battleLoading||waitForgeFormationSave(this,()=>this._loadBattle()))return;"
+            },
+            {
+              "find": "this._refreshing=!0,Ze(`${Ia}/state?timeZone=${encodeURIComponent(forgeUserTimeZone())}`)",
+              "replace": "this._refreshing=!0,Ze(`${Ia}/state?timeZone=${encodeURIComponent(forgeUserTimeZone())}&light=1`)"
+            },
+            {
+              "find": "this._stepRefreshing=true;\nZe(`${Ia}/state?timeZone=${encodeURIComponent(forgeUserTimeZone())}`)",
+              "replace": "this._stepRefreshing=true;\nZe(`${Ia}/state?timeZone=${encodeURIComponent(forgeUserTimeZone())}&light=1`)"
+            },
+            {
+              "find": "b.addEventListener(\"input\",()=>i&&i(b.value)),b.addEventListener(\"keydown\",w=>{w.key!==\"Enter\"||w.shiftKey||(w.preventDefault(),r&&r(b.value))}),",
+              "replace": "b.addEventListener(\"input\",()=>i&&i(b.value)),"
+            },
+            {
+              "find": "this._renderBrowser();return}this._postJson(\"/formation\",{runId:this._run.runId})",
+              "replace": "this._renderBrowser();return}if(waitForgeFormationLoad(this))return;this._postJson(\"/formation\",{runId:this._run.runId})"
+            },
+            {
+              "find": "this._chaptersState=\"loading\",this._fillChapters(),this._postJson(\"/chapters\",{runId:e}).then(r=>{",
+              "replace": "this._chaptersState=\"loading\",this._chaptersData||this._fillChapters(),this._postJson(\"/chapters\",{runId:e}).then(r=>{"
+            },
+            {
+              "find": "r&&r.ok&&Array.isArray(r.chapters)?(this._chaptersData=r,this._chaptersFor=e+\"|\"+a,this._chaptersState=\"ready\"):this._chaptersState=\"error\",this._fillChapters(),",
+              "replace": "let forgeSame=!!this._chaptersData&&(!(r&&r.ok&&Array.isArray(r.chapters))||JSON.stringify(this._chaptersData)===JSON.stringify(r));r&&r.ok&&Array.isArray(r.chapters)?(this._chaptersData=r,this._chaptersFor=e+\"|\"+a,this._chaptersState=\"ready\"):this._chaptersState=\"error\",forgeSame||this._fillChapters(),"
+            }
+          ]
+        },
+        {
+          "version": "1.24.9",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.24.8\"",
+              "replace": "ds=\"1.24.9\""
+            },
+            {
+              "find": "var oy=[{version:null,changed:[\"In character chats, Enter now adds a new line. Only Send sends your message.\"],fixed:[\"Auto in story scenes stays on when something starts or finishes in the background, or when you switch tabs and come back.\",\"While a story is written in the background, Formation changes stick, and screens no longer stutter or redraw every few seconds.\"]},{version:\"1.24.7\"",
+              "replace": "var oy=[{version:null,changed:[\"A new chapter opens as soon as its plan is written. Each fight is designed in the background right after the scene before it, so it is ready when you reach it.\"],fixed:[\"Story memory summarizes only in the background, so writing no longer waits for it to catch up, and long chapters can be summarized again, with at least 10k tokens of room for thinking models.\"]},{version:\"1.24.8\",changed:[\"In character chats, Enter now adds a new line. Only Send sends your message.\"],fixed:[\"Auto in story scenes stays on when something starts or finishes in the background, or when you switch tabs and come back.\",\"While a story is written in the background, Formation changes stick, and screens no longer stutter or redraw every few seconds.\"]},{version:\"1.24.7\""
+            },
+            {
+              "find": "\"generation-failed\"),detail:String(i&&i.detail||\"\")})}).then(()=>{if(!(!n()||this._planState===\"error\"||!e))return this._prewarmCombats(e)}).then(()=>{if(n()){",
+              "replace": "\"generation-failed\"),detail:String(i&&i.detail||\"\")})}).then(()=>{if(n()){"
+            },
+            {
+              "find": "_prewarmCombats(e,forgeChapter,forgeVersion){let forgeStoryRevision=this._forgeStoryRevision||0,forgeStoryRunId=this._run?.runId;let a=qa(e);if(!a||!this._run)return Promise.resolve();let r=forgeChapter??this._planChapter,s=Promise.resolve();for(let o=0;o<a;o+=1){let n=o;s=s.then(()=>{if((this._forgeStoryRevision||0)!==forgeStoryRevision||this._run?.runId!==forgeStoryRunId)return;return this._postJson(\"/combat-guide\",{runId:this._run.runId,chapter:r,combatIndex:n,...Number.isSafeInteger(forgeVersion)?{storyRevision:forgeVersion}:{}})})}return s}_preforgeKey(){",
+              "replace": "_preforgeKey(){"
+            },
+            {
+              "find": "It is chapter one: its plan, its fights and its first scene.",
+              "replace": "It is chapter one: its plan and its first scene."
+            },
+            {
+              "find": "Writing it means the plan of chapter one, its fights and its first scene:",
+              "replace": "Writing it means the plan of chapter one and its first scene:"
+            }
+          ]
         }
       ]
     },
@@ -3308,6 +3416,62 @@
             {
               "find": "forgeStoryCancellation.dispose();forgeBannerAnimations.dispose()}",
               "replace": "forgeStoryCancellation.dispose();forgeBannerAnimations.dispose();forgeStoryExpressions.dispose()}"
+            }
+          ]
+        },
+        {
+          "version": "1.24.8",
+          "commits": [],
+          "edits": [
+            {
+              "find": "s.get(\"/state\",async()=>sl())",
+              "replace": "s.get(\"/state\",async p=>sl(p))"
+            },
+            {
+              "find": "async function sl(){",
+              "replace": "async function sl(forgeRequest){"
+            },
+            {
+              "find": "N.contextTokens=await Yr(N.runId);",
+              "replace": "forgeRequest?.query?.light!==\"1\"&&(N.contextTokens=await Yr(N.runId));"
+            },
+            {
+              "find": "let{doc:g,data:m}=await pe(o),w=m&&m.roster||{},b=new Set(Object.keys(w).filter($=>$!==ce(o,\"protagonist\"))),S=($,F)=>$===fn?F.has(fn)?null:(F.add(fn),fn):typeof $==\"string\"&&b.has($)&&!F.has($)?(F.add($),$):null,M=$=>{let F=$&&typeof $==\"object\"?$:{},U=new Set,Q=ee=>{let j=Array.isArray(ee)?ee:[],J=[];for(let he=0;he<3;he+=1)J.push(S(j[he],U));return J},ne=Q(F.front),Y=Q(F.back);return{front:ne,back:Y}},x=(Array.isArray(u.presets)?u.presets:[]).slice(0,50).map(($,F)=>({name:(l($&&$.name)||`Team ${F+1}`).slice(0,40),board:M($&&$.board)}));x.length||x.push({name:\"Team 1\",board:{front:[fn,null,null],back:[null,null,null]}});let L=pt(u.active,0,x.length-1)||0;return m.presets=x,m.activePreset=L,m.party=x[L].board,await Pe(o,g,m)?{ok:!0,presets:x,active:L}:{ok:!1,error:\"write-conflict\"}",
+              "replace": "let x,L;return await xn(o,m=>{let w=m&&m.roster||{},b=new Set(Object.keys(w).filter($=>$!==ce(o,\"protagonist\"))),S=($,F)=>$===fn?F.has(fn)?null:(F.add(fn),fn):typeof $==\"string\"&&b.has($)&&!F.has($)?(F.add($),$):null,M=$=>{let F=$&&typeof $==\"object\"?$:{},U=new Set,Q=ee=>{let j=Array.isArray(ee)?ee:[],J=[];for(let he=0;he<3;he+=1)J.push(S(j[he],U));return J},ne=Q(F.front),Y=Q(F.back);return{front:ne,back:Y}};x=(Array.isArray(u.presets)?u.presets:[]).slice(0,50).map(($,F)=>({name:(l($&&$.name)||`Team ${F+1}`).slice(0,40),board:M($&&$.board)}));x.length||x.push({name:\"Team 1\",board:{front:[fn,null,null],back:[null,null,null]}});L=pt(u.active,0,x.length-1)||0;m.presets=x,m.activePreset=L,m.party=x[L].board})?{ok:!0,presets:x,active:L}:{ok:!1,error:\"write-conflict\"}"
+            },
+            {
+              "find": "async function Cr(p,u,o){return forgeChoices.readOrGenerate(p,forgeCachedOnly=>forgeGenerateBeat(p,u,o,forgeCachedOnly))}",
+              "replace": "async function Cr(p,u,o,forgeQuiet=!1){let forgeBeat=await forgeChoices.readOrGenerate(p,forgeCachedOnly=>forgeGenerateBeat(p,u,o,forgeCachedOnly));return forgeBeat&&forgeBeat.ok&&!forgeQuiet?{...forgeBeat,contextTokens:await Yr(p)}:forgeBeat}"
+            },
+            {
+              "find": "cached:!0,contextTokens:await Yr(p),cast:forgeStoryExpressions",
+              "replace": "cached:!0,cast:forgeStoryExpressions"
+            },
+            {
+              "find": "cg:await _(),contextTokens:await Yr(p),cast:ne}",
+              "replace": "cg:await _(),cast:ne}"
+            },
+            {
+              "find": "S=await Cr(p,u,b);",
+              "replace": "S=await Cr(p,u,b,!0);"
+            }
+          ]
+        },
+        {
+          "version": "1.24.9",
+          "commits": [],
+          "edits": [
+            {
+              "find": "let w=await Yt(p,m,u);if(w.mode===\"off\"||w.cancelled||w.next<0||w.waitingChoice)return;let b=w.next,S=await Cr(p,u,b,!0);",
+              "replace": "let w=await Yt(p,m,u);if(w.mode===\"off\"||w.cancelled||w.waitingChoice)return;let forgeChainOn=async()=>{let e=gn.get(o);e&&(e.at=Date.now());let r=Ae((await be()).data,p),s=r&&await Yt(p,r,u);return!!s&&s.mode!==\"off\"&&!s.cancelled&&!s.waitingChoice},forgePlan=Number.isInteger(u)?await a.getById(n.id,f(p,u)):null;if(!await forgePreforgeFights({nodes:forgePlan&&forgePlan.data?tr(forgePlan.data):[],nextStory:w.next,design:async x=>await forgeChainOn()?forgeDesignFight(p,m,u,x):{ok:!1,error:\"stopped\"}}))return;if(w.next<0||!await forgeChainOn())return;let b=w.next,S=await Cr(p,u,b,!0);"
+            },
+            {
+              "find": "async function Cr(p,u,o,forgeQuiet=!1){",
+              "replace": "function forgeDesignFight(p,m,u,x){return Ph(p,m,u,x).then(g=>(g&&g.ok&&g.guide&&!g.cached&&rt(m,p,g.guide.formation||[],{place:l(g.guide.place)?{name:g.guide.place,tags:g.guide.placeTags}:null}).catch(()=>{}),g))}function forgeFightsAfter(p,u,o,S){return Promise.resolve(S).then(r=>(r&&r.ok&&Number.isInteger(u)&&An(async()=>{let m=Ae((await be()).data,p),k=await a.getById(n.id,f(p,u));m&&k&&k.data&&await forgePreforgeFights({nodes:tr(k.data),nextStory:o+1,design:x=>forgeDesignFight(p,m,u,x)})}).catch(()=>{}),r))}async function Cr(p,u,o,forgeQuiet=!1){"
+            },
+            {
+              "find": "u.background===!0?An(()=>Cr(o,i,g)):Cr(o,i,g)",
+              "replace": "forgeFightsAfter(o,i,g,u.background===!0?An(()=>Cr(o,i,g)):Cr(o,i,g))"
             }
           ]
         }

@@ -30,6 +30,42 @@ const beat = (text, places) => ({
   ],
 });
 const slug = (name) => name.toLowerCase().replace(/\s+/gu, "-");
+const fighter = (name) => ({
+  name,
+  tier: "soldier",
+  role: "Warrior",
+  affinity: "Fire",
+  position: "front",
+  look: `${name.toLowerCase()} in a patched coat`,
+  stats: { hp: 30, atk: 30, def: 30, spd: 30 },
+  skill: { name: "Strike", effect: "damage", power: 100, target: "enemy", description: "A clean hit." },
+});
+const guide = (name) => ({
+  enemy: name,
+  tier: "soldier",
+  opening: `${name} attacks.`,
+  objective: `Defeat ${name}.`,
+  outcomeOnWin: `${name} flees.`,
+  formation: [fighter(name)],
+});
+// A chapter plan read from a layout such as "SCCS": S is a scene, C a fight.
+const layout = (nodes) => {
+  let scenes = 0;
+  return {
+    ...plan(1, 0),
+    nodes: [...nodes].map((kind, index) =>
+      kind === "S"
+        ? { ...node(scenes++), index: index + 1 }
+        : {
+            index: index + 1,
+            type: "combat",
+            title: `Fight ${index + 1}`,
+            setup: "Foes block the road.",
+            tier: "soldier",
+          },
+    ),
+  };
+};
 
 // The Engine's image endpoints, shared by every harness. A paint can be held, and a named paint can fail.
 const engine = { paints: [], uploads: [], held: null, failing: new Set(), noImages: false };
@@ -562,6 +598,133 @@ try {
     } finally {
       Date.now = realNow;
     }
+  });
+  await test("pre-forge designs each fight just before the scene that follows it, then the last fight", async () => {
+    const withFights = {
+      ...plan(1, 2),
+      nodes: [
+        node(0),
+        { index: 2, type: "combat", title: "Mill ambush", setup: "Bandits wait at the mill.", tier: "soldier" },
+        { ...node(1), index: 3 },
+        { index: 4, type: "combat", title: "Harbor brawl", setup: "Dockhands block the pier.", tier: "soldier" },
+      ],
+    };
+    const host = await harness({ story: { preforge: "story" }, images: { enabled: false }, chapters: [withFights] });
+    host.responses.push(beat("First", []), guide("Bandit"), beat("Second", []), guide("Dockhand"));
+    assert.equal((await host.post("/preforge/start", { runId, chapter: 1 })).allowed, true);
+    await settle(host);
+    assert.equal(host.responses.length, 0, "two scenes and two fights were written");
+    assert.equal(host.data(`${runId}:combat:1:0`).enemy, "Bandit", "the first fight comes after the first scene");
+    assert.equal(host.data(`${runId}:combat:1:1`).enemy, "Dockhand", "the last fight follows the last scene");
+    assert.ok(host.data(`${runId}:beat:1:1`).segments.length);
+    assert.ok(
+      !host.warnings.some((warning) => warning.includes("pre-forge chain stopped")),
+      JSON.stringify(host.warnings),
+    );
+    const before = host.modelCalls.length;
+    assert.equal((await host.post("/combat-guide", { runId, chapter: 1, combatIndex: 0 })).cached, true);
+    assert.equal(host.modelCalls.length, before, "opening a fight pre-forge designed costs no model call");
+  });
+
+  // Each fight design and the scene after them re-read the run and pre-forge state first.
+  for (const [label, stop] of [
+    ["pre-forge Cancel", (host) => host.post("/preforge/cancel", { runId, chapter: 1 })],
+    ["switching to Off", (host) => host.setRun((run) => (run.story = { preforge: "off" }))],
+  ]) {
+    await test(`${label} between two fight designs stops before the next paid call`, async () => {
+      const host = await harness({
+        story: { preforge: "story" },
+        images: { enabled: false },
+        chapters: [layout("SCCS")],
+      });
+      host.responses.push(beat("First", []), guide("Bandit"), guide("Dockhand"), beat("Second", []));
+      const design = host.pauseModelCall(2);
+      await host.post("/preforge/start", { runId, chapter: 1 });
+      await waitFor(design.entered, "the first fight design");
+      await stop(host);
+      design.release();
+      await settle(host);
+      assert.equal(host.modelCalls.length, 2, "neither the second fight nor the next scene is paid for");
+      assert.equal(host.data(`${runId}:combat:1:0`).enemy, "Bandit", "the design already running is kept");
+      assert.equal(host.data(`${runId}:combat:1:1`), undefined);
+      assert.equal(host.data(`${runId}:beat:1:1`), undefined);
+      assert.equal((await host.status()).running, false);
+      // A stop is a plain return, not a failure.
+      assert.ok(!host.warnings.some((warning) => warning.includes("pre-forge chain")), JSON.stringify(host.warnings));
+    });
+  }
+
+  await test("a gap of several fights keeps the chain's heartbeat fresh past the 20-minute dedupe ceiling", async () => {
+    const realNow = Date.now;
+    let offset = 0;
+    Date.now = () => realNow() + offset;
+    try {
+      const host = await harness({
+        story: { preforge: "story" },
+        images: { enabled: false },
+        chapters: [layout("SCCCS")],
+      });
+      host.responses.push(beat("First", []), guide("Bandit"), guide("Dockhand"), guide("Smuggler"), beat("Second", []));
+      let held = host.pauseModelCall(2);
+      await host.post("/preforge/start", { runId, chapter: 1 });
+      await waitFor(held.entered, "the first fight design");
+      offset += 15 * 60_000;
+      // Every design takes 15 minutes: only a heartbeat per fight keeps the chain inside the ceiling.
+      for (const call of [3, 4]) {
+        const next = host.pauseModelCall(call);
+        held.release();
+        await waitFor(next.entered, `fight design ${call - 1}`);
+        held = next;
+        offset += 15 * 60_000;
+        assert.equal((await host.status()).running, true, `${(call - 1) * 15} minutes into one gap`);
+        await host.post("/preforge/retry", { runId, chapter: 1 });
+        await settle(host);
+        assert.equal(host.modelCalls.length, call, "Retry joins the running chain");
+      }
+      held.release();
+      await settle(host);
+      assert.equal(host.modelCalls.length, 5);
+      assert.equal((await host.status()).done, 2);
+      assert.equal(host.data(`${runId}:combat:1:2`).enemy, "Smuggler");
+      assert.ok(!host.warnings.some((warning) => warning.includes("dedupe ceiling")), JSON.stringify(host.warnings));
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  await test("a played scene designs the fights before the next scene in the background, even with pre-forge Off", async () => {
+    const host = await harness({
+      story: { preforge: "off" },
+      images: { connectionId: "fixture-images", enemyArt: true },
+      chapters: [layout("SCS")],
+    });
+    host.responses.push(beat("First", []), guide("Bandit"));
+    const design = host.pauseModelCall(2);
+    let answered = false;
+    const opened = host.post("/beat", { runId, chapter: 1, storyIndex: 0 });
+    opened.then(() => (answered = true));
+    await waitFor(() => answered && design.entered(), "the scene's reply while its next fight is designed");
+    assert.equal((await opened).ok, true);
+    const ids = [...host.docs.keys()];
+    const session = host.data(sessionId);
+    design.release();
+    await settle(host);
+    assert.equal(host.data(`${runId}:combat:1:0`).enemy, "Bandit");
+    assert.deepEqual(
+      [...host.docs.keys()].filter((id) => !ids.includes(id)),
+      [`${runId}:combat:1:0`],
+      "only the fight is filed",
+    );
+    assert.deepEqual(host.data(sessionId), session, "designing ahead does not open the battle");
+    assert.deepEqual(engine.paints, ["Bandit"], "the freshly designed enemy is painted");
+    const before = host.modelCalls.length;
+    assert.equal((await host.post("/combat-guide", { runId, chapter: 1, combatIndex: 0 })).cached, true);
+    assert.equal(host.modelCalls.length, before, "opening the fight costs no model call");
+    host.responses.push(beat("Second", []));
+    assert.equal((await host.post("/beat", { runId, chapter: 1, storyIndex: 1 })).ok, true);
+    await settle(host);
+    assert.equal(host.modelCalls.length, before + 1, "the last scene has no new fight to design");
+    assert.deepEqual(engine.paints, ["Bandit"]);
   });
 } finally {
   globalThis.fetch = fetchBefore;

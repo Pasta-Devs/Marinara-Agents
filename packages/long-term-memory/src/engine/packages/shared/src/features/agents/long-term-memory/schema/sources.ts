@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { ltmInteropSourceSchema, ltmModeSchema, ltmNoteIdSchema, ltmScopeSchema } from "./primitives.js";
+import {
+  ltmInteropSourceSchema,
+  ltmModeSchema,
+  ltmNoteIdSchema,
+  ltmScopeSchema,
+  ltmSourceProvenanceSchema,
+} from "./primitives.js";
 import { ltmNoteSchema } from "./notes.js";
 import {
   ltmExtractionAccountingSchema,
@@ -62,6 +68,15 @@ export const ltmInteropPreviewSampleSchema = z.discriminatedUnion("status", [
     .strict(),
 ]);
 
+// A source note whose source no preview candidate matches any more. Only reported by an unfiltered first page.
+export const ltmInteropPreviewOutdatedSchema = z
+  .object({
+    noteId: ltmNoteIdSchema,
+    title: z.string().min(1).max(240),
+    provenance: ltmSourceProvenanceSchema,
+  })
+  .strict();
+
 export const ltmInteropPreviewResponseSchema = z
   .object({
     source: ltmInteropSourceSchema,
@@ -76,6 +91,7 @@ export const ltmInteropPreviewResponseSchema = z
         imported: z.number().int().min(0).max(1_000_000),
       })
       .strict(),
+    outdated: z.array(ltmInteropPreviewOutdatedSchema).max(1_000).optional(),
     truncated: z.boolean(),
     hasMore: z.boolean().optional(),
     nextCursor: z.string().max(2048).nullable().optional(),
@@ -194,6 +210,7 @@ export const ltmLorebookPreviewResponseSchema = z
     totals: ltmLorebookPreviewCountsSchema.extend({
       books: z.number().int().min(0).max(1_000_000),
     }),
+    outdated: z.array(ltmInteropPreviewOutdatedSchema).max(1_000).optional(),
     truncated: z.boolean(),
     hasMore: z.boolean().optional(),
     nextCursor: z.string().max(2048).nullable().optional(),
@@ -458,6 +475,7 @@ export const ltmImportSourceNotesResponseSchema = z
 export type LtmInteropPreviewRequest = z.infer<typeof ltmInteropPreviewRequestSchema>;
 export type LtmInteropPreviewSample = z.infer<typeof ltmInteropPreviewSampleSchema>;
 export type LtmInteropPreviewFreshness = z.infer<typeof ltmInteropPreviewFreshnessSchema>;
+export type LtmInteropPreviewOutdated = z.infer<typeof ltmInteropPreviewOutdatedSchema>;
 export type LtmInteropPreviewResponse = z.infer<typeof ltmInteropPreviewResponseSchema>;
 export type LtmLorebookPreviewRequest = z.infer<typeof ltmLorebookPreviewRequestSchema>;
 export type LtmLorebookPreviewEntry = z.infer<typeof ltmLorebookPreviewEntrySchema>;

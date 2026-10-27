@@ -7,6 +7,7 @@ import {
   type LtmSourceDetailsResponse,
   type LtmInteropPreviewRequest,
   type LtmInteropPreviewFreshness,
+  type LtmInteropPreviewOutdated,
   type LtmInteropPreviewResponse,
   type LtmLorebookPreviewRequest,
   type LtmLorebookPreviewResponse,
@@ -547,6 +548,10 @@ async function requestedChats(request: { sourceScope?: LtmScope; chatId?: string
   });
 }
 
+async function chatScopesById() {
+  return new Map((await getPackagePersistence().listChats()).map((chat) => [chat.id, resolveChatLtmScope(chat)]));
+}
+
 async function candidates(
   request: {
     source: "characters" | "lorebooks" | "chats" | "messages";
@@ -731,10 +736,12 @@ async function existingMatcher(storage: LongTermMemoryStorage) {
   const notes = await storage.listNotes(),
     byId = new Map(notes.map((note) => [note.id, note])),
     byProvenance = new Map<string, LtmNote>(),
-    pieceStarts = new Map<string, Set<string>>();
+    pieceStarts = new Map<string, Set<string>>(),
+    sourceNotes: Array<{ note: LtmNote; provenance: LtmSourceProvenance }> = [];
   for (const note of notes) {
     if (note.type !== "source") continue;
     const provenance = inferSourceProvenance(note);
+    if (provenance) sourceNotes.push({ note, provenance });
     if (provenance && !byProvenance.has(provenanceKey(provenance))) byProvenance.set(provenanceKey(provenance), note);
     if (provenance?.kind === "chat_transcript" && provenance.entryId)
       pieceStarts.set(provenance.sourceId, (pieceStarts.get(provenance.sourceId) ?? new Set()).add(provenance.entryId));
@@ -743,7 +750,55 @@ async function existingMatcher(storage: LongTermMemoryStorage) {
     [row.sourceNoteId, ...row.legacySourceNoteIds]
       .map((id) => byId.get(id))
       .find((note): note is LtmNote => Boolean(note)) ?? byProvenance.get(provenanceKey(row.provenance));
-  return Object.assign(match, { pieceStarts });
+  return Object.assign(match, { pieceStarts, sourceNotes });
+}
+
+const OUTDATED_NOTE_LIMIT = 1_000;
+const OUTDATED_PROVENANCE_KIND = {
+  characters: "character",
+  lorebooks: "lorebook",
+  chats: "chat_summary",
+  messages: "chat_transcript",
+} as const;
+
+/**
+ * Source notes of this source kind that no current candidate matches. `rows` must be the whole source, before
+ * mode, query and branch-sibling filters, so a note is only reported when its source is really gone. A lorebook or
+ * chat note without an entry id cannot be tied to one entry, so it is never reported. A chat note is judged by its
+ * chat's current scope, the one `candidates` walks by, and by its own scope once the chat itself is gone.
+ * ponytail: lists at most OUTDATED_NOTE_LIMIT notes; a vault with more gone sources shows the rest after removals.
+ */
+function outdatedSourceNotes(
+  source: keyof typeof OUTDATED_PROVENANCE_KIND,
+  rows: Candidate[],
+  matchExisting: Awaited<ReturnType<typeof existingMatcher>>,
+  sourceScope: LtmScope | undefined,
+  chatScopes: Map<string, LtmScope>,
+): LtmInteropPreviewOutdated[] {
+  const matchedIds = new Set<string>(),
+    matchedKeys = new Set<string>();
+  for (const row of rows) {
+    const note = matchExisting(row);
+    if (note) matchedIds.add(note.id);
+    matchedKeys.add(provenanceKey(row.provenance));
+  }
+  return matchExisting.sourceNotes
+    .filter(
+      ({ note, provenance }) =>
+        provenance.kind === OUTDATED_PROVENANCE_KIND[source] &&
+        (provenance.kind === "character" || provenance.entryId) &&
+        !matchedIds.has(note.id) &&
+        !matchedKeys.has(provenanceKey(provenance)) &&
+        (!isChatSource(provenance.kind) ||
+          matchesChatSummaryScope(chatScopes.get(provenance.sourceId) ?? note.scope, sourceScope)),
+    )
+    .map(({ note, provenance }) => ({
+      noteId: note.id,
+      title: (note.title || provenance.sourceId).slice(0, 240),
+      provenance,
+    }))
+    .sort((left, right) => (left.title < right.title ? -1 : left.title > right.title ? 1 : 0))
+    .slice(0, OUTDATED_NOTE_LIMIT);
 }
 
 function previewFreshness(
@@ -825,22 +880,32 @@ export async function previewPackageInterop(
 ): Promise<LtmInteropPreviewResponse> {
   const sourceScope = requestedSourceScope(request);
   const matchExisting = await existingMatcher(new LongTermMemoryStorage(root));
-  const resolved = resolvePreviewCandidates(
-    (
-      await candidates(
-        { ...request, sourceScope, includeOutOfScope: sourceScope !== undefined },
-        undefined,
-        matchExisting.pieceStarts,
-      )
-    ).filter((row) => candidateVisibleInScope(row, sourceScope)),
-    matchExisting,
-  );
+  const candidateRequest = { ...request, sourceScope, includeOutOfScope: sourceScope !== undefined },
+    found = await candidates(candidateRequest, undefined, matchExisting.pieceStarts),
+    resolved = resolvePreviewCandidates(
+      found.filter((row) => candidateVisibleInScope(row, sourceScope)),
+      matchExisting,
+    );
   // Identical branch pieces are already merged, so a branch keeps the pieces its chat contributed to.
   const { branchChatId } = request;
   const rows =
     request.source === "messages" && branchChatId
       ? resolved.filter((row) => row.branchChatIds?.includes(branchChatId))
       : resolved;
+  // Only an unfiltered first page has seen the whole source, so only it can say which notes lost theirs.
+  const outdated =
+    request.cursor || request.query
+      ? undefined
+      : outdatedSourceNotes(
+          request.source,
+          // ponytail: a mode filter reads the source a second time; one unfiltered walk would halve a messages preview.
+          request.mode
+            ? await candidates({ ...candidateRequest, mode: undefined }, undefined, matchExisting.pieceStarts)
+            : found,
+          matchExisting,
+          sourceScope,
+          isChatSource(OUTDATED_PROVENANCE_KIND[request.source]) ? await chatScopesById() : new Map(),
+        );
   const page = previewPage(rows, request, request.source, (row) => row.previewOrder ?? row.sourceId);
   // ponytail: host resource APIs list complete source records; only this page gets
   // rendered previews and freshness hashes. Host-side cursors can replace the scan later.
@@ -853,6 +918,7 @@ export async function previewPackageInterop(
     importedCount: samples.filter((item) => item.status === "imported").length,
     samples,
     totals: { matches: rows.length, ready: rows.length - imported, imported },
+    ...(outdated?.length ? { outdated } : {}),
     truncated: page.hasMore,
     hasMore: page.hasMore,
     nextCursor: page.nextCursor,
@@ -865,7 +931,8 @@ export async function previewPackageLorebooks(
 ): Promise<LtmLorebookPreviewResponse> {
   const sourceScope = requestedSourceScope(request);
   const matchExisting = await existingMatcher(new LongTermMemoryStorage(root));
-  const matchingBooks = normalizeLorebooks(await getPackageResources().listLorebooks())
+  const allBooks = normalizeLorebooks(await getPackageResources().listLorebooks());
+  const matchingBooks = allBooks
     .map((book) => {
       const bookMatches = matchesQuery(
         {
@@ -964,10 +1031,21 @@ export async function previewPackageLorebooks(
     }),
     { entries: 0, candidates: 0, pending: 0, imported: 0 },
   );
+  const outdated =
+    request.cursor || request.query
+      ? undefined
+      : outdatedSourceNotes(
+          "lorebooks",
+          allBooks.flatMap((book) => book.candidates),
+          matchExisting,
+          sourceScope,
+          new Map(),
+        );
   return {
     counts: { books: books.length, ...counts(books) },
     books,
     totals: { books: matchingBooks.length, ...totals },
+    ...(outdated?.length ? { outdated } : {}),
     truncated: page.hasMore,
     hasMore: page.hasMore,
     nextCursor: page.nextCursor,

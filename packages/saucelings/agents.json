@@ -1,0 +1,22 @@
+[
+  {
+    "id": "saucelings",
+    "name": "Saucelings",
+    "description": "A Tamagotchi-style pet in Home: pick a character to look after an egg, let their personality drive their care schedule, cover the gaps they miss, watch its sauce temperament shift, retire elders to a Menagerie, and let the caretaker find eggs of their own invention while you chat.",
+    "author": "Pasta Devs",
+    "phase": "pre_generation",
+    "enabledByDefault": false,
+    "category": "misc",
+    "runtimeDisabled": true,
+    "libraryHidden": true,
+    "modeAllowlist": [
+      "conversation",
+      "roleplay",
+      "game"
+    ],
+    "defaultTools": [],
+    "defaultSettings": {},
+    "defaultPromptTemplate": "",
+    "execution": "feature"
+  }
+]

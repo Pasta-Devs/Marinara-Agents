@@ -354,8 +354,9 @@ try {
   else globalThis.forgeStoryCancelEnglish = originalEnglish;
 }
 
-// Keep playing: leaving a forging main chapter keeps its request alive, and its settlement is reported, warmed
-// and pre-forged without disturbing the screen the player is on.
+// Keep playing: leaving a forging main chapter keeps its request alive, and its settlement is reported and
+// pre-forged without disturbing the screen the player is on. No fight is designed before the chapter opens:
+// pre-forge designs them beside its scenes (since 1.24.9).
 {
   const toasts = [],
     previousHost = globalThis.__MARINARA_HOST__,
@@ -380,7 +381,6 @@ try {
     op: chapterLabel,
   };
   const load = method("_loadChapterPlan", globals),
-    prewarm = method("_prewarmCombats", globals),
     settle = async () => {
       for (let turn = 0; turn < 20; turn += 1) await tick();
     };
@@ -416,9 +416,9 @@ try {
         this.checks += 1;
       },
       _loadChapterPlan: load,
+      // Removed in 1.24.9; kept as a probe that nothing still warms fights before a chapter opens.
       _prewarmCombats(...args) {
         prewarms.push(args);
-        return prewarm.apply(this, args);
       },
       _postJson(path, body) {
         const request = { path, body, ...deferred() };
@@ -463,11 +463,8 @@ try {
       await settle();
       assert.equal(host._plan, null, "the screen the player is on keeps its own plan");
       assert.equal(host._hudView, "home");
-      assert.deepEqual(prewarms, [[plan, 3, 7]]);
-      assert.deepEqual(posted("/combat-guide"), [
-        { runId: "keep-world", chapter: 3, combatIndex: 0, storyRevision: 7 },
-        { runId: "keep-world", chapter: 3, combatIndex: 1, storyRevision: 7 },
-      ]);
+      assert.deepEqual(prewarms, [], "fights are designed by pre-forge, not before the chapter opens");
+      assert.deepEqual(posted("/combat-guide"), []);
       assert.deepEqual(posted("/preforge/start"), [{ runId: "keep-world", chapter: 3, storyRevision: 7 }]);
       assert.deepEqual(toasts, [["success", "Chapter Three is ready."]]);
       assert.equal(host._forgeAway.size, 0);
@@ -475,22 +472,19 @@ try {
       assert.equal(host._forgeStoryRevision || 0, 0, "nothing was cancelled");
       assert.equal(request.body.chapter, 3);
     }
-    // 2. Keep playing while the accepted plan warms its fights: one warm-up, one pre-forge, one notice.
+    // 2. A plan that lands while the player waits opens at once: no fight is designed first.
     {
       reset();
-      const { host, requests, prewarms, posted, answer } = world({ guides: "hold" });
+      const { host, prewarms, posted, answer } = world({ guides: "hold" });
       host._loadChapterPlan();
       const plan = { title: "Three", combats: 1, nodes: [] };
       answer(0, plan);
       await settle();
-      assert.equal(prewarms.length, 1, "the foreground load started warming");
-      stepAwayFromForgeChapter(host);
-      requests.find((request) => request.path === "/combat-guide").resolve({ ok: true });
-      await settle();
-      assert.equal(prewarms.length, 1);
-      assert.equal(host._plan, null);
-      assert.deepEqual(posted("/preforge/start"), [{ runId: "keep-world", chapter: 3, storyRevision: 7 }]);
-      assert.deepEqual(toasts, [["success", "Chapter Three is ready."]]);
+      assert.equal(host._plan, plan, "the chapter opens without waiting for its fight");
+      assert.deepEqual(prewarms, []);
+      assert.deepEqual(posted("/combat-guide"), []);
+      assert.equal(host.checks, 1, "pre-forge is asked to write ahead, fights included");
+      assert.deepEqual(toasts, []);
     }
     // 3 and 4. Leave chapter 3, open chapter 1 (and leave it too): each settles for its own chapter.
     for (const leaveBoth of [false, true]) {
@@ -506,22 +500,11 @@ try {
       await settle();
       assert.equal(host._planChapter, 1, "the chapter on screen is untouched");
       assert.equal(host._plan, null);
-      assert.deepEqual(posted("/combat-guide")[0].chapter, 3);
+      assert.deepEqual(posted("/combat-guide"), []);
       answer(1, one);
       await settle();
       assert.equal(host._plan, leaveBoth ? null : one, "chapter 1 opens normally unless it was left too");
-      assert.deepEqual(
-        prewarms.map(([plan, chapter]) => [plan.title, chapter]),
-        leaveBoth
-          ? [
-              ["Three", 3],
-              ["One", 1],
-            ]
-          : [
-              ["Three", 3],
-              ["One", undefined],
-            ],
-      );
+      assert.deepEqual(prewarms, []);
       assert.deepEqual(
         posted("/preforge/start").map((body) => body.chapter),
         leaveBoth ? [3, 1] : [3],
@@ -553,7 +536,7 @@ try {
       await settle();
       assert.equal(host._plan, plan);
       assert.equal(host.adopted, 1);
-      assert.equal(prewarms.length, 1);
+      assert.equal(prewarms.length, 0);
       assert.equal(host.checks, 1);
       assert.deepEqual(toasts, []);
       assert.equal(host._forgeAway.size, 0);
@@ -580,7 +563,7 @@ try {
       }
       assert.equal(host._plan, plan, `order ${order}`);
       assert.equal(host.adopted, 1, `order ${order}`);
-      assert.equal(prewarms.length, 1, `order ${order}`);
+      assert.equal(prewarms.length, 0, `order ${order}`);
       assert.equal(host.checks, 1, `order ${order}`);
       assert.deepEqual(toasts, []);
       assert.equal(host._forgeAway.size, 0);
@@ -598,7 +581,7 @@ try {
       answer(1, plan);
       await settle();
       assert.equal(host._plan, null);
-      assert.equal(prewarms.length, 1);
+      assert.equal(prewarms.length, 0);
       assert.deepEqual(toasts, [["success", "Chapter Three is ready."]]);
     }
     // 6. Cancel elsewhere still stops the chapter and says so; Cancel on its own reopened loader is quiet.
@@ -697,34 +680,24 @@ try {
       assert.equal(host._preforgeAsked.size, 0);
       assert.deepEqual(toasts, [["success", "Chapter Three is ready."]]);
     }
-    // No ready notice when the player already opened the chapter while its fights were warming.
+    // The ready notice is shown once when the chapter lands while away; opening it afterwards adds none.
     {
       reset();
-      const { host, requests, answer, open } = world({ guides: "hold" });
+      const { host, posted, answer, open } = world({ guides: "hold" });
       host._loadChapterPlan();
       stepAwayFromForgeChapter(host);
       const plan = { title: "Three", combats: 1, nodes: [] };
       answer(0, plan);
       await settle();
+      assert.deepEqual(toasts, [["success", "Chapter Three is ready."]]);
       open(3);
       answer(1, plan);
       await settle();
-      for (const request of requests.filter((item) => item.path === "/combat-guide")) request.resolve({ ok: true });
-      await settle();
       assert.equal(host._plan, plan);
-      assert.deepEqual(toasts, []);
+      assert.deepEqual(toasts, [["success", "Chapter Three is ready."]]);
+      assert.deepEqual(posted("/combat-guide"), []);
     }
-    // 9. Warming a given chapter pins its chapter and story revision; the foreground call is unchanged.
-    {
-      const { host, posted } = world({ chapter: 2 });
-      await host._prewarmCombats({ combats: 1 }, 4, 7);
-      await host._prewarmCombats({ combats: 1 });
-      assert.deepEqual(posted("/combat-guide"), [
-        { runId: "keep-world", chapter: 4, combatIndex: 0, storyRevision: 7 },
-        { runId: "keep-world", chapter: 2, combatIndex: 0 },
-      ]);
-    }
-    // 10. The portrait pass does not reopen a chapter loader the player left.
+    // 9. The portrait pass does not reopen a chapter loader the player left.
     {
       const startArt = method("_startArt");
       for (const escaped of [true, false]) {
@@ -806,7 +779,9 @@ try {
       assert.equal(shown.querySelector("[data-forge-keep-playing]"), null);
       assert.equal(shown.querySelector("[data-forge-keep-playing-hint]"), null);
     }
-    console.info("Keep playing: background settlement, single adoption, notices, warm-up and loader offer passed.");
+    console.info(
+      "Keep playing: background settlement, single adoption, notices, no fight warm-up and loader offer passed.",
+    );
   } finally {
     if (previousHost === undefined) delete globalThis.__MARINARA_HOST__;
     else globalThis.__MARINARA_HOST__ = previousHost;

@@ -1,3 +1,15 @@
+## 1.24.9 — 2026-10-27
+
+- A new chapter opens as soon as its plan is written. Its fights are no longer all designed before the chapter map appears: each fight is designed in the background right after the scene before it is written (by pre-forge or when you open it), so it is ready, with its enemy art, when you reach it.
+- Story memory summarizes only in the background, so writing a plan, scene, fight or chat no longer waits for it to catch up. Canon the saved overview does not cover yet is sent beside it as its summary, or as written for a fresh side story or chat. A summary already running on the same connection still finishes first; a separate summary connection avoids that.
+- Long chapters can be summarized again: summaries get at least 10k tokens of output room for thinking models (or the model's maximum, never below 8,192).
+
+## 1.24.8 — 2026-10-27
+
+- In character chats, Enter now adds a new line instead of sending. Only **Send** sends your message, so a stray Enter can no longer send it early.
+- Auto in story scenes no longer turns itself off when background work starts or finishes, such as expression portraits, scenes written ahead or portraits painting, or when you switch tabs and come back. The current line's voice no longer replays either.
+- While a story is written in the background, Formation changes stick: a picked unit, a drag or the bench scroll are no longer reset mid-move, saves never land out of order, and a battle waits for your last change. The chapter map no longer redraws every few seconds, and background writing no longer stalls other screens.
+
 ## 1.24.7 — 2026-10-27
 
 - New **Expression portraits** setting in World → Sources → Images, off by default. Story portraits then show anger, fear, sadness or joy line by line, marked in the same request that writes the scene. Four faces per look are painted in the background, only for characters who speak. A failed set is not retried on its own: turn the setting off and on to try once more.

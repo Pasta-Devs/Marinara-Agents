@@ -165,6 +165,11 @@ characters; when the selected chat also has summaries, it says that importing
 both can repeat memories in review. A chat with branches adds a Branch menu
 (this branch, each other branch, All branches); it filters the list to a
 branch's history, and the destination stays the whole chat.
+When the unsearched first page finds imported notes whose character, lorebook
+entry, chat summary or message piece no longer exists, a "Source gone (N)" group
+above the source tabs lists them. Each row opens the memory or removes it with
+its source (the usual delete confirmation); leaving a row alone keeps the
+memory and lists it again on the next preview. Searching hides the group.
 
 ### Settings and Chat Settings
 

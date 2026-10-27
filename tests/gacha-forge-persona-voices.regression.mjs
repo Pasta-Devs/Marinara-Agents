@@ -153,7 +153,9 @@ async function actualComposer(host) {
   let html = "",
     input;
   host._root = {
-    addEventListener() {},
+    addEventListener(name, callback) {
+      if (name === "click") this.click = callback;
+    },
     removeEventListener() {},
     querySelector(selector) {
       if (selector === ".root") return this;
@@ -181,15 +183,16 @@ async function actualComposer(host) {
   };
   return {
     canType: () => html.includes("data-chat-text") && !/data-chat-send disabled/.test(html),
-    enter(text) {
+    send(text) {
       assert.ok(html.includes("data-chat-text"), "native composer is available");
       input.value = text;
-      input.keydown({ key: "Enter", shiftKey: false, preventDefault() {} });
+      assert.equal(input.keydown, undefined, "Enter adds a line instead of sending");
+      host._root.click({ target: { closest: (selector) => (selector === "[data-chat-send]" ? {} : null) } });
     },
   };
 }
 
-test("native Vigor refresh keeps Send held through failure reconciliation, then Enter sends in order", async () => {
+test("native Vigor refresh keeps Send held through failure reconciliation, then Send sends in order", async () => {
   const fx = fixture();
   const { host, controller } = fx;
   let release;
@@ -227,7 +230,7 @@ test("native Vigor refresh keeps Send held through failure reconciliation, then 
     await settle();
     assert.equal(host._chatSending, "");
     assert.equal(composer.canType(), true);
-    composer.enter(second.text);
+    composer.send(second.text);
     await settle();
     assert.equal(sends, 2);
     assert.deepEqual(playerIds(host), [first.id, second.id]);

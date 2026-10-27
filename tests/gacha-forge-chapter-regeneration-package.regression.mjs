@@ -321,6 +321,8 @@ test("actual SDK reset drains an abort-ignoring model and never restores its lat
   let reset;
   try {
     f.docs.delete(`${chapterRunId}:beat:2:6`);
+    // Unsummarized canon is sent in full (1.24.9 never summarizes in front of a scene), so give it room.
+    f.transport.maxContext = 262144;
     f.transport.ignoreAbort = true;
     f.transport.started = started.resolve;
     f.transport.release = release.promise;

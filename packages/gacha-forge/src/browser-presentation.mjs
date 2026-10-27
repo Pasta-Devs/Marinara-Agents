@@ -363,6 +363,22 @@ export function syncForgeBrowserPresentation(host) {
   }
 }
 
+// Background work starting or ending updates only its chip. Redrawing the screen for it would restart a story
+// scene with Auto off, restart a fight, and drop a half-made Formation move.
+export function syncForgeBusyChip(host, key, html) {
+  if (host._busyChipKey === key) return;
+  const view = host._root.querySelector(".gf-stage")?.querySelector(":scope > .gf-view");
+  if (!view) return;
+  host._busyChipKey = key;
+  const chip = view.querySelector(":scope > [data-busy]");
+  const markup = key ? html() : "";
+  if (!markup) return void chip?.remove();
+  if (!chip) return void view.insertAdjacentHTML("beforeend", markup);
+  const next = document.createElement("div");
+  next.innerHTML = markup;
+  chip.replaceChildren(...next.firstElementChild.childNodes);
+}
+
 export function wireForgeBrowserFullscreen(host) {
   const root = host._root;
   if (!root.querySelector("[data-forge-browser-layout]")) {
