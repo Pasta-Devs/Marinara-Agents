@@ -14,6 +14,14 @@ const deferred = () => {
   const promise = new Promise((done) => (resolve = done));
   return { promise, resolve };
 };
+// Background work crosses the fixture's real local HTTP, so waits poll real time with a bound.
+async function until(check, label) {
+  for (let turn = 0; turn < 500; turn += 1) {
+    if (await check()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail(`timed out waiting for ${label}`);
+}
 
 async function fixture(options) {
   const f = await createChapterRuntime(options);
@@ -70,7 +78,18 @@ test("actual routes default to no proactive paid work and normalize the saved op
 
 test("actual generation uses current four-field canon and played event/story continuity, then appends once", async () => {
   const f = await fixture();
+  const summaries = deferred();
   try {
+    // Room for background summaries: the fixture's default 10k window leaves them too little output to run at
+    // all, so "the message never waits for summaries" would pass without any summary.
+    f.transport.maxContext = 32768;
+    // Every summary is held until the message is saved: the message must not queue behind one.
+    const answer = f.transport.reply;
+    f.transport.reply = async (body, transport) => {
+      if (String(body.messages?.[0]?.content).includes("Summarize only the supplied canonical story history"))
+        await summaries.promise;
+      return answer(body, transport);
+    };
     f.run().story.dailyUnitMessages = 1;
     // Completed event canon participates in ordinary current-chat memory; prefetched content must not.
     f.seed(`${runId}:chapter:event-1`, "chapter-plan", {
@@ -92,18 +111,41 @@ test("actual generation uses current four-field canon and played event/story con
     const originalIds = f.chatDoc().data.messages.map((row) => row.id);
     assert.equal((await f.due()).body.status, "scheduled");
     f.makeDue();
-    const reply = await f.due({ debugMode: true });
+    let answered = false;
+    const pending = f.due({ debugMode: true });
+    pending.then(
+      () => (answered = true),
+      () => (answered = true),
+    );
+    await until(() => answered, "the message while every summary is held");
+    const reply = await pending;
     assert.equal(reply.status, 200);
     assert.equal(reply.body.status, "sent", JSON.stringify(reply));
     const messages = f.calls.filter((call) => call.kind === "proactive-chat");
-    const summaries = f.calls.filter((call) => call.kind === "summary");
+    const paid = () => f.calls.filter((call) => call.kind !== "summary").length;
     assert.equal(messages.length, 1, "Exactly one routed proactive-message request for the reserved attempt");
     assert.equal(
-      summaries.length,
-      6,
-      "Existing automatic memory prepares three records and three incremental overviews",
+      f.calls.slice(0, f.calls.indexOf(messages[0])).filter((call) => call.kind === "summary").length,
+      0,
+      "The message never waits for memory summaries; unsummarized canon goes in as written",
     );
-    assert.equal(f.calls.length, 7, "Every paid-request scope is counted; no format repair or hidden retry");
+    assert.equal(paid(), 1, "Every paid-request scope is counted; no format repair or hidden retry");
+    const memory = async () => (await f.post("/story-memory/status")).body.memory;
+    assert.equal((await memory()).phase, "pending", "Memory catches up in the background, after the message");
+    await until(() => f.calls.some((call) => call.kind === "summary"), "a held background summary");
+    summaries.resolve();
+    await until(async () => !["pending", "stale"].includes((await memory()).phase), "background memory");
+    const settled = await memory();
+    assert.equal(settled.phase, "ready", JSON.stringify(settled));
+    assert.deepEqual(
+      f.docs
+        .get(`${runId}:summary:memory`)
+        .data.records.map((record) => record.kind)
+        .sort(),
+      ["chapter", "chat", "story-event"],
+      "The completed chapter, the played event and the closed DM session are summarized",
+    );
+    assert.equal(paid(), 1, "Summaries are the only other requests");
     assert.equal(f.errors.length, 0);
     assert.ok(f.resolved.some((request) => request.connectionId === f.run().connectionId));
     const prompt = JSON.stringify(messages[0].body.messages);
@@ -133,8 +175,9 @@ test("actual generation uses current four-field canon and played event/story con
     const opened = await f.post("/chat/open", { unitId, timeZone });
     assert.ok(opened.body.messages.some((row) => row.id === reply.body.said.id));
     assert.equal((await f.due()).body.status, "quota");
-    assert.equal(f.calls.length, 7);
+    assert.equal(paid(), 1);
   } finally {
+    summaries.resolve();
     await f.close();
   }
 });

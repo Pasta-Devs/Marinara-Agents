@@ -1904,6 +1904,36 @@
               "replace": "let forgeSame=!!this._chaptersData&&(!(r&&r.ok&&Array.isArray(r.chapters))||JSON.stringify(this._chaptersData)===JSON.stringify(r));r&&r.ok&&Array.isArray(r.chapters)?(this._chaptersData=r,this._chaptersFor=e+\"|\"+a,this._chaptersState=\"ready\"):this._chaptersState=\"error\",forgeSame||this._fillChapters(),"
             }
           ]
+        },
+        {
+          "version": "1.24.9",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.24.8\"",
+              "replace": "ds=\"1.24.9\""
+            },
+            {
+              "find": "var oy=[{version:null,changed:[\"In character chats, Enter now adds a new line. Only Send sends your message.\"],fixed:[\"Auto in story scenes stays on when something starts or finishes in the background, or when you switch tabs and come back.\",\"While a story is written in the background, Formation changes stick, and screens no longer stutter or redraw every few seconds.\"]},{version:\"1.24.7\"",
+              "replace": "var oy=[{version:null,changed:[\"A new chapter opens as soon as its plan is written. Each fight is designed in the background right after the scene before it, so it is ready when you reach it.\"],fixed:[\"Story memory summarizes only in the background, so writing no longer waits for it to catch up, and long chapters can be summarized again, with at least 10k tokens of room for thinking models.\"]},{version:\"1.24.8\",changed:[\"In character chats, Enter now adds a new line. Only Send sends your message.\"],fixed:[\"Auto in story scenes stays on when something starts or finishes in the background, or when you switch tabs and come back.\",\"While a story is written in the background, Formation changes stick, and screens no longer stutter or redraw every few seconds.\"]},{version:\"1.24.7\""
+            },
+            {
+              "find": "\"generation-failed\"),detail:String(i&&i.detail||\"\")})}).then(()=>{if(!(!n()||this._planState===\"error\"||!e))return this._prewarmCombats(e)}).then(()=>{if(n()){",
+              "replace": "\"generation-failed\"),detail:String(i&&i.detail||\"\")})}).then(()=>{if(n()){"
+            },
+            {
+              "find": "_prewarmCombats(e,forgeChapter,forgeVersion){let forgeStoryRevision=this._forgeStoryRevision||0,forgeStoryRunId=this._run?.runId;let a=qa(e);if(!a||!this._run)return Promise.resolve();let r=forgeChapter??this._planChapter,s=Promise.resolve();for(let o=0;o<a;o+=1){let n=o;s=s.then(()=>{if((this._forgeStoryRevision||0)!==forgeStoryRevision||this._run?.runId!==forgeStoryRunId)return;return this._postJson(\"/combat-guide\",{runId:this._run.runId,chapter:r,combatIndex:n,...Number.isSafeInteger(forgeVersion)?{storyRevision:forgeVersion}:{}})})}return s}_preforgeKey(){",
+              "replace": "_preforgeKey(){"
+            },
+            {
+              "find": "It is chapter one: its plan, its fights and its first scene.",
+              "replace": "It is chapter one: its plan and its first scene."
+            },
+            {
+              "find": "Writing it means the plan of chapter one, its fights and its first scene:",
+              "replace": "Writing it means the plan of chapter one and its first scene:"
+            }
+          ]
         }
       ]
     },
@@ -3424,6 +3454,24 @@
             {
               "find": "S=await Cr(p,u,b);",
               "replace": "S=await Cr(p,u,b,!0);"
+            }
+          ]
+        },
+        {
+          "version": "1.24.9",
+          "commits": [],
+          "edits": [
+            {
+              "find": "let w=await Yt(p,m,u);if(w.mode===\"off\"||w.cancelled||w.next<0||w.waitingChoice)return;let b=w.next,S=await Cr(p,u,b,!0);",
+              "replace": "let w=await Yt(p,m,u);if(w.mode===\"off\"||w.cancelled||w.waitingChoice)return;let forgeChainOn=async()=>{let e=gn.get(o);e&&(e.at=Date.now());let r=Ae((await be()).data,p),s=r&&await Yt(p,r,u);return!!s&&s.mode!==\"off\"&&!s.cancelled&&!s.waitingChoice},forgePlan=Number.isInteger(u)?await a.getById(n.id,f(p,u)):null;if(!await forgePreforgeFights({nodes:forgePlan&&forgePlan.data?tr(forgePlan.data):[],nextStory:w.next,design:async x=>await forgeChainOn()?forgeDesignFight(p,m,u,x):{ok:!1,error:\"stopped\"}}))return;if(w.next<0||!await forgeChainOn())return;let b=w.next,S=await Cr(p,u,b,!0);"
+            },
+            {
+              "find": "async function Cr(p,u,o,forgeQuiet=!1){",
+              "replace": "function forgeDesignFight(p,m,u,x){return Ph(p,m,u,x).then(g=>(g&&g.ok&&g.guide&&!g.cached&&rt(m,p,g.guide.formation||[],{place:l(g.guide.place)?{name:g.guide.place,tags:g.guide.placeTags}:null}).catch(()=>{}),g))}function forgeFightsAfter(p,u,o,S){return Promise.resolve(S).then(r=>(r&&r.ok&&Number.isInteger(u)&&An(async()=>{let m=Ae((await be()).data,p),k=await a.getById(n.id,f(p,u));m&&k&&k.data&&await forgePreforgeFights({nodes:tr(k.data),nextStory:o+1,design:x=>forgeDesignFight(p,m,u,x)})}).catch(()=>{}),r))}async function Cr(p,u,o,forgeQuiet=!1){"
+            },
+            {
+              "find": "u.background===!0?An(()=>Cr(o,i,g)):Cr(o,i,g)",
+              "replace": "forgeFightsAfter(o,i,g,u.background===!0?An(()=>Cr(o,i,g)):Cr(o,i,g))"
             }
           ]
         }

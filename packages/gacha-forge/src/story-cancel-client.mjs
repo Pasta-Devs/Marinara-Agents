@@ -139,24 +139,23 @@ export function forgeChapterSettled(
     return true;
   }
   const version = host._forgeChapterPlanVersions?.get(response.plan);
-  void Promise.resolve(origin.warmed || host._prewarmCombats(response.plan, origin.chapter, version))
-    .catch(() => {})
-    .then(() => {
-      if (host._run?.runId !== origin.runId) return;
-      const asked = `${origin.runId}:${origin.chapter}`;
-      if ((host._forgeStoryRevision || 0) === origin.revision && !host._preforgeAsked?.has(asked)) {
-        host._preforgeAsked?.add(asked);
-        const body = { runId: origin.runId, chapter: origin.chapter };
-        if (Number.isSafeInteger(version)) body.storyRevision = version;
-        // Opening the chapter later asks again when this start did not go through.
-        void Promise.resolve(host._postJson("/preforge/start", body)).then(
-          (started) => started?.ok || host._preforgeAsked?.delete(asked),
-          () => host._preforgeAsked?.delete(asked),
-        );
-      }
-      if (host._planChapter === origin.chapter && host._plan && !host._bondUnit) return; // already open
-      say("success", forgeStoryCancelEnglish.chapterReady);
-    });
+  // Fights are designed with the scenes written ahead, so the chapter is ready as soon as its plan is.
+  void Promise.resolve().then(() => {
+    if (host._run?.runId !== origin.runId) return;
+    const asked = `${origin.runId}:${origin.chapter}`;
+    if ((host._forgeStoryRevision || 0) === origin.revision && !host._preforgeAsked?.has(asked)) {
+      host._preforgeAsked?.add(asked);
+      const body = { runId: origin.runId, chapter: origin.chapter };
+      if (Number.isSafeInteger(version)) body.storyRevision = version;
+      // Opening the chapter later asks again when this start did not go through.
+      void Promise.resolve(host._postJson("/preforge/start", body)).then(
+        (started) => started?.ok || host._preforgeAsked?.delete(asked),
+        () => host._preforgeAsked?.delete(asked),
+      );
+    }
+    if (host._planChapter === origin.chapter && host._plan && !host._bondUnit) return; // already open
+    say("success", forgeStoryCancelEnglish.chapterReady);
+  });
   return true;
 }
 
