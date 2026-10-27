@@ -1837,7 +1837,7 @@
             },
             {
               "find": "var oy=[{version:null,new:[\"Expression portraits: turn them on in World → Sources → Images. Story portraits then show anger, fear, sadness or joy line by line, painted in the background for characters who speak.\"],fixed:[\"Your persona keeps its own voice even when another character shares part of its name, and turning Voice other characters off and on again no longer asks to pay again for combat lines that were never made.\"]},{version:\"1.24.6\"",
-              "replace": "var oy=[{version:null,fixed:[\"Auto in story scenes keeps playing when something starts or finishes in the background, or when you switch tabs and come back.\",\"While a story is written in the background, Formation changes stick, and screens no longer stutter or redraw every few seconds.\"]},{version:\"1.24.7\",new:[\"Expression portraits: turn them on in World → Sources → Images. Story portraits then show anger, fear, sadness or joy line by line, painted in the background for characters who speak.\"],fixed:[\"Your persona keeps its own voice even when another character shares part of its name, and turning Voice other characters off and on again no longer asks to pay again for combat lines that were never made.\"]},{version:\"1.24.6\""
+              "replace": "var oy=[{version:null,changed:[\"In character chats, Enter now adds a new line. Only Send sends your message.\"],fixed:[\"Auto in story scenes keeps playing when something starts or finishes in the background, or when you switch tabs and come back.\",\"While a story is written in the background, Formation changes stick, and screens no longer stutter or redraw every few seconds.\"]},{version:\"1.24.7\",new:[\"Expression portraits: turn them on in World → Sources → Images. Story portraits then show anger, fear, sadness or joy line by line, painted in the background for characters who speak.\"],fixed:[\"Your persona keeps its own voice even when another character shares part of its name, and turning Voice other characters off and on again no longer asks to pay again for combat lines that were never made.\"]},{version:\"1.24.6\""
             },
             {
               "find": "\"|busy:\"+Fm(s);if(this._syncBar(),_a(this._root,this._contextTokens,this._warnTokens),this._drawnView===\"browser\"&&this._renderKey===o)return;",
@@ -1886,6 +1886,10 @@
             {
               "find": "this._stepRefreshing=true;\nZe(`${Ia}/state?timeZone=${encodeURIComponent(forgeUserTimeZone())}`)",
               "replace": "this._stepRefreshing=true;\nZe(`${Ia}/state?timeZone=${encodeURIComponent(forgeUserTimeZone())}&light=1`)"
+            },
+            {
+              "find": "b.addEventListener(\"input\",()=>i&&i(b.value)),b.addEventListener(\"keydown\",w=>{w.key!==\"Enter\"||w.shiftKey||(w.preventDefault(),r&&r(b.value))}),",
+              "replace": "b.addEventListener(\"input\",()=>i&&i(b.value)),"
             }
           ]
         }

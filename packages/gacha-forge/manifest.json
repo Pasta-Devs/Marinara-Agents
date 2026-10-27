@@ -299,8 +299,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "aa3f4cf3e22299a220522af6a369bf381bbfd6c60a8570481c30878b45cf6a4f",
-      "bytes": 1897471
+      "sha256": "24ba593d9ab55dc609bc0dec4c5707b6b32dad37d1113cd6b553cc81dc526965",
+      "bytes": 1897461
     },
     {
       "path": "farm-asc.webp",
