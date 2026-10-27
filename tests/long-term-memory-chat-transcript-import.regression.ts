@@ -100,6 +100,24 @@ async function main() {
       .join(""),
     `user: ${"y".repeat(50_000)}`,
   );
+  const short = ["s1", "s2", "s3"].map((id) => message("c", id, "user", id));
+  assert.deepEqual(
+    transcriptPieces(short, speaker, (id) => id === "s3").map(({ entryId, first, last }) => ({ entryId, first, last })),
+    [
+      { entryId: "s1", first: 1, last: 2 },
+      { entryId: "s3", first: 3, last: 3 },
+    ],
+    "an imported piece's first message starts its piece again",
+  );
+  short[1] = message("c", "s2", "user", "s2", { hiddenFromAI: true });
+  assert.deepEqual(
+    transcriptPieces(short, speaker, (id) => id === "s2").map(({ entryId, first, last }) => ({ entryId, first, last })),
+    [
+      { entryId: "s1", first: 1, last: 1 },
+      { entryId: "s2", first: 3, last: 3 },
+    ],
+    "a hidden first message still names the piece its next visible message starts",
+  );
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-chat-transcript-"));
   const root = join(dataDir, "long-term-memory");
@@ -269,11 +287,47 @@ async function main() {
         [{ sourceId: "chat-roleplay:messages:r1", status: "imported", freshness: "source_updated" }],
         "a message that fits the last piece marks only that piece updated",
       );
+
+      roleplayMessages.splice(4);
+      roleplayMessages.push(message(roleplayChat.id, "r5", "user", "z".repeat(23_900)));
+      roleplayMessages.push(message(roleplayChat.id, "r6", "assistant", "The vault closes."));
+      await importPackageInterop(
+        {
+          source: "messages",
+          chatId: roleplayChat.id,
+          sourceIds: ["chat-roleplay:messages:r5"],
+          destinationScope: { characterIds: ["character-kirei"] },
+          extract: true,
+          limit: 100,
+        },
+        root,
+        new AbortController().signal,
+      );
+      roleplayMessages.splice(1, 1);
+      const deleted = await previewPackageInterop({ source: "messages", chatId: roleplayChat.id, limit: 100 }, root);
+      assert.deepEqual(
+        deleted.samples.map(({ sourceId, status, freshness }) => ({ sourceId, status, freshness })),
+        [
+          { sourceId: "chat-roleplay:messages:r1", status: "imported", freshness: "source_updated" },
+          { sourceId: "chat-roleplay:messages:r5", status: "imported", freshness: "source_updated" },
+        ],
+        "deleting an earlier message keeps a later imported piece's cut, renumbered, instead of pulling it into the earlier one",
+      );
+      roleplayMessages[3] = message(roleplayChat.id, "r5", "user", "z".repeat(23_900), { hiddenFromAI: true });
+      const hidden = await previewPackageInterop({ source: "messages", chatId: roleplayChat.id, limit: 100 }, root);
+      assert.deepEqual(
+        hidden.samples.map(({ sourceId, status, freshness }) => ({ sourceId, status, freshness })),
+        [
+          { sourceId: "chat-roleplay:messages:r1", status: "imported", freshness: "source_updated" },
+          { sourceId: "chat-roleplay:messages:r5", status: "imported", freshness: "source_updated" },
+        ],
+        "hiding an imported piece's first message keeps the piece under its name",
+      );
     },
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );
   process.stdout.write(
-    "Long-Term Memory chat transcript import regression: pieces, speakers, scope, mode, branches, and append freshness ok\n",
+    "Long-Term Memory chat transcript import regression: pieces, speakers, scope, mode, branches, append freshness, and kept piece cuts ok\n",
   );
 }
 

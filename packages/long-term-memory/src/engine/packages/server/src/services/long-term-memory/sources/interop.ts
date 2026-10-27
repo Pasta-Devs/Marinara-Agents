@@ -156,11 +156,22 @@ type TranscriptPiece = { entryId: string; first: number; last: number; content: 
 // A piece is named by its first message, so new messages only grow or follow the last piece and earlier pieces keep
 // their ids and text. Numbers count every message, hidden ones too, so they match the chat's message numbers. Memories
 // reach every character, so like the Engine's own memory this reads the public content, never agentContent with its
-// whispers, and skips messages hidden from the AI or from some characters.
-export function transcriptPieces(messages: TranscriptMessage[], speaker: (message: TranscriptMessage) => string) {
+// whispers, and skips messages hidden from the AI or from some characters. isStart names the first messages of pieces
+// already imported: each starts its piece again, so an edit or deletion before it can't re-cut and orphan it. One now
+// hidden still names the piece its next visible message starts.
+export function transcriptPieces(
+  messages: TranscriptMessage[],
+  speaker: (message: TranscriptMessage) => string,
+  isStart: (messageId: string) => boolean = () => false,
+) {
   const pieces: TranscriptPiece[] = [];
-  let current: TranscriptPiece | undefined;
+  let current: TranscriptPiece | undefined, start: string | undefined;
   for (const [index, message] of messages.entries()) {
+    if (isStart(message.id)) {
+      if (current) pieces.push(current);
+      current = undefined;
+      start = message.id;
+    }
     const extra = object(message.extra);
     if (extra.hiddenFromAI === true || extra.commandOnly === true) continue;
     if (Array.isArray(extra.hiddenFromAICharacterIds) && extra.hiddenFromAICharacterIds.length) continue;
@@ -168,18 +179,20 @@ export function transcriptPieces(messages: TranscriptMessage[], speaker: (messag
     if (!body) continue;
     const number = index + 1,
       line = `${speaker(message)}: ${body}`;
-    if (current && current.content.length + 2 + line.length <= 24_000) {
+    if (!start && current && current.content.length + 2 + line.length <= 24_000) {
       current.content += `\n\n${line}`;
       current.last = number;
       continue;
     }
     if (current) pieces.push(current);
     current = undefined;
-    if (line.length <= 24_000) current = { entryId: message.id, first: number, last: number, content: line };
+    const entryId = start ?? message.id;
+    start = undefined;
+    if (line.length <= 24_000) current = { entryId, first: number, last: number, content: line };
     else
       for (const [part, content] of chunks(line).entries())
         pieces.push({
-          entryId: part ? `${message.id}:part:${part + 1}` : message.id,
+          entryId: part ? `${entryId}:part:${part + 1}` : entryId,
           first: number,
           last: number,
           content,
@@ -537,6 +550,7 @@ async function candidates(
     includeOutOfScope?: boolean;
   },
   selected?: Set<string>,
+  pieceStarts?: Map<string, Set<string>>,
 ) {
   const result: Candidate[] = [];
   if (request.source === "characters")
@@ -639,7 +653,12 @@ async function candidates(
               : message.role === "narrator"
                 ? "Narrator"
                 : "System";
-      for (const piece of transcriptPieces(await getPackagePersistence().listMessages(chat.id), speaker)) {
+      const starts = pieceStarts?.get(chat.id);
+      for (const piece of transcriptPieces(
+        await getPackagePersistence().listMessages(chat.id),
+        speaker,
+        (messageId) => starts?.has(boundedId(messageId, "message")) === true,
+      )) {
         const entryId = boundedId(piece.entryId, "message"),
           provenance = { kind: "chat_transcript" as const, sourceId: chat.id, entryId },
           range = piece.first === piece.last ? `${piece.first}` : `${piece.first}-${piece.last}`,
@@ -703,16 +722,20 @@ function provenanceKey(provenance: LtmSourceProvenance) {
 async function existingMatcher(storage: LongTermMemoryStorage) {
   const notes = await storage.listNotes(),
     byId = new Map(notes.map((note) => [note.id, note])),
-    byProvenance = new Map<string, LtmNote>();
+    byProvenance = new Map<string, LtmNote>(),
+    pieceStarts = new Map<string, Set<string>>();
   for (const note of notes) {
     if (note.type !== "source") continue;
     const provenance = inferSourceProvenance(note);
     if (provenance && !byProvenance.has(provenanceKey(provenance))) byProvenance.set(provenanceKey(provenance), note);
+    if (provenance?.kind === "chat_transcript" && provenance.entryId)
+      pieceStarts.set(provenance.sourceId, (pieceStarts.get(provenance.sourceId) ?? new Set()).add(provenance.entryId));
   }
-  return (row: Candidate) =>
+  const match = (row: Candidate) =>
     [row.sourceNoteId, ...row.legacySourceNoteIds]
       .map((id) => byId.get(id))
       .find((note): note is LtmNote => Boolean(note)) ?? byProvenance.get(provenanceKey(row.provenance));
+  return Object.assign(match, { pieceStarts });
 }
 
 function previewFreshness(
@@ -789,9 +812,13 @@ export async function previewPackageInterop(
   const sourceScope = requestedSourceScope(request);
   const matchExisting = await existingMatcher(new LongTermMemoryStorage(root));
   const rows = resolvePreviewCandidates(
-    (await candidates({ ...request, sourceScope, includeOutOfScope: sourceScope !== undefined })).filter((row) =>
-      candidateVisibleInScope(row, sourceScope),
-    ),
+    (
+      await candidates(
+        { ...request, sourceScope, includeOutOfScope: sourceScope !== undefined },
+        undefined,
+        matchExisting.pieceStarts,
+      )
+    ).filter((row) => candidateVisibleInScope(row, sourceScope)),
     matchExisting,
   );
   const page = previewPage(rows, request, request.source, (row) => row.previewOrder ?? row.sourceId);
@@ -932,6 +959,7 @@ export async function sourcePackageDetails(
   root: string,
 ): Promise<LtmSourceDetailsResponse> {
   const sourceScope = requestedSourceScope(request),
+    matchExisting = await existingMatcher(new LongTermMemoryStorage(root)),
     rows = await candidates(
       {
         source: request.source,
@@ -941,9 +969,8 @@ export async function sourcePackageDetails(
         includeOutOfScope: sourceScope !== undefined,
       },
       new Set(request.sourceIds),
+      matchExisting.pieceStarts,
     ),
-    storage = new LongTermMemoryStorage(root),
-    matchExisting = await existingMatcher(storage),
     details = rows.flatMap((row) => {
       const existing = matchExisting(row);
       return candidateVisibleInScope(row, sourceScope)
@@ -984,6 +1011,7 @@ export async function importPackageInterop(
     candidateRows = await candidates(
       { ...request, sourceScope, includeOutOfScope: sourceScope !== undefined },
       selected,
+      matchExisting.pieceStarts,
     ),
     visibleRows = candidateRows.filter((row) => candidateVisibleInScope(row, sourceScope)),
     resolvedIds = new Set(visibleRows.map((item) => item.sourceId)),
