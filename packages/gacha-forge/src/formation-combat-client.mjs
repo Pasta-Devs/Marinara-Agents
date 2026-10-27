@@ -111,29 +111,48 @@ export function waitForgeFormationSave(host, resume) {
   const pending = forgeFormationSaving(host);
   if (!pending) return false;
   if (host._formationSaveWait !== pending) {
+    const runId = host._run?.runId;
     host._formationSaveWait = pending;
     pending.then((saved) => {
-      host._formationSaveWait = null;
+      if (host._formationSaveWait === pending) host._formationSaveWait = null;
+      // A save from a world the player has since left never touches this one.
+      if (host._run?.runId !== runId) return;
       // Load whichever battle is open now. One the player backed out of is never loaded, so nothing is left
       // to release the farm lock that its load would have released.
       const waiting = host._hudView === "combat" && host._combatPhase === "loading";
       if (waiting && saved) return resume();
-      if (!host._battleLoading) host._farmBusy = false;
+      if (host._battleLoading) return;
+      host._farmBusy = false;
       if (!waiting) return;
-      // The edit was not saved, so the battle would use an older team. Formation shows the saved one instead.
-      host._formationBattleMode = true;
-      host._hudView = "formation";
+      // The edit was not saved, so the battle would use an older team. Show the saved team where it is picked.
+      if (host._combatNode?.tower) host._hudView = "tower";
+      else {
+        host._formationBattleMode = true;
+        host._hudView = "formation";
+      }
       host._renderBrowser();
     });
   }
   return true;
 }
 
-// Reopening Formation reads the team from the server too, so it waits for edits still being saved.
+// Reopening Formation reads the team from the server too, so it waits once for edits still being saved.
 export function waitForgeFormationLoad(host) {
   const pending = forgeFormationSaving(host);
-  pending?.then(() => host._formationState === "loading" && host._loadFormation());
-  return !!pending;
+  if (!pending) {
+    // A read that starts now makes any read still queued for an earlier save redundant.
+    host._formationLoadWait = null;
+    return false;
+  }
+  if (host._formationLoadWait !== pending) {
+    host._formationLoadWait = pending;
+    pending.then(() => {
+      if (host._formationLoadWait !== pending) return;
+      host._formationLoadWait = null;
+      if (host._formationState === "loading") host._loadFormation();
+    });
+  }
+  return true;
 }
 
 /** One sentence of what an ability does, with its real numbers. Plain text; escape before inserting. */

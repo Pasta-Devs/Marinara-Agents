@@ -116,6 +116,25 @@ test("a battle reads the team only after the last edit is saved", async () => {
   assert.equal(forge._formationBattleMode, true);
   assert.equal(forge._formationState, "idle", "so the next render reads the team from the server");
   assert.equal(renders, 1);
+  // A tower fight goes back to the tower, where its team is picked.
+  forge._hudView = "combat";
+  forge._combatNode = { tower: true, floor: 3 };
+  saveForgeFormation(forge, team("D"), 0);
+  waitForgeFormationSave(forge, resume);
+  forge.posts[3].reply.resolve(null);
+  await settle();
+  assert.equal(forge._hudView, "tower");
+
+  // A failed save from a world the player has left does not touch the world now open.
+  forge._hudView = "combat";
+  forge._combatNode = { combatIndex: 3 };
+  saveForgeFormation(forge, team("E"), 0);
+  waitForgeFormationSave(forge, resume);
+  forge._run = { runId: "other-world" };
+  forge.posts[4].reply.resolve({ ok: false });
+  await settle();
+  assert.equal(forge._hudView, "combat");
+  assert.equal(loads, 1);
 });
 
 test("reopening Formation waits for edits still being saved", async () => {
@@ -132,6 +151,61 @@ test("reopening Formation waits for edits still being saved", async () => {
   await settle();
   assert.equal(forge.loads, 1, "the team is read once B is saved");
   assert.equal(waitForgeFormationLoad(forge), false);
+
+  // Several reopens while one save runs read the team once.
+  saveForgeFormation(forge, team("C"), 0);
+  forge._formationState = "loading";
+  waitForgeFormationLoad(forge);
+  waitForgeFormationLoad(forge);
+  forge.posts[2].reply.resolve({ ok: true, presets: team("C"), active: 0 });
+  await settle();
+  assert.equal(forge.loads, 2);
+
+  // A failed save reloads Formation itself, so the read queued behind it is not sent as well.
+  saveForgeFormation(forge, team("D"), 0);
+  forge._formationState = "loading";
+  waitForgeFormationLoad(forge);
+  forge._loadFormation = function () {
+    this.loads += 1;
+    waitForgeFormationLoad(this);
+  };
+  forge.posts[3].reply.resolve({ ok: false });
+  await settle();
+  assert.equal(forge.loads, 3);
+});
+
+test("the chapters list refills only when a reload brings different chapters", async () => {
+  const source = await readFile(new URL("../packages/gacha-forge/client.js", import.meta.url), "utf8");
+  const start = source.indexOf("_loadChapters(){");
+  const Chapters = new Function(`return class {${source.slice(start, source.indexOf("_fillChapters(){", start))}}`)();
+  const list = { chapters: [{ chapter: 1 }], nextChapter: 2, nextUnlocked: true, ok: true };
+  let reply;
+  const forge = Object.assign(new Chapters(), {
+    fills: 0,
+    _run: { runId: "world" },
+    _planChapter: 1,
+    _hudView: "chapters",
+    _fillChapters() {
+      this.fills += 1;
+    },
+    _postJson: async () => reply,
+  });
+  reply = structuredClone(list);
+  forge._loadChapters();
+  await settle();
+  assert.equal(forge.fills, 2, "a first load shows Loading, then the list");
+  reply = structuredClone(list);
+  forge._loadChapters();
+  await settle();
+  assert.equal(forge.fills, 2, "background work ending with nothing new leaves the cards in place");
+  reply = null;
+  forge._loadChapters();
+  await settle();
+  assert.equal(forge.fills, 2, "a failed reload keeps the list it has");
+  reply = { ...structuredClone(list), chapters: [{ chapter: 1 }, { chapter: 2 }], nextChapter: 3 };
+  forge._loadChapters();
+  await settle();
+  assert.equal(forge.fills, 3, "a chapter that finished in the background appears");
 });
 
 test("the shipped server retries a Formation save and skips the history count on refreshes", async () => {

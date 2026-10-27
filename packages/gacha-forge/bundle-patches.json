@@ -1894,6 +1894,14 @@
             {
               "find": "this._renderBrowser();return}this._postJson(\"/formation\",{runId:this._run.runId})",
               "replace": "this._renderBrowser();return}if(waitForgeFormationLoad(this))return;this._postJson(\"/formation\",{runId:this._run.runId})"
+            },
+            {
+              "find": "this._chaptersState=\"loading\",this._fillChapters(),this._postJson(\"/chapters\",{runId:e}).then(r=>{",
+              "replace": "this._chaptersState=\"loading\",this._chaptersData||this._fillChapters(),this._postJson(\"/chapters\",{runId:e}).then(r=>{"
+            },
+            {
+              "find": "r&&r.ok&&Array.isArray(r.chapters)?(this._chaptersData=r,this._chaptersFor=e+\"|\"+a,this._chaptersState=\"ready\"):this._chaptersState=\"error\",this._fillChapters(),",
+              "replace": "let forgeSame=!!this._chaptersData&&(!(r&&r.ok&&Array.isArray(r.chapters))||JSON.stringify(this._chaptersData)===JSON.stringify(r));r&&r.ok&&Array.isArray(r.chapters)?(this._chaptersData=r,this._chaptersFor=e+\"|\"+a,this._chaptersState=\"ready\"):this._chaptersState=\"error\",forgeSame||this._fillChapters(),"
             }
           ]
         }
