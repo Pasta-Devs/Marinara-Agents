@@ -78,6 +78,19 @@ test("a failed last save shows the saved team instead of a team no battle will u
   assert.equal(away._formationState, "idle");
 });
 
+test("a save request that throws never leaves the world's saves stuck", async () => {
+  const forge = host();
+  const post = forge._postJson;
+  forge._postJson = () => Promise.reject(new Error("fixture reply handling threw"));
+  saveForgeFormation(forge, team("A"), 0);
+  await settle();
+  assert.equal(forge.loads, 1, "it counts as a failed save, so Formation shows the saved team");
+  assert.equal(forge._formationSaves.size, 0);
+  forge._postJson = post;
+  saveForgeFormation(forge, team("B"), 0);
+  assert.equal(forge.posts.length, 1, "the next edit is still sent");
+});
+
 test("a battle reads the team only after the last edit is saved", async () => {
   const forge = host();
   let loads = 0;
