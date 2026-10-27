@@ -323,6 +323,218 @@ async function main() {
     await rm(dataDir, { recursive: true, force: true });
   }
 }
+// #1751: imported notes whose source is gone are listed on an unfiltered first page only, and never by a false match.
+async function outdatedNotes() {
+  const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-outdated-"));
+  const root = join(dataDir, "long-term-memory");
+  const characters = ["alpha", "beta"].map((id) => ({
+    id: `character-${id}`,
+    data: { name: `Navigator ${id}`, description: "Keeps the charts." },
+    comment: "",
+  }));
+  const chat = {
+    id: "chat-voyage",
+    name: "Voyage",
+    mode: "roleplay",
+    characterIds: [],
+    groupId: null,
+    personaId: null,
+    connectionId: null,
+    metadata: {
+      summaryEntries: [
+        { id: "summary-a", content: "The first voyage." },
+        { id: "summary-b", content: "The second voyage." },
+      ],
+    },
+    lastMessageAt: null,
+    updatedAt: "2026-09-13T00:00:00.000Z",
+  };
+  const chatsInVault = [chat];
+  const chatMessages = [
+    {
+      id: "m1",
+      chatId: chat.id,
+      role: "user",
+      characterId: null,
+      content: "I open the Moon Vault.",
+      activeSwipeIndex: 0,
+      extra: {},
+      createdAt: "2026-09-13T00:00:00.000Z",
+    },
+  ];
+  const books = [
+    {
+      id: "book-atlas",
+      data: { name: "Atlas", category: "World" },
+      entries: [
+        { id: "entry-coast", name: "Coast", content: "A coast worth remembering." },
+        { id: "entry-reef", name: "Reef", content: "A reef worth avoiding." },
+      ],
+    },
+  ];
+  const release = configurePackageRuntime({
+    dataDir,
+    logger: { debug() {}, info() {}, warn() {}, error() {} },
+    resources: {
+      async listCharacters() {
+        return characters;
+      },
+      async listPersonas() {
+        return [];
+      },
+      async listLorebooks() {
+        return books;
+      },
+    },
+    persistence: {
+      async listChats() {
+        return chatsInVault;
+      },
+      async getChat(id) {
+        return chatsInVault.find((row) => row.id === id) ?? null;
+      },
+      async listMessages() {
+        return chatMessages;
+      },
+      async updateChatMetadata() {},
+    },
+  });
+  try {
+    const signal = new AbortController().signal;
+    const importOne = async (source: "characters" | "chats" | "messages" | "lorebooks", sourceId: string) => {
+      const done = await importPackageInterop(
+        {
+          source,
+          sourceIds: [sourceId],
+          ...(source === "messages" ? { chatId: chat.id } : {}),
+          destinationScope: { characterIds: ["character-alpha"] },
+          extract: false,
+          limit: 100,
+        },
+        root,
+        signal,
+      );
+      assert.equal(done.imported.length, 1, `imported ${sourceId}`);
+      return done.imported[0]!.note.id;
+    };
+    const previewSources = {
+      characters: { source: "characters" as const, limit: 100 },
+      chats: { source: "chats" as const, limit: 100 },
+      messages: { source: "messages" as const, chatId: chat.id, limit: 100 },
+    };
+    const sampleId = async (name: keyof typeof previewSources, index = 0) =>
+      (await previewPackageInterop(previewSources[name], root)).samples[index]!.sourceId;
+    const coastSourceId = (await previewPackageLorebooks({ limit: 100 }, root)).books
+      .flatMap((book) => book.entries)
+      .find((item) => item.id === "entry-coast")!.candidates[0]!.sourceId;
+
+    const characterNote = await importOne("characters", await sampleId("characters"));
+    const summaryNote = await importOne("chats", await sampleId("chats"));
+    const messageNote = await importOne("messages", await sampleId("messages"));
+    const loreNote = await importOne("lorebooks", coastSourceId);
+
+    // Nothing is missing yet, so no preview reports an outdated note.
+    for (const name of Object.keys(previewSources) as (keyof typeof previewSources)[]) {
+      assert.equal((await previewPackageInterop(previewSources[name], root)).outdated, undefined);
+    }
+    assert.equal((await previewPackageLorebooks({ limit: 100 }, root)).outdated, undefined);
+
+    // Delete every imported source; one note's sibling stays, so only the imported piece is reported.
+    characters.shift();
+    chat.metadata.summaryEntries.shift();
+    chatMessages.length = 0;
+    books[0]!.entries.shift();
+    const outdatedIds = async (preview: { outdated?: { noteId: string }[] }) =>
+      (preview.outdated ?? []).map((row) => row.noteId).sort();
+    for (const [name, noteId] of [
+      ["characters", characterNote],
+      ["chats", summaryNote],
+      ["messages", messageNote],
+    ] as const) {
+      const preview = ltmInteropPreviewResponseSchema.parse(await previewPackageInterop(previewSources[name], root));
+      assert.deepEqual(await outdatedIds(preview), [noteId], `${name} reports its note as outdated`);
+      assert.equal(preview.outdated![0]!.title.length > 0, true);
+      // A search reports nothing: it has not seen the whole source.
+      assert.equal(
+        (await previewPackageInterop({ ...previewSources[name], query: "zzz-no-match" }, root)).outdated,
+        undefined,
+        `${name} search reports nothing`,
+      );
+    }
+    // The chat note is judged by its chat's scope, not the scope it was imported with: this chat has no characters.
+    assert.equal(
+      (
+        await previewPackageInterop(
+          { ...previewSources.messages, sourceScope: { characterIds: ["character-alpha"] } },
+          root,
+        )
+      ).outdated,
+      undefined,
+      "a chat outside the source scope is not reported",
+    );
+    const lorePreview = ltmLorebookPreviewResponseSchema.parse(await previewPackageLorebooks({ limit: 100 }, root));
+    assert.deepEqual(await outdatedIds(lorePreview), [loreNote], "lorebooks report the deleted entry");
+    assert.equal((await previewPackageLorebooks({ limit: 100, query: "Atlas" }, root)).outdated, undefined);
+
+    // A branch sibling that repeats an imported summary is deduplicated without making its note look outdated.
+    await importOne("chats", (await previewPackageInterop(previewSources.chats, root)).samples[0]!.sourceId);
+    chat.groupId = "group-branches" as never;
+    chatsInVault.push({
+      ...chat,
+      id: "chat-voyage-branch",
+      metadata: {
+        summaryEntries: [
+          { id: "summary-b", content: "The second voyage." },
+          { id: "summary-c", content: "The third voyage." },
+        ],
+      },
+    });
+    await importOne("chats", "chat-voyage-branch:summary-b");
+    assert.deepEqual(
+      await outdatedIds(await previewPackageInterop(previewSources.chats, root)),
+      [summaryNote],
+      "a deduplicated branch sibling is not outdated",
+    );
+    // A mode filter that hides the roleplay chats' rows does not turn their still existing sources into outdated notes.
+    assert.deepEqual(
+      await outdatedIds(await previewPackageInterop({ ...previewSources.chats, mode: "game" }, root)),
+      [summaryNote],
+      "a mode filter keeps existing sources",
+    );
+    // A source scope that excludes the gone note's chat lists nothing.
+    assert.equal(
+      (await previewPackageInterop({ ...previewSources.chats, sourceScope: { chatIds: ["chat-elsewhere"] } }, root))
+        .outdated,
+      undefined,
+    );
+    // Only the first page lists the notes.
+    const firstPage = await previewPackageInterop({ ...previewSources.chats, limit: 1 }, root);
+    assert.deepEqual(await outdatedIds(firstPage), [summaryNote]);
+    assert.ok(firstPage.nextCursor);
+    assert.equal(
+      (await previewPackageInterop({ ...previewSources.chats, limit: 1, cursor: firstPage.nextCursor! }, root))
+        .outdated,
+      undefined,
+      "a continuation page reports nothing",
+    );
+
+    // A continuation page carries no list; the merged result keeps the first page's.
+    const chatsPage = ltmInteropPreviewResponseSchema.parse(await previewPackageInterop(previewSources.chats, root));
+    assert.deepEqual(
+      mergeSourcePreviewPages([chatsPage, { ...chatsPage, outdated: undefined }])?.outdated?.map((row) => row.noteId),
+      [summaryNote],
+    );
+    assert.deepEqual(
+      mergeLorebookPreviewPages([lorePreview, { ...lorePreview, outdated: undefined }])?.outdated?.map(
+        (row) => row.noteId,
+      ),
+      [loreNote],
+    );
+  } finally {
+    release();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+}
 // Client note requests page through the whole vault, send the stored admin secret, and stop at the note limit.
 async function noteRequestPaging() {
   const originalFetch = globalThis.fetch;
@@ -390,6 +602,7 @@ async function noteRequestPaging() {
 
 void (async () => {
   await main();
+  await outdatedNotes();
   await noteRequestPaging();
 })().catch((error) => {
   console.error(error);
