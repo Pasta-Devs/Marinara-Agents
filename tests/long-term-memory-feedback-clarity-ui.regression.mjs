@@ -1284,6 +1284,21 @@ for (const name of spinnerFiles) {
 assert.match(activity, /const deferredSearch = useDeferredValue\(search\);/u);
 assert.match(activity, /const query = deferredSearch\.trim\(\)/u);
 
+// The Korean catalog mirrors English: same keys, same {{placeholders}}, no blank text, and it is registered.
+const koLocale = JSON.parse(readFileSync(ltmSourcePaths.localeKo));
+const catalogKeys = (catalog) => Object.keys(catalog).filter((key) => key !== "_meta");
+const placeholders = (text) => [...text.matchAll(/\{\{[A-Za-z0-9_]+\}\}/gu)].map((match) => match[0]).sort();
+assert.equal(koLocale._meta?.locale, "ko");
+assert.deepEqual(catalogKeys(koLocale), catalogKeys(locale), "ko.json keys must equal en.json keys, in order");
+for (const key of catalogKeys(locale)) {
+  assert.equal(typeof koLocale[key], "string", `${key} needs Korean text`);
+  assert.ok(koLocale[key].trim(), `${key} Korean text is blank`);
+  assert.deepEqual(placeholders(koLocale[key]), placeholders(locale[key]), `${key} placeholders differ from en`);
+}
+const localization = readFileSync(ltmSourcePaths.localization, "utf8");
+assert.match(localization, /import koreanCatalog from "\.\/locales\/ko\.json"/u);
+assert.match(localization, /ko: stringEntries\(koreanCatalog\)/u);
+
 process.stdout.write(
   "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, defaults, and scope loading ok\n",
 );
