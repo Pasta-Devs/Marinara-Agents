@@ -91,6 +91,7 @@
   "saucelings.swap.note": "{{name}} will move to the Menagerie, and the caretaker you pick brings a new egg.",
   "saucelings.swap.noteEgg": "The egg will move to the Menagerie, and the caretaker you pick brings a new one.",
   "saucelings.swap.confirm": "Swap",
+  "saucelings.swap.wait": "One new egg a day. The next one is ready at {{time}}.",
   "saucelings.unlocks.title": "Special saucelings · {{have}} of {{total}} unlocked",
   "saucelings.unlocks.prismite": "Prismite: raise {{need}} saucelings to elder or evolve them ({{have}} so far).",
   "saucelings.unlocks.thundrake": "Thundrake: care for your saucelings {{need}} times ({{have}} so far).",

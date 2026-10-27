@@ -1,3 +1,8 @@
+## 1.24.10 — 2026-10-27
+
+- A seasonal story event can start right after you finish a chapter again. Only a story you are in the middle of keeps an event closed: a main chapter or Character Story part with some, but not all, of it played. One you forged but have not started yet no longer blocks it, and waits until the event is done.
+- The event card now says what to finish first ("Finish Chapter 3" or "Finish Arden's Character Story"), and starting a chapter while an event is open names the event to finish.
+
 ## 1.24.9 — 2026-10-27
 
 - A new chapter opens as soon as its plan is written. Its fights are no longer all designed before the chapter map appears: each fight is designed in the background right after the scene before it is written (by pre-forge or when you open it), so it is ready, with its enemy art, when you reach it.

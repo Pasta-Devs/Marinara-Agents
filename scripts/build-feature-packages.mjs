@@ -556,7 +556,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.5.0",
+    version: "1.5.2",
     minEngineVersion: "2.5.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -636,7 +636,7 @@ const features = [
   },
   {
     id: "saucelings",
-    version: "0.22.3",
+    version: "0.23.0",
     // Home widgets need capability API 1.35+, first released in Engine 2.5.0 (2.4.6 shipped 1.18).
     minEngineVersion: "2.5.0",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,

@@ -1835,6 +1835,7 @@ const inkMoth = normalizeDesign(inkMothAnswer(), "found")!;
   assert.deepEqual(loaded.menagerie[0].forms, { adult: "form-1" });
   assert.deepEqual([loaded.menagerie[0].foundBy, loaded.menagerie[0].foundAt], ["char-1", null]);
   assert.equal(loaded.lastEggFindDay, null);
+  assert.equal(loaded.lastNewEggDay, null);
   assert.equal(loaded.settings.eggHunting, true);
   assert.equal(normalizeSaucelingWorld({ settings: { eggHunting: false } }).settings.eggHunting, false);
   assert.equal(
@@ -2892,7 +2893,13 @@ async function testBundledServer() {
     throw new Error("the caretaker's lines never landed");
   };
 
+  // One new egg a UTC day; where the steps below bring in several, a day passes between them.
+  const nextDay = () => {
+    [...storedDocs.values()].find((doc) => doc.kind === "saucelings-world")!.data.lastNewEggDay = null;
+  };
+
   const s1 = await routes.get("POST /adopt")!({ body: { characterId: "dottore-1", name: "Noodletto" } });
+  assert.equal(s1.world.lastNewEggDay, new Date().toISOString().slice(0, 10));
   // An egg has no name of its own: it carries its species name until it hatches and the player names it
   assert.equal(s1.world.activePet.name, SPECIES_CATALOG[s1.world.activePet.species].name);
   assert.equal(s1.latestRemark.includes(s1.world.activePet.name), false);
@@ -3197,6 +3204,13 @@ async function testBundledServer() {
 
   // Deleting a background takes it from every sauceling showing it, in the nook and in the Menagerie
   await routes.get("POST /retire")!({ body: {} });
+  // An empty nook does not reset the day's egg
+  await assert.rejects(
+    routes.get("POST /adopt")!({ body: { characterId: "dottore-1" } }),
+    (error: any) => error.statusCode === 409 && /One new egg a day/u.test(error.message),
+  );
+  assert.equal((await routes.get("GET /state")!({})).world.activePet, null);
+  nextDay();
   const nextEgg = await routes.get("POST /adopt")!({ body: { characterId: "dottore-1" } });
   assert.equal(nextEgg.world.activePet.backgroundId, null);
   await routes.get("POST /background/:id/select")!({ params: { id: bgOne } });
@@ -3225,6 +3239,7 @@ async function testBundledServer() {
   assert.deepEqual(await image(kept.id), { image: png });
 
   // The library holds 24; a 25th is refused and leaves no stray image behind
+  nextDay();
   await routes.get("POST /adopt")!({ body: { characterId: "dottore-1" } });
   for (let n = 0; n < SAUCELING_BACKGROUND_LIMIT - 1; n++) await saveBackground({ image: webpOf(10 + n) });
   assert.equal((await libraryNow()).length, SAUCELING_BACKGROUND_LIMIT);
@@ -3306,12 +3321,14 @@ async function testBundledServer() {
 
   // Replacing the pet in the nook must be asked for; Release lets a Menagerie pet go for good
   assert.equal((await menagerieNow())[0].id, biscottiId);
+  nextDay();
   const gnoccoId = (await routes.get("POST /adopt")!({ body: { characterId: "dottore-1" } })).world.activePet
     .id as string;
   const refusesSwap = (route: string, req: Record<string, unknown>) =>
     assert.rejects(routes.get(route)!(req), (error: any) => error.statusCode === 409);
   await refusesSwap("POST /adopt", { body: { characterId: "dottore-1" } });
   await refusesSwap("POST /menagerie/:id/restore", { params: { id: biscottiId }, body: {} });
+  // Bringing one back from the Menagerie is not a new egg, so it is not limited
   const swappedIn = await routes.get("POST /menagerie/:id/restore")!({
     params: { id: biscottiId },
     body: { swap: true },
@@ -3323,6 +3340,13 @@ async function testBundledServer() {
   );
   // An egg swapped out comes back still an egg
   assert.equal((await menagerieNow())[0].stageAtRetirement, "egg");
+  // A second new egg the same day is refused and leaves the nook as it was
+  await assert.rejects(
+    routes.get("POST /adopt")!({ body: { characterId: "dottore-1", swap: true } }),
+    (error: any) => error.statusCode === 409 && /midnight UTC/u.test(error.message),
+  );
+  assert.equal((await routes.get("GET /state")!({})).world.activePet.id, biscottiId);
+  nextDay();
   const newEgg = await routes.get("POST /adopt")!({ body: { characterId: "dottore-1", swap: true } });
   const farfallinaId = newEgg.world.activePet.id as string;
   assert.deepEqual(
@@ -3330,6 +3354,7 @@ async function testBundledServer() {
     [biscottiId, gnoccoId],
   );
   await badRequest("POST /portrait", { petId: farfallinaId, image: png }, /once it hatches/u);
+  nextDay();
   const zitiId = (await routes.get("POST /adopt")!({ body: { characterId: "dottore-1", swap: true } })).world.activePet
     .id as string;
   const released = await routes.get("POST /menagerie/:id/release")!({ params: { id: farfallinaId } });

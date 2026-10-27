@@ -32,6 +32,12 @@ const forgeEventEscape = (value) =>
     (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character],
   );
 const forgeEventT = (key) => forgeSeasonalEnglish[key] || key;
+const forgeEventBoundary = (blocked) =>
+  blocked?.kind === "chapter" && Number.isInteger(blocked.chapter)
+    ? forgeEventT("events.boundary.chapter").replace("{chapter}", String(blocked.chapter))
+    : blocked?.kind === "character-story" && blocked.name
+      ? forgeEventT("events.boundary.story").replace("{name}", blocked.name)
+      : forgeEventT("events.boundary");
 const forgeEventChapter = (value) => typeof value === "string" && /^event-[1-9]\d{0,8}$/u.test(value);
 const forgeEventWindow = (event) => `${event.seq}:${event.endsAt}`;
 const forgeSeasonalNow = (host) => {
@@ -153,7 +159,7 @@ function forgeSeasonalCards(events, { archive = false } = {}) {
             `<li>${forgeEventEscape(reward.qty)} ${forgeEventEscape(reward.name || forgeEventT(`events.reward.${reward.kind}`))}</li>`,
         )
         .join("");
-      return `<article class="gf-event-card" data-story-event-card="${forgeEventEscape(event.chapter)}">${!archive && event.art ? `<div class="gf-event-art" data-story-event-banner><img src="${forgeEventEscape(event.art)}" alt="" /></div>` : ""}<h3>${forgeEventEscape(event.title || forgeEventT("events.title"))}</h3><p>${forgeEventEscape(event.theme || "")}</p><p>${forgeEventEscape(expired ? forgeEventT("events.expired") : `${forgeEventT("events.ends")} ${date}`)}</p>${failed ? `<p>${forgeEventEscape(forgeEventT("events.failed"))}</p><button type="button" class="gf-event-action" data-story-event-retry>${forgeEventT("events.retry")}</button>` : `<p>${forgeEventEscape(forgeEventT("events.progress"))} ${event.played || 0}/10</p>${!archive ? `<h4>${forgeEventT("events.rewards")}</h4><ul class="gf-event-rewards">${rewards}</ul>` : ""}<button type="button" class="gf-event-action" data-story-event-open="${forgeEventEscape(event.chapter)}"${(!expired && !event.canStart && !event.opened) || (expired && !event.played) ? " disabled" : ""}>${forgeEventT(action)}</button>${!event.canStart && !event.opened && !expired ? `<p>${forgeEventT("events.boundary")}</p>` : ""}${event.mediaError ? `<p>${forgeEventT("events.mediaFailed")}</p>` : ""}`}</article>`;
+      return `<article class="gf-event-card" data-story-event-card="${forgeEventEscape(event.chapter)}">${!archive && event.art ? `<div class="gf-event-art" data-story-event-banner><img src="${forgeEventEscape(event.art)}" alt="" /></div>` : ""}<h3>${forgeEventEscape(event.title || forgeEventT("events.title"))}</h3><p>${forgeEventEscape(event.theme || "")}</p><p>${forgeEventEscape(expired ? forgeEventT("events.expired") : `${forgeEventT("events.ends")} ${date}`)}</p>${failed ? `<p>${forgeEventEscape(forgeEventT("events.failed"))}</p><button type="button" class="gf-event-action" data-story-event-retry>${forgeEventT("events.retry")}</button>` : `<p>${forgeEventEscape(forgeEventT("events.progress"))} ${event.played || 0}/10</p>${!archive ? `<h4>${forgeEventT("events.rewards")}</h4><ul class="gf-event-rewards">${rewards}</ul>` : ""}<button type="button" class="gf-event-action" data-story-event-open="${forgeEventEscape(event.chapter)}"${(!expired && !event.canStart && !event.opened) || (expired && !event.played) ? " disabled" : ""}>${forgeEventT(action)}</button>${!event.canStart && !event.opened && !expired ? `<p>${forgeEventEscape(forgeEventBoundary(event.blockedBy))}</p>` : ""}${event.mediaError ? `<p>${forgeEventT("events.mediaFailed")}</p>` : ""}`}</article>`;
     })
     .join("");
 }
