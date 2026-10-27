@@ -96,14 +96,14 @@ test("actual generation uses current four-field canon and played event/story con
     assert.equal(reply.status, 200);
     assert.equal(reply.body.status, "sent", JSON.stringify(reply));
     const messages = f.calls.filter((call) => call.kind === "proactive-chat");
-    const summaries = f.calls.filter((call) => call.kind === "summary");
+    const paid = () => f.calls.filter((call) => call.kind !== "summary").length;
     assert.equal(messages.length, 1, "Exactly one routed proactive-message request for the reserved attempt");
     assert.equal(
-      summaries.length,
-      6,
-      "Existing automatic memory prepares three records and three incremental overviews",
+      f.calls.slice(0, f.calls.indexOf(messages[0])).filter((call) => call.kind === "summary").length,
+      0,
+      "The message never waits for memory summaries; unsummarized canon goes in as written",
     );
-    assert.equal(f.calls.length, 7, "Every paid-request scope is counted; no format repair or hidden retry");
+    assert.equal(paid(), 1, "Every paid-request scope is counted; no format repair or hidden retry");
     assert.equal(f.errors.length, 0);
     assert.ok(f.resolved.some((request) => request.connectionId === f.run().connectionId));
     const prompt = JSON.stringify(messages[0].body.messages);
@@ -133,7 +133,7 @@ test("actual generation uses current four-field canon and played event/story con
     const opened = await f.post("/chat/open", { unitId, timeZone });
     assert.ok(opened.body.messages.some((row) => row.id === reply.body.said.id));
     assert.equal((await f.due()).body.status, "quota");
-    assert.equal(f.calls.length, 7);
+    assert.equal(paid(), 1);
   } finally {
     await f.close();
   }

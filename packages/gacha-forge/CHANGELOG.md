@@ -1,3 +1,9 @@
+## 1.24.9 — 2026-10-27
+
+- A new chapter opens as soon as its plan is written. Its fights are no longer all designed before the chapter map appears: with pre-forge on, each fight is designed in the background in story order beside the scenes written ahead, and otherwise when you reach it.
+- Story memory summarizes only in the background. Writing a plan, scene, fight or chat never waits for summaries: it uses the overview and chapter summaries saved so far, plus the previous chapter in full and the current chapter. The overview is sized once for the smallest of your story, narration and chat models.
+- Long chapters can be summarized again. Summaries now get at least 10k tokens of output room for thinking models; before, a chapter too long for one request always failed and memory fell back to the old history.
+
 ## 1.24.8 — 2026-10-27
 
 - In character chats, Enter now adds a new line instead of sending. Only **Send** sends your message, so a stray Enter can no longer send it early.

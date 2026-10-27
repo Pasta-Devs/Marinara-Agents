@@ -42,7 +42,7 @@ async function harness({
   summarizeReply,
   denyMetadata = false,
   planChapter = 2,
-  maxContext = 10000,
+  maxContext = 40000,
 } = {}) {
   metadataAvailable = !denyMetadata;
   metadataContext = maxContext;
@@ -260,7 +260,7 @@ test("successful final normal completion automatically remembers canon within it
   assert.equal(status.recordCount, 1);
   assert.ok(status.overviewTokens > 0);
   assert.ok(status.overviewTokens <= status.overviewBudget);
-  assert.equal(status.overviewBudget, 1000);
+  assert.equal(status.overviewBudget, 4000);
   assert.ok(host.calls.some((messages) => JSON.stringify(messages).includes("Canonical scene 10")));
   assert.ok(
     host.calls.every((messages) => !JSON.stringify(messages).includes("UNPLAYED-PLAN-OUTCOME")),
@@ -425,6 +425,9 @@ test("new chapter generation includes current legacy chats even when pre-forging
         index === 0 ? "CURRENT-CHAT-MARKER: Keeper asked Mari to bring a silver bell." : `Later conversation ${index}.`,
     })),
   });
+  // Summaries are written in the background; writing uses them once they are saved.
+  ok(await host.post("/story-memory/retry"));
+  assert.equal((await settled(host)).phase, "ready", JSON.stringify(host.warnings));
   ok(await host.post("/chapter-plan", { chapter: 2 }));
   const planner = host.calls.find(
     (messages) => !messages[0].content.includes("Summarize only the supplied canonical story history"),
@@ -452,7 +455,7 @@ test("protected loopback metadata falls back to the public model facade without 
   ok(await host.post("/complete", { chapter: 1, nodeIndex: 9, difficulty: "normal" }));
   const status = await settled(host);
   assert.equal(status.phase, "ready", JSON.stringify(host.warnings));
-  assert.equal(status.overviewBudget, 1000);
+  assert.equal(status.overviewBudget, 4000);
   assert.equal(status.recordCount, 1);
 });
 
@@ -583,8 +586,17 @@ test("next-chapter and scene prompts keep three older chapters plus separate cha
     assert.ok(prompt.includes("CANON-LAST-CHOICE") && prompt.includes("CANON-LAST-BRANCH"));
     assert.ok(!prompt.includes("UNPLAYED-ALTERNATIVE"), "Only the saved first-choice branch enters recent canon");
   };
+  const summaries = () =>
+    host.requests.filter(({ messages }) =>
+      messages[0].content.includes("Summarize only the supplied canonical story history"),
+    ).length;
+  // Summaries are written in the background; writing uses them once they are saved and never pays for them.
+  ok(await host.post("/story-memory/retry"));
+  assert.equal((await settled(host)).phase, "ready", JSON.stringify(host.warnings));
+  const summarized = summaries();
   ok(await host.post("/chapter-plan", { chapter: 6 }));
   checkRecallPools(requestAfter(0));
+  assert.equal(summaries(), summarized, "the chapter plan neither waits for nor pays for a summary");
   assert.equal((await settled(host)).recordCount, 7, "All five chapters and both character sources remain archived");
 
   session.progress[6] = { normal: 1 };

@@ -349,12 +349,8 @@ export function createForgeStoryMemoryIntegration({
     const context = await resolveContext(runId, { job: "compress" });
     if (!context.maxContext) throw new Error("compress-context-unknown");
     messages = await prepareMessages(messages, runId);
-    const reserve = Math.min(
-      tokenBudget || 2000,
-      2000,
-      context.maxOutput || Infinity,
-      Math.max(1, Math.floor(context.maxContext * 0.1)),
-    );
+    // Thinking models reason before they write, so every summary leaves at least 10k tokens of output room.
+    const reserve = Math.min(Math.max(10240, tokenBudget || 0), context.maxOutput || Infinity);
     const available = (input) =>
       context.maxContext -
       input.reduce(
@@ -531,7 +527,6 @@ export function createForgeStoryMemoryIntegration({
           previousContent = lastChapter.content;
           previous = `# Previous chapter in full: ${lastChapter.title}\n${previousContent}`;
         }
-        if (!useCurrent) await memory.maintain({ runId, job, connectionId, debugMode });
         const result = await memory.recall({
           runId,
           target,
@@ -541,11 +536,21 @@ export function createForgeStoryMemoryIntegration({
           connectionId,
           debugMode,
         });
+        // Memory that fell behind catches up in the background; a failed summary waits for Retry.
+        const lagging =
+          result.status?.phase === "ready" ? result.lagging : ["stale", "pending"].includes(result.status?.phase);
+        if (useCurrent && lagging) schedule(runId);
         if (result.status?.phase !== "ready") return legacy();
         const partial = useCurrent
           ? await partialBondHistory(runId, current || Number.isInteger(chapter) ? null : chapter)
           : "";
-        return renderContext(result, { prefix: [previous, prefix, partial].filter(Boolean).join("\n\n"), fate });
+        // Required recent canon, in story order: the previous chapter and any side canon not summarized yet.
+        const recent = [...(result.unsummarized || []), ...(lastChapter ? [lastChapter] : [])]
+          .sort((left, right) => left.order - right.order)
+          .map((source) =>
+            source === lastChapter ? previous : `# Recent canon in full: ${source.title}\n${source.content}`,
+          );
+        return renderContext(result, { prefix: [...recent, prefix, partial].filter(Boolean).join("\n\n"), fate });
       } catch (error) {
         logger?.warn?.(
           "[gacha-forge] story memory unavailable; using canonical history: %s",

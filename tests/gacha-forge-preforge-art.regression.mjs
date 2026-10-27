@@ -563,6 +563,49 @@ try {
       Date.now = realNow;
     }
   });
+  await test("pre-forge designs each fight just before the scene that follows it, then the last fight", async () => {
+    const withFights = {
+      ...plan(1, 2),
+      nodes: [
+        node(0),
+        { index: 2, type: "combat", title: "Mill ambush", setup: "Bandits wait at the mill.", tier: "soldier" },
+        { ...node(1), index: 3 },
+        { index: 4, type: "combat", title: "Harbor brawl", setup: "Dockhands block the pier.", tier: "soldier" },
+      ],
+    };
+    const fighter = (name) => ({
+      name,
+      tier: "soldier",
+      role: "Warrior",
+      affinity: "Fire",
+      position: "front",
+      stats: { hp: 30, atk: 30, def: 30, spd: 30 },
+      skill: { name: "Strike", effect: "damage", power: 100, target: "enemy", description: "A clean hit." },
+    });
+    const guide = (name) => ({
+      enemy: name,
+      tier: "soldier",
+      opening: `${name} attacks.`,
+      objective: `Defeat ${name}.`,
+      outcomeOnWin: `${name} flees.`,
+      formation: [fighter(name)],
+    });
+    const host = await harness({ story: { preforge: "story" }, images: { enabled: false }, chapters: [withFights] });
+    host.responses.push(beat("First", []), guide("Bandit"), beat("Second", []), guide("Dockhand"));
+    assert.equal((await host.post("/preforge/start", { runId, chapter: 1 })).allowed, true);
+    await settle(host);
+    assert.equal(host.responses.length, 0, "two scenes and two fights were written");
+    assert.equal(host.data(`${runId}:combat:1:0`).enemy, "Bandit", "the first fight comes after the first scene");
+    assert.equal(host.data(`${runId}:combat:1:1`).enemy, "Dockhand", "the last fight follows the last scene");
+    assert.ok(host.data(`${runId}:beat:1:1`).segments.length);
+    assert.ok(
+      !host.warnings.some((warning) => warning.includes("pre-forge chain stopped")),
+      JSON.stringify(host.warnings),
+    );
+    const before = host.modelCalls.length;
+    assert.equal((await host.post("/combat-guide", { runId, chapter: 1, combatIndex: 0 })).cached, true);
+    assert.equal(host.modelCalls.length, before, "opening a fight pre-forge designed costs no model call");
+  });
 } finally {
   globalThis.fetch = fetchBefore;
 }

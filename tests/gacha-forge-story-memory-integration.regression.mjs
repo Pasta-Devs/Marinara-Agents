@@ -3,14 +3,27 @@ import { test } from "node:test";
 import { createForgeStoryMemoryIntegration } from "../packages/gacha-forge/src/story-memory-integration.mjs";
 import { createForgeStoryMemory } from "../packages/gacha-forge/src/story-memory.mjs";
 
+// Summaries keep 10240 output tokens free, so tests that really compress need more than the 10k default window.
+const summaryConnections = async () => [{ id: "main", provider: "custom", model: "fixture", maxContext: 32768 }];
+const deferred = () => {
+  let resolve;
+  const promise = new Promise((accept) => {
+    resolve = accept;
+  });
+  return { promise, resolve };
+};
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
 function fixture(options = {}) {
   const realMemory = options.realMemory;
+  const onMaintain = options.maintain;
   const runId = "memory-frontier";
   const phase = options.phase || "ready";
   const plans = new Map();
   const session = { progress: {}, bondChapters: {} };
   const chats = [];
   const requests = [];
+  const maintained = [];
   let adapters;
   const plan = (chapter, nodes = ["story", "combat", "story"]) => {
     const value = { chapter, title: `Chapter ${chapter}`, nodes: nodes.map((type) => ({ type })) };
@@ -22,8 +35,9 @@ function fixture(options = {}) {
       adapters = options;
       if (realMemory) return createForgeStoryMemory(options);
       return {
-        async maintain() {
-          return { status: { phase: "ready" } };
+        async maintain(options) {
+          maintained.push(options);
+          return (await onMaintain?.(options)) || { status: { phase: "ready" } };
         },
         async recall(options) {
           requests.push(options);
@@ -89,7 +103,7 @@ function fixture(options = {}) {
         sessions: [{ at: 123, count: 2, chapter, memory: "All saved conversations must reach current writing." }],
       },
     });
-  return { runId, plans, session, requests, memory, plan, context, addChat };
+  return { runId, plans, session, requests, maintained, memory, plan, context, addChat };
 }
 
 test("new chapter writing includes legacy chats even when pre-generation assigned a future chapter label", async () => {
@@ -235,12 +249,13 @@ test("a known consumer with unknown compression context requests configuration a
     readConnections: async () => {
       contextReads += 1;
       return [
-        { id: "main", provider: "custom", model: "known-consumer", maxContext: 10000 },
+        { id: "main", provider: "custom", model: "known-consumer", maxContext: 32768 },
         {
           id: "compressor",
           provider: "custom",
           model: "unknown-compressor",
-          maxContext: loseContextAfterPreflight && contextReads > 2 ? null : compressionContext,
+          // Background work reads the three reader windows, then the compression preflight.
+          maxContext: loseContextAfterPreflight && contextReads > 4 ? null : compressionContext,
         },
       ];
     },
@@ -267,7 +282,7 @@ test("a known consumer with unknown compression context requests configuration a
   });
   f.plan(1);
   f.session.progress = { 1: { normal: 3 } };
-  assert.equal((await f.memory.resolveContext(f.runId)).maxContext, 10000);
+  assert.equal((await f.memory.resolveContext(f.runId)).maxContext, 32768);
   const unavailable = await f.memory.maintain({ runId: f.runId });
   assert.equal(unavailable.status.phase, "context-unknown");
   assert.equal(unavailable.status.retryable, false);
@@ -276,7 +291,7 @@ test("a known consumer with unknown compression context requests configuration a
   assert.equal((await f.memory.status(f.runId)).phase, "context-unknown");
   assert.equal(saved.records.length, 0);
   assert.equal(saved.work.length, 0);
-  compressionContext = 10000;
+  compressionContext = 32768;
   assert.equal((await f.memory.maintain({ runId: f.runId })).status.phase, "ready");
   assert.equal(generations, 2);
   assert.equal(saved.records.length, 1);
@@ -286,13 +301,42 @@ test("a known consumer with unknown compression context requests configuration a
   const changed = await f.memory.maintain({ runId: f.runId });
   assert.equal(changed.status.phase, "context-unknown", "A window removed after preflight keeps its distinct reason");
   assert.equal(changed.status.retryable, false);
-  assert.equal(contextReads, 3, "Unknown capacity must stop at the first fit check, without searching smaller chunks");
+  assert.equal(contextReads, 5, "Unknown capacity must stop at the first fit check, without searching smaller chunks");
   assert.equal(generations, 2);
   assert.deepEqual(saved.overview, good.overview);
   assert.deepEqual(saved.records, good.records);
   loseContextAfterPreflight = false;
   assert.equal((await f.memory.maintain({ runId: f.runId })).status.phase, "ready");
   assert.equal(generations, 2);
+});
+
+test("summary requests leave thinking models at least 10240 output tokens, or the model's smaller maximum", async () => {
+  let compressor = { maxContext: 10855 };
+  const f = fixture({
+    run: { compressConnectionId: "compressor" },
+    readConnections: async () => [
+      { id: "main", provider: "custom", model: "fixture", maxContext: 200000 },
+      { id: "compressor", provider: "custom", model: "fixture-compressor", ...compressor },
+    ],
+  });
+  // 400 characters estimate as 100 tokens; each message adds 4 and every request 512.
+  const messages = [{ role: "user", content: "x".repeat(400) }];
+  const budget = (tokenBudget) => f.memory.summaryBudget({ runId: f.runId, messages, tokenBudget });
+  assert.equal(await budget(2000), null, "a small overview budget no longer shrinks the output reserve");
+  compressor = { maxContext: 10856 };
+  const fitting = await budget(2000);
+  assert.equal(fitting.maxTokens, 10240);
+  assert.equal(fitting.requestBudget(messages), 10240);
+  assert.equal(fitting.requestBudget([...messages, { role: "user", content: "x" }]), 0);
+  assert.equal(await budget(20000), null, "a larger overview budget raises the reserve");
+  compressor = { maxContext: 32768 };
+  assert.equal((await budget(undefined)).maxTokens, 32152, "detail requests keep every token that remains");
+  compressor = { maxContext: 4711, maxOutputTokens: 4096 };
+  assert.equal(await budget(2000), null);
+  compressor = { maxContext: 4712, maxOutputTokens: 4096 };
+  const capped = await budget(20000);
+  assert.equal(capped.maxTokens, 4096, "a model that cannot write 10240 tokens needs only its own maximum");
+  assert.equal(capped.requestBudget(messages), 4096);
 });
 
 test("the full previous canonical chapter precedes current beats and does not spend a recall slot", async () => {
@@ -412,6 +456,46 @@ test("live-chat recovery deduplicates played text across different legacy headin
   assert.equal(rendered.prefix, `COMPRESSED_FIRST_CHAPTER\n\n# Current chapter so far\n${body}`);
 });
 
+test("memory that fell behind answers with legacy history at once and catches up once in the background", async () => {
+  const gate = deferred();
+  const f = fixture({ phase: "stale", maintain: () => gate.promise });
+  f.plan(1);
+  f.plan(2);
+  f.session.progress = { 1: { normal: 3 } };
+  const histories = await Promise.all([f.context(2), f.context(2), f.context(2)]);
+  assert.ok(
+    histories.every((history) => history.startsWith("legacy fallback\n\n# Previous chapter in full: Chapter 1")),
+    "Generation never waits for the summary model",
+  );
+  await settle();
+  assert.deepEqual(
+    f.maintained,
+    [{ runId: f.runId }],
+    "One background job, sized for every reader rather than this job",
+  );
+  assert.equal((await f.memory.status(f.runId)).phase, "pending");
+  gate.resolve();
+  await settle();
+  assert.equal(f.maintained.length, 2, "Generations during the job coalesce into one fresh snapshot");
+  assert.equal((await f.memory.status(f.runId)).phase, "ready");
+  for (const phase of ["error", "context-unknown"]) {
+    const failed = fixture({ phase });
+    failed.plan(1);
+    failed.plan(2);
+    failed.session.progress = { 1: { normal: 3 } };
+    assert.match(await failed.context(2), /^legacy fallback/);
+    await settle();
+    assert.deepEqual(failed.maintained, [], `${phase} waits for Retry or configuration instead of paying again`);
+  }
+  const replay = fixture({ phase: "stale" });
+  for (let chapter = 1; chapter <= 3; chapter += 1) replay.plan(chapter);
+  replay.session.progress = { 1: { normal: 3 }, 2: { normal: 3 } };
+  assert.match(await replay.context(2), /^legacy fallback/);
+  assert.deepEqual(replay.requests.at(-1).target, { chapter: 2, storyIndex: 0 });
+  await settle();
+  assert.deepEqual(replay.maintained, [], "A replay neither builds its own overview nor schedules maintenance");
+});
+
 for (const failAt of [1, 3])
   test(`legacy fallback survives event source failure on read${failAt}`, async () => {
     let eventReads = 0;
@@ -481,6 +565,7 @@ for (const [eventOpened, bondOpened] of [
       { eventOpened, bondOpened },
       {
         realMemory: true,
+        readConnections: summaryConnections,
         documents: {
           getById: async () => (saved ? { data: structuredClone(saved), revision } : null),
           create: async ({ data }) => {
@@ -533,6 +618,7 @@ test("a later side-story opening keeps existing memory fingerprints and compress
     { eventOpened: 10, bondOpened: 20 },
     {
       realMemory: true,
+      readConnections: summaryConnections,
       documents: {
         getById: async () => (saved ? { data: structuredClone(saved), revision } : null),
         create: async ({ data }) => {

@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 
 const sourceKinds = new Set(["chapter", "character-story", "story-event", "chat"]);
 const overviewHeading = "# Canon to date\n";
+// Jobs whose prompts include the overview; the summary model only writes it.
+const forgeMemoryReaders = ["structured", "narration", "chat"];
 const stopWords = new Set(
   "a an and are as at be been by for from had has have he her his i in is it its of on or our she that the their them they this to was we were what when where which who will with you your".split(
     " ",
@@ -242,9 +244,13 @@ export function createForgeStoryMemory({
 
   async function maintainImpl(options, epoch, signal, frame) {
     const { runId, target, job, connectionId, debugMode = false } = options;
-    const context = await resolveContext(runId, { job, connectionId });
-    const maxContext =
-      Number.isFinite(context?.maxContext) && context.maxContext > 0 ? Math.floor(context.maxContext) : null;
+    // Background work sizes the overview for every model that reads it, so no generation has to rebuild it.
+    const contexts =
+      job || connectionId
+        ? [await resolveContext(runId, { job, connectionId })]
+        : await Promise.all(forgeMemoryReaders.map((reader) => resolveContext(runId, { job: reader })));
+    const known = contexts.map((context) => context?.maxContext).filter((value) => Number.isFinite(value) && value > 0);
+    const maxContext = known.length ? Math.floor(Math.min(...known)) : null;
     const budget = maxContext == null ? null : Math.floor(maxContext * 0.1);
     const operationId = randomUUID();
     Object.assign(frame, { budget, maxContext, operationId });
@@ -526,24 +532,51 @@ export function createForgeStoryMemory({
     return work;
   }
 
+  // Generation never waits for summaries: it reads the memory saved so far, and maintain() runs in the background.
   async function recall(options) {
     try {
       const epoch = epochFor(options.runId);
-      const result = await maintain(options);
-      if (!result.budget || !current(options.runId, epoch)) return { ...result, overview: "", details: [], text: "" };
-      const sources = sourcesFrom(await readSources(options.runId, options.target), orderSources);
+      const context = await resolveContext(options.runId, { job: options.job, connectionId: options.connectionId });
+      const maxContext =
+        Number.isFinite(context?.maxContext) && context.maxContext > 0 ? Math.floor(context.maxContext) : null;
+      const budget = maxContext == null ? null : Math.floor(maxContext * 0.1);
       const { data } = await read(options.runId);
+      const result = {
+        status: data.status || { phase: "stale", retryable: true, reason: "not-prepared" },
+        budget,
+        maxContext,
+      };
+      if (!budget)
+        return {
+          ...result,
+          status: { phase: "context-unknown", retryable: false, reason: "configure-context" },
+          overview: "",
+          details: [],
+          text: "",
+        };
+      const sources = sourcesFrom(await readSources(options.runId, options.target), orderSources);
       const records = validRecords(data, sources);
       const currentStamps = sourceStamp(sources);
-      const eligible = (stamps) => Array.isArray(stamps) && same(stamps, currentStamps.slice(0, stamps.length));
       const saved =
-        result.overview != null && eligible(result.overviewSources)
-          ? { content: result.overview }
-          : eligible(data.overview?.sources)
-            ? data.overview
-            : null;
-      const overview =
-        saved && estimateTokens(`${overviewHeading}${saved.content}`) <= result.budget ? saved.content : "";
+        Array.isArray(data.overview?.sources) &&
+        same(data.overview.sources, currentStamps.slice(0, data.overview.sources.length))
+          ? data.overview
+          : null;
+      const covered = new Set((saved?.sources || []).map(([key]) => key));
+      // The latest chapter is sent in full, so the overview may lag it by that one chapter and lose no canon.
+      const latest = sources.findLast((source) => source.kind === "chapter");
+      const behind = sources.some(
+        (source) => source.kind === "chapter" && source !== latest && !covered.has(source.key),
+      );
+      const overview = saved && estimateTokens(`${overviewHeading}${saved.content}`) <= budget ? saved.content : "";
+      if (behind || (saved?.sources.length && !overview) || !current(options.runId, epoch))
+        return {
+          ...result,
+          status: { ...result.status, phase: result.status.phase === "ready" ? "stale" : result.status.phase },
+          overview: "",
+          details: [],
+          text: "",
+        };
       let vector;
       const host = await embeddings(options.runId);
       try {
@@ -558,7 +591,22 @@ export function createForgeStoryMemory({
         vector,
         spaceId: host?.spaceId,
       });
-      return { ...result, overview, details, text: forgeStoryMemoryText({ overview, details }) };
+      // Side canon finished since the last summary is sent as written, like the latest chapter, until its
+      // summary lands; nothing played waits for, or goes missing behind, background work.
+      const summarized = new Set(records.map((record) => record.key));
+      const unsummarized = sources.filter((source) => source.kind !== "chapter" && !summarized.has(source.key));
+      return {
+        ...result,
+        status: { ...result.status, phase: "ready" },
+        unsummarized,
+        // Work still owed in the background; a failed summary keeps its saved phase and waits for Retry.
+        lagging:
+          result.status.phase !== "error" &&
+          (unsummarized.length > 0 || sources.some((source) => !covered.has(source.key))),
+        overview,
+        details,
+        text: forgeStoryMemoryText({ overview, details }),
+      };
     } catch (error) {
       log?.(error);
       return {

@@ -263,6 +263,12 @@ try {
     segments: [{ text: "The second festival closes." }],
   });
   f.session().progress["event-2"] = { normal: 9 };
+  // Memory is summarized in the background since 1.24.9; let it settle so the snapshot sees only this grant.
+  for (let turn = 0; turn < 200; turn += 1) {
+    const memory = (await post("/story-memory/status", {})).body.memory;
+    if (!["pending", "stale"].includes(memory?.phase)) break;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
   f.faults.updateId = unitId;
   const beforeRollback = structuredClone(f.docs);
   const failedOutfit = await post("/story-event/complete", {
