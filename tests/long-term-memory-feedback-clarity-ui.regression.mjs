@@ -1081,7 +1081,38 @@ assert.equal((maintenance.match(/queryKeys\.localCharactersRoot/g) ?? []).length
 assert.match(sharedControls, /export function lockedActionProps\(locked: boolean, reasonId\?: string\)/u);
 assert.equal((sharedControls.match(/props\["aria-disabled"\] \? "opacity-50"/gu) ?? []).length, 2);
 assert.match(maintenance, /const lock = lockedActionProps\(busy\)/u);
-assert.doesNotMatch(maintenance, /disabled=\{[^}]*\b(?:busy|pending)\b/u);
+// A native `disabled={…}` expression is read to its matching brace: a pattern that stops at the first `}` lets a
+// nested object, arrow body or template literal hide the running-work flag from the scan.
+const nativeDisabledMentioning = (source, pattern) => {
+  const found = [];
+  for (const match of source.matchAll(/(?<!aria-)\bdisabled=\{/gu)) {
+    const start = match.index + match[0].length;
+    let depth = 1;
+    let end = start;
+    for (; end < source.length && depth > 0; end += 1) {
+      if (source[end] === "{") depth += 1;
+      else if (source[end] === "}") depth -= 1;
+    }
+    const expression = source.slice(start, end - 1);
+    if (pattern.test(expression)) found.push(expression);
+  }
+  return found;
+};
+const runningWork = /\b(?:busy|pending)\b/u;
+assert.deepEqual(nativeDisabledMentioning("<Button disabled={!ready || busy} />", runningWork), ["!ready || busy"]);
+assert.deepEqual(nativeDisabledMentioning("<Button disabled={busy} />", runningWork), ["busy"]);
+assert.deepEqual(
+  nativeDisabledMentioning("<Button disabled={Boolean(find({ id })) || busy} />", runningWork),
+  ["Boolean(find({ id })) || busy"],
+  "an expression with a nested object is read whole",
+);
+assert.doesNotMatch(
+  "<Button disabled={Boolean(find({ id })) || busy} />",
+  /disabled=\{[^}]*\b(?:busy|pending)\b/u,
+  "the first-brace pattern misses that expression",
+);
+assert.deepEqual(nativeDisabledMentioning("<Button aria-disabled={busy} />", runningWork), []);
+assert.deepEqual(nativeDisabledMentioning(maintenance, runningWork), []);
 assert.doesNotMatch(vault, /className: "opacity-50"/u);
 assert.doesNotMatch(readFileSync(ltmSourcePaths.settings, "utf8"), /className: "opacity-50"/u);
 // Vault and Review locks: unsaved identity edits and running saves never feed a native `disabled`; the source
@@ -1094,10 +1125,13 @@ const subjectIdentityReview = readFileSync(
   join(dirname(ltmSourcePaths.reviewQueue), "SubjectIdentityReview.tsx"),
   "utf8",
 );
-assert.doesNotMatch(reviewQueue, /(?<!aria-)disabled=\{[^}]*identityDirtyIds/u);
-assert.doesNotMatch(
-  reviewQueue,
-  /(?<!aria-)disabled=\{[^}]*\b(?:dismissingId|clearingSourceId|extractingSourceId|isFetching|running !== null)\b/u,
+assert.deepEqual(nativeDisabledMentioning(reviewQueue, /identityDirtyIds/u), []);
+assert.deepEqual(
+  nativeDisabledMentioning(
+    reviewQueue,
+    /\b(?:dismissingId|clearingSourceId|extractingSourceId|isFetching|running !== null)\b/u,
+  ),
+  [],
 );
 assert.equal(
   (reviewQueue.match(/lockedActionProps\(identityLocked, identityLockReasonId\)/gu) ?? []).length,
