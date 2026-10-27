@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.24.8",
+          "date": "2026-10-27",
+          "notes": "- In character chats, Enter now adds a new line instead of sending. Only **Send** sends your message, so a stray Enter can no longer send it early.\n- Auto in story scenes no longer turns itself off when background work starts or finishes, such as expression portraits, scenes written ahead or portraits painting, or when you switch tabs and come back. The current line's voice no longer replays either.\n- While a story is written in the background, Formation changes stick: a picked unit, a drag or the bench scroll are no longer reset mid-move, saves never land out of order, and a battle waits for your last change. The chapter map no longer redraws every few seconds, and background writing no longer stalls other screens.",
+          "highlight": false
+        },
+        {
           "version": "1.24.7",
           "date": "2026-10-27",
           "notes": "- New **Expression portraits** setting in World → Sources → Images, off by default. Story portraits then show anger, fear, sadness or joy line by line, marked in the same request that writes the scene. Four faces per look are painted in the background, only for characters who speak. A failed set is not retried on its own: turn the setting off and on to try once more.\n- Your persona keeps its own voice even when another character shares part of its name, and turning Voice other characters off and on again no longer asks to pay again for combat lines that were never made.",
@@ -283,12 +289,6 @@
           "version": "1.16.1",
           "date": "2026-10-25",
           "notes": "- Restore first-send character replies and keep sent and remembered messages scrollable in the same chat window, without automatic resends.\n- Use current linked character cards’ full Description, Personality, Backstory and Appearance in story prompts, excluding card Scenario, greetings and example dialogue.\n- Keep Writing help buttons compact and preserve tapped explanations through viewport updates.\n- Use “They did not answer.” as the neutral direct-message failure fallback.\n- Hide the neutral story portrait silhouette when the current artwork is loaded, retaining safe loading and missing-art fallbacks.\n- Restore explicit banner animation recovery after playback or stale-clip errors. Failed replacement attempts keep previous saved media; successful replacements receive a fresh immutable URL.",
-          "highlight": true
-        },
-        {
-          "version": "1.16.0",
-          "date": "2026-10-25",
-          "notes": "- Punctuate choice labels. Keep the correct speaker portrait and prevent fullscreen/mute from advancing.\n- Tap Writing help on mobile; keep daily rewards clear of Claim and animate loaded unit art smoothly.\n- Use the current timezone for resets and new banner periods, including clock changes. Catch up automatic chapter memory on world open; retain manual controls and show compressed/combined counts.\n- Auto-select affordable character, weapon, relic and skill upgrades before confirmation. Auto-equip the best free gear and clear stale Units dots.\n- Open farming domains from upgrade materials and show their next rotation; Mandates open their Login Event.\n- Reuse matching dialogue audio; reveal fresh opening lines while preserving saved reading positions.\n- Generate richer music briefs with world motifs, varied arrangements and musical development.",
           "highlight": true
         }
       ]
