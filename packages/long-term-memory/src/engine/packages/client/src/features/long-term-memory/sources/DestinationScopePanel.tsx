@@ -271,7 +271,7 @@ export function DestinationScopePanel({
               .map((m) => localizedLabel(m, localizeUi, labelKeys.mode))
               .join(", ")}`
           : mode === "all"
-            ? source === "chats"
+            ? source === "chats" || source === "messages"
               ? localizeUi("ui.longTermMemory.sourcesworkspace.automatic")
               : localizeUi("ui.longTermMemory.sourcesworkspace.importsDefaultToRoleplay")
             : sourceModeLabel(mode, localizeUi)}

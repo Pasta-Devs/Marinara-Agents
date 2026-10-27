@@ -74,8 +74,8 @@ folder owns one area.
 | `extraction/` | evidence-unit extraction, validation and compilation, source processing and hashes, candidate reconciliation, extraction settings | `evidence-unit-extraction`, `evidence-unit-validation`, `evidence-unit-compiler`, `structured-summary-normalizer`, `source-extraction`, `source-processing`, `source-hash`, `dedup`, `candidate-reconciliation`, `scoped-targets`, `extraction-config` |
 | `identity/` | subject identity (`subject-names`: name text rules; `subject-matching`: the trusted catalog's types, index and matchers; `subject-catalog`: building and loading the catalog and checking stored notes against it; `subject-identity`: resolving a batch's subjects), chat scope and scope links, identity and fork repair | `subject-names`, `subject-matching`, `subject-catalog`, `subject-identity`, `subject-choice-review`, `subject-equality`, `identity-repair`, `note-fork-repair`, `chat-scope`, `scope-links` |
 | `drafts/` | the draft store, projection and review, applying drafts to notes, rejected suggestions | `draft-store`, `draft-projector`, `draft-review`, `reconciliation`, `rejected-suggestions` |
-| `maintenance/` | integrity checks and repair, note transfer, legacy adoption and quarantine, the debug log | `maintenance`, `note-transfer`, `legacy-adoption`, `legacy-source-quarantine`, `debug-log` |
-| `sources/` | Engine chats and summaries read as sources | `interop`, `source-identity` |
+| `maintenance/` | integrity checks and repair, note transfer, legacy agent-settings adoption and quarantine, the debug log | `maintenance`, `note-transfer`, `legacy-adoption`, `legacy-source-quarantine`, `debug-log` |
+| `sources/` | Engine chats, summaries and messages read as sources | `interop`, `source-identity` |
 | `services/` | what other packages can look up through the Engine: recalled memories about the accounts they write as (`recall`), a character's memories available everywhere (`storage-read`), the reads switch and the reader list | `recall`, `storage-read` |
 
 The folders are areas, not enforced layers. `persistence/` still imports from

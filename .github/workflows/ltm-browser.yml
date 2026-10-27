@@ -115,7 +115,7 @@ jobs:
       # Pull Request Checks through npm run test:security.
       - name: Run Engine-free Long-Term Memory regressions
         run: |
-          for test in candidate-reconciliation conversation-summary-import debug-log delta-review extraction-graph \
+          for test in candidate-reconciliation chat-transcript-import conversation-summary-import debug-log delta-review extraction-graph \
             extraction-reliability local-characters rebuild-job runtime; do
             npx tsx "tests/long-term-memory-$test.regression.ts"
           done

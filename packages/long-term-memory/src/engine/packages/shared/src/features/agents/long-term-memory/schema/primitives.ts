@@ -174,7 +174,7 @@ export function hasLocalCharacterSubject(subjects: readonly z.infer<typeof ltmSu
 
 export const ltmSourceProvenanceSchema = z
   .object({
-    kind: z.enum(["character", "lorebook", "chat_summary"]),
+    kind: z.enum(["character", "lorebook", "chat_summary", "chat_transcript"]),
     sourceId: z.string().min(1).max(120),
     entryId: z.string().min(1).max(120).optional(),
   })
@@ -314,7 +314,7 @@ export const ltmIdentityMatchBasisSchema = z.enum([
   "unordered_pair",
 ]);
 
-export const ltmInteropSourceSchema = z.enum(["characters", "lorebooks", "chats"]);
+export const ltmInteropSourceSchema = z.enum(["characters", "lorebooks", "chats", "messages"]);
 
 export type LtmNoteType = z.infer<typeof ltmNoteTypeSchema>;
 export type LtmStatus = z.infer<typeof ltmStatusSchema>;

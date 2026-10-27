@@ -185,9 +185,24 @@ async function main() {
       assert.ok(capturedTurnQuarantine);
       assert.deepEqual(await readdir(join(root, "quarantine", capturedTurnQuarantine)), ["source_turn_legacy.json"]);
       await first.storage.createNote(noteInput);
+      const transcriptProvenance = { kind: "chat_transcript" as const, sourceId: "chat-a", entryId: "message-1" };
+      await first.storage.createNote({
+        ...noteInput,
+        id: "source_transcript_import",
+        title: "Imported chat messages",
+        type: "source",
+        tags: ["imported_chat_messages"],
+        provenance: transcriptProvenance,
+        sections: { source: { text: "User: Hello.", updatedAt: timestamp } },
+      });
       await first.cleanup();
       first = null;
       restarted = await activateLongTermMemoryStorage(root);
+      assert.deepEqual(
+        (await restarted.storage.getNote("source_transcript_import"))?.provenance,
+        transcriptProvenance,
+        "chat_transcript provenance survives a restart",
+      );
       assert.equal(
         (await restarted.storage.getNote(noteInput.id))?.sections.facts?.text,
         "This note survives runtime restart.",

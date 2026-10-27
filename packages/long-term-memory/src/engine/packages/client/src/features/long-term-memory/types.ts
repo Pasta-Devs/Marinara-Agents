@@ -54,7 +54,7 @@ export type CapabilityElement = HTMLElement & {
 
 export type LongTermMemoryDestination = "vault" | "review" | "sources" | "settings";
 
-export type SourceTab = "characters" | "lorebooks" | "chats";
+export type SourceTab = "characters" | "lorebooks" | "chats" | "messages";
 
 export type LtmRecoveryHandoff = {
   key: number;

@@ -8,7 +8,13 @@ import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-help
 async function main() {
   const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
   const packageManifest = JSON.parse(await readFile(join(repoRoot, "packages/long-term-memory/manifest.json"), "utf8"));
-  assert.equal(packageManifest.engine.min, "2.4.1", "Long-Term Memory is gated by its capability API, not engine.min");
+  // engine.min cannot tell Engine staging from the 2.5.1 release; capability API 1.387 (E2 + E3) can.
+  assert.equal(packageManifest.engine.min, "2.5.1");
+  assert.deepEqual(
+    packageManifest.capabilityApi,
+    { major: 1, minor: 387 },
+    "Long-Term Memory is gated by its capability API",
+  );
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { activate } = await import(`${source}/server-entry.ts`);
   const {
@@ -679,15 +685,10 @@ async function main() {
       assert.ok(runtime, "package activation must register the runtime service");
       assert.deepEqual(
         chats[0].metadata,
-        {
-          enableLongTermMemory: true,
-          longTermMemoryBudgetTokens: 2048,
-          activeAgentIds: ["long-term-memory"],
-          enableAgents: true,
-          longTermMemoryPackageAdopted: true,
-        },
-        "legacy chat settings must be preserved while activating the package agent",
+        { enableLongTermMemory: true, longTermMemoryBudgetTokens: 2048 },
+        "activation must leave legacy chat settings alone; users switch the package on per chat",
       );
+      assert.equal(metadataUpdates, 0, "activation must not write chat metadata");
       assert.deepEqual(
         JSON.parse(await readFile(join(dataDir, "long-term-memory", "config", "agent-settings.json"), "utf8")),
         {
@@ -2119,7 +2120,7 @@ async function main() {
       legacyAgentConfig = null;
       cleanup = await activate({ dataDir, api });
       assert.deepEqual(chats[0].metadata.activeAgentIds, [], "reinstall must not reverse explicit uninstall cleanup");
-      assert.equal(metadataUpdates, 1, "legacy adoption must be idempotent across restarts");
+      assert.equal(metadataUpdates, 0, "reactivation must not write chat metadata");
       assert.equal(
         agentConfigReads,
         1,

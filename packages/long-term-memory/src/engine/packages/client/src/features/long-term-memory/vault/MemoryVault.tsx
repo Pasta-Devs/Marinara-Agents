@@ -1283,6 +1283,10 @@ export default function MemoryVault({
       return localizeUi("ui.longTermMemory.memoryvault.chatSummary", {
         title: scopeTargetLabel("chat", draft.provenance.sourceId, targets),
       });
+    if (draft.provenance.kind === "chat_transcript")
+      return localizeUi("ui.longTermMemory.memoryvault.chatMessages", {
+        title: scopeTargetLabel("chat", draft.provenance.sourceId, targets),
+      });
     return localizeUi("ui.longTermMemory.memoryvault.lorebook");
   };
 
@@ -2872,7 +2876,9 @@ export default function MemoryVault({
                               ? "characters"
                               : draft.provenance?.kind === "lorebook" || draft.tags.includes("imported_lorebook")
                                 ? "lorebooks"
-                                : "chats",
+                                : draft.provenance?.kind === "chat_transcript"
+                                  ? "messages"
+                                  : "chats",
                             draft.id,
                           )
                         }
