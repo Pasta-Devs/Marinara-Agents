@@ -1,6 +1,6 @@
 # Saucelings release notes
 
-## Unreleased
+## 0.23.1 — 2026-10-27
 
 - On a wide screen, Background, Caretaker, Looks and New egg open in their own box under the meters and care buttons, instead of across the bottom of the Nook.
 
