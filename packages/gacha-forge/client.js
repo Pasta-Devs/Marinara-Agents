@@ -9430,7 +9430,8 @@ function saveForgeFormation(host, presets, active) {
     while (queue.next) {
       const edit = queue.next;
       queue.next = null;
-      reply = await host._postJson("/formation/save", { runId, ...edit });
+      // A request that throws counts as a failed save rather than leaving this world's queue stuck.
+      reply = await Promise.resolve(host._postJson("/formation/save", { runId, ...edit })).catch(() => null);
     }
     saves.delete(runId);
     const saved = reply?.ok === true && Array.isArray(reply.presets);
