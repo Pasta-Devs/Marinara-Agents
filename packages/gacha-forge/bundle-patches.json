@@ -1934,6 +1934,24 @@
               "replace": "Writing it means the plan of chapter one and its first scene:"
             }
           ]
+        },
+        {
+          "version": "1.24.10",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.24.9\"",
+              "replace": "ds=\"1.24.10\""
+            },
+            {
+              "find": "var oy=[{version:null,changed:[\"A new chapter opens as soon as its plan is written. Each fight is designed in the background right after the scene before it, so it is ready when you reach it.\"],fixed:[\"Story memory summarizes only in the background, so writing no longer waits for it to catch up, and long chapters can be summarized again, with at least 10k tokens of room for thinking models.\"]},{version:\"1.24.8\"",
+              "replace": "var oy=[{version:null,fixed:[\"A seasonal story event can start right after a chapter again: a chapter or Character Story you forged but have not started no longer blocks it, and the event card names what you still need to finish.\"]},{version:\"1.24.9\",changed:[\"A new chapter opens as soon as its plan is written. Each fight is designed in the background right after the scene before it, so it is ready when you reach it.\"],fixed:[\"Story memory summarizes only in the background, so writing no longer waits for it to catch up, and long chapters can be summarized again, with at least 10k tokens of room for thinking models.\"]},{version:\"1.24.8\""
+            },
+            {
+              "find": ":\"That beat could not be started.\",this._renderBrowser()",
+              "replace": ":a&&a.error===\"story-event-open\"?forgeSeasonalEnglish[\"events.mainBlocked\"].replace(\"{title}\",a.title||forgeSeasonalEnglish[\"events.title\"]):\"That beat could not be started.\",this._renderBrowser()"
+            }
+          ]
         }
       ]
     },

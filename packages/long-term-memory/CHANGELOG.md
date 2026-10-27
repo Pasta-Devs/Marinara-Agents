@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.6.0 — 2026-10-27
 
 - Long-Term Memory now has a Korean interface. It follows the Engine's language setting and shows English for any text without a Korean version. The translation is machine-made and awaits review by a Korean speaker.
 

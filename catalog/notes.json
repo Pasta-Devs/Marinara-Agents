@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.24.10",
+          "date": "2026-10-27",
+          "notes": "- A seasonal story event can start right after you finish a chapter again. Only a story you are in the middle of keeps an event closed: a main chapter or Character Story part with some, but not all, of it played. One you forged but have not started yet no longer blocks it, and waits until the event is done.\n- The event card now says what to finish first (\"Finish Chapter 3\" or \"Finish Arden's Character Story\"), and starting a chapter while an event is open names the event to finish.",
+          "highlight": false
+        },
+        {
           "version": "1.24.9",
           "date": "2026-10-27",
           "notes": "- A new chapter opens as soon as its plan is written. Its fights are no longer all designed before the chapter map appears: each fight is designed in the background right after the scene before it is written (by pre-forge or when you open it), so it is ready, with its enemy art, when you reach it.\n- Story memory summarizes only in the background, so writing a plan, scene, fight or chat no longer waits for it to catch up. Canon the saved overview does not cover yet is sent beside it as its summary, or as written for a fresh side story or chat. A summary already running on the same connection still finishes first; a separate summary connection avoids that.\n- Long chapters can be summarized again: summaries get at least 10k tokens of output room for thinking models (or the model's maximum, never below 8,192).",
@@ -284,12 +290,6 @@
           "date": "2026-10-25",
           "notes": "- Enable optional Seasonal events beside compact Player choices in setup or Story Continuity.\n- Explore a new, world-specific story and combat adventure every three weeks, with an event banner and optional animation and music. Event themes, familiar cast and rewards are prepared before you start; the chapter is written against current canon when you choose to play.\n- Earn bounded resources, Aether, four-star characters or themed outfits once. Expired events close new progress and rewards; played scenes remain in Chapters. Existing banner minigames stay available.\n- Keep event progress and rewards safe across refresh, restart, opt-out and concurrent requests, using existing chapter, combat and media systems.",
           "highlight": true
-        },
-        {
-          "version": "1.17.0",
-          "date": "2026-10-25",
-          "notes": "- Regenerate an ongoing chapter or the current open Character Story from its bottom action after a named confirmation. Completed chapters remain protected.\n- Discard only the selected chapter’s story, choices and reading progress, then write a fresh plan with current settings and character cards. Preserve other chapters, conversations, characters, inventory and earned rewards.\n- Stop and drain pending story work before resetting. Replaying cleared progress does not award first-clear rewards again; the usual Vigor cost to play still applies.",
-          "highlight": true
         }
       ]
     },
@@ -363,6 +363,12 @@
     },
     "long-term-memory": {
       "versions": [
+        {
+          "version": "1.6.0",
+          "date": "2026-10-27",
+          "notes": "- Long-Term Memory now has a Korean interface. It follows the Engine's language setting and shows English for any text without a Korean version. The translation is machine-made and awaits review by a Korean speaker.",
+          "highlight": true
+        },
         {
           "version": "1.5.2",
           "date": "2026-10-27",
@@ -475,12 +481,6 @@
           "version": "1.4.80",
           "date": "2026-10-22",
           "notes": "- No change in what Long-Term Memory does. Internally, the server file that matches names in chats and summaries to memories is split into four files.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.79",
-          "date": "2026-10-22",
-          "notes": "- Extraction from a structured chat summary now reads a character name that starts with \"Char\", such as \"Char Aznable\", or a relationship pair whose first name starts with \"Rel\", as a name instead of an id when the summary writes the name out, as in \"- Char Aznable | …\", \"character: Char Aznable\", \"- Rel Varga, Sayla Mass | …\" or \"characters: Rel Varga, Sayla Mass\". The section the summary gives that character, such as Profile, now reaches their memory, those lines are saved instead of being dropped as not in the chat's roster, and a relationship that only the summary mentions is kept. The event made for a relationship's cause names the pair as the summary wrote it, as in \"Rel Varga and Sayla Mass relationship changed after the hangar fire.\", instead of splitting the names into words. A line that writes an id made from the name instead, such as \"subject: char_aznable\", is still read as an id.",
           "highlight": false
         }
       ]
