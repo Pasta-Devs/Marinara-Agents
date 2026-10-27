@@ -4,7 +4,7 @@ import { errorMessage, withoutUserMessage } from "./api";
 export type LtmSourceTaskKind = "import" | "refresh" | "re-extract";
 
 export type LtmSourceTaskContract = {
-  source: "characters" | "lorebooks" | "chats";
+  source: "characters" | "lorebooks" | "chats" | "messages";
   sourceIds: string[];
   action: LtmSourceTaskKind;
   sourceScope?: LtmScope;

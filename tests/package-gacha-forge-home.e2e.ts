@@ -71,7 +71,7 @@ test("Home shows the real element matchups between Letters and the portrait with
       }),
     );
   }, appVersion);
-  await page.route("**/api/gacha-forge/state", (route) =>
+  await page.route("**/api/gacha-forge/state*", (route) =>
     route.fulfill({
       json: { runs: [activeRun], activeRunId: activeRun.runId, activeRun, guidesSeen: ["welcome", "home", "chat"] },
     }),
@@ -202,7 +202,7 @@ test("Units explains the Home dot and clears the recommendation after progressio
       }),
     );
   }, appVersion);
-  await page.route("**/api/gacha-forge/state", (route) => {
+  await page.route("**/api/gacha-forge/state*", (route) => {
     stateReads += 1;
     return route.fulfill({
       json: {

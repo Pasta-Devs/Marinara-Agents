@@ -1,9 +1,6 @@
 // Maintained package source, inlined after player-choices-en.mjs by the bundle builder.
-/* global forgeChoiceEnglish */
+/* global forgeChoiceEnglish, forgeChoiceLabel, forgeSeasonalEnglish */
 const forgeChoiceSettingsLayout = `
-.st-pane .gf-choice-settings-toggle {
-  grid-template-columns: 44px minmax(0, 1fr); gap: 0.75rem; align-items: center; padding: 0.4rem 0.6rem;
-}
 .st-pane .gf-choice-settings-toggle > .ob-bx {
   width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0;
   display: grid; place-items: center; line-height: 1;
@@ -45,10 +42,26 @@ function forgeChoiceEscape(value) {
 }
 
 export function forgeChoiceSettings(run) {
-  return `<style data-forge-choice-settings-layout>${forgeChoiceSettingsLayout}</style><div class="st-plate" data-player-choice-settings><div class="hd"><h3>${forgeChoiceEnglish["settings.playerChoices.title"]}</h3></div><label class="ob-toggle gf-choice-settings-toggle"><button class="ob-bx" type="button" role="checkbox" aria-checked="${run?.story?.choices !== false}" data-forge-allow-choices aria-label="${forgeChoiceEnglish["settings.playerChoices.allow"]}"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 8.4 3.1 3.1 5.9-7.3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><span class="bt gf-choice-settings-copy"><b>${forgeChoiceEnglish["settings.playerChoices.allow"]}</b><span class="bd">${forgeChoiceEnglish["settings.playerChoices.hint"]}</span></span></label></div>`;
+  const tick =
+    '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 8.4 3.1 3.1 5.9-7.3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  return `<style data-forge-choice-settings-layout>${forgeChoiceSettingsLayout}</style><div class="gf-story-options"><div class="st-plate" data-player-choice-settings><div class="hd"><h3>${forgeChoiceEnglish["settings.playerChoices.title"]}</h3></div><label class="ob-toggle gf-choice-settings-toggle"><button class="ob-bx" type="button" role="checkbox" aria-checked="${run?.story?.choices !== false}" data-forge-allow-choices aria-label="${forgeChoiceEnglish["settings.playerChoices.allow"]}">${tick}</button><span class="bt gf-choice-settings-copy"><b>${forgeChoiceEnglish["settings.playerChoices.allow"]}</b><span class="bd">${forgeChoiceEnglish["settings.playerChoices.hint"]}</span></span></label></div><div class="st-plate"><div class="hd"><h3>${forgeSeasonalEnglish["events.settings.title"]}</h3></div><label class="ob-toggle"><button class="ob-bx" type="button" role="checkbox" aria-checked="${run?.story?.seasonalEvents === true}" data-forge-seasonal-events aria-label="${forgeSeasonalEnglish["events.settings.allow"]}">${tick}</button><span class="bt"><b>${forgeSeasonalEnglish["events.settings.allow"]}</b><span class="bd">${forgeSeasonalEnglish["events.settings.hint"]}</span></span></label></div></div>`;
 }
 
 export function wireForgeChoiceSettings(root, _run, onSources) {
+  const seasonal = root.querySelector("[data-forge-seasonal-events]");
+  seasonal?.addEventListener("click", async () => {
+    if (seasonal.disabled || typeof onSources !== "function") return;
+    const value = seasonal.getAttribute("aria-checked") !== "true";
+    seasonal.disabled = true;
+    seasonal.setAttribute("aria-checked", String(value));
+    try {
+      await onSources({ story: { seasonalEvents: value } });
+    } catch {
+      seasonal.setAttribute("aria-checked", String(!value));
+    } finally {
+      seasonal.disabled = false;
+    }
+  });
   const toggle = root.querySelector("[data-forge-allow-choices]");
   if (!toggle || typeof onSources !== "function") return;
   toggle.addEventListener("click", async () => {
@@ -90,6 +103,8 @@ export function prepareForgeChoices(host, response) {
   if (!choices.length) return;
   const node = host._activeStoryNode;
   const runId = host._run?.runId;
+  const plan = host._plan;
+  const storyRevision = host._forgeChapterPlanVersions?.get(plan) ?? host._forgeChapterVersions?.get(runId) ?? 0;
   const bondUnit = host._bondUnit;
   const bondPart = host._bondPart;
   const canon = { ...(response.choiceCanon || {}) };
@@ -106,6 +121,8 @@ export function prepareForgeChoices(host, response) {
   let active = true;
   let busy = false;
   let resumePlayback = null;
+  // Not tied to the plan object: opening a chapter reloads its plan in the background, and an identical reload
+  // landing mid-beat would otherwise hide every choice. A regenerated story still fails on storyRevision.
   const isCurrent = () => active && host._activeStoryNode === node && host._run?.runId === runId;
   const rebuild = () => {
     timeline.length = 0;
@@ -181,7 +198,7 @@ export function prepareForgeChoices(host, response) {
     panel.dataset.choiceId = choice.id;
     panel.setAttribute("role", "group");
     panel.setAttribute("aria-label", forgeChoiceEnglish["story.choices.prompt"]);
-    panel.innerHTML = `<p class="vn-choice-heading">${forgeChoiceEnglish["story.choices.prompt"]}</p>${choice.kind === "big" ? `<p class="vn-choice-heading">${forgeChoiceEnglish["story.choices.majorWarning"]}</p>` : ""}<div class="vn-choice-options">${choice.options.map((option) => `<button class="vn-choice-option" type="button" data-forge-choice-option="${forgeChoiceEscape(option.id)}">${forgeChoiceEscape(option.text)}</button>`).join("")}</div><p class="vn-choice-status" data-forge-choice-error role="status" aria-live="polite" hidden></p>`;
+    panel.innerHTML = `<p class="vn-choice-heading">${forgeChoiceEnglish["story.choices.prompt"]}</p>${choice.kind === "big" ? `<p class="vn-choice-heading">${forgeChoiceEnglish["story.choices.majorWarning"]}</p>` : ""}<div class="vn-choice-options">${choice.options.map((option) => `<button class="vn-choice-option" type="button" data-forge-choice-option="${forgeChoiceEscape(option.id)}">${forgeChoiceEscape(forgeChoiceLabel(option.text))}</button>`).join("")}</div><p class="vn-choice-status" data-forge-choice-error role="status" aria-live="polite" hidden></p>`;
     root.querySelector(".vn-dock")?.prepend(panel);
     const currentPanel = panel;
     const status = currentPanel.querySelector(".vn-choice-status");
@@ -203,12 +220,17 @@ export function prepareForgeChoices(host, response) {
           ...(node.replay ? { replay: true } : {}),
           choiceId: choice.id,
           optionId: button.dataset.forgeChoiceOption,
+          storyRevision,
         });
       } catch {
         result = null;
       }
       if (!isCurrent()) return;
       busy = false;
+      if (result?.error === "story-changed") {
+        status.textContent = forgeChoiceEnglish["story.choices.changed"];
+        return;
+      }
       const optionId = result?.ok
         ? result.optionId
         : result?.error === "choice-locked"
@@ -235,6 +257,15 @@ export function prepareForgeChoices(host, response) {
   host._choicePlayback = {
     timeline,
     mainIndex: (index) => mainIndexes[index] ?? 0,
+    artworkChoice(index) {
+      const segment = timeline[index];
+      for (const choice of choices) {
+        if (choice.at !== mainIndexes[index]) continue;
+        const option = choice.options.find((entry) => entry.id === selected.get(choice.id));
+        if (option?.segments?.includes(segment)) return { choiceId: choice.id, optionId: option.id };
+      }
+      return {};
+    },
     startAt(mainIndex) {
       const wanted = Math.max(0, mainIndexes.indexOf(mainIndex));
       const pending = [...pendingIndexes.keys()].find((index) => index <= wanted);

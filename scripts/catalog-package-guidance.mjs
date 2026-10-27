@@ -159,6 +159,10 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["conversation", "roleplay", "game"],
     activation: "Install it, restart Marinara Engine when prompted, then open Home → Saucelings.",
   },
+  "story-writer": {
+    modes: ["conversation", "roleplay", "game"],
+    activation: "Install it, restart Marinara Engine when prompted, then open Home → Story Writer.",
+  },
   pixelforge: {
     modes: ["game"],
     activation: "Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",

@@ -24,7 +24,7 @@ test("Forge fills every screen, toggles inside the Engine and keeps world drafts
     );
   }, appVersion);
   // No model calls or generated game data are needed to exercise the real shipped UI.
-  await page.route("**/api/gacha-forge/state", (route) =>
+  await page.route("**/api/gacha-forge/state*", (route) =>
     route.fulfill({ json: { runs: [], guidesSeen: ["welcome"] } }),
   );
   // Keep the setup draft in the same isolated fixture as the mocked world state.

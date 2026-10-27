@@ -52,6 +52,8 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
   extStir: slurp("stir", "stir", "extension", "levers", "planner"),
   extSupportDesk: slurp("stir", "support desk", "extension", "tickets", "trust"),
   extEngineLink: internal(slurp("engine", "engine link")),
+  extLive: slurp("live", "live shows", "extension", "go live", "cam", "stream"),
+  live: slurp("live", "live shows", "cam show", "private show", "live pictures", "tips"),
   inlineAdsEnabled: slurp("ads", "ads", "promotions", "feed"),
   inlineAdsFrequency: slurp("ads", "ad frequency", "promotions"),
   brandDealsPace: slurp("ads", "brand deals", "sponsored posts", "paid partnership"),
@@ -237,6 +239,7 @@ const SLP_EXTENSION_TARGETS: Partial<Record<SlpBackstageTarget, SlpExtensionId>>
   drama: "storylines",
   // The Stir page holds both switches; its other settings are the Support desk's.
   stir: "supportDesk",
+  live: "live",
 };
 /** Settings an extension owns that live on another page. */
 const SLP_EXTENSION_SETTINGS: Partial<Record<keyof SlurpSettings, SlpExtensionId>> = {

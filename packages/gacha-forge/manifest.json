@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "capabilityApi": {
     "major": 1,
-    "minor": 384
+    "minor": 385
   },
   "builtAgainst": {
     "engineVersion": "2.5.1",
@@ -10,7 +10,7 @@
   },
   "id": "gacha-forge",
   "name": "Gacha Forge",
-  "version": "1.15.2",
+  "version": "1.24.7",
   "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
   "engine": {
     "min": "2.5.1",
@@ -299,8 +299,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "f6cf24badc3ffa2db1aa33b0fc8e994a05fa2e58844ee478fe4216409d5937b9",
-      "bytes": 1559394
+      "sha256": "ffbf4f0623e099aa336951675de96703425d8cb1229d6bb0d941c484db6fd13b",
+      "bytes": 1894412
     },
     {
       "path": "farm-asc.webp",
@@ -774,8 +774,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "3ae5e78afb00793495857b44e088451a83701a382c24154f1750647c0e8729b0",
-      "bytes": 649593
+      "sha256": "da0ecca518586149fa31c4b10f9cbe464d049690b2a90db950c003f26ef718fb",
+      "bytes": 981352
     },
     {
       "path": "skill-aoe_damage-dark.webp",
@@ -1526,6 +1526,101 @@
       "path": "tower-bg.webp",
       "sha256": "22c28eb34c91b72ee9da276561e054745b828db21c55b4b647cbefb825e5bf8c",
       "bytes": 15292
+    },
+    {
+      "path": "src/formation-combat-client.mjs",
+      "sha256": "aec64a5c99e46aa9aee2e0d6ea541cf9ed75491738e02bd98da5bc9306b1e99d",
+      "bytes": 72431
+    },
+    {
+      "path": "src/formation-combat-en.mjs",
+      "sha256": "2e4a85317267e7a4b95888e2b0a543efa6799bb0db85c8d4ee45b3336941d0eb",
+      "bytes": 17873
+    },
+    {
+      "path": "src/formation-combat-server.mjs",
+      "sha256": "2c679bf29206b90111bb0c54c666ef1caf241e4d833565881838d04092dfc760",
+      "bytes": 24623
+    },
+    {
+      "path": "src/formation-combat-shared.mjs",
+      "sha256": "b4359de121be45980f9fbf7b2d1fbe844b33cf55629a10759130b0938ae4bc4a",
+      "bytes": 69396
+    },
+    {
+      "path": "src/formation-migration-server.mjs",
+      "sha256": "c16b905157714c3528604e01edb3c4d67bf8d76e54ac6e30dc9477ff12fd43db",
+      "bytes": 22427
+    },
+    {
+      "path": "src/formation-settings-client.mjs",
+      "sha256": "6741e855b2d704c7c70ad6ae461fd252b822e5b991216437dd588ea287e44a3d",
+      "bytes": 9980
+    },
+    {
+      "path": "src/formation-settings-en.mjs",
+      "sha256": "5335816230eb2a3dc63dab53abeb25231b0b63c1a87dc981ec851e062d8f91cc",
+      "bytes": 3723
+    },
+    {
+      "path": "src/combat-ultimate-client.mjs",
+      "sha256": "832cbfbed5e0e887eb61527da407a880861257f9e1a9984c0472b12856292fa6",
+      "bytes": 7695
+    },
+    {
+      "path": "src/combat-voices-client.mjs",
+      "sha256": "e2787168d7bc83b95721f83346ca112d2d9a34385863ccfc449d5f824118f51f",
+      "bytes": 16815
+    },
+    {
+      "path": "src/combat-voices-en.mjs",
+      "sha256": "d9656579bd48a6464c73195504fc6f130cc8deb1262361e7658c5e9a5aaecbcf",
+      "bytes": 1593
+    },
+    {
+      "path": "src/combat-voices-server.mjs",
+      "sha256": "ff04e4d84f59b500d074f7b7833e99ace52e12cbf0700c60bfc742436565f948",
+      "bytes": 19080
+    },
+    {
+      "path": "src/proactive-messages-en.mjs",
+      "sha256": "7c2a9d2f8216b780d92a8e26dd1b45f09eb02d471056c58ebdea9af317924328",
+      "bytes": 919
+    },
+    {
+      "path": "src/proactive-messages-client.mjs",
+      "sha256": "dda2d8259f61ddef28e9518740de4662971841eb25f1cd65fe209593a31f6051",
+      "bytes": 10938
+    },
+    {
+      "path": "src/proactive-messages-server.mjs",
+      "sha256": "2ac0079fc45e446b83c73d787a289b3aa7ec659a3083a3c2a10e4ca056b8f5c1",
+      "bytes": 14954
+    },
+    {
+      "path": "src/proactive-messages-adapter.mjs",
+      "sha256": "f508d2f3b013f8c0ffac15014c16c26a8787f8887cd5db31b25f46ec04838b01",
+      "bytes": 3158
+    },
+    {
+      "path": "src/background-download-client.mjs",
+      "sha256": "2ef9e96e3c243f6a5d4ed6b815e89cdfc7412ef3cb8983818dae061e406d9e26",
+      "bytes": 6420
+    },
+    {
+      "path": "src/background-unlocks-server.mjs",
+      "sha256": "af782ce72612652b2dc34af0a30e3a0397c785981b0b40fc9f8e45d5aabbe508",
+      "bytes": 11417
+    },
+    {
+      "path": "src/background-unlocks-client.mjs",
+      "sha256": "2c8a37d92eda1ef08389e5f0ae4af2b9a5d5d7f8d6843b31b3555099a4f646b2",
+      "bytes": 5215
+    },
+    {
+      "path": "src/unit-art-client.mjs",
+      "sha256": "7cf5a2703acd816e8b3b27538e9939d5da3fbf1241e735defdd8394a5fc9eeec",
+      "bytes": 1768
     }
   ]
 }

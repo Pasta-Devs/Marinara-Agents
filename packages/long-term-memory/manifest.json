@@ -2,18 +2,18 @@
   "schemaVersion": 2,
   "capabilityApi": {
     "major": 1,
-    "minor": 341
+    "minor": 387
   },
   "builtAgainst": {
-    "engineVersion": "2.5.0",
-    "engineCommit": "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed"
+    "engineVersion": "2.5.1",
+    "engineCommit": "345cd747cf8e8fd56f3fbdceb625a1edd568b525"
   },
   "id": "long-term-memory",
   "name": "Long-Term Memory",
-  "version": "1.4.92",
-  "description": "Remembers important things from your chat summaries, characters, and lorebooks, and brings them back when they matter. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
+  "version": "1.5.0",
+  "description": "Remembers important things from your chats, characters, and lorebooks, and brings them back when they matter. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
   "engine": {
-    "min": "2.4.1",
+    "min": "2.5.1",
     "maxExclusive": "4.0.0"
   },
   "kind": [
@@ -37,24 +37,23 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "263273cb19dbed76302b12855c9a56df0f5489008a580d24803f7ab9f998e6be",
-      "bytes": 552
+      "sha256": "d0c5a064c4d5cd96064d85ec73ab4c390bf4bfedeaa7237c9e79b599e308c631",
+      "bytes": 543
     },
     {
       "path": "server.mjs",
-      "sha256": "2a5a6b5aec812eefa196012a2ac1452d87e0d9bdcee805a21ddbc07d0b9692b8",
-      "bytes": 488930
+      "sha256": "e12e6319a5efa5965d59876c1aae797750cd5f58d68956c54661c20d0de205ca",
+      "bytes": 491149
     },
     {
       "path": "client.js",
-      "sha256": "fe2e6c90916f0391946a5620f9ff92a96e21478f029808507af4975150498982",
-      "bytes": 693335
+      "sha256": "fc2bd4c9fb17ac5eec5b87ecc8c551b7d699d425407e498c26fbc3b8d59a4a8e",
+      "bytes": 702457
     }
   ],
   "permissions": [
     "agent-runtime",
     "chat-read",
-    "chat-write",
     "routes",
     "storage",
     "ui"

@@ -763,7 +763,7 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 384
+          "minor": 385
         },
         "builtAgainst": {
           "engineVersion": "2.5.1",
@@ -771,7 +771,7 @@
         },
         "id": "gacha-forge",
         "name": "Gacha Forge",
-        "version": "1.15.2",
+        "version": "1.24.7",
         "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
         "engine": {
           "min": "2.5.1",
@@ -1060,8 +1060,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "f6cf24badc3ffa2db1aa33b0fc8e994a05fa2e58844ee478fe4216409d5937b9",
-            "bytes": 1559394
+            "sha256": "ffbf4f0623e099aa336951675de96703425d8cb1229d6bb0d941c484db6fd13b",
+            "bytes": 1894412
           },
           {
             "path": "farm-asc.webp",
@@ -1535,8 +1535,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "3ae5e78afb00793495857b44e088451a83701a382c24154f1750647c0e8729b0",
-            "bytes": 649593
+            "sha256": "da0ecca518586149fa31c4b10f9cbe464d049690b2a90db950c003f26ef718fb",
+            "bytes": 981352
           },
           {
             "path": "skill-aoe_damage-dark.webp",
@@ -2287,15 +2287,110 @@
             "path": "tower-bg.webp",
             "sha256": "22c28eb34c91b72ee9da276561e054745b828db21c55b4b647cbefb825e5bf8c",
             "bytes": 15292
+          },
+          {
+            "path": "src/formation-combat-client.mjs",
+            "sha256": "aec64a5c99e46aa9aee2e0d6ea541cf9ed75491738e02bd98da5bc9306b1e99d",
+            "bytes": 72431
+          },
+          {
+            "path": "src/formation-combat-en.mjs",
+            "sha256": "2e4a85317267e7a4b95888e2b0a543efa6799bb0db85c8d4ee45b3336941d0eb",
+            "bytes": 17873
+          },
+          {
+            "path": "src/formation-combat-server.mjs",
+            "sha256": "2c679bf29206b90111bb0c54c666ef1caf241e4d833565881838d04092dfc760",
+            "bytes": 24623
+          },
+          {
+            "path": "src/formation-combat-shared.mjs",
+            "sha256": "b4359de121be45980f9fbf7b2d1fbe844b33cf55629a10759130b0938ae4bc4a",
+            "bytes": 69396
+          },
+          {
+            "path": "src/formation-migration-server.mjs",
+            "sha256": "c16b905157714c3528604e01edb3c4d67bf8d76e54ac6e30dc9477ff12fd43db",
+            "bytes": 22427
+          },
+          {
+            "path": "src/formation-settings-client.mjs",
+            "sha256": "6741e855b2d704c7c70ad6ae461fd252b822e5b991216437dd588ea287e44a3d",
+            "bytes": 9980
+          },
+          {
+            "path": "src/formation-settings-en.mjs",
+            "sha256": "5335816230eb2a3dc63dab53abeb25231b0b63c1a87dc981ec851e062d8f91cc",
+            "bytes": 3723
+          },
+          {
+            "path": "src/combat-ultimate-client.mjs",
+            "sha256": "832cbfbed5e0e887eb61527da407a880861257f9e1a9984c0472b12856292fa6",
+            "bytes": 7695
+          },
+          {
+            "path": "src/combat-voices-client.mjs",
+            "sha256": "e2787168d7bc83b95721f83346ca112d2d9a34385863ccfc449d5f824118f51f",
+            "bytes": 16815
+          },
+          {
+            "path": "src/combat-voices-en.mjs",
+            "sha256": "d9656579bd48a6464c73195504fc6f130cc8deb1262361e7658c5e9a5aaecbcf",
+            "bytes": 1593
+          },
+          {
+            "path": "src/combat-voices-server.mjs",
+            "sha256": "ff04e4d84f59b500d074f7b7833e99ace52e12cbf0700c60bfc742436565f948",
+            "bytes": 19080
+          },
+          {
+            "path": "src/proactive-messages-en.mjs",
+            "sha256": "7c2a9d2f8216b780d92a8e26dd1b45f09eb02d471056c58ebdea9af317924328",
+            "bytes": 919
+          },
+          {
+            "path": "src/proactive-messages-client.mjs",
+            "sha256": "dda2d8259f61ddef28e9518740de4662971841eb25f1cd65fe209593a31f6051",
+            "bytes": 10938
+          },
+          {
+            "path": "src/proactive-messages-server.mjs",
+            "sha256": "2ac0079fc45e446b83c73d787a289b3aa7ec659a3083a3c2a10e4ca056b8f5c1",
+            "bytes": 14954
+          },
+          {
+            "path": "src/proactive-messages-adapter.mjs",
+            "sha256": "f508d2f3b013f8c0ffac15014c16c26a8787f8887cd5db31b25f46ec04838b01",
+            "bytes": 3158
+          },
+          {
+            "path": "src/background-download-client.mjs",
+            "sha256": "2ef9e96e3c243f6a5d4ed6b815e89cdfc7412ef3cb8983818dae061e406d9e26",
+            "bytes": 6420
+          },
+          {
+            "path": "src/background-unlocks-server.mjs",
+            "sha256": "af782ce72612652b2dc34af0a30e3a0397c785981b0b40fc9f8e45d5aabbe508",
+            "bytes": 11417
+          },
+          {
+            "path": "src/background-unlocks-client.mjs",
+            "sha256": "2c8a37d92eda1ef08389e5f0ae4af2b9a5d5d7f8d6843b31b3555099a4f646b2",
+            "bytes": 5215
+          },
+          {
+            "path": "src/unit-art-client.mjs",
+            "sha256": "7cf5a2703acd816e8b3b27538e9939d5da3fbf1241e735defdd8394a5fc9eeec",
+            "bytes": 1768
           }
         ]
       },
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.15.2.zip",
-        "sha256": "735821e5d55bbbb86873cb7a860b61bb1e63a21edabdf71f82af96c70b2a1835",
-        "bytes": 8109146
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.24.7.zip",
+        "sha256": "4a96777adecc1967eadc99a29b143d233d90ab5fda0c519c1828efdec2d18b72",
+        "bytes": 9102100
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     },
@@ -2556,18 +2651,18 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 341
+          "minor": 387
         },
         "builtAgainst": {
-          "engineVersion": "2.5.0",
-          "engineCommit": "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed"
+          "engineVersion": "2.5.1",
+          "engineCommit": "345cd747cf8e8fd56f3fbdceb625a1edd568b525"
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.4.92",
-        "description": "Remembers important things from your chat summaries, characters, and lorebooks, and brings them back when they matter. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
+        "version": "1.5.0",
+        "description": "Remembers important things from your chats, characters, and lorebooks, and brings them back when they matter. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
-          "min": "2.4.1",
+          "min": "2.5.1",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -2591,24 +2686,23 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "263273cb19dbed76302b12855c9a56df0f5489008a580d24803f7ab9f998e6be",
-            "bytes": 552
+            "sha256": "d0c5a064c4d5cd96064d85ec73ab4c390bf4bfedeaa7237c9e79b599e308c631",
+            "bytes": 543
           },
           {
             "path": "server.mjs",
-            "sha256": "2a5a6b5aec812eefa196012a2ac1452d87e0d9bdcee805a21ddbc07d0b9692b8",
-            "bytes": 488930
+            "sha256": "e12e6319a5efa5965d59876c1aae797750cd5f58d68956c54661c20d0de205ca",
+            "bytes": 491149
           },
           {
             "path": "client.js",
-            "sha256": "fe2e6c90916f0391946a5620f9ff92a96e21478f029808507af4975150498982",
-            "bytes": 693335
+            "sha256": "fc2bd4c9fb17ac5eec5b87ecc8c551b7d699d425407e498c26fbc3b8d59a4a8e",
+            "bytes": 702457
           }
         ],
         "permissions": [
           "agent-runtime",
           "chat-read",
-          "chat-write",
           "routes",
           "storage",
           "ui"
@@ -2618,9 +2712,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.4.92.zip",
-        "sha256": "798fd46fac7cbf49bd3c4e12a9fa3da9233014d1b35f3d289e28da50f31a27df",
-        "bytes": 1184766
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.5.0.zip",
+        "sha256": "d5c37af18369016ee8002fee173fc92816a9856db48040a55ed9ba6afb49dd84",
+        "bytes": 1196070
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -2828,12 +2922,12 @@
           "minor": 341
         },
         "builtAgainst": {
-          "engineVersion": "2.5.0",
-          "engineCommit": "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed"
+          "engineVersion": "2.5.1",
+          "engineCommit": "42d64368e82340a46e35c0f4489d9f41024d6032"
         },
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.5.9",
+        "version": "1.5.10",
         "description": "A pretend social network where your characters post, share photos, and talk about your chats. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -2862,7 +2956,7 @@
           }
         },
         "engine": {
-          "min": "2.4.6",
+          "min": "2.5.1",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -2921,8 +3015,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "38920a2b2fff2bf6b753949c3c93d182486f9247934c69f1a1c4d732b0cc1f2c",
-            "bytes": 717486
+            "sha256": "127907c85ac32d487ccd46cfc6498e37ff9ad353b09d4b77a95afc9034367835",
+            "bytes": 725722
           },
           {
             "path": "noodle-klusek.png",
@@ -2943,9 +3037,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.9.zip",
-        "sha256": "b4d28f457f025c76161df381c934a74cd0b5ec6ec13976953d43b31359fba835",
-        "bytes": 1294208
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.10.zip",
+        "sha256": "639671101b28fcf8cfc4de6d94937547cdf70da237d44a6ff1e0828674a75fa6",
+        "bytes": 1302445
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
@@ -3123,7 +3217,7 @@
         },
         "id": "quartermaster",
         "name": "Quartermaster",
-        "version": "0.1.28",
+        "version": "0.1.31",
         "description": "An RPG character sheet and inventory for Roleplay: equip gear around your persona's portrait, save outfits, get AI art for items, and let it keep everything in step with the story. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.6",
@@ -3151,13 +3245,13 @@
           },
           {
             "path": "client.js",
-            "sha256": "acc3b1778a802799f9822aecb2077e138f8e04f5ca4a9d7802587450c1b8e43a",
-            "bytes": 306535
+            "sha256": "47fe5a9d36a3ce1d0d1f5bd2c7146548aba588345eade0e05a09fd1ce7758220",
+            "bytes": 344726
           },
           {
             "path": "server.mjs",
-            "sha256": "8a6b260e52068d0654723a75f98e95c84053491c3d9e3b812a5ab97ef3f073b1",
-            "bytes": 131685
+            "sha256": "04daa595ce98bb06673bda1b0a2f44e69336596f0039b91e748eba9834596662",
+            "bytes": 155502
           },
           {
             "path": "icons/armor_legs.webp",
@@ -3281,9 +3375,9 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/quartermaster.png",
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/quartermaster/README.md",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quartermaster-0.1.28.zip",
-        "sha256": "6eb40478ea7339318e6582b66a308f11547d35100c8c766851ced50fb3679a4e",
-        "bytes": 482700
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quartermaster-0.1.31.zip",
+        "sha256": "083daab29822838b27f3b6c7a7f30c21ba11cc8b4802b5cda3a8bcbf663ad71e",
+        "bytes": 544708
       }
     },
     {
@@ -3537,7 +3631,7 @@
         },
         "id": "slurp2",
         "name": "Slurp",
-        "version": "0.4.1",
+        "version": "0.4.4",
         "description": "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -3606,13 +3700,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "2f8f75e42e58f3cb1459307baf3b2d422bf84930e88f705a5309f29f1fb86e20",
-            "bytes": 2008746
+            "sha256": "6bf0abb76d6f978b8e52d2c20ea761c69951114a92521ede94c1d2581d0d133a",
+            "bytes": 2044007
           },
           {
             "path": "client.js",
-            "sha256": "5916950ee953da96c8d5c2957ce5ff5fc5e41895e31082df14fae716d85c24c0",
-            "bytes": 2839552
+            "sha256": "e7154e8787e7af59f2c7648979e81af97f85b503a53eff09ae038f1a1f6dd8cd",
+            "bytes": 2882346
           },
           {
             "path": "slurp2-logo.png",
@@ -3636,18 +3730,18 @@
           },
           {
             "path": "src/engine/packages/client/src/slp/locales/de.json",
-            "sha256": "1f6bf145d2f707bcf4600bfe9b32a330cfa2314d9772eb14e7d29d928252b65a",
-            "bytes": 231893
+            "sha256": "f2e7f03c58a5d2896634732bcd42c3739fb2e14c36a396508d6e8f8425c5cf43",
+            "bytes": 239281
           },
           {
             "path": "src/engine/packages/client/src/slp/locales/ko.json",
-            "sha256": "af21ea5829363ccbe6999893eb62ef838ef9c02347cd4f2b80c8d0b4a208c8de",
-            "bytes": 328893
+            "sha256": "74f80e54ee7784d247e8f0fef9d64a74dd4070e1cefa5fba08ad6f1e2021fb5a",
+            "bytes": 336839
           },
           {
             "path": "src/engine/packages/client/src/slp/locales/pl.json",
-            "sha256": "2a7eba40377498e64f1ba4ca534e74c1143a6378a309fe517e1ebdb6d5dc8377",
-            "bytes": 233528
+            "sha256": "c2f20a1f1295f96336529421af2d9098e730f76d51011fb104929dc4797c7c26",
+            "bytes": 241032
           }
         ],
         "permissions": [
@@ -3665,11 +3759,116 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.1.zip",
-        "sha256": "d72b33c28cf7169badcc2eccbf118b80980238b66b2db80a8a4a3d8010987b40",
-        "bytes": 5874623
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.4.zip",
+        "sha256": "e3c3adfd26cbfc636b3e8415193f5b26986734a1b9ea4427a3c8047b8be3b1bc",
+        "bytes": 5975516
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 386
+        },
+        "builtAgainst": {
+          "engineVersion": "2.5.1",
+          "engineCommit": "54e6848c818ae4150f108ab9614986bb7610891d"
+        },
+        "id": "story-writer",
+        "name": "Story Writer",
+        "version": "0.1.1",
+        "description": "A co-writing book. Pick a connection, your characters, personas and lorebooks, describe the story, and the model writes it chapter by chapter while you guide it with an author's note and edit anything on the page. Install it, restart Marinara Engine when prompted, then open Home → Story Writer.",
+        "engine": {
+          "min": "2.5.1",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "home-browser-tab"
+          ],
+          "homeBrowserTab": {
+            "label": "Story Writer",
+            "ariaLabel": "Open Story Writer",
+            "iconPaths": [
+              "story-writer-icon.png"
+            ]
+          },
+          "assets": {
+            "paths": [
+              "story-writer-mari.webp",
+              "wood-desk.webp",
+              "paper-light.webp",
+              "paper-dark.webp"
+            ]
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "498b13d0c7f04f59546aab5d16d4c6806335bcb4b7eef9e9bcf46008b0e7a3a3",
+            "bytes": 666
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "ca6300129f178a7f32aa5eadd587a5a7c885ffc4a202c617e70ee235731d3974",
+            "bytes": 13665
+          },
+          {
+            "path": "client.js",
+            "sha256": "4a745b679a777d1d71dd8a17f441a9b621784a8b5c0b6579619b6a1ba9a71438",
+            "bytes": 210075
+          },
+          {
+            "path": "story-writer-icon.png",
+            "sha256": "fdf24e26aaea6611faf1038b92fe95762abb240c2861c13496930a015d1cce9c",
+            "bytes": 61634
+          },
+          {
+            "path": "story-writer-mari.webp",
+            "sha256": "97dd7fe0c5609602e1abcdb628d38e59ad30077945346900035d6cb89c302da7",
+            "bytes": 174988
+          },
+          {
+            "path": "wood-desk.webp",
+            "sha256": "6a5b8a51f584c5062999eea3dfe90fb74facb1cc4a3b55ecdb119f5b5a89d913",
+            "bytes": 91530
+          },
+          {
+            "path": "paper-light.webp",
+            "sha256": "61b26fa8903d0213eeea702b02d34a2853356b7f60932ab0e789ef50a6064350",
+            "bytes": 43156
+          },
+          {
+            "path": "paper-dark.webp",
+            "sha256": "3889e55f4c6513a1cf0424344eb17d10d8fd4142a0288398c06bf610d984cecb",
+            "bytes": 14878
+          }
+        ],
+        "permissions": [
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/story-writer.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/story-writer-0.1.1.zip",
+        "sha256": "ba901a101a3094af030ea08e1d3ea6bc68301e74351ebf6340a5f4480fee99ff",
+        "bytes": 614064
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/story-writer/README.md"
     },
     {
       "manifest": {

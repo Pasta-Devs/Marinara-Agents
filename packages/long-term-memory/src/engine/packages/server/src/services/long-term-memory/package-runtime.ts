@@ -100,7 +100,19 @@ export type CapabilityRuntimeHost = {
         updatedAt: string;
       }>
     >;
-    updateChatMetadata(input: { chatId: string; metadata: Record<string, unknown>; updatedAt: string }): Promise<void>;
+    listMessages(chatId: string): Promise<
+      Array<{
+        id: string;
+        chatId: string;
+        role: string;
+        characterId: string | null;
+        content: string;
+        activeSwipeIndex: number;
+        extra: unknown;
+        createdAt: string;
+        agentContent?: string;
+      }>
+    >;
   };
 };
 

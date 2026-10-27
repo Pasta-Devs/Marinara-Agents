@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Button } from "./shared-controls";
+import { Button, lockedActionProps } from "./shared-controls";
 import { useLtmTranslation } from "./localization";
 import type { CapabilityProps, SourceTab } from "./types";
 
@@ -230,6 +230,7 @@ export function Onboarding({
     });
   };
   const activateForOnboarding = async () => {
+    if (activationPending) return;
     if (await onActivate()) advanceOnboarding();
   };
 
@@ -254,12 +255,14 @@ export function Onboarding({
     );
   }
   if (!showFull) return null;
+  const sprite = onboardingSteps[onboardingStep];
   return (
     <section
       aria-labelledby="ltm-onboarding-title"
       aria-describedby="ltm-onboarding-description"
       data-ltm-surface="onboarding"
       className="mari-editor-panel mari-editor-panel--soft overflow-hidden"
+      style={{ containerName: "ltm-onboarding", containerType: "inline-size" }}
     >
       <style>{`
                 [data-ltm-onboarding-body] {
@@ -267,6 +270,7 @@ export function Onboarding({
                   grid-template-columns: minmax(0, 1fr);
                   align-items: center;
                   gap: 1.25rem;
+                  padding: 1rem;
                 }
                 [data-ltm-onboarding-sprite-wrap] {
                   display: flex;
@@ -286,6 +290,9 @@ export function Onboarding({
                 }
                 [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-shift="left"] {
                   transform: translateX(-40px);
+                }
+                [data-ltm-onboarding-sprite-wide] {
+                  display: none;
                 }
                 [data-ltm-onboarding-actions] {
                   display: flex;
@@ -323,7 +330,12 @@ export function Onboarding({
                   padding: 0.375rem 0.625rem;
                   font-size: 0.75rem;
                 }
-                @media (min-width: 768px) {
+                @container ltm-onboarding (min-width: 40rem) {
+                  [data-ltm-onboarding-body] {
+                    padding: 1.5rem;
+                  }
+                }
+                @container ltm-onboarding (min-width: 48rem) {
                   [data-ltm-onboarding-body] {
                     grid-template-columns: minmax(0, 1fr) 12rem;
                   }
@@ -334,6 +346,12 @@ export function Onboarding({
                   [data-ltm-onboarding-sprite] {
                     height: 11rem;
                     max-width: 12rem;
+                  }
+                  [data-ltm-onboarding-sprite-wide] {
+                    display: block;
+                  }
+                  [data-ltm-onboarding-sprite-narrow] {
+                    display: none;
                   }
                   [data-ltm-onboarding-sprite][data-ltm-onboarding-mobile-flip] {
                     transform: none;
@@ -368,7 +386,7 @@ export function Onboarding({
           })}
         </p>
       </div>
-      <div data-ltm-onboarding-body className="p-4 sm:p-6">
+      <div data-ltm-onboarding-body>
         <div className="space-y-4">
           <div className="space-y-2">
             <h2
@@ -708,7 +726,8 @@ export function Onboarding({
                 <>
                   <Button
                     primary
-                    disabled={activationPending || !props.onEnabledForChatChange}
+                    disabled={!props.onEnabledForChatChange}
+                    {...lockedActionProps(activationPending)}
                     onClick={() => void activateForOnboarding()}
                   >
                     {localizeUi("ui.longTermMemory.longtermmemorydetail.turnOnForThisChat")}
@@ -797,20 +816,27 @@ export function Onboarding({
           </div>
         </div>
         <div data-ltm-onboarding-sprite-wrap>
-          <picture>
-            <source
-              media="(min-width: 768px)"
-              srcSet={`/sprites/mari/${onboardingSteps[onboardingStep].desktopSprite}`}
-            />
+          {/* The container, not the window, decides the layout, so it decides the sprite; a media-query picture element follows the window. */}
+          <img
+            src={`/sprites/mari/${sprite.mobileSprite}`}
+            alt={sprite.alt}
+            draggable={false}
+            loading={sprite.mobileSprite === sprite.desktopSprite ? undefined : "lazy"}
+            data-ltm-onboarding-sprite={sprite.mobileSprite}
+            data-ltm-onboarding-sprite-narrow={sprite.mobileSprite === sprite.desktopSprite ? undefined : ""}
+            data-ltm-onboarding-mobile-flip={sprite.mobileFlip || undefined}
+            data-ltm-onboarding-mobile-shift={onboardingStep === 4 ? "left" : undefined}
+          />
+          {sprite.mobileSprite === sprite.desktopSprite ? null : (
             <img
-              src={`/sprites/mari/${onboardingSteps[onboardingStep].mobileSprite}`}
-              alt={onboardingSteps[onboardingStep].alt}
+              src={`/sprites/mari/${sprite.desktopSprite}`}
+              alt={sprite.alt}
               draggable={false}
-              data-ltm-onboarding-sprite={onboardingSteps[onboardingStep].mobileSprite}
-              data-ltm-onboarding-mobile-flip={onboardingSteps[onboardingStep].mobileFlip || undefined}
-              data-ltm-onboarding-mobile-shift={onboardingStep === 4 ? "left" : undefined}
+              loading="lazy"
+              data-ltm-onboarding-sprite={sprite.desktopSprite}
+              data-ltm-onboarding-sprite-wide=""
             />
-          </picture>
+          )}
         </div>
       </div>
       <div data-ltm-onboarding-footer className="items-center gap-3">

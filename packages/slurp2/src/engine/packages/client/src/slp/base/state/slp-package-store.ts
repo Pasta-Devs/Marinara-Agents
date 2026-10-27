@@ -103,6 +103,8 @@ function isSlurpNavigation(value: unknown): value is SlurpNavigationState {
       );
     case "profiles":
       return value.returnToSettings === undefined || isSlurpNavigation(value.returnToSettings);
+    case "live":
+      return typeof value.showId === "string" && (value.returnTo === undefined || isSlurpNavigation(value.returnTo));
     case "create-profile":
       return (
         typeof value.sourceAccountId === "string" &&

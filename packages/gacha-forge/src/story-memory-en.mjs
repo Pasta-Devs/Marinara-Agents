@@ -5,6 +5,8 @@ export const forgeStoryMemoryEnglish = Object.freeze({
   "story.memory.checking": "Checking story memory…",
   "story.memory.pending": "Updating story memory. You can keep playing.",
   "story.memory.ready": "Story memory is up to date.",
+  "story.memory.counts":
+    "Automatically compressed chapters: {chapters}. Character memories: {characters}. Records combined into the overview: {combined}.",
   "story.memory.stale": "Story memory needs an update. Saved records are safe, and you can keep playing.",
   "story.memory.error": "Story memory could not update. Saved records are safe, and you can keep playing.",
   "story.memory.contextUnknown":

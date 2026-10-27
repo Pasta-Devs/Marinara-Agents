@@ -1,5 +1,35 @@
 # Long-Term Memory changelog
 
+## 1.5.0 — 2026-10-27
+
+- Sources has a Chat Messages tab that learns from a chat's own messages, so a chat without summaries can have memories too. It warns when the chat also has summaries, because importing both can repeat memories in review.
+- Whispers, and messages hidden from the AI or from some characters, are left out of chat messages, because a memory can reach every character.
+- Needs Marinara Engine 2.5.1 with capability API 1.387, which no longer runs its own memory recall in chats where Long-Term Memory is on.
+- Chats with Long-Term Memory on and nothing imported in Sources have no memories on that Engine. Import their messages or summaries from Sources.
+- If you used the Engine's old built-in memory, switch Long-Term Memory on in each chat's settings; the package no longer turns it on for those chats.
+- The package no longer asks to change chat settings.
+
+## 1.4.95 — 2026-10-26
+
+- Maintenance, Debug, setup and Chat Settings buttons keep keyboard focus while their work runs, so the result appears where you are.
+- Vault and Review controls stay reachable while they save or while identity edits are unsaved, and say why they are locked.
+- Sources re-extract and re-import buttons stay reachable during a run and explain why they are waiting.
+- Debug, Maintenance and source results are announced to screen readers, and Add section explains why a name was not accepted.
+- The setup guide picture and detail header follow the panel's width, and navigation and availability tabs are easier to tap.
+- Loading spinners stop spinning when reduced motion is on, and typing in Debug search stays smooth on long logs.
+
+## 1.4.94 — 2026-10-26
+
+- Long-Term Memory loads settings written by a newer version instead of failing to start, on Engines that use zod 4 or check a list's length before its entries.
+
+## 1.4.93 — 2026-10-25
+
+- Blocked and running controls in Review and Sources stay reachable by keyboard, so the reason beside them can be read.
+- Memory Settings, the activation switch and the setup guide now follow the panel's width instead of the window, and the Vault and Debug lists fit a zoomed or short screen.
+- The retry and clear actions in Memory Settings are large enough to tap.
+- Typing in Review and the Memory Vault no longer rebuilds every row's text and the whole search index.
+- The activation switch's shadow follows the theme, and the success colour is documented at its measured contrast.
+
 ## 1.4.92 — 2026-10-25
 
 - Sources tells re-importing from the source apart from reloading the list: "Re-import from source" and "Reload list".

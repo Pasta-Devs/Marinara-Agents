@@ -117,7 +117,11 @@ export function DestinationScopePanel({
         />
       </div>
       {disabled ? (
-        <p className="shrink-0 text-xs text-[var(--muted-foreground)]" data-ltm-import-lock="destination">
+        <p
+          id={`${labelId}-lock`}
+          className="shrink-0 text-xs text-[var(--muted-foreground)]"
+          data-ltm-import-lock="destination"
+        >
           {localizeUi("ui.longTermMemory.sourcesworkspace.lockedWhileImportRuns")}
         </p>
       ) : null}
@@ -140,13 +144,14 @@ export function DestinationScopePanel({
               >
                 <input
                   type="checkbox"
-                  className={`${sourceCheckboxClass}${disabled ? " opacity-50" : ""}`}
+                  className={`${sourceCheckboxClass}${availabilityDisabled || disabled ? " opacity-50" : ""}`}
                   data-ltm-availability-mode-checkbox={chatMode}
                   checked={checked}
-                  disabled={availabilityDisabled || isLastSelected}
-                  aria-disabled={disabled || undefined}
+                  disabled={isLastSelected}
+                  aria-disabled={availabilityDisabled || disabled || undefined}
+                  aria-describedby={disabled ? `${labelId}-lock` : undefined}
                   onChange={() => {
-                    if (disabled) return;
+                    if (availabilityDisabled || disabled) return;
                     const next = checked
                       ? availabilityModes.filter((m) => m !== chatMode)
                       : [...availabilityModes, chatMode];
@@ -266,7 +271,7 @@ export function DestinationScopePanel({
               .map((m) => localizedLabel(m, localizeUi, labelKeys.mode))
               .join(", ")}`
           : mode === "all"
-            ? source === "chats"
+            ? source === "chats" || source === "messages"
               ? localizeUi("ui.longTermMemory.sourcesworkspace.automatic")
               : localizeUi("ui.longTermMemory.sourcesworkspace.importsDefaultToRoleplay")
             : sourceModeLabel(mode, localizeUi)}

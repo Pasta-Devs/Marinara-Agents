@@ -69,6 +69,113 @@ export function forgeExplicitVoice(config, characterId) {
   return voices.length === 1 ? voices[0] : null;
 }
 
+// The Engine's NPC default voice pool, as its tts-dialogue.ts resolveNpcDefaultVoice picks it. null = speech is off.
+export function forgeVoicePool(config, gender) {
+  if (!config || (!config.connectionId && config.enabled === false)) return null;
+  const profile = config.connectionId ? config.connectionProfiles?.[config.connectionId] : config;
+  const list = (value) => (Array.isArray(value) ? value : []).filter((voice) => typeof voice === "string" && voice);
+  const male = list(profile?.npcDefaultMaleVoices);
+  const female = list(profile?.npcDefaultFemaleVoices);
+  const combined = [...new Set([...female, ...male])];
+  // The same voices in both lists means the player did not split them by gender.
+  const unpartitioned =
+    male.length > 0 && male.length === female.length && male.every((voice) => female.includes(voice));
+  if (gender === "female" && !unpartitioned && female.length) return female;
+  if (gender === "male" && !unpartitioned && male.length) return male;
+  return combined;
+}
+
+// A name always lands on the same voice of a pool (the Engine's stableTTSIndex over its normalized name).
+export function forgeStableVoice(pool, name) {
+  const seed =
+    String(name ?? "")
+      .toLowerCase()
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim() || String(name ?? "");
+  if (!seed || !pool?.length) return null;
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) hash = ((hash << 5) - hash + seed.charCodeAt(index)) | 0;
+  return pool[Math.abs(hash) % pool.length];
+}
+
+const forgeConnectionVoiceLists = new Map();
+// ponytail: one provider voice list per connection and source for this page; a reload picks up newly added
+// provider voices. A failed read rejects and is not kept, so callers can tell it from an empty list and retry.
+export function forgeConnectionVoices(config) {
+  const id = config?.connectionId || "";
+  // Without a chosen connection, the Engine lists the legacy source's voices, so a source switch is a new list.
+  const key = JSON.stringify([id, config?.source || "", config?.baseUrl || ""]);
+  if (!forgeConnectionVoiceLists.has(key))
+    forgeConnectionVoiceLists.set(
+      key,
+      forgeAudioJson(`/api/tts/voices${id ? `?connectionId=${encodeURIComponent(id)}` : ""}`).then(
+        (result) =>
+          [
+            ...new Set((Array.isArray(result?.voices) ? result.voices : []).filter((v) => typeof v === "string" && v)),
+          ].sort(),
+        (error) => {
+          forgeConnectionVoiceLists.delete(key);
+          throw error;
+        },
+      ),
+    );
+  return forgeConnectionVoiceLists.get(key);
+}
+
+// Explicit Engine assignments always win. "Voice other characters" gives everyone else except the persona the
+// Engine's NPC pool voice for their gender, or any voice of the connection while that pool is empty.
+export async function forgeSpeakerVoice(config, speaker, others, listVoices = forgeConnectionVoices) {
+  const explicit = forgeExplicitVoice(config, speaker?.characterId);
+  if (explicit || !others || speaker?.persona || !String(speaker?.name ?? "").trim()) return explicit;
+  const pool = forgeVoicePool(config, speaker.gender);
+  if (!pool) return null;
+  return forgeStableVoice(pool.length ? pool : await listVoices(config), speaker.name);
+}
+
+// The story cast resolver's protagonist aliases. A speaker the cast cannot settle (for example two cast entries share
+// the persona's name or surname) whom that resolver would match to the run protagonist alone is the persona: its own
+// voice or silence, never the pool. Like the resolver, one word may be any word of the name; more words share its first.
+const forgeStoryPersonaAliases = new Set(["you", "yourself", "me", "myself", "i", "player", "protagonist"]);
+export function forgeStoryPersona(protagonist, speaker) {
+  const normalized = (value) =>
+    String(value || "")
+      .normalize("NFKD")
+      .toLowerCase()
+      .replace(/\p{M}/gu, "")
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim();
+  const name = normalized(speaker);
+  const own = normalized(protagonist?.name).split(" ");
+  const named = name.includes(" ") ? name.split(" ")[0] === own[0] : own.includes(name);
+  if (!name || !(forgeStoryPersonaAliases.has(name) || (own[0] && named))) return null;
+  return {
+    name: protagonist?.name || speaker,
+    characterId: String(protagonist?.personaId || "").trim() || null,
+    prota: true,
+  };
+}
+
+export function forgeVoiceCacheKey(runId, segment, character, config, voice) {
+  const profile = (config.connectionId && config.connectionProfiles?.[config.connectionId]) || config;
+  const identity = JSON.stringify([
+    character.characterId,
+    segment.speaker,
+    segment.text,
+    voice,
+    config.connectionId || "",
+    config.source,
+    config.baseUrl,
+    config.model,
+    profile.audioFormat,
+    profile.speed,
+    profile.elevenLabsStability,
+    profile.elevenLabsLanguageCode,
+  ]);
+  // Reuse the package's stable world hash; playback IDs remain unique for cancellation.
+  return `gacha-voice-v1:${forgeSoundtrackContextKey(runId, identity, "line")}`;
+}
+
 export class ForgeAudioController {
   constructor(host, services = globalThis.__MARINARA_HOST__?.services) {
     this.host = host;
@@ -128,6 +235,7 @@ export class ForgeAudioController {
     }
     this.player?.setVolumes({ music: this.settings.musicVolume, sfx: this.settings.sfxVolume });
     this.player?.setMuted(this.settings.muted);
+    this._forgeCombatVoices?.configure();
     if (this.settings.muted || !this.settings.tts || this.settings.dialogueVolume === 0) this.voiceAbort?.abort();
     if (this.tts?.getActiveId()?.startsWith(`gacha-forge:${this.runId}:`)) {
       this.tts.setCurrentPlaybackVolume(this.settings.dialogueVolume, this.settings.muted);
@@ -444,8 +552,8 @@ export class ForgeAudioController {
       segment.thought
     )
       return;
-    const character = cast;
-    if (!character?.characterId) return;
+    const character = cast || forgeStoryPersona(this.host._run?.protagonist, segment.speaker);
+    if (!character?.characterId && !initial.otherVoices) return;
     const abort = new AbortController();
     this.voiceAbort?.abort();
     this.voiceAbort = abort;
@@ -454,10 +562,27 @@ export class ForgeAudioController {
     if (signal?.aborted) abort.abort();
     try {
       const config = await forgeAudioJson("/api/tts/config", { signal: abort.signal });
-      const voice = forgeExplicitVoice(config, character.characterId);
+      const voice = await forgeSpeakerVoice(
+        config,
+        {
+          characterId: character?.characterId,
+          name: character?.name || segment.speaker,
+          gender: character?.gender || segment.gender,
+          persona: character?.prota === true,
+        },
+        this.settings.otherVoices,
+      );
       if (!voice || abort.signal.aborted || this.disposed) return;
       await this.tts.speakSequence(
-        [{ text: segment.text, speaker: segment.speaker, voice, characterId: character.characterId }],
+        [
+          {
+            text: segment.text,
+            speaker: segment.speaker,
+            voice,
+            ...(character?.characterId ? { characterId: character.characterId } : {}),
+            cacheKey: forgeVoiceCacheKey(this.runId, segment, character || {}, config, voice),
+          },
+        ],
         `gacha-forge:${this.runId}:${this.voiceSession}:${++this.voiceIndex}`,
         {
           signal: abort.signal,
@@ -481,6 +606,7 @@ export class ForgeAudioController {
     clearTimeout(this.noticeTimer);
     this.dismissNotice?.();
     this.voiceAbort?.abort();
+    this._forgeCombatVoices?.dispose();
     for (const request of this.requests) request.abort();
     this.host._root.removeEventListener("click", this.onClick);
     this.player?.dispose();
@@ -502,6 +628,10 @@ export function forgeAudioCue(host) {
       ? "boss"
       : "combat";
   }
+  const eventCue =
+    host._forgeSeasonalBanner?.music?.cue ||
+    (host._forgeEvent?.chapter === host._planChapter ? host._forgeEvent?.music?.cue : null);
+  if (eventCue) return eventCue;
   if (state === "beat")
     return host._beatState === "ready"
       ? host._bondUnit
@@ -603,12 +733,16 @@ export function wireForgeAudio(host) {
 }
 
 export function saveForgeAudioSources(host, sources) {
-  if (!sources?.audio) return host._setSourcesNow(sources);
+  // Story controls write the same world index and must serialize with audio saves too.
+  if (!sources?.audio && !sources?.story) return host._setSourcesNow(sources);
   const runId = host._run?.runId;
   const save = () => {
     if (host._run?.runId !== runId) return;
     return host
-      ._setSourcesNow({ ...sources, audio: normalizeForgeAudio({ ...host._run.audio, ...sources.audio }) })
+      ._setSourcesNow({
+        ...sources,
+        ...(sources.audio ? { audio: normalizeForgeAudio({ ...host._run.audio, ...sources.audio }) } : {}),
+      })
       .finally(() => wireForgeAudio(host));
   };
   const next = (host._forgeAudioSave ?? Promise.resolve()).catch(() => {}).then(save);

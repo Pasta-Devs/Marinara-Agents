@@ -11,6 +11,8 @@ import {
 } from "../packages/gacha-forge/src/enemy-encounters-client.mjs";
 import { ForgeAudioController } from "../packages/gacha-forge/src/audio-client.mjs";
 import { forgeEnemyTier as serverEnemyTier } from "../packages/gacha-forge/src/enemy-encounters-server.mjs";
+import { createForgeFormationPresentation } from "../packages/gacha-forge/src/formation-combat-client.mjs";
+import { createForgeCombatPresentation } from "../packages/gacha-forge/src/combat-voices-client.mjs";
 
 const original = {
   document: globalThis.document,
@@ -507,11 +509,18 @@ try {
     };
     const runner = vm.runInNewContext(`(${source.slice(start, end)})`, {
       createForgeCombatDialogue,
+      createForgeFormationPresentation,
+      createForgeCombatPresentation,
       setTimeout,
       clearTimeout,
       matchMedia: () => ({ matches: true }),
       rl: () => ({}),
       Uw: () => ({}),
+      // The Formation presentation's hooks; a Classic fight never calls them.
+      Lt: () => "",
+      Mo: {},
+      ua: {},
+      jt: "",
     });
     const run = { steps: [], stepI: 0, auto: true, done: { result: "lose", log: [] }, pending: null };
     let finished = 0;

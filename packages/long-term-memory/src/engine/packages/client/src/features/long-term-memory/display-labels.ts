@@ -73,6 +73,14 @@ export const labelKeys = {
     quarantine_malformed_notes: "ui.longTermMemory.memorysettings.quarantineMalformedNotes",
     backfill_imported_source_titles: "ui.longTermMemory.memorysettings.backfillSourceTitles",
   },
+  identityMatchBasis: {
+    bound_subjects: "ui.longTermMemory.memorysettings.basisBoundSubjects",
+    exact_name: "ui.longTermMemory.memorysettings.basisExactName",
+    unique_alias: "ui.longTermMemory.memorysettings.basisUniqueAlias",
+    trait_or_qualified_alias: "ui.longTermMemory.memorysettings.basisQualifiedAlias",
+    spelling_variation: "ui.longTermMemory.memorysettings.basisSpellingVariation",
+    unordered_pair: "ui.longTermMemory.memorysettings.basisUnorderedPair",
+  },
   maintenanceResult: {
     rebuilt: "ui.longTermMemory.memorysettings.resultRebuilt",
     backfilled: "ui.longTermMemory.memorysettings.resultBackfilled",

@@ -45,7 +45,7 @@ test("Units keep portraits loaded and center controls, with an affinity card bad
       body: readFileSync(resolve("artwork/agent-covers/gacha-forge.png")),
     }),
   );
-  await page.route("**/api/gacha-forge/state", (route) =>
+  await page.route("**/api/gacha-forge/state*", (route) =>
     route.fulfill({ json: { runs: [], guidesSeen: ["welcome"] } }),
   );
   // Keep the setup draft in the same isolated fixture as the mocked world state.
@@ -57,9 +57,13 @@ test("Units keep portraits loaded and center controls, with an affinity card bad
     }
     return route.fulfill({ json: { ok: true, draft: setupSnapshot } });
   });
-  await page.route("**/api/gacha-forge/unit", (route) =>
-    route.fulfill({ json: { ok: true, unit, level: 1, bond: 0, favorite: false, gear: { slots: [], totals: {} } } }),
-  );
+  await page.route("**/api/gacha-forge/unit", async (route) => {
+    // Exceed the former 250ms hold and 700ms entrance-reuse limits.
+    await new Promise((resolve) => setTimeout(resolve, 850));
+    await route.fulfill({
+      json: { ok: true, unit, level: 1, bond: 0, favorite: false, gear: { slots: [], totals: {} } },
+    });
+  });
   await page.route("**/api/gacha-forge/unit/favorite", (route) => route.fulfill({ json: { ok: true } }));
   await page.goto("/");
   await page.getByRole("tab", { name: "Open Gacha Forge" }).click();
@@ -88,10 +92,30 @@ test("Units keep portraits loaded and center controls, with an affinity card bad
   const card = forge.locator(`[data-unit="${unit.id}"]`);
   await expect(card).toBeVisible();
   await card.locator("img").evaluate((image) => (image as HTMLImageElement).decode());
+  await forge.evaluate((node) => {
+    const sample = { held: false, flight: false, finished: false };
+    (window as any).unitOpeningSample = sample;
+    const frame = () => {
+      const root = node.shadowRoot!;
+      sample.held ||= !!root.querySelector(".gf-hold");
+      const image = root.querySelector<HTMLImageElement>(".gf-stage > .gf-view .cp-photo");
+      if (image) {
+        sample.flight ||= !!root.querySelector(".gf-fly");
+        sample.finished = true;
+      }
+      if (!sample.finished) requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  });
   await card.click();
   const photo = forge.locator(".cp-photo");
   await expect(photo).toBeVisible();
   await photo.evaluate((image) => (image as HTMLImageElement).decode());
+  const opening = await page.evaluate(() => (window as any).unitOpeningSample);
+  expect(opening.held).toBe(true);
+  expect(opening.flight, "A delayed response starts the complete unit opening instead of snapping into place").toBe(
+    true,
+  );
   await expect(forge.locator("[data-guide-modal]")).toHaveCount(0);
   await forge.evaluate((node) => {
     const sample = { frames: 0, blankFrames: 0, running: true };
@@ -200,5 +224,83 @@ test("Units keep portraits loaded and center controls, with an affinity card bad
   await page.screenshot({
     animations: "disabled",
     path: testInfo.outputPath(`unit-affinity-${testInfo.project.name}.png`),
+  });
+  const upgrades: unknown[] = [];
+  await page.route("**/api/gacha-forge/level-up", (route) => {
+    upgrades.push(route.request().postDataJSON());
+    return route.fulfill({ json: { ok: true, level: 3, xp: 0, wallet: { funds: 0, insight: { shard: 5 } } } });
+  });
+  await forge.evaluate((node, unit) => {
+    const game = node as any;
+    game._rosterUnitId = unit.id;
+    game._unit = unit;
+    game._unitState = "ready";
+    game._unitTab = "growth";
+    game._growth = {
+      level: 1,
+      levelCap: 3,
+      xp: 0,
+      xpNeeded: 200,
+      wallet: { funds: 250, insight: { shard: 10 } },
+      tiers: [{ id: "shard", name: "Insight Shard", xp: 100 }],
+      ladder: [
+        { level: 1, xp: 200, funds: 100, cpAfter: 200 },
+        { level: 2, xp: 300, funds: 150, cpAfter: 300 },
+      ],
+    };
+    game._growthRev += 1;
+    game._renderBrowser();
+  }, unit);
+  await forge.locator("[data-forge-auto-insight]").click();
+  expect(upgrades).toEqual([]);
+  expect(await forge.evaluate((node) => (node as any)._feed)).toEqual({ shard: 5 });
+  await expect(forge.locator("[data-gw-lv-to]")).toContainText("3");
+  await page.screenshot({ path: testInfo.outputPath("auto-level-preview.png"), animations: "disabled" });
+  await page.route("**/api/gacha-forge/farm", (route) =>
+    route.fulfill({
+      json: {
+        ok: true,
+        today: 0,
+        days: [{ day: "Monday" }],
+        vigor: 100,
+        locked: [],
+        stages: {
+          funds: [],
+          relic: [],
+          xp: [
+            {
+              difficulty: 1,
+              label: "Insight Trial",
+              vigor: 10,
+              qty: 2,
+              material: "Insight Shard",
+              itemId: "shard",
+              worth: { value: 100, unit: "XP" },
+            },
+          ],
+        },
+        families: [],
+        formFamilies: [],
+        wheel: [],
+        formWheel: [],
+      },
+    }),
+  );
+  await forge.locator("[data-forge-find-insight]").click();
+  await expect(forge.getByRole("heading", { name: "Materials", exact: true })).toBeVisible();
+  await expect(forge.locator('[data-farm-run="xp"]')).toBeVisible();
+  expect(upgrades).toHaveLength(0);
+  await forge.evaluate((node) => {
+    const game = node as any;
+    game._hudView = "roster";
+    game._renderBrowser();
+  });
+  await forge.locator("[data-feed-go]").click();
+  await expect.poll(() => upgrades.length).toBe(1);
+  expect(upgrades[0]).toEqual({
+    runId: "unit-proof",
+    unitId: unit.id,
+    spend: { shard: 5 },
+    timeZone: expect.any(String),
   });
 });

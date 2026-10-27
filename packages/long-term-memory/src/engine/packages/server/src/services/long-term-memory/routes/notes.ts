@@ -561,7 +561,10 @@ export function registerNotesRoutes(app: FastifyInstance, runtime: LtmRouteRunti
         return reply.status(400).send({ error: "Long-term memory note is not a source note" });
       const explicitChatId = body.chatId;
       const chatId =
-        body.chatId ?? (sourceNote.provenance?.kind === "chat_summary" ? sourceNote.provenance.sourceId : undefined);
+        body.chatId ??
+        (sourceNote.provenance?.kind === "chat_summary" || sourceNote.provenance?.kind === "chat_transcript"
+          ? sourceNote.provenance.sourceId
+          : undefined);
       const chat = chatId ? await getPackagePersistence().getChat(chatId) : null;
       if (explicitChatId && !chat) return reply.status(404).send({ error: "Chat not found" });
       const operationId = randomUUID();

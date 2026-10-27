@@ -87,6 +87,15 @@ const EXPECTED = [
   "POST /slurp/drama/choice",
   "POST /slurp/drama/start",
   "POST /slurp/drama/runs/:id/end",
+  // 0.4.12: Live v3 (who is live, one show, the player's tip, the next beat).
+  "GET /slurp/live",
+  "GET /slurp/live/:id",
+  "GET /slurp/live/:id/picture/:n",
+  "POST /slurp/live/:id/beat",
+  "POST /slurp/live/:id/end",
+  "POST /slurp/live/:id/private",
+  "POST /slurp/live/:id/tip",
+  "POST /slurp/live/host",
   // 0.3.2 Creator Pages: the player's edit, and "Let <Creator> design it".
   "PUT /slurp/accounts/:id/page",
   "POST /slurp/accounts/:id/page/compose",
@@ -412,6 +421,15 @@ const ADDED_ROUTES = new Set([
   "POST /slurp/drama/choice",
   "POST /slurp/drama/start",
   "POST /slurp/drama/runs/:id/end",
+  // 0.4.12: Live v3 (who is live, one show, the player's tip, the next beat).
+  "GET /slurp/live",
+  "GET /slurp/live/:id",
+  "GET /slurp/live/:id/picture/:n",
+  "POST /slurp/live/:id/beat",
+  "POST /slurp/live/:id/end",
+  "POST /slurp/live/:id/private",
+  "POST /slurp/live/:id/tip",
+  "POST /slurp/live/host",
   // 0.3.11: a heart or one reply to a fan's note on the player's own page (fans write notes there, not chats).
   "POST /slurp/notifications/:id/fan-note",
   // 0.3.11: a background sign-up's progress (big batches run as a server job).
@@ -530,6 +548,7 @@ const EXPECTED_HANDLER_COUNTS = {
   "features/discovery": 5,
   "features/economy": 14,
   "features/feed": 39,
+  "features/live": 8,
   "features/maintenance": 15,
   "features/media": 8,
   // 0.3.63: +1 (the sexting session).
@@ -545,8 +564,8 @@ const EXPECTED_HANDLER_COUNTS = {
 // 0.3.4: +1 POST, +1 PUT (Creator Pages). 0.3.5: +1 GET, +3 POST (Support desk). 0.3.7: +1 POST (rewrite all).
 // 0.3.8: +1 GET, +5 POST (Drama: bonds, drama view, choice, start, end). 0.3.11: +1 POST (fan notes).
 // DM edit tools and thread export: +1 GET, +4 POST. 0.3.28: +1 GET (Deep details for a chat reply). 0.3.42: +1 GET (carryover reach). Story state (Life panel): +1 GET, +1 POST.
-// 0.3.63: +1 POST (sexting session).
-const EXPECTED_METHOD_COUNTS = { DELETE: 20, GET: 91, PATCH: 20, POST: 166, PUT: 7 } as const;
+// 0.3.63: +1 POST (sexting session). 0.4.12: +2 GET, +2 POST (Live v3).
+const EXPECTED_METHOD_COUNTS = { DELETE: 20, GET: 94, PATCH: 20, POST: 171, PUT: 7 } as const;
 
 const root = join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/slp");
 const registration = /\bapp\.(get|post|put|patch|delete|addContentTypeParser)(?:<[^()]*?>)?\(\s*["'`]([^"'`]+)["'`]/gu;
@@ -605,7 +624,7 @@ assert.deepEqual(methodCounts, EXPECTED_METHOD_COUNTS, "HTTP method multiset cha
 // 0.3.41: +1 (Engine avatar copies).
 // DM edit tools, thread export: +5. Story state (Life panel): +2. Remove an imported pack: +1.
 // 0.3.63: +1 (the sexting session).
-assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 304);
+assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 312);
 assert.deepEqual(handlerCounts, EXPECTED_HANDLER_COUNTS, "handler count changed in a feature");
 assert.ok(foundRoutes.includes("POST /slurp/posts/:id/media"), "the renamed POST media route must remain registered");
 assert.ok(

@@ -85,6 +85,9 @@ const PACKAGE_BUILT_AGAINST = Object.freeze({
   engineVersion: "2.5.0",
   engineCommit: "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed",
 });
+// Capability API 1.387 ships Engine E2 (no built-in recall where Long-Term Memory is on) with E3, so only an Engine
+// that leaves recall to this package installs the version that learns from chat messages (Pasta-Devs/Marinara-Agents#1744).
+const LONG_TERM_MEMORY_CAPABILITY_API = Object.freeze({ major: 1, minor: 387 });
 const hierarchicalMapsOwnedSourcePaths = [
   "packages/server/src/routes/spatial-context.routes.ts",
   "packages/server/src/services/spatial-context",
@@ -214,6 +217,21 @@ const blackjackOwnedSourcePaths = [
   "packages/client/src/hooks/use-blackjack.ts",
   "packages/client/src/stores/blackjack-game.store.ts",
 ];
+// Story Writer is written here too. Its server keeps stories through api.runtime.persistence, so it needs no host
+// runtime overlay. A directory entry owns everything under it (ownedCapturePaths matches by prefix).
+const storyWriterSourceRoot = join(packagesDir, "story-writer/src/engine");
+const storyWriterOwnedSourcePaths = [
+  "packages/client/src/story-writer-package-entry.tsx",
+  "packages/client/src/components/story-writer",
+  "packages/client/src/hooks/use-story-writer.ts",
+  "packages/client/src/hooks/use-engine-resources.ts",
+  "packages/client/src/hooks/use-story-generation.ts",
+  "packages/client/src/lib/story-writer",
+  "packages/client/src/localization",
+  "packages/server/src/services/story-writer",
+];
+// The reader's artwork and textures, fetched by URL from the package asset route.
+const storyWriterServedAssetPaths = ["story-writer-mari.webp", "wood-desk.webp", "paper-light.webp", "paper-dark.webp"];
 // Package clients use the Engine's stores, services and components through `__MARINARA_HOST__` (capability API 1.341):
 // every feature build stacks these adapters over the vendored modules, so no client bundles a copy that keeps its own
 // state (#1478: the UI store copy reset Engine settings; #1487). scripts/client-host-gates.mjs holds each bundle to it.
@@ -383,10 +401,10 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.5.9",
-    minEngineVersion: "2.4.6",
+    version: "1.5.10",
+    minEngineVersion: "2.5.1",
     capabilityApi: PACKAGE_CAPABILITY_API,
-    builtAgainst: PACKAGE_BUILT_AGAINST,
+    builtAgainst: { engineVersion: "2.5.1", engineCommit: "42d64368e82340a46e35c0f4489d9f41024d6032" },
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
     description: "A pretend social network where your characters post, share photos, and talk about your chats.",
@@ -463,7 +481,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.4.1",
+    version: "0.4.4",
     minEngineVersion: "2.4.6",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
@@ -538,16 +556,16 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.4.92",
-    minEngineVersion: "2.4.1",
+    version: "1.5.0",
+    minEngineVersion: "2.5.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
     description:
-      "Remembers important things from your chat summaries, characters, and lorebooks, and brings them back when they matter.",
+      "Remembers important things from your chats, characters, and lorebooks, and brings them back when they matter.",
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
-    permissions: ["agent-runtime", "chat-read", "chat-write", "routes", "storage", "ui"],
+    permissions: ["agent-runtime", "chat-read", "routes", "storage", "ui"],
     serverImport: "packages/server/src/services/long-term-memory/server-entry.ts",
     serverEntry: true,
     clientImport: "packages/client/src/features/long-term-memory/client-entry.tsx",
@@ -555,7 +573,7 @@ const features = [
     ownedSourcePaths: longTermMemoryOwnedSourcePaths,
     engineBoundaryPath: join(packagesDir, "long-term-memory/engine-boundary.json"),
     boundaryDisplayName: "Long-Term Memory",
-    capabilityApi: PACKAGE_CAPABILITY_API,
+    capabilityApi: LONG_TERM_MEMORY_CAPABILITY_API,
     contributions: {
       agentDetail: { agentIds: ["long-term-memory"] },
       slots: ["chat-settings"],
@@ -800,6 +818,38 @@ const features = [
     packageSourceRoot: blackjackSourceRoot,
     ownedSourcePaths: blackjackOwnedSourcePaths,
   },
+  {
+    id: "story-writer",
+    version: "0.1.1",
+    minEngineVersion: "2.5.1",
+    // The browser tab's openConnection prop and the debugMode field of /generate/raw arrived in capability API 1.386.
+    capabilityApi: Object.freeze({ major: 1, minor: 386 }),
+    builtAgainst: { engineVersion: "2.5.1", engineCommit: "54e6848c818ae4150f108ab9614986bb7610891d" },
+    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
+    name: "Story Writer",
+    description:
+      "A co-writing book. Pick a connection, your characters, personas and lorebooks, describe the story, and the model writes it chapter by chapter while you guide it with an author's note and edit anything on the page.",
+    category: "misc",
+    kind: ["agent"],
+    modes: ["conversation", "roleplay", "game"],
+    permissions: ["routes", "storage", "ui"],
+    serverImport: "packages/server/src/services/story-writer/server-entry.ts",
+    serverEntry: true,
+    clientImport: "packages/client/src/story-writer-package-entry.tsx",
+    packageSourceRoot: storyWriterSourceRoot,
+    ownedSourcePaths: storyWriterOwnedSourcePaths,
+    libraryHidden: true,
+    assetPaths: ["story-writer-icon.png", ...storyWriterServedAssetPaths],
+    contributions: {
+      slots: ["home-browser-tab"],
+      homeBrowserTab: {
+        label: "Story Writer",
+        ariaLabel: "Open Story Writer",
+        iconPaths: ["story-writer-icon.png"],
+      },
+      assets: { paths: storyWriterServedAssetPaths },
+    },
+  },
 ];
 
 const requestedFeatureIds = new Set(process.argv.slice(2));
@@ -829,7 +879,7 @@ const longTermMemoryBoundary = selectedFeatures.some((feature) => feature.id ===
       sourceRoot: longTermMemorySourceRoot,
       boundaryPath: join(packagesDir, "long-term-memory/engine-boundary.json"),
       displayName: "Long-Term Memory",
-      capabilityApi: PACKAGE_CAPABILITY_API,
+      capabilityApi: LONG_TERM_MEMORY_CAPABILITY_API,
     })
   : null;
 const memoryNagBoundary = selectedFeatures.some((feature) => feature.id === "memory-nag")
@@ -1215,6 +1265,7 @@ async function buildPackageStyles(buildRoot, temporary, capabilityId) {
 import tailwindcss from ${JSON.stringify(tailwindModule)};
 export default defineConfig({
   root: ${JSON.stringify(join(engineRoot, "packages/client"))},
+  publicDir: false,
   plugins: [tailwindcss()],
   build: {
     emptyOutDir: true,
@@ -2159,7 +2210,7 @@ for (const feature of selectedFeatures) {
           ? "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
           : feature.id === "noodle"
             ? "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
-            : feature.id === "slurp2"
+            : feature.id === "slurp2" || feature.id === "story-writer"
               ? `https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/${feature.id}/README.md`
               : `https://github.com/Pasta-Devs/Marinara-Agents#${feature.id}`,
     });

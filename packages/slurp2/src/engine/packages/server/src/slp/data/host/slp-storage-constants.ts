@@ -39,6 +39,7 @@ import {
   slurpContinuityLinks,
   slurpDemandTrends,
   slurpWorldClaims,
+  slurpLiveShows,
   slurpImprovementJobs,
   slurpImprovementProposals,
 } from "../../../db/schema/slurp.js";
@@ -106,6 +107,7 @@ export const SLURP_BACKUP_TABLES = {
   continuityLinks: slurpContinuityLinks,
   demandTrends: slurpDemandTrends,
   worldClaims: slurpWorldClaims,
+  liveShows: slurpLiveShows,
   improvementJobs: slurpImprovementJobs,
   improvementProposals: slurpImprovementProposals,
 } as const;

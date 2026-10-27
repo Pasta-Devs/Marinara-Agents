@@ -44,7 +44,7 @@ assert.equal(
 
 // --- Sections: Basic first, the extensions after it, each with its own page.
 assert.equal(SLP_BACKSTAGE_SECTIONS[1], "basic");
-assert.deepEqual(SLP_BACKSTAGE_EXTENSION_SECTIONS, ["ads", "content", "world", "stir", "engine"]);
+assert.deepEqual(SLP_BACKSTAGE_EXTENSION_SECTIONS, ["ads", "content", "world", "stir", "live", "engine"]);
 assert.deepEqual(SLP_BACKSTAGE_SECTIONS.slice(-SLP_BACKSTAGE_EXTENSION_SECTIONS.length), [
   ...SLP_BACKSTAGE_EXTENSION_SECTIONS,
 ]);

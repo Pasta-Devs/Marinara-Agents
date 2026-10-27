@@ -5,7 +5,7 @@
  */
 import type { SlpActionName } from "./slp-actions.js";
 
-export const SLP_EXTENSIONS = ["ads", "storylines", "world", "stir", "supportDesk", "engineLink"] as const;
+export const SLP_EXTENSIONS = ["ads", "storylines", "world", "stir", "supportDesk", "engineLink", "live"] as const;
 export type SlpExtensionId = (typeof SLP_EXTENSIONS)[number];
 
 /** The settings key of each switch. */
@@ -16,6 +16,7 @@ export const SLP_EXTENSION_KEYS = {
   stir: "extStir",
   supportDesk: "extSupportDesk",
   engineLink: "extEngineLink",
+  live: "extLive",
 } as const satisfies Record<SlpExtensionId, string>;
 export type SlpExtensionKey = (typeof SLP_EXTENSION_KEYS)[SlpExtensionId];
 export type SlpExtensionSettings = Partial<Record<SlpExtensionKey, boolean>>;
@@ -86,6 +87,8 @@ export function slpExtensionFromLegacy(
   defaults: { inlineAdsEnabled: boolean; brandDealsPace: string },
 ): boolean {
   if (Object.keys(raw).length === 0) return false;
+  // Live came after the switches: an older install opts in, it never wakes up live.
+  if (id === "live") return false;
   if (id === "ads") {
     const ads = raw.inlineAdsEnabled ?? defaults.inlineAdsEnabled;
     const deals = raw.brandDealsPace ?? defaults.brandDealsPace;

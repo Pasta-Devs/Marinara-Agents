@@ -27,6 +27,7 @@ export function SourceScopeCombobox({
   required = false,
   invalid = false,
   disabled = false,
+  describedBy,
   memoryGroups,
 }: {
   targets: ScopeTarget[];
@@ -38,6 +39,7 @@ export function SourceScopeCombobox({
   required?: boolean;
   invalid?: boolean;
   disabled?: boolean;
+  describedBy?: string;
   memoryGroups?: { has: (target: ScopeTarget) => boolean; withLabel: string; withoutLabel: string };
 }) {
   const { locale, t: localizeUi } = useLtmTranslation();
@@ -255,6 +257,7 @@ export function SourceScopeCombobox({
         aria-required={required}
         aria-invalid={invalid}
         aria-disabled={disabled || undefined}
+        aria-describedby={disabled ? describedBy : undefined}
         data-ltm-scope-picker-trigger={testId}
         className={`${inputClass} flex items-center gap-2 text-left${disabled ? " opacity-50" : ""}`}
         onClick={() => {

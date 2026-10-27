@@ -220,3 +220,5 @@ export { useSetSlurpCreatorMessaging } from "./slp-messages-hooks.js";
 
 // The role-play sign-up draws its chat with the same bubbles as a real thread.
 export { slurpBubbleSurface } from "./SlpMessageBubble.js";
+export { newRequestId } from "./slp-thread-actions.js";
+export { SlpThreadTaskLayer } from "./SlpThreadView.js";

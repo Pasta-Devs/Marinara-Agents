@@ -7,6 +7,7 @@ import { SlurpWalletView } from "./SlpScreenWallet";
 import { DisclosureBadge } from "./SlpHomeHelpers";
 import { SlurpInboxView } from "./SlpScreenMessages";
 import { SlpStirScreen } from "../../features/stir/slp-stir-contract";
+import { SlpLiveScreen } from "../../features/live/SlpLiveScreen";
 import { ChevronLeft, ChevronRight, Plus, TriangleAlert, UserRound } from "lucide-react";
 import { ProfileInitial, SLP_PAGE_SCROLL_CLASS } from "../../base/chrome/SlpChrome";
 import { cn } from "../../../lib/utils";
@@ -47,6 +48,18 @@ export function renderSlurpHomeDestinations({
     return (
       <SlpShell {...shellProps}>
         <SlpEmptyState title={localizeUi("ui.noodle.viewerhub.createAPersonaToBrowseNoodler")} />
+      </SlpShell>
+    );
+  }
+
+  if (navigation.mode === "creator" && navigation.view === "live") {
+    return (
+      <SlpShell {...shellProps}>
+        <SlpLiveScreen
+          showId={navigation.showId}
+          personaId={viewerPersonaId}
+          onBack={navigation.returnTo ? () => onNavigate(navigation.returnTo!) : exitToCreatorHub}
+        />
       </SlpShell>
     );
   }

@@ -213,6 +213,11 @@ async function harness({
     seed,
     snapshot: () => clone([...docs]),
     data: (id) => clone(docs.get(id)?.data),
+    async state() {
+      const route = routes.get("GET /state");
+      assert.ok(route, "The shipped package registers GET /state");
+      return route({ query: { timeZone: "Europe/Warsaw" } });
+    },
     async post(path, body = {}) {
       const route = routes.get(`POST ${path}`);
       assert.ok(route, `The shipped package registers POST ${path}`);
@@ -265,6 +270,43 @@ test("successful final normal completion automatically remembers canon within it
     host.snapshot().filter(([id]) => id.startsWith(`${runId}:beat:`)),
     beats,
   );
+});
+
+test("opening an existing world automatically compresses and combines completed chapter backlog", async () => {
+  const host = await harness({ progress: 10 });
+  const session = host.data(sessionId);
+  session.progress[2] = { normal: 10 };
+  host.seed(sessionId, "session", session);
+  const plan = host.data(`${runId}:chapter:1`);
+  host.seed(`${runId}:chapter:2`, "chapter-plan", { ...plan, chapter: 2, title: "The keeper's promise" });
+  for (let index = 0; index < 10; index += 1)
+    host.seed(`${runId}:beat:2:${index}`, "beat", {
+      chapter: 2,
+      storyIndex: index,
+      segments: [{ speaker: "", text: `Second canonical chapter scene ${index + 1}: the keeper promises to return.` }],
+    });
+  const originals = host.snapshot().filter(([id]) => id.includes(":beat:") || id.includes(":chapter:"));
+  ok(await host.state());
+  const status = await settled(host);
+  assert.equal(status.phase, "ready", JSON.stringify(host.warnings));
+  assert.equal(status.chapters, 2);
+  assert.equal(status.combinedRecords, 2);
+  assert.equal(host.data(memoryId).records.length, 2);
+  assert.deepEqual(
+    host.snapshot().filter(([id]) => id.includes(":beat:") || id.includes(":chapter:")),
+    originals,
+  );
+  const summaries = () =>
+    host.calls.filter((messages) =>
+      messages[0]?.content.includes("Summarize only the supplied canonical story history"),
+    ).length;
+  const calls = summaries();
+  ok(await host.state());
+  assert.equal((await settled(host)).phase, "ready");
+  assert.equal(summaries(), calls, "Routine world refresh does not regenerate unchanged memory");
+  const manual = await host.post("/continuity");
+  ok(manual);
+  assert.equal(manual.chapters.length, 2, "Manual chapter compression remains available alongside automatic memory");
 });
 
 test("a failed completion write does not schedule an archive or consume model calls", async () => {
@@ -360,7 +402,10 @@ test("an opened Character Story is excluded until its final completion commits",
 });
 
 test("new chapter generation includes current legacy chats even when pre-forging gave them a later coarse chapter", async () => {
+  // Keep this successful canon-generation request within its explicitly ample configured window.
+  const configuredWindow = 262144;
   const host = await harness({
+    maxContext: configuredWindow,
     progress: 10,
     summarizeReply(messages) {
       const data = JSON.parse(messages[1].content);
@@ -394,7 +439,7 @@ test("new chapter generation includes current legacy chats even when pre-forging
   );
   const inputTokens = request.messages.reduce((sum, message) => sum + estimateTextTokens(message.content) + 4, 0);
   assert.ok(
-    inputTokens + request.maxTokens + 512 <= 10000,
+    inputTokens + request.maxTokens + 512 <= configuredWindow,
     "The actual provider request reserves its real output within the model context",
   );
   assert.equal((await settled(host)).recordCount, 10);

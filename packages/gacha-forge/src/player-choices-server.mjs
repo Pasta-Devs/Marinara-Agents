@@ -1,3 +1,4 @@
+/* global forgeChoiceLabel */
 // Choice graphs stay beside the beat they belong to. The graph is reusable during replay;
 // only the first-play selection map belongs to the story's permanent continuity.
 export function forgeChoicesEnabled(run) {
@@ -13,7 +14,17 @@ PLAYER AGENCY: the narrator may offer short, reconverging protagonist dialogue/a
   return result;
 }
 
-export function forgeChoiceMessages(messages, { enabled, terminal }) {
+// Speech for NPCs: the same beat call names each NPC speaker's voice, so no extra model request is made.
+const forgeSpeakerVoicePrompt = `
+
+SPEAKER VOICES (extend the JSON shape above with an optional top-level "voices" object):
+- For every NPC who speaks aloud in this beat (anyone who is not a summonable hero and not the protagonist), map their exact "speaker" name to "male" or "female", the voice they should be read in. Example: "voices":{"The Old Station Keeper":"male"}.
+- Leave out a speaker whose voice is unclear. Never list narration.`;
+
+export function forgeChoiceMessages(messages, { enabled, terminal, event, audio }) {
+  if (event) messages = [...messages, { role: "user", content: event }];
+  if (audio?.tts === true && audio.otherVoices === true)
+    messages = [{ ...messages[0], content: messages[0].content + forgeSpeakerVoicePrompt }, ...messages.slice(1)];
   if (!enabled) return messages;
   const result = messages.map((message) => ({ ...message }));
   result[0].content = result[0].content.replace(
@@ -28,6 +39,7 @@ PLAYER CHOICES (extend the JSON shape above with an optional "choices" array):
 - Shape: "choices":[{"kind":"small","at":0,"options":[{"text":"Apologize","selection":{"kind":"dialogue","text":"I am sorry I kept you waiting."},"segments":[{"speaker":"","text":"...","place":"..."}]},{"text":"Pull your hoodie up","selection":{"kind":"action","text":"You pull your hoodie up against the cold."},"segments":[...]}]}].
 - Every option has one "selection": {"kind":"dialogue"|"action","text":"..."}. It is the beat performed AFTER the player chooses. Use "dialogue" only for the protagonist's actual spoken words. Use "action" for physical actions, decisions or nonverbal responses; write these as narration in the story's normal voice, NEVER as spoken dialogue. Do not assign a character speaker to an action.
 - "at" is the ZERO-BASED index of the MAINLINE segment after which the options appear. Never put two choices at the same index.
+- End every intent label with appropriate punctuation for the story's language.
 - A SMALL choice has kind "small". Generate ALL its alternative paths together in this one response: 1 to 8 short segments in EVERY option, in the same segment format as the mainline. Do not merely describe what you would write later.
 - After the chosen option and its branch, the story returns to the next mainline segment. Every branch MUST arrive at that same continuation naturally; its local dialogue or route may differ, but it may not change the chapter's required plot, future fights, or settled fate. Later beats may be written before the player chooses, so they must never require a particular small option.
 - The selection text is the protagonist's performed line/action, separate from the button label. Do not repeat it as the first branch segment. Do not place unselected alternatives in mainline prose. Do not nest choices inside branches.
@@ -42,8 +54,69 @@ ${
   return result;
 }
 
+const forgeSpeakerKey = (name) =>
+  String(name ?? "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\s+/gu, " ")
+    .trim();
+const forgeVoiceGender = (value) => value === "male" || value === "female";
+
+// Saved on each segment, so stored beats, replays and choice branches carry the speaker's voice gender.
+export function forgeSpeakerGenders(raw, segments) {
+  const voices = raw?.voices && typeof raw.voices === "object" && !Array.isArray(raw.voices) ? raw.voices : {};
+  const genders = new Map();
+  for (const [name, value] of Object.entries(voices).slice(0, 40)) {
+    const gender = typeof value === "string" ? value.trim().toLowerCase() : "";
+    if (forgeSpeakerKey(name) && forgeVoiceGender(gender)) genders.set(forgeSpeakerKey(name), gender);
+  }
+  for (const segment of genders.size && Array.isArray(segments) ? segments : []) {
+    const gender = segment?.speaker && genders.get(forgeSpeakerKey(segment.speaker));
+    if (gender) segment.gender = gender;
+  }
+  return segments;
+}
+
+// A name keeps one voice for the whole world. The first gender any saved beat gives a speaker is kept on the run
+// (capped) and wins over later beats, including beats where the writer left the speaker out or that were written
+// before Voice other characters was on. Returns the run's map; the beat's segments are updated in place.
+export function forgeRunSpeakerGenders(known, beat) {
+  const entries = known && typeof known === "object" && !Array.isArray(known) ? Object.entries(known) : [];
+  const genders = new Map(entries.filter(([name, gender]) => name && forgeVoiceGender(gender)).slice(0, 200));
+  const segments = [
+    ...(Array.isArray(beat?.segments) ? beat.segments : []),
+    ...(Array.isArray(beat?.choices) ? beat.choices : []).flatMap((choice) =>
+      (Array.isArray(choice?.options) ? choice.options : []).flatMap((option) =>
+        Array.isArray(option?.segments) ? option.segments : [],
+      ),
+    ),
+  ].filter((segment) => segment && typeof segment === "object" && forgeSpeakerKey(segment.speaker));
+  for (const segment of segments) {
+    const name = forgeSpeakerKey(segment.speaker);
+    if (forgeVoiceGender(segment.gender) && !genders.has(name) && genders.size < 200) genders.set(name, segment.gender);
+  }
+  for (const segment of segments) {
+    const gender = genders.get(forgeSpeakerKey(segment.speaker));
+    if (gender) segment.gender = gender;
+  }
+  return Object.fromEntries(genders);
+}
+
+// Saving a beat records its new speaker genders on the run; reading a stored beat only applies them.
+export async function forgeRememberSpeakerGenders(readSession, updateSession, beat) {
+  const { data: session } = await readSession();
+  const known = forgeRunSpeakerGenders(session?.speakerGenders, beat);
+  if (!updateSession || JSON.stringify(known) === JSON.stringify(session?.speakerGenders || {})) return beat;
+  // A concurrent first value wins; this beat's segments then follow it.
+  await updateSession((next) => {
+    next.speakerGenders = forgeRunSpeakerGenders(next.speakerGenders, beat);
+  });
+  return beat;
+}
+
 export function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled, terminal }) {
   const beat = normalizeBeat(raw, options);
+  forgeSpeakerGenders(raw, beat?.segments);
   if (!beat || !enabled || raw?.choices == null) return beat;
   if (!Array.isArray(raw.choices) || raw.choices.length > 3) return null;
   if (raw.choices.length && beat.segments.length !== raw.segments.length) return null;
@@ -65,8 +138,10 @@ export function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled,
     const selections = new Set();
     const normalizedOptions = [];
     for (const [optionIndex, option] of choice.options.entries()) {
-      const text = typeof option?.text === "string" ? option.text.trim() : "";
-      if (!text || text.length > 280 || labels.has(text)) return null;
+      const rawText = typeof option?.text === "string" ? option.text.trim() : "";
+      if (!rawText || rawText.length > 280) return null;
+      const text = forgeChoiceLabel(rawText);
+      if (labels.has(text)) return null;
       labels.add(text);
       const selection = option.selection;
       const selectedText = typeof selection?.text === "string" ? selection.text.trim() : "";
@@ -93,7 +168,7 @@ export function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled,
         id: `option-${optionIndex + 1}`,
         text,
         selection: { kind: selection.kind, text: selectedText },
-        segments: branch.segments,
+        segments: forgeSpeakerGenders(raw, branch.segments),
       });
     }
     choices.push({ id: `choice-${index + 1}`, kind: choice.kind, at: choice.at, options: normalizedOptions });
@@ -157,6 +232,7 @@ export function forgeCreateChoiceRuntime({
   bondHistory,
   readRun,
   resolveChapter,
+  choiceChapterActive = async () => true,
 }) {
   const generationQueues = new Map();
 
@@ -201,6 +277,9 @@ export function forgeCreateChoiceRuntime({
     for (const row of rows) {
       if (!row?.id?.startsWith(prefix) || !row.data) continue;
       const data = row.data;
+      // Expired/disabled event choices cannot hold unrelated main-story generation.
+      // A chapter-scoped operation still checks its own unresolved choices normally.
+      if (chapter == null && !(await choiceChapterActive(runId, data.chapter))) continue;
       if (beforeChapter != null) {
         const numeric = Number(data.chapter);
         if (Number.isInteger(numeric)) {
