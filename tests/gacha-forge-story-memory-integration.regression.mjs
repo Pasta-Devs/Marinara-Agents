@@ -5,7 +5,11 @@ import {
   forgeComposeMemoryPrompt,
   forgeMemoryContext,
 } from "../packages/gacha-forge/src/story-memory-fit.mjs";
-import { createForgeStoryMemoryIntegration } from "../packages/gacha-forge/src/story-memory-integration.mjs";
+import {
+  createForgeStoryMemoryIntegration,
+  forgeChatRecallQuery,
+  forgeKnowledgeBoundary,
+} from "../packages/gacha-forge/src/story-memory-integration.mjs";
 import { createForgeStoryMemory, forgeStoryMemoryText } from "../packages/gacha-forge/src/story-memory.mjs";
 
 // Summaries keep 10240 output tokens free, so tests that really compress need more than the 10k default window.
@@ -108,6 +112,7 @@ function fixture(options = {}) {
     findKnownModel: () => undefined,
     estimateTokens: (value) => Math.ceil(value.length / 4),
     background: (callback) => callback(),
+    runStory: options.runStory,
     renderContext: options.renderContext,
     logger: { warn() {} },
   });
@@ -492,7 +497,13 @@ test("live-chat recovery deduplicates played text across different legacy headin
 
 test("memory that fell behind answers with legacy history at once and catches up once in the background", async () => {
   let gate = deferred();
-  const f = fixture({ phase: "stale", maintain: () => gate.promise });
+  // The story's own signal, which Cancel and a reset abort.
+  const story = new AbortController();
+  const f = fixture({
+    phase: "stale",
+    maintain: () => gate.promise,
+    runStory: (_runId, operation) => operation(story.signal),
+  });
   f.plan(1);
   f.plan(2);
   f.session.progress = { 1: { normal: 3 } };
@@ -504,8 +515,8 @@ test("memory that fell behind answers with legacy history at once and catches up
   await settle();
   assert.deepEqual(
     f.maintained,
-    [{ runId: f.runId }],
-    "One background job, sized for every reader rather than this job",
+    [{ runId: f.runId, signal: story.signal }],
+    "One background job, sized for every reader rather than this job, stopped by the story's Cancel",
   );
   assert.equal((await f.memory.status(f.runId)).phase, "pending");
   await f.context(2);
@@ -796,4 +807,98 @@ test("a later side-story opening keeps existing memory fingerprints and compress
     ["event-2"],
     "Existing canonical detail summaries must not be regenerated just because the boundary acquired a later event",
   );
+});
+
+test("recall searches with what was just played, then the call site's cues, and passes who may know it", async () => {
+  const f = fixture();
+  f.plan(1);
+  f.plan(2);
+  f.session.progress = { 1: { normal: 3 }, 2: { normal: 1 } };
+  await f.memory.context({
+    runId: f.runId,
+    chapter: 2,
+    storyIndex: 1,
+    query: { plan: "Chapter 2 plan", cues: ["The duel ended in a draw."], speakers: ["Mira"] },
+    prefix: "# Current chapter so far\nThe gate creaked.\n[Canonical player choice by Mira: Open the gate]",
+    job: "narration",
+    cast: ["memory-frontier:unit:keeper"],
+    fallback: () => "legacy fallback",
+  });
+  const request = f.requests.at(-1);
+  assert.deepEqual(request.query, {
+    cues: ["The gate creaked.\nOpen the gate", "The duel ended in a draw."],
+    window: "The gate creaked.\nOpen the gate",
+    plan: "Chapter 2 plan",
+    speakers: ["Mira"],
+  });
+  assert.deepEqual(request.cast, ["memory-frontier:unit:keeper"]);
+  assert.equal(request.reader, undefined);
+  // Before the first beat, the end of the previous chapter is what was just played.
+  await f.memory.context({
+    runId: f.runId,
+    chapter: 2,
+    storyIndex: 0,
+    query: "legacy words",
+    job: "chat",
+    current: true,
+    reader: "memory-frontier:unit:keeper",
+    fallback: () => "legacy fallback",
+  });
+  assert.deepEqual(f.requests.at(-1).query.cues, ["Canonical 1:0\n\nCanonical 1:1", "legacy words"]);
+  assert.equal(f.requests.at(-1).reader, "memory-frontier:unit:keeper");
+});
+
+test("chats and Character Stories carry their audience, and a chat sees only its own unit's open Character Story", async () => {
+  const f = fixture();
+  f.plan(1);
+  f.plan("bond-keeper", ["story", "story", "story"]);
+  f.plan("bond-bryn", ["story", "story", "story"]);
+  f.session.progress = { 1: { normal: 3 } };
+  f.session.bondChapters.keeper = { after: 1, opened: 10, beats: 3 };
+  f.session.bondChapters.bryn = { after: 1, opened: 11, beats: 1 };
+  f.addChat(1);
+  const sources = await f.memory.readSources(f.runId);
+  const audience = (kind) => sources.find((source) => source.kind === kind)?.audience;
+  assert.deepEqual(audience("chat"), ["memory-frontier:unit:keeper"]);
+  assert.deepEqual(audience("character-story"), ["keeper"]);
+  assert.doesNotMatch(JSON.stringify(sources), /audience/u, "the audience is never saved or summarized");
+  const chat = (reader) =>
+    f.memory.context({
+      runId: f.runId,
+      chapter: 2,
+      storyIndex: 0,
+      query: "keeper",
+      current: true,
+      job: "chat",
+      reader,
+      fallback: () => "legacy fallback",
+    });
+  assert.match(await chat("bryn"), /Canonical bond-bryn:0/u);
+  assert.doesNotMatch(await chat("keeper"), /Canonical bond-bryn/u);
+});
+
+test("a chat's recall query is what the player said since the companion last spoke, with speakers kept apart", () => {
+  const messages = [
+    { who: "player", text: "Old question." },
+    { who: "unit", text: "Old answer." },
+    { who: "player", text: "Did you see the reef?" },
+    { who: "player", text: "The moonstone was there." },
+  ];
+  assert.deepEqual(forgeChatRecallQuery(messages, { speakers: ["Arden", "", "Mira"] }), {
+    cues: ["Did you see the reef?", "The moonstone was there."],
+    window: "Old question.\nOld answer.\nDid you see the reef?\nThe moonstone was there.",
+    speakers: ["Arden", "Mira"],
+  });
+  // With the companion speaking last, the player's latest message is the cue.
+  assert.deepEqual(forgeChatRecallQuery([...messages, { who: "unit", text: "Yes." }]).cues, [
+    "The moonstone was there.",
+  ]);
+  assert.deepEqual(forgeChatRecallQuery([]), { cues: [], window: "", speakers: [] });
+});
+
+test("the knowledge boundary keeps in-world knowledge and the fiction's own boundary", () => {
+  assert.match(forgeKnowledgeBoundary, /only what they saw or took part in/u);
+  assert.match(forgeKnowledgeBoundary, /learned inside the story from the protagonist or another in-world source/u);
+  assert.match(forgeKnowledgeBoundary, /another character's private conversations/u);
+  assert.match(forgeKnowledgeBoundary, /no player, game, prompt, instructions or memory notes/u);
 });
