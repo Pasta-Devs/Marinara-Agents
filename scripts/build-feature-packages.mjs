@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, relative, resolve, sep } from "node:path";
@@ -108,6 +108,25 @@ const memoryNagOwnedSourcePaths = [
   "packages/shared/src/features/agents/memory-nag",
   "packages/server/src/services/memory-nag",
   "packages/client/src/features/memory-nag",
+];
+const saucelingsSourceRoot = join(packagesDir, "saucelings/src/engine");
+const saucelingsOwnedSourcePaths = [
+  "packages/shared/src/features/agents/saucelings",
+  "packages/server/src/services/saucelings",
+  "packages/client/src/features/saucelings",
+];
+// The sprite pipeline writes sprites/atlas.json with every species sheet, effect and scene it made; the package
+// ships exactly those, so a new species or view needs no edit here.
+const saucelingsAtlas = JSON.parse(readFileSync(join(packagesDir, "saucelings/sprites/atlas.json"), "utf8"));
+const saucelingsSpritePaths = [
+  "sprites/atlas.json",
+  ...Object.values(saucelingsAtlas.sheets),
+  ...Object.values(saucelingsAtlas.effects).map((effect) => effect.path),
+  ...Object.values(saucelingsAtlas.scenes),
+  saucelingsAtlas.extras.path,
+  saucelingsAtlas.auras.path,
+  saucelingsAtlas.moves.path,
+  ...Object.values(saucelingsAtlas.live.sheets).map((sheet) => sheet.path),
 ];
 const noodleSourceRoot = join(packagesDir, "noodle/src/engine");
 const noodleOwnedSourcePaths = [
@@ -299,9 +318,12 @@ function featurePermissions(feature) {
 async function prepareFeatureBuildRoot(feature) {
   const ownRoot = feature.id === "hierarchical-maps" ? hierarchicalMapsSourceRoot : (feature.packageSourceRoot ?? null);
   if (ownRoot && !existsSync(ownRoot)) throw new Error(`Missing package-owned ${feature.name} source`);
-  // Long-Term Memory, Memory Nag and World Maps carry every Engine file they build from.
+  // Long-Term Memory, Memory Nag, Saucelings and World Maps carry every Engine file they build from.
   const fromVendoredEngine =
-    feature.id !== "long-term-memory" && feature.id !== "memory-nag" && feature.id !== "hierarchical-maps";
+    feature.id !== "long-term-memory" &&
+    feature.id !== "memory-nag" &&
+    feature.id !== "saucelings" &&
+    feature.id !== "hierarchical-maps";
   const buildRoot = await mkdtemp(join(tmpdir(), `marinara-${feature.id}-source-`));
   try {
     if (fromVendoredEngine) await cp(sourceRoot, buildRoot, { recursive: true, force: true });
@@ -613,6 +635,64 @@ const features = [
     },
   },
   {
+    id: "saucelings",
+    version: "0.22.3",
+    // Home widgets need capability API 1.35+, first released in Engine 2.5.0 (2.4.6 shipped 1.18).
+    minEngineVersion: "2.5.0",
+    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
+    name: "Saucelings",
+    description:
+      "A Tamagotchi-style pet in Home: pick a character to look after an egg, let their personality drive their care schedule, cover the gaps they miss, watch its sauce temperament shift, retire elders to a Menagerie, and let the caretaker find eggs of their own invention while you chat.",
+    category: "misc",
+    kind: ["agent"],
+    modes: ["conversation", "roleplay", "game"],
+    // prompt-context only rolls for egg hunting on each chat reply; it adds nothing to the prompt.
+    permissions: ["prompt-context", "routes", "storage", "ui"],
+    serverImport: "packages/server/src/services/saucelings/server-entry.ts",
+    serverEntry: true,
+    clientImport: "packages/client/src/features/saucelings/client-entry.tsx",
+    packageSourceRoot: saucelingsSourceRoot,
+    ownedSourcePaths: saucelingsOwnedSourcePaths,
+    engineBoundaryPath: join(packagesDir, "saucelings/engine-boundary.json"),
+    boundaryDisplayName: "Saucelings",
+    capabilityApi: PACKAGE_CAPABILITY_API,
+    libraryHidden: true,
+    assetPaths: ["saucelings-icon.png", ...saucelingsSpritePaths],
+    contributions: {
+      slots: ["home-browser-tab", "home-widget"],
+      homeBrowserTab: {
+        label: "Saucelings",
+        ariaLabel: "Open Saucelings",
+        iconPaths: ["saucelings-icon.png"],
+      },
+      homeWidgets: [
+        {
+          id: "sauceling-compact",
+          label: "Sauceling",
+          description: "Compact view of your sauceling's meters and caretaker status",
+          size: "compact",
+          icon: "heart",
+          accent: "orange",
+          surface: "soft",
+          header: "compact",
+        },
+        {
+          id: "sauceling-nook",
+          label: "Sauceling Nook",
+          description: "Quick Feed and Play actions plus the latest caretaker remark",
+          size: "large",
+          icon: "sparkles",
+          accent: "orange",
+          surface: "soft",
+          header: "banner",
+        },
+      ],
+      assets: {
+        paths: saucelingsSpritePaths,
+      },
+    },
+  },
+  {
     id: "hierarchical-maps",
     version: "1.7.1",
     minEngineVersion: "2.5.1",
@@ -807,6 +887,14 @@ const memoryNagBoundary = selectedFeatures.some((feature) => feature.id === "mem
       sourceRoot: memoryNagSourceRoot,
       boundaryPath: join(packagesDir, "memory-nag/engine-boundary.json"),
       displayName: "Memory Nag",
+      capabilityApi: PACKAGE_CAPABILITY_API,
+    })
+  : null;
+const saucelingsBoundary = selectedFeatures.some((feature) => feature.id === "saucelings")
+  ? await assertPackagePrivateImportBoundary({
+      sourceRoot: saucelingsSourceRoot,
+      boundaryPath: join(packagesDir, "saucelings/engine-boundary.json"),
+      displayName: "Saucelings",
       capabilityApi: PACKAGE_CAPABILITY_API,
     })
   : null;
@@ -1982,7 +2070,9 @@ for (const feature of selectedFeatures) {
         ? longTermMemoryBoundary
         : feature.id === "memory-nag"
           ? memoryNagBoundary
-          : null;
+          : feature.id === "saucelings"
+            ? saucelingsBoundary
+            : null;
   const manifest = {
     schemaVersion: boundary || feature.capabilityApi ? 2 : 1,
     ...(boundary
