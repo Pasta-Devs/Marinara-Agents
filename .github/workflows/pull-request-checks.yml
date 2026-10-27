@@ -124,6 +124,7 @@ jobs:
           node tests/gacha-forge-story-memory-fit.regression.mjs
           node tests/gacha-forge-story-memory-client.regression.mjs
           node tests/gacha-forge-story-memory-package.regression.mjs
+          node tests/gacha-forge-story-memory-audience.regression.mjs
           node tests/gacha-forge-background-work.regression.mjs
 
           # Prints how much of the reference extension's interface the Beholder package actually

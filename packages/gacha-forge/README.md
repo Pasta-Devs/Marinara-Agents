@@ -1,3 +1,15 @@
+## Story memory recall (1.25.0)
+
+Story memory recalls by meaning as well as by words. When the Engine has an embedding model, each saved memory gets a vector in the background and recall compares meaning alongside words; without one, recall uses words alone. Recall waits at most 1.5 seconds for the embedder, then continues on words.
+
+Recall searches with what was just played or said: the end of the current chapter so far (or of the previous chapter before the first scene), the last fight's outcome, and in a chat the messages you sent since the companion last replied. The chapter plan is only a weak extra cue. Names count for more than common words, except the names of whoever is talking.
+
+Only clearly relevant memories are recalled: up to three chapter summaries and up to three side memories (Character Stories, story events and chats together), within a tenth of the model's context alongside the overview. Conversations a prompt already lists among its newest are not recalled a second time.
+
+A unit's chats stay private and are no longer folded into the shared overview. They are recalled in that unit's own chats, its Character Story planning, scenes and story events it is in, and when a main chapter is planned; never in another unit's chat or in a fight. Another unit's Character Story reaches a chat only once the shared overview covers it, and its decisions are not listed there. An overview saved before 1.25.0 that already holds chats is rebuilt in the background and is not sent to chats or scenes until then.
+
+Every story writer and chat follows a knowledge boundary: a character knows only what they saw, took part in, or learned inside the story from the protagonist or another in-world source. They never know another character's private conversations unless they learned of them that way, and nothing outside the fiction.
+
 ## Faster chapter forging and background memory (1.24.9)
 
 A new chapter opens as soon as its plan is written. Its fights are no longer designed before the chapter map appears. Each fight is designed in the background right after the scene before it is written, so it is ready, with its enemy art, when you reach it. With pre-forge on, the write-ahead chain designs it between scenes. With pre-forge off, opening the scene starts it. A fight neither path reached is designed when its battle opens. Pre-forge Cancel, switching to Off, or a pending big choice stops the chain before its next fight or scene.
@@ -112,7 +124,7 @@ Gacha Forge automatically keeps memories from the world's completed canonical ch
 
 The overview uses at most 10% of the selected generation model's context window, measured with the Engine's token estimator. If the generation or compression connection's context window is unknown, configure it in **Engine Connections**. Gacha Forge reports the missing configuration instead of guessing a model limit.
 
-All saved character memories contribute to the overview. Relevant Character Story and conversation details are recalled separately from the three chapters. When space is tight, whole optional recall blocks are removed in relevance order; the complete previous chapter and current played content remain intact. If required history alone exceeds the model's context, generation reports the overflow instead of silently shortening it.
+Completed Character Stories and story events contribute to the overview; since 1.25.0 a unit's conversations stay private to it (see above). Relevant Character Story, event and conversation details are recalled separately from the three chapters. When space is tight, whole optional recall blocks are removed in relevance order; the complete previous chapter and current played content remain intact. If required history alone exceeds the model's context, generation reports the overflow instead of silently shortening it.
 
 **Settings → Story → Continuity** shows automatic memory's status and offers a retry when an update needs attention. Memory work runs in the background; a failure keeps previous memories and original records and does not block play. Existing manual compression and editing controls remain optional tools.
 

@@ -241,8 +241,10 @@ function createForgeSeasonalLegacyAdapter() {
           .slice(0, target.nodeIndex)
           .filter((entry) => entry.type === "story").length,
         history = await _r(target.runId, chapter, storyIndex, {
-          query: `${target.event.theme} ${node.title} ${node.setup}`,
+          query: { plan: [node.title, node.setup, target.event.theme].filter(Boolean).join(" ") },
           job: "structured",
+          // A fight's design needs no one's private conversations.
+          cast: [],
         });
       let messages = forgeComposeMemoryPrompt(vS, [
         run.scenario,
@@ -390,6 +392,8 @@ function createForgeSeasonalLegacyAdapter() {
       const reference = await cast(runId),
         selected = reference.filter((unit) => event.cast.includes(unit.id));
       const context = { pool: JSON.stringify(selected), index: "" };
+      // Only the event's own cast's conversations, both listed and recalled.
+      const conversations = await Ei(runId, { only: selected.map((unit) => unit.name), limit: 6 });
       const messages = forgeChoicePlanMessages(
         forgeComposeMemoryPrompt(gS, [
           run.scenario,
@@ -400,10 +404,17 @@ function createForgeSeasonalLegacyAdapter() {
           "",
           run.language,
           Uo(run, "chapter"),
-          await _r(runId, after + 1, 0, { current: true, query: event.theme, job: "structured" }),
+          await _r(runId, after + 1, 0, {
+            current: true,
+            query: { plan: [event.title, event.theme].filter(Boolean).join(" ") },
+            job: "structured",
+            // The event's own cast are the only units whose private conversations it may draw on.
+            cast: Array.isArray(event.cast) ? event.cast : [],
+            listed: conversations,
+          }),
           "",
           "",
-          fu(await Ei(runId, { limit: 6 })),
+          fu(conversations),
         ]),
         forgeChoicesEnabled(run),
       );

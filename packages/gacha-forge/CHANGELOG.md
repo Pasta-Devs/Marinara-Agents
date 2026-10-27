@@ -1,3 +1,9 @@
+## 1.25.0 — 2026-10-27
+
+- Story memory recalls by meaning as well as by words, using the Engine's embedding model when one is set, and searches with what was just played or said instead of the chapter plan. Only clearly relevant memories come back: up to three chapter summaries and three side memories.
+- A unit's chats stay private. They are no longer folded into the shared overview, and never reach another unit's chat, a scene or event without that unit, or a fight.
+- Characters in scenes and chats know only what they saw, took part in or were told in the story, and nothing outside it.
+
 ## 1.24.10 — 2026-10-27
 
 - A seasonal story event can start right after you finish a chapter again. Only a story you are in the middle of keeps an event closed: a main chapter or Character Story part with some, but not all, of it played. One you forged but have not started yet no longer blocks it, and waits until the event is done.
