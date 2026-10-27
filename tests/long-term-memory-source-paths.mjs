@@ -16,6 +16,8 @@ export const ltmSourcePaths = {
   interop: at(`${server}sources/interop.ts`),
   lastInjectionSummary: at(`${client}LastInjectionSummary.tsx`),
   locale: at(`${client}locales/en.json`),
+  localeKo: at(`${client}locales/ko.json`),
+  localization: at(`${client}localization.tsx`),
   maintenance: at(`${client}settings/MaintenancePanel.tsx`),
   navigation: at(`${client}LongTermMemoryNavigation.tsx`),
   reviewQueue: at(`${client}review/ReviewQueue.tsx`),

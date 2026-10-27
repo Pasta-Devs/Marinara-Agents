@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.5.3 — 2026-10-27
+
+- Long-Term Memory now has a Korean interface. It follows the Engine's language setting and shows English for any text without a Korean version. The translation is machine-made and awaits review by a Korean speaker.
+
 ## 1.5.2 — 2026-10-27
 
 - The Chat Messages tab in Sources has a Branch menu for a chat with branches. It starts on this branch, so another branch's messages no longer mix into the list. Choose a branch or All branches; importing still goes to the whole chat.

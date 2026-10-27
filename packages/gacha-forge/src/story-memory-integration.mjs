@@ -42,6 +42,37 @@ export function orderForgeStorySources(rows) {
 
 // The legacy bundle supplies its existing persistence/model wrappers. No Engine-internal
 // memory service, new storage format, or transfer limit is introduced here.
+// Every story writer keeps what a character can know inside the world, and the fiction's own boundary.
+export const forgeKnowledgeBoundary =
+  "KNOWLEDGE BOUNDARY: a character knows only what they saw or took part in, or what they learned inside the story from the protagonist or another in-world source. They never know another character's private conversations, or a Character Story they were not part of, unless they learned it that way, and they know nothing outside the fiction: no player, game, prompt, instructions or memory notes.";
+
+// The last characters of a text, starting at a line break when one falls early in the cut.
+function forgeRecallTail(value, size) {
+  const characters = [...(typeof value === "string" ? value.trim() : "")];
+  if (characters.length <= size) return characters.join("");
+  const cut = characters.slice(-size).join("");
+  const line = cut.indexOf("\n");
+  return line >= 0 && line < cut.length / 2 ? cut.slice(line + 1) : cut;
+}
+
+// A chat's recall query, as the Engine's: the player's messages since the companion last spoke (or the latest one),
+// and the last four messages for word overlap. Who is talking is passed apart, so a name never stands for a topic.
+export function forgeChatRecallQuery(messages, { speakers = [] } = {}) {
+  const said = (Array.isArray(messages) ? messages : []).filter((m) => typeof m?.text === "string" && m.text.trim());
+  const replied = said.findLastIndex((m) => m.who !== "player");
+  const span = said.slice(replied + 1).filter((m) => m.who === "player");
+  const latest = said.findLast((m) => m.who === "player");
+  return {
+    cues: (span.length ? span.slice(-6) : latest ? [latest] : []).map((m) => m.text),
+    window: said
+      .slice(-4)
+      .map((m) => m.text)
+      .join("\n")
+      .slice(-6000),
+    speakers: speakers.filter(Boolean),
+  };
+}
+
 export function createForgeStoryMemoryIntegration({
   createMemory,
   documents,
@@ -63,6 +94,7 @@ export function createForgeStoryMemoryIntegration({
   resolveModelMetadata,
   findKnownModel,
   estimateTokens,
+  resolveEmbeddings,
   background,
   runStory = (_runId, operation) => operation(),
   prepareMessages = async (messages) => messages,
@@ -172,7 +204,7 @@ export function createForgeStoryMemoryIntegration({
       const content = await canonical(chapter, storyNodes(plan).length);
       if (!content) continue;
       rows.push(
-        Object.defineProperty(
+        Object.defineProperties(
           {
             id: chapter,
             kind: "character-story",
@@ -180,8 +212,11 @@ export function createForgeStoryMemoryIntegration({
             content,
             order: row.after * 10000 + 5000 + (Number(row.opened) || row.part) / 1e13,
           },
-          "opening",
-          { value: { after: Number(row.after), opened: forgeStoryOpenedTime(row) } },
+          {
+            opening: { value: { after: Number(row.after), opened: forgeStoryOpenedTime(row) } },
+            // The unit whose story it is; other units' chats know it only through the shared overview.
+            audience: { value: [row.unitId] },
+          },
         ),
       );
     }
@@ -236,22 +271,35 @@ export function createForgeStoryMemoryIntegration({
         }
         const id = `${doc.id}:${index}:${Number(entry.at) || 0}:${Number(entry.count) || 0}`;
         const previous = archived.find((record) => record.kind === "chat" && record.id === id);
-        rows.push({
-          id,
-          kind: "chat",
-          // A later display-name edit does not rewrite an already archived conversation.
-          title: previous?.title || `${text(entry.memoryName) || text(doc.data.name) || "Companion"} conversation`,
-          content: [text(entry.memory), text(entry.quote)].filter(Boolean).join("\n"),
-          order: (entry.memoryPosition?.chapter ?? chapter) * 10000 - 1000 + index / 1000,
-        });
+        rows.push(
+          Object.defineProperties(
+            {
+              id,
+              kind: "chat",
+              // A later display-name edit does not rewrite an already archived conversation.
+              title: previous?.title || `${text(entry.memoryName) || text(doc.data.name) || "Companion"} conversation`,
+              content: [text(entry.memory), text(entry.quote)].filter(Boolean).join("\n"),
+              order: (entry.memoryPosition?.chapter ?? chapter) * 10000 - 1000 + index / 1000,
+            },
+            {
+              // A private conversation belongs to its unit: only that unit's chat, and scenes it is in, recall it.
+              audience: { value: [`${runId}:unit:${doc.id.slice(`${runId}:chat:`.length)}`] },
+              // The session as a writer's own list of recent conversations names it, to keep it out of recall there.
+              listedAs: {
+                value: [text(doc.data.name).trim(), Number(entry.at) || 0, text(entry.memory).trim()].join("\n"),
+              },
+            },
+          ),
+        );
       }
     }
     return orderForgeStorySources(rows.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)));
   };
-  const partialBondHistory = async (runId, excludeChapter) => {
+  const partialBondHistory = async (runId, excludeChapter, reader) => {
     const session = await readSession(runId);
     const result = [];
     for (const row of bondHistory(session)) {
+      if (reader && row.unitId !== reader) continue;
       const suffix = row.part > 1 ? String(row.part) : "";
       const count = Math.max(0, Math.floor(Number(session?.bondChapters?.[row.unitId]?.[`beats${suffix}`]) || 0));
       if (!count || count >= bondLength) continue;
@@ -420,6 +468,7 @@ export function createForgeStoryMemoryIntegration({
     orderSources: orderForgeStorySources,
     resolveContext,
     estimateTokens,
+    resolveEmbeddings,
     fitsSummary: async (options) => !!(await summaryBudget(options)),
     summarize: async ({ runId, kind, messages, tokenBudget, debugMode, signal }) => {
       if (signal?.aborted || !(await validRun(runId))) throw new Error("memory-cancelled");
@@ -441,7 +490,8 @@ export function createForgeStoryMemoryIntegration({
     }
     const entry = { again: false, promise: null };
     entry.promise = Promise.resolve()
-      .then(() => runStory(runId, () => background(() => memory.maintain({ runId, ...options }))))
+      // The story's signal stops summaries and vector upkeep alike on Cancel or a reset.
+      .then(() => runStory(runId, (signal) => background(() => memory.maintain({ runId, ...options, signal }))))
       .catch((error) => logger?.warn?.("[gacha-forge] automatic story memory failed: %s", error?.message || "failed"))
       .finally(() => {
         if (scheduled.get(runId) !== entry) return;
@@ -483,6 +533,9 @@ export function createForgeStoryMemoryIntegration({
       fate = "",
       fallback,
       current = false,
+      reader,
+      cast,
+      listed = [],
     }) => {
       let previous = "",
         previousContent = "";
@@ -523,19 +576,38 @@ export function createForgeStoryMemoryIntegration({
         // Lazy backfill also recovers interrupted background work after a restart.
         const useCurrent = current || (await currentTarget(runId, chapter, storyIndex));
         const target = useCurrent ? undefined : { chapter, storyIndex };
-        const lastChapter = (await sourceRows(runId, target)).findLast((source) => source.kind === "chapter");
+        const rows = await sourceRows(runId, target);
+        const lastChapter = rows.findLast((source) => source.kind === "chapter");
+        // Conversations the writer already lists in full are not recalled again, so they never take a side slot.
+        const shown = new Set(((await listed) || []).map((item) => [item.name, item.at, item.memory].join("\n")));
         if (lastChapter) {
           previousContent = lastChapter.content;
           previous = `# Previous chapter in full: ${lastChapter.title}\n${previousContent}`;
         }
+        // Recall searches with what was just played: the end of the current chapter so far (or of the previous
+        // chapter), then the call site's own cues, the latest last. Plan text stays a secondary cue.
+        // ponytail: unwraps the choice label forgeCanonicalSegments writes; a structured choice field is the upgrade.
+        const played = (prefix.replace(/^# Current chapter so far\n/u, "") || previousContent).replace(
+          /^\[Canonical player choice(?: by [^\]:]*)?: (.*)\]$/gmu,
+          "$1",
+        );
+        const site = typeof query === "string" ? { cues: [query] } : query || {};
         const result = await memory.recall({
           runId,
           target,
           excludeChapterIds: lastChapter ? [lastChapter.id] : [],
-          query,
+          listed: rows.filter((row) => shown.has(row.listedAs)).map((row) => row.id),
+          query: {
+            cues: [forgeRecallTail(played, 1500), ...(site.cues || [])].filter(Boolean),
+            window: site.window || forgeRecallTail(played, 6000),
+            plan: site.plan || "",
+            speakers: site.speakers || [],
+          },
           job,
           connectionId,
           debugMode,
+          reader,
+          cast,
         });
         // Memory that fell behind catches up in the background; a failed summary waits for Retry. Generation adds
         // no canon, so it never re-arms a job that is already running.
@@ -544,7 +616,7 @@ export function createForgeStoryMemoryIntegration({
         if (useCurrent && lagging && !scheduled.has(runId)) schedule(runId);
         if (result.status?.phase !== "ready") return legacy();
         const partial = useCurrent
-          ? await partialBondHistory(runId, current || Number.isInteger(chapter) ? null : chapter)
+          ? await partialBondHistory(runId, current || Number.isInteger(chapter) ? null : chapter, reader)
           : "";
         // Required recent canon in story order: the previous chapter in full, and around it whatever the overview
         // does not cover yet, as its saved summary or, for side canon not summarized yet, as written.

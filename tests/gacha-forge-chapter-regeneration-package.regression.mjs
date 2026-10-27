@@ -244,6 +244,8 @@ test("actual SDK reset writes a fresh main plan and retains first-clear rewards 
 test("actual SDK current Character Story reset preserves completed parts and regenerates with its existing placement", async () => {
   const f = await createChapterRuntime({ bond: true });
   try {
+    // This successful planner needs room for its canon plus the 8192-token answer floor.
+    f.transport.maxContext = 262144;
     const chapter = "bond-arden-2",
       before = structuredClone(f.session().bondChapters[chapterUnitId]);
     const completed = structuredClone(f.docs.get(`${chapterRunId}:chapter:bond-arden`));

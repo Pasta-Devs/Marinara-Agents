@@ -313,7 +313,8 @@ export function forgeCreateChoiceRuntime({
       : null;
   }
 
-  async function continuity(runId, chapter, storyIndex) {
+  // A reader (a unit's own chat) sees decisions from main chapters, events and its own Character Stories only.
+  async function continuity(runId, chapter, storyIndex, reader) {
     const numericTarget = Number.isInteger(chapter);
     const target = numericTarget ? null : await documents.getById(packageId, planId(runId, chapter));
     const targetAfter = Number(target?.data?.after) || 0;
@@ -333,6 +334,7 @@ export function forgeCreateChoiceRuntime({
       if (!decisions.length) continue;
       const numeric = Number.isInteger(data.chapter);
       const plan = numeric ? null : await documents.getById(packageId, planId(runId, data.chapter));
+      if (reader && plan?.data?.bondUnitId && plan.data.bondUnitId !== reader) continue;
       const after = Number(plan?.data?.after) || 0;
       let earlier;
       if (String(data.chapter) === String(chapter)) {
