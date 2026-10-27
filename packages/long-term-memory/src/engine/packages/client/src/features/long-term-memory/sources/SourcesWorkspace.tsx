@@ -75,6 +75,7 @@ import {
 import { buildScopeIndexes, type ScopeTargetChat } from "../scope-targets";
 import {
   chatOnlyLtmScope,
+  getLtmScopeGroupIds,
   ltmModeForChatMode,
 } from "../../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../../shared/src/features/agents/long-term-memory/constants.js";
@@ -313,6 +314,8 @@ export default function SourcesWorkspace({
     props.chatId ? [`chat:${props.chatId}`] : [],
   );
   const [modeFilter, setModeFilter] = useState<LtmMode | "all">("all");
+  // Chat Messages branch: null follows the current chat, "" lists every branch, else a chat id.
+  const [branchPick, setBranchPick] = useState<string | null>(null);
   const [customAvailabilityModes, setCustomAvailabilityModes] = useState<LtmMode[] | null>(null);
   const [modesError, setModesError] = useState("");
   const [availabilitySaving, setAvailabilitySaving] = useState(false);
@@ -630,7 +633,27 @@ export default function SourcesWorkspace({
   const sourceScope = sourceTarget?.sourceScope;
   const previewScope = source === "chats" || source === "messages" ? sourceScope : undefined;
   const effectiveImportScope = `${sourceTargetId}:${[...selectedDestinationTargetIds].sort().join(",")}`;
-  const previewQueryKey = [...queryKeys.preview, "pages", source, previewScope, modeFilter, committedSourceQuery];
+  // Branches are the chats of one group; the list is the shared history plus the picked branch's own pieces.
+  const branchGroupIds = source === "messages" ? getLtmScopeGroupIds(previewScope) : [];
+  const branchChats = (
+    branchGroupIds.length === 1
+      ? (scopeTargets.data?.groups.find((group) => group.id === branchGroupIds[0])?.chatIds ?? [])
+      : []
+  ).flatMap((id) => scopeIndexes.chatsById.get(id) ?? []);
+  const currentBranchId = branchChats.find((chat) => chat.id === props.chatId)?.id;
+  const branchChatId =
+    branchChats.length < 2 || branchPick === ""
+      ? undefined
+      : (branchChats.find((chat) => chat.id === branchPick)?.id ?? currentBranchId);
+  const previewQueryKey = [
+    ...queryKeys.preview,
+    "pages",
+    source,
+    previewScope,
+    modeFilter,
+    branchChatId,
+    committedSourceQuery,
+  ];
   const lorebookPreviewQueryKey = [
     ...queryKeys.lorebookPreview,
     "pages",
@@ -650,7 +673,15 @@ export default function SourcesWorkspace({
     queryFn: ({ pageParam, signal }) =>
       request<
         LtmInteropPreviewResponse,
-        { source: Source; limit: number; sourceScope?: LtmScope; mode?: LtmMode; query?: string; cursor?: string }
+        {
+          source: Source;
+          limit: number;
+          sourceScope?: LtmScope;
+          mode?: LtmMode;
+          branchChatId?: string;
+          query?: string;
+          cursor?: string;
+        }
       >(
         "/import/preview",
         "POST",
@@ -660,6 +691,7 @@ export default function SourcesWorkspace({
           ...(pageParam ? { cursor: pageParam } : {}),
           ...(previewScope ? { sourceScope: previewScope } : {}),
           ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
+          ...(branchChatId ? { branchChatId } : {}),
           ...(committedSourceQuery.trim() ? { query: committedSourceQuery } : {}),
         },
         signal,
@@ -1002,6 +1034,7 @@ export default function SourcesWorkspace({
   useEffect(() => {
     setSourceContextKey(props.chatId ?? "all");
     setSourceTargetId(props.chatId ? `chat:${props.chatId}` : "all");
+    setBranchPick(null);
     setSelectedDestinationTargetIds(props.chatId ? [`chat:${props.chatId}`] : []);
   }, [props.chatId]);
 
@@ -1110,6 +1143,13 @@ export default function SourcesWorkspace({
   const changeSourceScope = async (next: string) => {
     if (next === sourceTargetId || !(await confirmSelectionChange())) return;
     setSourceTargetId(next);
+    setBranchPick(null);
+    clearImportResult();
+  };
+
+  const changeBranch = async (next: string) => {
+    if (next === (branchChatId ?? "") || !(await confirmSelectionChange())) return;
+    setBranchPick(next);
     clearImportResult();
   };
 
@@ -2478,6 +2518,35 @@ export default function SourcesWorkspace({
                       />
                     </label>
                     <div className="flex flex-wrap items-center gap-2">
+                      {source === "messages" && branchChats.length > 1 ? (
+                        <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
+                          {localizeUi("ui.longTermMemory.sourcesworkspace.branch")}
+                          <select
+                            className={`${inputClass} w-44${activeSourceTask ? " opacity-50" : ""}`}
+                            value={branchChatId ?? ""}
+                            aria-disabled={activeSourceTask ? true : undefined}
+                            onChange={(event) => {
+                              if (!activeSourceTask) void changeBranch(event.target.value);
+                            }}
+                            aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.filterSourcesByBranch")}
+                            data-ltm-source-branch
+                          >
+                            {currentBranchId ? (
+                              <option value={currentBranchId}>
+                                {localizeUi("ui.longTermMemory.sourcesworkspace.thisBranch")}
+                              </option>
+                            ) : null}
+                            {branchChats
+                              .filter((chat) => chat.id !== currentBranchId)
+                              .map((chat) => (
+                                <option key={chat.id} value={chat.id}>
+                                  {chat.label}
+                                </option>
+                              ))}
+                            <option value="">{localizeUi("ui.longTermMemory.sourcesworkspace.allBranches")}</option>
+                          </select>
+                        </label>
+                      ) : null}
                       <label className="flex min-h-11 items-center gap-2 text-xs font-medium">
                         {localizeUi("ui.longTermMemory.transferworkbench.mode")}
                         <select

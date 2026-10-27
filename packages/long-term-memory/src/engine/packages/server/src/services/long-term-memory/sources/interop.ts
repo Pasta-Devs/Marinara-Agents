@@ -45,6 +45,8 @@ import { LtmServiceError } from "../service-error.js";
 type Candidate = {
   sourceId: string;
   previewOrder?: string;
+  // Chats whose history holds this chat_transcript piece, set when identical branch pieces merge.
+  branchChatIds?: string[];
   title: string;
   sourceText: string;
   sourceNoteId: string;
@@ -388,6 +390,7 @@ function candidateVisibleInScope(candidate: Candidate, scope: LtmScope | undefin
 
 function resolvePreviewCandidates(rows: Candidate[], matchExisting: (row: Candidate) => LtmNote | undefined) {
   const resolved = new Map<string, Candidate>();
+  const branchChatIds = new Map<string, Set<string>>();
   for (const row of rows) {
     // ponytail: branch chat records share summary entry identity but keep
     // distinct chat ids; keep the first identical chat-summary candidate so
@@ -403,8 +406,13 @@ function resolvePreviewCandidates(rows: Candidate[], matchExisting: (row: Candid
           : row.sourceId;
     const previous = resolved.get(key);
     if (!previous || (!matchExisting(previous) && matchExisting(row))) resolved.set(key, row);
+    if (row.provenance.kind === "chat_transcript")
+      branchChatIds.set(key, (branchChatIds.get(key) ?? new Set()).add(row.provenance.sourceId));
   }
-  return [...resolved.values()];
+  return [...resolved].map(([key, row]) => {
+    const chatIds = branchChatIds.get(key);
+    return chatIds ? { ...row, branchChatIds: [...chatIds] } : row;
+  });
 }
 
 function resolveImportCandidates(rows: Candidate[]) {
@@ -824,13 +832,19 @@ function previewSample(row: Candidate, note: LtmNote | undefined) {
       }
     : { ...base, status: "pending" as const, freshness: "new" as const };
 }
-function previewPage<T>(rows: T[], request: LtmLorebookPreviewRequest, source: string, key: (row: T) => string) {
+function previewPage<T>(
+  rows: T[],
+  request: LtmLorebookPreviewRequest & { branchChatId?: string },
+  source: string,
+  key: (row: T) => string,
+) {
   const binding = hash(
     JSON.stringify([
       source,
       scopeKey(requestedSourceScope(request)),
       request.mode ?? null,
       normalizedSearchText(request.query ?? ""),
+      request.branchChatId ?? null,
     ]),
     64,
   );
@@ -868,10 +882,16 @@ export async function previewPackageInterop(
   const matchExisting = await existingMatcher(new LongTermMemoryStorage(root));
   const candidateRequest = { ...request, sourceScope, includeOutOfScope: sourceScope !== undefined },
     found = await candidates(candidateRequest, undefined, matchExisting.pieceStarts),
-    rows = resolvePreviewCandidates(
+    resolved = resolvePreviewCandidates(
       found.filter((row) => candidateVisibleInScope(row, sourceScope)),
       matchExisting,
     );
+  // Identical branch pieces are already merged, so a branch keeps the pieces its chat contributed to.
+  const { branchChatId } = request;
+  const rows =
+    request.source === "messages" && branchChatId
+      ? resolved.filter((row) => row.branchChatIds?.includes(branchChatId))
+      : resolved;
   // Only an unfiltered first page has seen the whole source, so only it can say which notes lost theirs.
   const outdated =
     request.cursor || request.query
