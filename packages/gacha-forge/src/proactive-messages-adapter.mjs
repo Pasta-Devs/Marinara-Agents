@@ -1,4 +1,4 @@
-/* global forgeProactiveMessages:writable, createForgeProactiveMessages, n, r, Os, gr, Ea, withForgeChatSend, forgeDayKey, forgeResetIn, forgeHydrateStoryCharacters, Le, Ti, K0, ss, _r, Nr, l, $g, go, Hp, Ei, forgeComposeMemoryPrompt, forgeProactiveChatMessages, cv, _t, It, ov, s, forgeStoryCancellation */
+/* global forgeProactiveMessages:writable, createForgeProactiveMessages, forgeChatRecallQuery, n, r, Os, gr, Ea, withForgeChatSend, forgeDayKey, forgeResetIn, forgeHydrateStoryCharacters, Le, Ti, K0, ss, _r, Nr, l, $g, go, Hp, Ei, forgeComposeMemoryPrompt, forgeProactiveChatMessages, cv, _t, It, ov, s, forgeStoryCancellation */
 forgeProactiveMessages = createForgeProactiveMessages({
   packageId: n.id,
   persistence: r.persistence,
@@ -12,10 +12,13 @@ forgeProactiveMessages = createForgeProactiveMessages({
     signal.throwIfAborted();
     const history = (Array.isArray(chat.messages) ? chat.messages : []).slice(Ti(chat)).slice(-K0);
     const channel = ss(run, session) || "";
+    const memories = await Ei(runId, { only: [l(unit.name)] });
     const context = await _r(runId, (await Nr(runId)) + 1, 0, {
-      query: [l(unit.name), l(history.at(-1)?.text)].filter(Boolean).join(" "),
+      query: forgeChatRecallQuery(history, { speakers: [l(unit.name), l(run.protagonist?.name)] }),
       job: "chat",
       current: true,
+      reader: unitId,
+      listed: memories,
     });
     signal.throwIfAborted();
     const story = context.length > $g ? context.slice(-$g) : context;
@@ -28,7 +31,7 @@ forgeProactiveMessages = createForgeProactiveMessages({
       bond: gr(session.roster?.[unitId]?.bondFights),
       story,
       history,
-      memories: await Ei(runId, { only: [l(unit.name)] }),
+      memories,
       photos: false,
       asked: false,
     };

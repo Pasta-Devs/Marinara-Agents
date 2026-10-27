@@ -364,10 +364,13 @@ test("automatic continuity retains every saved conversation, beyond the old late
   const status = await settled(host);
   assert.equal(status.phase, "ready", JSON.stringify(host.warnings));
   assert.equal(status.recordCount, 10);
-  assert.equal(host.data(memoryId).records.filter((record) => record.kind === "chat").length, 9);
-  const prompts = JSON.stringify(host.calls);
-  assert.ok(prompts.includes("Conversation memory 1:"));
-  assert.ok(prompts.includes("Conversation memory 9:"));
+  const chats = host.data(memoryId).records.filter((record) => record.kind === "chat");
+  assert.equal(chats.length, 9);
+  assert.ok(chats.some((record) => record.content.includes("Conversation memory 1:")));
+  assert.ok(chats.some((record) => record.content.includes("Conversation memory 9:")));
+  // A conversation is private to its unit: it stays its own record, never summarized again or folded into the
+  // shared overview.
+  assert.doesNotMatch(JSON.stringify(host.calls), /Conversation memory/u);
   assert.equal(host.data(`${runId}:chat:keeper`).sessions.length, 9);
 });
 
@@ -560,7 +563,7 @@ test("next-chapter and scene prompts keep three older chapters plus separate cha
     assert.ok(request, "The actual shipped writer calls the fixture provider");
     return request.messages.map((message) => message.content).join("\n");
   };
-  const checkRecallPools = (prompt) => {
+  const checkRecallPools = (prompt, { chat = true } = {}) => {
     const sections = [
       ...prompt.matchAll(/# Recalled (chapter|character-story|chat): ([^\n]+)\n([\s\S]*?)(?=\n# |$)/gu),
     ];
@@ -570,9 +573,10 @@ test("next-chapter and scene prompts keep three older chapters plus separate cha
       sections.some((section) => section[1] === "character-story" && section[3].includes("CHARACTER-STORY-MARKER")),
       "Character Story recall has its own quota",
     );
-    assert.ok(
+    assert.equal(
       sections.some((section) => section[1] === "chat" && section[3].includes("CHAT-MEMORY-MARKER")),
-      "Conversation recall does not displace a chapter",
+      chat,
+      chat ? "Conversation recall does not displace a chapter" : "A unit's private chat stays out of scenes without it",
     );
     assert.ok(
       chapters.every((section) => /^Lighthouse key chapter [1-4]$/u.test(section[2])),
@@ -585,6 +589,7 @@ test("next-chapter and scene prompts keep three older chapters plus separate cha
     );
     assert.ok(prompt.includes("CANON-LAST-CHOICE") && prompt.includes("CANON-LAST-BRANCH"));
     assert.ok(!prompt.includes("UNPLAYED-ALTERNATIVE"), "Only the saved first-choice branch enters recent canon");
+    assert.match(prompt, /KNOWLEDGE BOUNDARY: a character knows only what they saw/u);
   };
   const summaries = () =>
     host.requests.filter(({ messages }) =>
@@ -606,7 +611,9 @@ test("next-chapter and scene prompts keep three older chapters plus separate cha
     title: "The current lighthouse chapter",
     nodes: [
       { index: 1, type: "story", title: "Arrive", goal: "Recover the lighthouse key." },
-      { index: 2, type: "story", title: "Continue", goal: "Mari recovers the lighthouse key." },
+      // A scene recalls a unit's private conversations only when that unit is in it.
+      { index: 2, type: "story", title: "Continue", goal: "Mari recovers the lighthouse key with the keeper." },
+      { index: 3, type: "story", title: "Alone", goal: "Mari walks alone to the western door." },
     ],
   });
   const currentPrefix = "CURRENT-CHAPTER-PREFIX: Mari raises the lighthouse key above the silver lock.";
@@ -617,4 +624,8 @@ test("next-chapter and scene prompts keep three older chapters plus separate cha
   const scenePrompt = requestAfter(start, "narrator");
   checkRecallPools(scenePrompt);
   assert.ok(scenePrompt.includes(currentPrefix), "The played current chapter stays in addition to recalled history");
+  host.replies.push({ places: [], segments: [{ speaker: "", text: "The western door is cold." }] });
+  const alone = host.requests.length;
+  ok(await host.post("/beat", { chapter: 6, storyIndex: 2 }));
+  checkRecallPools(requestAfter(alone, "narrator"), { chat: false });
 });

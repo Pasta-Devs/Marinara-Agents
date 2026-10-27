@@ -254,7 +254,7 @@ test("a smaller eligible source projection is rebuilt in the background without 
   assert.doesNotMatch(smaller.text, /FUTURE_SECRET|bridge/);
   assert.deepEqual(
     smaller.details.map((record) => record.id),
-    ["2", "1"],
+    ["1", "2"],
   );
   const rebuilt = f.calls.length;
   assert.equal((await service.maintain({ runId: "world" })).status.phase, "ready");
@@ -371,7 +371,7 @@ test("historical recall never sees later memory, builds no overview of its own a
   assert.deepEqual(f.memory(), newer);
 });
 
-test("up to3 main chapters are recalled separately from all relevant character memories, with lexical/semantic fallback", async () => {
+test("up to3 main chapters and up to3 side memories are recalled in separate lanes, with lexical/semantic fallback", async () => {
   const f = fixture([
     source("1", "Harborfall keeper is recovering."),
     source("1", "Harborfall captain gave Mira a sapphire.", {
@@ -404,9 +404,12 @@ test("up to3 main chapters are recalled separately from all relevant character m
     result.details.filter((record) => record.kind === "chapter").map((record) => record.id),
     ["7", "6", "4"],
   );
-  assert.equal(result.details.filter((record) => record.kind === "character-story").length, 2);
-  assert.equal(result.details.filter((record) => record.kind === "chat").length, 2);
-  assert.equal(result.details.length, 7, "Character memories do not spend the three-chapter allowance");
+  assert.equal(
+    result.details.filter((record) => record.kind !== "chapter").length,
+    3,
+    "Character Stories, events and chats share one three-record allowance",
+  );
+  assert.equal(result.details.length, 6, "Side memories do not spend the three-chapter allowance");
   assert.equal(f.memory().records.length, 10, "All canonical sources remain archived for the overview");
   assert.ok(result.details.some((record) => record.kind === "character-story"));
   assert.ok(result.details.some((record) => record.kind === "chat"));
@@ -431,7 +434,7 @@ test("up to3 main chapters are recalled separately from all relevant character m
     excluded.details.some((record) => record.kind === "chat" && record.id === "7"),
     "Only main-chapter candidates are excluded",
   );
-  assert.equal(excluded.details.length, 7);
+  assert.equal(excluded.details.length, 6);
   assert.deepEqual(
     f.memory().overview,
     savedOverview,
@@ -461,9 +464,10 @@ test("up to3 main chapters are recalled separately from all relevant character m
     ).length,
     3,
   );
-  assert.equal(rankForgeStoryMemories(f.memory().records, "Harborfall", { maxRecalls: 99 }).length, 7);
-  assert.equal(rankForgeStoryMemories(f.memory().records, "Harborfall", { maxRecalls: 1 }).length, 5);
-  assert.equal(rankForgeStoryMemories(f.memory().records, "Harborfall", { maxRecalls: 0 }).length, 4);
+  assert.equal(rankForgeStoryMemories(f.memory().records, "Harborfall", { maxRecalls: 99 }).length, 6);
+  assert.equal(rankForgeStoryMemories(f.memory().records, "Harborfall", { maxRecalls: 1 }).length, 4);
+  assert.equal(rankForgeStoryMemories(f.memory().records, "Harborfall", { maxRecalls: 0 }).length, 3);
+  assert.equal(rankForgeStoryMemories(f.memory().records, "Harborfall", { maxSideRecalls: 0 }).length, 3);
   assert.ok(
     rankForgeStoryMemories(f.memory().records, "Harborfall", { scope: "chapters" }).every(
       (record) => record.kind === "chapter",
@@ -487,8 +491,9 @@ test("embeddings use document/query intent and only current-space vectors are us
   const result = await service.recall({ runId: "world", query: "coastal rescue" });
   assert.deepEqual(intents, ["document", "query"]);
   assert.equal(f.memory().records[0].embeddingSpaceId, "fixture-space");
+  assert.equal(typeof f.memory().records[0].embedding, "string", "vectors are saved as compact base64");
   assert.equal(result.details.length, 1);
-  assert.deepEqual(result.details[0].embedding, [1, 0]);
+  assert.equal(result.details[0].embedding, undefined, "vectors never reach the prompt");
 });
 
 test("a delayed overview cannot overwrite a newer completed-canon overview from another service", async () => {
@@ -623,26 +628,25 @@ test("recall stays ready when memory lags the latest chapter or side canon, but 
   const chat = source("chat", "Arden promised to guard the moonstone.", { kind: "chat", order: 2.5 });
   const story = source("story", "Mira trusted Arden with the moonstone.", { kind: "character-story", order: 2.6 });
   // Side canon with no summary yet is handed over as written, beside the latest chapter the caller sends in full.
+  // A conversation is private, so it is never required canon: it is recalled when relevant, as written until saved.
   const written = [
-    { id: "chat", kind: "chat", title: "Chapter chat", content: "Arden promised to guard the moonstone." },
     { id: "story", kind: "character-story", title: "Chapter story", content: "Mira trusted Arden with the moonstone." },
   ];
+  const recalledChat = (result) => result.details.find((record) => record.id === "chat")?.content;
   // Side canon reaches the overview later; recall still has every archived chapter.
   f.setRows([...rows, chat, story]);
   const side = await service.recall({ runId: "world", query: "moonstone" });
   assert.equal(side.status.phase, "ready");
   assert.equal(side.overview, overview);
   assert.deepEqual(side.recent, [{ id: "2", kind: "chapter", title: "Chapter 2", latest: true }, ...written]);
+  assert.equal(recalledChat(side), "Arden promised to guard the moonstone.");
   // The caller sends the latest chapter in full, so it may also be missing from memory.
   f.setRows([...rows, chat, story, source("3", "The Frost River bridge opened.")]);
   const latest = await service.recall({ runId: "world", query: "moonstone" });
   assert.equal(latest.status.phase, "ready");
   assert.equal(latest.overview, overview);
   assert.equal(latest.lagging, true, "the background job still owes summaries");
-  assert.deepEqual(
-    latest.details.map((record) => record.id),
-    ["2"],
-  );
+  assert.deepEqual(latest.details.map((record) => record.id).sort(), ["2", "chat"]);
   assert.deepEqual(latest.recent, [...written, { id: "3", kind: "chapter", title: "Chapter 3", latest: true }]);
   // Once chapter 3 is no longer the latest, its canon would be missing from the prompt: it has no summary yet.
   f.setRows([...rows, chat, story, source("3", "The Frost River bridge opened."), source("4", "Mira left.")]);
@@ -655,13 +659,14 @@ test("recall stays ready when memory lags the latest chapter or side canon, but 
 });
 
 // A background job whose detail summaries land but whose overview fold fails.
-const recapOnly = (f) =>
+const recapOnly = (f, overrides = {}) =>
   f.create({
     summarize: async (request) => {
       f.calls.push(request);
       if (request.kind === "overview") throw new Error("fixture overview offline");
       return `Recap: ${JSON.parse(request.messages[1].content).source.content}`;
     },
+    ...overrides,
   });
 
 test("newer side canon inserted before covered canon keeps the saved overview and is sent beside it without model calls", async () => {
@@ -733,12 +738,12 @@ test(
     const f = fixture(rows);
     await f.create().maintain({ runId: "world" });
     const saved = f.memory().overview;
-    const chat = source("chat", "Arden promised to guard the moonstone.", {
-      kind: "chat",
-      title: "Arden conversation",
+    const story = source("story", "Mira trusted Arden with the moonstone.", {
+      kind: "character-story",
+      title: "Trust",
       order: 3,
     });
-    f.setRows([...rows, chat]);
+    f.setRows([...rows, story]);
     const started = deferred();
     const gate = deferred();
     const service = f.create({
@@ -756,14 +761,14 @@ test(
     const expected = [
       { id: "2", kind: "chapter", title: "Chapter 2", latest: true },
       {
-        id: "chat",
-        kind: "chat",
-        title: "Arden conversation",
-        content: "Recap: Arden promised to guard the moonstone.",
+        id: "story",
+        kind: "character-story",
+        title: "Trust",
+        content: "Recap: Mira trusted Arden with the moonstone.",
         summary: true,
       },
     ];
-    // The chat's summary is saved while its overview fold is still running.
+    // The story's summary is saved while its overview fold is still running.
     const folding = await service.recall({ runId: "world", query: "moonstone" });
     assert.equal(folding.status.phase, "ready");
     assert.equal(folding.overview, saved.content);
@@ -771,7 +776,7 @@ test(
     assert.deepEqual(
       folding.details.map((record) => record.id),
       ["2"],
-      "the relevant chat summary is sent once, as recent canon, not ranked again",
+      "the relevant story summary is sent once, as recent canon, not ranked again",
     );
     assert.equal(folding.lagging, true);
     gate.resolve();
@@ -804,7 +809,7 @@ test("earlier chapters behind the overview go in as their summaries in story ord
   f.setRows(chapters);
   assert.equal((await recapOnly(f).maintain({ runId: "world" })).status.phase, "error");
   const calls = f.calls.length;
-  // A chat finished since then has no summary yet and goes in as written, in its place in the story.
+  // A chat finished since then is private: it is recalled when relevant, not sent as required canon.
   const chat = source("chat", "Arden promised to guard the moonstone.", {
     kind: "chat",
     title: "Arden conversation",
@@ -817,11 +822,14 @@ test("earlier chapters behind the overview go in as their summaries in story ord
   assert.equal(behind.overview, saved.content);
   assert.deepEqual(behind.recent, [
     { id: "2", kind: "chapter", title: "Chapter 2", content: "Recap: Arden returned the moonstone.", summary: true },
-    { id: "chat", kind: "chat", title: "Arden conversation", content: "Arden promised to guard the moonstone." },
     { id: "3", kind: "chapter", title: "Chapter 3", content: "Recap: The Frost River bridge opened.", summary: true },
     { id: "4", kind: "chapter", title: "Chapter 4", latest: true },
   ]);
-  assert.deepEqual(behind.details, [], "summaries sent as recent canon are not ranked again");
+  assert.deepEqual(
+    behind.details.map((record) => record.id),
+    ["chat"],
+    "summaries sent as recent canon are not ranked again",
+  );
   assert.equal(behind.lagging, false, "a failed fold waits for Retry");
   // Chapter 4 also has a summary once chapter 5 is the latest, but chapter 5 has none once chapter 6 is.
   f.setRows([...chapters.slice(0, 2), chat, ...chapters.slice(2), source("5", "Arden followed.")]);
@@ -1098,7 +1106,11 @@ test("opening chronology reuses legacy paid archives and embeddings while rebuil
   };
   await f.create(options).maintain({ runId: "world" });
   const paid = f.memory().records;
-  assert.equal(embeddingInputs.length, 2);
+  assert.deepEqual(
+    embeddingInputs.map((input) => [input.texts.length, input.intent]),
+    [[2, "document"]],
+    "new records are embedded in one batch",
+  );
   assert.ok(paid.every((record) => record.embeddingSpaceId === "fixture"));
   const previousCalls = f.calls.length;
   const previousEmbeddings = embeddingInputs.length;
@@ -1240,4 +1252,248 @@ test("mixed-boundary permutation preserves unknown, main and chat slots and acce
     rows.map((row) => row.id),
     ["main", "bond", "unknown", "chat", "event", "invalid", "negative"],
   );
+});
+
+const memoryRecord = (key, kind, content, order, extra = {}) => ({
+  key,
+  id: key,
+  kind,
+  title: key,
+  content,
+  order,
+  ...extra,
+});
+
+test("recall ranks like the Engine's advanced recall: a relevance floor, names over common words, the latest cue first", () => {
+  const records = [
+    memoryRecord("pier", "chapter", "The lanterns were lit along the pier at dusk.", 1),
+    memoryRecord("cart", "chapter", "Mira watched while Arden fixed the old cart.", 2),
+    memoryRecord("volcano", "chapter", "Smoke rose over the distant volcano.", 3),
+  ];
+  assert.deepEqual(rankForgeStoryMemories(records, "spaceship engines"), [], "nothing irrelevant fills the slots");
+  // A name the story writes mid-sentence outweighs common words, unless it only says who is talking.
+  const said = "I asked Arden about the pier lanterns.";
+  assert.equal(rankForgeStoryMemories(records, said)[0].key, "cart");
+  assert.equal(rankForgeStoryMemories(records, { cues: [said], speakers: ["Arden"] })[0].key, "pier");
+  // Plan text close to everything cannot outrank what was just played.
+  const ranked = rankForgeStoryMemories(records, {
+    plan: "Lanterns, carts, smoke, the pier, the volcano and the old roads of the valley.",
+    cues: ["Smoke rose again over the volcano."],
+  });
+  assert.equal(ranked[0].key, "volcano");
+  // Each record is costed whole: one too large for the budget is skipped and a smaller one still gets in.
+  const long = memoryRecord("long", "chapter", `The volcano woke. ${"Ash fell on every roof. ".repeat(40)}`, 4);
+  const fitted = rankForgeStoryMemories([...records, long], "volcano ash", {
+    budgetTokens: 120,
+    estimateTokens: (value) => [...value].length,
+  });
+  assert.deepEqual(
+    fitted.map((record) => record.key),
+    ["volcano"],
+  );
+  // Meaning alone counts once it is clearly similar: cosine 0.5 clears the 0.45 floor, 0.4 does not.
+  const vectorRecord = (key, similarity) =>
+    memoryRecord(key, "chapter", "Quiet evening.", 1, {
+      embedding: [similarity, Math.sqrt(1 - similarity ** 2)],
+      embeddingSpaceId: "space",
+    });
+  assert.deepEqual(
+    rankForgeStoryMemories([vectorRecord("close", 0.5), vectorRecord("far", 0.4)], "a calm night", {
+      vectors: [[1, 0]],
+      spaceId: "space",
+    }).map((record) => record.key),
+    ["close"],
+  );
+});
+
+test(
+  "query vectors are skipped without saved vectors, give up after 1.5 seconds, and fall back to the latest cue",
+  { timeout: 10000 },
+  async () => {
+    const rows = [source("1", "Keeper saved at Harborfall."), source("2", "Arden returned the moonstone.")];
+    const f = fixture(rows);
+    const calls = [];
+    let mode = "down";
+    const service = f.create({
+      resolveEmbeddings: async () => ({
+        spaceId: "space",
+        embed: async (texts, signal, intent) => {
+          calls.push([intent, texts.length]);
+          if (mode === "down") return null;
+          if (intent === "document") return texts.map(() => [1, 0]);
+          if (mode === "hang") return new Promise(() => {});
+          return mode === "single" && texts.length > 1 ? null : texts.map(() => [0, 1]);
+        },
+      }),
+    });
+    await service.maintain({ runId: "world" });
+    assert.ok(f.memory().records.every((record) => !record.embedding));
+    calls.length = 0;
+    await service.recall({ runId: "world", query: { plan: "harbor", cues: ["moonstone"] } });
+    assert.deepEqual(calls, [], "no record has a vector, so no query is embedded");
+    mode = "ready";
+    await service.maintain({ runId: "world" });
+    assert.ok(f.memory().records.every((record) => record.embeddingSpaceId === "space"));
+    mode = "hang";
+    const started = performance.now();
+    const hung = await service.recall({ runId: "world", query: "moonstone" });
+    assert.ok(performance.now() - started < 3000, "a stalled embedder cannot hold generation up");
+    assert.deepEqual(
+      hung.details.map((record) => record.id),
+      ["2"],
+      "recall falls back to words",
+    );
+    mode = "single";
+    calls.length = 0;
+    await service.recall({ runId: "world", query: { plan: "harbor", cues: ["first", "moonstone"] } });
+    assert.deepEqual(calls, [
+      ["query", 3],
+      ["query", 1],
+    ]);
+  },
+);
+
+test("vectors are kept up in the background: one batch, a refused text on its own, and a new embedding model", async () => {
+  const rows = [
+    source("1", "Keeper saved at Harborfall."),
+    source("2", "REFUSED text the embedder rejects."),
+    source("3", "Arden returned the moonstone."),
+  ];
+  const f = fixture(rows);
+  const calls = [];
+  let space = "a";
+  let down = false;
+  const service = f.create({
+    resolveEmbeddings: async () => ({
+      spaceId: space,
+      embed: async (texts, _signal, intent) => {
+        calls.push([intent, texts.length]);
+        if (down) throw new Error("embedder offline");
+        return texts.some((text) => text.includes("REFUSED")) ? null : texts.map(() => [1, 0]);
+      },
+    }),
+  });
+  down = true;
+  assert.equal((await service.maintain({ runId: "world" })).status.phase, "ready", "vectors never fail memory");
+  assert.deepEqual(calls, [
+    ["document", 3],
+    ["document", 1],
+  ]);
+  assert.ok(
+    f.memory().records.every((record) => !record.embedding),
+    "an offline embedder stops at once",
+  );
+  down = false;
+  calls.length = 0;
+  await service.maintain({ runId: "world" });
+  assert.deepEqual(calls, [
+    ["document", 3],
+    ["document", 1],
+    ["document", 1],
+    ["document", 1],
+  ]);
+  assert.deepEqual(
+    f.memory().records.map((record) => record.embeddingSpaceId),
+    ["a", undefined, "a"],
+  );
+  calls.length = 0;
+  space = "b";
+  await service.maintain({ runId: "world" });
+  assert.deepEqual(
+    f.memory().records.map((record) => record.embeddingSpaceId),
+    ["b", undefined, "b"],
+  );
+  assert.deepEqual(calls[0], ["document", 3], "a new embedding model re-embeds every record");
+});
+
+test("private conversations stay with their unit, and another unit's Character Story arrives only through the overview", async () => {
+  const private_ = (row, audience) => Object.defineProperty(row, "audience", { value: audience });
+  const rows = () => [
+    source("1", "Keeper saved at Harborfall."),
+    private_(
+      source("chat-a", "Arden swore to guard the moonstone.", { kind: "chat", title: "Arden chat", order: 1.2 }),
+      ["unit:arden"],
+    ),
+    private_(source("chat-b", "Bryn hid the moonstone map.", { kind: "chat", title: "Bryn chat", order: 1.4 }), [
+      "unit:bryn",
+    ]),
+    private_(
+      source("story-a", "Arden found the moonstone in the reef.", {
+        kind: "character-story",
+        title: "Arden story",
+        order: 1.6,
+      }),
+      ["unit:arden"],
+    ),
+    source("2", "Mira left Harborfall."),
+  ];
+  const f = fixture(rows());
+  const service = f.create({ readSources: async () => rows() });
+  assert.equal((await service.maintain({ runId: "world" })).status.phase, "ready");
+  const folded = f.calls.filter((call) => call.kind === "overview").map((call) => JSON.parse(call.messages[1].content));
+  assert.ok(
+    folded.every((input) => input.records.every((record) => record.kind !== "chat")),
+    "chats never reach the shared overview",
+  );
+  assert.equal(
+    f.calls.filter((call) => call.kind === "detail" && /chat/u.test(call.messages[1].content)).length,
+    0,
+    "a chat is its own record, with no second summary",
+  );
+  assert.ok(f.memory().overview.sources.every(([key]) => JSON.parse(key)[0] !== "chat"));
+  const ids = (result) => result.details.map((record) => record.id).sort();
+  assert.deepEqual(ids(await service.recall({ runId: "world", query: "moonstone", reader: "unit:arden" })), [
+    "chat-a",
+    "story-a",
+  ]);
+  assert.deepEqual(ids(await service.recall({ runId: "world", query: "moonstone", reader: "unit:bryn" })), ["chat-b"]);
+  assert.deepEqual(ids(await service.recall({ runId: "world", query: "moonstone", cast: ["unit:bryn"] })), [
+    "chat-b",
+    "story-a",
+  ]);
+  assert.deepEqual(ids(await service.recall({ runId: "world", query: "moonstone", cast: [] })), ["story-a"]);
+  assert.deepEqual(ids(await service.recall({ runId: "world", query: "moonstone" })), ["chat-a", "chat-b", "story-a"]);
+  // Until the overview covers it, another unit's Character Story is not sent to a chat as recent canon either.
+  const unfolded = fixture(rows());
+  const recaps = recapOnly(unfolded, { readSources: async () => rows() });
+  assert.equal((await recaps.maintain({ runId: "world" })).status.phase, "error");
+  const recent = async (reader) =>
+    (await recaps.recall({ runId: "world", query: "moonstone", reader })).recent?.map((entry) => entry.id);
+  assert.deepEqual(await recent("unit:arden"), ["1", "story-a", "2"]);
+  assert.deepEqual(await recent("unit:bryn"), ["1", "2"]);
+});
+
+test("an overview saved before chats were private is not sent to a restricted reader until it is rebuilt", async () => {
+  const chat = Object.defineProperty(
+    source("chat-a", "Arden swore to guard the moonstone.", { kind: "chat", title: "Arden chat", order: 1.5 }),
+    "audience",
+    { value: ["unit:arden"] },
+  );
+  const rows = [source("1", "Keeper saved at Harborfall."), chat, source("2", "Mira left Harborfall.")];
+  const f = fixture(rows);
+  await f.create().maintain({ runId: "world" });
+  const memory = f.memory();
+  const chatRecord = memory.records.find((record) => record.kind === "chat");
+  f.seed({
+    ...memory,
+    overview: {
+      content: "Arden swore to guard the moonstone, and Mira left.",
+      sources: memory.records.map((record) => [record.key, record.fingerprint]),
+    },
+  });
+  assert.ok(chatRecord);
+  const service = f.create();
+  assert.equal(
+    (await service.recall({ runId: "world", query: "moonstone" })).overview,
+    "Arden swore to guard the moonstone, and Mira left.",
+    "an unrestricted reader keeps it",
+  );
+  for (const restriction of [{ reader: "unit:bryn" }, { cast: [] }]) {
+    const restricted = await service.recall({ runId: "world", query: "moonstone", ...restriction });
+    assert.equal(restricted.overview, "");
+    assert.doesNotMatch(JSON.stringify(restricted), /swore/u);
+  }
+  assert.equal((await service.maintain({ runId: "world" })).status.phase, "ready");
+  assert.ok(f.memory().overview.sources.every(([key]) => JSON.parse(key)[0] !== "chat"));
+  assert.notEqual((await service.recall({ runId: "world", query: "x", reader: "unit:bryn" })).overview, "");
 });

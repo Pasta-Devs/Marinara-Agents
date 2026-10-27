@@ -184,6 +184,7 @@ test("actual normal character replies reserve8192 answer tokens and preserve mod
     assert.equal(reply.body.ok, true, JSON.stringify(reply));
     assert.equal(f.transport.completionOptions.length, 1);
     f.assertSelected(f.transport.completionOptions);
+    assert.match(JSON.stringify(f.calls.at(-1).body), /KNOWLEDGE BOUNDARY: a character knows only what they saw/u);
   } finally {
     await f.close();
   }
