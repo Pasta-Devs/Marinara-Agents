@@ -103,6 +103,14 @@ function refuseUnlessSwap(world: SaucelingWorldDocument, swap: boolean): void {
   }
 }
 
+/** One new egg a UTC day, the same day as egg finds. Eggs found in chat and saucelings brought back from the Menagerie
+ *  are not counted. */
+function refuseSecondEggToday(world: SaucelingWorldDocument, nowIso: string): void {
+  if (world.lastNewEggDay === currentDayKey(nowIso)) {
+    refuse(409, "One new egg a day. The next one is ready at midnight UTC.");
+  }
+}
+
 function requiredString(value: unknown, label: string, maxLen = 120): string {
   if (typeof value !== "string" || !value.trim() || value.trim().length > maxLen) {
     refuse(400, `${label} is required.`);
@@ -284,11 +292,13 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
     const nowIso = new Date().toISOString();
     const before = await readSaucelingWorld();
     refuseUnlessSwap(before, swap);
+    refuseSecondEggToday(before, nowIso);
     // Their own voice if they have one (the page offers to make it first), else one guessed from their card.
     const profile = await careProfileNow(characterId, before.profileCache[characterId]);
 
     const world = await saveWithLines(nowIso, (current) => {
       refuseUnlessSwap(current, swap);
+      refuseSecondEggToday(current, nowIso);
       let menagerie = [...current.menagerie];
       if (current.activePet) {
         const retired = retirePetToMenagerie(current.activePet, nowIso);
@@ -300,6 +310,7 @@ export const saucelingsRoutes: FastifyPluginAsync = async (app) => {
           ...current,
           activePet: created.pet,
           menagerie,
+          lastNewEggDay: currentDayKey(nowIso),
           profileCache: cachingVoice(current, profile),
         },
         pet: created.pet,

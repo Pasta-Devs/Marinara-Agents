@@ -923,7 +923,8 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
 .sl-about-row, .sl-about-row > label { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 /* Caretaker, Looks and New egg: a panel the "⋯" menu opens under the nook. */
 .sl-panel { display: grid; gap: 0.6rem; font-size: 0.8125rem; }
-.sl-panel:focus { outline: none; }
+.sl-panel:focus,
+.sl-picker:focus { outline: none; }
 .sl-panel > p { margin: 0; opacity: 0.85; }
 .sl-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .sl-panel-head > h3 { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.7; }
