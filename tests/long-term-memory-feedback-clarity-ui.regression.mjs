@@ -775,6 +775,12 @@ assert.match(workspaceScreen, /excludedNoteIds: excludedMemories/u);
 assert.match(workspaceScreen, /data-ltm-source-operation-preview/u);
 assert.match(workspaceScreen, /data-ltm-source-operation-excluded/u);
 assert.match(workspaceScreen, /data-ltm-source-operation-result/u);
+// The result's hidden status copy is always mounted (LiveResult), and only the visible list waits for a result.
+assert.match(
+  workspaceScreen,
+  /<div\s+data-ltm-source-operation-result=\{result \? operation : undefined\}[^>]*>\s*<LiveResult/u,
+);
+assert.doesNotMatch(workspaceScreen, /\{result \? \(\s*<div data-ltm-source-operation-result/u);
 assert.match(workspace, /data-ltm-source-mode/u);
 assert.match(workspaceScreen, /const sourceCheckboxClass = "h-4 w-4 shrink-0 accent-/u);
 assert.match(workspaceScreen, /linked\.isError[\s\S]*linkedMemoriesCouldNotLoad/u);
@@ -1139,6 +1145,20 @@ assert.equal(
   locale["ui.longTermMemory.memoryvault.savedButRecallIsStale"],
   "Saved. Recall will catch up once the index rebuild succeeds: {{error}}",
 );
+// An empty rebuild error picks the no-error key at both call sites, so the warning never ends in a bare colon.
+assert.equal(
+  locale["ui.longTermMemory.memoryvault.savedButRecallIsStaleNoError"],
+  "Saved. Recall will catch up once the index rebuild succeeds.",
+);
+assert.doesNotMatch(locale["ui.longTermMemory.memoryvault.savedButRecallIsStaleNoError"], /\{\{|:\s*$/u);
+assert.doesNotMatch(vault, /error: (?:response|result)\.rebuild\.error \?\? ""/u);
+assert.equal(
+  vault.match(
+    /\.rebuild\.error\s*\?\s*localizeUi\("ui\.longTermMemory\.memoryvault\.savedButRecallIsStale", \{ error: /gu,
+  )?.length,
+  2,
+);
+assert.equal(vault.match(/"ui\.longTermMemory\.memoryvault\.savedButRecallIsStaleNoError"/gu)?.length, 2);
 // #1636: the open row uses the documented primary wash plus a start-edge bar and aria-current, not an accent tint.
 assert.match(vaultRow, /selected \? "bg-\[var\(--primary\)\]\/10" : ""/u);
 assert.doesNotMatch(vaultRow, /bg-\[var\(--accent\)\]\/50/u);
@@ -1269,18 +1289,18 @@ assert.match(
 );
 assert.match(detail, /Measured on the status panel[^\n]*at least 10\.0:1 light, 9\.1:1 dark/u);
 
-// Every spinner in the feature stops under reduced motion; the workspace rule only shortens the
-// loop, so a spinner outside it (navigation, detail header) would still turn without its own class.
+// Every spinner and pulsing placeholder in the feature stops under reduced motion; the workspace rule only shortens
+// the loop, so one outside it (navigation, detail header, loading rows) would still move without its own class.
 const spinnerFiles = readdirSync(ltmClientRoot, { recursive: true }).filter((name) => /\.tsx$/u.test(String(name)));
 assert.ok(spinnerFiles.length > 10, "spinner scan found the feature sources");
 for (const name of spinnerFiles) {
   const lines = readFileSync(join(ltmClientRoot, String(name)), "utf8").split("\n");
   lines.forEach((line, index) => {
-    if (line.includes("animate-spin")) {
+    if (/animate-(?:spin|pulse)/u.test(line)) {
       assert.match(
         line,
         /motion-reduce:animate-none/u,
-        `${name}:${index + 1} spinner needs motion-reduce:animate-none`,
+        `${name}:${index + 1} spinner or placeholder needs motion-reduce:animate-none`,
       );
     }
   });

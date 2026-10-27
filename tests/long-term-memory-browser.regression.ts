@@ -2443,13 +2443,17 @@ async function main() {
       });
       const branchNoteRoute = `**/api/long-term-memory/notes/${outsideChatNote.id}`;
       let deferRecallRebuild = false;
+      let deferRecallError: string | undefined = "index busy";
       await page.route(branchNoteRoute, async (route) => {
         if (route.request().method() === "PATCH") await branchSaveHeld;
         if (route.request().method() === "PATCH" && deferRecallRebuild) {
           const response = await route.fetch();
           await route.fulfill({
             response,
-            json: { ...(await response.json()), rebuild: { status: "deferred", error: "index busy" } },
+            json: {
+              ...(await response.json()),
+              rebuild: { status: "deferred", ...(deferRecallError ? { error: deferRecallError } : {}) },
+            },
           });
           return;
         }
@@ -2500,6 +2504,15 @@ async function main() {
       );
       assert.equal(await staleWarning.locator("[data-ltm-status-icon]").count(), 1);
       assert.equal(await page.locator('[data-ltm-vault-feedback] [data-ltm-status="danger"]').count(), 0);
+      // A deferred rebuild that reports no error leaves no dangling colon.
+      deferRecallError = undefined;
+      await branchTitle.fill("Memory outside current chat, saved without a rebuild error");
+      await saveButton.click();
+      await page.waitForFunction(
+        () =>
+          document.querySelector('[data-ltm-vault-feedback] [data-ltm-status="warning"]')?.textContent?.trim() ===
+          "Saved. Recall will catch up once the index rebuild succeeds.",
+      );
       // The next message resets the tone: a plain save shows the success notice again.
       deferRecallRebuild = false;
       await branchTitle.fill("Memory outside current chat, saved");

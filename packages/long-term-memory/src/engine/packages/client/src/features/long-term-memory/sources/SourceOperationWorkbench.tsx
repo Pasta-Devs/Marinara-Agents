@@ -7,7 +7,7 @@ import type {
   LtmNoteTransferPreviewResponse,
 } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { derivedNotesQueryOptions, errorMessage, request } from "../api";
-import { Button, InfoPopover, StatusSurface, inputClass, lockedActionProps } from "../shared-controls";
+import { Button, InfoPopover, LiveResult, StatusSurface, inputClass, lockedActionProps } from "../shared-controls";
 import { labelKeys, localizedLabel, noteTypeLabel } from "../display-labels";
 import type { LongTermMemoryDestinationProps } from "../types";
 import { useLtmTranslation } from "../localization";
@@ -438,49 +438,58 @@ export function SourceOperationWorkbench({
           </Button>
         </div>
       ) : null}
-      {result ? (
-        <div data-ltm-source-operation-result={operation} className="space-y-2">
-          <StatusSurface tone={result.failed.length ? "warning" : "success"}>
-            {localizeUi("ui.longTermMemory.sourceoperation.resultSummary", {
-              updated: result.updated.length,
-              deleted: result.deleted.length,
-              detached: result.detached.length,
-              excluded: result.excluded.length,
-              skipped: result.skipped.length,
-              failed: result.failed.length,
-            })}
-          </StatusSurface>
-          {[
-            ...new Set([
-              ...result.updated,
-              ...result.deleted,
-              ...result.detached,
-              ...result.excluded,
-              ...result.skipped,
-              ...result.failed,
-            ]),
-          ].map((id) => (
-            <p
-              key={id}
-              className="rounded bg-[var(--secondary)]/45 p-2 text-xs"
-              data-ltm-source-operation-result-memory={id}
-            >
-              {titleFor(id)}:{" "}
-              {result.deleted.includes(id)
-                ? localizeUi("ui.longTermMemory.sourceoperation.deleted")
-                : result.detached.includes(id)
-                  ? localizeUi("ui.longTermMemory.sourceoperation.detached")
-                  : result.updated.includes(id)
-                    ? localizeUi("ui.longTermMemory.sourceoperation.updated")
-                    : result.excluded.includes(id)
-                      ? localizeUi("ui.longTermMemory.sourceoperation.excluded")
-                      : result.failed.includes(id)
-                        ? localizeUi("ui.longTermMemory.sourceoperation.failed")
-                        : localizeUi("ui.longTermMemory.sourceoperation.skipped")}
-            </p>
-          ))}
-        </div>
-      ) : null}
+      {/* The wrapper and the hidden status copy stay mounted, so a finished run is read out instead of mounting with its text. */}
+      <div
+        data-ltm-source-operation-result={result ? operation : undefined}
+        className={result ? "flex flex-col gap-2" : "contents"}
+      >
+        <LiveResult
+          tone={result?.failed.length ? "warning" : "success"}
+          text={
+            result
+              ? localizeUi("ui.longTermMemory.sourceoperation.resultSummary", {
+                  updated: result.updated.length,
+                  deleted: result.deleted.length,
+                  detached: result.detached.length,
+                  excluded: result.excluded.length,
+                  skipped: result.skipped.length,
+                  failed: result.failed.length,
+                })
+              : ""
+          }
+        />
+        {result
+          ? [
+              ...new Set([
+                ...result.updated,
+                ...result.deleted,
+                ...result.detached,
+                ...result.excluded,
+                ...result.skipped,
+                ...result.failed,
+              ]),
+            ].map((id) => (
+              <p
+                key={id}
+                className="rounded bg-[var(--secondary)]/45 p-2 text-xs"
+                data-ltm-source-operation-result-memory={id}
+              >
+                {titleFor(id)}:{" "}
+                {result.deleted.includes(id)
+                  ? localizeUi("ui.longTermMemory.sourceoperation.deleted")
+                  : result.detached.includes(id)
+                    ? localizeUi("ui.longTermMemory.sourceoperation.detached")
+                    : result.updated.includes(id)
+                      ? localizeUi("ui.longTermMemory.sourceoperation.updated")
+                      : result.excluded.includes(id)
+                        ? localizeUi("ui.longTermMemory.sourceoperation.excluded")
+                        : result.failed.includes(id)
+                          ? localizeUi("ui.longTermMemory.sourceoperation.failed")
+                          : localizeUi("ui.longTermMemory.sourceoperation.skipped")}
+              </p>
+            ))
+          : null}
+      </div>
     </div>
   );
 }

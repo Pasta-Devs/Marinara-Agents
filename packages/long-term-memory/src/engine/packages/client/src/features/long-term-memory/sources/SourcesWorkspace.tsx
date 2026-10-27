@@ -2301,7 +2301,7 @@ export default function SourcesWorkspace({
                                 <div role="list" className="space-y-2">
                                   {lorebookDetails.isLoading ? (
                                     <div
-                                      className="h-20 animate-pulse rounded bg-[var(--secondary)]"
+                                      className="h-20 animate-pulse rounded bg-[var(--secondary)] motion-reduce:animate-none"
                                       aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.loadingSourceContent")}
                                     />
                                   ) : lorebookDetails.isError ? (
@@ -2833,7 +2833,7 @@ export default function SourcesWorkspace({
                         <p className="text-xs text-[var(--muted-foreground)]">{focusedFlatRow.summary}</p>
                         {sourceDetails.isLoading ? (
                           <div
-                            className="h-32 animate-pulse rounded bg-[var(--secondary)]"
+                            className="h-32 animate-pulse rounded bg-[var(--secondary)] motion-reduce:animate-none"
                             aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.loadingSourceContent")}
                           />
                         ) : sourceDetails.isError ? (
