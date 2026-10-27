@@ -72,6 +72,51 @@ export function forgeFormationStartRequest(host, path, body) {
   };
 }
 
+// Team edits save one at a time and only the newest waits, so a save slowed by a story being written in the
+// background can never land after a newer edit and undo it.
+export function saveForgeFormation(host, presets, active) {
+  const runId = host._run?.runId;
+  if (!runId) return;
+  const saves = (host._formationSaves ||= new Map());
+  const queue = saves.get(runId) || { next: null, running: null };
+  saves.set(runId, queue);
+  queue.next = { presets, active };
+  queue.running ||= (async () => {
+    let reply = null;
+    while (queue.next) {
+      const edit = queue.next;
+      queue.next = null;
+      reply = await host._postJson("/formation/save", { runId, ...edit });
+    }
+    saves.delete(runId);
+    if (host._run?.runId !== runId) return;
+    if (reply?.ok && Array.isArray(reply.presets)) {
+      if (host._formation) host._formation = { ...host._formation, presets: reply.presets, active: reply.active };
+    } else if (host._hudView === "formation" || host._hudView === "tower") {
+      // The server kept an older team: show the one a battle will actually use.
+      host._loadFormation();
+    } else {
+      host._formation = null;
+      host._formationState = "idle";
+    }
+  })();
+}
+
+// A battle reads its team from the server, so it waits until the last team edit is saved.
+export function waitForgeFormationSave(host, resume) {
+  const pending = host._formationSaves?.get(host._run?.runId)?.running;
+  if (!pending) return false;
+  if (host._formationSaveWait !== pending) {
+    const node = host._combatNode;
+    host._formationSaveWait = pending;
+    pending.then(() => {
+      host._formationSaveWait = null;
+      if (host._combatNode === node && host._combatPhase === "loading") resume();
+    });
+  }
+  return true;
+}
+
 /** One sentence of what an ability does, with its real numbers. Plain text; escape before inserting. */
 export function forgeFormationDescribe(ability, affinity = "") {
   if (!ability) return "";
