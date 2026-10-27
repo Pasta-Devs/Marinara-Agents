@@ -905,7 +905,7 @@ test("the knowledge boundary keeps in-world knowledge and the fiction's own boun
   assert.match(forgeKnowledgeBoundary, /no player, game, prompt, instructions or memory notes/u);
 });
 
-test("summaries other than the newest are offered to the fitter oldest first; canon in full never is", async () => {
+test("chapter summaries other than the newest are offered to the fitter oldest first; events and canon in full never are", async () => {
   let rendered;
   const f = fixture({
     renderContext: (result, options) => (rendered = options),
@@ -916,6 +916,8 @@ test("summaries other than the newest are offered to the fitter oldest first; ca
         { id: "festival", kind: "story-event", title: "Story event: Festival", content: "EVENT_IN_FULL" },
         { id: "2", kind: "chapter", title: "Chapter 2", content: "RECAP_2", summary: true },
         { id: "3", kind: "chapter", title: "Chapter 3", content: "RECAP_3", summary: true },
+        // A summarized event opened after Chapter 3 sorts after it, but Chapter 3 is still the newest chapter.
+        { id: "fair", kind: "story-event", title: "Story event: Fair", content: "FAIR_RECAP", summary: true },
         { id: "4", kind: "chapter", title: "Chapter 4", latest: true },
       ],
     }),
@@ -930,6 +932,6 @@ test("summaries other than the newest are offered to the fitter oldest first; ca
   for (const block of rendered.optional) assert.ok(rendered.prefix.includes(`${block}\n\n`));
   assert.match(
     rendered.prefix,
-    /# Recent canon summary: Chapter 3\nRECAP_3\n\n# Previous chapter in full: Chapter 4\n/u,
+    /# Recent canon summary: Chapter 3\nRECAP_3\n\n# Recent canon summary: Story event: Fair\nFAIR_RECAP\n\n# Previous chapter in full: Chapter 4\n/u,
   );
 });

@@ -32,7 +32,12 @@ const { waitForgeFormationSave } = new Function(
   `${cut("const forgeFormationSaving = (host) =>", "// Reopening Formation")};return { waitForgeFormationSave };`,
 )();
 const ef = new Function(`${cut("function ef(", "function Ja(")};return ef`)();
-const provided = { waitForgeFormationSave, ef, forgeWarmCombatVoices() {}, Wt: () => false };
+const provided = {
+  waitForgeFormationSave,
+  ef,
+  forgeWarmCombatVoices: (host) => (host.warmed = (host.warmed || 0) + 1),
+  Wt: () => false,
+};
 // Free names the sliced _initState touches (Br, Ka, small wiring helpers) resolve to harmless stubs.
 const scope = new Proxy(provided, {
   has: (target, key) => typeof key === "string" && (key in target || !(key in globalThis)),
@@ -138,7 +143,7 @@ test("enter A, leave while A loads, enter B: A's late reply is ignored and B is 
   );
 });
 
-test("farm fight left while loading, tower fight entered: the farm reply neither shows nor frees the lock early", async () => {
+test("farm fight left while loading, tower fight entered: the farm reply never shows on the tower fight", async () => {
   const h = host();
   farmFight(h, "xp");
   h._exitCombat(false);
@@ -151,7 +156,7 @@ test("farm fight left while loading, tower fight entered: the farm reply neither
     { sent, afterA, final: { ...h.screen(), farmBusy: h._farmBusy } },
     {
       sent: ["/farm/battle", "/tower/battle"],
-      afterA: { view: "combat", phase: "loading", fight: "Floor 7", payload: null, error: "", farmBusy: true },
+      afterA: { view: "combat", phase: "loading", fight: "Floor 7", payload: null, error: "", farmBusy: false },
       final: { view: "combat", phase: "prebattle", fight: "Floor 7", payload: "tower B", error: "", farmBusy: false },
     },
   );
@@ -259,16 +264,19 @@ test("an error reply for the abandoned fight is ignored; the current fight's own
   );
 });
 
-test("the farm lock: blocked while its load runs, never stuck once every abandoned load has replied", async () => {
+test("the farm lock holds while a farm load runs and is freed by Back, even when that load never answers", async () => {
   const h = host();
-  farmFight(h, "xp");
+  farmFight(h, "xp"); // never answered
+  h._farmRun({ stage: "funds", difficulty: 1, family: "" });
+  const blocked = h.calls.length === 1 && h._hudView === "combat";
   h._exitCombat(false);
   h._farmRun({ stage: "funds", difficulty: 1, family: "" });
-  const blocked = h._hudView === "farm";
-  await h.land(0, ok("farm A"));
-  h._farmRun({ stage: "funds", difficulty: 1, family: "" });
   const reopened = h._hudView;
-  // A farm load abandoned for a story fight that is itself abandoned: the last reply frees the lock.
+  h._exitCombat(false);
+  h._hudView = "events";
+  h._seasonalRun(3);
+  const seasonal = h._hudView;
+  // A farm load abandoned for a story fight that is itself abandoned: its late reply touches nothing.
   const g = host();
   farmFight(g, "xp");
   g._exitCombat(false);
@@ -278,8 +286,43 @@ test("the farm lock: blocked while its load runs, never stuck once every abandon
   g._exitCombat(false);
   await g.land(1, ok("C"));
   assert.deepEqual(
-    { blocked, reopened, whileC, end: g._farmBusy, gView: g._hudView, gDrawn: g.drawn.at(-1) },
-    { blocked: true, reopened: "formation", whileC: true, end: false, gView: "chapter", gDrawn: "chapter" },
+    { blocked, reopened, seasonal, whileC, end: g._farmBusy, gView: g._hudView, gDrawn: g.drawn.at(-1) },
+    {
+      blocked: true,
+      reopened: "formation",
+      seasonal: "formation",
+      whileC: false,
+      end: false,
+      gView: "chapter",
+      gDrawn: "chapter",
+    },
+  );
+});
+
+test("Back while a fight loads: its late reply never fills the fight, starts it or warms its voices", async () => {
+  const h = host();
+  storyFight(h, 0, "A");
+  h._exitCombat(false);
+  await h.land(0, ok("A"));
+  const g = host();
+  g._result = { again: { stage: "xp", difficulty: 1, family: "" }, back: "farm", againPreset: 1, canReplay: true };
+  g._resultAgain(); // auto-starting load
+  g._leaveCombat("farm");
+  await g.land(0, ok("farm A", 1));
+  const state = (x) => ({
+    view: x._hudView,
+    phase: x._combatPhase,
+    combat: x._combat,
+    autoStarting: !!x._autoStarting,
+    started: x.started.length,
+    warmed: x.warmed || 0,
+  });
+  assert.deepEqual(
+    [state(h), state(g)],
+    [
+      { view: "chapter", phase: "loading", combat: null, autoStarting: false, started: 0, warmed: 0 },
+      { view: "farm", phase: "loading", combat: null, autoStarting: false, started: 0, warmed: 0 },
+    ],
   );
 });
 

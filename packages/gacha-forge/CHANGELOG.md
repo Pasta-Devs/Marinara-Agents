@@ -1,8 +1,8 @@
 ## 1.25.2 — 2026-10-27
 
 - Backing out of a fight while it loads and entering another one now loads the new fight instead of showing the one you left. A fight request that never answers no longer blocks every later fight.
-- In Formation, a swap (planned, or a Swap effect) seats both units before either one's passive fires, so a revive, Swap, Shuffle or Echo it sets off never puts a fourth unit in a row. Fights started before 1.25.2 keep their rules.
-- On a small model, a reply no longer fails while story memory catches up: the oldest chapter summaries standing in for the overview are left out only when the reply would not fit otherwise, and never the newest.
+- In Formation, a swap (planned, or a Swap effect) seats both units before either one's passive fires, so a revive, Swap, Shuffle or Echo it sets off never puts a fourth unit in a row, and a unit revived in another row is drawn where it is. Fights started before 1.25.2 keep their rules.
+- On a small model, a reply is much less likely to fail while story memory catches up: older chapter summaries standing in for the overview are left out, oldest first, only when the reply would not fit otherwise. The newest chapter summary, Character Stories and events always stay.
 
 ## 1.25.1 — 2026-10-27
 

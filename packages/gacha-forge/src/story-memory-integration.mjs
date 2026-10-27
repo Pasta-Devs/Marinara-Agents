@@ -626,8 +626,11 @@ export function createForgeStoryMemoryIntegration({
             : `# ${source.summary ? "Recent canon summary" : "Recent canon in full"}: ${source.title}\n${source.content}`,
         );
         if (previous && !result.recent?.some((source) => source.latest)) recent.push(previous);
-        // Older summaries the overview misses may be left out by the prompt fitter, oldest first; the newest stays.
-        const summaries = (result.recent || []).flatMap((source, index) => (source.summary ? [recent[index]] : []));
+        // Older chapter summaries the overview misses may be left out by the prompt fitter, oldest first; the newest
+        // stays, and so does every Character Story and story event.
+        const summaries = (result.recent || []).flatMap((source, index) =>
+          source.summary && source.kind === "chapter" ? [recent[index]] : [],
+        );
         return renderContext(result, {
           prefix: [...recent, prefix, partial].filter(Boolean).join("\n\n"),
           fate,
