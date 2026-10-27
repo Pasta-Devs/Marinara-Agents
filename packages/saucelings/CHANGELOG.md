@@ -1,5 +1,17 @@
 # Saucelings release notes
 
+## 0.22.3 — 2026-10-27
+
+- Background: an error belongs to the last thing you tried and clears once something works. The description box waits while a place is suggested, so it never replaces what you typed.
+- Evolve: Keep works while the new looks are still being written; only a choice already sent has to finish.
+- After a repaint, your sauceling no longer drops to a silhouette while its new pictures load.
+- Settings: a number that fails to save goes back to the saved one, and a picture connection that was deleted shows as missing instead of blank.
+- Album: a sauceling brought back from the Menagerie is no longer shown twice.
+- Moving the egg no longer closes a rename or a hand-over you were in the middle of.
+- Painted sheets with two or three touching rows of drawings are read correctly.
+- An egg find that fails (the writing connection does not answer) no longer uses up the day's find.
+- Talking with the caretaker counts toward an evolution offer on the day the egg hatches or after a hand-over.
+
 ## 0.22.2 — 2026-10-27
 
 - The Nook's "⋯" button also holds Caretaker, Looks and New egg. Each opens its own panel under the Nook; close it with ✕ or Escape.

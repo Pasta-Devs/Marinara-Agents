@@ -610,15 +610,12 @@ export function readSheet(
     if (hi <= lo) return null;
     const cut = argmin(allRows, lo, hi);
     if (cut <= top) return null;
-    // Two touching rows make a band about twice the usual height of the other bands (not counting itself); a band that
-    // is not clearly taller is a row, so a row is missing. A lone band has no other to be measured against, so it is
-    // two rows only where its ink thins clearly at the cut.
-    const others = bands
-      .filter((_, i) => i !== tall)
-      .map(([a, b]) => b - a)
-      .sort((a, b) => a - b);
+    // Two touching rows make a band about twice the height of a row; a band not clearly taller than every other band
+    // (rows grow from stage to stage, so not the median) is a row, so a row is missing. A lone band has no other to be
+    // measured against, so it is two rows only where its ink thins clearly at the cut.
+    const others = bands.filter((_, i) => i !== tall).map(([a, b]) => b - a);
     if (others.length) {
-      if (bottom - top < 1.4 * others[Math.floor(others.length / 2)]!) return null;
+      if (bottom - top < 1.4 * Math.max(...others)) return null;
     } else {
       const typical = Array.from(allRows.subarray(top, bottom)).sort((a, b) => a - b)[Math.floor((bottom - top) / 2)]!;
       if (allRows[cut]! >= 0.25 * typical) return null;
