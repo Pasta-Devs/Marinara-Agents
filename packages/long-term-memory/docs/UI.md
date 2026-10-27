@@ -163,6 +163,11 @@ running task can be cancelled and its latest result can be revisited.
 The Chat Messages tab imports a chat's own messages in pieces of up to 24,000
 characters; when the selected chat also has summaries, it says that importing
 both can repeat memories in review.
+When the unsearched first page finds imported notes whose character, lorebook
+entry, chat summary or message piece no longer exists, a "Source gone (N)" group
+above the source tabs lists them. Each row opens the memory or removes it with
+its source (the usual delete confirmation); leaving a row alone keeps the
+memory and lists it again on the next preview. Searching hides the group.
 
 ### Settings and Chat Settings
 

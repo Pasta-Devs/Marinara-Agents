@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Sources lists imported memories whose character, lorebook entry, chat summary or chat message was deleted under "Source gone", so you can remove them with their source or leave them as they are.
+
 ## 1.5.0 — 2026-10-27
 
 - Sources has a Chat Messages tab that learns from a chat's own messages, so a chat without summaries can have memories too. It warns when the chat also has summaries, because importing both can repeat memories in review.

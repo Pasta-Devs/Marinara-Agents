@@ -16,7 +16,15 @@ export function mergeSourcePreviewPages(pages: LtmInteropPreviewResponse[] | und
     ...new Map(pages!.flatMap((page) => page.samples).map((sample) => [sample.sourceId, sample])).values(),
   ];
   const importedCount = samples.filter((sample) => sample.status === "imported").length;
-  return { ...last, samples, scanned: samples.length, importedCount, draftable: samples.length - importedCount };
+  // Only an unfiltered first page reports outdated notes.
+  return {
+    ...last,
+    samples,
+    scanned: samples.length,
+    importedCount,
+    draftable: samples.length - importedCount,
+    outdated: pages![0]!.outdated,
+  };
 }
 
 export function mergeLorebookPreviewPages(pages: LtmLorebookPreviewResponse[] | undefined) {
@@ -62,7 +70,7 @@ export function mergeLorebookPreviewPages(pages: LtmLorebookPreviewResponse[] | 
     }),
     { books: 0, entries: 0, candidates: 0, imported: 0, pending: 0 },
   );
-  return { ...last, books, counts };
+  return { ...last, books, counts, outdated: pages![0]!.outdated };
 }
 
 const CSRF_HEADER = "x-marinara-csrf";
