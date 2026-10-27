@@ -112,6 +112,7 @@ function fixture(options = {}) {
     findKnownModel: () => undefined,
     estimateTokens: (value) => Math.ceil(value.length / 4),
     background: (callback) => callback(),
+    runStory: options.runStory,
     renderContext: options.renderContext,
     logger: { warn() {} },
   });
@@ -496,7 +497,13 @@ test("live-chat recovery deduplicates played text across different legacy headin
 
 test("memory that fell behind answers with legacy history at once and catches up once in the background", async () => {
   let gate = deferred();
-  const f = fixture({ phase: "stale", maintain: () => gate.promise });
+  // The story's own signal, which Cancel and a reset abort.
+  const story = new AbortController();
+  const f = fixture({
+    phase: "stale",
+    maintain: () => gate.promise,
+    runStory: (_runId, operation) => operation(story.signal),
+  });
   f.plan(1);
   f.plan(2);
   f.session.progress = { 1: { normal: 3 } };
@@ -508,8 +515,8 @@ test("memory that fell behind answers with legacy history at once and catches up
   await settle();
   assert.deepEqual(
     f.maintained,
-    [{ runId: f.runId }],
-    "One background job, sized for every reader rather than this job",
+    [{ runId: f.runId, signal: story.signal }],
+    "One background job, sized for every reader rather than this job, stopped by the story's Cancel",
   );
   assert.equal((await f.memory.status(f.runId)).phase, "pending");
   await f.context(2);

@@ -574,9 +574,11 @@ test("next-chapter and scene prompts keep three older chapters plus separate cha
       "Character Story recall has its own quota",
     );
     assert.equal(
-      sections.some((section) => section[1] === "chat" && section[3].includes("CHAT-MEMORY-MARKER")),
-      chat,
-      chat ? "Conversation recall does not displace a chapter" : "A unit's private chat stays out of scenes without it",
+      prompt.match(/CHAT-MEMORY-MARKER/gu)?.length ?? 0,
+      chat ? 1 : 0,
+      chat
+        ? "The writer lists the conversation itself, so recall neither repeats it nor spends a side slot on it"
+        : "A unit's private chat stays out of scenes without it",
     );
     assert.ok(
       chapters.every((section) => /^Lighthouse key chapter [1-4]$/u.test(section[2])),

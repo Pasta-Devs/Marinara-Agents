@@ -1497,3 +1497,42 @@ test("an overview saved before chats were private is not sent to a restricted re
   assert.ok(f.memory().overview.sources.every(([key]) => JSON.parse(key)[0] !== "chat"));
   assert.notEqual((await service.recall({ runId: "world", query: "x", reader: "unit:bryn" })).overview, "");
 });
+
+test("a long text the embedder refuses never blocks the rest, and Cancel stops vector upkeep at once", async () => {
+  const rows = [
+    source("1", `REFUSED ${"A very long recap of the first chapter. ".repeat(40)}`),
+    source("2", "Arden returned the moonstone."),
+    source("3", "Keeper saved at Harborfall."),
+  ];
+  const f = fixture(rows);
+  const embedder = {
+    spaceId: "space",
+    embed: async (texts) => (texts.some((text) => text.includes("REFUSED")) ? null : texts.map(() => [1, 0])),
+  };
+  const service = f.create({ resolveEmbeddings: async () => embedder });
+  await service.maintain({ runId: "world" });
+  assert.deepEqual(
+    f.memory().records.map((record) => record.embeddingSpaceId),
+    [undefined, "space", "space"],
+  );
+  f.setRows([...rows, source("4", "Mira left.")]);
+  await service.maintain({ runId: "world" });
+  assert.equal(f.memory().records.find((record) => record.id === "4").embeddingSpaceId, "space");
+  // The story's Cancel or a reset aborts the signal: no further batch runs and nothing more is written.
+  const many = fixture(Array.from({ length: 40 }, (_, index) => source(String(index + 1), `Day ${index + 1}.`)));
+  const story = new AbortController();
+  let batches = 0;
+  const cancelled = many.create({
+    resolveEmbeddings: async () => ({
+      spaceId: "space",
+      embed: async (texts) => {
+        batches += 1;
+        story.abort();
+        return texts.map(() => [1, 0]);
+      },
+    }),
+  });
+  await cancelled.maintain({ runId: "world", signal: story.signal });
+  assert.equal(batches, 1);
+  assert.ok(many.memory().records.every((record) => !record.embedding));
+});
