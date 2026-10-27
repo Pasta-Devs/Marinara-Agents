@@ -930,3 +930,17 @@ export const slurpWorldClaims = fileTable("slurp2_world_claims", {
   token: text("token").notNull(),
   claimedAt: text("claimed_at").notNull(),
 });
+
+/** One live show (docs: LIVE-V3-PLAN.md). `state` is the JSON `SlpLiveState` only code changes. */
+export const slurpLiveShows = fileTable("slurp2_live_shows", {
+  id: text("id").primaryKey(),
+  hostKind: text("host_kind").notNull(),
+  hostId: text("host_id").notNull(),
+  startedAt: text("started_at").notNull(),
+  endsAt: text("ends_at").notNull(),
+  endedAt: text("ended_at"),
+  state: text("state").notNull(),
+  /** Last time a player had the show open; beats and pictures only run while this is fresh. */
+  watchedAt: text("watched_at"),
+  createdAt: text("created_at").notNull(),
+});

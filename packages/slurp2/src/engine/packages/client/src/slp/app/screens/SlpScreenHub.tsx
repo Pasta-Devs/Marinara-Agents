@@ -52,7 +52,7 @@ import { useSlurpHubDiscoveryFilters } from "./slp-hub-discovery-filters";
 import { SlurpInlineSuggestedCreators } from "./SlpScreenSuggestedCreators";
 import { SlpHubDiscover } from "./SlpHubDiscover";
 import { useSlurpSettings, useTurnOnSlurpAutoPosting } from "../../features/settings/slp-settings-hooks";
-import { SlpExtrasOfferCard } from "../../features/settings/SlpExtrasOffer";
+import { SlpHubTopCards } from "./SlpHubTopCards";
 
 // ---------------------------------------------------------------------------
 // Local types
@@ -563,7 +563,7 @@ export function ViewerHub({
           </div>
         </div>
       )}
-      <SlpExtrasOfferCard />
+      <SlpHubTopCards />
       {isLoading ? (
         <div className="relative">
           <div className="flex items-center gap-2 px-4 pt-4 text-xs font-semibold text-[var(--noodle-accent-foreground)] sm:px-5">

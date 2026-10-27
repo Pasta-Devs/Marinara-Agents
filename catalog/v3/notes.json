@@ -172,6 +172,18 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.24.7",
+          "date": "2026-10-27",
+          "notes": "- New **Expression portraits** setting in World → Sources → Images, off by default. Story portraits then show anger, fear, sadness or joy line by line, marked in the same request that writes the scene. Four faces per look are painted in the background, only for characters who speak. A failed set is not retried on its own: turn the setting off and on to try once more.\n- Your persona keeps its own voice even when another character shares part of its name, and turning Voice other characters off and on again no longer asks to pay again for combat lines that were never made.",
+          "highlight": false
+        },
+        {
+          "version": "1.24.6",
+          "date": "2026-10-27",
+          "notes": "- New **Voice other characters** toggle next to Read character dialogue. NPCs and units without an assigned voice speak with a voice from the Engine's Random NPC Voices lists (Connections → Text to Speech), matched to male or female when known. With both lists empty, any voice of the current connection is used. Each name keeps the same voice. Assigned voices still win, and your persona uses only its own.\n- Combat voice lines now play in Classic and Formation fights, start preparing when the battle screen opens, and include your persona's assigned voice. A short notice says when nobody in the team can be voiced.",
+          "highlight": false
+        },
+        {
           "version": "1.24.5",
           "date": "2026-10-26",
           "notes": "- When a Front Row unit falls in Formation, a Back Row unit on its side steps into the empty seat at once and acts from its next turn. This works for your team and for enemies, and a fight now ends only when one side has nobody left. Moving and retreating never pull a support forward. A fight started before this update is still scored by the rules it was played under.",
@@ -277,18 +289,6 @@
           "version": "1.16.0",
           "date": "2026-10-25",
           "notes": "- Punctuate choice labels. Keep the correct speaker portrait and prevent fullscreen/mute from advancing.\n- Tap Writing help on mobile; keep daily rewards clear of Claim and animate loaded unit art smoothly.\n- Use the current timezone for resets and new banner periods, including clock changes. Catch up automatic chapter memory on world open; retain manual controls and show compressed/combined counts.\n- Auto-select affordable character, weapon, relic and skill upgrades before confirmation. Auto-equip the best free gear and clear stale Units dots.\n- Open farming domains from upgrade materials and show their next rotation; Mandates open their Login Event.\n- Reuse matching dialogue audio; reveal fresh opening lines while preserving saved reading positions.\n- Generate richer music briefs with world motifs, varied arrangements and musical development.",
-          "highlight": true
-        },
-        {
-          "version": "1.15.2",
-          "date": "2026-10-24",
-          "notes": "- Show actionable Seedance setup guidance when a banner cannot be animated, and keep Retry visibly busy while generation is pending. Saved clips and the original banner illustration remain available.",
-          "highlight": true
-        },
-        {
-          "version": "1.15.1",
-          "date": "2026-10-24",
-          "notes": "- Cancel chapter and story generation from the loading screen and return to Gacha Home without deleting the world or saved progress. Active story requests and chapter preforging stop, and late responses cannot reopen the cancelled screen.",
           "highlight": true
         }
       ]
@@ -828,6 +828,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.4",
+          "date": "2026-10-26",
+          "notes": "- Live shows, rebuilt: code runs every show minute by minute (fans, tips, menu orders, goals); while you watch, the model writes the host and the chat, and the host answers you by name.\n- Live pictures about once per minute, and private shows at the Backstage price and length.\n- Go live yourself as your persona's Creator, or as any Creator from Stir; the room reacts and suggests your next move.\n- \"X is live\" notices, a thank-you post after each show, and a Backstage > Live shows page.\n- The cam is told in words on the stage, so a show works without pictures; pictures follow those words. A live Creator's Moments tile opens the show. Live is portrait on every screen, with a slim top bar.",
+          "highlight": false
+        },
+        {
           "version": "0.4.3",
           "date": "2026-10-26",
           "notes": "- Slurp starts again on Engine builds with zod 4. The feed post and Creator generation routes no longer stop at load with \"Right-hand side of 'instanceof' is not an object\" (zod 4 has no `ZodEffects`); they extend the plain object schemas instead.",
@@ -939,12 +945,6 @@
           "version": "0.3.39",
           "date": "2026-10-14",
           "notes": "- Fixed: on Android, choosing a picture for a post (in the composer, or \"replace\" while editing a post) no longer opens the system photo picker, which lists only a few albums such as Camera, Screenshots and Downloads. Android now offers its full file browser, so every folder is reachable. A file that is not a picture still gets \"Choose an image file.\". Other platforms keep the picture-only file dialog. (#1378)",
-          "highlight": false
-        },
-        {
-          "version": "0.3.38",
-          "date": "2026-10-13",
-          "notes": "- Added: in a Creator's settings, \"Appearance for pictures\" has a new button, \"Use the card's image tags\". It shows only while the linked character or persona has the Image Appearance Override switched on and filled in, and it saves those tags as the Creator's own appearance. It asks first when that replaces an appearance you wrote. \"Use linked appearance\" (or \"Clear override\") removes it again. (#1366)",
           "highlight": false
         }
       ]

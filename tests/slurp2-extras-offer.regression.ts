@@ -75,7 +75,7 @@ const routes = slurp2Source(`${server}features/settings/slp-settings-routes.ts`)
 assert.match(routes, /app\.get\("\/extras\/offer"/u);
 assert.match(routes, /app\.post\("\/extras\/offer\/answer"/u);
 assert.match(
-  slurp2Source("packages/slurp2/src/engine/packages/client/src/slp/app/screens/SlpScreenHub.tsx"),
+  slurp2Source("packages/slurp2/src/engine/packages/client/src/slp/app/screens/SlpHubTopCards.tsx"),
   /<SlpExtrasOfferCard \/>/u,
 );
 

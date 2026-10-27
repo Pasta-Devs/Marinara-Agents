@@ -7,7 +7,6 @@ import {
   slpExtensionFromLegacy,
 } from "../../../../../shared/src/slp/slp-extensions.js";
 import { slpArcBlueprintSchema, type SlpArcBlueprint } from "../../../../../shared/src/slp/slp-story-engine.js";
-
 const SLURP_ARC_LIBRARY_MAX = 200;
 import {
   LEGACY_SLURP_DISCOVERY_TAG_SEED,
@@ -57,6 +56,7 @@ import {
   SLP_DEFAULT_SUPPORT_DESK_SETTINGS,
 } from "../../../../../shared/src/slp/slp-support-desk.js";
 import { slpDramaSettingsSchema } from "../../../../../shared/src/slp/slp-drama.js";
+import { SLP_DEFAULT_LIVE_SETTINGS, slpLiveSettingsField } from "../../../../../shared/src/slp/slp-live.js";
 import { SLURP_STORY_JOB_DEFAULTS, type SlurpStoryJobWeights } from "../../../../../shared/src/slp/slp-post-purpose.js";
 import { DEFAULT_SLP_CREATOR_REPLIES_PER_24_HOURS } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { SLURP_COOL_OFF_HOURS } from "../world/slp-stance.js";
@@ -113,10 +113,7 @@ export const slpCreatorFanArchetypeWeightsSchema = z
     message: "At least one fan archetype weight must be greater than zero.",
   });
 
-/**
- * Creator settings are owned by Slurp. Keep this deliberately narrow: public Noodle settings
- * must not become an implicit dependency of Creator scheduling or generation.
- */
+/** Creator settings are owned by Slurp; public Noodle settings must not drive Creator scheduling or generation. */
 export const slurpSettingsSchema = z.object({
   // The extension switches (shared slp-extensions.ts). Off hides and stops it; its data stays.
   extAds: z.boolean(),
@@ -124,6 +121,7 @@ export const slurpSettingsSchema = z.object({
   extWorld: z.boolean(),
   extStir: z.boolean(),
   extSupportDesk: z.boolean(),
+  extLive: z.boolean(),
   extEngineLink: z.boolean(),
   inlineAdsEnabled: z.boolean(),
   inlineAdsFrequency: z.enum(["light", "standard", "frequent"]),
@@ -439,6 +437,7 @@ export const slurpSettingsSchema = z.object({
   /** Settings › Stir: the Slurp Support desk (tickets, notices, refusals, shady moves, leaving). */
   supportDesk: slpSupportDeskSettingsSchema,
   drama: slpDramaSettingsSchema,
+  live: slpLiveSettingsField,
   /** Settings › Stir: a couple may grow to four people (0.3.5). Off by default. */
   polyamory: z.boolean(),
   /** Settings › Overview › Pause all: no model or image call, no tick, nothing (`slp-pause.ts`). */
@@ -466,6 +465,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   extWorld: false,
   extStir: false,
   extSupportDesk: false,
+  extLive: false,
   extEngineLink: false,
   inlineAdsEnabled: true,
   inlineAdsFrequency: "standard",
@@ -645,6 +645,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   modelBudget: slurpModelBudgetSchema.parse({}),
   supportDesk: { ...SLP_DEFAULT_SUPPORT_DESK_SETTINGS },
   drama: slpDramaSettingsSchema.parse({}),
+  live: SLP_DEFAULT_LIVE_SETTINGS,
   polyamory: false,
   paused: false,
   nightQuiet: false,
@@ -670,11 +671,8 @@ export function isSlurpViewerActorAccount(account: Pick<SlurpAccount, "invited" 
 let cachedSettingsRaw: string | null = null;
 let cachedSettings: SlurpSettings | null = null;
 
-/**
- * Keys retired in fix phase 1b (R1-136): nothing read them. Stored copies are safe: the normalizer
- * takes only known keys, the PATCH schema strips unknown ones, and the next save drops them. Listed
- * so a test can prove old data still loads.
- */
+/** Keys retired in fix phase 1b (R1-136); nothing reads them. The PATCH schema strips them and the next save
+ * drops them; listed so a test can prove old data still loads. */
 export const SLURP_RETIRED_SETTINGS_KEYS = [
   "imageGenerationConnectionId",
   "invitedCharacterGroupIds",

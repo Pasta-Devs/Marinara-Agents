@@ -141,13 +141,20 @@ export function createForgeCombatVoices({ dataDir, runtime, readUnit, generateLi
         return null;
     const ownEpoch = epoch(body.runId);
     const found = await readUnit(body.runId, body.unitId);
+    // The server derives the identity: the persona's own ID for the protagonist (never a pool voice), the card for a
+    // card unit, and the unit itself for a unit without one, which only "Voice other characters" can voice.
+    const card = String(found?.unit?.characterId || found?.unit?.cardId || "").trim();
+    const persona = found?.unit?.isProtagonist === true;
+    const identity = persona ? String(found.run?.protagonist?.personaId || "").trim() || card : card || body.unitId;
     if (
       !found?.run ||
       !found.unit ||
       disposed ||
       ownEpoch !== epoch(body.runId) ||
-      body.characterId !== (found.unit.characterId || found.unit.cardId) ||
-      (!allowDisabled && (found.run.audio?.combatVoices !== true || found.run.combat?.mode !== "formation"))
+      !identity ||
+      body.characterId !== identity ||
+      (!allowDisabled &&
+        (found.run.audio?.combatVoices !== true || (!persona && !card && found.run.audio?.otherVoices !== true)))
     )
       return null;
     return {
@@ -330,14 +337,17 @@ export function createForgeCombatVoices({ dataDir, runtime, readUnit, generateLi
     },
     fail(body) {
       return safe(async () => {
-        const ctx = await context(body, ["slot", "token"], true);
-        if (!ctx || typeof body.token !== "string") return { ok: false, error: "bad-request" };
+        const ctx = await context(body, ["slot", "token", "released"], true);
+        if (!ctx || typeof body.token !== "string" || (body.released !== undefined && body.released !== true))
+          return { ok: false, error: "bad-request" };
         return mutate(body.runId, async () => {
           if (!current(ctx)) return { ok: false, error: "not-found" };
           const saved = await readySlot(ctx, body.slot);
           if (!saved || saved.record?.token !== body.token || saved.record.state !== "pending")
             return { ok: false, error: "stale-combat-voice" };
-          await write(saved.folder, saved.key, { state: "failed" });
+          // A released token was never synthesized, so its slot is missing again and needs no paid retry.
+          if (body.released) await forgeCombatVoiceUnlink(forgeCombatVoiceJoin(saved.folder, `${saved.key}.json`));
+          else await write(saved.folder, saved.key, { state: "failed" });
           return { ok: true };
         });
       });

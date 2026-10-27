@@ -372,7 +372,18 @@ test("actual story cast projects the persona ID and the existing controller choo
   const start = source.indexOf("async function dh(s,c){");
   const end = source.indexOf("async function il(s){", start);
   assert.ok(start >= 0 && end > start, "actual server story-cast function");
-  const project = new Function("a", "n", "kt", "sn", "l", "Le", "r", `return (${source.slice(start, end)})`)(
+  const project = new Function(
+    "a",
+    "n",
+    "kt",
+    "sn",
+    "l",
+    "Le",
+    "r",
+    "nt",
+    "forgeStoryExpressionCast",
+    `return (${source.slice(start, end)})`,
+  )(
     { list: async () => [] },
     { id: "gacha-forge" },
     "units",
@@ -380,6 +391,8 @@ test("actual story cast projects the persona ID and the existing controller choo
     (value) => String(value || "").trim(),
     () => ({ personaAvatar: async () => "/persona.webp" }),
     { logger: { warn() {} } },
+    () => ({}),
+    () => ({}),
   );
   const { host, controller, calls } = fixture();
   try {
@@ -390,6 +403,72 @@ test("actual story cast projects the persona ID and the existing controller choo
     assert.equal(calls.length, 1);
     assert.equal(calls[0].requests[0].voice, "persona-voice");
     assert.equal(calls[0].requests[0].characterId, "persona");
+  } finally {
+    controller.dispose();
+  }
+});
+
+test("an ambiguous persona name still speaks only in the persona's own voice, never the NPC pool", async () => {
+  const { host, config, controller, calls } = fixture();
+  try {
+    config.npcDefaultFemaleVoices = ["pool-voice"];
+    config.npcDefaultMaleVoices = ["pool-voice"];
+    controller.configure({ tts: true, otherVoices: true });
+    // Two cast entries share the persona's name, so the cast resolver cannot settle the speaker.
+    const cast = [
+      { name: "Mari", prota: true, characterId: "persona" },
+      { name: "Mari", prota: false, characterId: "card-mari" },
+    ];
+    assert.equal(
+      forgeVoiceCharacter(cast, "Mari", () => null),
+      null,
+    );
+    for (const speaker of ["Mari", "MARI!", "you"]) {
+      await controller.speak(
+        { speaker, text: "Protagonist line." },
+        forgeVoiceCharacter(cast, speaker, () => null),
+      );
+    }
+    assert.deepEqual(
+      calls.map((call) => [call.requests[0].voice, call.requests[0].characterId]),
+      [
+        ["persona-voice", "persona"],
+        ["persona-voice", "persona"],
+        ["persona-voice", "persona"],
+      ],
+    );
+    host._run.protagonist = { personaId: "persona", name: "Mari Rossi" };
+    await controller.speak({ speaker: "Mari", text: "First name only." }, null);
+    assert.equal(calls.at(-1).requests[0].voice, "persona-voice");
+    // The bundle's own cast resolver ties on a shared surname or first word, yet either could be the persona.
+    const source = await readFile(new URL("../packages/gacha-forge/client.js", import.meta.url), "utf8");
+    const resolve = new Function(
+      source.slice(source.indexOf("function Kl("), source.indexOf("function Vo(")) + ";return Xl;",
+    )();
+    host._run.protagonist = { personaId: "persona", name: "Alex Rivera" };
+    const ties = [
+      ["Rivera", { name: "Maria Rivera", prota: false }],
+      ["Alex R.", { name: "Alex Chen", prota: false, characterId: "card-alex" }],
+    ];
+    for (const [speaker, other] of ties) {
+      const tie = forgeVoiceCharacter(
+        [other, { name: "Alex Rivera", prota: true, characterId: "persona" }],
+        speaker,
+        resolve,
+      );
+      assert.equal(tie, null, `${speaker} ties in the cast`);
+      await controller.speak({ speaker, text: "Possibly the protagonist." }, tie);
+      assert.equal(calls.at(-1).requests[0].voice, "persona-voice", speaker);
+    }
+    config.voiceAssignments = [];
+    calls.length = 0;
+    for (const speaker of ["Mari", "Rivera", "Alex R."]) {
+      host._run.protagonist = { personaId: "persona", name: speaker === "Mari" ? "Mari Rossi" : "Alex Rivera" };
+      await controller.speak({ speaker, text: "No persona voice." }, null);
+    }
+    assert.equal(calls.length, 0, "a persona without its own voice stays silent");
+    await controller.speak({ speaker: "Bryn", text: "An NPC." }, null);
+    assert.equal(calls[0]?.requests[0].voice, "pool-voice", "other unresolved speakers still use the pool");
   } finally {
     controller.dispose();
   }

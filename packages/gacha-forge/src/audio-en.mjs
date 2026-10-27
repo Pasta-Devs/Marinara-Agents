@@ -4,10 +4,14 @@ export const forgeAudioEnglish = {
   "audio.group.mix": "Audio levels",
   "audio.group.playback": "Story playback",
   "audio.settings.tts": "Read character dialogue",
-  "audio.settings.ttsHint": "Use the current Engine voice connection. Only characters with an assigned voice speak.",
+  "audio.settings.ttsHint":
+    "Use the current Engine voice connection. Characters with an assigned voice speak; Voice other characters covers everyone else.",
+  "audio.settings.otherVoices": "Voice other characters",
+  "audio.settings.otherVoicesHint":
+    "Characters without an assigned voice, including NPCs, use the Engine's Male NPC defaults and Female NPC defaults, matched to male or female when known. To pick them, turn on Use default voices for random NPCs under Random NPC Voices in Connections → Text to Speech; the lists still apply here if that switch is turned off later. If both lists are empty, any voice of the current connection is used. Each name keeps the same voice. Also covers combat voice lines. Assigned voices still win; your persona uses only its own voice.",
   "audio.settings.combatVoices": "Combat voice lines",
   "audio.settings.combatVoicesHint":
-    "Formation combat only. Save and reuse four short battle lines per voiced character. Initial generation uses your model and voice providers; characters without an assigned Engine voice stay silent.",
+    "Save and reuse four short battle lines per voiced character, in Classic and Formation. Lines are prepared when the battle screen opens; the first time uses your model and voice providers. Characters without an assigned Engine voice stay silent unless Voice other characters is on.",
   "audio.settings.generate": "Generate music and sound effects",
   "audio.settings.generateHint": "Optional provider requests. Otherwise, the game's existing music and effects play.",
   "audio.settings.connection": "Audio connection",
@@ -46,6 +50,10 @@ export const forgeAudioEnglish = {
   "audio.promptFailed":
     "The music brief could not be generated. Check the world's narration connection. Playing the existing soundtrack.",
   "audio.voiceFailed": "This spoken line could not play. You can keep reading.",
+  "audio.combatVoicesNone":
+    "Combat voice lines are on, but nobody in this team has an assigned Engine voice. Assign one in the Engine or turn on Voice other characters.",
+  "audio.combatVoicesNoVoice":
+    "Combat voice lines are on, but the current voice connection offers no voice for this team.",
   "audio.connectionsFailed": "Could not read audio connections. Open Engine Settings to check them.",
 };
 
@@ -74,6 +82,16 @@ export function forgeAudioFields() {
       type: "toggle",
       label: forgeAudioEnglish["audio.settings.tts"],
       hint: forgeAudioEnglish["audio.settings.ttsHint"],
+      default: false,
+    },
+    {
+      id: "audio.otherVoices",
+      step: "sources",
+      settings: "sources",
+      group: "audio",
+      type: "toggle",
+      label: forgeAudioEnglish["audio.settings.otherVoices"],
+      hint: forgeAudioEnglish["audio.settings.otherVoicesHint"],
       default: false,
     },
     {

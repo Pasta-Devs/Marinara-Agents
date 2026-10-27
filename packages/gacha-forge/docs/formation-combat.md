@@ -20,7 +20,9 @@ Formation is an optional Gacha Forge combat mode alongside Classic. It is based 
 
 Show the acting character's portrait with existing elemental effects when using an Ultimate. Preserve reduced motion, readable status, mobile controls and saved themes.
 
-Add an opt-in Combat voice lines control under World Sources Audio. Only voiced characters receive a fixed saved set of four lines: death, enemy defeat and two Ultimate variants. Generate through current voice/provider contracts, persist the resulting audio in package storage, and reuse it on later battles and reloads. No automatic regeneration or unvoiced fallback generation.
+Add an opt-in Combat voice lines control under World Sources Audio. Only voiced characters receive a fixed saved set of four lines: death, enemy defeat and two Ultimate variants. Generate through current voice/provider contracts, persist the resulting audio in package storage, and reuse it on later battles and reloads. No automatic regeneration.
+
+Since 1.24.6 the lines play in Classic too: Classic death events name their killer for kill lines, with no rule change. Preparation starts when the battle screen loads. Voiced means an explicit Engine voice, the persona's own voice for the protagonist, or, with the opt-in Voice other characters toggle, a stable pick from the Engine's NPC default voice pool for any other unit. The server derives each speaker's identity (card, persona or unit) and accepts a unit without a card only while that toggle is on. A free notice says when nobody in the team can be voiced.
 
 ## Validation target
 

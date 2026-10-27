@@ -771,7 +771,7 @@
         },
         "id": "gacha-forge",
         "name": "Gacha Forge",
-        "version": "1.24.5",
+        "version": "1.24.7",
         "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
         "engine": {
           "min": "2.5.1",
@@ -1060,8 +1060,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "676cf1b2a9e0028ab5773766419a7ecba88f516184a7afb24ca083a5dffca882",
-            "bytes": 1878732
+            "sha256": "ffbf4f0623e099aa336951675de96703425d8cb1229d6bb0d941c484db6fd13b",
+            "bytes": 1894412
           },
           {
             "path": "farm-asc.webp",
@@ -1535,8 +1535,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "6ef61a625462bd9558601ecc775131b051b9c2b5d397ca8c13a7a8aee1a29e02",
-            "bytes": 954461
+            "sha256": "da0ecca518586149fa31c4b10f9cbe464d049690b2a90db950c003f26ef718fb",
+            "bytes": 981352
           },
           {
             "path": "skill-aoe_damage-dark.webp",
@@ -2330,8 +2330,8 @@
           },
           {
             "path": "src/combat-voices-client.mjs",
-            "sha256": "8e1be77b50397a5ce9857827fb081f6240daf6741045f60e1a3fee308b977b96",
-            "bytes": 12854
+            "sha256": "e2787168d7bc83b95721f83346ca112d2d9a34385863ccfc449d5f824118f51f",
+            "bytes": 16815
           },
           {
             "path": "src/combat-voices-en.mjs",
@@ -2340,8 +2340,8 @@
           },
           {
             "path": "src/combat-voices-server.mjs",
-            "sha256": "4b677f85aad0cf033c2f699573a76c5dcc2b8bb6d5c86dbbe658b7f7238e9635",
-            "bytes": 18271
+            "sha256": "ff04e4d84f59b500d074f7b7833e99ace52e12cbf0700c60bfc742436565f948",
+            "bytes": 19080
           },
           {
             "path": "src/proactive-messages-en.mjs",
@@ -2388,9 +2388,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.24.5.zip",
-        "sha256": "912d4bc63a91b5f89420413e7df1306110c7b4f0d55d58373b372d370f084068",
-        "bytes": 9054759
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.24.7.zip",
+        "sha256": "4a96777adecc1967eadc99a29b143d233d90ab5fda0c519c1828efdec2d18b72",
+        "bytes": 9102100
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     },
@@ -3631,7 +3631,7 @@
         },
         "id": "slurp2",
         "name": "Slurp",
-        "version": "0.4.3",
+        "version": "0.4.4",
         "description": "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -3700,13 +3700,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "41e586cc7d21dfb11ef5a553a65694c472dac4668f78427517a2fade7307fd40",
-            "bytes": 2008648
+            "sha256": "6bf0abb76d6f978b8e52d2c20ea761c69951114a92521ede94c1d2581d0d133a",
+            "bytes": 2044007
           },
           {
             "path": "client.js",
-            "sha256": "0986ea78793f863cc230558b47ed2f5b153aa922b29687a335ed706c2cc9ec54",
-            "bytes": 2851220
+            "sha256": "e7154e8787e7af59f2c7648979e81af97f85b503a53eff09ae038f1a1f6dd8cd",
+            "bytes": 2882346
           },
           {
             "path": "slurp2-logo.png",
@@ -3730,18 +3730,18 @@
           },
           {
             "path": "src/engine/packages/client/src/slp/locales/de.json",
-            "sha256": "1f6bf145d2f707bcf4600bfe9b32a330cfa2314d9772eb14e7d29d928252b65a",
-            "bytes": 231893
+            "sha256": "f2e7f03c58a5d2896634732bcd42c3739fb2e14c36a396508d6e8f8425c5cf43",
+            "bytes": 239281
           },
           {
             "path": "src/engine/packages/client/src/slp/locales/ko.json",
-            "sha256": "af21ea5829363ccbe6999893eb62ef838ef9c02347cd4f2b80c8d0b4a208c8de",
-            "bytes": 328893
+            "sha256": "74f80e54ee7784d247e8f0fef9d64a74dd4070e1cefa5fba08ad6f1e2021fb5a",
+            "bytes": 336839
           },
           {
             "path": "src/engine/packages/client/src/slp/locales/pl.json",
-            "sha256": "2a7eba40377498e64f1ba4ca534e74c1143a6378a309fe517e1ebdb6d5dc8377",
-            "bytes": 233528
+            "sha256": "c2f20a1f1295f96336529421af2d9098e730f76d51011fb104929dc4797c7c26",
+            "bytes": 241032
           }
         ],
         "permissions": [
@@ -3759,9 +3759,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.3.zip",
-        "sha256": "44f54e50ad71f9b161d47bf1663f73be1f0aabe0f3acbfe4ccf4b65d3a5c11c0",
-        "bytes": 5886193
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.4.zip",
+        "sha256": "e3c3adfd26cbfc636b3e8415193f5b26986734a1b9ea4427a3c8047b8be3b1bc",
+        "bytes": 5975516
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },

@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, readdir, readFile, writeFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
+import vm from "node:vm";
 import {
   createForgeCombatVoices,
   normalizeForgeCombatVoiceLines,
@@ -11,10 +13,16 @@ import {
 import {
   createForgeCombatVoiceController,
   createForgeCombatPresentation,
+  forgeWarmCombatVoices,
 } from "../packages/gacha-forge/src/combat-voices-client.mjs";
 import { forgeCombatVoiceEnglish } from "../packages/gacha-forge/src/combat-voices-en.mjs";
 import { createForgeUltimatePresentation } from "../packages/gacha-forge/src/combat-ultimate-client.mjs";
-import { forgeExplicitVoice, forgeVoiceCacheKey } from "../packages/gacha-forge/src/audio-client.mjs";
+import {
+  forgeExplicitVoice,
+  forgeSpeakerVoice,
+  forgeStableVoice,
+  forgeVoiceCacheKey,
+} from "../packages/gacha-forge/src/audio-client.mjs";
 import { forgeSoundtrackContextKey, normalizeForgeAudio } from "../packages/gacha-forge/src/audio-settings.mjs";
 
 const original = Object.fromEntries(
@@ -22,6 +30,8 @@ const original = Object.fromEntries(
     "document",
     "matchMedia",
     "forgeExplicitVoice",
+    "forgeSpeakerVoice",
+    "forgeConnectionVoices",
     "forgeVoiceCacheKey",
     "forgeSoundtrackContextKey",
     "forgeCombatVoiceEnglish",
@@ -30,6 +40,8 @@ const original = Object.fromEntries(
 );
 Object.assign(globalThis, {
   forgeExplicitVoice,
+  forgeSpeakerVoice,
+  forgeConnectionVoices: async () => assert.fail("tests pass their own connection voice list"),
   forgeVoiceCacheKey,
   forgeSoundtrackContextKey,
   forgeCombatVoiceEnglish,
@@ -150,24 +162,31 @@ function client(backend, options = {}) {
   stage.connected = true;
   const root = { querySelector: (selector) => (selector === ".gf-stage" ? stage : null) };
   const host = {
-    _run: { runId: "world", combat: { mode: "formation" } },
+    _run: { runId: "world", combat: { mode: options.mode || "formation" } },
     _root: root,
     _state: () => "combat",
     _postJson: (path, body) => backend.manager[path.split("/").at(-1)]({ ...body, timeZone: "Europe/Warsaw" }),
   };
-  const audio = { settings: normalizeForgeAudio({ combatVoices: true, ...options.audio }), disposed: false };
+  const notices = [];
+  const audio = {
+    settings: normalizeForgeAudio({ combatVoices: true, ...options.audio }),
+    disposed: false,
+    notice: (key) => notices.push(key),
+  };
   const played = [];
   let synthesis = 0;
   let prompts = 0;
-  const config = {
+  const config = options.config || {
     connectionId: "tts-selected",
     connectionProfiles: { "tts-selected": { voiceAssignments: [{ characterId: "card-a", voice: "explicit-a" }] } },
   };
+  const voicesUsed = [];
   const services = {
     tts: {
       ttsService: {
         generateAudio: async (...args) => {
           synthesis++;
+          voicesUsed.push(args[1].voice);
           return options.generateAudio ? options.generateAudio(...args) : new Blob([wav], { type: "audio/wav" });
         },
       },
@@ -194,11 +213,14 @@ function client(backend, options = {}) {
     audio,
     services,
     getConfig: options.getConfig || (async () => config),
+    listVoices: options.listVoices,
   });
   controllers.push(controller);
   return {
     host,
     audio,
+    notices,
+    voicesUsed,
     stage,
     controller,
     played,
@@ -638,6 +660,428 @@ try {
     }
     fx.dispose();
     assert.equal(screen.children.length, 0);
+  });
+  await test("an explicit-voice card unit keeps its 1.24.5 identity, so its saved clips stay valid", async () => {
+    const s = await server();
+    const c = client(s);
+    const bodies = [];
+    const post = c.host._postJson;
+    c.host._postJson = (path, body) => (bodies.push(body), post(path, body));
+    await c.controller.warm([actor]);
+    const voiceIdentity = forgeVoiceCacheKey(
+      "world",
+      { speaker: actor.name, text: "fixed-combat-voices-v1" },
+      actor,
+      c.config,
+      "explicit-a",
+    );
+    assert(bodies.every((body) => body.characterId === "card-a" && body.voiceIdentity === voiceIdentity));
+    const sha = (value) => createHash("sha256").update(value).digest("hex");
+    const folder = join(s.root, "capability-package-data", "gacha-forge", "combat-voices", sha("world"));
+    const files = await readdir(folder);
+    assert(files.includes(`${sha(JSON.stringify([actor.id, "card-a", "lines"]))}.json`));
+    for (const slot of ["death", "kill", "ultimateA", "ultimateB"])
+      assert(files.includes(`${sha(JSON.stringify([actor.id, "card-a", voiceIdentity, slot, lines[slot]]))}.json`));
+  });
+  await test("Classic fights prepare and play the same lines, and the shipped Classic engine names each killer", async () => {
+    const s = await server({ run: { combat: { mode: "classic" }, audio: { combatVoices: true } } });
+    const c = client(s, { mode: "classic" });
+    await c.controller.warm([actor]);
+    assert.equal(c.synthesis, 4, "Classic worlds prepare lines");
+    await c.controller.play(actor, "kill");
+    assert.equal(c.played.length, 1, "and play them");
+    const source = await readFile(new URL("../packages/gacha-forge/client.js", import.meta.url), "utf8");
+    // The bundle defines its custom element at load; nothing here renders.
+    const context = vm.createContext({
+      console,
+      setTimeout,
+      clearTimeout,
+      AbortController,
+      URL,
+      crypto,
+      HTMLElement: class {},
+    });
+    const { Gu, Lo } = vm.runInContext(`${source}\n;({ Gu, Lo })`, context);
+    const fighter = (id, name, power, spd, hp) => ({
+      id,
+      name,
+      role: "Mage",
+      affinity: "fire",
+      power,
+      stats: { hp, atk: 100, def: 10, spd },
+      skill: { name: "Nova", effect: "aoe_damage", power: 200, target: "enemies" },
+    });
+    const fight = (allies, enemies) => {
+      const run = Gu({ allies, enemies, seed: 1 });
+      for (let turns = 0; run.pending && turns < 500; turns += 1)
+        Lo(run, { action: run.pending.options.ultimate ? "ultimate" : "attack" });
+      assert(run.done, "the Classic fight finishes");
+      const calls = [];
+      const fx = createForgeCombatPresentation(
+        { querySelector: () => null },
+        {
+          payload: { combatMode: "classic", allies, enemies },
+          host: { _run: { combat: { mode: "classic" } } },
+          run: {},
+          audio: { _forgeCombatVoices: { configure() {}, warm() {}, play: (who, slot) => calls.push([who.id, slot]) } },
+        },
+      );
+      for (const step of run.done.steps) for (const event of step.events || []) fx.event(event);
+      fx.dispose();
+      return {
+        calls, // The bundle runs in its own realm; compare plain copies.
+        deaths: JSON.parse(
+          JSON.stringify(run.done.steps.flatMap((step) => step.events || []).filter((e) => e.op === "death")),
+        ),
+      };
+    };
+    const won = fight([fighter(actor.id, "Arden", 3, 200, 1000)], [fighter("enemy-0", "Foe", 1, 1, 1500)]);
+    assert.deepEqual(won.deaths, [{ op: "death", id: "enemy-0", killerId: actor.id }]);
+    assert.deepEqual(won.calls.at(-1), [actor.id, "kill"]);
+    assert(
+      won.calls.some(([, slot]) => slot === "ultimateA"),
+      "a Classic Ultimate is voiced",
+    );
+    const lost = fight([fighter(actor.id, "Arden", 1, 1, 10)], [fighter("enemy-0", "Boss", 50, 200, 100)]);
+    assert.deepEqual(lost.deaths, [{ op: "death", id: actor.id, killerId: "enemy-0" }]);
+    assert.deepEqual(lost.calls, [[actor.id, "death"]]);
+  });
+  await test("the battle screen starts preparation before the fight is played", async () => {
+    const warmed = [];
+    const host = { _combat: { allies: [actor] }, _forgeAudio: { _forgeCombatVoices: null } };
+    host._forgeAudio._forgeCombatVoices = { configure() {}, warm: (allies) => warmed.push(allies) };
+    forgeWarmCombatVoices(host);
+    assert.deepEqual(warmed, [[actor]]);
+    forgeWarmCombatVoices({ _combat: { allies: [actor] } });
+    forgeWarmCombatVoices({ _forgeAudio: host._forgeAudio, _combat: null });
+    assert.equal(warmed.length, 1);
+    const source = await readFile(new URL("../packages/gacha-forge/client.js", import.meta.url), "utf8");
+    assert.equal(
+      source.split('this._combatPhase="prebattle",this._autoStarting=r,forgeWarmCombatVoices(this)').length,
+      2,
+      "the loaded battle preview warms the team as the prebattle screen opens",
+    );
+  });
+  await test("Voice other characters prepares card-less units from the NPC pool; the server holds the same gate", async () => {
+    const bryn = { id: "world:unit:bryn", name: "Bryn", characterId: null, gender: "female" };
+    const run = { combat: { mode: "classic" }, audio: { combatVoices: true, otherVoices: true } };
+    const readUnit = async (_runId, unitId) =>
+      unitId === bryn.id ? { run, unit: { id: bryn.id, name: "Bryn", characterId: null } } : null;
+    const config = {
+      connectionId: "tts-selected",
+      connectionProfiles: {
+        "tts-selected": { voiceAssignments: [], npcDefaultMaleVoices: ["m1"], npcDefaultFemaleVoices: ["f1", "f2"] },
+      },
+    };
+    const s = await server({ run, readUnit });
+    const off = client(s, { config, mode: "classic" });
+    await off.controller.warm([bryn]);
+    assert.equal(off.synthesis + s.generations, 0, "the toggle is off by default");
+    const c = client(s, { config, mode: "classic", audio: { otherVoices: true } });
+    await c.controller.warm([bryn]);
+    assert.equal(c.synthesis, 4);
+    const pick = forgeStableVoice(["f1", "f2"], "Bryn");
+    assert.deepEqual(new Set(c.voicesUsed), new Set([pick]), "a female unit uses the female pool, stably by name");
+    await c.controller.play(bryn, "death");
+    assert.equal(c.played.length, 1);
+    const body = { runId: "world", unitId: bryn.id, voiceIdentity: "pool" };
+    assert.equal((await s.manager.prepare({ ...body, characterId: "card-x" })).ok, false);
+    run.audio.otherVoices = false;
+    assert.equal((await s.manager.prepare({ ...body, characterId: bryn.id })).error, "combat-voices-off");
+    run.audio.otherVoices = true;
+    assert.equal((await s.manager.prepare({ ...body, characterId: bryn.id })).ok, true);
+    const empty = client(s, {
+      config: { connectionId: "tts-selected", connectionProfiles: { "tts-selected": {} } },
+      audio: { otherVoices: true },
+      listVoices: async () => ["v1", "v2", "v3"],
+    });
+    await empty.controller.warm([bryn]);
+    assert.deepEqual(new Set(empty.voicesUsed), new Set([forgeStableVoice(["v1", "v2", "v3"], "Bryn")]));
+  });
+  await test("the persona speaks combat lines only in its own assigned voice", async () => {
+    const mari = { id: "world:unit:protagonist", name: "Mari", characterId: "persona-mari", isLeader: true };
+    const run = { protagonist: { personaId: "persona-mari" }, combat: {}, audio: { combatVoices: true } };
+    const readUnit = async (_runId, unitId) =>
+      unitId === mari.id ? { run, unit: { id: mari.id, name: "Mari", isProtagonist: true, characterId: null } } : null;
+    const assigned = {
+      connectionId: "tts-selected",
+      connectionProfiles: {
+        "tts-selected": {
+          voiceAssignments: [{ characterId: "persona-mari", voice: "persona-voice" }],
+          npcDefaultFemaleVoices: ["pool"],
+        },
+      },
+    };
+    const s = await server({ run, readUnit });
+    const c = client(s, { config: assigned, audio: { otherVoices: true } });
+    await c.controller.warm([mari]);
+    assert.equal(c.synthesis, 4);
+    assert.deepEqual(new Set(c.voicesUsed), new Set(["persona-voice"]));
+    const unvoiced = client(s, {
+      config: { ...assigned, connectionProfiles: { "tts-selected": { npcDefaultFemaleVoices: ["pool"] } } },
+      audio: { otherVoices: true },
+    });
+    await unvoiced.controller.warm([mari]);
+    await unvoiced.controller.play(mari, "death");
+    assert.equal(unvoiced.synthesis + unvoiced.played.length, 0, "a persona without a voice never borrows the pool");
+    const body = { runId: "world", unitId: mari.id, voiceIdentity: "persona" };
+    assert.equal((await s.manager.prepare({ ...body, characterId: mari.id })).ok, false, "never a unit-keyed pool");
+    run.protagonist.personaId = "";
+    assert.equal((await s.manager.prepare({ ...body, characterId: "persona-mari" })).ok, false);
+  });
+  await test("one free notice says when nobody in the team can be voiced", async () => {
+    const bryn = { id: "world:unit:bryn", name: "Bryn", characterId: null };
+    const s = await server();
+    const c = client(s);
+    await c.controller.warm([bryn, { ...actor, characterId: "unassigned" }]);
+    await c.controller.warm([bryn, { ...actor, characterId: "unassigned" }]);
+    assert.deepEqual(c.notices, ["audio.combatVoicesNone"]);
+    assert.equal(c.synthesis + s.generations + c.prompts, 0, "nothing is prepared or charged");
+    assert.equal(
+      c.stage.children.some((element) => !element.hidden),
+      false,
+      "no paid retry banner",
+    );
+    await c.controller.warm([actor]);
+    assert.deepEqual(c.notices, ["audio.combatVoicesNone"], "a voiced team gets no notice");
+    const none = client(s, {
+      config: { connectionId: "tts-selected", connectionProfiles: { "tts-selected": {} } },
+      audio: { otherVoices: true },
+      listVoices: async () => [],
+    });
+    await none.controller.warm([bryn]);
+    assert.deepEqual(none.notices, ["audio.combatVoicesNoVoice"]);
+    const muted = client(s, { audio: { muted: true } });
+    await muted.controller.warm([bryn]);
+    assert.deepEqual(muted.notices, [], "no notice while combat voices cannot play anyway");
+  });
+  await test("a failed settings or voice-list read is free: no paid failure, retry banner or false notice", async () => {
+    const bryn = { id: "world:unit:bryn", name: "Bryn", characterId: null };
+    const banner = (c) => c.stage.children.some((element) => !element.hidden);
+    const s = await server();
+    let broken = true;
+    const c = client(s, {
+      getConfig: async () => {
+        if (broken) throw new Error("fixture /api/tts/config 500");
+        return c.config;
+      },
+      audio: { otherVoices: true },
+    });
+    for (const mode of ["formation", "classic"]) {
+      c.host._run.combat.mode = mode;
+      await c.controller.warm([actor, bryn, { id: "world:unit:protagonist", name: "Mari", isLeader: true }]);
+      assert.equal(banner(c), false, `${mode}: nothing was requested, so there is no paid retry`);
+      assert.deepEqual(c.notices, []);
+      assert.equal(c.synthesis + s.generations + c.prompts, 0);
+    }
+    broken = false;
+    await c.controller.warm([actor]);
+    assert.equal(c.synthesis, 4, "the next warm reads the settings again");
+    let listed = 0;
+    const empty = client(s, {
+      config: { connectionId: "tts-selected", connectionProfiles: { "tts-selected": {} } },
+      audio: { otherVoices: true },
+      listVoices: async () => {
+        if (++listed === 1) throw new Error("fixture /api/tts/voices 502");
+        return [];
+      },
+    });
+    await empty.controller.warm([bryn]);
+    assert.deepEqual(empty.notices, [], "a voice-list error is not 'this connection offers no voice'");
+    assert.equal(banner(empty), false);
+    await empty.controller.warm([bryn]);
+    assert.deepEqual(empty.notices, ["audio.combatVoicesNoVoice"], "the team was not marked noticed by the error");
+  });
+  await test("turning Voice other characters off during preparation is not a paid failure", async () => {
+    const bryn = { id: "world:unit:bryn", name: "Bryn", characterId: null, gender: "male" };
+    const run = { combat: { mode: "formation" }, audio: { combatVoices: true, otherVoices: true } };
+    const readUnit = async (_runId, unitId) =>
+      unitId === bryn.id ? { run, unit: { id: bryn.id, name: "Bryn", characterId: null } } : null;
+    const config = {
+      connectionId: "tts-selected",
+      connectionProfiles: { "tts-selected": { npcDefaultMaleVoices: ["m1"] } },
+    };
+    const s = await server({ run, readUnit });
+    let calls = 0;
+    const c = client(s, {
+      config,
+      audio: { otherVoices: true },
+      generateAudio: async () => {
+        if (++calls === 2) {
+          run.audio.otherVoices = false;
+          c.audio.settings.otherVoices = false;
+          c.controller.configure();
+        }
+        return new Blob([wav], { type: "audio/wav" });
+      },
+    });
+    await c.controller.warm([bryn]);
+    assert.equal(c.synthesis, 2, "the clip already being made is saved, then the unit is no longer voiced");
+    await tick();
+    assert.equal(
+      c.stage.children.some((element) => !element.hidden),
+      false,
+      "no paid retry banner",
+    );
+    run.audio.otherVoices = true;
+    const broken = client(s, {
+      config,
+      audio: { otherVoices: true },
+      generateAudio: async () => {
+        throw new Error("fixture provider failure");
+      },
+    });
+    await broken.controller.warm([bryn]);
+    assert.equal(broken.stage.children[0]?.hidden, false, "a real provider failure shows the paid retry");
+    broken.audio.settings.otherVoices = false;
+    broken.controller.configure();
+    for (let index = 0; index < 5; index += 1) await tick();
+    assert.equal(broken.stage.children[0].hidden, true, "a unit that can no longer be voiced leaves the retry");
+    assert.equal(broken.prompts, 0);
+  });
+  await test("card units voiced from the pool stop all paid work when Voice other characters turns off mid-preparation", async () => {
+    const cards = ["a", "b", "c"].map((key) => ({
+      id: `world:unit:${key}`,
+      name: `Card ${key}`,
+      characterId: `card-${key}`,
+      gender: "female",
+    }));
+    const run = { combat: { mode: "formation" }, audio: { combatVoices: true, otherVoices: true } };
+    const readUnit = async (_runId, unitId) => {
+      const unit = cards.find((card) => card.id === unitId);
+      return unit ? { run, unit } : null;
+    };
+    // No assignment for any card: every voice comes from the NPC pool, which the server cannot see.
+    const config = {
+      connectionId: "tts-selected",
+      connectionProfiles: { "tts-selected": { npcDefaultFemaleVoices: ["f1"] } },
+    };
+    const started = deferred();
+    const gate = deferred();
+    let pending = 0;
+    const s = await server({
+      run,
+      readUnit,
+      generateLines: async () => {
+        if (++pending === 2) started.resolve();
+        return gate.promise;
+      },
+    });
+    const c = client(s, { config, audio: { otherVoices: true } });
+    const post = c.host._postJson;
+    const paths = [];
+    c.host._postJson = (path, body) => (paths.push(path.split("/").at(-1)), post(path, body));
+    const preparing = c.controller.warm(cards);
+    await started.promise;
+    assert.deepEqual(paths, ["prepare", "prepare"], "two cards prepare at a time");
+    run.audio.otherVoices = false;
+    c.audio.settings.otherVoices = false;
+    c.controller.configure();
+    gate.resolve(lines);
+    await preparing;
+    assert.equal(c.synthesis, 0, "no clip is generated once the pool voice is off");
+    assert.deepEqual(paths, ["prepare", "prepare"], "no reservation and no prepare for the queued card");
+    assert.equal(
+      c.stage.children.some((element) => !element.hidden),
+      false,
+      "turning the setting off is not a paid failure",
+    );
+
+    // A reservation held while muted is settled, never synthesized, when the pool voice is turned off meanwhile.
+    run.audio.otherVoices = true;
+    const held = client(s, { config, audio: { otherVoices: true } });
+    const heldPost = held.host._postJson;
+    const reserved = deferred();
+    const release = deferred();
+    const heldPaths = [];
+    held.host._postJson = async (path, body) => {
+      heldPaths.push(path.split("/").at(-1));
+      const result = await heldPost(path, body);
+      if (path.endsWith("/reserve")) {
+        reserved.resolve();
+        await release.promise;
+      }
+      return result;
+    };
+    const holding = held.controller.warm([cards[0]]);
+    await reserved.promise;
+    held.audio.settings.muted = true;
+    held.controller.configure();
+    release.resolve();
+    await tick();
+    run.audio.otherVoices = false;
+    held.audio.settings.otherVoices = false;
+    held.controller.configure();
+    held.audio.settings.muted = false;
+    held.controller.configure();
+    await holding;
+    assert.equal(held.synthesis, 0);
+    assert.deepEqual(heldPaths, ["prepare", "reserve", "fail"], "the unspent token is settled, nothing more");
+    assert.equal(
+      held.stage.children.some((element) => !element.hidden),
+      false,
+    );
+  });
+  await test("an unspent reservation released by Voice other characters is reserved and voiced once when it returns", async () => {
+    const card = { id: "world:unit:a", name: "Card a", characterId: "card-a", gender: "female" };
+    const run = { combat: { mode: "formation" }, audio: { combatVoices: true, otherVoices: true } };
+    const readUnit = async (_runId, unitId) => (unitId === card.id ? { run, unit: card } : null);
+    const config = {
+      connectionId: "tts-selected",
+      connectionProfiles: { "tts-selected": { npcDefaultFemaleVoices: ["f1"] } },
+    };
+    const s = await server({ run, readUnit });
+    const c = client(s, { config, audio: { otherVoices: true } });
+    const post = c.host._postJson;
+    const reserving = deferred();
+    const release = deferred();
+    const paths = [];
+    const spoken = [];
+    c.services.tts.ttsService.generateAudio = async (text) => {
+      spoken.push(text);
+      return new Blob([wav], { type: "audio/wav" });
+    };
+    c.host._postJson = async (path, body) => {
+      paths.push(path.split("/").at(-1) + (body.slot ? `:${body.slot}` : "") + (body.released ? ":released" : ""));
+      const result = await post(path, body);
+      if (paths.length === 2) {
+        reserving.resolve();
+        await release.promise;
+      }
+      return result;
+    };
+    const first = c.controller.warm([card]);
+    await reserving.promise;
+    run.audio.otherVoices = false;
+    c.audio.settings.otherVoices = false;
+    c.controller.configure();
+    release.resolve();
+    await first;
+    assert.deepEqual(paths, ["prepare", "reserve:death", "fail:death:released"]);
+    assert.equal(
+      (await s.manager.fail({ ...context, slot: "death", token: "x", released: "yes" })).error,
+      "bad-request",
+      "released is only ever the literal true",
+    );
+    run.audio.otherVoices = true;
+    c.audio.settings.otherVoices = true;
+    c.controller.configure();
+    paths.length = 0;
+    await c.controller.warm([card]);
+    for (let index = 0; index < 5; index += 1) await tick();
+    assert.equal(
+      c.stage.children.some((element) => !element.hidden),
+      false,
+      "never synthesized, so no paid retry banner",
+    );
+    assert.equal(c.prompts, 0);
+    assert.deepEqual(
+      paths.filter((path) => path.startsWith("reserve")),
+      ["reserve:death", "reserve:kill", "reserve:ultimateA", "reserve:ultimateB"],
+    );
+    assert.deepEqual(spoken, [lines.death, lines.kill, lines.ultimateA, lines.ultimateB], "each clip voiced once");
+    await c.controller.play(card, "death");
+    assert.equal(c.played.length, 1);
   });
 } finally {
   for (const controller of controllers) controller.dispose();
