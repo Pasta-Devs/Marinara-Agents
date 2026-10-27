@@ -858,6 +858,14 @@ for (const theme of ["dark", "light"]) {
       await expect(summary).toContainText("Front 2/3 · Back 3/3");
       await expect.poll(() => runtime.session().presets[0].board.front.filter(Boolean).length).toBe(2);
       expect(runtime.session().presets[0].board.back.filter(Boolean).length).toBe(3);
+      // Background work starting between the two taps keeps the picked unit, so the move still lands.
+      const { front, back } = runtime.session().presets[0].board;
+      await board.locator('[data-slot="front:1"]').click();
+      await forge.evaluate((node) => (node as any)._busyStart({ cost: "tokens", label: "Writing the next scene" }));
+      await expect(forge.locator("[data-busy]")).toContainText("Writing the next scene");
+      await board.locator('[data-slot="back:1"]').click();
+      await expect.poll(() => runtime.session().presets[0].board.back[1]).toBe(front[1]);
+      expect(runtime.session().presets[0].board.front[1]).toBe(back[1]);
     } finally {
       await runtime.close();
     }
