@@ -264,11 +264,13 @@ try {
   });
   f.session().progress["event-2"] = { normal: 9 };
   // Memory is summarized in the background since 1.24.9; let it settle so the snapshot sees only this grant.
-  for (let turn = 0; turn < 200; turn += 1) {
+  let settled = false;
+  for (let turn = 0; turn < 500 && !settled; turn += 1) {
     const memory = (await post("/story-memory/status", {})).body.memory;
-    if (!["pending", "stale"].includes(memory?.phase)) break;
-    await new Promise((resolve) => setImmediate(resolve));
+    settled = !["pending", "stale"].includes(memory?.phase);
+    if (!settled) await new Promise((resolve) => setTimeout(resolve, 10));
   }
+  assert.ok(settled, "story memory did not settle before the snapshot");
   f.faults.updateId = unitId;
   const beforeRollback = structuredClone(f.docs);
   const failedOutfit = await post("/story-event/complete", {
