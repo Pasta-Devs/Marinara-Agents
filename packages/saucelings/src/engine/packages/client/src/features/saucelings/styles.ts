@@ -878,7 +878,7 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
 .sl-ask { padding-top: 0.5rem; border-top: 1px solid var(--border, rgba(255,255,255,0.08)); }
 .sl-ask > summary { cursor: pointer; font-size: 0.8rem; }
 .sl-ask > .sl-care-row { border-top: 0; padding-top: 0.45rem; }
-/* Rename, Background and Tour in one menu under the stage bar's "⋯". */
+/* Rename, Background, Caretaker, Looks, New egg and Tour in one menu under the stage bar's "⋯". */
 .sl-menu { position: relative; flex-shrink: 0; }
 .sl-menu > summary { list-style: none; cursor: pointer; }
 .sl-menu > summary::-webkit-details-marker { display: none; }
@@ -921,9 +921,12 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
 .sl-about-row .sl-select { min-width: 0; max-width: 100%; }
 /* A caretaker's name has no break points to wrap on, so the words in these rows may break anywhere. */
 .sl-about-row, .sl-about-row > label { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
-.sl-about-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr)); gap: 0.75rem; margin-top: 0.25rem; }
-.sl-about-group { display: grid; align-content: start; gap: 0.5rem; min-width: 0; padding-top: 0.6rem; border-top: 1px solid var(--border, rgba(255,255,255,0.1)); }
-.sl-about-group > h3 { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.7; }
+/* Caretaker, Looks and New egg: a panel the "⋯" menu opens under the nook. */
+.sl-panel { display: grid; gap: 0.6rem; font-size: 0.8125rem; }
+.sl-panel:focus { outline: none; }
+.sl-panel > p { margin: 0; opacity: 0.85; }
+.sl-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.sl-panel-head > h3 { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.7; }
 .sl-unlocks { margin: 0 auto; max-width: 32rem; font-size: 0.8rem; text-align: left; }
 .sl-unlocks > summary { cursor: pointer; font-weight: 600; opacity: 0.85; }
 .sl-unlocks ul { display: grid; gap: 0.15rem; margin: 0.35rem 0 0; padding-left: 1.1rem; opacity: 0.85; }
@@ -992,7 +995,7 @@ html[data-marinara-effects-paused="true"] .sl-stage-blink,
   box-shadow: 0 10px 30px rgba(0,0,0,0.45);
 }
 .sl-tour-mari { width: 4.5rem; height: auto; flex-shrink: 0; }
-.sl-tour-text { display: grid; gap: 0.35rem; min-width: 0; flex: 1; }
+.sl-tour-text { display: grid; gap: 0.35rem; min-width: 0; flex: 1; overflow-wrap: anywhere; }
 .sl-tour-text p { margin: 0; font-size: 0.8rem; line-height: 1.45; opacity: 0.9; }
 .sl-tour-foot { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem; font-size: 0.8rem; }
 .sl-tour-dots { display: flex; gap: 0.25rem; margin-right: auto; }

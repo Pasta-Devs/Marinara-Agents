@@ -1,5 +1,11 @@
 # Saucelings release notes
 
+## 0.22.2 — 2026-10-27
+
+- The Nook's "⋯" button also holds Caretaker, Looks and New egg. Each opens its own panel under the Nook; close it with ✕ or Escape.
+- About only describes your sauceling: its look, sauce, traits and who found it.
+- The tour card wraps a long caretaker name instead of pushing its buttons off the screen.
+
 ## 0.22.1 — 2026-10-27
 
 - On the large Home widget, the caretaker no longer towers over the card: both figures are sized to the card's width.

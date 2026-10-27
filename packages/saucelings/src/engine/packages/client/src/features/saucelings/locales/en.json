@@ -88,7 +88,6 @@
   "saucelings.retire.confirm": "Retire",
   "saucelings.checkIn.button": "Check in with {{name}}",
   "saucelings.checkIn.pending": "{{name}} is writing…",
-  "saucelings.swap.button": "Swap for a new egg",
   "saucelings.swap.note": "{{name}} will move to the Menagerie, and the caretaker you pick brings a new egg.",
   "saucelings.swap.noteEgg": "The egg will move to the Menagerie, and the caretaker you pick brings a new one.",
   "saucelings.swap.confirm": "Swap",

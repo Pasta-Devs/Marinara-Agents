@@ -314,7 +314,7 @@ export function FormPainter({
 }
 
 /** Paints the nook sauceling's whole sheet again (every stage, in one picture), after asking, for when the picture
- *  came out wrong. It lives in About, out of the way, since it is rarely needed; the old forms stay until the new
+ *  came out wrong. It lives in the Looks panel, out of the way, since it is rarely needed; the old forms stay until the new
  *  ones are saved. */
 export function FormRepaint({
   state,
@@ -554,7 +554,7 @@ export function FigurePainter({
       });
       return { next, ...figure };
     },
-    // This runs even when About was closed while it painted.
+    // This runs even when the Caretaker panel was closed while it painted.
     onSuccess: saved,
   }).mutate;
   // The figure is loaded before the swap shows, so the stage does not stand empty while it comes.

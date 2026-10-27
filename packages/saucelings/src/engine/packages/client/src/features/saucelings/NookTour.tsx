@@ -38,7 +38,7 @@ const STEPS = [
     target: "caretaker",
     pose: "explaining",
   },
-  { title: "saucelings.tour.aboutTitle", body: "saucelings.tour.aboutBody", target: "about", pose: "point-down" },
+  { title: "saucelings.tour.aboutTitle", body: "saucelings.tour.aboutBody", target: "menu", pose: "point-up" },
   { title: "saucelings.tour.tabsTitle", body: "saucelings.tour.tabsBody", target: "tabs", pose: "point-up" },
 ] as const;
 const HATCHED_FIRST = { ...STEPS[0], title: "saucelings.tour.petTitle", body: "saucelings.tour.petBody" } as const;
