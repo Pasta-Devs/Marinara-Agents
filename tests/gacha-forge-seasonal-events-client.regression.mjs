@@ -234,3 +234,42 @@ test("a failed expiry refresh stays explicit retry even after its window edge wa
   );
   assert.equal(failed._forgeSeasonalState.events[0].live, true);
 });
+
+test("a closed event card names the chapter or Character Story to finish first", () => {
+  const card = (blockedBy) => {
+    const pane = { dataset: {}, classList: { add() {} }, innerHTML: "", querySelectorAll: () => [] };
+    const screen = {
+      _root: {
+        querySelector: (selector) =>
+          selector === '[data-screen="events"] .ev-pane'
+            ? pane
+            : selector === "[data-forge-seasonal-layout]"
+              ? {}
+              : null,
+        querySelectorAll: () => [],
+      },
+      _run: { runId: "review-world", story: { seasonalEvents: true } },
+      _forgeSeasonalRunId: "review-world",
+      _forgeSeasonalEnabled: true,
+      _forgeSeasonalState: {
+        events: [{ seq: 3, chapter: "event-3", endsAt: Date.now() + 86400000, live: true, canStart: false, blockedBy }],
+      },
+      _forgeSeasonalLoadedAt: Date.now(),
+      _hudView: "events",
+      _eventId: "story-events",
+      _eventSlots: [],
+      async _postJson() {
+        return { ok: true, events: [] };
+      },
+      _renderBrowser() {},
+    };
+    wireForgeSeasonalEvents(screen);
+    return pane.innerHTML;
+  };
+  assert.match(card({ kind: "chapter", chapter: 3 }), /Finish Chapter 3 before starting this event\./u);
+  assert.match(
+    card({ kind: "character-story", unitId: "u", name: "Arden & <Co>" }),
+    /Finish Arden &amp; &lt;Co&gt;&#39;s Character Story before starting this event\./u,
+  );
+  assert.match(card(undefined), /Finish the current main chapter or Character Story before starting this event\./u);
+});
