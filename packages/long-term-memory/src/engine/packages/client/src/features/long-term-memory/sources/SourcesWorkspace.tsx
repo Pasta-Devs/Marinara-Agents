@@ -1522,6 +1522,52 @@ export default function SourcesWorkspace({
     );
   };
 
+  // Notes whose source is gone. Keeping one needs no action; Remove goes through the delete workbench.
+  const outdatedNotes = (source === "lorebooks" ? lorebookPreviewData?.outdated : previewData?.outdated) ?? [];
+  const outdatedSourcesGroup = outdatedNotes.length ? (
+    <section className="space-y-2 rounded-md border border-[var(--border)] p-2" data-ltm-source-outdated>
+      <h3 className="text-xs font-semibold">
+        {localizeUi("ui.longTermMemory.sourcesworkspace.sourceGone", { value1: outdatedNotes.length })}
+      </h3>
+      <p className="text-xs text-[var(--muted-foreground)]">
+        {localizeUi("ui.longTermMemory.sourcesworkspace.sourceGoneHelp")}
+      </p>
+      <ul className="max-h-52 space-y-1 overflow-y-auto">
+        {outdatedNotes.map((note) => (
+          <li
+            key={note.noteId}
+            className="flex flex-wrap items-center gap-1"
+            data-ltm-source-outdated-note={note.noteId}
+          >
+            <span className="min-w-0 flex-1 break-words text-xs">{note.title}</span>
+            <Button
+              className="mari-editor-action--compact"
+              aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.openSourceMemoryValue1", {
+                value1: note.title,
+              })}
+              onClick={() => onOpenMemory?.(note.noteId)}
+            >
+              {localizeUi("ui.longTermMemory.sourcesworkspace.openSourceMemory")}
+            </Button>
+            <Button
+              className="mari-editor-action--compact"
+              aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.removeGoneSourceValue1", {
+                value1: note.title,
+              })}
+              onClick={(event) => {
+                openSourceOperation({ id: note.noteId, title: note.title, operation: "delete" }, event.currentTarget);
+                setWorkspacePane("workbench");
+              }}
+              data-ltm-source-action="remove-outdated"
+              data-ltm-source-note-id={note.noteId}
+            >
+              {localizeUi("ui.longTermMemory.sourcesworkspace.removeGoneSource")}
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  ) : null;
   const sourceOperationWorkbench = sourceOperation ? (
     <SourceOperationWorkbench
       key={`${sourceOperation.id}:${sourceOperation.operation ?? "copy"}`}
@@ -1963,6 +2009,7 @@ export default function SourcesWorkspace({
                         {localizeUi("ui.longTermMemory.sourcesworkspace.reloadList")}
                       </Button>
                     </div>
+                    {outdatedSourcesGroup}
                     <div
                       role="tablist"
                       aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.sourceStatus")}
@@ -2468,6 +2515,7 @@ export default function SourcesWorkspace({
                         {localizeUi("ui.longTermMemory.sourcesworkspace.reloadList")}
                       </Button>
                     </div>
+                    {outdatedSourcesGroup}
                     <div
                       role="tablist"
                       aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.sourceStatus")}
