@@ -91,6 +91,7 @@ export function MaintenancePanel({
       tone={messageState.tone}
       className={className}
       data-ltm-maintenance-result={area}
+      tabIndex={-1}
     />
   );
   // Running work and the parent's save lock keep focus (`aria-disabled`), so each handler returns early on `busy`.
@@ -135,6 +136,18 @@ export function MaintenancePanel({
     focusAfterReload.current = null;
     if (target.isConnected && document.activeElement === document.body) target.focus();
   }, [hidden, pending]);
+  // A finished run empties the selection, so Run selected maintenance turns natively disabled and drops focus
+  // to the page. Once the run settles, move focus to its result, unless the user has already moved it.
+  const repairResultBox = useRef<HTMLDivElement>(null);
+  const focusRepairResult = useRef(false);
+  useEffect(() => {
+    if (pending || !focusRepairResult.current) return;
+    focusRepairResult.current = false;
+    const active = document.activeElement;
+    if (!active || active === document.body || active.matches(":disabled")) {
+      repairResultBox.current?.querySelector<HTMLElement>("[data-ltm-maintenance-result]")?.focus();
+    }
+  }, [pending]);
 
   /** True when `key` was refetched at or after `since`; a failed or paused refetch leaves the old data in the cache. */
   const refetchedSince = (key: readonly unknown[], since: number) => {
@@ -179,6 +192,7 @@ export function MaintenancePanel({
           .join(" "),
       );
       setSelectedActions([]);
+      focusRepairResult.current = true;
       await invalidateLtmQueries(queryClient, [
         queryKeys.integrity,
         queryKeys.status,
@@ -711,7 +725,7 @@ export function MaintenancePanel({
         <Button primary disabled={!selectedActions.length} {...lock} onClick={() => void runRepair()}>
           {localizeUi("ui.longTermMemory.memorysettings.runSelectedMaintenance")}
         </Button>
-        {resultFor("repair")}
+        <div ref={repairResultBox}>{resultFor("repair")}</div>
       </div>
       <div className="border-t border-[var(--border)] pt-3">
         <div className="flex items-center gap-1">

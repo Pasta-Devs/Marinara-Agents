@@ -4467,6 +4467,22 @@ async function main() {
           0,
           "a new run replaces the previous result",
         );
+        // A finished run empties the selection, which turns Run selected maintenance natively disabled; focus moves
+        // to the result instead of dropping to the page.
+        await resetPage.route("**/api/long-term-memory/repair", (route) =>
+          route.fulfill({ json: { actions: [{ action: "rebuild_indexes", result: "completed", count: 6 }] } }),
+        );
+        await maintenancePanel.getByRole("checkbox", { name: "Reindex recall data", exact: true }).check();
+        await maintenancePanel.getByRole("button", { name: "Run selected maintenance" }).focus();
+        await resetPage.keyboard.press("Enter");
+        await maintenancePanel
+          .locator("[data-ltm-status]")
+          .filter({ hasText: /\(6\)$/u })
+          .waitFor();
+        await resetPage.waitForFunction(
+          () => document.activeElement?.matches('[data-ltm-maintenance-result="repair"]') ?? false,
+        );
+        assert.notEqual(await resetPage.evaluate(() => document.activeElement?.tagName), "BODY");
         // A running action keeps keyboard focus: while the repair request is held, Run selected maintenance and
         // Export backup stay focused or focusable, are aria-disabled instead of `disabled`, and a second Enter
         // sends no second request.
@@ -8599,6 +8615,58 @@ async function main() {
       );
       await restoredSourceResult.getByRole("button", { name: "Back to preview" }).click();
       assert.equal(await restoredSourceResult.count(), 0);
+
+      // While availability settings load, an imported row's Re-extract stays focusable, says why it waits, and a
+      // press sends nothing.
+      {
+        let releaseSettings = () => {};
+        const settingsGate = new Promise<void>((resolve) => {
+          releaseSettings = resolve;
+        });
+        const settingsRoute = "**/api/long-term-memory/settings";
+        await page.route(settingsRoute, async (route) => {
+          if (route.request().method() === "GET") await settingsGate;
+          // The reload at the end of the case can settle a held request first.
+          await route.continue().catch(() => {});
+        });
+        try {
+          await page.reload();
+          await page.evaluate((version) => {
+            const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+              capabilityProps?: unknown;
+            };
+            element.setAttribute("view", "detail");
+            element.capabilityProps = { agent: { name: "Long-Term Memory" }, package: { version } };
+            document.body.append(element);
+          }, packageManifest.version);
+          await page.locator('[data-ltm-surface="detail"]').waitFor();
+          await page.locator('[data-ltm-control="navigation"][data-ltm-destination="sources"]').first().click();
+          await page.locator('[data-ltm-source-tab="chats"]').click();
+          await page.locator('[data-ltm-source-status-filter="imported"]').click();
+          await page.locator('[data-ltm-source-open="chat-a:summary-desktop-reextract"]').click();
+          const waitingReextract = page.locator('[data-ltm-source-inspector-action="re-extract"]');
+          await waitingReextract.waitFor();
+          assert.equal(await waitingReextract.getAttribute("aria-disabled"), "true");
+          assert.equal(await waitingReextract.getAttribute("disabled"), null);
+          const waitingReasonId = await waitingReextract.getAttribute("aria-describedby");
+          assert.ok(waitingReasonId, "a waiting Re-extract points at the reason");
+          assert.match(await page.locator(`[id="${waitingReasonId}"]`).innerText(), /Loading availability settings/u);
+          await waitingReextract.focus();
+          assert.equal(await waitingReextract.evaluate((button) => button === document.activeElement), true);
+          const waitingWrites: string[] = [];
+          const recordWaitingWrite = (request: { method(): string; url(): string }) => {
+            if (request.method() !== "GET") waitingWrites.push(request.url());
+          };
+          page.on("request", recordWaitingWrite);
+          await page.keyboard.press("Enter");
+          await page.waitForTimeout(150);
+          page.off("request", recordWaitingWrite);
+          assert.deepEqual(waitingWrites, []);
+        } finally {
+          releaseSettings();
+          await page.unroute(settingsRoute);
+        }
+      }
 
       const mobileContext = await browser.newContext({
         ...devices["Pixel 7"],

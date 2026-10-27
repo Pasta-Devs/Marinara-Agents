@@ -664,7 +664,10 @@ assert.match(detail, /onSaveRequest=\{\(save\) =>/u);
 assert.match(detail, /navigationPrompt/u);
 assert.match(detail, /navigationResolveRef\.current\?\.\(false\)/u);
 assert.match(detail, /navigationSaveInFlightRef/u);
-assert.match(detail, /navigationBusyProps = navigationSaveInFlight\s+\? \(\{ "aria-disabled": true/u);
+assert.match(detail, /navigationBusyProps = lockedActionProps\(navigationSaveInFlight\)/u);
+// Detail locks go through the shared helper; no hand-built aria-disabled literal is left.
+assert.match(detail, /<Button \{\.\.\.lockedActionProps\(repairPending\)\}/u);
+assert.doesNotMatch(detail, /"aria-disabled": true/u);
 assert.match(detail, /\{\.\.\.navigationBusyProps\}/u);
 assert.match(detail, /finishNavigationPrompt\("save"\)/u);
 assert.match(detail, /aria-modal="true"/u);
@@ -790,14 +793,17 @@ assert.match(workspace, /\.\.\.\(contract\.modes\?\.length \? \{ modes: contract
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.retryUsesModes"], "Retries with {{modes}}");
 // Re-extract locks on any running source task, stays focusable and points at the lock reason.
 assert.match(workspace, /const reextractLocked = importRunning \|\| !availabilityReady;/u);
+assert.match(workspace, /const reextractActionProps = lockedActionProps\(reextractLocked, reextractReasonId\);/u);
+// While availability settings load, Re-extract points at the existing loading message instead of staying silent.
 assert.match(
   workspace,
-  /const reextractActionProps = lockedActionProps\(reextractLocked, importRunning \? importLockId : undefined\);/u,
+  /const reextractReasonId = importRunning \? importLockId : !availabilityReady \? availabilityWaitId : undefined;/u,
 );
+assert.match(workspace, /id=\{availabilityWaitId\}/u);
 assert.equal(workspace.match(/\{\.\.\.reextractActionProps\}/gu)?.length, 3);
 assert.doesNotMatch(workspace, /(?<!aria-)disabled=\{reextractDisabled\}/u);
 assert.equal(workspace.match(/disabled=\{reextractLocked\}/gu)?.length, 2);
-assert.equal(workspace.match(/lockReasonId=\{importRunning \? importLockId : undefined\}/gu)?.length, 2);
+assert.equal(workspace.match(/lockReasonId=\{reextractReasonId\}/gu)?.length, 2);
 assert.match(
   workspace,
   /const availabilityReady = settingsQuery\.isSuccess && effectiveAvailabilityModes\.length > 0/u,
