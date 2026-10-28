@@ -11,7 +11,10 @@ import {
   SLURP_POST_JOBS,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-jobs.ts";
 import { parseSlurpBeat } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-beat.ts";
-import { normalizeSlurpCanonAnchors } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-brief.ts";
+import {
+  mergeSlurpCanonAnchors,
+  normalizeSlurpCanonAnchors,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-brief.ts";
 
 const gym = { main: "fitness" as const, side: ["cosplay" as const] };
 
@@ -89,6 +92,11 @@ for (const main of ["music", "dance", "tech", "nerd", "outdoors", "cooking"] as 
   );
   assert.ok(jobs.every((job) => !job!.place && !["day-off", "night-out", "post-gym", "get-ready"].includes(job!.id)));
 }
+
+// Emptying the card keeps the fresh reading's niches.
+const fresh = normalizeSlurpCanonAnchors({ places: ["the gym"], niches: gym });
+const base = normalizeSlurpCanonAnchors({ places: ["the gym"], niches: gym });
+assert.deepEqual(mergeSlurpCanonAnchors(null, base, fresh)?.niches, gym);
 
 // No niche (an old cache): everyday jobs only.
 for (let sequence = 0; sequence < 50; sequence += 1)

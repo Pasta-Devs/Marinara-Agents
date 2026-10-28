@@ -119,7 +119,7 @@ function anchorsOrNull(anchors: SlurpCanonAnchors): SlurpCanonAnchors | null {
     anchors.runningJokes,
     anchors.essentials ?? [],
   ].every((list) => list.length === 0);
-  return empty ? null : anchors;
+  return empty && !anchors.niches ? null : anchors;
 }
 
 const NO_ANCHORS: SlurpCanonAnchors = {
@@ -179,7 +179,8 @@ export function mergeSlurpCanonAnchors(
     JSON.stringify(pick(now)) === JSON.stringify(pick(then)) ? pick(next) : pick(now);
   const routine = value((anchors) => anchors.routine);
   const essentials = text((anchors) => anchors.essentials);
-  const niches = value((anchors) => anchors.niches);
+  // The editor never edits niches, so the fresh reading's always win (an emptied card must not drop them).
+  const niches = next.niches;
   return anchorsOrNull({
     people: list(
       (anchors) => anchors.people,
