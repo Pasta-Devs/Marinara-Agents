@@ -109,6 +109,76 @@ for (const lane of ["main", "bond"])
       await f.close();
     }
   }
+{
+  // A played event's stored map is read past the world's generation queue (readOrGenerate, as main /chapter-plan):
+  // it answers while the next main chapter is still being written.
+  const f = await createChapterRuntime();
+  f.transport.maxContext = 262144;
+  let release, held;
+  try {
+    for (const [id] of f.docs)
+      if (id.startsWith(`${runId}:chapter:2`) || id.startsWith(`${runId}:beat:2:`)) f.docs.delete(id);
+    f.docs.get("index").data.runs[0].story.seasonalEvents = true;
+    f.session().progress = { 1: { normal: 10 } };
+    delete f.session().reading;
+    let started;
+    const providerStarted = new Promise((r) => {
+      started = r;
+    });
+    const gate = new Promise((r) => {
+      release = r;
+    });
+    const providers = [];
+    f.transport.reply = async (body) => {
+      const sys = String(body.messages?.[0]?.content || "");
+      if (sys.includes("substantial, self-contained seasonal story event"))
+        return JSON.stringify({
+          title: "Festival",
+          theme: "Known friends gather.",
+          premise: "A confined celebration.",
+          cast: [unitId],
+          special: "character",
+        });
+      if (sys.includes("Summarize only")) return JSON.stringify({ summary: "Existing canon." });
+      const kind = sys.includes("SEASONAL EVENT:") ? "event" : "ordinary";
+      providers.push(kind);
+      if (kind === "ordinary") {
+        started();
+        await gate;
+      }
+      return JSON.stringify(freshMainPlan);
+    };
+    assert((await f.post("/story-events", { runId })).body.ok);
+    const opened = await f.post("/story-event/plan", { runId, chapter: "event-1" });
+    assert.equal(opened.body.ok, true, JSON.stringify(opened));
+    f.session().progress["event-1"] = { normal: 10 };
+    held = f.post("/chapter-plan", { runId, chapter: 2 });
+    void held.catch(() => {});
+    let timer;
+    const within = (promise, label) =>
+      Promise.race([
+        promise,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(label)), 5000);
+        }),
+      ]).finally(() => clearTimeout(timer));
+    await within(providerStarted, "the next main chapter's planner did not reach the provider within 5 seconds");
+    const map = await within(
+      f.post("/story-event/plan", { runId, chapter: "event-1" }),
+      "a played event's stored map waited behind the main chapter being written",
+    );
+    assert.equal(map.body.ok, true, JSON.stringify(map));
+    assert.equal(map.body.cached, true);
+    assert.ok(map.body.cp?.normal > 0, JSON.stringify(map.body.cp));
+    assert.deepEqual(providers, ["event", "ordinary"], "the stored map spends no provider request");
+    release();
+    assert.equal((await held).body.ok, true);
+  } finally {
+    release?.();
+    await Promise.allSettled([held]);
+    await f.close();
+  }
+}
 console.info(
-  "Actual SDK shared story admission passed both orderings for main chapters and Character Stories: serialized, and never a denied paid generation.",
+  "Actual SDK shared story admission passed both orderings for main chapters and Character Stories: serialized, and never a denied paid generation. A played event's stored map answers while a main chapter is written.",
 );
