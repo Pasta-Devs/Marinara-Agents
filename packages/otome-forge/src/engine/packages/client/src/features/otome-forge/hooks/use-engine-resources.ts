@@ -26,7 +26,7 @@ type Row = Record<string, unknown>;
 const STALE_TIME = 30_000;
 // The catalog route caps a page at 100 rows; a library past 2,000 characters lists its first 2,000 by name.
 const CHARACTER_PAGE_SIZE = 100;
-const MAX_CHARACTERS = 2_000;
+export const MAX_CHARACTERS = 2_000;
 const DETAIL_CHARS = 140;
 const NON_TEXT_PROVIDERS = new Set(["image_generation", "video_generation", "audio_generation", "audio", "decision"]);
 const IMAGE_PROVIDER = "image_generation";
@@ -135,7 +135,12 @@ const NO_ITEMS: PickerItem[] = [];
 
 export function useCharacterOptions() {
   const query = useQuery({ queryKey: engineResourceKeys.characters, queryFn: fetchCharacters, staleTime: STALE_TIME });
-  return { items: query.data ?? NO_ITEMS, isLoading: query.isLoading, isError: query.isError };
+  return {
+    items: query.data ?? NO_ITEMS,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    isSuccess: query.isSuccess,
+  };
 }
 
 const toPersonaItems = (rows: Row[]) => rows.flatMap(toItem).sort(byName);
@@ -147,5 +152,10 @@ export function usePersonaOptions() {
     staleTime: STALE_TIME,
     select: toPersonaItems,
   });
-  return { items: query.data ?? NO_ITEMS, isLoading: query.isLoading, isError: query.isError };
+  return {
+    items: query.data ?? NO_ITEMS,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    isSuccess: query.isSuccess,
+  };
 }

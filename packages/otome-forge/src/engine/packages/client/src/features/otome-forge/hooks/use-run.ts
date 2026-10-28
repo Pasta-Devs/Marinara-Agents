@@ -16,12 +16,16 @@ const POLL_MS = 2_000;
 
 export const runQueryKey = (runKey: string) => ["otome-forge", "run", runKey] as const;
 
+/** GET /runs/:run, for useRun and for opening a story, which loads it before showing it. */
+export const fetchRunView = async (otome: ReturnType<typeof useOtomeApi>, runKey: string) =>
+  (await otome.get<{ view: RunView }>(`/runs/${encodeURIComponent(runKey)}`)).view;
+
 export function useRun(runKey: string | null) {
   const otome = useOtomeApi();
   return useQuery({
     queryKey: runQueryKey(runKey ?? ""),
     enabled: !!runKey,
-    queryFn: async () => (await otome.get<{ view: RunView }>(`/runs/${encodeURIComponent(runKey ?? "")}`)).view,
+    queryFn: () => fetchRunView(otome, runKey ?? ""),
     refetchInterval: (query) => (query.state.data && forgeIsWorking(query.state.data.forge) ? POLL_MS : false),
   });
 }

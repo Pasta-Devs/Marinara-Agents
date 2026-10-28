@@ -40,10 +40,18 @@ export function AgeGateDialog({ onDone }: AgeGateDialogProps) {
   return (
     <Dialog
       title={t("ui.otomeForge.gate.title")}
-      onClose={() => onDone(false)}
+      // While the confirmation is being saved it cannot be cancelled: the server would store it as given.
+      onClose={busy ? undefined : () => onDone(false)}
       actions={
         <>
-          <button type="button" className="of-button of-button--quiet of-glass" onClick={() => onDone(false)}>
+          <button
+            type="button"
+            className="of-button of-button--quiet of-glass"
+            aria-disabled={busy}
+            onClick={() => {
+              if (!busy) onDone(false);
+            }}
+          >
             {t("ui.otomeForge.gate.cancel")}
           </button>
           <button

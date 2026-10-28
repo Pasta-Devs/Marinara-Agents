@@ -69,6 +69,8 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
   useSampledAccents(run.data);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Where the last action was started, so its failure shows beside that control: the paint offer or the steps.
+  const [errorAt, setErrorAt] = useState<"offer" | "steps">("steps");
   // Prompt review: the paint steps still to show, and the prompt for the first one.
   const [reviewQueue, setReviewQueue] = useState<string[]>([]);
   const [reviewPrompt, setReviewPrompt] = useState<ImagePrompt | null>(null);
@@ -152,6 +154,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
   const reviewOpen = reviewQueue.length > 0;
   const startPainting = () => {
     if (!waiting.length || busy || reviewOpen) return;
+    setErrorAt("offer");
     if (reviewImagePromptsBeforeSend) reviewStep(waiting.map((step) => step.id));
     else void send("paint", "/forge/consent", { steps: waiting.map((step) => step.id) });
   };
@@ -159,6 +162,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
   // A paint's Retry is a paint like any other: with prompt review on, its prompt is shown first.
   const retry = (step: ForgeStep) => {
     if (busy || reviewOpen) return;
+    setErrorAt("steps");
     if (isPaint(step) && reviewImagePromptsBeforeSend) reviewStep([step.id]);
     else void send(step.id, "/forge/retry", { step: step.id });
   };
@@ -201,6 +205,13 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
   const reviewSubject = reviewing
     ? nameOfStep(steps.find((step) => step.id === reviewing) ?? { id: reviewing, state: "waiting-consent" })
     : "";
+
+  // Always in the page (a live region that appears with its message is often not read); filled only at `at`.
+  const errorAlert = (at: "offer" | "steps") => (
+    <div role="alert" className="of-live">
+      {error && errorAt === at ? <p className="of-notice of-notice--error">{error}</p> : null}
+    </div>
+  );
 
   // While forging, the steps lead; once the world is ready, painting and the cast lead and the steps follow.
   const stepsSection = (
@@ -249,9 +260,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
           );
         })}
       </ol>
-      <div role="alert" className="of-live">
-        {error ? <p className="of-notice of-notice--error">{error}</p> : null}
-      </div>
+      {errorAlert("steps")}
     </section>
   );
   // Looks wait for the player's tap; without an image connection the cast stays as initials, and the ready world says so.
@@ -296,6 +305,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
 
       {ready ? null : stepsSection}
       {paintOffer}
+      {errorAlert("offer")}
       {ready ? <CastList view={view} onOpenBible={onOpenBible} /> : null}
 
       {ready ? (

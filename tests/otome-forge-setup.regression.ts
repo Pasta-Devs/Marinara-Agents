@@ -14,9 +14,15 @@ import type {
   SetupInput,
   Unit,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
+import { ARCHETYPE_IDS } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/archetypes.ts";
 import { bibleProblem } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/bible.ts";
 import { defaultContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
 import { forgeIsWorking } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/forge.ts";
+import {
+  dropMissingPicks,
+  emptyDraft,
+  type DraftLi,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/screens/setup/draft.ts";
 import type {
   ImageClient,
   PortraitRequest,
@@ -298,6 +304,14 @@ test("bible checks: adults only, no school or student role, a stage-4 secret; we
     assert.match(String(checkBible(bible({ role }))), /school or student role/, role);
   }
   assert.equal(typeof checkBible(bible({ role: "Harbour master's clerk" })), "object");
+  // Mask tells count as the editor saves them: blank ones are not tells.
+  assert.match(String(checkBible(bible({ mask: { presents: "", tells: ["", "  ", "\t"] } }))), /mask\.tells/);
+  assert.match(String(checkBible(bible({ mask: { presents: "", tells: ["a", "", "b"] } }))), /mask\.tells/);
+  assert.deepEqual(
+    (checkBible(bible({ mask: { presents: "p", tells: [" a ", "", "b", "c"] } })) as Bible).mask,
+    { presents: "p", tells: ["a", "b", "c"] },
+    "a bible that passes keeps its tells trimmed and without blanks",
+  );
   assert.match(
     String(checkBible(bible({ secrets: [{ id: "a", truth: "t", tells: [], revealAt: { stage: 2 } }] }))),
     /revealAt\.stage 4/,
@@ -934,4 +948,34 @@ test("the bible editor checks the server's rules before it saves, and each one i
     const parsed = BibleSchema.safeParse(candidate);
     assert.ok(!parsed.success || typeof checkBible(parsed.data) === "string", `the server refuses ${problem} too`);
   }
+});
+
+test("a kept draft drops a persona or card the Engine no longer has, and keeps everything while a list is unknown", () => {
+  const pronouns = { preset: "he" as const, custom: { subject: "", object: "", possessive: "" } };
+  const li = (source: DraftLi["source"], id: string): DraftLi => ({
+    key: `k-${id}`,
+    source,
+    cardId: source === "card" ? id : "",
+    archetype: source === "archetype" ? ARCHETYPE_IDS[0] : "",
+    name: id,
+    avatarUrl: null,
+    notes: "",
+    pronouns,
+  });
+  const draft = {
+    ...emptyDraft(),
+    protagonist: { ...emptyDraft().protagonist, personaId: "persona-gone", name: "Ava" },
+    lis: [li("card", "card-kai"), li("card", "card-gone"), li("archetype", "Sol")],
+  };
+  const repaired = dropMissingPicks(draft, [{ id: "persona-ava" }], [{ id: "card-kai" }]);
+  assert.equal(repaired.protagonist.personaId, "", "the protagonist step asks for a persona again");
+  assert.equal(repaired.protagonist.name, "");
+  assert.deepEqual(
+    repaired.lis.map((item) => item.key),
+    ["k-card-kai", "k-Sol"],
+    "only the deleted card goes; archetypes stay",
+  );
+  assert.equal(dropMissingPicks(draft, null, null), draft, "lists still loading, failed or cut off change nothing");
+  const kept = dropMissingPicks(draft, [{ id: "persona-gone" }], [{ id: "card-kai" }, { id: "card-gone" }]);
+  assert.equal(kept, draft, "nothing missing returns the same draft, so the wizard does not re-render");
 });

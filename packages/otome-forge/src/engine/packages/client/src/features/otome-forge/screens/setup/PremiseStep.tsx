@@ -2,7 +2,7 @@
 // Otome Forge setup, step 1: the premise, the story's language and an optional title. "Surprise me" asks the model
 // for a premise (POST /premise/suggest) and can be undone.
 // ──────────────────────────────────────────────
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Dices, Undo2 } from "lucide-react";
 import { useOtomeApi } from "../../api";
@@ -23,6 +23,18 @@ export function PremiseStep({ draft, update, connectionId }: PremiseStepProps) {
   const [error, setError] = useState<string | null>(null);
   const [previous, setPrevious] = useState<string | null>(null);
   const id = useId();
+  // The premise as it is now, or null once this step has closed (the player moved on, or Start over remounted it), so a
+  // suggestion that arrives late never replaces what the player wrote meanwhile.
+  const livePremise = useRef<string | null>(draft.premise);
+  useEffect(() => {
+    livePremise.current = draft.premise;
+  }, [draft.premise]);
+  useEffect(
+    () => () => {
+      livePremise.current = null;
+    },
+    [],
+  );
 
   const surprise = async () => {
     if (busy) return;
@@ -30,6 +42,7 @@ export function PremiseStep({ draft, update, connectionId }: PremiseStepProps) {
       setError(t("ui.otomeForge.errors.noConnection"));
       return;
     }
+    const before = draft.premise;
     setBusy(true);
     setError(null);
     try {
@@ -37,7 +50,8 @@ export function PremiseStep({ draft, update, connectionId }: PremiseStepProps) {
         language: draft.language.trim() || "English",
         connectionId,
       });
-      setPrevious(draft.premise);
+      if (livePremise.current !== before) return;
+      setPrevious(before);
       update((current) => ({ ...current, premise: premise.slice(0, PREMISE_MAX) }));
     } catch (failure) {
       setError(otome.errorMessage(failure));

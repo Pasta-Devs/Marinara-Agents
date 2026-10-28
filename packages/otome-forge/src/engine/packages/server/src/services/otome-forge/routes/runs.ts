@@ -229,12 +229,23 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
     handle(async (request) => {
       parseBody(NoFields, request.body);
       const index = await store.mutateDoc(INDEX_TARGET, normalizeIndex, (current) => ({ ...current, ageGate: null }));
+      // A world that cannot be written never keeps the ones after it at the gated level; the request still fails, so
+      // the player sees it and can revoke again (which lowers every world again).
+      const failed: string[] = [];
       for (const run of index.runs) {
-        await store.updateDoc(runDocTarget("world", worldId(runIdOf(run.runKey))), normalizeWorld, (world) => ({
-          ...world,
-          content: enforceContent(world.content, false),
-          images: { ...world.images, rating: DEFAULT_IMAGE_RATING },
-        }));
+        try {
+          await store.updateDoc(runDocTarget("world", worldId(runIdOf(run.runKey))), normalizeWorld, (world) => ({
+            ...world,
+            content: enforceContent(world.content, false),
+            images: { ...world.images, rating: DEFAULT_IMAGE_RATING },
+          }));
+        } catch (error) {
+          runtime.logger.error(error, "Otome Forge could not lower %s after the 18+ gate was revoked", run.runKey);
+          failed.push(run.runKey);
+        }
+      }
+      if (failed.length) {
+        throw new OtomeForgeError(500, `The 18+ gate was revoked, but ${failed.length} world(s) were not lowered.`);
       }
       return { ageGate: null };
     }),

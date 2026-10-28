@@ -8,13 +8,20 @@ import { useTranslation } from "react-i18next";
 import { Check, ChevronLeft, ChevronRight, RotateCcw, Sparkles } from "lucide-react";
 import { otomeErrorCode, useOtomeApi } from "../../api";
 import { Dialog } from "../../components/Dialog";
-import { defaultTextConnectionId, useConnections } from "../../hooks/use-engine-resources";
+import {
+  MAX_CHARACTERS,
+  defaultTextConnectionId,
+  useCharacterOptions,
+  useConnections,
+  usePersonaOptions,
+} from "../../hooks/use-engine-resources";
 import type { RunView } from "../../shared/api-types";
 import { CastStep } from "./CastStep";
 import { ConnectionsStep } from "./ConnectionsStep";
 import { ContentStep } from "./ContentStep";
 import {
   clearDraft,
+  dropMissingPicks,
   emptyDraft,
   isBlankDraft,
   loadDraft,
@@ -63,6 +70,9 @@ export function SetupWizard({ onCreated }: SetupWizardProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  // Bumped by Start over, so the premise step starts again: its Undo and any pending "Surprise me" belong to the old
+  // draft.
+  const [resets, setResets] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const moved = useRef(false);
@@ -104,6 +114,19 @@ export function SetupWizard({ onCreated }: SetupWizardProps) {
       };
     });
   }, [connectionsFailed, connectionsLoading, imageConnections, textConnections]);
+
+  // A persona or card deleted from the Engine since the draft was kept is dropped, so its step asks again instead of
+  // the server refusing the world at the end. Only a list that loaded counts: one still loading, paused offline,
+  // failed, or cut off at its cap changes nothing.
+  const personas = usePersonaOptions();
+  const characters = useCharacterOptions();
+  const personasKnown = personas.isSuccess;
+  const cardsKnown = characters.isSuccess && characters.items.length < MAX_CHARACTERS;
+  useEffect(() => {
+    setDraft((current) =>
+      dropMissingPicks(current, personasKnown ? personas.items : null, cardsKnown ? characters.items : null),
+    );
+  }, [cardsKnown, characters.items, personas.items, personasKnown]);
 
   // A step the player moved to starts at its heading, announced and at the top.
   useEffect(() => {
@@ -172,6 +195,7 @@ export function SetupWizard({ onCreated }: SetupWizardProps) {
     setConfirmReset(false);
     setAttempted(false);
     setError(null);
+    setResets((count) => count + 1);
     setDraft({
       ...emptyDraft(),
       connections: { ...emptyDraft().connections, narration: defaultTextConnectionId(textConnections) },
@@ -181,7 +205,7 @@ export function SetupWizard({ onCreated }: SetupWizardProps) {
   const surpriseConnection = draft.connections.structured || draft.connections.narration;
   const body =
     draft.step === "premise" ? (
-      <PremiseStep draft={draft} update={update} connectionId={surpriseConnection} />
+      <PremiseStep key={resets} draft={draft} update={update} connectionId={surpriseConnection} />
     ) : draft.step === "protagonist" ? (
       <ProtagonistStep draft={draft} update={update} />
     ) : draft.step === "cast" ? (

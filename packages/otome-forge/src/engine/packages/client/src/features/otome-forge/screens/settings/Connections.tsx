@@ -39,6 +39,14 @@ function StoryConnections({ run, settings }: { run: RunView; settings: SaveSetti
       </p>
     );
   }
+  // A failed list is not an empty one: the player is not told to add a connection they already have.
+  if (connections.isError && connections.text.length === 0) {
+    return (
+      <p className="of-notice of-notice--error" role="alert">
+        {t("ui.otomeForge.setup.connectionsFailed")}
+      </p>
+    );
+  }
   return (
     <>
       <ConnectionControls value={form} connections={connections.text} onChange={setForm} />

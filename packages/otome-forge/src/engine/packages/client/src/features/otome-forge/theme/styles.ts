@@ -389,8 +389,9 @@ ${R} .of-input {
 ${R} .of-input::placeholder { color: var(--of-text-faint); }
 ${R} .of-input:hover { border-color: var(--of-border-strong); }
 ${R} .of-input:focus { outline: none; }
+/* background-color, not the shorthand, which would reset the arrow .of-select draws with background-image. */
 ${R} .of-input:focus-visible {
-  border-color: var(--of-focus); background: var(--of-input-bg-focus);
+  border-color: var(--of-focus); background-color: var(--of-input-bg-focus);
   box-shadow: 0 0 0 3px var(--of-glow-soft), inset 0 1px 2px rgb(0 0 0 / 0.08);
 }
 ${R} .of-input:disabled { opacity: 0.6; }

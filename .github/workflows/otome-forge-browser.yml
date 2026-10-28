@@ -57,6 +57,11 @@ jobs:
       - name: Install Engine dependencies
         run: pnpm --dir engine install --frozen-lockfile
 
+      # The package server types its runtime host from @marinara-engine/shared, and the real-server visit loads the
+      # Engine server; both read the built shared package (dist/ is not committed), as the LTM and Noodle suites do.
+      - name: Build Engine shared package
+        run: pnpm --dir engine --filter @marinara-engine/shared build
+
       # The strict run checks the package against the Engine's own dependency types, so it needs this Engine checkout;
       # Pull Request Checks has none and runs only the name check.
       - name: Typecheck Otome Forge strictly

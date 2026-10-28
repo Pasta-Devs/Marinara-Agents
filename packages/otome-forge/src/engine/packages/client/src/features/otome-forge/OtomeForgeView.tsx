@@ -11,7 +11,7 @@ import { Stage } from "./components/Stage";
 import { TopBar } from "./components/TopBar";
 import { INDEX_QUERY_KEY, useOtomeIndex } from "./hooks/use-index";
 import { useLook, type LookPreference } from "./hooks/use-look";
-import { runQueryKey, useRun } from "./hooks/use-run";
+import { fetchRunView, runQueryKey, useRun } from "./hooks/use-run";
 import { accentOf } from "./lib/accent";
 import { OtomePropsContext, readOtomeProps } from "./props";
 import { BibleView } from "./screens/BibleView";
@@ -128,6 +128,13 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     setOpenError(null);
     try {
       await activate(runKey);
+      // Loaded again here, so a story whose last load failed opens, or says why it cannot, instead of leaving the
+      // picker as it was (the active story's query would not run again by itself).
+      await queryClient.fetchQuery({
+        queryKey: runQueryKey(runKey),
+        queryFn: () => fetchRunView(otome, runKey),
+        staleTime: 0,
+      });
       navigated.current = true;
       setChosen(null);
     } catch (failure) {

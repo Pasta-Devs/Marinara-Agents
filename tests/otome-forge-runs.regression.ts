@@ -437,6 +437,34 @@ test("revoking the gate drops every world to SFW, Angst at most and SFW images; 
   assert.equal(language.body.world.images.rating, "sfw");
 });
 
+test("a world that cannot be lowered on revoke never stops the rest; the revoke fails and lowers it when repeated", async () => {
+  const { call, world, fake, logs } = await setup();
+  await call("POST", "/age-gate", { body: { confirm: true } });
+  const content = (await world())!.content;
+  for (const runKey of [RUN_KEY, OTHER_KEY]) {
+    await call("POST", "/runs/:run/settings", {
+      params: { run: runKey },
+      body: { content: { ...content, heat: "explicit" }, images: { rating: "suggestive" } },
+    });
+  }
+  // The first world in the index loses every write attempt.
+  for (let attempt = 0; attempt < 4; attempt += 1) fake.interfere(worldId(runIdOf(RUN_KEY)));
+  const failed = await call("POST", "/age-gate/revoke");
+  assert.equal(failed.status, 500, "the player is told, so they can revoke again");
+  assert.equal((await world(OTHER_KEY))!.content.heat, "sfw", "the world after the failed one is still lowered");
+  assert.equal((await world(OTHER_KEY))!.images.rating, "sfw");
+  assert.equal((await world(RUN_KEY))!.content.heat, "explicit");
+  assert.ok(
+    logs.some((entry) => entry.level === "error" && entry.args.includes(RUN_KEY)),
+    "the failed run is logged",
+  );
+
+  const again = await call("POST", "/age-gate/revoke");
+  assert.equal(again.status, 200);
+  assert.equal((await world(RUN_KEY))!.content.heat, "sfw");
+  assert.equal((await world(RUN_KEY))!.images.rating, "sfw");
+});
+
 test("activate marks the run played and active; an unknown run is a 404", async () => {
   const { call, store } = await setup();
   const activated = await call("POST", "/runs/:run/activate", { params: { run: OTHER_KEY } });

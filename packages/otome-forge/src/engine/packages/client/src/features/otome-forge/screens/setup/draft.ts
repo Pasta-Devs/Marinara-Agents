@@ -268,6 +268,29 @@ export function hasDraft(): boolean {
   }
 }
 
+/**
+ * The draft without the persona or card love interests the Engine no longer has (deleted since the draft was kept), so
+ * their steps ask again. A list that is null (loading, failed, or cut off) changes nothing; nothing missing returns the
+ * same draft.
+ */
+export function dropMissingPicks(
+  draft: SetupDraft,
+  personas: readonly { id: string }[] | null,
+  cards: readonly { id: string }[] | null,
+): SetupDraft {
+  const { personaId } = draft.protagonist;
+  const personaGone = !!personas && !!personaId && !personas.some((persona) => persona.id === personaId);
+  const lis = cards
+    ? draft.lis.filter((li) => li.source !== "card" || cards.some((card) => card.id === li.cardId))
+    : draft.lis;
+  if (!personaGone && lis.length === draft.lis.length) return draft;
+  return {
+    ...draft,
+    protagonist: personaGone ? { ...draft.protagonist, personaId: "", name: "" } : draft.protagonist,
+    lis,
+  };
+}
+
 // ── Checks and the request ──
 
 /** The chosen pronouns, or null while none are chosen or a custom set is incomplete. */

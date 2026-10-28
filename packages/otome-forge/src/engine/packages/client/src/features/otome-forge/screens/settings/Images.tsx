@@ -35,6 +35,10 @@ function StoryImages({ run, settings }: { run: RunView; settings: SaveSettings }
           <p className="of-hint" role="status">
             {t("ui.otomeForge.setup.loadingConnections")}
           </p>
+        ) : connections.isError && connections.image.length === 0 ? (
+          <p className="of-notice of-notice--error" role="alert">
+            {t("ui.otomeForge.setup.connectionsFailed")}
+          </p>
         ) : (
           <ImageControls
             value={form}
