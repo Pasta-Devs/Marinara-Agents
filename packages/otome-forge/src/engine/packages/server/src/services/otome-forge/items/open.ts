@@ -23,7 +23,7 @@ import { addOutfit, itemArtView, queueItemArt, type ItemPaintOptions } from "../
 import { updateIfChanged } from "../art/paint.js";
 import { OtomeForgeError, type RouteDeps } from "../http.js";
 import { itemId, runDocTarget, stateId } from "../ids.js";
-import { STATE_LIMITS, keepNewest, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
+import { keepTimeline, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeItem } from "../schemas/wish.js";
 import type { OtomeStore } from "../store.js";
 import { cancellable } from "../story/beats.js";
@@ -108,9 +108,7 @@ export function withCoupleTimeline(state: RunState, items: readonly Item[], at: 
       text: [row.his.look?.name, row.hers.look?.name].filter(Boolean).join(" · ") || row.hers.title,
       ref: coupleRef(row),
     }));
-  return entries.length
-    ? { ...state, timeline: keepNewest([...state.timeline, ...entries], STATE_LIMITS.timeline) }
-    : state;
+  return entries.length ? { ...state, timeline: keepTimeline([...state.timeline, ...entries]) } : state;
 }
 
 /** Dates every couple set now complete that has no timeline entry yet; writes nothing when there is none. */

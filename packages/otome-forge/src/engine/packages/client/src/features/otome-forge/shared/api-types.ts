@@ -85,6 +85,8 @@ export interface ImageSettings {
   expressions: boolean;
   expressionsSince?: string;
   styleProfileId?: string;
+  /** The player's own words for how every picture looks (art style, medium); they lead each image prompt. */
+  style?: string;
 }
 
 export type ForgeStepState = "pending" | "running" | "done" | "failed" | "waiting-consent";
@@ -1030,6 +1032,8 @@ export interface RunLiView {
   voiceGender: Unit["voiceGender"];
   accent: string;
   portrait?: string;
+  /** His look's paint record (the forge screen shows a failed paint's reason in debug mode). */
+  art?: Paint;
   level: number;
   stage: number;
   /** M2b: his painted faces for the current look, once the whole set is ready and expressions are on. */
@@ -1060,14 +1064,14 @@ export interface SetupInput {
   protagonist: { personaId: string; pronouns: Pronouns; traits: string[]; goal: string };
   lis: SetupLi[];
   content: ContentSettings;
-  images: Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions">;
+  images: Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "style">;
   connections: Connections;
 }
 
 /** POST /runs/:run/settings. Raising a gated setting needs the 18+ gate; lowering one never does. */
 export interface SettingsInput {
   content?: ContentSettings;
-  images?: Partial<Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "styleProfileId">>;
+  images?: Partial<Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "styleProfileId" | "style">>;
   connections?: Connections;
   language?: string;
 }

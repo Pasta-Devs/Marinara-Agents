@@ -763,6 +763,8 @@ test("Otome Forge phone: a thread with typing, his sticker, suggestions, her sti
   await expect(root.locator(".of-typing")).toHaveCount(0);
   await root.getByRole("button", { name: "Stickers" }).click();
   await root.getByRole("button", { name: "Send the Flustered sticker" }).click();
+  // The pressed sticker leaves with its panel: focus goes on to the message box, never to the page.
+  await expect(box).toBeFocused();
   await expect.poll(() => posts(stub, "/send").length).toBe(3);
   expect(posts(stub, "/send")[2]!.body).toMatchObject({ text: "", sticker: "flustered" });
   await expect(log.getByRole("img", { name: "Sticker: Flustered" })).toBeVisible();

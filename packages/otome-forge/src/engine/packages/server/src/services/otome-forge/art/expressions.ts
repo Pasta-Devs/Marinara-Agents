@@ -22,7 +22,7 @@ import { wornLookUrl } from "../schemas/common.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { queueScenePaints, releaseBeatArt } from "./cg.js";
-import { galleryRef, type GeneratedImage } from "./image-client.js";
+import { galleryRef, worldStyle, type GeneratedImage } from "./image-client.js";
 import { imagesOf, paintSlot, updateIfChanged, type ArtDeps } from "./paint.js";
 import type { PaintOptions } from "./places.js";
 import { LOOK_SIZE, expressionPrompt } from "./prompts.js";
@@ -88,7 +88,7 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
       async generateExpression(request: Record<string, unknown>) {
         const world = await store.readDoc(worldId(runId), normalizeWorld);
         if (!world) throw new Error("the story was deleted");
-        const style = await images.styleProfile(world.images.styleProfileId);
+        const style = await worldStyle(images, world.images);
         const unit = normalizeUnit(request.unit);
         const { prompt, negativePrompt } = expressionPrompt({
           unit,

@@ -3,7 +3,7 @@
 // the last message (or "typing…" while his reply is being written) and how many are unread. Every love interest has
 // a row, written to or not.
 // ──────────────────────────────────────────────
-import { type CSSProperties } from "react";
+import { type CSSProperties, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Heart, RotateCcw, Smartphone } from "lucide-react";
@@ -36,9 +36,10 @@ interface ThreadListProps {
   view: RunView;
   onOpen: (li: LiId) => void;
   rowRef: (li: LiId, element: HTMLButtonElement | null) => void;
+  headingRef?: RefObject<HTMLHeadingElement | null>;
 }
 
-export function ThreadList({ runKey, view, onOpen, rowRef }: ThreadListProps) {
+export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadListProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const { localization, timeZone } = useOtomeProps();
@@ -74,7 +75,7 @@ export function ThreadList({ runKey, view, onOpen, rowRef }: ThreadListProps) {
         <div className="of-emblem of-glass" aria-hidden="true">
           <Smartphone size={30} strokeWidth={1.6} />
         </div>
-        <h1 className="of-title" tabIndex={-1}>
+        <h1 ref={headingRef} className="of-title" tabIndex={-1}>
           {t("ui.otomeForge.common.screenPhone")}
         </h1>
         <p className="of-hand">{t("ui.otomeForge.phone.note")}</p>

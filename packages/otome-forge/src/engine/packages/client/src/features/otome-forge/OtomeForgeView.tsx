@@ -118,14 +118,17 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     setChosen(next);
   };
 
+  const loading = (
+    <div className="of-center" role="status">
+      <Heart className="of-pulse" size={30} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
+      <p className="of-body">{t("ui.otomeForge.common.loading")}</p>
+    </div>
+  );
   if (waiting) {
     return (
       <>
         <TopBar />
-        <div className="of-center" role="status">
-          <Heart className="of-pulse" size={30} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
-          <p className="of-body">{t("ui.otomeForge.common.loading")}</p>
-        </div>
+        {loading}
       </>
     );
   }
@@ -324,8 +327,11 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
       />
     ) : screen === "claw" && activeRun && view && datesOf ? (
       <ClawMachine runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
+    ) : activeRun && run.isPending ? (
+      // A screen of the story whose view is still on its way (the active story changed beneath it).
+      loading
     ) : (
-      <Placeholder screen={screen} />
+      <Placeholder screen={screen} onStories={() => go("picker")} />
     );
 
   return (
