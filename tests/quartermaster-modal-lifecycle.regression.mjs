@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -249,7 +249,9 @@ await test("generated images use their own upload result and cannot close a late
         const uploadStarted = new Promise((resolve) => {
           startedUpload = resolve;
         });
-        const upload = () => {
+        const uploadArgs = [];
+        const upload = (...args) => {
+          uploadArgs.push(args);
           startedUpload();
           return new Promise((resolve, reject) => {
             settleUpload = () => (succeeds ? resolve({}) : reject(new Error("Upload failed")));
@@ -261,6 +263,8 @@ await test("generated images use their own upload result and cannot close a late
         QM.uploadItemImage = QM.uploadOutfitPortrait = upload;
         const pending = dock._submitImageGenGenerate();
         await uploadStarted;
+        // A generated item image is saved as "generated", for its label in the dock.
+        if (kind === "item") assert.equal(uploadArgs[0].at(-1), "generated");
         if (change === "reopen") dock._closeImageGenModal();
         if (change === "chat") QM.state.chatId = "chat-b";
         const token = dock._imageGenSessionToken;
@@ -355,7 +359,7 @@ await test("image deletion uses its own result during concurrent mutations", asy
   for (const succeeds of [false, true]) {
     const forgotten = [];
     const api = {
-      _missingItemImageIds: new Set(),
+      _missingItemImageIds: new Set(["item-a"]),
       forgetImage: (url) => forgotten.push(url),
       itemImageUrl: (_chatId, _ownerId, id) => `item:${id}`,
     };
@@ -366,7 +370,9 @@ await test("image deletion uses its own result during concurrent mutations", asy
       api.state.deleteItemImage("item-a"),
       api.state._mutate(succeeds ? Promise.reject(new Error("Other request failed")) : Promise.resolve({})),
     ]);
-    assert.equal(api._missingItemImageIds.has("item-a"), succeeds);
+    // Another name match may show once the file is gone, so a successful
+    // delete re-checks the item instead of marking it as having no image.
+    assert.equal(api._missingItemImageIds.has("item-a"), !succeeds);
     assert.deepEqual(
       forgotten,
       succeeds ? ["item:item-a"] : [],
@@ -649,12 +655,16 @@ await test("a refused Admin Secret explains how to fix it on this device", async
   );
 });
 
-await test("gated images load with the Admin Secret and say whether a failure is worth retrying", async () => {
+await test("our images load through the cache, with the Admin Secret when saved, and say whether a failure is worth retrying", async () => {
+  // Without a secret too: only fetch can tell a real "no image" (404) from a
+  // dropped connection, which a plain <img src> reported the same way (#1697).
   const plain = loadApi();
   const plainImg = imageElement();
   plain.QM.setImageSrc(plainImg, itemUrl);
-  assert.equal(plainImg.src, itemUrl, "no saved secret: plain src, as before");
-  assert.equal(plain.calls.length, 0);
+  await flush();
+  assert.equal(plain.calls.length, 1);
+  assert.equal(plain.calls[0].init.headers["X-Admin-Secret"], undefined);
+  assert.equal(plainImg.src, "blob:1", "no saved secret: loads through the cache too");
 
   const loaded = loadApi({ secret: "s3cret" });
   const loadedImg = imageElement();
@@ -674,14 +684,32 @@ await test("gated images load with the Admin Secret and say whether a failure is
     [() => ({ ok: false, status: 500, body: {} }), true],
     [() => Promise.reject(new Error("offline")), true],
   ];
-  for (const [respond, retryable] of cases) {
-    const failing = loadApi({ secret: "s3cret", respond });
-    const img = imageElement();
-    failing.QM.setImageSrc(img, itemUrl);
-    await flush();
-    assert.equal(img.src, "");
-    assert.deepEqual(img.errors, [retryable]);
+  for (const secret of ["s3cret", null]) {
+    for (const [respond, retryable] of cases) {
+      const failing = loadApi({ secret, respond });
+      const img = imageElement();
+      failing.QM.setImageSrc(img, itemUrl);
+      await flush();
+      assert.equal(img.src, "");
+      assert.deepEqual(img.errors, [retryable], `secret ${secret}: only a 404 is a real "no image"`);
+    }
   }
+
+  // Saving a secret after a refused load retries it, even though no secret was
+  // saved when the cache started.
+  let refuse = true;
+  const later = loadApi({ respond: () => (refuse ? { ok: false, status: 403, body: {} } : ok) });
+  const laterImg = imageElement();
+  later.QM.setImageSrc(laterImg, itemUrl);
+  await flush();
+  assert.deepEqual(laterImg.errors, [true]);
+  refuse = false;
+  later.storage.secret = "s3cret";
+  const retriedImg = imageElement();
+  later.QM.setImageSrc(retriedImg, itemUrl);
+  await flush();
+  assert.equal(later.calls.length, 2, "a newly saved secret retries the refused image");
+  assert.equal(retriedImg.src, "blob:1");
 });
 
 await test("images are fetched once and shared by every element and repaint", async () => {
@@ -1072,8 +1100,27 @@ async function startServer({ proposal = { items: [], outfits: [] } } = {}) {
     return result && "statusCode" in result && "body" in result ? result : { statusCode: 200, body: result };
   };
   const inv = (chatId) => ({ chatId, ownerId: "persona" });
+  const image = (chatId, itemId) => ({ ...inv(chatId), itemId });
   const server = {
     llmCalls,
+    itemsDir: join(dataDir, "gallery", "quartermaster", "items"),
+    dataDir,
+    uploadImage: (chatId, itemId, bytes, source) =>
+      call("POST", "/inventory/:chatId/:ownerId/items/:itemId/image", {
+        params: image(chatId, itemId),
+        body: { imageDataUrl: `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`, source },
+      }),
+    image: async (chatId, itemId) => {
+      const result = await call("GET", "/inventory/:chatId/:ownerId/items/:itemId/image", {
+        params: image(chatId, itemId),
+      });
+      return result.statusCode === 200 ? result.body.toString() : result.statusCode;
+    },
+    imageInfo: async (chatId, itemId) =>
+      (await call("GET", "/inventory/:chatId/:ownerId/items/:itemId/image/info", { params: image(chatId, itemId) }))
+        .body,
+    deleteImage: (chatId, itemId) =>
+      call("DELETE", "/inventory/:chatId/:ownerId/items/:itemId/image", { params: image(chatId, itemId) }),
     get: async (chatId) => (await call("GET", "/inventory/:chatId/:ownerId", { params: inv(chatId) })).body,
     addItem: (chatId, body) => call("POST", "/inventory/:chatId/:ownerId/items", { params: inv(chatId), body }),
     patchItem: (chatId, itemId, body) =>
@@ -1515,6 +1562,165 @@ await test("outfits and reverts rebuild deleted items with their default slot, h
   assert.deepEqual([restored.hidden, restored.defaultSlot], [true, "back"]);
 });
 
+await test("a saved image stays with its item through a rename, and unlinking is per chat", async () => {
+  const server = await startServer();
+  const { Apple: apple1 } = await server.seed("chat-1", [{ name: "Apple" }]);
+  const { Apple: apple2 } = await server.seed("chat-2", [{ name: "Apple" }]);
+
+  await server.uploadImage("chat-1", apple1.id, "one", "generated");
+  assert.deepEqual(await server.imageInfo("chat-1", apple1.id), {
+    file: "apple.png",
+    source: "generated",
+    savedFile: "apple.png",
+    savedMissing: false,
+    deletable: true,
+  });
+  // Shared by name: chat 2's Apple, with nothing saved, matches it.
+  assert.equal(await server.image("chat-2", apple2.id), "one");
+  assert.equal((await server.imageInfo("chat-2", apple2.id)).source, "name");
+
+  // A new image never replaces another chat's file.
+  await server.uploadImage("chat-2", apple2.id, "two", "uploaded");
+  assert.equal((await server.imageInfo("chat-2", apple2.id)).savedFile, "apple (1).png");
+  assert.equal(await server.image("chat-1", apple1.id), "one");
+  assert.equal(await server.image("chat-2", apple2.id), "two");
+
+  // Renamed, chat 2's item keeps its saved image; unlinked, it's back to
+  // matching its new name, and chat 1 keeps its own saved file.
+  await server.patchItem("chat-2", apple2.id, { name: "Orange" });
+  assert.equal(await server.image("chat-2", apple2.id), "two");
+  assert.equal((await server.imageInfo("chat-2", apple2.id)).source, "uploaded");
+  await server.patchItem("chat-2", apple2.id, { imageFile: null });
+  assert.equal(await server.image("chat-2", apple2.id), 404);
+  assert.equal((await server.imageInfo("chat-1", apple1.id)).savedFile, "apple.png");
+  await writeFile(join(server.itemsDir, "orange.webp"), "orange");
+  assert.equal(await server.image("chat-2", apple2.id), "orange");
+  assert.deepEqual(
+    [(await server.imageInfo("chat-2", apple2.id)).source, (await server.imageInfo("chat-2", apple2.id)).file],
+    ["name", "orange.webp"],
+  );
+
+  // The client can only clear a saved image, never point it at a file.
+  for (const imageFile of ["apple.png", "../../escape.png", 5]) {
+    assert.equal((await server.patchItem("chat-2", apple2.id, { imageFile })).statusCode, 400);
+  }
+  assert.equal((await server.item("chat-2", "Orange")).imageFile, undefined);
+
+  // A saved file that's gone falls back to the name match, and says so.
+  const { Pear: pear } = await server.seed("chat-1", [{ name: "Pear" }]);
+  await server.uploadImage("chat-1", pear.id, "pear", "uploaded");
+  await server.patchItem("chat-1", pear.id, { name: "Orange" });
+  const { unlink } = await import("node:fs/promises");
+  await unlink(join(server.itemsDir, "pear.png"));
+  assert.deepEqual(await server.imageInfo("chat-1", pear.id), {
+    file: "orange.webp",
+    source: "name",
+    savedFile: "pear.png",
+    savedMissing: true,
+    deletable: true,
+  });
+});
+
+await test("a rename keeps an older upload, but an image-pack match still follows the name", async () => {
+  const server = await startServer();
+  await mkdir(join(server.itemsDir, "pack"), { recursive: true });
+  await writeFile(join(server.itemsDir, "oldhat.png"), "old upload");
+  await writeFile(join(server.itemsDir, "pack", "packsword.png"), "sword");
+  await writeFile(join(server.itemsDir, "pack", "packaxe.png"), "axe");
+  const items = await server.seed("chat-1", [{ name: "Old Hat" }, { name: "Pack Sword" }]);
+
+  await server.patchItem("chat-1", items["Old Hat"].id, { name: "Worn Hat" });
+  assert.equal(await server.image("chat-1", items["Old Hat"].id), "old upload");
+  assert.deepEqual(
+    [(await server.item("chat-1", "Worn Hat")).imageFile, (await server.item("chat-1", "Worn Hat")).imageSource],
+    ["oldhat.png", "uploaded"],
+  );
+
+  assert.equal((await server.imageInfo("chat-1", items["Pack Sword"].id)).file, "pack/packsword.png");
+  await server.patchItem("chat-1", items["Pack Sword"].id, { name: "Pack Axe" });
+  assert.equal(await server.image("chat-1", items["Pack Sword"].id), "axe");
+  assert.equal((await server.item("chat-1", "Pack Axe")).imageFile, undefined);
+
+  // Image-pack files are never deleted from here.
+  const refused = await server.deleteImage("chat-1", items["Pack Sword"].id);
+  assert.equal(refused.statusCode, 400);
+  assert.equal(await readFile(join(server.itemsDir, "pack", "packaxe.png"), "utf8"), "axe");
+});
+
+await test("uploads get safe, numbered filenames, and × deletes the file it shows", async () => {
+  const server = await startServer();
+  await mkdir(server.itemsDir, { recursive: true });
+  await writeFile(join(server.itemsDir, "Apple.jpg"), "existing");
+  const names = ["../../escape", "Sword/Shield", "CON", "???", "Apple"];
+  const items = await server.seed(
+    "chat-1",
+    names.map((name) => ({ name })),
+  );
+  for (const name of names) {
+    const result = await server.uploadImage("chat-1", items[name].id, name, "uploaded");
+    assert.equal(result.statusCode, 200, name);
+  }
+  const saved = Object.fromEntries(
+    await Promise.all(names.map(async (name) => [name, (await server.item("chat-1", name)).imageFile])),
+  );
+  assert.deepEqual(saved, {
+    "../../escape": "escape.png",
+    "Sword/Shield": "swordshield.png",
+    CON: "conitem.png",
+    "???": "item.png",
+    Apple: "apple (1).png",
+  });
+  assert.deepEqual((await readdir(join(server.dataDir, "gallery", "quartermaster"))).sort(), ["items"]);
+  assert.deepEqual((await readdir(server.dataDir)).sort(), ["gallery"]);
+  for (const name of names) assert.equal(await server.image("chat-1", items[name].id), name);
+
+  // × deletes the saved file; the item then shows its name match.
+  await server.deleteImage("chat-1", items.Apple.id);
+  assert.equal((await readdir(server.itemsDir)).includes("apple (1).png"), false);
+  assert.equal((await server.item("chat-1", "Apple")).imageFile, undefined);
+  assert.equal(await server.image("chat-1", items.Apple.id), "existing");
+});
+
+await test("a saved image travels with outfit rebuilds, revert, and Export/Import", async () => {
+  const server = await startServer();
+  const { Hat: hat } = await server.seed("travel-1", [{ name: "Hat", defaultSlot: "head", location: "equipped:head" }]);
+  await server.uploadImage("travel-1", hat.id, "hat", "generated");
+  await server.saveOutfit("travel-1", { name: "Look" });
+  let [look] = (await server.get("travel-1")).outfits;
+  assert.equal(look.slots.head.imageFile, "hat.png");
+
+  // Renaming keeps the outfit's copy in step; an outfit rebuilding the
+  // deleted item restores its image.
+  await server.patchItem("travel-1", hat.id, { name: "Cap" });
+  await server.deleteItem("travel-1", hat.id);
+  await server.equipOutfit("travel-1", look.id);
+  const rebuilt = await server.item("travel-1", "Cap");
+  assert.deepEqual([rebuilt.imageFile, rebuilt.imageSource], ["hat.png", "generated"]);
+  assert.equal(await server.image("travel-1", rebuilt.id), "hat");
+  await server.patchItem("travel-1", rebuilt.id, { imageFile: null });
+  [look] = (await server.get("travel-1")).outfits;
+  assert.equal(look.slots.head.imageFile, undefined, "unlinking clears the outfit's copy too");
+
+  const { Lantern: lantern } = await server.seed("travel-2", [{ name: "Lantern" }]);
+  await server.uploadImage("travel-2", lantern.id, "lantern", "uploaded");
+  await server.patchItem("travel-2", lantern.id, { name: "Lamp" });
+  await server.agentTurn("travel-2", { removeItem: [1] });
+  await server.revert("travel-2", lantern.id);
+  assert.equal((await server.item("travel-2", "Lamp")).imageFile, "lantern.png");
+
+  const sheet = await server.exportSheet("travel-2");
+  assert.equal(sheet.items[0].imageFile, "lantern.png");
+  await server.importSheet("travel-3", sheet);
+  const imported = await server.item("travel-3", "Lamp");
+  assert.equal(await server.image("travel-3", imported.id), "lantern");
+  await server.importSheet("travel-4", {
+    items: [{ name: "Forged", imageFile: "../../../etc/passwd.png", imageSource: "generated" }],
+    outfits: [{ name: "Bad", slots: { head: { name: "Forged", imageFile: "a/b.png" } } }],
+  });
+  assert.equal((await server.item("travel-4", "Forged")).imageFile, undefined);
+  assert.equal((await server.get("travel-4")).outfits[0].slots.head.imageFile, undefined);
+});
+
 await test("export and import carry hidden items, locks and the new settings", async () => {
   const server = await startServer();
   const { Locket: locket } = await server.seed("export-1", [{ name: "Locket", description: "x", defaultSlot: "neck" }]);
@@ -1555,6 +1761,148 @@ await test("export and import carry hidden items, locks and the new settings", a
     [false, true, "userHidden", true],
     "older files get the defaults",
   );
+});
+
+await test("image details label the file, offer Unlink only for a saved one, and × asks before deleting", async () => {
+  const node = (text = "") => ({
+    textContent: text,
+    style: {},
+    listeners: {},
+    children: [],
+    className: "",
+    append(...nodes) {
+      this.children.push(...nodes);
+    },
+    appendChild(child) {
+      this.children.push(child);
+      return child;
+    },
+    replaceChildren(...nodes) {
+      this.children = nodes;
+    },
+    remove() {},
+    setAttribute() {},
+    addEventListener(name, handler) {
+      this.listeners[name] = handler;
+    },
+  });
+  const textOf = (n) => (n.textContent ?? "") + (n.children ?? []).map(textOf).join("");
+  const buttonsIn = (n) => [...(n.label ? [n.label] : []), ...(n.children ?? []).flatMap(buttonsIn)];
+  const answers = [];
+  const calls = [];
+  const api = {
+    button(label) {
+      const button = node(label);
+      button.label = label;
+      return button;
+    },
+    _missingItemImageIds: new Set(),
+    setImageSrc() {},
+    itemImageUrl: (_chatId, _ownerId, id) => `item:${id}`,
+    state: {
+      chatId: "chat-a",
+      itemImageInfo: () => answers.shift(),
+      unlinkItemImage: async (id) => calls.push(["unlink", id]),
+      deleteItemImage: async (id) => calls.push(["delete", id]),
+    },
+  };
+  const uiContext = vm.createContext({
+    QM: api,
+    QM_OWNER_ID: "persona",
+    QM_COLOR_DANGER: "red",
+    QM_COLOR_DANGER_FG: "white",
+    QM_COLOR_SUCCESS: "green",
+    QM_COLOR_SUCCESS_FG: "white",
+    QM_COLOR_WARNING: "orange",
+    window: { localStorage: { getItem: () => null } },
+    document: {
+      createElement: () => node(),
+      createTextNode: (text) => ({ textContent: text }),
+      querySelectorAll: () => [],
+      addEventListener() {},
+      removeEventListener() {},
+    },
+    setTimeout,
+  });
+  vm.runInContext(
+    await readFile(new URL("../packages/quartermaster/src/10-dock.js", import.meta.url), "utf8"),
+    uiContext,
+  );
+  const lines = (info) => JSON.parse(JSON.stringify(vm.runInContext("qmItemImageDetailLines", uiContext)(info)));
+  const ui = api.dock;
+
+  assert.deepEqual(lines({ file: "apple.png", source: "generated", savedFile: "apple.png" }), [
+    { label: "Generated filename", file: "apple.png" },
+  ]);
+  assert.deepEqual(lines({ file: "apple (1).png", source: "uploaded", savedFile: "apple (1).png" }), [
+    { label: "Uploaded filename", file: "apple (1).png" },
+  ]);
+  assert.deepEqual(lines({ file: "pack/orange.png", source: "name", savedFile: null }), [
+    { label: "Matched by name", file: "pack/orange.png" },
+  ]);
+  assert.deepEqual(lines({ file: "orange.png", source: "name", savedFile: "pear.png", savedMissing: true }), [
+    { label: "Saved file missing", file: "pear.png" },
+    { label: "Matched by name", file: "orange.png" },
+  ]);
+  assert.deepEqual(lines({ file: null, source: null, savedFile: null }), []);
+
+  // The editor line: Unlink only for a saved file; hidden with nothing to show.
+  const line = node();
+  answers.push(Promise.resolve({ file: "apple.png", source: "generated", savedFile: "apple.png" }));
+  await ui._fillItemImageDetails(line, "item-a", { inline: true });
+  assert.match(textOf(line), /Generated filename: apple\.png/);
+  assert.deepEqual(buttonsIn(line), ["Unlink"]);
+  assert.equal(line.style.display, "flex");
+  await line.children.at(-1).listeners.click();
+  assert.deepEqual(calls.splice(0), [["unlink", "item-a"]]);
+  answers.push(Promise.resolve({ file: "apple.png", source: "name", savedFile: null }));
+  await ui._fillItemImageDetails(line, "item-a", { inline: true });
+  assert.deepEqual(buttonsIn(line), [], "a name match has nothing to unlink");
+  answers.push(Promise.resolve({ file: null, source: null, savedFile: null }));
+  await ui._fillItemImageDetails(line, "item-a", { inline: true });
+  assert.equal(line.style.display, "none");
+
+  // A slower, older answer never replaces a newer one.
+  let settleOld;
+  answers.push(new Promise((resolve) => (settleOld = resolve)));
+  answers.push(Promise.resolve({ file: "new.png", source: "uploaded", savedFile: "new.png" }));
+  const older = ui._fillItemImageDetails(line, "item-a", { inline: true });
+  await ui._fillItemImageDetails(line, "item-a", { inline: true });
+  settleOld({ file: "old.png", source: "uploaded", savedFile: "old.png" });
+  await older;
+  assert.match(textOf(line), /new\.png/);
+
+  // × in the editor: Delete file (warning that it's every chat), Unlink, Cancel.
+  const choice = node();
+  let changed = 0;
+  answers.push(Promise.resolve({ file: "apple.png", source: "generated", savedFile: "apple.png", deletable: true }));
+  await ui._showItemImageRemoveChoice(choice, "item-a", () => changed++);
+  assert.deepEqual(buttonsIn(choice), ["Delete file", "Unlink", "Cancel"]);
+  assert.match(textOf(choice), /deletes the file\. Every item using it, in any chat, loses its image/);
+  const deleteButton = choice.children[1].children[0];
+  await deleteButton.listeners.click();
+  assert.deepEqual(calls.splice(0), [["delete", "item-a"]]);
+  assert.deepEqual([changed, choice.style.display], [1, "none"]);
+  answers.push(Promise.resolve({ file: "pack/axe.png", source: "name", savedFile: null, deletable: false }));
+  await ui._showItemImageRemoveChoice(choice, "item-a");
+  assert.deepEqual(buttonsIn(choice), ["Cancel"]);
+  assert.match(textOf(choice), /image pack/);
+
+  // A bag card gets [i], the editor gets ×; a saved file shows its button even
+  // before (or without) a loaded picture, so it can still be unlinked.
+  const bag = ui._buildItemImageControl({ id: "item-a", name: "Apple", imageFile: "apple.png" }, 48);
+  const bagCorner = bag.children.at(-1);
+  assert.equal(bagCorner.className, "qm-overflow-wrap");
+  assert.equal(bagCorner.style.display, "inline-flex");
+  assert.equal(ui._buildItemImageControl({ id: "item-b", name: "Pear" }, 48).children.at(-1).style.display, "none");
+  let removeAsked = 0;
+  const editor = ui._buildItemImageControl({ id: "item-a", name: "Apple", imageFile: "apple.png" }, 96, {
+    onRemove: () => removeAsked++,
+  });
+  const editorCorner = editor.children.at(-1);
+  assert.equal(editorCorner.textContent, "×");
+  editorCorner.listeners.click();
+  assert.equal(removeAsked, 1);
 });
 
 await test("the Bag's Hidden tab holds hidden items, and other tabs only when the setting allows", () => {

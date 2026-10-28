@@ -153,10 +153,25 @@ Give any item — or any saved outfit — its own picture, three ways:
    prompt templates (item images, outfit portraits) are fully editable there too — pre-filled with
    sensible defaults so you're editing, not writing from scratch.
 
-Settings also has a **Refresh Images** button, which clears the missing-image cache so an item
-without a picture stops silently skipping its image lookup on every repaint. In practice: if
-you've just dropped new images into the gallery folder for items that were already missing
-pictures, click Refresh Images and they'll pick up the new files.
+An image you upload or generate is **saved to the item**: it keeps that picture even if you rename
+it. Everything else is matched by name, as before: image-pack files, images uploaded before
+Quartermaster 0.1.32 (saved to the item the first time it's renamed), and items you've unlinked.
+Image files are shared by name across chats, so an "Apple" in another chat with no saved image of
+its own shows the same picture. A new image never replaces an existing file; it's saved as
+`apple (1).png`, `apple (2).png` and so on.
+
+- **Bag cards** have an **[i]** on the image showing the file and where it came from: *Uploaded
+  filename*, *Generated filename*, or *Matched by name*.
+- The **item editor** shows the same under the item's name, with **Unlink** when the image is
+  saved to the item. Unlink only changes this chat's item: it goes back to matching its name, and
+  the file stays. Rename "Apple" to "Orange", unlink, and it picks up an orange image if there is one.
+- The **×** on the image in the item editor offers **Delete file**, which deletes the image file for
+  every item using it in every chat, or **Unlink**. Image-pack files (in a subfolder) are never
+  deleted from Quartermaster.
+
+Settings also has a **Refresh Images** button, which re-checks every item for a matching image. If
+you've just dropped new images into the gallery folder for items that were missing pictures, click
+Refresh Images and they'll pick up the new files.
 
 ## The Quartermaster Agent (automation)
 
@@ -272,6 +287,26 @@ and every bundled icon, and writes `artifacts/quartermaster-<version>.zip` — r
 overwrite an already-released version's artifact file if you forget to bump `VERSION` first.
 
 ## Changelog
+
+### 0.1.32
+- **Item images stay with their item** (attempted fix for #1697, pending the reporter's
+  confirmation). Uploading or generating an image saves its filename on the item, so renaming it no
+  longer loses the picture. An image uploaded before this update is saved to its item the first
+  time it's renamed. Image-pack matches aren't saved, so renaming onto another pack image's name
+  still switches to it.
+- **Connection blips no longer hide images.** Item images now always load through Quartermaster's
+  own loader, which tells a real "no image" apart from a dropped connection or server error. Before,
+  without an Admin Secret saved, any failed load hid that item's image until the page was reloaded.
+  A disk error on the server now reports as an error, not as "no image".
+- **Image details and Unlink.** Bag cards have an [i] on the image, and the item editor has a line
+  under the name, showing the file and whether it was uploaded, generated, or matched by name.
+  Unlink sends this chat's item back to matching by name and keeps the file.
+- **Deleting moved to the item editor.** The × on bag card images is gone; the editor's × offers
+  Delete file (warning that every chat using the file loses it) or Unlink.
+- **New images never replace another file.** If `apple.png` exists, a new one is saved as
+  `apple (1).png`, so another chat's Apple keeps its picture.
+- Item names containing characters a filename can't hold (like "/") now upload correctly, and those
+  characters can no longer affect where the file is written.
 
 ### 0.1.31
 - Corrected a code comment about settling pending item changes. Nothing changes in use.

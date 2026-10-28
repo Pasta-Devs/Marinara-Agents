@@ -517,6 +517,27 @@ function qmClampPopoverToContainer(popoverEl, containerEl, defaults) {
   }
 }
 
+const QM_ITEM_IMAGE_SOURCE_LABELS = {
+  uploaded: "Uploaded filename",
+  generated: "Generated filename",
+  name: "Matched by name",
+};
+const QM_UNLINK_IMAGE_HELP = "Go back to matching this item's name. The image file isn't deleted.";
+
+// An item image's details (QM.state.itemImageInfo) as label/file lines, for a
+// bag card's [i] and the item editor's image line. Empty when the item shows
+// no image and has none saved.
+function qmItemImageDetailLines(info) {
+  const lines = [];
+  if (info.savedMissing) lines.push({ label: "Saved file missing", file: info.savedFile });
+  if (info.file) lines.push({ label: QM_ITEM_IMAGE_SOURCE_LABELS[info.source] ?? "Matched by name", file: info.file });
+  return lines;
+}
+
+// Fills a details box at most once per request: a slower, older answer never
+// replaces a newer one for the same box.
+const qmImageDetailRequests = new WeakMap();
+
 function qmReadColumnCollapsed() {
   const result = { outfits: false, equipped: false, bag: false };
   try {
@@ -638,6 +659,7 @@ QM.dock = {
   imageGenBackdrop: null,
   addItemBackdrop: null,
   _itemEditorEscapeHandler: null,
+  _itemEditorUnsubscribe: null,
   _outfitEditorEscapeHandler: null,
   _saveOutfitEscapeHandler: null,
   _wardrobeEscapeHandler: null,
@@ -3302,16 +3324,15 @@ QM.dock = {
     return wrapper;
   },
 
-  // Unlike outfit portraits, an item's image isn't a stored reference —
-  // it's resolved server-side by name (findItemImageFile, matching an
-  // uploaded file or a hand-placed image-pack file the same way — see
-  // server.mjs's own comment). So the client doesn't know in advance
-  // whether one exists; it just tries the URL and falls back to the dashed
-  // placeholder on a 404 via onerror/onload, rather than checking a flag.
+  // The server picks the file (server.mjs's resolveItemImage): the item's saved
+  // upload or generation, else a name match, uploaded or from an image pack. So
+  // the client doesn't know in advance whether one exists; it just tries the
+  // URL and falls back to the dashed placeholder on a 404 via onerror/onload.
   // Clicking the thumbnail opens the Generate/Upload choice modal
   // (12-image-gen.js); the hidden fileInput below is reused as-is by its own
-  // "Upload" choice, this control's own upload logic is untouched either way.
-  _buildItemImageControl(item, sizePx) {
+  // "Upload" choice. The corner button is [i] (details and Unlink) on a bag
+  // card, and × in the item editor, where `onRemove` asks Delete or Unlink.
+  _buildItemImageControl(item, sizePx, { onRemove } = {}) {
     const wrapper = document.createElement("div");
     Object.assign(wrapper.style, {
       position: "relative",
@@ -3330,7 +3351,7 @@ QM.dock = {
       if (!file) return;
       try {
         const dataUrl = await QM.compressImageFile(file);
-        await QM.state.uploadItemImage(item.id, dataUrl);
+        await QM.state.uploadItemImage(item.id, dataUrl, "uploaded");
       } catch (error) {
         QM.state.error = error && error.message ? error.message : String(error);
         QM.state._notify();
@@ -3365,7 +3386,7 @@ QM.dock = {
 
     const removeButton = document.createElement("button");
     removeButton.type = "button";
-    removeButton.title = "Remove uploaded image (a matching image-pack file, if any, would still show)";
+    removeButton.title = "Delete or unlink this image";
     removeButton.textContent = "×";
     Object.assign(removeButton.style, {
       position: "absolute",
@@ -3383,11 +3404,10 @@ QM.dock = {
       border: "none",
       display: "none",
     });
-    removeButton.addEventListener("click", () => {
-      if (window.confirm(`Remove ${item.name}'s image? This can't be undone.`)) {
-        QM.state.deleteItemImage(item.id);
-      }
-    });
+    removeButton.addEventListener("click", () => onRemove?.());
+    // A saved file that's gone still gets its corner button, so it can be unlinked.
+    const cornerButton = onRemove ? removeButton : this._buildItemImageInfoBadge(item);
+    if (item.imageFile) cornerButton.style.display = onRemove ? "block" : "inline-flex";
 
     // No matching image (uploaded or pack) — fall back to that item's own
     // default-slot icon rather than the bare "+" mark, same artwork the
@@ -3426,7 +3446,7 @@ QM.dock = {
         placeholderMark.style.display = "none";
         thumbButton.style.border = "1px solid var(--border, rgba(128,128,128,0.3))";
         img.style.display = "block";
-        removeButton.style.display = "block";
+        cornerButton.style.display = onRemove ? "block" : "inline-flex";
       });
       img.addEventListener("error", (event) => {
         if (!event.qmRetryable) QM._missingItemImageIds.add(item.id);
@@ -3437,8 +3457,176 @@ QM.dock = {
       thumbButton.appendChild(img);
     }
 
-    wrapper.append(thumbButton, fileInput, removeButton);
+    wrapper.append(thumbButton, fileInput, cornerButton);
     return wrapper;
+  },
+
+  // A bag card's [i]: a small popover with the image's filename and where it
+  // comes from, plus Unlink when this item has a saved file. It loads the
+  // details only when opened.
+  _buildItemImageInfoBadge(item) {
+    const wrapper = document.createElement("span");
+    wrapper.className = "qm-overflow-wrap";
+    Object.assign(wrapper.style, { position: "absolute", top: "-6px", right: "-6px", display: "none" });
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "i";
+    button.title = "Image file details";
+    button.setAttribute("aria-label", "Image file details");
+    Object.assign(button.style, {
+      width: "14px",
+      height: "14px",
+      lineHeight: "12px",
+      padding: "0",
+      fontSize: "10px",
+      fontWeight: "700",
+      fontFamily: "Georgia, serif",
+      borderRadius: "50%",
+      cursor: "pointer",
+      background: "var(--secondary, #3a3a3a)",
+      color: "var(--secondary-foreground, #fff)",
+      border: "1px solid var(--border, rgba(128,128,128,0.5))",
+    });
+
+    const panel = document.createElement("div");
+    panel.className = "qm-overflow-menu";
+    Object.assign(panel.style, {
+      position: "absolute",
+      top: "100%",
+      right: "0",
+      zIndex: "30",
+      marginTop: "2px",
+      flexDirection: "column",
+      gap: "6px",
+      width: "200px",
+      padding: "8px",
+      boxSizing: "border-box",
+      borderRadius: "var(--radius, 4px)",
+      border: "1px solid var(--border, rgba(128,128,128,0.4))",
+      background: "var(--popover, var(--card, #1a1a1a))",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+      fontSize: "11px",
+      textAlign: "left",
+      cursor: "default",
+    });
+    // Clicks inside (Unlink) mustn't reach the document listener that closes it.
+    panel.addEventListener("click", (event) => event.stopPropagation());
+
+    const panelDefaults = { left: "auto", right: "0", top: "100%", bottom: "auto" };
+    button.addEventListener("click", (event) =>
+      qmTogglePopover(wrapper, "qm-overflow-open", event, () => {
+        qmClampPopoverToContainer(panel, this.body, panelDefaults);
+        this._fillItemImageDetails(panel, item.id, { onUnlink: qmClosePopover });
+      }),
+    );
+
+    wrapper.append(button, panel);
+    return wrapper;
+  },
+
+  // Fills `box` with an item image's details: one line per qmItemImageDetailLines
+  // entry, plus Unlink when this item has a saved file. `inline` is the item
+  // editor's form, which hides the box when there's nothing to show.
+  async _fillItemImageDetails(box, itemId, { inline = false, onUnlink } = {}) {
+    const request = {};
+    qmImageDetailRequests.set(box, request);
+    if (!inline) box.replaceChildren(document.createTextNode("Loading…"));
+    let info;
+    try {
+      info = await QM.state.itemImageInfo(itemId);
+    } catch (error) {
+      info = { error: error && error.message ? error.message : String(error) };
+    }
+    if (qmImageDetailRequests.get(box) !== request) return;
+
+    const lines = info.error ? [] : qmItemImageDetailLines(info);
+    const nodes = [];
+    if (info.error) nodes.push(document.createTextNode(`Couldn't load image details: ${info.error}`));
+    if (!info.error && lines.length === 0) nodes.push(document.createTextNode("No image file."));
+    for (const line of lines) {
+      const row = document.createElement("div");
+      Object.assign(row.style, { overflowWrap: "anywhere" });
+      const label = document.createElement("span");
+      label.textContent = `${line.label}: `;
+      label.style.color = "var(--muted-foreground, currentcolor)";
+      const name = document.createElement("span");
+      name.textContent = line.file;
+      row.append(label, name);
+      nodes.push(row);
+    }
+    if (info.savedFile) {
+      const unlink = QM.button("Unlink", { bg: "transparent", border: true, fg: "inherit" });
+      unlink.title = QM_UNLINK_IMAGE_HELP;
+      Object.assign(unlink.style, {
+        padding: "1px 8px",
+        fontSize: "11px",
+        alignSelf: inline ? "center" : "flex-start",
+      });
+      unlink.addEventListener("click", async () => {
+        unlink.disabled = true;
+        onUnlink?.();
+        await QM.state.unlinkItemImage(itemId);
+      });
+      nodes.push(unlink);
+    }
+    box.replaceChildren(...nodes);
+    if (inline) box.style.display = lines.length > 0 || info.error ? "flex" : "none";
+  },
+
+  // The item editor's × on the image. Deleting the file reaches every item using
+  // it, in any chat, so this says so first, and offers Unlink (this chat's item
+  // only, file kept) when the item has a saved file.
+  async _showItemImageRemoveChoice(box, itemId, onChanged) {
+    const request = {};
+    qmImageDetailRequests.set(box, request);
+    box.style.display = "flex";
+    box.replaceChildren(document.createTextNode("Loading…"));
+    let info;
+    try {
+      info = await QM.state.itemImageInfo(itemId);
+    } catch (error) {
+      info = { error: error && error.message ? error.message : String(error) };
+    }
+    if (qmImageDetailRequests.get(box) !== request) return;
+
+    const hide = () => {
+      qmImageDetailRequests.delete(box);
+      box.style.display = "none";
+      box.replaceChildren();
+    };
+    const message = document.createElement("div");
+    Object.assign(message.style, { overflowWrap: "anywhere" });
+    const buttons = document.createElement("div");
+    Object.assign(buttons.style, { display: "flex", gap: "6px", flexWrap: "wrap" });
+    const act = (label, danger, run) => {
+      const button = QM.button(label, danger ? { bg: QM_COLOR_DANGER, fg: QM_COLOR_DANGER_FG } : { border: true });
+      button.style.padding = "2px 8px";
+      button.addEventListener("click", async () => {
+        hide();
+        await run();
+        onChanged?.();
+      });
+      buttons.appendChild(button);
+    };
+
+    if (info.error) {
+      message.textContent = `Couldn't load image details: ${info.error}`;
+    } else if (info.deletable) {
+      message.textContent = `Delete ${info.file}? This deletes the file. Every item using it, in any chat, loses its image.`;
+      if (info.savedFile) message.textContent += " To remove it from just this item and keep the file, use Unlink.";
+      act("Delete file", true, () => QM.state.deleteItemImage(itemId));
+    } else if (info.file) {
+      message.textContent = `${info.file} is from an image pack and can't be deleted here.`;
+    } else {
+      message.textContent = "This item's saved image file is missing.";
+    }
+    if (info.savedFile) act("Unlink", false, () => QM.state.unlinkItemImage(itemId));
+    const cancel = QM.button("Cancel", { bg: "transparent", border: true, fg: "inherit" });
+    cancel.style.padding = "2px 8px";
+    cancel.addEventListener("click", hide);
+    buttons.appendChild(cancel);
+    box.replaceChildren(message, buttons);
   },
 
   // Read-only display card, same rhythm as the item card: full-height
@@ -4258,9 +4446,53 @@ QM.dock = {
     closeButton.addEventListener("click", () => this._closeItemEditor());
     header.append(title, closeButton);
 
+    // `item` is the snapshot this editor opened with; the image parts follow
+    // the live item, so an upload, Unlink, delete or rename shows straight away.
+    const liveItem = () => QM.state.items?.find((candidate) => candidate.id === item.id) ?? item;
     const imageRow = document.createElement("div");
     Object.assign(imageRow.style, { display: "flex", justifyContent: "center" });
-    imageRow.appendChild(this._buildItemImageControl(item, 96));
+    const removeChoice = document.createElement("div");
+    Object.assign(removeChoice.style, {
+      display: "none",
+      flexDirection: "column",
+      gap: "6px",
+      padding: "8px",
+      fontSize: "11px",
+      borderRadius: "var(--radius, 4px)",
+      border: `1px solid ${QM_COLOR_DANGER}`,
+    });
+    const imageFileLine = document.createElement("div");
+    Object.assign(imageFileLine.style, {
+      display: "none",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "6px",
+      marginTop: "-4px",
+      fontSize: "11px",
+    });
+    const paintImage = () => {
+      imageRow.replaceChildren(
+        this._buildItemImageControl(liveItem(), 96, {
+          onRemove: () => this._showItemImageRemoveChoice(removeChoice, item.id, paintImage),
+        }),
+      );
+      this._fillItemImageDetails(imageFileLine, item.id, { inline: true });
+    };
+    paintImage();
+    // Only a change to what picks the image repaints it (typing a description
+    // notifies too). Delete and Unlink from here repaint themselves, since a
+    // deleted name match changes nothing on the item.
+    const imageKey = () => {
+      const current = liveItem();
+      return JSON.stringify([current.name, current.imageFile ?? null, current.imageSource ?? null]);
+    };
+    let lastImageKey = imageKey();
+    this._itemEditorUnsubscribe = QM.state.subscribe(() => {
+      const key = imageKey();
+      if (key === lastImageKey) return;
+      lastImageKey = key;
+      paintImage();
+    });
 
     const nameInput = QM.smallInput("input");
     nameInput.type = "text";
@@ -4338,7 +4570,17 @@ QM.dock = {
     paintLock();
     lockLine.append(lockButton, lockHint);
 
-    panel.append(header, imageRow, nameInput, slotSelect, storedLine, lockLine, description);
+    panel.append(
+      header,
+      imageRow,
+      removeChoice,
+      nameInput,
+      imageFileLine,
+      slotSelect,
+      storedLine,
+      lockLine,
+      description,
+    );
     backdrop.appendChild(panel);
     this.itemEditorBackdrop = backdrop;
     (this.root || this.body).appendChild(backdrop);
@@ -4346,6 +4588,8 @@ QM.dock = {
   },
 
   _closeItemEditor() {
+    this._itemEditorUnsubscribe?.();
+    this._itemEditorUnsubscribe = null;
     this.itemEditorBackdrop?.remove();
     this.itemEditorBackdrop = null;
     this._unbindEscapeClose(this._itemEditorEscapeHandler);

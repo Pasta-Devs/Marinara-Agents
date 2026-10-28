@@ -652,6 +652,12 @@
     "quartermaster": {
       "versions": [
         {
+          "version": "0.1.32",
+          "date": "2026-10-28",
+          "notes": "- Attempted fix for item images going missing. An uploaded or generated image now stays with its\n  item, even after a rename. Images uploaded before this update are kept on rename too.\n- A dropped connection no longer hides item images until you reload.\n- Item editor: a line under the name shows which image file the item uses. Unlink sends this\n  chat's item back to matching by name without deleting the file.\n- Bag cards have an [i] on the image with the same details. Deleting an image file moved to the\n  × in the item editor, which says the file is shared by every chat and offers Unlink instead.\n- A new image never replaces another item's file: it's saved as \"apple (1).png\" and so on.\n- Item names with characters like \"/\" upload correctly.",
+          "highlight": true
+        },
+        {
           "version": "0.1.31",
           "date": "2026-10-25",
           "notes": "- No changes you'll notice: a code comment was corrected.",
@@ -764,12 +770,6 @@
           "date": "2026-09-14",
           "notes": "- Attempted fix for Recent Agent Update's collapsed box showing a sliver of Restore Inventory\n  underneath.\n- Info tooltips and card overflow menus no longer clip against the dock's edge.\n- Shrank the item card's quantity field to match the \"⋯\" button beside it.\n- \"+ Add Item\" is now green, matching Save Current Outfit.",
           "highlight": false
-        },
-        {
-          "version": "0.1.12",
-          "date": "2026-09-14",
-          "notes": "- Settings moved to its own tab instead of an accordion pushing inventory below the fold.\n- Settings regrouped into Appearance/Display/Image Generation/Data, with hover-and-tap tooltips\n  replacing permanent explanation text.\n- Recent Automatic Update (renamed Recent Agent Update) moved next to Restore Inventory, with a\n  colored +N/↑N/−N count summary and visible reasoning even on quiet turns.\n- Item and outfit cards collapse Edit/Update/Delete into a \"⋯\" menu, giving descriptions more\n  room.\n- Delete confirmations now also cover the item-image and outfit-portrait remove buttons.\n- Add Item is now a modal instead of an always-open form.",
-          "highlight": true
         }
       ]
     },

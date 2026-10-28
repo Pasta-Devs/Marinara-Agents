@@ -229,6 +229,17 @@ const QM_HIDDEN_ITEM_ACCESS_OPTIONS = [
     help: "The agent's changes apply and the item becomes shown.",
   },
 ];
+// Once an item's image may have changed, forget what this session remembers
+// about it (QM.setImageSrc's cache and _missingItemImageIds), after the request
+// succeeds and before _mutate repaints, so the next paint loads it fresh.
+function qmForgetItemImageAfter(request, chatId, itemId) {
+  return request.then((result) => {
+    QM._missingItemImageIds.delete(itemId);
+    QM.forgetImage(QM.itemImageUrl(chatId, QM_OWNER_ID, itemId));
+    return result;
+  });
+}
+
 // Whether the pending-change "Show item" box starts ticked for this mode.
 function qmAccessModeShows(mode) {
   return mode === "userShown" || mode === "agentShown";
@@ -711,34 +722,35 @@ QM.state = {
   addItem(item) {
     return this._mutate(QM.addItem(this.chatId, QM_OWNER_ID, item));
   },
+  // A rename can change which image an item shows (a different name match),
+  // and Unlink ({ imageFile: null }) always does.
   updateItem(itemId, patch) {
-    return this._mutate(QM.updateItem(this.chatId, QM_OWNER_ID, itemId, patch));
+    const request = QM.updateItem(this.chatId, QM_OWNER_ID, itemId, patch);
+    const imageMayChange = "name" in patch || "imageFile" in patch;
+    return this._mutate(imageMayChange ? qmForgetItemImageAfter(request, this.chatId, itemId) : request);
   },
   deleteItem(itemId) {
     return this._mutate(QM.deleteItem(this.chatId, QM_OWNER_ID, itemId));
   },
-  // Each image change drops that image from QM.setImageSrc's cache once it
-  // succeeds, before _mutate repaints, so the next render fetches the new one.
-  uploadItemImage(itemId, imageDataUrl) {
-    QM._missingItemImageIds.delete(itemId);
-    const chatId = this.chatId;
-    return this._mutate(
-      QM.uploadItemImage(chatId, QM_OWNER_ID, itemId, imageDataUrl).then((result) => {
-        QM.forgetImage(QM.itemImageUrl(chatId, QM_OWNER_ID, itemId));
-        return result;
-      }),
-    );
+  // source: "uploaded" or "generated".
+  uploadItemImage(itemId, imageDataUrl, source = "uploaded") {
+    const request = QM.uploadItemImage(this.chatId, QM_OWNER_ID, itemId, imageDataUrl, source);
+    return this._mutate(qmForgetItemImageAfter(request, this.chatId, itemId));
   },
+  // Another name match may show once the file is gone, so this re-checks
+  // rather than marking the item as having no image.
   deleteItemImage(itemId) {
-    const chatId = this.chatId;
-    return this._mutate(
-      QM.deleteItemImage(chatId, QM_OWNER_ID, itemId).then((result) => {
-        // Suppress image lookups only after this delete succeeds.
-        QM._missingItemImageIds.add(itemId);
-        QM.forgetImage(QM.itemImageUrl(chatId, QM_OWNER_ID, itemId));
-        return result;
-      }),
-    );
+    const request = QM.deleteItemImage(this.chatId, QM_OWNER_ID, itemId);
+    return this._mutate(qmForgetItemImageAfter(request, this.chatId, itemId));
+  },
+  // This chat's item stops using its saved file and goes back to name
+  // matching; the file stays on disk for anything else using it.
+  unlinkItemImage(itemId) {
+    return this.updateItem(itemId, { imageFile: null });
+  },
+  // Read-only, like exportInventory: the dock's image details.
+  itemImageInfo(itemId) {
+    return QM.itemImageInfo(this.chatId, QM_OWNER_ID, itemId);
   },
   unequipAll() {
     return this._mutate(QM.unequipAll(this.chatId, QM_OWNER_ID));
