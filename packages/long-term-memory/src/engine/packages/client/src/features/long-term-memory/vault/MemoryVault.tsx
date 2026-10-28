@@ -1752,7 +1752,9 @@ export default function MemoryVault({
         setDraft((current) => (fingerprint(current) === submittedFingerprint ? next : current));
         setSaveState("idle");
         setWarning(
-          localizeUi("ui.longTermMemory.memoryvault.savedButRecallIsStale", { error: response.rebuild.error ?? "" }),
+          response.rebuild.error
+            ? localizeUi("ui.longTermMemory.memoryvault.savedButRecallIsStale", { error: response.rebuild.error })
+            : localizeUi("ui.longTermMemory.memoryvault.savedButRecallIsStaleNoError"),
         );
         await invalidateLtmQueries(client, [
           queryKeys.notes,
@@ -1929,7 +1931,9 @@ export default function MemoryVault({
         setRenamingSectionKey(null);
         setRenamedSectionKey("");
         setWarning(
-          localizeUi("ui.longTermMemory.memoryvault.savedButRecallIsStale", { error: result.rebuild.error ?? "" }),
+          result.rebuild.error
+            ? localizeUi("ui.longTermMemory.memoryvault.savedButRecallIsStale", { error: result.rebuild.error })
+            : localizeUi("ui.longTermMemory.memoryvault.savedButRecallIsStaleNoError"),
         );
         await invalidate();
         return;

@@ -1405,6 +1405,7 @@
   "ui.longTermMemory.memoryvault.resolve": "Resolve",
   "ui.longTermMemory.memoryvault.saved": "Saved",
   "ui.longTermMemory.memoryvault.savedButRecallIsStale": "Saved. Recall will catch up once the index rebuild succeeds: {{error}}",
+  "ui.longTermMemory.memoryvault.savedButRecallIsStaleNoError": "Saved. Recall will catch up once the index rebuild succeeds.",
   "ui.longTermMemory.memoryvault.diagnostics": "Diagnostics",
   "ui.longTermMemory.memoryvault.copyDiagnostics": "Copy diagnostics",
   "ui.longTermMemory.memoryvault.diagnosticsCopied": "Diagnostics copied.",
