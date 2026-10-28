@@ -6,6 +6,7 @@ import tseslint from "typescript-eslint";
 const maintainedSourceFiles = [
   "packages/**/src/**/*.{js,mjs,ts,tsx}",
   "sources/*-overlay/**/*.{mjs,ts,tsx}",
+  "sources/forge-kit/**/*.mjs",
   "scripts/**/*.{js,mjs}",
   "tests/**/*.{js,mjs,ts,tsx}",
   "eslint.config.mjs",
@@ -68,6 +69,21 @@ export default tseslint.config(
     files: ["**/*.{js,mjs}"],
     rules: {
       "@typescript-eslint/no-unused-vars": "off",
+    },
+  },
+  {
+    // Gacha Forge pastes the forge kit into its bundles as text (packages/gacha-forge/bundle-patches.json), so a kit
+    // module can import nothing those bundles would not already have: only Node built-ins.
+    files: ["sources/forge-kit/**/*.mjs"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        { patterns: [{ regex: "^(?!node:)", message: "Forge kit modules may import only node: built-ins." }] },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        { selector: "ImportExpression", message: "Forge kit modules may not use dynamic import()." },
+      ],
     },
   },
   {

@@ -519,6 +519,7 @@ async function main() {
       let reviewQueueEmpty = false;
       let reviewFingerprintRevision = 0;
       let lastInjectionRequests = 0;
+      let lastInjectionHold: Promise<void> | null = null;
       browserServer = createServer(async (request, response) => {
         const url = new URL(request.url ?? "/", "http://127.0.0.1");
         const send = (status: number, body: unknown, contentType = "application/json") => {
@@ -636,7 +637,7 @@ async function main() {
               ],
             });
           // Keep the failure in flight briefly so the retry's disabled guard is observable.
-          await new Promise((resolve) => setTimeout(resolve, 120));
+          await (lastInjectionHold ?? new Promise((resolve) => setTimeout(resolve, 120)));
           return send(503, { error: "latest recall failed" });
         }
         if (request.method === "GET" && url.pathname.endsWith("/drafts/review")) {
@@ -1638,8 +1639,10 @@ async function main() {
       const desktopActivationChanges: boolean[] = [];
       const chatSummarySettingsOpens: number[] = [];
       const promptPresetEditorOpens: number[] = [];
-      await page.exposeFunction("onDesktopActivationChange", (enabled: boolean) => {
+      let activationGate: Promise<void> = Promise.resolve();
+      await page.exposeFunction("onDesktopActivationChange", async (enabled: boolean) => {
         desktopActivationChanges.push(enabled);
+        await activationGate;
       });
       await page.exposeFunction("onOpenChatSummarySettings", () => {
         chatSummarySettingsOpens.push(Date.now());
@@ -2443,13 +2446,17 @@ async function main() {
       });
       const branchNoteRoute = `**/api/long-term-memory/notes/${outsideChatNote.id}`;
       let deferRecallRebuild = false;
+      let deferRecallError: string | undefined = "index busy";
       await page.route(branchNoteRoute, async (route) => {
         if (route.request().method() === "PATCH") await branchSaveHeld;
         if (route.request().method() === "PATCH" && deferRecallRebuild) {
           const response = await route.fetch();
           await route.fulfill({
             response,
-            json: { ...(await response.json()), rebuild: { status: "deferred", error: "index busy" } },
+            json: {
+              ...(await response.json()),
+              rebuild: { status: "deferred", ...(deferRecallError ? { error: deferRecallError } : {}) },
+            },
           });
           return;
         }
@@ -2500,6 +2507,15 @@ async function main() {
       );
       assert.equal(await staleWarning.locator("[data-ltm-status-icon]").count(), 1);
       assert.equal(await page.locator('[data-ltm-vault-feedback] [data-ltm-status="danger"]').count(), 0);
+      // A deferred rebuild that reports no error leaves no dangling colon.
+      deferRecallError = undefined;
+      await branchTitle.fill("Memory outside current chat, saved without a rebuild error");
+      await saveButton.click();
+      await page.waitForFunction(
+        () =>
+          document.querySelector('[data-ltm-vault-feedback] [data-ltm-status="warning"]')?.textContent?.trim() ===
+          "Saved. Recall will catch up once the index rebuild succeeds.",
+      );
       // The next message resets the tone: a plain save shows the success notice again.
       deferRecallRebuild = false;
       await branchTitle.fill("Memory outside current chat, saved");
@@ -2526,6 +2542,111 @@ async function main() {
       await page.locator(`[data-ltm-note-id="${outsideChatNote.id}"] [data-ltm-note-open-bar]`).waitFor();
       assert.equal(await otherRow.getAttribute("aria-current"), null);
       await branchTitle.fill("Memory outside current chat, saved");
+      // Save pressed in an unsaved-changes prompt while a save is in flight joins that save: one PATCH, and the
+      // caller still finishes what it was asked to do. Both callers (the Vault dialog, the destination prompt).
+      let outsidePatchRequests = 0;
+      const countOutsidePatch = (request: { method: () => string; url: () => string }) => {
+        if (request.method() === "PATCH" && request.url().endsWith(`/notes/${outsideChatNote.id}`))
+          outsidePatchRequests += 1;
+      };
+      page.on("request", countOutsidePatch);
+      let inFlightGate: Promise<void> = Promise.resolve();
+      let releaseInFlightSave!: () => void;
+      const holdNextSave = () => {
+        inFlightGate = new Promise<void>((resolve) => {
+          releaseInFlightSave = resolve;
+        });
+      };
+      await page.route(branchNoteRoute, async (route) => {
+        if (route.request().method() === "PATCH") await inFlightGate;
+        await route.fallback();
+      });
+      const waitForOutsidePatches = async (count: number) => {
+        for (let attempt = 0; attempt < 100 && outsidePatchRequests < count; attempt += 1)
+          await page.waitForTimeout(20);
+        assert.equal(outsidePatchRequests, count);
+      };
+      const saveAndContinue = page.getByRole("button", { name: "Save and continue", exact: true });
+      const noSaveError = async () =>
+        assert.equal(await page.locator('[data-ltm-vault-feedback] [data-ltm-status="danger"]').count(), 0);
+      holdNextSave();
+      let patchesBefore = outsidePatchRequests;
+      await branchTitle.fill("Memory outside current chat, saved in flight");
+      await saveButton.click();
+      await waitForOutsidePatches(patchesBefore + 1);
+      await otherRow.click();
+      await saveAndContinue.click();
+      await page.waitForTimeout(150);
+      assert.equal(outsidePatchRequests, patchesBefore + 1, "Vault dialog: Save joins the save in flight");
+      releaseInFlightSave();
+      await page.waitForFunction((openId) => {
+        const open = document.querySelector('[data-ltm-note-id] button[aria-current="true"]');
+        const id = open?.closest("[data-ltm-note-id]")?.getAttribute("data-ltm-note-id");
+        return Boolean(id) && id !== openId;
+      }, outsideChatNote.id);
+      assert.equal(outsidePatchRequests, patchesBefore + 1, "Vault dialog: no second save after the first lands");
+      await noSaveError();
+      await page.locator(`[data-ltm-note-id="${outsideChatNote.id}"] button`).first().click();
+      await page.waitForFunction(
+        () =>
+          document.querySelector<HTMLInputElement>("[data-ltm-field='title']")?.value ===
+          "Memory outside current chat, saved in flight",
+      );
+      // Two saves in a row: the second "Memory saved." is announced, so the notice leaves and returns.
+      await page.evaluate(() => {
+        const log: string[] = [];
+        (window as Window & { __ltmSavedLog?: string[] }).__ltmSavedLog = log;
+        const selector = '[data-ltm-vault-feedback] [data-ltm-status="success"]';
+        log.push(document.querySelector(selector)?.textContent?.trim() ?? "");
+        const observer = new MutationObserver(() => {
+          const now = document.querySelector(selector)?.textContent?.trim() ?? "";
+          if (now !== log.at(-1)) log.push(now);
+        });
+        (window as Window & { __ltmSavedObserver?: MutationObserver }).__ltmSavedObserver = observer;
+        observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+      });
+      const savedLog = () => page.evaluate(() => (window as Window & { __ltmSavedLog?: string[] }).__ltmSavedLog ?? []);
+      await branchTitle.fill("Memory outside current chat, first of two");
+      await saveButton.click();
+      await page.waitForFunction(
+        () => (window as Window & { __ltmSavedLog?: string[] }).__ltmSavedLog?.at(-1) === "Memory saved.",
+      );
+      await branchTitle.fill("Memory outside current chat, second of two");
+      assert.equal((await savedLog()).at(-1), "Memory saved.", "the first notice stays until the next save starts");
+      await saveButton.click();
+      await page.waitForFunction(() => {
+        const log = (window as Window & { __ltmSavedLog?: string[] }).__ltmSavedLog ?? [];
+        return log.at(-1) === "Memory saved." && log.at(-2) === "" && log.at(-3) === "Memory saved.";
+      });
+      await page.evaluate(() =>
+        (window as Window & { __ltmSavedObserver?: MutationObserver }).__ltmSavedObserver?.disconnect(),
+      );
+      // Destination prompt: leaving the Vault for Review while a save is in flight joins that save too.
+      holdNextSave();
+      patchesBefore = outsidePatchRequests;
+      await branchTitle.fill("Memory outside current chat, saved for destination");
+      await saveButton.click();
+      await waitForOutsidePatches(patchesBefore + 1);
+      await reviewDestination.click();
+      await saveAndContinue.click();
+      await page.waitForTimeout(150);
+      assert.equal(outsidePatchRequests, patchesBefore + 1, "Destination prompt: Save joins the save in flight");
+      releaseInFlightSave();
+      await page.locator('[data-ltm-surface="review-queue"]').waitFor();
+      assert.equal(outsidePatchRequests, patchesBefore + 1, "Destination prompt: no second save after the first lands");
+      assert.equal(await page.locator("#ltm-destination-unsaved-description").count(), 0);
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+      await openWorldGroup();
+      await page.locator(`[data-ltm-note-id="${outsideChatNote.id}"] button`).first().click();
+      await page.waitForFunction(
+        () =>
+          document.querySelector<HTMLInputElement>("[data-ltm-field='title']")?.value ===
+          "Memory outside current chat, saved for destination",
+      );
+      await branchTitle.fill("Memory outside current chat, saved");
+      await saveButton.click();
+      await page.waitForFunction(() => document.querySelector("[data-ltm-save-status]")?.textContent === "Saved");
+      page.off("request", countOutsidePatch);
       await page.unroute(branchNoteRoute);
       // Escape keeps the Rename detail dialog open while the rename runs, as its disabled Cancel button does.
       let releaseRename: (() => void) | null = null;
@@ -2922,7 +3043,31 @@ async function main() {
         0,
         "Prompt preset handoff must remain hidden without a host callback",
       );
-      await page.getByRole("button", { name: "Turn on for this chat" }).click();
+      // A held turn-on keeps the button focusable and aria-disabled, and Enter or Space on it
+      // sends no second request (Enter and Space still fire onClick on an aria-disabled button).
+      let releaseHeldTurnOn!: () => void;
+      activationGate = new Promise<void>((resolve) => {
+        releaseHeldTurnOn = resolve;
+      });
+      const turnOnButton = page.getByRole("button", { name: "Turn on for this chat" });
+      await turnOnButton.click();
+      await page.waitForFunction(() => {
+        const button = [...document.querySelectorAll("button")].find((candidate) =>
+          /turn on for this chat/i.test(candidate.textContent ?? ""),
+        );
+        return (
+          button instanceof HTMLButtonElement && button.getAttribute("aria-disabled") === "true" && !button.disabled
+        );
+      });
+      await turnOnButton.focus();
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("Space");
+      await page.waitForTimeout(150);
+      assert.deepEqual(desktopActivationChanges, [true], "a held turn-on sends exactly one request");
+      releaseHeldTurnOn();
+      await page.waitForFunction(
+        () => ![...document.querySelectorAll("button")].some((c) => /turn on for this chat/i.test(c.textContent ?? "")),
+      );
       assert.deepEqual(desktopActivationChanges, [true]);
       await page.evaluate(() => {
         const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
@@ -4068,8 +4213,27 @@ async function main() {
         assert.equal(await activity.locator('[data-ltm-debug-operation="estimated"]').count(), 0);
         assert.equal(await activity.locator('[data-ltm-debug-operation="target"]').count(), 0);
         await activity.locator('[data-ltm-debug-chip="all"]').click();
-        await activity.locator("[data-ltm-debug-search]").fill("fixture-model");
+        // Typing filters on the deferred value: right after the input event the box shows the new text and the
+        // rows are still the unfiltered ones, then the filtered rows replace them.
+        const unfilteredRows = await activity.locator("[data-ltm-debug-operation]").count();
+        assert.ok(unfilteredRows > 1, "the unfiltered log has several operations");
+        const typed = await activity.page().evaluate(() => {
+          const input = document.querySelector<HTMLInputElement>("[data-ltm-debug-search]")!;
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "fixture-model");
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          return {
+            value: input.value,
+            rows: document.querySelectorAll("[data-ltm-debug-operation]").length,
+          };
+        });
+        assert.deepEqual(typed, { value: "fixture-model", rows: unfilteredRows }, "rows lag the typed text");
         await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
+        await activity
+          .page()
+          .waitForFunction(
+            (count) => document.querySelectorAll("[data-ltm-debug-operation]").length < count,
+            unfilteredRows,
+          );
         assert.equal(await activity.locator('[data-ltm-debug-operation="target"]').count(), 0);
         // No-match: an empty result names the memory coverage, not a plain miss.
         await activity.locator("[data-ltm-debug-search]").fill("no-such-operation");
@@ -4467,6 +4631,22 @@ async function main() {
           0,
           "a new run replaces the previous result",
         );
+        // A finished run empties the selection, which turns Run selected maintenance natively disabled; focus moves
+        // to the result instead of dropping to the page.
+        await resetPage.route("**/api/long-term-memory/repair", (route) =>
+          route.fulfill({ json: { actions: [{ action: "rebuild_indexes", result: "completed", count: 6 }] } }),
+        );
+        await maintenancePanel.getByRole("checkbox", { name: "Reindex recall data", exact: true }).check();
+        await maintenancePanel.getByRole("button", { name: "Run selected maintenance" }).focus();
+        await resetPage.keyboard.press("Enter");
+        await maintenancePanel
+          .locator("[data-ltm-status]")
+          .filter({ hasText: /\(6\)$/u })
+          .waitFor();
+        await resetPage.waitForFunction(
+          () => document.activeElement?.matches('[data-ltm-maintenance-result="repair"]') ?? false,
+        );
+        assert.notEqual(await resetPage.evaluate(() => document.activeElement?.tagName), "BODY");
         // A running action keeps keyboard focus: while the repair request is held, Run selected maintenance and
         // Export backup stay focused or focusable, are aria-disabled instead of `disabled`, and a second Enter
         // sends no second request.
@@ -5019,6 +5199,152 @@ async function main() {
         assert.equal(await critiquePage.locator("[data-ltm-tab-dirty]").count(), 0, "Discard clears the dot");
         await critiquePage.close();
       }
+      // Maintenance strings that depend on a count or a list: the One and Other plural forms in the apply
+      // confirmation, and the Intl.ListFormat joins for subject names and match bases (render-level proof).
+      {
+        const pluralPage = await browserContext.newPage();
+        const repairNote = (noteId: string, title: string) => ({
+          noteId,
+          title,
+          basis: "exact_name",
+          alreadyBound: false,
+          exactFullName: true,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        });
+        const candidate = (id: string, subjectNames: string[], matchBasis: string[], duplicateIds: string[]) => ({
+          id: id.repeat(64),
+          subjectNames,
+          noteType: "character",
+          matchBasis,
+          blockingReasons: [],
+          notes: [
+            repairNote(`${id}-canonical`, subjectNames[0]!),
+            ...duplicateIds.map((duplicateId) => repairNote(duplicateId, `${subjectNames[0]} (copy)`)),
+          ],
+          canonicalNoteId: `${id}-canonical`,
+          duplicateNoteIds: duplicateIds,
+          additiveContent: [],
+          supersedingConflicts: [],
+        });
+        let previewCandidates = [candidate("a", ["Mira"], ["exact_name"], ["a-copy"])];
+        await pluralPage.route("**/api/long-term-memory/identity-repair/preview", (route) =>
+          route.fulfill({
+            json: {
+              generatedAt: "2026-01-01T00:00:00.000Z",
+              scope: { kind: "global" },
+              counts: {
+                analyzedNotes: 6,
+                candidateCount: previewCandidates.length,
+                bindableNotes: 6,
+                duplicateNotes: previewCandidates.reduce((count, item) => count + item.duplicateNoteIds.length, 0),
+                unresolvedNotes: 0,
+              },
+              candidates: previewCandidates,
+              unresolved: [],
+            },
+          }),
+        );
+        await pluralPage.goto(`http://127.0.0.1:${address.port}/`);
+        await pluralPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+        await pluralPage.evaluate(`(() => {
+          const element = document.createElement("marinara-capability-long-term-memory");
+          element.setAttribute("view", "detail");
+          element.capabilityProps = {
+            confirmAction: (options) => {
+              window.__ltmConfirms = [...(window.__ltmConfirms ?? []), options];
+              return false;
+            },
+          };
+          document.body.append(element);
+        })()`);
+        await pluralPage.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+        await pluralPage.locator("#settings-tab-maintenance").click();
+        const maintenance = pluralPage.locator("#settings-panel-maintenance");
+        const confirmCount = () =>
+          pluralPage.evaluate(() => (window as unknown as { __ltmConfirms?: unknown[] }).__ltmConfirms?.length ?? 0);
+        const lastConfirm = () =>
+          pluralPage.evaluate(() =>
+            (
+              window as unknown as { __ltmConfirms: Array<{ message?: string; confirmLabel?: string }> }
+            ).__ltmConfirms.at(-1)!,
+          );
+        // The hidden status copy of every result area is mounted and empty before a run, and the backup area's
+        // is the same node afterwards, now carrying the result (one utterance per run).
+        await pluralPage.route("**/api/long-term-memory/backup/export", (route) => route.fulfill({ json: {} }));
+        const maintenanceLiveCopy = () =>
+          maintenance.evaluate((panel) =>
+            [...panel.querySelectorAll('p[role="status"].sr-only')].map((node) => ({
+              marked: node.hasAttribute("data-ltm-test-mounted"),
+              text: node.textContent ?? "",
+            })),
+          );
+        const mountedLiveCopy = await maintenanceLiveCopy();
+        assert.ok(mountedLiveCopy.length >= 4, "every result area mounts its status copy");
+        assert.deepEqual(
+          mountedLiveCopy.filter((node) => node.text !== ""),
+          [],
+        );
+        await maintenance.evaluate((panel) => {
+          for (const node of panel.querySelectorAll('p[role="status"].sr-only')) {
+            node.setAttribute("data-ltm-test-mounted", "");
+          }
+        });
+        await maintenance.getByRole("button", { name: "Export backup" }).click();
+        await pluralPage.waitForFunction(() =>
+          [...document.querySelectorAll('#settings-panel-maintenance p[role="status"].sr-only')].some(
+            (node) => node.textContent === "Memory backup exported.",
+          ),
+        );
+        const announced = await maintenanceLiveCopy();
+        assert.equal(announced.length, mountedLiveCopy.length, "no status copy was added or removed");
+        assert.deepEqual(
+          announced.filter((node) => node.text !== ""),
+          [{ marked: true, text: "Memory backup exported." }],
+        );
+        assert.equal(
+          announced.every((node) => node.marked),
+          true,
+          "the announcing node is the one mounted before",
+        );
+        // One: a single repair with a single duplicate.
+        await maintenance.getByRole("button", { name: "Preview identity repairs" }).click();
+        await maintenance.getByRole("button", { name: /Apply selected repairs/u }).click();
+        await pluralPage.waitForFunction(
+          () => ((window as unknown as { __ltmConfirms?: unknown[] }).__ltmConfirms?.length ?? 0) === 1,
+        );
+        assert.deepEqual(await lastConfirm(), {
+          title: "Apply identity repairs?",
+          message:
+            "1 selected identity repair will be applied. 1 explicitly included duplicate note will be archived; excluded duplicates will be preserved. A backup is created first.",
+          confirmLabel: "Apply 1 repair",
+          tone: "destructive",
+        });
+        // Other: two repairs, three duplicates, and lists of three names and two match bases.
+        previewCandidates = [
+          candidate("a", ["Mira", "Mirabel", "Mimi"], ["exact_name", "unique_alias"], ["a-copy"]),
+          candidate("b", ["Sol"], ["exact_name"], ["b-copy", "b-copy-two"]),
+        ];
+        await maintenance.getByRole("button", { name: "Preview identity repairs" }).click();
+        const firstCandidate = maintenance.locator("label", { hasText: "Mira, Mirabel, and Mimi" });
+        await firstCandidate.waitFor();
+        assert.match(
+          (await firstCandidate.innerText()).replace(/\s+/gu, " "),
+          /Mira, Mirabel, and Mimi .*match via exact name, unique alias\./u,
+        );
+        await maintenance.getByRole("button", { name: /Apply selected repairs/u }).click();
+        await pluralPage.waitForFunction(
+          () => ((window as unknown as { __ltmConfirms?: unknown[] }).__ltmConfirms?.length ?? 0) === 2,
+        );
+        assert.equal(await confirmCount(), 2);
+        assert.deepEqual(await lastConfirm(), {
+          title: "Apply identity repairs?",
+          message:
+            "2 selected identity repairs will be applied. 3 explicitly included duplicate notes will be archived; excluded duplicates will be preserved. A backup is created first.",
+          confirmLabel: "Apply 2 repairs",
+          tone: "destructive",
+        });
+        await pluralPage.close();
+      }
       // #1452: when the settings read after Reset or Import fails, Retry on the error surface loads the
       // new settings instead of the cached ones the action replaced. An import whose integrity read
       // alone fails still shows the settings it refetched (and says the backup was imported).
@@ -5468,6 +5794,10 @@ async function main() {
       const compactRetry = lastInjection.getByRole("button", { name: /retry/i });
       const compactRetryBox = await compactRetry.boundingBox();
       assert.ok(compactRetryBox && compactRetryBox.height >= 24, "compact Retry keeps a 24px target");
+      let releaseLastInjection = () => {};
+      lastInjectionHold = new Promise<void>((resolve) => {
+        releaseLastInjection = resolve;
+      });
       await compactRetry.click();
       // D27 repair: a cached-data retry still shows the title without a loading flash,
       // but the Retry control stays aria-disabled (and focusable) while that refetch is in flight.
@@ -5479,6 +5809,14 @@ async function main() {
           button instanceof HTMLButtonElement && button.getAttribute("aria-disabled") === "true" && !button.disabled
         );
       });
+      // Enter and Space still fire onClick on an aria-disabled button: a held retry sends no second request.
+      await compactRetry.focus();
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("Space");
+      await page.waitForTimeout(150);
+      assert.equal(lastInjectionRequests, 3, "a held Retry sends exactly one request");
+      lastInjectionHold = null;
+      releaseLastInjection();
       await page.waitForFunction(() => {
         const button = [...document.querySelectorAll("button")].find((candidate) =>
           /retry/i.test(candidate.textContent ?? ""),
@@ -8407,6 +8745,48 @@ async function main() {
       await sourceOperationWorkbench.waitFor({ state: "detached" });
       releaseTransferPreview();
       await page.unroute("**/api/long-term-memory/notes/transfer-preview");
+      // Render-level: the hidden status copy beside the result is mounted before the run and is the same node
+      // after it, so the finished run is read out instead of mounting with its text (one utterance per run).
+      const archiveBatchRoute = "**/api/long-term-memory/notes/batch";
+      await page.route(archiveBatchRoute, (route) =>
+        route.fulfill({ json: { updatedNoteIds: ["archived-source"], skippedNoteIds: [], failedNoteIds: [] } }),
+      );
+      await page.locator('[data-ltm-source-management-action="archive"]').click();
+      await sourceOperationWorkbench.waitFor();
+      const workbenchLiveCopy = () =>
+        sourceOperationWorkbench.evaluate((workbench) =>
+          [...workbench.querySelectorAll('[role="status"], [aria-live]')]
+            .filter((node) => !node.hasAttribute("data-ltm-source-operation-preview-summary"))
+            .map((node) => ({ marked: node.hasAttribute("data-ltm-test-mounted"), text: node.textContent ?? "" })),
+        );
+      assert.deepEqual(await workbenchLiveCopy(), [{ marked: false, text: "" }], "the live copy is mounted and empty");
+      assert.equal(await sourceOperationWorkbench.locator("[data-ltm-source-operation-result]").count(), 0);
+      await sourceOperationWorkbench.evaluate((workbench) => {
+        const live = [...workbench.querySelectorAll('[role="status"]')].find(
+          (node) => !node.hasAttribute("data-ltm-source-operation-preview-summary"),
+        );
+        live?.setAttribute("data-ltm-test-mounted", "");
+      });
+      await sourceOperationWorkbench.locator('[data-ltm-source-operation-action="preview"]').click();
+      // This host has no confirmAction here, so Apply asks through window.confirm; accept it.
+      const applyDialog = page.waitForEvent("dialog");
+      const applyClick = sourceOperationWorkbench.locator('[data-ltm-source-operation-action="apply"]').click();
+      await (await applyDialog).accept();
+      await applyClick;
+      const workbenchResult = sourceOperationWorkbench.locator("[data-ltm-source-operation-result]");
+      await workbenchResult.waitFor();
+      assert.deepEqual(
+        await workbenchLiveCopy(),
+        [{ marked: true, text: "Updated 1; deleted 0; detached 0; excluded 0; skipped 0; failed 0." }],
+        "the same status node now carries the result, and nothing else announces it",
+      );
+      assert.equal(
+        (await workbenchResult.locator("[data-ltm-status]").first().innerText()).trim(),
+        "Updated 1; deleted 0; detached 0; excluded 0; skipped 0; failed 0.",
+      );
+      await sourceOperationWorkbench.locator("[data-ltm-source-operation-close]").click();
+      await sourceOperationWorkbench.waitFor({ state: "detached" });
+      await page.unroute(archiveBatchRoute);
       await page.unroute(derivedRoute);
       await page.locator("[data-ltm-source-workbench] h2", { hasText: "Desktop re-extract source" }).waitFor();
       await page.locator('[data-ltm-source-tab="characters"]').click();
@@ -8599,6 +8979,58 @@ async function main() {
       );
       await restoredSourceResult.getByRole("button", { name: "Back to preview" }).click();
       assert.equal(await restoredSourceResult.count(), 0);
+
+      // While availability settings load, an imported row's Re-extract stays focusable, says why it waits, and a
+      // press sends nothing.
+      {
+        let releaseSettings = () => {};
+        const settingsGate = new Promise<void>((resolve) => {
+          releaseSettings = resolve;
+        });
+        const settingsRoute = "**/api/long-term-memory/settings";
+        await page.route(settingsRoute, async (route) => {
+          if (route.request().method() === "GET") await settingsGate;
+          // The reload at the end of the case can settle a held request first.
+          await route.continue().catch(() => {});
+        });
+        try {
+          await page.reload();
+          await page.evaluate((version) => {
+            const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+              capabilityProps?: unknown;
+            };
+            element.setAttribute("view", "detail");
+            element.capabilityProps = { agent: { name: "Long-Term Memory" }, package: { version } };
+            document.body.append(element);
+          }, packageManifest.version);
+          await page.locator('[data-ltm-surface="detail"]').waitFor();
+          await page.locator('[data-ltm-control="navigation"][data-ltm-destination="sources"]').first().click();
+          await page.locator('[data-ltm-source-tab="chats"]').click();
+          await page.locator('[data-ltm-source-status-filter="imported"]').click();
+          await page.locator('[data-ltm-source-open="chat-a:summary-desktop-reextract"]').click();
+          const waitingReextract = page.locator('[data-ltm-source-inspector-action="re-extract"]');
+          await waitingReextract.waitFor();
+          assert.equal(await waitingReextract.getAttribute("aria-disabled"), "true");
+          assert.equal(await waitingReextract.getAttribute("disabled"), null);
+          const waitingReasonId = await waitingReextract.getAttribute("aria-describedby");
+          assert.ok(waitingReasonId, "a waiting Re-extract points at the reason");
+          assert.match(await page.locator(`[id="${waitingReasonId}"]`).innerText(), /Loading availability settings/u);
+          await waitingReextract.focus();
+          assert.equal(await waitingReextract.evaluate((button) => button === document.activeElement), true);
+          const waitingWrites: string[] = [];
+          const recordWaitingWrite = (request: { method(): string; url(): string }) => {
+            if (request.method() !== "GET") waitingWrites.push(request.url());
+          };
+          page.on("request", recordWaitingWrite);
+          await page.keyboard.press("Enter");
+          await page.waitForTimeout(150);
+          page.off("request", recordWaitingWrite);
+          assert.deepEqual(waitingWrites, []);
+        } finally {
+          releaseSettings();
+          await page.unroute(settingsRoute);
+        }
+      }
 
       const mobileContext = await browser.newContext({
         ...devices["Pixel 7"],

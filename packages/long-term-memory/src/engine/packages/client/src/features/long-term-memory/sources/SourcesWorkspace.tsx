@@ -297,6 +297,7 @@ export default function SourcesWorkspace({
   const importResultLabelId = useId();
   const importReasonId = useId();
   const importLockId = useId();
+  const availabilityWaitId = useId();
   const reimportDescriptionId = `${importReasonId}-reimport`;
   const client = useQueryClient();
   const selectAllRef = useRef<HTMLInputElement>(null);
@@ -473,7 +474,9 @@ export default function SourcesWorkspace({
   const importActionProps = lockedActionProps(importDisabled, importRunning ? importLockId : undefined);
   // Re-extract shares the import lock: a run of either kind holds it, and the reason line says which.
   const reextractLocked = importRunning || !availabilityReady;
-  const reextractActionProps = lockedActionProps(reextractLocked, importRunning ? importLockId : undefined);
+  // While settings load there is no run, so the reason is the loading line itself.
+  const reextractReasonId = importRunning ? importLockId : !availabilityReady ? availabilityWaitId : undefined;
+  const reextractActionProps = lockedActionProps(reextractLocked, reextractReasonId);
 
   const changeAvailabilityModes = async (nextModes: LtmMode[]) => {
     if (!nextModes.length || !availabilityReady || availabilitySavingRef.current) return;
@@ -1857,7 +1860,11 @@ export default function SourcesWorkspace({
           : null}
       </p>
       {!availabilityReady ? (
-        <StatusSurface tone={settingsQuery.isError ? "danger" : "neutral"} busy={!settingsQuery.isError}>
+        <StatusSurface
+          id={availabilityWaitId}
+          tone={settingsQuery.isError ? "danger" : "neutral"}
+          busy={!settingsQuery.isError}
+        >
           {settingsQuery.isError
             ? errorMessage(
                 settingsQuery.error,
@@ -2294,7 +2301,7 @@ export default function SourcesWorkspace({
                                 <div role="list" className="space-y-2">
                                   {lorebookDetails.isLoading ? (
                                     <div
-                                      className="h-20 animate-pulse rounded bg-[var(--secondary)]"
+                                      className="h-20 animate-pulse rounded bg-[var(--secondary)] motion-reduce:animate-none"
                                       aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.loadingSourceContent")}
                                     />
                                   ) : lorebookDetails.isError ? (
@@ -2414,7 +2421,7 @@ export default function SourcesWorkspace({
                     <ImportedSourceInspector
                       source={focusedImportedSource}
                       disabled={reextractLocked}
-                      lockReasonId={importRunning ? importLockId : undefined}
+                      lockReasonId={reextractReasonId}
                       bulkActive={bulkSelectionActive}
                       onOpenMemory={onOpenMemory}
                       onOpenReview={onOpenReview}
@@ -2826,7 +2833,7 @@ export default function SourcesWorkspace({
                         <p className="text-xs text-[var(--muted-foreground)]">{focusedFlatRow.summary}</p>
                         {sourceDetails.isLoading ? (
                           <div
-                            className="h-32 animate-pulse rounded bg-[var(--secondary)]"
+                            className="h-32 animate-pulse rounded bg-[var(--secondary)] motion-reduce:animate-none"
                             aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.loadingSourceContent")}
                           />
                         ) : sourceDetails.isError ? (
@@ -2970,7 +2977,7 @@ export default function SourcesWorkspace({
                     <ImportedSourceInspector
                       source={focusedImportedSource}
                       disabled={reextractLocked}
-                      lockReasonId={importRunning ? importLockId : undefined}
+                      lockReasonId={reextractReasonId}
                       bulkActive={bulkSelectionActive}
                       onOpenMemory={onOpenMemory}
                       onOpenReview={onOpenReview}

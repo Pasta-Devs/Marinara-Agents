@@ -23,7 +23,7 @@ import {
   forgeStableVoice,
   forgeVoiceCacheKey,
 } from "../packages/gacha-forge/src/audio-client.mjs";
-import { forgeSoundtrackContextKey, normalizeForgeAudio } from "../packages/gacha-forge/src/audio-settings.mjs";
+import { forgeSoundtrackContextKey, normalizeForgeAudio } from "../sources/forge-kit/audio-settings.mjs";
 
 const original = Object.fromEntries(
   [

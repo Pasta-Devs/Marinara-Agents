@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -19,6 +19,13 @@ try {
   for (const file of ["client.js", "server.mjs", "bundle-patches.json", "src"]) {
     await cp(new URL(file, sourceRoot), new URL(file, root), { recursive: true });
   }
+  // The ledger also pastes the shared forge kit, which sits beside the package at sources/forge-kit.
+  const kitSource = new URL("../sources/forge-kit/", import.meta.url);
+  const kit = pathToFileURL(join(directory, "sources/forge-kit") + "/");
+  await cp(kitSource, kit, { recursive: true });
+  const kitNames = new Set(
+    (await readdir(kitSource)).filter((file) => file.endsWith(".mjs")).map((file) => file.replace(/\.mjs$/u, "")),
+  );
   const originalClient = await readFile(new URL("client.js", root), "utf8");
   const originalServer = await readFile(new URL("server.mjs", root), "utf8");
   await rebuildGachaBundles(root);
@@ -35,6 +42,11 @@ try {
     ["upgrade-assist-client", ["client.js"]],
     ["upgrade-assist-server", ["server.mjs"]],
     ["time-zone-server", ["server.mjs"]],
+    ["chat-continuity-server", ["server.mjs"]],
+    ["story-cancel-server", ["server.mjs"]],
+    ["character-card-context", ["server.mjs"]],
+    ["story-expressions", ["client.js", "server.mjs"]],
+    ["story-expressions-server", ["server.mjs"]],
     ["player-choice-text", ["client.js", "server.mjs"]],
     ["home-presentation", ["client.js"]],
     ["background-download-client", ["client.js"]],
@@ -56,6 +68,7 @@ try {
     ["player-choices-client", ["client.js"]],
     ["player-choices-server", ["server.mjs"]],
     ["audio-settings", ["client.js", "server.mjs"]],
+    ["audio-prompts", ["server.mjs"]],
     ["audio-en", ["client.js"]],
     ["audio-client", ["client.js"]],
     ["audio-story", ["client.js"]],
@@ -76,8 +89,10 @@ try {
     ["seasonal-events-client", ["client.js"]],
     ["seasonal-events-en", ["client.js"]],
   ];
+  const listed = new Set(sources.map(([name]) => name));
+  for (const name of kitNames) assert.ok(listed.has(name), `forge kit module ${name} has a rebuild proof entry`);
   for (const [name, bundles] of sources) {
-    const source = new URL(`src/${name}.mjs`, root);
+    const source = kitNames.has(name) ? new URL(`${name}.mjs`, kit) : new URL(`src/${name}.mjs`, root);
     const before = await readFile(source, "utf8");
     // Bundled helpers discard comments; a pure export proves their input is rebuilt as well.
     const marker =

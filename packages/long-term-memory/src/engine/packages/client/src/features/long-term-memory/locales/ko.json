@@ -1405,6 +1405,7 @@
   "ui.longTermMemory.memoryvault.resolve": "해결",
   "ui.longTermMemory.memoryvault.saved": "저장됨",
   "ui.longTermMemory.memoryvault.savedButRecallIsStale": "저장했어요. 인덱스 재구축에 성공하면 회상도 반영돼요: {{error}}",
+  "ui.longTermMemory.memoryvault.savedButRecallIsStaleNoError": "저장했어요. 인덱스 재구축에 성공하면 회상도 반영돼요.",
   "ui.longTermMemory.memoryvault.diagnostics": "진단",
   "ui.longTermMemory.memoryvault.copyDiagnostics": "진단 복사",
   "ui.longTermMemory.memoryvault.diagnosticsCopied": "진단을 복사했어요.",

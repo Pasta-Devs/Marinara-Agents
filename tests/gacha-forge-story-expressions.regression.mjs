@@ -6,15 +6,12 @@ import {
   forgeStoryExpressionArt,
   forgeStoryExpressionNames,
   normalizeForgeStoryExpression,
-} from "../packages/gacha-forge/src/story-expressions.mjs";
+} from "../sources/forge-kit/story-expressions.mjs";
 import { forgeStoryExpressionFields } from "../packages/gacha-forge/src/story-expressions-en.mjs";
 import { forgeAudioFields } from "../packages/gacha-forge/src/audio-en.mjs";
-import { normalizeForgeAudio } from "../packages/gacha-forge/src/audio-settings.mjs";
-import { forgeChoiceLabel } from "../packages/gacha-forge/src/player-choice-text.mjs";
-import {
-  forgeCanonicalSegments,
-  forgeNormalizeChoiceBeat,
-} from "../packages/gacha-forge/src/player-choices-server.mjs";
+import { normalizeForgeAudio } from "../sources/forge-kit/audio-settings.mjs";
+import { forgeChoiceLabel } from "../sources/forge-kit/player-choice-text.mjs";
+import { forgeCanonicalSegments, forgeNormalizeChoiceBeat } from "../sources/forge-kit/player-choices-server.mjs";
 
 const previousFetch = globalThis.fetch;
 const previousAudio = globalThis.normalizeForgeAudio;

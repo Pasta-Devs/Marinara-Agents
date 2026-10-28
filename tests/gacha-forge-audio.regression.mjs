@@ -5,7 +5,7 @@ import {
   normalizeForgeAudio,
   normalizeForgeMusicMood,
   forgeSoundtrackContextKey,
-} from "../packages/gacha-forge/src/audio-settings.mjs";
+} from "../sources/forge-kit/audio-settings.mjs";
 import { forgeAudioEnglish, forgeAudioFields } from "../packages/gacha-forge/src/audio-en.mjs";
 import {
   ForgeAudioController,
@@ -25,8 +25,8 @@ import {
   forgeNormalizeChoiceBeat,
   forgeRememberSpeakerGenders,
   forgeRunSpeakerGenders,
-} from "../packages/gacha-forge/src/player-choices-server.mjs";
-import { forgeChoiceLabel } from "../packages/gacha-forge/src/player-choice-text.mjs";
+} from "../sources/forge-kit/player-choices-server.mjs";
+import { forgeChoiceLabel } from "../sources/forge-kit/player-choice-text.mjs";
 
 const before = {
   forgeSoundtrackContextKey: globalThis.forgeSoundtrackContextKey,

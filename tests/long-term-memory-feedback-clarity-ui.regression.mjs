@@ -664,7 +664,10 @@ assert.match(detail, /onSaveRequest=\{\(save\) =>/u);
 assert.match(detail, /navigationPrompt/u);
 assert.match(detail, /navigationResolveRef\.current\?\.\(false\)/u);
 assert.match(detail, /navigationSaveInFlightRef/u);
-assert.match(detail, /navigationBusyProps = navigationSaveInFlight\s+\? \(\{ "aria-disabled": true/u);
+assert.match(detail, /navigationBusyProps = lockedActionProps\(navigationSaveInFlight\)/u);
+// Detail locks go through the shared helper; no hand-built aria-disabled literal is left.
+assert.match(detail, /<Button \{\.\.\.lockedActionProps\(repairPending\)\}/u);
+assert.doesNotMatch(detail, /"aria-disabled": true/u);
 assert.match(detail, /\{\.\.\.navigationBusyProps\}/u);
 assert.match(detail, /finishNavigationPrompt\("save"\)/u);
 assert.match(detail, /aria-modal="true"/u);
@@ -772,6 +775,12 @@ assert.match(workspaceScreen, /excludedNoteIds: excludedMemories/u);
 assert.match(workspaceScreen, /data-ltm-source-operation-preview/u);
 assert.match(workspaceScreen, /data-ltm-source-operation-excluded/u);
 assert.match(workspaceScreen, /data-ltm-source-operation-result/u);
+// The result's hidden status copy is always mounted (LiveResult), and only the visible list waits for a result.
+assert.match(
+  workspaceScreen,
+  /<div\s+data-ltm-source-operation-result=\{result \? operation : undefined\}[^>]*>\s*<LiveResult/u,
+);
+assert.doesNotMatch(workspaceScreen, /\{result \? \(\s*<div data-ltm-source-operation-result/u);
 assert.match(workspace, /data-ltm-source-mode/u);
 assert.match(workspaceScreen, /const sourceCheckboxClass = "h-4 w-4 shrink-0 accent-/u);
 assert.match(workspaceScreen, /linked\.isError[\s\S]*linkedMemoriesCouldNotLoad/u);
@@ -790,14 +799,17 @@ assert.match(workspace, /\.\.\.\(contract\.modes\?\.length \? \{ modes: contract
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.retryUsesModes"], "Retries with {{modes}}");
 // Re-extract locks on any running source task, stays focusable and points at the lock reason.
 assert.match(workspace, /const reextractLocked = importRunning \|\| !availabilityReady;/u);
+assert.match(workspace, /const reextractActionProps = lockedActionProps\(reextractLocked, reextractReasonId\);/u);
+// While availability settings load, Re-extract points at the existing loading message instead of staying silent.
 assert.match(
   workspace,
-  /const reextractActionProps = lockedActionProps\(reextractLocked, importRunning \? importLockId : undefined\);/u,
+  /const reextractReasonId = importRunning \? importLockId : !availabilityReady \? availabilityWaitId : undefined;/u,
 );
+assert.match(workspace, /id=\{availabilityWaitId\}/u);
 assert.equal(workspace.match(/\{\.\.\.reextractActionProps\}/gu)?.length, 3);
 assert.doesNotMatch(workspace, /(?<!aria-)disabled=\{reextractDisabled\}/u);
 assert.equal(workspace.match(/disabled=\{reextractLocked\}/gu)?.length, 2);
-assert.equal(workspace.match(/lockReasonId=\{importRunning \? importLockId : undefined\}/gu)?.length, 2);
+assert.equal(workspace.match(/lockReasonId=\{reextractReasonId\}/gu)?.length, 2);
 assert.match(
   workspace,
   /const availabilityReady = settingsQuery\.isSuccess && effectiveAvailabilityModes\.length > 0/u,
@@ -1069,7 +1081,38 @@ assert.equal((maintenance.match(/queryKeys\.localCharactersRoot/g) ?? []).length
 assert.match(sharedControls, /export function lockedActionProps\(locked: boolean, reasonId\?: string\)/u);
 assert.equal((sharedControls.match(/props\["aria-disabled"\] \? "opacity-50"/gu) ?? []).length, 2);
 assert.match(maintenance, /const lock = lockedActionProps\(busy\)/u);
-assert.doesNotMatch(maintenance, /disabled=\{[^}]*\b(?:busy|pending)\b/u);
+// A native `disabled={…}` expression is read to its matching brace: a pattern that stops at the first `}` lets a
+// nested object, arrow body or template literal hide the running-work flag from the scan.
+const nativeDisabledMentioning = (source, pattern) => {
+  const found = [];
+  for (const match of source.matchAll(/(?<!aria-)\bdisabled=\{/gu)) {
+    const start = match.index + match[0].length;
+    let depth = 1;
+    let end = start;
+    for (; end < source.length && depth > 0; end += 1) {
+      if (source[end] === "{") depth += 1;
+      else if (source[end] === "}") depth -= 1;
+    }
+    const expression = source.slice(start, end - 1);
+    if (pattern.test(expression)) found.push(expression);
+  }
+  return found;
+};
+const runningWork = /\b(?:busy|pending)\b/u;
+assert.deepEqual(nativeDisabledMentioning("<Button disabled={!ready || busy} />", runningWork), ["!ready || busy"]);
+assert.deepEqual(nativeDisabledMentioning("<Button disabled={busy} />", runningWork), ["busy"]);
+assert.deepEqual(
+  nativeDisabledMentioning("<Button disabled={Boolean(find({ id })) || busy} />", runningWork),
+  ["Boolean(find({ id })) || busy"],
+  "an expression with a nested object is read whole",
+);
+assert.doesNotMatch(
+  "<Button disabled={Boolean(find({ id })) || busy} />",
+  /disabled=\{[^}]*\b(?:busy|pending)\b/u,
+  "the first-brace pattern misses that expression",
+);
+assert.deepEqual(nativeDisabledMentioning("<Button aria-disabled={busy} />", runningWork), []);
+assert.deepEqual(nativeDisabledMentioning(maintenance, runningWork), []);
 assert.doesNotMatch(vault, /className: "opacity-50"/u);
 assert.doesNotMatch(readFileSync(ltmSourcePaths.settings, "utf8"), /className: "opacity-50"/u);
 // Vault and Review locks: unsaved identity edits and running saves never feed a native `disabled`; the source
@@ -1082,10 +1125,13 @@ const subjectIdentityReview = readFileSync(
   join(dirname(ltmSourcePaths.reviewQueue), "SubjectIdentityReview.tsx"),
   "utf8",
 );
-assert.doesNotMatch(reviewQueue, /(?<!aria-)disabled=\{[^}]*identityDirtyIds/u);
-assert.doesNotMatch(
-  reviewQueue,
-  /(?<!aria-)disabled=\{[^}]*\b(?:dismissingId|clearingSourceId|extractingSourceId|isFetching|running !== null)\b/u,
+assert.deepEqual(nativeDisabledMentioning(reviewQueue, /identityDirtyIds/u), []);
+assert.deepEqual(
+  nativeDisabledMentioning(
+    reviewQueue,
+    /\b(?:dismissingId|clearingSourceId|extractingSourceId|isFetching|running !== null)\b/u,
+  ),
+  [],
 );
 assert.equal(
   (reviewQueue.match(/lockedActionProps\(identityLocked, identityLockReasonId\)/gu) ?? []).length,
@@ -1133,6 +1179,20 @@ assert.equal(
   locale["ui.longTermMemory.memoryvault.savedButRecallIsStale"],
   "Saved. Recall will catch up once the index rebuild succeeds: {{error}}",
 );
+// An empty rebuild error picks the no-error key at both call sites, so the warning never ends in a bare colon.
+assert.equal(
+  locale["ui.longTermMemory.memoryvault.savedButRecallIsStaleNoError"],
+  "Saved. Recall will catch up once the index rebuild succeeds.",
+);
+assert.doesNotMatch(locale["ui.longTermMemory.memoryvault.savedButRecallIsStaleNoError"], /\{\{|:\s*$/u);
+assert.doesNotMatch(vault, /error: (?:response|result)\.rebuild\.error \?\? ""/u);
+assert.equal(
+  vault.match(
+    /\.rebuild\.error\s*\?\s*localizeUi\("ui\.longTermMemory\.memoryvault\.savedButRecallIsStale", \{ error: /gu,
+  )?.length,
+  2,
+);
+assert.equal(vault.match(/"ui\.longTermMemory\.memoryvault\.savedButRecallIsStaleNoError"/gu)?.length, 2);
 // #1636: the open row uses the documented primary wash plus a start-edge bar and aria-current, not an accent tint.
 assert.match(vaultRow, /selected \? "bg-\[var\(--primary\)\]\/10" : ""/u);
 assert.doesNotMatch(vaultRow, /bg-\[var\(--accent\)\]\/50/u);
@@ -1263,18 +1323,18 @@ assert.match(
 );
 assert.match(detail, /Measured on the status panel[^\n]*at least 10\.0:1 light, 9\.1:1 dark/u);
 
-// Every spinner in the feature stops under reduced motion; the workspace rule only shortens the
-// loop, so a spinner outside it (navigation, detail header) would still turn without its own class.
+// Every spinner and pulsing placeholder in the feature stops under reduced motion; the workspace rule only shortens
+// the loop, so one outside it (navigation, detail header, loading rows) would still move without its own class.
 const spinnerFiles = readdirSync(ltmClientRoot, { recursive: true }).filter((name) => /\.tsx$/u.test(String(name)));
 assert.ok(spinnerFiles.length > 10, "spinner scan found the feature sources");
 for (const name of spinnerFiles) {
   const lines = readFileSync(join(ltmClientRoot, String(name)), "utf8").split("\n");
   lines.forEach((line, index) => {
-    if (line.includes("animate-spin")) {
+    if (/animate-(?:spin|pulse)/u.test(line)) {
       assert.match(
         line,
         /motion-reduce:animate-none/u,
-        `${name}:${index + 1} spinner needs motion-reduce:animate-none`,
+        `${name}:${index + 1} spinner or placeholder needs motion-reduce:animate-none`,
       );
     }
   });

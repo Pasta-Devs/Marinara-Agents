@@ -242,9 +242,7 @@ const otomeForgeOwnedSourcePaths = [
 // The forge kit: plain .mjs modules Gacha Forge pastes into its bundles and Otome Forge imports as
 // `@forge-kit/<module>.mjs`. Package sources are copied into a temporary build root, so a relative import out of it
 // cannot resolve; both bundles alias the name instead. The gates and source capture skip files outside the build root.
-// ponytail: points at Gacha Forge's src/ until the kit moves to sources/forge-kit (Otome Forge plan M0a); then
-// repoint this and the "@forge-kit/*" path in tests/tsconfig.regressions.json there and drop this note.
-const forgeKitRoot = join(packagesDir, "gacha-forge/src");
+const forgeKitRoot = join(repoRoot, "sources/forge-kit");
 // Package clients use the Engine's stores, services and components through `__MARINARA_HOST__` (capability API 1.341):
 // every feature build stacks these adapters over the vendored modules, so no client bundles a copy that keeps its own
 // state (#1478: the UI store copy reset Engine settings; #1487). scripts/client-host-gates.mjs holds each bundle to it.
@@ -569,7 +567,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.5.3",
+    version: "1.5.5",
     minEngineVersion: "2.5.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",

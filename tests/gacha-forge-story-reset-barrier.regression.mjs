@@ -4,8 +4,8 @@ import {
   createForgeStoryCancellation,
   forgeStoryDocuments,
   forgeStoryWork,
-} from "../packages/gacha-forge/src/story-cancel-server.mjs";
-import { createForgeStoryMemoryIntegration } from "../packages/gacha-forge/src/story-memory-integration.mjs";
+} from "../sources/forge-kit/story-cancel-server.mjs";
+import { createForgeStoryMemoryIntegration } from "../sources/forge-kit/story-memory-integration.mjs";
 
 const deferred = () => Promise.withResolvers();
 const tick = () => new Promise((resolve) => setImmediate(resolve));

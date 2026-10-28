@@ -3,7 +3,7 @@ import * as chatContinuity from "../packages/gacha-forge/src/chat-continuity-cli
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import vm from "node:vm";
-import { normalizeForgeAudio } from "../packages/gacha-forge/src/audio-settings.mjs";
+import { normalizeForgeAudio } from "../sources/forge-kit/audio-settings.mjs";
 
 const english = await readFile(
   new URL("../packages/gacha-forge/src/proactive-messages-en.mjs", import.meta.url),

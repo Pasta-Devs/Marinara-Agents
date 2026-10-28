@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { orderForgeStorySources } from "../packages/gacha-forge/src/story-memory-integration.mjs";
+import { orderForgeStorySources } from "../sources/forge-kit/story-memory-integration.mjs";
 import {
   createForgeStoryMemory,
   forgeStoryMemoryText,
   rankForgeStoryMemories,
-} from "../packages/gacha-forge/src/story-memory.mjs";
+} from "../sources/forge-kit/story-memory.mjs";
 
 const source = (id, content, extra = {}) => ({
   id,
