@@ -4,6 +4,7 @@
 - In Formation, a swap seats both units before either one's passive fires, so a revive, Swap, Shuffle or Echo it sets off never puts a fourth unit in a row, and revived units are drawn where they are. Fights started earlier keep their rules.
 - On a small model, replies are much less likely to fail while memory catches up: the oldest chapter summaries, or the oldest chapters of the full story history, are left out only when the reply would not fit otherwise. The previous chapter, the scene so far and your decisions always stay.
 - Story memory no longer stops for good when a chapter it already remembers reads differently later: it keeps its first memory and goes on.
+- Seasonal event fights load again after a chapter was regenerated, and a fight that can't be set up now says why.
 
 ## 1.25.1 — 2026-10-27
 

@@ -388,3 +388,11 @@ test("entering the same fight twice, with its screen already drawn, still loads 
   for (let index = 0; index < h.calls.length; index += 1) await h.land(index, ok("A"));
   assert.deepEqual([h.calls.length, h._combatPhase, h._combat?.fight], [2, "prebattle", "A"]);
 });
+
+test("a fight that cannot be set up says why: a changed story has its own words, any other failure shows its code", () => {
+  assert.ok(source.includes('if (error === "story-changed") return forgeFormationLabel("storyChanged");'));
+  assert.match(source, /"combat\.formation\.storyChanged":\s+"The story changed while this page was open\./u);
+  assert.ok(
+    source.includes(`forgeFormationErrorLabel(o)||"Couldn't set up the battle."+(o?" ("+u(String(o))+")":""))`),
+  );
+});

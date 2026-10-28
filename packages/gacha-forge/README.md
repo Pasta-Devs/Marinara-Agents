@@ -1,5 +1,7 @@
 ## Fight loading, Formation swaps and memory that keeps going (1.25.2)
 
+A seasonal story event's fights load again in a world where a chapter or Character Story was regenerated. Before, every event fight in such a world stopped at "Couldn't set up the battle.", and Retry repeated the same refusal, because the fight's request was the one event request sent without the story's version. A fight that can't be set up now also shows the reason the server gave, and a story changed in another tab says to reopen it.
+
 Backing out of a fight while it is still loading and entering another one now loads the new fight. Before, the first fight's late reply replaced it, so the fight you left was shown and could be started. A fight request that never answers no longer blocks every later fight either, and Back from a loading Materials or event fight frees those screens at once.
 
 In Formation, a two-unit move (a planned swap, or a Swap effect) seats both units before either one's passive fires, so a revive, Swap, Shuffle or Echo it sets off never sees the seat the mover left as free, and no row ever holds four. A revive returns the fallen unit to the row it fell in when that row has room, otherwise to the other row, or not at all when both are full; a unit revived in another row, or moved by a Shuffle and then defeated, is now drawn where it really is. Fights started before 1.25.2 are scored by the rules they started under.

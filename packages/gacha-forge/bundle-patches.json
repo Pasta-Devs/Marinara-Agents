@@ -2035,7 +2035,7 @@
             },
             {
               "find": "var oy=[{version:null,fixed:[\"Scenes that are already written can be played while pre-forge writes the rest of the chapter, and the next one turns into Play as soon as it is written.\",\"Opening a weapon or relic to upgrade it no longer cuts to an empty screen while it loads, and the relic you are upgrading is no longer faded out.\"]},{version:\"1.25.0\"",
-              "replace": "var oy=[{version:null,fixed:[\"Backing out of a fight while it loads and entering another one now loads the new fight, instead of showing the one you left.\",\"In Formation, a swap now seats both units before either one's passive fires, so a revive, Swap or Echo it sets off never puts a fourth unit in a row.\",\"On a small model, a reply is much less likely to fail while story memory catches up: the oldest chapters are left out first, only when the reply would not fit otherwise.\",\"Story memory no longer stops for good when a chapter it already remembers reads differently later: it keeps its first memory and goes on.\"]},{version:\"1.25.1\",fixed:[\"Scenes that are already written can be played while pre-forge writes the rest of the chapter, and the next one turns into Play as soon as it is written.\",\"Opening a weapon or relic to upgrade it no longer cuts to an empty screen while it loads, and the relic you are upgrading is no longer faded out.\"]},{version:\"1.25.0\""
+              "replace": "var oy=[{version:null,fixed:[\"Backing out of a fight while it loads and entering another one now loads the new fight, instead of showing the one you left.\",\"In Formation, a swap now seats both units before either one's passive fires, so a revive, Swap or Echo it sets off never puts a fourth unit in a row.\",\"On a small model, a reply is much less likely to fail while story memory catches up: the oldest chapters are left out first, only when the reply would not fit otherwise.\",\"Story memory no longer stops for good when a chapter it already remembers reads differently later: it keeps its first memory and goes on.\",\"Seasonal event fights load again in a world where a chapter or Character Story was regenerated, instead of stopping at \\\"Couldn't set up the battle.\\\"\"]},{version:\"1.25.1\",fixed:[\"Scenes that are already written can be played while pre-forge writes the rest of the chapter, and the next one turns into Play as soon as it is written.\",\"Opening a weapon or relic to upgrade it no longer cuts to an empty screen while it loads, and the relic you are upgrading is no longer faded out.\"]},{version:\"1.25.0\""
             },
             {
               "find": "_pickCombatPreset(e){!this._run||this._combatPreset===e||(this._combatPreset=e,this._loadBattle())}",
@@ -2064,6 +2064,10 @@
             {
               "find": "}).then(()=>{this._battleLoading=!1,this._farmBusy=!1,",
               "replace": "}).then(()=>{if(this._battleLoading!==forgeBattleLoad){this._battleLoading||(this._farmBusy=!1);return}this._battleLoading=!1,this._farmBusy=!1,"
+            },
+            {
+              "find": "forgeFormationErrorLabel(o)||\"Couldn't set up the battle.\")+\"</span>\"",
+              "replace": "forgeFormationErrorLabel(o)||\"Couldn't set up the battle.\"+(o?\" (\"+u(String(o))+\")\":\"\"))+\"</span>\""
             }
           ]
         }
