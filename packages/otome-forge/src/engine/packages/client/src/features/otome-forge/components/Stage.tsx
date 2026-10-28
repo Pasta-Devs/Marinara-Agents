@@ -2,7 +2,7 @@
 // Otome Forge: the portrait stage. A 9:16 stage centred over a blurred, dimmed copy of the scene; full-bleed at phone
 // width; never rotates. Fullscreen goes through the Home browser's own control (`browserFullscreen.setActive`).
 // ──────────────────────────────────────────────
-import type { CSSProperties, ReactNode } from "react";
+import { createContext, useContext, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { useOtomeProps } from "../props";
@@ -13,8 +13,25 @@ interface StageProps {
   children: ReactNode;
 }
 
+/** The layer over the stage that dialogs render into (components/Dialog.tsx), and the body they make inert. */
+export interface StageLayer {
+  layer: HTMLDivElement;
+  body: HTMLDivElement;
+}
+
+const StageLayerContext = createContext<StageLayer | null>(null);
+
+export function useStageLayer(): StageLayer | null {
+  return useContext(StageLayerContext);
+}
+
 export function Stage({ background, children }: StageProps) {
   const { t } = useTranslation();
+  const [body, setBody] = useState<HTMLDivElement | null>(null);
+  const [layer, setLayer] = useState<HTMLDivElement | null>(null);
+  // One value per pair of elements: a new object on every render would rerun each open dialog's mount effect (focus
+  // jumping back to its first control) whenever the host redraws.
+  const stageLayer = useMemo(() => (body && layer ? { body, layer } : null), [body, layer]);
   const style = background ? ({ "--of-bg": background } as CSSProperties) : undefined;
   return (
     <div className="of-frame" style={style}>
@@ -27,7 +44,12 @@ export function Stage({ background, children }: StageProps) {
           <div className="of-scene-stars" />
           <div className="of-scene-veil" />
         </div>
-        <div className="of-stage-body">{children}</div>
+        <StageLayerContext.Provider value={stageLayer}>
+          <div ref={setBody} className="of-stage-body">
+            {children}
+          </div>
+        </StageLayerContext.Provider>
+        <div ref={setLayer} className="of-stage-layer" />
       </section>
     </div>
   );

@@ -1,0 +1,90 @@
+name: Otome Forge Package Browser
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - ".github/workflows/otome-forge-browser.yml"
+      - "artifacts/otome-forge-*.zip"
+      - "packages/otome-forge/**"
+      - "scripts/typecheck-packages.mjs"
+      - "sources/forge-kit/**"
+      - "tests/otome-forge-*"
+      - "tests/package-otome-forge*.e2e.ts"
+
+concurrency:
+  group: otome-forge-browser-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  otome-forge-browser:
+    name: Otome Forge package browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Marinara Agents
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout Marinara Engine staging
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Pasta-Devs/Marinara-Engine
+          ref: staging
+          path: engine
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: engine/package.json
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Install package runner dependencies
+        run: npm ci
+
+      - name: Install Engine dependencies
+        run: pnpm --dir engine install --frozen-lockfile
+
+      # The package server types its runtime host from @marinara-engine/shared, and the real-server visit loads the
+      # Engine server; both read the built shared package (dist/ is not committed), as the LTM and Noodle suites do.
+      - name: Build Engine shared package
+        run: pnpm --dir engine --filter @marinara-engine/shared build
+
+      # The strict run checks the package against the Engine's own dependency types, so it needs this Engine checkout;
+      # Pull Request Checks has none and runs only the name check.
+      - name: Typecheck Otome Forge strictly
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+        run: node scripts/typecheck-packages.mjs otome-forge
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      # The suite runs the committed build (client.js, server.mjs): CI has no rebuild step, so what is tested is what
+      # ships. Package routes are stubbed per test except the real-server visit.
+      - name: Run Otome Forge browser suite
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+          # Until release 1 the package is uncatalogued, then staging-only (the preview overlay).
+          MARINARA_CATALOG_INCLUDE_INCOMPLETE: "1"
+        run: npm run test:browser:otome-forge
+
+      # The same real-server visit with Gacha Forge installed beside it: its unprefixed `index` document must not
+      # break Otome Forge's.
+      - name: Open Otome Forge beside Gacha Forge
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+          MARINARA_PACKAGE_IDS: gacha-forge
+        run: npm run test:browser:otome-forge -- --grep "real server"
