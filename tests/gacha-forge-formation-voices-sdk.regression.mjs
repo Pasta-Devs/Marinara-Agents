@@ -9,11 +9,8 @@ import {
   currentCardCanon,
 } from "./fixtures/gacha-forge-chapter-runtime.mjs";
 import { createForgeCombatVoiceController } from "../packages/gacha-forge/src/combat-voices-client.mjs";
-import {
-  forgeExplicitVoice,
-  forgeSpeakerVoice,
-  forgeVoiceCacheKey,
-} from "../packages/gacha-forge/src/audio-client.mjs";
+import { forgeExplicitVoice, forgeSpeakerVoice } from "../sources/forge-kit/voice-picking.mjs";
+import { forgeVoiceCacheKey } from "../packages/gacha-forge/src/audio-client.mjs";
 import { forgeSoundtrackContextKey, normalizeForgeAudio } from "../sources/forge-kit/audio-settings.mjs";
 
 const original = Object.fromEntries(

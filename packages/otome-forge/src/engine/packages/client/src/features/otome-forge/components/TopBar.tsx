@@ -6,6 +6,7 @@
 import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, Heart, Settings, Sparkle } from "lucide-react";
+import { initialsOf } from "../lib/accent";
 import { useOtomeProps } from "../props";
 import { FullscreenButton } from "./Stage";
 
@@ -32,16 +33,6 @@ interface TopBarProps {
   onSettings?: () => void;
 }
 
-function initials(name: string): string {
-  return name
-    .trim()
-    .split(/\s+/u)
-    .slice(0, 2)
-    .map((word) => Array.from(word)[0] ?? "")
-    .join("")
-    .toLocaleUpperCase();
-}
-
 function LoveInterestChip({ li, onHome }: { li: TopBarLoveInterest | null; onHome?: () => void }) {
   const { t } = useTranslation();
   const label = li ? t("ui.otomeForge.common.homeWith", { name: li.name }) : t("ui.otomeForge.common.screenHome");
@@ -50,7 +41,7 @@ function LoveInterestChip({ li, onHome }: { li: TopBarLoveInterest | null; onHom
     <button type="button" className="of-chip of-glass" aria-label={label} title={label} onClick={onHome}>
       {li ? (
         <span className="of-avatar" style={avatarStyle} aria-hidden="true">
-          {li.portraitUrl ? <img src={li.portraitUrl} alt="" /> : initials(li.name)}
+          {li.portraitUrl ? <img src={li.portraitUrl} alt="" /> : initialsOf(li.name)}
         </span>
       ) : (
         <span className="of-avatar of-avatar--empty" aria-hidden="true">

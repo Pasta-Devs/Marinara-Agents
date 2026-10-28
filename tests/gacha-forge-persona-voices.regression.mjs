@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { ForgeAudioController } from "../packages/gacha-forge/src/audio-client.mjs";
+import { ForgeAudioController, forgeConnectionVoices } from "../packages/gacha-forge/src/audio-client.mjs";
 import { forgeVoiceCharacter } from "../packages/gacha-forge/src/audio-story.mjs";
 import { normalizeForgeAudio, forgeSoundtrackContextKey } from "../sources/forge-kit/audio-settings.mjs";
+import { forgeSpeakerVoice, forgeStoryPersona } from "../sources/forge-kit/voice-picking.mjs";
 
 import { createChatRuntime } from "./fixtures/gacha-forge-chat-runtime.mjs";
 
@@ -14,9 +15,22 @@ const chat = await import(
     : "../packages/gacha-forge/src/chat-continuity-client.mjs"
 );
 const previousGlobals = Object.fromEntries(
-  ["normalizeForgeAudio", "forgeSoundtrackContextKey", "Ze"].map((key) => [key, globalThis[key]]),
+  [
+    "normalizeForgeAudio",
+    "forgeSoundtrackContextKey",
+    "forgeSpeakerVoice",
+    "forgeStoryPersona",
+    "forgeConnectionVoices",
+    "Ze",
+  ].map((key) => [key, globalThis[key]]),
 );
-Object.assign(globalThis, { normalizeForgeAudio, forgeSoundtrackContextKey });
+Object.assign(globalThis, {
+  normalizeForgeAudio,
+  forgeSoundtrackContextKey,
+  forgeSpeakerVoice,
+  forgeStoryPersona,
+  forgeConnectionVoices,
+});
 after(() => {
   for (const [key, value] of Object.entries(previousGlobals)) {
     if (value === undefined) delete globalThis[key];

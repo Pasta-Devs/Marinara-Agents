@@ -75,8 +75,9 @@ function normalizeForgeAudio(value) {
   };
 }
 
-function normalizeForgeMusicMood(value) {
-  return ["happy", "tense", "sad"].includes(value) ? value : "happy";
+// The first mood is the fallback.
+function normalizeForgeMusicMood(value, moods = ["happy", "tense", "sad"]) {
+  return moods.includes(value) ? value : moods[0];
 }
 
 const forgeSoundtrackCues = ["home", "combat", "boss", "happy", "tense", "sad", "bond"];
@@ -107,18 +108,24 @@ function rememberForgeBannerSoundtrack(session, descriptor, unlock = false) {
   };
 }
 
-function recordForgeSoundtrack(session, runId, track) {
+// `scope` is the package id the host stores generated music under.
+function recordForgeSoundtrack(
+  session,
+  runId,
+  track,
+  { scope = "gacha-forge", cues = forgeSoundtrackCues } = {},
+) {
   if (!track || typeof track.connectionId !== "string" || track.connectionId.length > 200) return false;
-  if (!forgeSoundtrackCues.includes(track.cue) && !Object.hasOwn(session.audioBanners || {}, track.cue)) return false;
+  if (!cues.includes(track.cue) && !Object.hasOwn(session.audioBanners || {}, track.cue)) return false;
   const key = forgeSoundtrackContextKey(runId, track.connectionId, track.cue);
-  if (typeof track.tag !== "string" || !track.tag.startsWith(`music:contexts:gacha-forge:${key}:`)) return false;
-  if (typeof track.path !== "string" || !track.path.startsWith(`music/contexts/gacha-forge/${key}/`)) return false;
-  const file = track.path.slice(`music/contexts/gacha-forge/${key}/`.length);
+  if (typeof track.tag !== "string" || !track.tag.startsWith(`music:contexts:${scope}:${key}:`)) return false;
+  if (typeof track.path !== "string" || !track.path.startsWith(`music/contexts/${scope}/${key}/`)) return false;
+  const file = track.path.slice(`music/contexts/${scope}/${key}/`.length);
   if (
     file.startsWith(".") ||
     /[/\\\p{Cc}]/u.test(file) ||
     !/\.(?:mp3|wav|ogg|m4a|flac|aac|webm)$/iu.test(file) ||
-    track.tag !== `music:contexts:gacha-forge:${key}:${file.replace(/\.[^.]+$/u, "")}`
+    track.tag !== `music:contexts:${scope}:${key}:${file.replace(/\.[^.]+$/u, "")}`
   )
     return false;
   const tracks = Array.isArray(session.audioTracks) ? session.audioTracks : [];
@@ -134,9 +141,9 @@ function recordForgeSoundtrack(session, runId, track) {
   return true;
 }
 
-function availableForgeSoundtracks(session) {
+function availableForgeSoundtracks(session, { cues = forgeSoundtrackCues } = {}) {
   return (Array.isArray(session?.audioTracks) ? session.audioTracks : [])
-    .filter((track) => forgeSoundtrackCues.includes(track.cue) || session.audioBanners?.[track.cue]?.unlocked === true)
+    .filter((track) => cues.includes(track.cue) || session.audioBanners?.[track.cue]?.unlocked === true)
     .map((track) => ({ ...track, title: session.audioBanners?.[track.cue]?.title || "" }));
 }
 /* forge-audio-settings-source:end */
@@ -186,12 +193,18 @@ function normalizeForgeMusicPrompt(value) {
   return prompt && prompt.length <= 1000 ? { prompt } : null;
 }
 
-function forgeMusicBriefMessages(run, cue, banner) {
+// Another game passes its own scene texts and medium; the defaults are Gacha Forge's.
+function forgeMusicBriefMessages(
+  run,
+  cue,
+  banner,
+  { scenes = forgeMusicScenes, medium = "game soundtrack" } = {},
+) {
   return [
     {
       role: "system",
       content:
-        'LANGUAGE — THIS IS A HARD RULE: Write an original instrumental game soundtrack brief in English. Return only JSON: {"prompt":"..."}. ' +
+        `LANGUAGE — THIS IS A HARD RULE: Write an original instrumental ${medium} brief in English. Return only JSON: {"prompt":"..."}. ` +
         "Keep the prompt within 1000 characters. Compose a specific musical idea for a 60-second, seamlessly " +
         "looping track with no vocals, not a list of generic mood adjectives. Find a distinctive image, tension " +
         "or cultural texture in this world and translate it into a recognizable short motif and an intentional " +
@@ -214,7 +227,7 @@ function forgeMusicBriefMessages(run, cue, banner) {
           ? "a distinctive seasonal story event theme"
           : banner
             ? "a distinctive summon banner theme"
-            : forgeMusicScenes[cue],
+            : scenes[cue],
         ...(banner
           ? { banner: banner.title, identity: banner.cue, ...(banner.event ? { eventTheme: banner.theme } : {}) }
           : {}),
@@ -224,7 +237,15 @@ function forgeMusicBriefMessages(run, cue, banner) {
 }
 
 // Reuse the world's narration pipeline; save each brief with the existing session's optimistic writes.
-function createForgeMusicPromptService({ readWorld, readSession, updateSession, generate, log }) {
+function createForgeMusicPromptService({
+  readWorld,
+  readSession,
+  updateSession,
+  generate,
+  log,
+  scenes = forgeMusicScenes,
+  medium,
+}) {
   const pending = new Map();
   return async ({ runId, cue, debugMode = false }) => {
     if (typeof runId !== "string" || !runId || typeof cue !== "string") return { ok: false, error: "bad-request" };
@@ -232,8 +253,8 @@ function createForgeMusicPromptService({ readWorld, readSession, updateSession, 
     if (!run || typeof run.scenario !== "string" || !run.scenario.trim()) return { ok: false, error: "not-found" };
     const session = await readSession(runId);
     const banner = Object.hasOwn(session?.audioBanners || {}, cue) ? session.audioBanners[cue] : null;
-    if (!Object.hasOwn(forgeMusicScenes, cue) && !banner) return { ok: false, error: "bad-request" };
-    const messages = forgeMusicBriefMessages(run, cue, banner);
+    if (!Object.hasOwn(scenes, cue) && !banner) return { ok: false, error: "bad-request" };
+    const messages = forgeMusicBriefMessages(run, cue, banner, { scenes, medium });
     const fingerprint = forgeMusicHash("sha256").update(JSON.stringify(messages)).digest("hex");
     const saved = session?.audioPrompts?.[cue];
     // Older prepared event themes could exceed the brief limit; reuse their bounded text without another paid request.
@@ -253,7 +274,10 @@ function createForgeMusicPromptService({ readWorld, readSession, updateSession, 
       const brief = result?.ok && normalizeForgeMusicPrompt(result.value);
       if (!brief) return { ok: false, error: "generation-failed" };
       const current = await readWorld(runId);
-      if (!current || JSON.stringify(forgeMusicBriefMessages(current, cue, banner)) !== JSON.stringify(messages))
+      if (
+        !current ||
+        JSON.stringify(forgeMusicBriefMessages(current, cue, banner, { scenes, medium })) !== JSON.stringify(messages)
+      )
         return { ok: false, error: "stale-world" };
       const updated = await updateSession(runId, (data) => {
         data.audioPrompts = { ...data.audioPrompts, [cue]: { fingerprint, prompt: brief.prompt } };
@@ -822,16 +846,17 @@ function createForgeBannerAnimations({ dataDir, runtime, readBanner }) {
 /* forge-story-expressions-server-source:start */
 // Expression portraits, shared by both bundles. The plate's normal image is the neutral face; a
 // dialogue or thought line may name one of these four, and an untagged line stays neutral.
+// Another game passes its own face names; Gacha Forge passes none and gets these four.
 const forgeStoryExpressionNames = ["anger", "fear", "sadness", "joy"];
 
-function normalizeForgeStoryExpression(value) {
-  return forgeStoryExpressionNames.includes(value) ? value : "";
+function normalizeForgeStoryExpression(value, names = forgeStoryExpressionNames) {
+  return names.includes(value) ? value : "";
 }
 
 // The plate's character for one line: its expression image when the cast carries a ready set,
 // otherwise the cast entry unchanged (its art is the neutral face).
-function forgeStoryExpressionArt(character, segment) {
-  const expression = normalizeForgeStoryExpression(segment?.expression);
+function forgeStoryExpressionArt(character, segment, names = forgeStoryExpressionNames) {
+  const expression = normalizeForgeStoryExpression(segment?.expression, names);
   const art = expression ? character?.expressions?.[expression] : "";
   return art && typeof art === "string" ? { ...character, art, neutral: character.art || "" } : character;
 }
@@ -860,7 +885,10 @@ import { AsyncResource as ForgeStoryExpressionScope } from "node:async_hooks";
 // the set is still the pending record this attempt wrote, so a set another instance took over is not paid.
 // ponytail: a unit document removed by a roster merge takes its refs with it, so those gallery images
 // are orphaned like history entries past the sixth; collect them before the remove if merges grow.
+// Another game passes its own face names, their looks, avatar-path reader, log prefix and scope name;
+// Gacha Forge passes none, so every default below is its own.
 
+// Each face's edit look: [the sentence for natural-language prompts, the tags for tag prompts].
 const forgeExpressionLooks = {
   anger: ["an angry expression: furrowed brows, narrowed glaring eyes, a tense jaw", "angry, furrowed brows, glaring"],
   fear: ["a frightened expression: wide eyes, raised brows, tense parted lips", "scared, wide-eyed, raised eyebrows"],
@@ -881,11 +909,11 @@ function forgeStoryExpressionBases(unit, extra = []) {
 }
 
 // The cast entry's expression map for its current base: only a ready set, only while the setting is on.
-function forgeStoryExpressionCast(images, unit, base) {
+function forgeStoryExpressionCast(images, unit, base, names = forgeStoryExpressionNames) {
   const record = forgeStoryExpressionsOn(images) && base ? unit?.expressions?.[base] : null;
   if (record?.state !== "ready") return {};
   const expressions = {};
-  for (const name of forgeStoryExpressionNames) {
+  for (const name of names) {
     const url = record.images?.[name]?.url;
     if (typeof url === "string" && url) expressions[name] = url;
   }
@@ -949,9 +977,9 @@ function forgeStoryExpressionPrompt(
   base,
   expression,
   profile = {},
-  { tagged = false, negative = "" } = {},
+  { tagged = false, negative = "", looks = forgeExpressionLooks } = {},
 ) {
-  const [look, lookTags] = forgeExpressionLooks[expression];
+  const [look, lookTags] = looks[expression];
   const outfit = (Array.isArray(unit?.outfits) ? unit.outfits : []).find((item) => item?.url && item.url === base);
   const wearing = outfit
     ? forgeExpressionText(outfit.outfitLine) || forgeExpressionTags(outfit.outfitTags)
@@ -990,17 +1018,22 @@ function createForgeStoryExpressions({
   base: currentBase,
   galleryRef,
   debug = () => false,
+  names = forgeStoryExpressionNames,
+  looks = forgeExpressionLooks,
+  localAvatarPath = forgeLocalAvatarPath,
+  logPrefix = "[gacha-forge]",
+  scopeName = "gacha-forge-expressions",
 }) {
   // Created at activation, outside every request: a job never inherits a scene's Cancel scope, so a
   // story reset never waits on (or aborts the bookkeeping of) a paint that was already paid for.
-  const detached = new ForgeStoryExpressionScope("gacha-forge-expressions");
+  const detached = new ForgeStoryExpressionScope(scopeName);
   const live = new Set();
   let disposed = false;
   const galleryId = (ref) => (typeof ref === "string" && ref.startsWith("global-gallery:") ? ref.slice(15) : "");
   const remove = async (refs) => {
     for (const id of refs.map(galleryId).filter(Boolean)) {
       if (!(await client().deleteGalleryImage(id)))
-        logger.warn("[gacha-forge] could not delete expression image %s", id);
+        logger.warn(`${logPrefix} could not delete expression image %s`, id);
     }
   };
   const refsOf = (record) =>
@@ -1047,7 +1080,7 @@ function createForgeStoryExpressions({
     }
     if (!paint) return;
     const base = persona ? personaBase : currentBase(unit);
-    const reference = forgeLocalAvatarPath(base);
+    const reference = localAvatarPath(base);
     if (!reference) return;
     const record = unit.expressions?.[base];
     if (record?.state === "ready") return;
@@ -1066,12 +1099,12 @@ function createForgeStoryExpressions({
     try {
       target = await connection(run);
     } catch (error) {
-      return void logger.warn("[gacha-forge] expression portraits for %s: %s", unitId, error?.message || String(error));
+      return void logger.warn(`${logPrefix} expression portraits for %s: %s`, unitId, error?.message || String(error));
     }
     if (!target) return;
     const source = await client().cardAvatarImage(reference);
     if (!source?.base64 || !/^image\//u.test(source.mime))
-      return void logger.warn("[gacha-forge] expression portraits for %s: the base image could not be read", unitId);
+      return void logger.warn(`${logPrefix} expression portraits for %s: the base image could not be read`, unitId);
     const at = new Date().toISOString();
     const owned = (current) => current?.state === "pending" && current.at === at;
     if (disposed) return;
@@ -1084,7 +1117,7 @@ function createForgeStoryExpressions({
     const width = size.portraitWidth;
     const height = persona ? size.portraitWidth : size.portraitHeight; // a persona avatar is usually square
     let error = "";
-    for (const expression of forgeStoryExpressionNames) {
+    for (const expression of names) {
       if (started.expressions[base].images[expression]?.url) continue;
       let result;
       try {
@@ -1107,6 +1140,8 @@ function createForgeStoryExpressions({
             unit: fresh,
             base,
             expression,
+            // The client builds the edit prompt from these looks (forgeStoryExpressionPrompt's looks option).
+            looks,
             referenceImage: `data:${source.mime};base64,${source.base64}`,
             styleProfileId: images(latest).styleProfileId,
             width,
@@ -1115,13 +1150,13 @@ function createForgeStoryExpressions({
           });
           if (!image.overrideTook)
             logger.warn(
-              "[gacha-forge] expression prompt override did NOT take for %s (%s); Engine compiled its own. Sent: %s",
+              `${logPrefix} expression prompt override did NOT take for %s (%s); Engine compiled its own. Sent: %s`,
               unit.name,
               expression,
               image.sentPrompt,
             );
           logger[debug() ? "info" : "debug"](
-            "[gacha-forge] expression %s for %s prompt: %s",
+            `${logPrefix} expression %s for %s prompt: %s`,
             expression,
             unitId,
             image.sentPrompt,
@@ -1161,7 +1196,7 @@ function createForgeStoryExpressions({
       }
     }
     const stopped = error === "stopped" || error === "stale";
-    if (error && !stopped) logger.warn("[gacha-forge] expression portraits failed for %s: %s", unitId, error);
+    if (error && !stopped) logger.warn(`${logPrefix} expression portraits failed for %s: %s`, unitId, error);
     await update(unitId, (next) => {
       const current = next.expressions?.[base];
       if (!owned(current)) return;
@@ -1181,7 +1216,7 @@ function createForgeStoryExpressions({
     detached.runInAsyncScope(() =>
       background(() => dedupe(key, () => paintSet(runId, unitId, options)))
         .catch((error) =>
-          logger.warn("[gacha-forge] expression portraits for %s stopped: %s", unitId, error?.message || String(error)),
+          logger.warn(`${logPrefix} expression portraits for %s stopped: %s`, unitId, error?.message || String(error)),
         )
         .finally(() => live.delete(key)),
     );
@@ -1217,11 +1252,11 @@ function createForgeStoryExpressions({
         };
         detached.runInAsyncScope(() =>
           pass().catch((error) =>
-            logger.warn("[gacha-forge] expression portraits not queued: %s", error?.message || String(error)),
+            logger.warn(`${logPrefix} expression portraits not queued: %s`, error?.message || String(error)),
           ),
         );
       } catch (error) {
-        logger.warn("[gacha-forge] expression portraits not queued: %s", error?.message || String(error));
+        logger.warn(`${logPrefix} expression portraits not queued: %s`, error?.message || String(error));
       }
       return cast;
     },
@@ -1405,7 +1440,7 @@ async function forgeSubjectReference(client, unit) {
   return null;
 }
 
-function forgeWrapImageReferenceClient(client, logger) {
+function forgeWrapImageReferenceClient(client, logger, { logPrefix = "[gacha-forge]" } = {}) {
   for (const method of ["generateBannerArt", "generatePortrait", "generateOutfit"]) {
     const generate = client[method];
     client[method] = async function (options) {
@@ -1423,7 +1458,7 @@ function forgeWrapImageReferenceClient(client, logger) {
       if (subjects.length) {
         const level = resolved === subjects.length ? "debug" : "warn";
         logger?.[level]?.(
-          "[gacha-forge] %s: avatar references resolved for %d/%d subjects (%d distinct); Engine/provider reference limits still apply",
+          `${logPrefix} %s: avatar references resolved for %d/%d subjects (%d distinct); Engine/provider reference limits still apply`,
           method,
           resolved,
           subjects.length,
@@ -1588,7 +1623,7 @@ function forgeCharacterCardFields(card) {
 }
 
 /** Read current linked cards for this request only. These copies are prompt input, never saved units. */
-async function forgeHydrateStoryCharacters(units, readCard, logger) {
+async function forgeHydrateStoryCharacters(units, readCard, logger, { logPrefix = "[gacha-forge]" } = {}) {
   const reads = new Map();
   const read = async (cardId) => {
     try {
@@ -1598,7 +1633,7 @@ async function forgeHydrateStoryCharacters(units, readCard, logger) {
       // Missing and failed reads keep the same unit's legacy characterization available.
     }
     logger?.warn?.(
-      "[gacha-forge] linked character card %s could not be read; using the saved character summary",
+      `${logPrefix} linked character card %s could not be read; using the saved character summary`,
       cardId,
     );
     return null;
@@ -1654,14 +1689,14 @@ function forgeIncludeStoryFocusCharacters(documents, matchedUnits, forcedIds = [
 }
 
 /** Call after context fitting, immediately before sending these messages to the provider. */
-function logForgeStoryPrompt(runtime, label, messages, options = {}) {
+function logForgeStoryPrompt(runtime, label, messages, { debugMode, logPrefix = "gacha-forge" } = {}) {
   const override =
-    options.debugMode === true ||
+    debugMode === true ||
     runtime?.isDebugAgentsEnabled?.() === true ||
     /^(1|true)$/iu.test(process.env.DEBUG_AGENTS || "");
   const logger = runtime?.logger;
   if (!override && logger?.isLevelEnabled?.("debug") === false) return;
-  const format = "[debug/gacha-forge/%s] Messages sent to the provider: %s";
+  const format = `[debug/${logPrefix}/%s] Messages sent to the provider: %s`;
   if (typeof logger?.debugOverride === "function") {
     logger.debugOverride(override, format, label, JSON.stringify(messages));
   } else {
@@ -7023,7 +7058,8 @@ async function forgeRememberSpeakerGenders(readSession, updateSession, beat) {
   return beat;
 }
 
-function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled, terminal }) {
+// label turns an option's text into its saved label; Gacha Forge passes none and gets forgeChoiceLabel's punctuation.
+function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled, terminal, label = forgeChoiceLabel }) {
   const beat = normalizeBeat(raw, options);
   forgeSpeakerGenders(raw, beat?.segments);
   if (!beat || !enabled || raw?.choices == null) return beat;
@@ -7049,7 +7085,7 @@ function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled, termin
     for (const [optionIndex, option] of choice.options.entries()) {
       const rawText = typeof option?.text === "string" ? option.text.trim() : "";
       if (!rawText || rawText.length > 280) return null;
-      const text = forgeChoiceLabel(rawText);
+      const text = label(rawText);
       if (labels.has(text)) return null;
       labels.add(text);
       const selection = option.selection;

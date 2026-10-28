@@ -26,6 +26,53 @@ function checkedId(id: string): string {
 export function createOtomeStore(documents: CapabilityDocumentStore) {
   const get = (id: string) => documents.getById(OTOME_FORGE_PACKAGE_ID, checkedId(id));
 
+  async function write<T>(
+    target: DocTarget,
+    normalize: Normalize<T>,
+    change: (current: T) => T | Promise<T>,
+    attempts: number,
+    create: boolean,
+  ): Promise<T | null> {
+    const id = checkedId(target.id);
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const document = await get(id);
+      if (!document && !create) return null;
+      const next = await change(normalize(document?.data));
+      const at = new Date().toISOString();
+      if (!document) {
+        try {
+          const created = await documents.create({
+            id,
+            packageId: OTOME_FORGE_PACKAGE_ID,
+            kind: target.kind,
+            name: target.name,
+            description: "",
+            data: next,
+            createdAt: at,
+            updatedAt: at,
+          });
+          return normalize(created.data);
+        } catch (error) {
+          // Another request created it first: apply the change on top of theirs. Still missing means the create
+          // failed for its own reason.
+          if (!(await get(id))) throw error;
+          continue;
+        }
+      }
+      const saved = await documents.update({
+        id,
+        packageId: OTOME_FORGE_PACKAGE_ID,
+        expectedRevision: document.revision,
+        name: document.name,
+        description: document.description,
+        data: next,
+        updatedAt: at,
+      });
+      if (saved) return normalize(saved.data);
+    }
+    throw new OtomeForgeError(409, `Otome Forge data changed while saving ${id}. Try again.`, "conflict");
+  }
+
   return {
     /** The normalized document, or null while it does not exist. Never creates it. */
     async readDoc<T>(id: string, normalize: Normalize<T>): Promise<T | null> {
@@ -38,49 +85,36 @@ export function createOtomeStore(documents: CapabilityDocumentStore) {
      * revision or a lost create race re-reads and applies `change` again; once `attempts` are spent it is a 409.
      * `change` may throw an OtomeForgeError to refuse the write.
      */
-    async mutateDoc<T>(
+    mutateDoc<T>(
       target: DocTarget,
       normalize: Normalize<T>,
       change: (current: T) => T | Promise<T>,
       { attempts = DEFAULT_ATTEMPTS }: { attempts?: number } = {},
     ): Promise<T> {
-      const id = checkedId(target.id);
+      return write(target, normalize, change, attempts, true) as Promise<T>;
+    },
+
+    /**
+     * mutateDoc for a document that must already exist: a missing one stays missing and this resolves null. Use it for
+     * writes that must not bring back a deleted run (a late paint, a settings change racing a delete).
+     */
+    updateDoc<T>(
+      target: DocTarget,
+      normalize: Normalize<T>,
+      change: (current: T) => T | Promise<T>,
+      { attempts = DEFAULT_ATTEMPTS }: { attempts?: number } = {},
+    ): Promise<T | null> {
+      return write(target, normalize, change, attempts, false);
+    },
+
+    /** Removes the document; false when it was already gone. A newer revision is re-read and removed. */
+    async removeDoc(id: string, { attempts = DEFAULT_ATTEMPTS }: { attempts?: number } = {}): Promise<boolean> {
       for (let attempt = 0; attempt < attempts; attempt += 1) {
         const document = await get(id);
-        const next = await change(normalize(document?.data));
-        const at = new Date().toISOString();
-        if (!document) {
-          try {
-            const created = await documents.create({
-              id,
-              packageId: OTOME_FORGE_PACKAGE_ID,
-              kind: target.kind,
-              name: target.name,
-              description: "",
-              data: next,
-              createdAt: at,
-              updatedAt: at,
-            });
-            return normalize(created.data);
-          } catch (error) {
-            // Another request created it first: apply the change on top of theirs. Still missing means the create
-            // failed for its own reason.
-            if (!(await get(id))) throw error;
-            continue;
-          }
-        }
-        const saved = await documents.update({
-          id,
-          packageId: OTOME_FORGE_PACKAGE_ID,
-          expectedRevision: document.revision,
-          name: document.name,
-          description: document.description,
-          data: next,
-          updatedAt: at,
-        });
-        if (saved) return normalize(saved.data);
+        if (!document) return false;
+        if (await documents.remove(OTOME_FORGE_PACKAGE_ID, document.id, document.revision)) return true;
       }
-      throw new OtomeForgeError(409, `Otome Forge data changed while saving ${id}. Try again.`, "conflict");
+      throw new OtomeForgeError(409, `Otome Forge data changed while removing ${id}. Try again.`, "conflict");
     },
 
     /**

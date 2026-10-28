@@ -15,12 +15,18 @@ export function normalizeForgeMusicPrompt(value) {
   return prompt && prompt.length <= 1000 ? { prompt } : null;
 }
 
-export function forgeMusicBriefMessages(run, cue, banner) {
+// Another game passes its own scene texts and medium; the defaults are Gacha Forge's.
+export function forgeMusicBriefMessages(
+  run,
+  cue,
+  banner,
+  { scenes = forgeMusicScenes, medium = "game soundtrack" } = {},
+) {
   return [
     {
       role: "system",
       content:
-        'LANGUAGE — THIS IS A HARD RULE: Write an original instrumental game soundtrack brief in English. Return only JSON: {"prompt":"..."}. ' +
+        `LANGUAGE — THIS IS A HARD RULE: Write an original instrumental ${medium} brief in English. Return only JSON: {"prompt":"..."}. ` +
         "Keep the prompt within 1000 characters. Compose a specific musical idea for a 60-second, seamlessly " +
         "looping track with no vocals, not a list of generic mood adjectives. Find a distinctive image, tension " +
         "or cultural texture in this world and translate it into a recognizable short motif and an intentional " +
@@ -43,7 +49,7 @@ export function forgeMusicBriefMessages(run, cue, banner) {
           ? "a distinctive seasonal story event theme"
           : banner
             ? "a distinctive summon banner theme"
-            : forgeMusicScenes[cue],
+            : scenes[cue],
         ...(banner
           ? { banner: banner.title, identity: banner.cue, ...(banner.event ? { eventTheme: banner.theme } : {}) }
           : {}),
@@ -53,7 +59,15 @@ export function forgeMusicBriefMessages(run, cue, banner) {
 }
 
 // Reuse the world's narration pipeline; save each brief with the existing session's optimistic writes.
-export function createForgeMusicPromptService({ readWorld, readSession, updateSession, generate, log }) {
+export function createForgeMusicPromptService({
+  readWorld,
+  readSession,
+  updateSession,
+  generate,
+  log,
+  scenes = forgeMusicScenes,
+  medium,
+}) {
   const pending = new Map();
   return async ({ runId, cue, debugMode = false }) => {
     if (typeof runId !== "string" || !runId || typeof cue !== "string") return { ok: false, error: "bad-request" };
@@ -61,8 +75,8 @@ export function createForgeMusicPromptService({ readWorld, readSession, updateSe
     if (!run || typeof run.scenario !== "string" || !run.scenario.trim()) return { ok: false, error: "not-found" };
     const session = await readSession(runId);
     const banner = Object.hasOwn(session?.audioBanners || {}, cue) ? session.audioBanners[cue] : null;
-    if (!Object.hasOwn(forgeMusicScenes, cue) && !banner) return { ok: false, error: "bad-request" };
-    const messages = forgeMusicBriefMessages(run, cue, banner);
+    if (!Object.hasOwn(scenes, cue) && !banner) return { ok: false, error: "bad-request" };
+    const messages = forgeMusicBriefMessages(run, cue, banner, { scenes, medium });
     const fingerprint = forgeMusicHash("sha256").update(JSON.stringify(messages)).digest("hex");
     const saved = session?.audioPrompts?.[cue];
     // Older prepared event themes could exceed the brief limit; reuse their bounded text without another paid request.
@@ -82,7 +96,10 @@ export function createForgeMusicPromptService({ readWorld, readSession, updateSe
       const brief = result?.ok && normalizeForgeMusicPrompt(result.value);
       if (!brief) return { ok: false, error: "generation-failed" };
       const current = await readWorld(runId);
-      if (!current || JSON.stringify(forgeMusicBriefMessages(current, cue, banner)) !== JSON.stringify(messages))
+      if (
+        !current ||
+        JSON.stringify(forgeMusicBriefMessages(current, cue, banner, { scenes, medium })) !== JSON.stringify(messages)
+      )
         return { ok: false, error: "stale-world" };
       const updated = await updateSession(runId, (data) => {
         data.audioPrompts = { ...data.audioPrompts, [cue]: { fingerprint, prompt: brief.prompt } };

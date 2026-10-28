@@ -4,8 +4,12 @@
 // Errors go out as { error, code? }. The client shows `code`, localized as ui.otomeForge.errors.<code>; `error` is
 // English for logs and Debug only. Anything that is not an OtomeForgeError is logged here and hidden behind a 500.
 // Request bodies are never logged.
+import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type { ZodType } from "zod";
 import type { OtomeErrorCode } from "../../../../client/src/features/otome-forge/shared/api-types.js";
+import type { ImageClient } from "./art/image-client.js";
+import { isLiId, isRunKey, runIdOf } from "./ids.js";
+import type { OtomeStore } from "./store.js";
 
 export class OtomeForgeError extends Error {
   constructor(
@@ -72,4 +76,42 @@ export function parseBody<T>(schema: ZodType<T>, body: unknown): T {
     .map((issue) => `${issue.path.join(".") || "body"}: ${issue.message}`)
     .join("; ");
   throw new OtomeForgeError(400, `Invalid request: ${issues}`, "bad-request");
+}
+
+/** What every route module's register function receives: `registerXRoutes(router, deps)`. */
+export interface RouteDeps {
+  runtime: CapabilityRuntimeHost;
+  store: OtomeStore;
+  handle: Handle;
+  /** The loopback image client by default (art/paint.ts imagesOf); tests pass a fake. */
+  images?: ImageClient;
+}
+
+export type RegisterRoutes = (router: OtomeRouter, deps: RouteDeps) => void;
+
+function param(request: OtomeRequest, name: string): unknown {
+  const params = request.params;
+  return params && typeof params === "object" ? (params as Record<string, unknown>)[name] : undefined;
+}
+
+/** The `:run` param as its run key and run id R, or a 404 (a malformed key names no run). */
+export function runParam(request: OtomeRequest): { runKey: string; runId: string } {
+  const runKey = param(request, "run");
+  if (!isRunKey(runKey)) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+  return { runKey, runId: runIdOf(runKey) };
+}
+
+/** The `:li` param, or a 404. Whether the run has that LI is the route's check. */
+export function liParam(request: OtomeRequest): string {
+  const li = param(request, "li");
+  if (!isLiId(li)) throw new OtomeForgeError(404, "No such love interest.", "not-found");
+  return li;
+}
+
+/** `debugMode` from the body (POST) or the query (GET), as the client sends it on every request. */
+export function debugModeOf(request: OtomeRequest): boolean {
+  const from = (source: unknown) =>
+    source && typeof source === "object" ? (source as Record<string, unknown>).debugMode : undefined;
+  const value = from(request.body) ?? from(request.query);
+  return value === true || value === "true";
 }

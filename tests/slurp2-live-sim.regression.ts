@@ -11,6 +11,7 @@ import {
   slpLiveMenuFor,
   slpLiveMinute,
   slpLiveStart,
+  slpLiveSummaryText,
   slpLiveWorkQueue,
   slurpLiveSlot,
   SLP_LIVE_ORDER_MS,
@@ -383,5 +384,18 @@ assert.deepEqual(
 );
 assert.equal(camRoom.strip, 0);
 assert.notEqual(camRoom.place, "bed");
+
+// The recap is built from the show, so two shows with the same top tipper read differently.
+const recapState = slpLiveStart({ level: "explicit", fans: 10 });
+recapState.raised = 120;
+recapState.tippers = { "fan:1": 90, "fan:2": 30 };
+recapState.names = { "fan:1": "CopperCountess", "fan:2": "Moth" };
+recapState.queue = [{ id: "o1", itemId: "dance", by: "fan:1", name: "CopperCountess", at: 0, doneAt: 5 }];
+const recapA = slpLiveSummaryText("show-a", { ...recapState, place: "the bed" });
+const recapB = slpLiveSummaryText("show-b", recapState);
+assert.match(recapA, /the bed/u);
+assert.match(recapA, /a dance/u);
+assert.match(recapA, /120 coins from 2 tippers/u);
+assert.notEqual(recapA, recapB);
 
 console.log("slurp2 live sim: ok");

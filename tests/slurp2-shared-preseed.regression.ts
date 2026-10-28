@@ -5,6 +5,7 @@ import {
   SLURP_SHARED_IDEA_DAILY_CAP,
   slurpTopicalTags,
   slurpUsableSharedIdeas,
+  slurpWorldTickPrompt,
   type SlurpSharedIdea,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-shared-preseed.ts";
 import {
@@ -106,5 +107,12 @@ assert.deepEqual(
   selectSlurpBeat("creator-x", 3, anchors, history, ["casual"]),
   selectSlurpBeat("creator-x", 3, anchors, history, ["casual"], []),
 );
+
+// The daily tick sees the recent themes, so it stops picking "cozy" every day.
+assert.match(
+  slurpWorldTickPrompt({ date: "2026-10-28", withEvent: true, avoid: ["Cozy Week", "Cozy Corner"] }).user,
+  /Cozy Week; Cozy Corner\. Pick a different theme/u,
+);
+assert.equal(slurpWorldTickPrompt({ date: "2026-10-28", withEvent: true }).user, "Date: 2026-10-28");
 
 console.log("slurp2 shared preseed regression checks passed");

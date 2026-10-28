@@ -8,11 +8,14 @@ import {
 } from "../sources/forge-kit/audio-settings.mjs";
 import { forgeAudioEnglish, forgeAudioFields } from "../packages/gacha-forge/src/audio-en.mjs";
 import {
-  ForgeAudioController,
   forgeExplicitVoice,
   forgeVoicePool,
   forgeStableVoice,
   forgeSpeakerVoice,
+  forgeStoryPersona,
+} from "../sources/forge-kit/voice-picking.mjs";
+import {
+  ForgeAudioController,
   forgeConnectionVoices,
   forgeAudioCue,
   forgeMusicContextKey,
@@ -38,8 +41,13 @@ const before = {
   fetch: globalThis.fetch,
   Option: globalThis.Option,
   forgeChoiceLabel: globalThis.forgeChoiceLabel,
+  forgeSpeakerVoice: globalThis.forgeSpeakerVoice,
+  forgeStoryPersona: globalThis.forgeStoryPersona,
+  forgeConnectionVoices: globalThis.forgeConnectionVoices,
 };
 globalThis.forgeChoiceLabel = forgeChoiceLabel;
+// The client bundle pastes the kit's voice picking beside the audio client, so both see each other's names.
+Object.assign(globalThis, { forgeSpeakerVoice, forgeStoryPersona, forgeConnectionVoices });
 globalThis.forgeSoundtrackContextKey = forgeSoundtrackContextKey;
 globalThis.normalizeForgeAudio = normalizeForgeAudio;
 globalThis.normalizeForgeMusicMood = normalizeForgeMusicMood;

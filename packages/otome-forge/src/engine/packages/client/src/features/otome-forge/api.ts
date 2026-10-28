@@ -56,6 +56,15 @@ function isErrorCode(value: unknown): value is OtomeErrorCode {
   return typeof value === "string" && Object.prototype.hasOwnProperty.call(ERROR_MESSAGE_KEYS, value);
 }
 
+/**
+ * The message for a failed forge step's stored `error`: its route code's, "stopped" after a restart, or the generic
+ * one. Each key is a literal, so the locale validator sees it.
+ */
+export function forgeStepErrorKey(error: string | undefined): string {
+  if (isErrorCode(error)) return ERROR_MESSAGE_KEYS[error];
+  return error === "stopped" ? "ui.otomeForge.setup.forgeStepStopped" : "ui.otomeForge.errors.unknown";
+}
+
 /** The route's error code, or null for a failure without one (network, host gate, a route that threw). */
 export function otomeErrorCode(error: unknown): OtomeErrorCode | null {
   if (!(error instanceof ApiError)) return null;
