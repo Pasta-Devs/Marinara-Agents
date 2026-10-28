@@ -48,6 +48,7 @@ import {
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { linesView } from "../home/lines.js";
 import { OtomeForgeError } from "../http.js";
+import { wornLookUrl } from "../schemas/common.js";
 import { STATE_LIMITS, clipText, keepClawRounds, keepNewest } from "../schemas/state.js";
 import { grant } from "../state/rewards.js";
 
@@ -173,11 +174,11 @@ export function finishClawRound(
 }
 
 /**
- * The picture his plush wears: the cut-out of his worn look once it is ready, else the look itself; none without one.
- * ponytail: his worn look is his portrait until M4's "Wear at home" outfits, as Home's is (S/routes/home.ts lookOf).
+ * The picture his plush wears: the cut-out of his worn look (M4's Wear at home, else his portrait, as Home's is:
+ * S/routes/home.ts lookOf) once it is ready, else the look itself; none without one.
  */
-export function plushArtOf(unit: Pick<Unit, "portrait" | "cutouts">): string | undefined {
-  const look = unit.portrait;
+export function plushArtOf(unit: Pick<Unit, "portrait" | "cutouts" | "outfits" | "wornOutfit">): string | undefined {
+  const look = wornLookUrl(unit);
   if (!look) return undefined;
   const cut = unit.cutouts[look];
   return cut?.state === "ready" && cut.url ? cut.url : look;
@@ -190,7 +191,7 @@ export function plushArtOf(unit: Pick<Unit, "portrait" | "cutouts">): string | u
  */
 export function playView(
   state: RunState,
-  units: ReadonlyArray<Pick<Unit, "id" | "bible" | "portrait" | "cutouts" | "lines">>,
+  units: ReadonlyArray<Pick<Unit, "id" | "bible" | "portrait" | "cutouts" | "outfits" | "wornOutfit" | "lines">>,
   dayKey: string,
   dates: Record<LiId, boolean> = {},
 ): PlayView {

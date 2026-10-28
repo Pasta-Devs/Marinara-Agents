@@ -1,12 +1,11 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the plushies (drawn in SVG, never painted) and the shelf they line up on
 // ──────────────────────────────────────────────
-// Six series plushes and each love interest's own: his look (cut out of its background once Home has made the cut-out,
-// M3; GET /play names the picture), else his portrait, or his initials in his colour, in a round plush frame with ears
-// and stitches. The shelf shows what the protagonist has won (with a count), a silhouette for what is still in the
-// machine, and a "New" ribbon on what a round just added.
-// ponytail: the shelf stands on Dates and after a round only, and his plush wears his base look; the upgrade path is
-// M4's Album (a shelf page there) and the look he wears from M4's Wardrobe.
+// Six series plushes and each love interest's own: the look he wears at home (M4's Wardrobe, else his portrait; cut out
+// of its background once Home has made the cut-out, M3; GET /play names the picture), or his initials in his colour, in
+// a round plush frame with ears and stitches. The shelf shows what the protagonist has won (with a count), a silhouette
+// for what is still in the machine, and a "New" ribbon on what a round just added.
+// ponytail: the shelf stands on Dates and after a round only; the upgrade path is a shelf page in M4's Album.
 import { useId, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { accentOf, initialsOf } from "../lib/accent";

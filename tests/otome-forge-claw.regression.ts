@@ -448,6 +448,25 @@ test("his plush wears his look, or its cut-out once Home has made it, and the pl
   const cut = "/api/global-gallery/file/kai-cut.png";
   await setCutouts({ [look]: { state: "ready", at: "2026-10-28T09:00:00.000Z", url: cut, ref: "global-gallery:k1" } });
   assert.equal(await plushOf(KAI), cut);
+  // A look he wears at home (M4's Wardrobe) dresses his plush as it dresses Home, and its own cut-out once ready.
+  const worn = "/api/global-gallery/file/kai-coat.png";
+  const wornCut = "/api/global-gallery/file/kai-coat-cut.png";
+  await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    outfits: [{ id: "coat", name: "Coat", outfitLine: "a long coat", url: worn, at: "2026-10-28T09:00:00.000Z" }],
+    wornOutfit: "coat",
+  }));
+  assert.equal(await plushOf(KAI), worn);
+  await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    cutouts: { ...unit.cutouts, [worn]: { state: "ready", at: "2026-10-28T09:00:00.000Z", url: wornCut } } as never,
+  }));
+  assert.equal(await plushOf(KAI), wornCut);
+  await t.store.mutateDoc(
+    runDocTarget("unit", unitId(t.runId, KAI)),
+    normalizeUnit,
+    ({ wornOutfit: _worn, ...unit }) => unit,
+  );
   // The play view reads the record and asks for nothing: no cut-out is queued, and no model or image is touched.
   await setCutouts({});
   await t.call("GET", "/runs/:run/play");
