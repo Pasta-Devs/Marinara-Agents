@@ -37,7 +37,9 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   const navigated = useRef(false);
   const activeRun = index.data?.activeRun ?? null;
   const screen: ScreenId = chosen ?? (activeRun ? "home" : "picker");
-  const view = index.isPending ? "loading" : index.isError ? "error" : screen;
+  // A failed background refetch keeps the screen it already loaded; only a first load that failed shows the error.
+  const failed = index.isError && index.data === undefined;
+  const view = index.isPending ? "loading" : failed ? "error" : screen;
 
   useEffect(() => {
     if (!navigated.current || view === "loading") return;
@@ -62,7 +64,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
       </>
     );
   }
-  if (index.isError) {
+  if (failed) {
     return (
       <>
         <TopBar />
