@@ -151,8 +151,8 @@ export function normalizeConfrontationReply(
     if (problem) return `${name}: ${problem}`;
     const body = lists.list({ segments: raw, places: reply.places }, place);
     if (!body) return `${name} needs at least one segment with text`;
-    const crowded = keep(body.places);
-    if (crowded) return `${name}: ${crowded}`;
+    const over = keep(body.places);
+    if (over) return `${name}: ${over}`;
     return forgeSpeakerGenders(reply, body.segments);
   };
 

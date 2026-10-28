@@ -584,7 +584,8 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
             ...edited,
           });
           const art = result?.art;
-          // Patched onto the scene on screen only when it is the one painted (the reader may have moved on).
+          // Patched only onto the scene it painted: the target names the scene the review was opened on, and the
+          // update skips a scene shown since (shown.id against this render's sceneId).
           if (art && target.key === chapterKey && target.i === node)
             setScene((shown) =>
               shown && shown.id === sceneId && shown.art.cg
