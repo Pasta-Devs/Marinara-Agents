@@ -55,11 +55,22 @@ export function swapGachaBundleText(text, from, to) {
   return text.slice(0, index) + to + text.slice(index + from.length);
 }
 
+// The rebuild swaps bytes: on the 2 MB bundles, which hold non-ASCII text, V8's string search made one rebuild take
+// seconds. A UTF-8 match always starts on a character boundary, so the bytes match exactly where the text would.
+function swapGachaBundleBytes(bytes, from, to) {
+  const find = Buffer.from(from);
+  const index = bytes.indexOf(find);
+  if (index === -1 || bytes.indexOf(find, index + 1) !== -1) {
+    throw new Error(`Forge bundle patch anchor must occur once: ${find.toString("utf8", 0, 100)}`);
+  }
+  return Buffer.concat([bytes.subarray(0, index), Buffer.from(to), bytes.subarray(index + find.length)]);
+}
+
 export async function rebuildGachaBundles(packageRoot) {
   const ledger = await loadGachaBundlePatches(packageRoot);
   for (const [path, { base, patches }] of Object.entries(ledger.files)) {
     const file = new URL(path, packageRoot);
-    const current = await readFile(file, "utf8");
+    const current = await readFile(file);
     let original;
     let firstError;
     // A clean checkout may contain any previously generated prefix of the ledger.
@@ -74,15 +85,14 @@ export async function rebuildGachaBundles(packageRoot) {
               const markers = sourceMarkers(edit);
               const start = candidate.indexOf(markers.start);
               const end = candidate.indexOf(markers.end, start);
-              if (start >= 0 && end >= start) applied = candidate.slice(start, end + markers.end.length) + edit.find;
+              if (start >= 0 && end >= start) {
+                applied = Buffer.concat([candidate.subarray(start, end + markers.end.length), Buffer.from(edit.find)]);
+              }
             }
-            candidate = swapGachaBundleText(candidate, applied, edit.find);
+            candidate = swapGachaBundleBytes(candidate, applied, edit.find);
           }
         }
-        if (
-          Buffer.byteLength(candidate) === base.bytes &&
-          createHash("sha256").update(candidate).digest("hex") === base.sha256
-        ) {
+        if (candidate.length === base.bytes && createHash("sha256").update(candidate).digest("hex") === base.sha256) {
           original = candidate;
           break;
         }
@@ -96,8 +106,8 @@ export async function rebuildGachaBundles(packageRoot) {
     }
     let result = original;
     for (const { edits } of patches) {
-      for (const edit of edits) result = swapGachaBundleText(result, edit.find, edit.replace);
+      for (const edit of edits) result = swapGachaBundleBytes(result, edit.find, edit.replace);
     }
-    if (result !== current) await writeFile(file, result);
+    if (!result.equals(current)) await writeFile(file, result);
   }
 }
