@@ -1,5 +1,12 @@
 # Otome Forge release notes
 
+## 0.0.5 — 2026-10-28
+
+- Home now shows the love interest you pick, or you in your own look, before their newest CG or a painted place, tinted by your time of day. A painted look is cut out of its background when the Engine can, and pans slowly when it cannot; with no images, initials on a gradient. Reduced motion stills it.
+- Each love interest leaves one handwritten note a day, with a mood; Reply opens their thread. During a rupture the note is curt and taps get only cold lines.
+- Tap head, hand or heart for lines written ahead in their voice, so a tap never waits; too many pokes annoy them, and their face shows it. Rough day? offers comfort with no model call. With voices on, taps, the note and comfort are read aloud.
+- The phone: one private thread per love interest, with suggested replies and stickers. Close and remember saves the talk as a memory only that love interest recalls (+20 affection, capped daily).
+
 ## 0.0.4 — 2026-10-28
 
 - Each love interest now has a route: six stages from Mask to Bond, each opened by a free route chapter at an affection level and moved only by its last scene. The fourth reveals a secret; the fifth holds a confrontation and a choice that cannot be undone.

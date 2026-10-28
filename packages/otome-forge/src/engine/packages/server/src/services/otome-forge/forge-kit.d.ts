@@ -8,6 +8,10 @@ declare module "@forge-kit/time-zone-server.mjs" {
   export function forgeValidTimeZone(value: unknown): string;
   /** "YYYY-MM-DD" of the instant in the current request's time zone. */
   export function forgeDayKey(value?: number | string | Date): string;
+  /** The instant's wall-clock time in the request's zone, as a Date whose UTC fields read that local time. */
+  export function forgeWallDate(value?: number | string | Date, timeZone?: string): Date;
+  /** Monday 0 … Sunday 6, in the request's time zone. */
+  export function forgeWeekday(value?: number | string | Date): number;
 }
 
 declare module "@forge-kit/character-card-context.mjs" {
@@ -45,6 +49,39 @@ declare module "@forge-kit/story-memory-integration.mjs" {
   export const forgeKnowledgeBoundary: string;
   /** Re-orders side stories opened after the same main chapter by when they opened; other sources keep their place. */
   export function orderForgeStorySources<S extends { kind: string; id: string }>(rows: S[]): S[];
+  /** What a chat reply recalls with: the player's messages since his last reply (cues), the recent window, speakers. */
+  export function forgeChatRecallQuery(
+    messages: ReadonlyArray<{ who?: string; text?: unknown }>,
+    options?: { speakers?: string[] },
+  ): { cues: string[]; window: string; speakers: string[] };
+}
+
+// ── M3: phone threads ──
+
+declare module "@forge-kit/chat-continuity-server.mjs" {
+  /** True while a reply for that thread is being written (in this process). */
+  export function forgeChatReplyBusy(runId: string, unitId: string): boolean;
+  /** Runs `send` unless a reply for that thread is already in flight, which resolves the busy result instead. */
+  export function withForgeChatSend<T>(
+    runId: string,
+    unitId: string,
+    send: () => Promise<T>,
+  ): Promise<T | { ok: false; error: "generation-in-progress"; busy: true; retry: false }>;
+  /** One page of a thread, newest last; messages inside closed sessions are marked `archived`. */
+  export function forgeChatHistoryPage<M extends object>(
+    data: { messages?: M[]; sessions?: Array<{ count?: number }> } | null | undefined,
+    page: unknown,
+    pageSize: number,
+    busy?: boolean,
+  ): {
+    messages: Array<M & { archived: boolean }>;
+    page: number;
+    pages: number;
+    past: number;
+    activeCount: number;
+    busy: boolean;
+    retry: boolean;
+  };
 }
 
 declare module "@forge-kit/image-avatar-references.mjs" {

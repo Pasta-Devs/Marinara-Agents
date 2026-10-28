@@ -12,6 +12,7 @@ import {
   runIdOf,
   wouldVoice,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/audio.ts";
+import { playsHomeCue } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/screens/screens.ts";
 import type { RunLiView } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import {
   MUSIC_MEDIUM,
@@ -54,6 +55,16 @@ test("each story cue has a stock stand-in, and P14 writes an English brief for e
     assert.doesNotMatch(MUSIC_SCENES[cue], /\b(?:he|him|his|she|her)\b/i);
   }
   assert.equal(MUSIC_MEDIUM, "romance visual novel");
+});
+
+test("the home cue plays on in the reader until its first scene's cue arrives, and only inside a run", () => {
+  for (const screen of ["home", "story", "phone", "album", "reader"] as const) {
+    assert.equal(playsHomeCue(screen, "picker"), true, screen);
+  }
+  for (const screen of ["picker", "setup", "forge", "bible"] as const)
+    assert.equal(playsHomeCue(screen, "home"), false);
+  assert.equal(playsHomeCue("settings", "home"), true, "Settings opened from inside a run");
+  assert.equal(playsHomeCue("settings", "picker"), false);
 });
 
 test("a cue's brief is one model call, kept for the next request, and never written while music is off", async () => {
