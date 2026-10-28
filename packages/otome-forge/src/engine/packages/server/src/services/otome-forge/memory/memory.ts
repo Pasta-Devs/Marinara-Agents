@@ -273,7 +273,8 @@ export function createOtomeMemory({
 
     async status(runId) {
       const status = await memory.status(runId);
-      // The queue's own key, so a job it refused before starting or a call in its release gap never reads as pending.
+      // The queue's own key: pending while a job waits, runs or backs off after an admission refusal. A job that failed
+      // before starting for any other reason, or a call in the queue's release gap, shows the kit's real phase.
       return queue.has(maintainKey(runId)) ? { ...status, phase: "pending", retryable: false } : status;
     },
 
