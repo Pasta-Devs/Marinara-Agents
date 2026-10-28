@@ -4,13 +4,13 @@ import {
   fitForgeMemoryPrompt,
   forgeComposeMemoryPrompt,
   forgeMemoryContext,
-} from "../packages/gacha-forge/src/story-memory-fit.mjs";
+} from "../sources/forge-kit/story-memory-fit.mjs";
 import {
   createForgeStoryMemoryIntegration,
   forgeChatRecallQuery,
   forgeKnowledgeBoundary,
-} from "../packages/gacha-forge/src/story-memory-integration.mjs";
-import { createForgeStoryMemory, forgeStoryMemoryText } from "../packages/gacha-forge/src/story-memory.mjs";
+} from "../sources/forge-kit/story-memory-integration.mjs";
+import { createForgeStoryMemory, forgeStoryMemoryText } from "../sources/forge-kit/story-memory.mjs";
 
 // Summaries keep 10240 output tokens free, so tests that really compress need more than the 10k default window.
 const summaryConnections = async () => [{ id: "main", provider: "custom", model: "fixture", maxContext: 32768 }];

@@ -189,7 +189,7 @@
             {
               "find": "var ac=`",
               "replaceFrom": [
-                "src/player-choice-text.mjs",
+                "../../sources/forge-kit/player-choice-text.mjs",
                 "src/player-choices-en.mjs",
                 "src/player-choices-client.mjs"
               ],
@@ -290,7 +290,7 @@
             {
               "find": "var pb=48",
               "replaceFrom": [
-                "src/audio-settings.mjs",
+                "../../sources/forge-kit/audio-settings.mjs",
                 "src/audio-en.mjs",
                 "src/audio-client.mjs",
                 "src/audio-story.mjs"
@@ -1784,7 +1784,7 @@
             {
               "sourceId": "story-expressions-client",
               "replaceFrom": [
-                "src/story-expressions.mjs",
+                "../../sources/forge-kit/story-expressions.mjs",
                 "src/story-expressions-en.mjs"
               ],
               "find": "var pb=48"
@@ -2188,8 +2188,8 @@
             {
               "find": "async function lT(e){",
               "replaceFrom": [
-                "src/player-choice-text.mjs",
-                "src/player-choices-server.mjs"
+                "../../sources/forge-kit/player-choice-text.mjs",
+                "../../sources/forge-kit/player-choices-server.mjs"
               ],
               "sourceId": "choices-server"
             },
@@ -2305,7 +2305,7 @@
           "edits": [
             {
               "find": "var rb=[",
-              "replaceFrom": "src/audio-settings.mjs",
+              "replaceFrom": "../../sources/forge-kit/audio-settings.mjs",
               "sourceId": "audio-settings"
             },
             {
@@ -2365,7 +2365,7 @@
             },
             {
               "find": "var rb=[",
-              "replaceFrom": "src/audio-prompts.mjs",
+              "replaceFrom": "../../sources/forge-kit/audio-prompts.mjs",
               "sourceId": "audio-prompts",
               "notes": "World-specific soundtrack briefs through the existing narration connection, with session caching and generation logging."
             },
@@ -2450,7 +2450,7 @@
           "edits": [
             {
               "find": "function Rg(",
-              "replaceFrom": "src/image-avatar-references.mjs",
+              "replaceFrom": "../../sources/forge-kit/image-avatar-references.mjs",
               "sourceId": "image-avatar-references"
             },
             {
@@ -2506,17 +2506,17 @@
             },
             {
               "find": "async function lT(e)",
-              "replaceFrom": "src/story-memory.mjs",
+              "replaceFrom": "../../sources/forge-kit/story-memory.mjs",
               "sourceId": "story-memory"
             },
             {
               "find": "async function lT(e)",
-              "replaceFrom": "src/story-memory-integration.mjs",
+              "replaceFrom": "../../sources/forge-kit/story-memory-integration.mjs",
               "sourceId": "story-memory-integration"
             },
             {
               "find": "async function lT(e)",
-              "replaceFrom": "src/story-memory-fit.mjs",
+              "replaceFrom": "../../sources/forge-kit/story-memory-fit.mjs",
               "sourceId": "story-memory-fit"
             },
             {
@@ -2686,7 +2686,7 @@
           "edits": [
             {
               "find": "async function _t(",
-              "replaceFrom": "src/story-cancel-server.mjs",
+              "replaceFrom": "../../sources/forge-kit/story-cancel-server.mjs",
               "sourceId": "story-cancel-server"
             },
             {
@@ -2761,7 +2761,7 @@
             },
             {
               "find": "function Gg(e){",
-              "replaceFrom": "src/time-zone-server.mjs",
+              "replaceFrom": "../../sources/forge-kit/time-zone-server.mjs",
               "sourceId": "time-zone-server"
             },
             {
@@ -2864,7 +2864,7 @@
             },
             {
               "find": "/* forge-audio-settings-source:start */\n",
-              "replaceFrom": "src/chat-continuity-server.mjs",
+              "replaceFrom": "../../sources/forge-kit/chat-continuity-server.mjs",
               "sourceId": "chat-continuity"
             },
             {
@@ -2881,7 +2881,7 @@
             },
             {
               "find": "function vu(e,t=!1){",
-              "replaceFrom": "src/character-card-context.mjs",
+              "replaceFrom": "../../sources/forge-kit/character-card-context.mjs",
               "sourceId": "character-card-context",
               "reason": "Inject the frozen maintained helper before its first caller"
             },
@@ -3580,8 +3580,8 @@
             {
               "sourceId": "story-expressions-server",
               "replaceFrom": [
-                "src/story-expressions.mjs",
-                "src/story-expressions-server.mjs"
+                "../../sources/forge-kit/story-expressions.mjs",
+                "../../sources/forge-kit/story-expressions-server.mjs"
               ],
               "find": "var rb=["
             },

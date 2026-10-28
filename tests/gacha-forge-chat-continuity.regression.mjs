@@ -6,7 +6,7 @@ import {
   forgeChatHistoryPage,
   forgeChatReplyBusy,
   withForgeChatSend,
-} from "../packages/gacha-forge/src/chat-continuity-server.mjs";
+} from "../sources/forge-kit/chat-continuity-server.mjs";
 import {
   adoptForgeChatSnapshot,
   forgeChatHasCurrentMessages,

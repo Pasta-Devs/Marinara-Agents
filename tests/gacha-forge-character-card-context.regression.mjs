@@ -10,7 +10,7 @@ import {
   forgeHydrateStoryCharacters,
   forgeIncludeStoryFocusCharacters,
   logForgeStoryPrompt,
-} from "../packages/gacha-forge/src/character-card-context.mjs";
+} from "../sources/forge-kit/character-card-context.mjs";
 
 const character = (overrides = {}) => ({
   kind: "character",

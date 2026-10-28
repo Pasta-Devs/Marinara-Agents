@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "node:http";
 import { pathToFileURL } from "node:url";
-import { recordForgeSoundtrack } from "../packages/gacha-forge/src/audio-settings.mjs";
+import { recordForgeSoundtrack } from "../sources/forge-kit/audio-settings.mjs";
 
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engine checkout");
