@@ -355,8 +355,8 @@ export async function applyPulse(
             : partner
               ? slurpPartnerCommentBodies(partner)
               : slurpReactionBodiesForType(banks, fanTypeId, SLURP_SHIPPED_TYPE_REACTIONS[fanTypeId ?? ""] ?? []),
-          // Only the plain regular voice takes a generic titled line; every other voice keeps its own pool.
-          sides || partner || fanTypeId !== "regular"
+          // Only the regular voice with no own bank takes a generic titled line; every other voice keeps its own pool.
+          sides || partner || fanTypeId !== "regular" || banks.byType.regular?.length
             ? { ...(await pulseContext()), title: null }
             : await pulseContext(),
         )
