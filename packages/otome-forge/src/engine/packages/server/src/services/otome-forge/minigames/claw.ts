@@ -67,6 +67,9 @@ function lineFor(lines: readonly string[] | undefined, round: string): string | 
   return usable[hash % usable.length];
 }
 
+/** How he cheats: his bible's, else the steady hand the play view shows for a love interest with no bible yet. */
+const cheatOf = (unit: Pick<Unit, "bible"> | undefined): ClawCheat => unit?.bible?.play.cheat ?? "steady";
+
 /** The catch list, checked: known prizes of this machine only, each at most once (the length is the body's check). */
 export function checkCatches(input: Pick<ClawFinishInput, "li" | "caught">): void {
   const allowed = new Set(clawPrizeIds(input.li));
@@ -162,7 +165,7 @@ export function finishClawRound(
     at,
     first: input.first,
     caught: input.caught.map(({ prize, by }) => ({ prize, by })),
-    cheat: input.cheered ? (unit.bible?.play.cheat ?? null) : null,
+    cheat: input.cheered ? cheatOf(unit) : null,
     paid: { starlight: paid.granted.starlight, affection: paid.granted.affection },
     capped: paid.granted.starlight < starlight || paid.granted.affection < affection,
     newPlush,
@@ -204,7 +207,7 @@ export function playView(
     const plush = unit ? plushArtOf(unit) : undefined;
     const { claw, cold } = unit ? linesView(unit, state.lis[id]!) : { claw: null, cold: [] };
     lis[id] = {
-      cheat: play?.cheat ?? "steady",
+      cheat: cheatOf(unit),
       style: play?.style ?? "",
       rupture,
       makeItRight: dates[id] ?? rupture,

@@ -27,7 +27,7 @@ import {
   raisesGatedSetting,
 } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { galleryRefIds } from "../art/image-client.js";
-import { imagesOf, paintView } from "../art/paint.js";
+import { imagesOf, paintView, updateIfChanged } from "../art/paint.js";
 import { withPlaceViews } from "../art/places.js";
 import { OtomeForgeError, debugModeOf, liParam, parseBody, runParam, type RegisterRoutes } from "../http.js";
 import {
@@ -46,7 +46,14 @@ import {
 import { PronounsSchema, field } from "../schemas/common.js";
 import { normalizeIndex } from "../schemas/index.js";
 import { PLAYER_GOAL_MAX, PLAYER_TRAITS_MAX, normalizePlayer } from "../schemas/player.js";
-import { defaultLiState, normalizeState, readRun, toRunView, type RunDocuments } from "../schemas/state.js";
+import {
+  defaultLiState,
+  normalizeState,
+  readRun,
+  remapLearnedTells,
+  toRunView,
+  type RunDocuments,
+} from "../schemas/state.js";
 import { ACCENT_PATTERN, BibleSchema, LI_NOTES_MAX, normalizeUnit } from "../schemas/unit.js";
 import {
   ConnectionsSchema,
@@ -382,8 +389,10 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       // The player is the authority on an edit: no `pronouns` here, so the ones they set are kept.
       const bible = checkBible(body.bible, { others });
       if (typeof bible === "string") throw new OtomeForgeError(400, `Invalid bible: ${bible}`, "bad-request");
+      let tellsBefore: readonly string[] = [];
       const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => {
         if (!current.bible) throw new OtomeForgeError(409, "This bible is still being written.", "conflict");
+        tellsBefore = current.bible.mask.tells;
         // His pronouns and look live on the unit too (the run view and scene cards read the pronouns there, and the
         // next paint reads the look), so an edit to either steers what comes next.
         return {
@@ -396,6 +405,21 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         };
       });
       if (!unit) throw liNotFound();
+      // The tells he has learned are indexes into `mask.tells`: follow them to where an edit left those tells, so none
+      // names a tell the protagonist did not read.
+      // ponytail: the unit and the state are two writes, so a scene card built between them reads the old indexes
+      // against the new tells; the upgrade path is to store each learned tell's text beside its index.
+      const tellsAfter = unit.bible?.mask.tells;
+      if (tellsAfter && tellsBefore.join("\n") !== tellsAfter.join("\n")) {
+        await updateIfChanged(store, runDocTarget("state", stateId(runId)), normalizeState, (state) => {
+          const learned = state.lis[li]?.tellsLearned ?? [];
+          const remapped = remapLearnedTells(learned, tellsBefore, tellsAfter);
+          if (remapped.length === learned.length && remapped.every((index, at) => index === learned[at])) {
+            return undefined;
+          }
+          return { ...state, lis: { ...state.lis, [li]: { ...state.lis[li]!, tellsLearned: remapped } } };
+        });
+      }
       return { bible: unit.bible };
     }),
   );

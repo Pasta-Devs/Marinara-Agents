@@ -59,6 +59,8 @@ export function useDates(runKey: string) {
   return useQuery({
     queryKey: datesQueryKey(runKey),
     queryFn: () => otome.get<DatesView>(`${runPath(runKey)}/dates`),
+    // A plan left mid-write can still finish on the server, so a list cached earlier may miss that date.
+    refetchOnMount: "always",
   });
 }
 
@@ -132,7 +134,9 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
 
   // Opens where this love interest's dates stand, once they are known. On a first visit that is after the loading
   // state, which has no heading for the router to focus, so focus goes to the step's heading as it would after a move.
-  if (step === null && dates.data) {
+  // Only a list fetched since this screen opened counts: one cached from before may lack a date that finished after
+  // the player left, and Begin would then resume that date unannounced.
+  if (step === null && dates.data && dates.isFetchedAfterMount && !dates.isError) {
     moved.current = true;
     setStep(stepFor(dates.data, partner.id));
   }

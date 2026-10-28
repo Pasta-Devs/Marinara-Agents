@@ -164,6 +164,24 @@ function normalizeTells(value: unknown): number[] {
   return tells.slice(0, TELLS_MAX);
 }
 
+/**
+ * Learned tells, as indexes into the mask tells `before` an edit, now as indexes into the tells `after` it. A tell the
+ * edit removed or reworded is no longer one the protagonist read, so it is dropped.
+ */
+export function remapLearnedTells(
+  learned: readonly number[],
+  before: readonly string[],
+  after: readonly string[],
+): number[] {
+  const remapped: number[] = [];
+  for (const index of learned) {
+    const tell = before[index];
+    const next = tell === undefined ? -1 : after.indexOf(tell);
+    if (next >= 0 && !remapped.includes(next)) remapped.push(next);
+  }
+  return remapped;
+}
+
 /** A love interest's state with every M2a field defaulted (trust and tension 0, no grievances, never led). */
 export const defaultLiState = (): LiState => ({
   points: 0,

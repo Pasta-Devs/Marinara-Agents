@@ -78,6 +78,7 @@ import {
   nudgeBody,
   planPartnerTurn,
   restingBody,
+  retargetPlan,
   steerBody,
   stepBody,
   targetAt,
@@ -839,6 +840,17 @@ function ClawGame({
       [line, t(CHEAT_COPY[fired].title, { name: li.name }), t(CHEAT_COPY[fired].hint)].filter(Boolean).join(" "),
     );
     if (nudged) {
+      // The prize his plan aimed at is in the chute now: his claw goes to the one nearest it instead.
+      const retargeted = g.plan ? retargetPlan(g.plan, nudged, round.prizes) : null;
+      if (retargeted && retargeted !== g.plan) {
+        g.plan = retargeted;
+        if (reducedRef.current) {
+          g.body = restingBody(retargeted.aimX);
+        } else if (g.script === "back" || g.script === "settle") {
+          g.script = "back";
+          g.body = { ...g.body, target: retargeted.aimX };
+        }
+      }
       feedback.cue("cloth");
       setTimeout(() => {
         setUi((current) => ({
@@ -1062,8 +1074,13 @@ function ClawGame({
     if (g.stage === "aim") dropRef.current(reducedRef.current ? g.body.x : landingX(g.body));
   };
 
+  // A letter key in either case (Shift, Caps Lock); the named keys keep their names.
+  const keyOf = (event: ReactKeyboardEvent<HTMLDivElement>) =>
+    event.key.length === 1 ? event.key.toLowerCase() : event.key;
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const key = event.key;
+    // Ctrl, Cmd and Alt chords belong to the browser (save, copy, back), not to the claw.
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const key = keyOf(event);
     if (key === "ArrowLeft" || key === "ArrowRight" || key === "a" || key === "d") {
       if (game.current.stage !== "aim") return;
       event.preventDefault();
@@ -1071,13 +1088,14 @@ function ClawGame({
     } else if (key === "ArrowDown" || key === "s") {
       event.preventDefault();
       if (!event.repeat) dropNow();
-    } else if (key === "c" || key === "C") {
+    } else if (key === "c") {
       event.preventDefault();
       doCheer();
     }
   };
+  // No modifier check here: a move key let go while Ctrl, Cmd or Alt is down must still end its hold.
   const onKeyUp = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const key = event.key;
+    const key = keyOf(event);
     if (key === "ArrowLeft" || key === "ArrowRight" || key === "a" || key === "d") endHold();
   };
 

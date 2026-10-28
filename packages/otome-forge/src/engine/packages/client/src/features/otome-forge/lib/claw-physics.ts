@@ -489,3 +489,18 @@ export function planPartnerTurn(round: ClawRoundState): { round: ClawRoundState;
     },
   };
 }
+
+/**
+ * His plan after a nudge cheat tipped `nudged` into the chute: one aimed at that prize follows to the nearest prize
+ * left, keeping the aim error he had rolled (so it spends no draws). Any other plan, or one with no prize left, stands.
+ */
+export function retargetPlan(plan: PartnerPlan, nudged: Prize, prizes: readonly Prize[]): PartnerPlan {
+  if (plan.target.id !== nudged.id) return plan;
+  let target: Prize | null = null;
+  for (const prize of prizes) {
+    if (!target || Math.abs(prize.x - nudged.x) < Math.abs(target.x - nudged.x)) target = prize;
+  }
+  if (!target) return plan;
+  const aimX = clamp(target.x + (plan.aimX - nudged.x), GEOMETRY.rail.min, GEOMETRY.rail.max);
+  return { ...plan, target, aimX, overshoot: Math.abs(plan.overshoot) * (aimX > GEOMETRY.home ? 1 : -1) };
+}

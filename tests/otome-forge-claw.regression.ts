@@ -41,8 +41,10 @@ import {
   landDrop,
   planPartnerTurn,
   restingBody,
+  retargetPlan,
   stepBody,
   type ClawRoundState,
+  type Prize,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/claw-physics.ts";
 import {
   createHandle,
@@ -571,6 +573,23 @@ test("a love interest's name of any length never drops a round (or its replay gu
   assert.equal((await t.state()).owned.plush[liPlushId(KAI)], 1);
 });
 
+test("a cheered round with no bible records the steady cheat the play view shows", async () => {
+  const t = await clawWorld();
+  await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    bible: null,
+  }));
+  const play = await t.call("GET", "/runs/:run/play");
+  assert.equal(play.body.lis[KAI].cheat, "steady");
+  assert.equal((await t.finish({ cheered: true })).status, 200);
+  assert.equal((await t.state()).claw.rounds[0]!.cheat, "steady");
+  const memory = (await readMemorySources(t.store, t.runId)).find((source) => source.id.startsWith("claw:"));
+  assert.match(memory!.content, /Kai cheated, steadying the claw by hand/u);
+  // Not cheered, nothing to record.
+  await t.finish({ cheered: false });
+  assert.equal((await t.state()).claw.rounds[1]!.cheat, null);
+});
+
 // ── The rules (C/lib/claw-physics.ts) ──
 
 const round = (seed: number, cheat: ClawCheat = "steady", first: "me" | "partner" = "me") =>
@@ -725,6 +744,37 @@ test("each cheat does what it says, on the eighth cheer of his turn, once a roun
   assert.equal(added.state.bonusAt, added.state.turns.length - 1);
   assert.equal(isBonusTurn(added.state, CLAW_DROPS), true);
   assert.equal(round(3).bonusAt, null, "no cheat, no bonus drop");
+});
+
+test("a nudge that takes his target sends his plan to the nearest prize left, with his aim error", () => {
+  const planned = planPartnerTurn(round(11, "nudge", "partner"));
+  const nearest = [...planned.round.prizes].sort((a, b) => a.x - b.x)[0]!;
+  // His plan aims at the prize the nudge will take, a little off-centre.
+  const plan = { ...planned.plan!, target: nearest, aimX: nearest.x + 0.02 };
+  let state = planned.round;
+  let nudged: Prize | null = null;
+  for (let index = 0; index < CHEER_GOAL; index += 1) {
+    const cheered = cheer(state);
+    state = cheered.round;
+    nudged ??= cheered.nudged;
+  }
+  assert.equal(nudged?.id, nearest.id);
+
+  const moved = retargetPlan(plan, nudged!, state.prizes);
+  assert.notEqual(moved.target.id, nearest.id);
+  assert.ok(
+    state.prizes.some((prize) => prize.id === moved.target.id),
+    "a prize still in the machine",
+  );
+  assert.ok(Math.abs(moved.aimX - (moved.target.x + 0.02)) < 1e-9, "the same error off the new target");
+  assert.ok(moved.aimX >= GEOMETRY.rail.min && moved.aimX <= GEOMETRY.rail.max);
+  assert.equal(landDrop(state, moved.aimX).outcome.target?.id, moved.target.id, "his drop closes on it, not on air");
+
+  // A plan aimed at any other prize stands, and so does one with nothing left to aim at.
+  const other = state.prizes[0]!;
+  const elsewhere = { ...plan, target: other, aimX: other.x };
+  assert.equal(retargetPlan(elsewhere, nudged!, state.prizes), elsewhere);
+  assert.equal(retargetPlan(plan, nudged!, []), plan);
 });
 
 test("the claw moves and swings the same at any frame rate, and a stalled tab never jumps it", () => {
