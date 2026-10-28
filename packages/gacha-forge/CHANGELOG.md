@@ -1,3 +1,9 @@
+## 1.27.0 — 2026-10-28
+
+- A finished story event's fights now open on **Hard**, then **Very Hard**, while the event runs and Seasonal events is on: Hard once the event is done, Very Hard once every fight is won on Hard, as in a main chapter. They are the fights you played, stronger, at 5 Vigor each, and each win pays once per difficulty what a main chapter's Hard and Very Hard fights pay. No new fight is designed, and each difficulty keeps its own progress.
+- In **Chapters** a finished event shows its N, H and V marks, and **Enter event** while its Hard fights are open. **Events → Story events** counts its Hard and Very Hard wins.
+- A story event's map no longer lists a chapter's Funds, Aether and rank on Normal, which an event never paid, and a played event's map opens without waiting for a scene being written elsewhere.
+
 ## 1.26.3 — 2026-10-28
 
 - A story event you played now sits in **Chapters** right after the chapter it followed, as a finished Character Story does, instead of in a list below the next chapter. Its card says Done, Ended or Paused (Seasonal events off) and opens it to read its scenes again. Stories after the same chapter appear in the order you opened them. **Events → Story events** offers **Revisit played scenes** for a finished event, not **Continue event**.

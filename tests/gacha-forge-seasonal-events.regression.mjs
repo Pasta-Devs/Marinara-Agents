@@ -8,10 +8,16 @@ import {
 import { forgeAddCalendarDays, forgeTimeZoneRoutes, forgeWallDate } from "../sources/forge-kit/time-zone-server.mjs";
 import { forgeCreateChoiceRuntime } from "../sources/forge-kit/player-choices-server.mjs";
 import { createForgeBannerAnimations } from "../packages/gacha-forge/src/animation-server.mjs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+// The shipped bundle's main-chapter unlock (cc), which the adapter hands the service as clampDifficulty.
+const bundle = await readFile(new URL("../packages/gacha-forge/server.mjs", import.meta.url), "utf8"),
+  unlockStart = bundle.indexOf("var fk=10,bd=");
+const clampDifficulty = new Function(
+  `${bundle.slice(unlockStart, bundle.indexOf("var un=100", unlockStart))}\nreturn cc;`,
+)();
 const runId = "season-proof",
   packageId = "gacha-forge";
 const nodes = Array.from({ length: 10 }, (_, index) => ({
@@ -26,7 +32,7 @@ const brief = {
   rewards: { funds: 5000, aether: 320, insight: 6 },
   special: "character",
 };
-function fixture({ enabled = true } = {}) {
+function fixture({ enabled = true, plan = nodes } = {}) {
   const docs = new Map();
   const put = (id, kind, data) =>
     docs.set(id, { id, packageId, kind, data: structuredClone(data), revision: 1, name: id, description: "fixture" });
@@ -39,7 +45,9 @@ function fixture({ enabled = true } = {}) {
     overviewCalls = 0,
     planCalls = 0,
     grants = 0,
-    mediaCalls = 0;
+    mediaCalls = 0,
+    memory = 0;
+  const paid = [];
   const documents = {
     getById: async (_id, id) => structuredClone(docs.get(id) || null),
     list: async (_id, kind) => structuredClone([...docs.values()].filter((doc) => doc.kind === kind)),
@@ -93,7 +101,7 @@ function fixture({ enabled = true } = {}) {
     },
     generatePlan: async () => {
       planCalls++;
-      return generatePlan ? generatePlan() : { ok: true, plan: { title: "A crossing with friends", nodes } };
+      return generatePlan ? generatePlan() : { ok: true, plan: { title: "A crossing with friends", nodes: plan } };
     },
     prepareMedia: async () => {
       mediaCalls++;
@@ -107,13 +115,22 @@ function fixture({ enabled = true } = {}) {
     allNodes: (plan) => plan?.nodes || [],
     readBeat: async (_run, chapter, index) => docs.get(`${runId}:beat:${chapter}:${index}`)?.data,
     choices: { guard: async () => null, completeGuard: async () => null },
-    battle: async () => ({ ok: true }),
+    battle: async ({ target }) => ({ ok: true, nodeIndex: target.nodeIndex, difficulty: target.difficulty }),
     replayBattle: (_fight, log) => (log?.valid ? "win" : "lose"),
     spendVigor: (data) => {
       data.wallet.vigor = (data.wallet.vigor || 20) - 2;
       return { ok: true, spent: 2, wallet: data.wallet };
     },
-    onComplete: () => {},
+    onComplete: () => {
+      memory++;
+    },
+    clampDifficulty,
+    // Stands in for the adapter's payFight (main /complete's fight pay), which the package regression drives for real.
+    payFight: ({ data, difficulty }) => {
+      paid.push(difficulty);
+      data.wallet.funds += difficulty === "hard" ? 750 : 1000;
+      return { reward: { funds: difficulty === "hard" ? 750 : 1000 }, rank: { gain: 300 } };
+    },
     now: () => time,
   });
   const body = { runId, chapter: "event-1" };
@@ -143,6 +160,8 @@ function fixture({ enabled = true } = {}) {
       generatePlan = work;
     },
     counts: () => ({ overviewCalls, planCalls, grants, mediaCalls }),
+    memory: () => memory,
+    paid,
   };
 }
 
@@ -528,3 +547,161 @@ for (const inactive of ["expiry", "opt-out"])
     assert.equal(result.cached, true);
     assert.deepEqual(f.session().wallet, wallet);
   });
+
+// 1.27.0: a finished event's fights open on Hard, then Very Hard, with the main chapters' unlock (the bundle's cc).
+// Each difficulty keeps its own count in progress["event-N"]; Hard and Very Hard list only the fights, so a fight's
+// place there is its combat index.
+const finishedEvent = async (progress = { normal: 10 }, options) => {
+  const f = fixture(options);
+  await f.service.list({ runId });
+  await f.service.plan(f.body);
+  f.seedBeats();
+  f.session().progress["event-1"] = structuredClone(progress);
+  return f;
+};
+const fight = (f, combatIndex, difficulty, start = false) =>
+  f.service.runBattle({ ...f.body, combatIndex, difficulty }, start);
+
+test("Hard opens once the event is done and Very Hard once every fight is won on Hard; a locked one is refused", async () => {
+  const f = await finishedEvent({ normal: 9 });
+  for (const difficulty of ["hard", "veryhard"]) {
+    assert.deepEqual(await fight(f, 0, difficulty), { ok: false, error: "locked-difficulty", difficulty });
+    assert.deepEqual(await f.service.complete({ ...f.body, nodeIndex: 0, difficulty, log: { valid: true } }), {
+      ok: false,
+      error: "locked-difficulty",
+      difficulty,
+    });
+  }
+  f.session().progress["event-1"].normal = 10;
+  // The plan opens on a scene: Hard #0 is the first fight (node 2), not node 0.
+  assert.deepEqual(await fight(f, 0, "hard"), { ok: true, nodeIndex: 0, difficulty: "hard" });
+  assert.equal((await fight(f, 0, "veryhard")).error, "locked-difficulty");
+  f.session().progress["event-1"].hard = 2;
+  assert.equal((await fight(f, 0, "veryhard")).error, "locked-difficulty", "two of three Hard fights won");
+  f.session().progress["event-1"].hard = 3;
+  assert.deepEqual(await fight(f, 0, "veryhard"), { ok: true, nodeIndex: 0, difficulty: "veryhard" });
+  // Anything else asked for is Normal, whose fights are all cleared.
+  assert.equal((await fight(f, 0, "nightmare")).error, "event-already-played");
+  // Scenes are read on Normal whatever the request says.
+  assert.equal(
+    (await f.service.guardNode({ ...f.body, storyIndex: 9, difficulty: "hard" }, "story", "storyIndex")).error,
+    "bad-request",
+  );
+  assert.equal(
+    (await f.service.guardNode({ ...f.body, storyIndex: 0, difficulty: "hard" }, "story", "storyIndex")).replay,
+    true,
+  );
+});
+
+test("Very Hard waits for every fight of a plan with more than three", async () => {
+  const four = nodes.map((node, index) => (index === 8 ? { ...node, type: "combat" } : node));
+  const f = await finishedEvent({ normal: 10, hard: 3 }, { plan: four });
+  assert.equal((await fight(f, 0, "veryhard")).error, "locked-difficulty");
+  assert.deepEqual(await fight(f, 3, "hard"), { ok: true, nodeIndex: 3, difficulty: "hard" });
+  const row = (await f.service.list({ runId })).events[0];
+  assert.deepEqual(
+    { hard: row.hard, veryhard: row.veryhard, combats: row.combats },
+    { hard: 3, veryhard: 0, combats: 4 },
+  );
+  f.session().progress["event-1"].hard = 4;
+  assert.equal((await fight(f, 0, "veryhard")).ok, true);
+});
+
+test("each difficulty reaches its fights in order and refuses a cleared one before its briefing", async () => {
+  const f = await finishedEvent({ normal: 10, hard: 1 });
+  for (const start of [false, true]) {
+    assert.equal((await fight(f, 0, "hard", start)).error, "event-already-played");
+    assert.equal((await fight(f, 1, "hard", start)).ok, true);
+    assert.equal((await fight(f, 2, "hard", start)).error, "event-node-locked");
+    assert.equal((await fight(f, 3, "hard", start)).error, "bad-request");
+    for (const index of [0, 1, 2]) assert.equal((await fight(f, index, "normal", start)).error, "event-already-played");
+  }
+  const run = f.docs.get("index").data.runs[0];
+  run.story.seasonalEvents = false;
+  // Off or ended closes only the fight that would be new progress; the others answer as before.
+  assert.equal((await fight(f, 1, "hard")).error, "events-off");
+  assert.equal((await fight(f, 0, "hard")).error, "event-already-played");
+  assert.equal((await fight(f, 2, "hard")).error, "event-node-locked");
+  run.story.seasonalEvents = true;
+  assert.equal((await fight(f, 1, "hard")).ok, true, "turning events back on reopens Hard with its progress");
+  f.setTime(f.docs.get(`${runId}:story-event:1`).data.endsAt);
+  assert.equal((await fight(f, 1, "hard")).error, "event-expired");
+  assert.equal((await fight(f, 0, "hard")).error, "event-already-played");
+  assert.deepEqual(f.session().progress["event-1"], { normal: 10, hard: 1 }, "progress stays visible");
+});
+
+test("a Hard win merges into the event's progress and pays once, with no event reward, memory or reading change", async () => {
+  // A save from before 1.27.0 holds only {normal: 10}.
+  const f = await finishedEvent({ normal: 10 });
+  f.session().reading = { chapter: 2, storyIndex: 1, at: 3 };
+  const reading = structuredClone(f.session().reading),
+    before = { grants: f.counts().grants, memory: f.memory(), funds: f.session().wallet.funds };
+  const listed = (await f.service.list({ runId })).events[0];
+  assert.deepEqual(
+    { hard: listed.hard, veryhard: listed.veryhard, combats: listed.combats },
+    { hard: 0, veryhard: 0, combats: 3 },
+  );
+  const complete = (difficulty, nodeIndex = 0, log = { valid: true }) =>
+    f.service.complete({ ...f.body, nodeIndex, difficulty, log });
+  assert.equal((await complete("hard")).error, "battle-not-started");
+  // Only the fight started on this difficulty counts; one from before 1.27.0 stored none and was Normal.
+  for (const pending of [
+    { chapter: "event-1", nodeIndex: 0, fight: { seed: 1 } },
+    { chapter: "event-1", nodeIndex: 0, difficulty: "normal", fight: { seed: 1 } },
+    { chapter: "event-1", nodeIndex: 1, difficulty: "hard", fight: { seed: 1 } },
+    { chapter: 2, nodeIndex: 0, difficulty: "hard", fight: { seed: 1 } },
+  ]) {
+    f.session().combatPending = pending;
+    assert.equal((await complete("hard")).error, "battle-not-started", JSON.stringify(pending));
+  }
+  f.session().combatPending = { chapter: "event-1", nodeIndex: 0, difficulty: "hard", fight: { seed: 1 } };
+  assert.equal((await complete("hard", 0, { valid: false })).error, "lost");
+  assert.ok(f.session().combatPending, "a lost fight keeps its start, as on Normal");
+  const won = await complete("hard");
+  assert.equal(won.ok, true, JSON.stringify(won));
+  assert.deepEqual(won.reward, { funds: 750 });
+  assert.deepEqual(won.progress["event-1"], { normal: 10, hard: 1 });
+  assert.deepEqual(f.session().progress["event-1"], { normal: 10, hard: 1 });
+  assert.equal(f.session().combatPending, undefined);
+  assert.deepEqual(f.paid, ["hard"]);
+  assert.equal(f.session().wallet.funds, before.funds + 750);
+  assert.equal(f.counts().grants, before.grants, "the event's own rewards stay Normal's");
+  assert.equal(f.memory(), before.memory, "story memory learns from Normal play only");
+  assert.deepEqual(f.session().reading, reading, "a main chapter's reading mark is untouched");
+  const settled = structuredClone(f.docs);
+  const again = await complete("hard");
+  assert.equal(again.cached, true);
+  assert.deepEqual(f.docs, settled, "a repeat changes nothing and pays nothing");
+  assert.deepEqual(f.paid, ["hard"]);
+  assert.equal((await complete("hard", 2)).error, "event-node-locked");
+  assert.equal((await complete("veryhard")).error, "locked-difficulty");
+  // A Very Hard fight needs its own start too.
+  f.session().progress["event-1"].hard = 3;
+  f.session().combatPending = { chapter: "event-1", nodeIndex: 0, difficulty: "hard", fight: { seed: 1 } };
+  assert.equal((await complete("veryhard")).error, "battle-not-started");
+  f.session().combatPending = { chapter: "event-1", nodeIndex: 0, difficulty: "veryhard", fight: { seed: 1 } };
+  assert.equal((await complete("veryhard")).ok, true);
+  assert.deepEqual(f.session().progress["event-1"], { normal: 10, hard: 3, veryhard: 1 });
+  assert.deepEqual(f.paid, ["hard", "veryhard"]);
+});
+
+test("Hard progress never holds the main story, and off or ended retires a Hard fight without pay", async () => {
+  const f = await finishedEvent({ normal: 10, hard: 1 });
+  assert.equal(await f.service.guardMain(runId, 2), null);
+  assert.equal(await f.service.choiceActive(runId, 2), true);
+  for (const inactive of ["opt-out", "expiry"]) {
+    f.session().combatPending = { chapter: "event-1", nodeIndex: 1, difficulty: "hard", fight: { seed: 2 } };
+    const wallet = structuredClone(f.session().wallet);
+    if (inactive === "expiry") f.setTime(f.docs.get(`${runId}:story-event:1`).data.endsAt);
+    else f.docs.get("index").data.runs[0].story.seasonalEvents = false;
+    assert.equal(
+      (await f.service.complete({ ...f.body, nodeIndex: 1, difficulty: "hard", log: { valid: true } })).error,
+      inactive === "expiry" ? "event-expired" : "events-off",
+    );
+    assert.equal(f.session().combatPending, undefined);
+    assert.deepEqual(f.session().wallet, wallet);
+    assert.deepEqual(f.session().progress["event-1"], { normal: 10, hard: 1 });
+    assert.deepEqual(f.paid, []);
+    f.docs.get("index").data.runs[0].story.seasonalEvents = true;
+  }
+});

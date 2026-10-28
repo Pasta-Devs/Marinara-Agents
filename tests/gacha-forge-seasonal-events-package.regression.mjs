@@ -168,7 +168,8 @@ try {
     "story-changed",
   );
   let storyIndex = 0,
-    combatIndex = 0;
+    combatIndex = 0,
+    normalFight;
   const startFunds = f.session().wallet.funds,
     startAether = f.session().wallet.aether;
   for (const [nodeIndex, node] of result.body.plan.nodes.entries()) {
@@ -193,6 +194,7 @@ try {
       const ready = await post("/story-event/battle", { ...body, combatIndex });
       assert.equal(ready.body.ok, true, JSON.stringify(ready));
       assert.ok(ready.body.allies.length && ready.body.enemies.length);
+      normalFight ??= ready.body;
       const started = await post("/story-event/battle/start", { ...body, combatIndex });
       assert.equal(started.body.ok, true, JSON.stringify(started));
       const packet = structuredClone(f.session().combatPending.fight),
@@ -204,28 +206,150 @@ try {
     }
   }
   assert.equal(f.session().progress[event.chapter].normal, 10);
-  // 1.26.3: a finished event's fights are cleared on Normal, its only difficulty. On any difficulty a cleared fight
-  // is turned away when it loads, not only when it starts, so its briefing never offers a Start that is refused.
-  const vigor = f.session().wallet.vigor;
-  for (const difficulty of ["normal", "hard", "veryhard"])
-    for (const index of [0, 1, 2])
-      for (const path of ["/story-event/battle", "/story-event/battle/start"])
-        assert.equal(
-          (await post(path, { chapter: event.chapter, storyRevision: revision, combatIndex: index, difficulty })).body
-            .error,
-          "event-already-played",
-          `${path} ${difficulty} #${index}`,
-        );
-  assert.equal(f.session().wallet.vigor, vigor, "No Vigor is spent on a cleared fight");
+  assert.deepEqual(
+    { difficulty: normalFight.difficulty, cp: normalFight.cp, cost: normalFight.cost },
+    { difficulty: "normal", cp: 2000, cost: 5 },
+    "An event after Chapter 1 fights like Chapter 2",
+  );
+  // Memory is summarized in the background since 1.24.9; let it settle so only this test's requests are counted.
+  const settleMemory = async () => {
+    let settled = false;
+    for (let turn = 0; turn < 500 && !settled; turn += 1) {
+      const memory = (await post("/story-memory/status", {})).body.memory;
+      settled = !["pending", "stale"].includes(memory?.phase);
+      if (!settled) await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.ok(settled, "story memory did not settle before the snapshot");
+  };
+  await settleMemory();
+  // The shared party builder designs the protagonist's signature weapon for any fight, main or event, only while it
+  // is missing; a played world holds it, so it is seeded as a played world has it.
+  const weaponId = `${runId}:unit:protagonist-weapon`;
+  f.seed(weaponId, "unit", {
+    kind: "weapon",
+    name: "Kept blade",
+    rarity: 5,
+    weaponType: "blade",
+    mainStat: { key: "atk", value: 1 },
+    subStat: { key: "crit", value: 0 },
+  });
+  f.session().roster[weaponId] = { level: 1, bondFights: 0 };
+  f.session().roster[leader].weapon = weaponId;
+  // 1.27.0: once the event is done its fights open on Hard, then Very Hard. They replay the fights Normal designed,
+  // so a model that throws if asked proves no request is made.
+  const calls = f.calls.length,
+    reply = f.transport.reply;
+  f.transport.reply = () => {
+    throw new Error("Hard and Very Hard event fights must not call a model");
+  };
+  const fight = (path, combatIndex, difficulty, extra = {}) =>
+    post(path, { chapter: event.chapter, storyRevision: revision, combatIndex, difficulty, ...extra });
+  const refused = async (combatIndex, difficulty, error) => {
+    const vigor = f.session().wallet.vigor;
+    for (const path of ["/story-event/battle", "/story-event/battle/start"])
+      assert.equal(
+        (await fight(path, combatIndex, difficulty)).body.error,
+        error,
+        `${path} ${difficulty} #${combatIndex}`,
+      );
+    assert.equal(f.session().wallet.vigor, vigor, "A refused fight spends no Vigor");
+  };
+  for (const index of [0, 1, 2]) {
+    // 1.26.3: a cleared fight is turned away when it loads, not only when it starts.
+    await refused(index, "normal", "event-already-played");
+    await refused(index, "veryhard", "locked-difficulty");
+  }
+  const pay = { hard: { funds: 750, aether: 150, cp: 3000 }, veryhard: { funds: 1000, aether: 200, cp: 4000 } };
+  for (const difficulty of ["hard", "veryhard"])
+    for (const index of [0, 1, 2]) {
+      if (index < 2) await refused(index + 1, difficulty, "event-node-locked");
+      const ready = await fight("/story-event/battle", index, difficulty);
+      assert.equal(ready.body.ok, true, JSON.stringify(ready));
+      assert.deepEqual(
+        {
+          difficulty: ready.body.difficulty,
+          cp: ready.body.cp,
+          cost: ready.body.cost,
+          enemies: ready.body.enemies.length,
+        },
+        { difficulty, cp: pay[difficulty].cp, cost: 5, enemies: normalFight.enemies.length },
+        "the same fight, stronger",
+      );
+      const before = structuredClone(f.session());
+      const started = await fight("/story-event/battle/start", index, difficulty);
+      assert.equal(started.body.ok, true, JSON.stringify(started));
+      assert.equal(f.session().wallet.vigor, before.wallet.vigor - 5);
+      assert.deepEqual(
+        { ...f.session().combatPending, fight: undefined, at: undefined },
+        { chapter: event.chapter, combatIndex: index, nodeIndex: index, difficulty, fight: undefined, at: undefined },
+      );
+      const replay = replayCombat(structuredClone(f.session().combatPending.fight), []);
+      assert.equal(replay.result, "win", `The fixture team wins ${difficulty} #${index}`);
+      const won = await post("/story-event/complete", {
+        chapter: event.chapter,
+        storyRevision: revision,
+        nodeIndex: index,
+        difficulty,
+        log: replay.log,
+      });
+      assert.equal(won.body.ok, true, JSON.stringify(won));
+      assert.deepEqual(
+        { funds: won.body.reward.funds, aether: won.body.reward.aether, rank: won.body.rank.gain },
+        { funds: pay[difficulty].funds, aether: pay[difficulty].aether, rank: 300 },
+      );
+      const after = f.session();
+      assert.equal(after.wallet.funds, before.wallet.funds + pay[difficulty].funds);
+      assert.equal(after.wallet.aether, before.wallet.aether + pay[difficulty].aether);
+      assert.equal(after.stats["hard-clear"], (before.stats?.["hard-clear"] || 0) + 1);
+      assert.equal(after.stats["node-clear"], (before.stats?.["node-clear"] || 0) + 1);
+      assert.notDeepEqual(after.account, before.account, "rank XP is granted");
+      assert.equal(after.progress[event.chapter][difficulty], index + 1);
+      assert.equal(after.combatPending, undefined);
+      assert.deepEqual(after.reading, before.reading);
+      const paid = structuredClone(after);
+      assert.equal(
+        (
+          await post("/story-event/complete", {
+            chapter: event.chapter,
+            storyRevision: revision,
+            nodeIndex: index,
+            difficulty,
+            log: replay.log,
+          })
+        ).body.cached,
+        true,
+      );
+      assert.deepEqual(f.session(), paid, "A won fight pays once per difficulty");
+      await refused(index, difficulty, "event-already-played");
+      if (difficulty === "hard" && index === 0) {
+        // Off closes only the fight that would be new progress, and turning it back on reopens it.
+        run.story.seasonalEvents = false;
+        await refused(1, "hard", "events-off");
+        await refused(0, "hard", "event-already-played");
+        run.story.seasonalEvents = true;
+      }
+    }
+  assert.deepEqual(f.session().progress[event.chapter], { normal: 10, hard: 3, veryhard: 3 });
+  for (const index of [0, 1, 2]) await refused(index, "veryhard", "event-already-played");
+  assert.equal(f.calls.length, calls, "Hard and Very Hard made no model request");
+  f.transport.reply = reply;
   assert.equal(f.session().combatPending, undefined);
-  // What Chapters places the finished event by: played, opened and the chapter it followed.
+  // What Chapters places the finished event by: played, opened and the chapter it followed, and its N, H, V marks.
   const finished = (await post("/story-events")).body.events.find((entry) => entry.chapter === event.chapter);
   assert.deepEqual(
-    { played: finished.played, opened: Number.isFinite(finished.opened), after: finished.after },
-    { played: 10, opened: true, after: 1 },
+    {
+      played: finished.played,
+      opened: Number.isFinite(finished.opened),
+      after: finished.after,
+      hard: finished.hard,
+      veryhard: finished.veryhard,
+      combats: finished.combats,
+    },
+    { played: 10, opened: true, after: 1, hard: 3, veryhard: 3, combats: 3 },
   );
-  assert.equal(f.session().wallet.funds, startFunds + 6000);
-  assert.equal(f.session().wallet.aether, startAether + 320);
+  // The event's own rewards stay Normal's; Hard and Very Hard added a chapter's fight pay three times each.
+  assert.equal(f.session().wallet.funds, startFunds + 6000 + 3 * (750 + 1000));
+  assert.equal(f.session().wallet.aether, startAether + 320 + 3 * (150 + 200));
   assert.ok(f.session().roster[rewardId], "The prepared four-star character is actually claimed");
   const before = structuredClone(f.session());
   assert.equal(
@@ -283,14 +407,8 @@ try {
     segments: [{ text: "The second festival closes." }],
   });
   f.session().progress["event-2"] = { normal: 9 };
-  // Memory is summarized in the background since 1.24.9; let it settle so the snapshot sees only this grant.
-  let settled = false;
-  for (let turn = 0; turn < 500 && !settled; turn += 1) {
-    const memory = (await post("/story-memory/status", {})).body.memory;
-    settled = !["pending", "stale"].includes(memory?.phase);
-    if (!settled) await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  assert.ok(settled, "story memory did not settle before the snapshot");
+  // Let memory settle so the snapshot sees only this grant.
+  await settleMemory();
   f.faults.updateId = unitId;
   const beforeRollback = structuredClone(f.docs);
   const failedOutfit = await post("/story-event/complete", {

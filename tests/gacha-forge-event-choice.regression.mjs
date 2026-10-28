@@ -11,6 +11,7 @@ import { forgeSeasonalEnglish } from "../packages/gacha-forge/src/seasonal-event
 import {
   adoptForgeSeasonalResponse,
   forgeSeasonalHeld,
+  forgeSeasonalNodePay,
   openForgeSeasonalEvent,
   wireForgeSeasonalEvents,
 } from "../packages/gacha-forge/src/seasonal-events-client.mjs";
@@ -287,7 +288,7 @@ const cards = (html) =>
     `${match[1]}${match[2] ?? ""}`.trim(),
   );
 const eyebrow = (html) => /data-story-event-open="event-1">.*?<div class="ch-eyebrow">(.*?)<\/div>/u.exec(html)?.[1];
-const finished = { ...event, canStart: false, opened: now, played: 10, after: 1 };
+const finished = { ...event, canStart: false, opened: now, played: 10, after: 1, hard: 0, veryhard: 0, combats: 3 };
 
 test("a played story event sits in the timeline after the chapter it followed, Done, Ended or Paused", () => {
   const options = { offers: [], beats: 3, heldBy: "", event: null };
@@ -298,10 +299,12 @@ test("a played story event sits in the timeline after the chapter it followed, D
     'cleared data-open-chapter="2"',
     'new data-open-chapter="3"',
   ]);
+  // Done, it shows a cleared chapter's marks (1.27.0); with its Hard fights closed it is read again only.
   assert.match(
     html,
-    /data-story-event-open="event-1">.*Story event · Done.*<h3 class="ch-title">The Lantern Crossing<\/h3>.*Played\. Enter to read it again; reading changes nothing\..*Played 10 \/ 10.*Revisit played scenes/u,
+    /data-story-event-open="event-1">.*Story event · Done.*<h3 class="ch-title">The Lantern Crossing<\/h3>.*Played\. Enter to read it again; reading changes nothing\..*<span class="diffs"><span class="on">N<\/span><span class="">H<\/span><span class="">V<\/span><\/span>.*Revisit played scenes/u,
   );
+  assert.doesNotMatch(html, /Played 10 \/ 10/u);
   assert.equal(
     eyebrow(bp(two, 3, true, { ...options, played: [{ ...finished, played: 4, live: false }] })),
     "Story event · Ended",
@@ -386,9 +389,8 @@ test("Chapters passes the read events to the timeline, so the finished event sho
   );
 });
 
-test("an event's map draws no difficulty pills, since an event has only Normal; a chapter keeps them", () => {
-  // A finished event unlocked Hard: its pills were drawn and only marked hidden, which the map's
-  // .diff-pill { display: inline-flex } overrode, so Hard listed fights the server never lets start.
+test("an event's map draws the chapter's pills: Hard once the event is done, Very Hard once every fight is won on Hard", () => {
+  // 1.26.3 removed them, since events were Normal-only; 1.27.0 gives a finished event's fights Hard and Very Hard.
   const plan = {
     title: "The crossing",
     nodes: Array.from({ length: 10 }, (_, index) => ({
@@ -396,20 +398,237 @@ test("an event's map draws no difficulty pills, since an event has only Normal; 
       title: `N${index}`,
     })),
   };
-  const map = (props) => Zd({ plan, difficulty: "normal", progress: { normal: 10, hard: 0, veryhard: 0 }, ...props });
-  const eventMap = map({ chapterNumber: "event-1", forgeEvent: "The Lantern Crossing" });
-  assert.doesNotMatch(eventMap, /data-diff|diff-pill|Higher difficulty/u);
-  assert.match(
-    eventMap,
-    /<div class="cap-diff"><\/div>\s*<div class="cap-scroll">/u,
-    "the row the map's grid counts stays",
+  const map = (difficulty, progress, props = {}) =>
+    Zd({
+      plan,
+      difficulty,
+      progress: { normal: 0, hard: 0, veryhard: 0, ...progress },
+      chapterNumber: "event-1",
+      forgeEvent: "The Lantern Crossing",
+      cp: { normal: 2000, hard: 3000, veryhard: 4000 },
+      ...props,
+    });
+  const pill = (html, key) =>
+    new RegExp(
+      `<button class="diff-pill" type="button" role="tab" aria-selected="[a-z]+" data-diff="${key}"([^>]*)>`,
+      "u",
+    ).exec(html)?.[1];
+  const playing = map("normal", { normal: 4 });
+  assert.equal(pill(playing, "normal"), "");
+  assert.equal(pill(playing, "hard"), ' disabled title="Clear Normal to unlock"');
+  assert.equal(pill(playing, "veryhard"), ' disabled title="Clear Hard to unlock"');
+  assert.match(playing, /Recommended BP <b>2,000<\/b>/u);
+  const done = map("normal", { normal: 10 });
+  assert.equal(pill(done, "hard"), "", "a finished event opens Hard");
+  assert.equal(pill(done, "veryhard"), ' disabled title="Clear Hard to unlock"');
+  assert.match(done, /Chapter complete/u);
+  // Hard lists only the fights, each as a chapter's: cleared, the next to start, then locked.
+  const hard = map("hard", { normal: 10, hard: 1 });
+  assert.equal(hard.match(/class="node-row /gu)?.length, 3);
+  assert.deepEqual(
+    [...hard.matchAll(/class="node-row ([a-z]+)"/gu)].map((match) => match[1]),
+    ["done", "current", "locked"],
   );
-  assert.equal(eventMap.match(/class="node-row done"/gu)?.length, 10);
-  assert.match(eventMap, /Chapter complete/u);
+  assert.match(hard, /&#10004; Cleared.*data-start.*Locked/su);
+  assert.doesNotMatch(hard, /data-replay|data-play/u, "a cleared fight is never offered again");
+  assert.match(hard, /Recommended BP <b>3,000<\/b>/u);
+  assert.equal(pill(map("hard", { normal: 10, hard: 2 }), "veryhard"), ' disabled title="Clear Hard to unlock"');
+  const veryHard = map("veryhard", { normal: 10, hard: 3, veryhard: 3 });
+  assert.equal(pill(veryHard, "veryhard"), "");
+  assert.match(veryHard, /aria-selected="true" data-diff="veryhard"/u);
+  assert.match(veryHard, /Very Hard complete/u);
+  // A chapter's map is unchanged.
   assert.match(
-    map({ chapterNumber: 2 }),
+    Zd({ plan, difficulty: "normal", progress: { normal: 10, hard: 0, veryhard: 0 }, chapterNumber: 2 }),
     /<button class="diff-pill" type="button" role="tab" aria-selected="false" data-diff="hard">/u,
   );
+});
+
+test("an event's Normal nodes show their Vigor only, and its Hard fights a chapter's pay", () => {
+  const nodePay = {
+    combat: { vigor: 5, rank: 300, funds: 500, aether: 100, insight: { shard: 0 } },
+    story: { vigor: 5, rank: 150, funds: 500, aether: 100, insight: { shard: 0 } },
+  };
+  const hardPay = { ...nodePay, combat: { ...nodePay.combat, funds: 750, aether: 150 } };
+  const host = (difficulty, chapter = "event-1") => ({
+    _planChapter: chapter,
+    _forgeEvent: { chapter: "event-1", title: "The Lantern Crossing" },
+    _difficulty: difficulty,
+  });
+  const plan = {
+    title: "The crossing",
+    nodes: [
+      { type: "story", title: "A" },
+      { type: "combat", title: "B" },
+    ],
+  };
+  const meta = (pay, difficulty = "normal") =>
+    [
+      ...Zd({ plan, difficulty, progress: { normal: 10, hard: 0 }, forgeEvent: "The Lantern Crossing", pay }).matchAll(
+        /<span class="meta">(.*?)<\/span><\/div>/gu,
+      ),
+    ].map((match) => match[1]);
+  const eventNormal = meta(forgeSeasonalNodePay(host("normal"), nodePay));
+  assert.equal(eventNormal.length, 2);
+  for (const node of eventNormal) {
+    assert.match(node, /class="cost">.*5<\/span>/u);
+    assert.doesNotMatch(node, /class="prize"/u, "an event's Normal pays its own rewards, not a chapter's");
+  }
+  assert.equal(forgeSeasonalNodePay(host("hard"), hardPay), hardPay);
+  assert.match(meta(forgeSeasonalNodePay(host("hard"), hardPay), "hard")[0], /750.*150.*\+300/u);
+  assert.equal(forgeSeasonalNodePay(host("normal", 2), nodePay), nodePay, "a chapter keeps its pay");
+  assert.equal(forgeSeasonalNodePay(host("normal"), undefined), undefined);
+  // The shipped map reads its pay through it.
+  assert.ok(source.includes("pay:forgeSeasonalNodePay(this,this._nodePay&&this._nodePay[this._difficulty])"));
+});
+
+test("a finished event's card offers Enter event while its Hard fights are open, with the cleared marks", () => {
+  const options = { offers: [], beats: 3, heldBy: "", event: null };
+  const card = (changes) =>
+    /data-story-event-open="event-1">(.*?)<\/article>/u.exec(
+      bp(two, 3, true, { ...options, played: [{ ...finished, ...changes }] }),
+    )?.[1];
+  const open = card({ hardOpen: true, hard: 3, veryhard: 1 });
+  assert.match(open, /Story event · Done/u);
+  assert.match(
+    open,
+    /Played\. Enter to read it again, or fight its battles on Hard and Very Hard until the event ends\./u,
+  );
+  assert.match(
+    open,
+    /<span class="diffs"><span class="on">N<\/span><span class="on">H<\/span><span class="">V<\/span><\/span>/u,
+  );
+  assert.match(open, />Enter event/u);
+  // The marks count the plan's own fights.
+  assert.match(card({ hard: 3, combats: 4 }), /<span class="on">N<\/span><span class="">H<\/span>/u);
+  assert.match(card({ hard: 4, veryhard: 4, combats: 4 }), /<span class="on">H<\/span><span class="on">V<\/span>/u);
+  assert.match(card({ hardOpen: false }), />Revisit played scenes/u);
+  // Unfinished, it keeps its played bar.
+  assert.match(card({ played: 4, live: false }), /Played 4 \/ 10/u);
+});
+
+test("finishing the event's last node opens Hard on its cards without reading the list again", () => {
+  const host = {
+    _run: { runId: "w", story: { seasonalEvents: true } },
+    _planChapter: "event-1",
+    _forgeEvent: { ...event, opened: now, played: 9 },
+    _forgeSeasonalState: {
+      ok: true,
+      events: [{ ...event, canStart: false, opened: now, played: 9, after: 1, combats: 0 }],
+    },
+  };
+  // The list was read before the event opened, so it had no plan to count fights from; opening it does.
+  const fights = Array.from({ length: 10 }, (_, index) => ({
+    type: [1, 4, 6, 8].includes(index) ? "combat" : "story",
+  }));
+  adoptForgeSeasonalResponse(
+    host,
+    "/story-event/plan",
+    { runId: "w", chapter: "event-1" },
+    {
+      ok: true,
+      plan: { nodes: fights },
+      progress: { "event-1": { normal: 9 } },
+      event: { ...event, opened: now, after: 1 },
+    },
+  );
+  assert.equal(host._forgeSeasonalState.events[0].combats, 4);
+  assert.equal(host._forgeSeasonalState.events[0].hardOpen, false);
+  adoptForgeSeasonalResponse(
+    host,
+    "/story-event/complete",
+    { runId: "w", chapter: "event-1" },
+    { ok: true, progress: { "event-1": { normal: 10 } } },
+  );
+  const [row] = host._forgeSeasonalState.events;
+  assert.deepEqual(
+    { played: row.played, hard: row.hard, hardOpen: row.hardOpen },
+    { played: 10, hard: 0, hardOpen: true },
+  );
+  assert.equal(host._forgeEvent.played, 10);
+  const html = bp(two, 3, true, {
+    offers: [],
+    beats: 3,
+    heldBy: "",
+    event: null,
+    played: host._forgeSeasonalState.events,
+  });
+  assert.match(html, /data-story-event-open="event-1">.*Story event · Done.*Enter event/u);
+  // The last Very Hard win closes it again; so does Seasonal events off.
+  adoptForgeSeasonalResponse(
+    host,
+    "/story-event/complete",
+    { runId: "w", chapter: "event-1" },
+    { ok: true, progress: { "event-1": { normal: 10, hard: 4, veryhard: 4 } } },
+  );
+  assert.equal(host._forgeSeasonalState.events[0].hardOpen, false);
+  assert.equal(host._forgeEvent.veryhard, 4);
+  host._run.story.seasonalEvents = false;
+  adoptForgeSeasonalResponse(
+    host,
+    "/story-event/plan",
+    { runId: "w", chapter: "event-1" },
+    {
+      ok: true,
+      plan: { nodes: fights },
+      progress: { "event-1": { normal: 10, hard: 1 } },
+      event: { ...event, opened: now, after: 1 },
+    },
+  );
+  assert.equal(host._forgeSeasonalState.events[0].hardOpen, false, "a cached plan read while events are off");
+});
+
+test("an event that ends while Chapters shows it closes Hard even when the refresh at its end is dropped", async () => {
+  Object.assign(globalThis, {
+    forgeSeasonalEnglish,
+    wireForgeBannerAnimation() {},
+    syncForgeAudio() {},
+    stopForgeStoryRequests() {},
+  });
+  globalThis.document = { createElement: () => ({ dataset: {} }) };
+  // A wide margin so a slow runner still loads the row before the event ends.
+  const endsAt = Date.now() + 400;
+  let answer = { ok: true, serverNow: Date.now(), events: [{ ...finished, endsAt, hard: 1 }] },
+    reads = 0,
+    filled = 0;
+  const host = {
+    _root: {
+      querySelector: (selector) => (selector === "[data-forge-seasonal-layout]" ? {} : null),
+      querySelectorAll: () => [],
+    },
+    _run: { runId: "w", story: { seasonalEvents: true } },
+    _forgeSeasonalRunId: "w",
+    _forgeSeasonalEnabled: true,
+    _hudView: "chapters",
+    _eventSlots: [],
+    // _postJson answers null for a failed fetch and for a story request stopped by entering an event or cancelling.
+    _postJson: async () => (reads++, answer),
+    _renderBrowser() {},
+    _fillChapters: () => filled++,
+  };
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
+  const card = () =>
+    /data-story-event-open="event-1">(.*?)<\/article>/u.exec(
+      bp(two, 3, true, { offers: [], beats: 3, heldBy: "", event: null, played: host._forgeSeasonalState.events }),
+    )?.[1];
+  wireForgeSeasonalEvents(host);
+  await settle();
+  assert.equal(host._forgeSeasonalState.events[0].hardOpen, true);
+  assert.match(card(), />Enter event/u);
+  await new Promise((resolve) => setTimeout(resolve, Math.max(0, endsAt - Date.now()) + 50));
+  answer = null;
+  filled = 0;
+  wireForgeSeasonalEvents(host);
+  await settle();
+  assert.equal(reads, 2, "the event's end reads the list again");
+  assert.equal(host._forgeSeasonalState.ok, true, "the dropped read keeps the list");
+  assert.equal(host._forgeSeasonalState.events[0].hardOpen, false, "an ended event no longer offers Hard");
+  assert.equal(filled, 1, "Chapters is drawn again from the kept list");
+  assert.match(card(), />Revisit played scenes/u);
+  assert.doesNotMatch(card(), /Hard and Very Hard until the event ends/u);
+  wireForgeSeasonalEvents(host);
+  await settle();
+  assert.equal(reads, 2, "the window's end reads the list once");
 });
 
 test("side stories after one chapter are drawn in the order they were opened, from the real /chapters and /story-events", async () => {
