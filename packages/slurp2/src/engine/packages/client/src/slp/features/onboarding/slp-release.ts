@@ -1,7 +1,7 @@
 import { SLURP2_LEGACY_RELEASES } from "./slp-release-archive";
 
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.4.8";
+export const SLURP2_VERSION = "0.5.0";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -14,6 +14,14 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.5.0",
+    date: "2026-10-29",
+    notes: [
+      "Creators remember what Long-Term Memory knows about them in their posts and DMs. Pick whole memories or only the parts that fit, under Backstage › Engine link.",
+      "Backstage tells you when Long-Term Memory is missing or is not sharing its memories.",
+    ],
+  },
   {
     version: "0.4.8",
     date: "2026-10-28",
