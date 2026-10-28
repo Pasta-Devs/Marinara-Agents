@@ -222,16 +222,23 @@ async function main() {
         await previewPackageInterop({ source: "messages", chatId: roleplayChat.id, limit: 100 }, root),
       );
       assert.deepEqual(
-        preview.samples.map(({ sourceId, title, importMode, status }) => ({ sourceId, title, importMode, status })),
+        preview.samples.map(({ sourceId, title, importMode, status, messageRange }) => ({
+          sourceId,
+          title,
+          importMode,
+          status,
+          messageRange,
+        })),
         [
           {
             sourceId: "chat-roleplay:messages:r1",
             title: "Moon Vault, messages 1-4",
             importMode: "roleplay",
             status: "pending",
+            messageRange: { chatName: "Moon Vault", first: 1, last: 4 },
           },
         ],
-        "a chat's messages preview in that chat's mode",
+        "a chat's messages preview in that chat's mode, with its range as data for the row",
       );
       const details = await sourcePackageDetails(
         { source: "messages", sourceIds: ["chat-roleplay:messages:r1"], sourceScope: { chatId: roleplayChat.id } },
@@ -261,6 +268,11 @@ async function main() {
         scoped.samples.map((sample) => sample.sourceId),
         ["chat-conversation:messages:k1"],
         "a source scope limits messages to its chats",
+      );
+      assert.deepEqual(
+        scoped.samples[0]?.messageRange,
+        { chatName: "Kitchen", first: 1, last: 1 },
+        "a single-message piece has first equal to last",
       );
       assert.equal(messageReads, 1, "a scoped preview reads only its chat's messages");
 

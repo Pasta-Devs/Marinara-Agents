@@ -309,6 +309,10 @@ async function main() {
         join(dataDir, "long-term-memory"),
       );
       assert.equal(characterPreview.samples[0]?.importMode, "roleplay");
+      assert.ok(
+        [...searchedCandidates.samples, ...characterPreview.samples].every((sample) => !("messageRange" in sample)),
+        "only Chat Messages samples carry a message range",
+      );
       const scopedCharacterPreview = await previewPackageInterop(
         { source: "characters", sourceScope: unrelatedScope, limit: 100 },
         join(dataDir, "long-term-memory"),

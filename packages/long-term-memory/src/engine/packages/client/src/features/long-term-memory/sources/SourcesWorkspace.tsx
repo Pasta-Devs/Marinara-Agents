@@ -1501,6 +1501,7 @@ export default function SourcesWorkspace({
   const renderFlatSourceRow = (row: PreviewRow) => {
     const ready = row.status === "pending" || retryableIdSet.has(row.sourceId);
     const selected = ready ? selectedIds.has(row.sourceId) : selectedImportedIds.has(row.sourceId);
+    const range = row.messageRange;
     return (
       <ClickSurface
         key={row.sourceId}
@@ -1538,10 +1539,30 @@ export default function SourcesWorkspace({
           className="min-w-0 flex-1 text-left focus-visible:outline-none"
         >
           <span className="flex flex-wrap items-center gap-2">
-            <strong className="truncate text-sm">{row.title}</strong>
+            {range ? (
+              <>
+                {/* A long chat name is what gets cut; the range and badge stay whole and wrap before the name drops below 8rem. */}
+                <strong className="min-w-32 flex-1 truncate text-sm" data-ltm-source-chat-name>
+                  {range.chatName}
+                </strong>
+                <span
+                  className="shrink-0 whitespace-nowrap text-xs text-[var(--muted-foreground)]"
+                  data-ltm-source-message-range
+                >
+                  {range.first === range.last
+                    ? localizeUi("ui.longTermMemory.sourcesworkspace.messageValue1", { value1: range.first })
+                    : localizeUi("ui.longTermMemory.sourcesworkspace.messagesValue1ToValue2", {
+                        value1: range.first,
+                        value2: range.last,
+                      })}
+                </span>
+              </>
+            ) : (
+              <strong className="truncate text-sm">{row.title}</strong>
+            )}
             <span
               data-ltm-source-status={row.status}
-              className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase"
+              className={`rounded-full border border-[var(--border)] bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase ${range ? "shrink-0 whitespace-nowrap" : ""}`}
             >
               {sourceStatusLabel(row, localizeUi)}
             </span>

@@ -46,14 +46,27 @@ export function recordLtmPackageRead(
   });
 }
 
-/** The ten packages that read memories most lately, newest first; `caller` is null for a package that gave no name. */
+const PACKAGE_READ_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * The ten packages that read memories most lately, newest first, with their reads and returned memories over the
+ * last 7 days; `caller` is null for a package that gave no name.
+ */
 export async function listLtmPackageReaders(root: string) {
-  const lastReadAt = new Map<string | null, string>();
-  for (const event of await readLtmDebugLog({ phase: "retrieval" }, root))
-    if ((PACKAGE_READ_ACTIONS as readonly string[]).includes(event.action))
-      lastReadAt.set(event.source ?? null, event.ts);
-  return [...lastReadAt]
-    .map(([caller, at]) => ({ caller, lastReadAt: at }))
+  const since = Date.now() - PACKAGE_READ_WINDOW_MS;
+  const readers = new Map<string | null, { lastReadAt: string; reads: number; memories: number }>();
+  for (const event of await readLtmDebugLog({ phase: "retrieval" }, root)) {
+    if (!(PACKAGE_READ_ACTIONS as readonly string[]).includes(event.action)) continue;
+    const reader = readers.get(event.source ?? null) ?? { lastReadAt: event.ts, reads: 0, memories: 0 };
+    if (event.ts > reader.lastReadAt) reader.lastReadAt = event.ts;
+    if (Date.parse(event.ts) >= since) {
+      reader.reads += 1;
+      reader.memories += event.counts?.memories ?? 0;
+    }
+    readers.set(event.source ?? null, reader);
+  }
+  return [...readers]
+    .map(([caller, reader]) => ({ caller, ...reader }))
     .sort((left, right) => right.lastReadAt.localeCompare(left.lastReadAt))
     .slice(0, 10);
 }
