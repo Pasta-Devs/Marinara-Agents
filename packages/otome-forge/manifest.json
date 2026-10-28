@@ -48,6 +48,11 @@
       "path": "client.js",
       "sha256": "08b04ea7c9a3cf2b91ad57c736c34d8db37e5092808788564290f0ff7f6b2e1d",
       "bytes": 344262
+    },
+    {
+      "path": "fonts/OFL.txt",
+      "sha256": "42a08de2370044e2966c8158770a86c67a8b343c9422a1b30b8599d25c05dd5f",
+      "bytes": 4558
     }
   ],
   "permissions": [

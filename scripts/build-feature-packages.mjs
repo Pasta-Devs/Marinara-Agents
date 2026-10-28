@@ -883,6 +883,8 @@ const features = [
     clientImport: "packages/client/src/features/otome-forge/client-entry.tsx",
     packageSourceRoot: otomeForgeSourceRoot,
     ownedSourcePaths: otomeForgeOwnedSourcePaths,
+    // The fonts are embedded in client.js as data: URIs; their licence ships beside them.
+    assetPaths: ["fonts/OFL.txt"],
     libraryHidden: true,
     contributions: {
       slots: ["home-browser-tab"],
