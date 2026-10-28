@@ -10,6 +10,8 @@ export const forgeFormationCombatEnglish = {
   "combat.formation.kitFailed":
     "A character's combat kit could not be prepared. Open Story Continuity and choose Retry to try again.",
   "combat.formation.engineChanged": "Formation was updated. Reload the game to keep playing.",
+  "combat.formation.storyChanged":
+    "The story changed while this page was open. Go back and reopen it before trying again.",
   "combat.formation.energy": "Team energy",
   "combat.formation.foeEnergy": "Enemy energy",
   "combat.formation.income": "+{count} next turn",

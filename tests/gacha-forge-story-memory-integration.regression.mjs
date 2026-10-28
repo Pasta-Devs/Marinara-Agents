@@ -46,6 +46,7 @@ const memoryDocuments = () => {
 function fixture(options = {}) {
   const realMemory = options.realMemory;
   const onMaintain = options.maintain;
+  const recallOverride = options.recall;
   const runId = "memory-frontier";
   const phase = options.phase || "ready";
   const plans = new Map();
@@ -70,6 +71,7 @@ function fixture(options = {}) {
         },
         async recall(options) {
           requests.push(options);
+          if (recallOverride) return recallOverride(options);
           const sources = await adapters.readSources(runId, options.target);
           return {
             status: { phase },
@@ -901,4 +903,145 @@ test("the knowledge boundary keeps in-world knowledge and the fiction's own boun
   assert.match(forgeKnowledgeBoundary, /learned inside the story from the protagonist or another in-world source/u);
   assert.match(forgeKnowledgeBoundary, /another character's private conversations/u);
   assert.match(forgeKnowledgeBoundary, /no player, game, prompt, instructions or memory notes/u);
+});
+
+test("chapter summaries other than the newest are offered to the fitter oldest first; events and canon in full never are", async () => {
+  let rendered;
+  const f = fixture({
+    renderContext: (result, options) => (rendered = options),
+    recall: async () => ({
+      status: { phase: "ready" },
+      recent: [
+        { id: "1", kind: "chapter", title: "Chapter 1", content: "RECAP_1", summary: true },
+        { id: "festival", kind: "story-event", title: "Story event: Festival", content: "EVENT_IN_FULL" },
+        { id: "2", kind: "chapter", title: "Chapter 2", content: "RECAP_2", summary: true },
+        { id: "3", kind: "chapter", title: "Chapter 3", content: "RECAP_3", summary: true },
+        // A summarized event opened after Chapter 3 sorts after it, but Chapter 3 is still the newest chapter.
+        { id: "fair", kind: "story-event", title: "Story event: Fair", content: "FAIR_RECAP", summary: true },
+        { id: "4", kind: "chapter", title: "Chapter 4", latest: true },
+      ],
+    }),
+  });
+  for (let chapter = 1; chapter <= 5; chapter += 1) f.plan(chapter);
+  f.session.progress = { 1: { normal: 3 }, 2: { normal: 3 }, 3: { normal: 3 }, 4: { normal: 3 } };
+  await f.context(5);
+  assert.deepEqual(rendered.optional, [
+    "# Recent canon summary: Chapter 1\nRECAP_1",
+    "# Recent canon summary: Chapter 2\nRECAP_2",
+  ]);
+  for (const block of rendered.optional) assert.ok(rendered.prefix.includes(`${block}\n\n`));
+  assert.match(
+    rendered.prefix,
+    /# Recent canon summary: Chapter 3\nRECAP_3\n\n# Recent canon summary: Story event: Fair\nFAIR_RECAP\n\n# Previous chapter in full: Chapter 4\n/u,
+  );
+});
+
+test("legacy recovery lets the fitter leave out canon before the previous chapter: older chapters first, then side canon", async () => {
+  let rendered;
+  const f = fixture({
+    phase: "error",
+    renderContext: (result, options) =>
+      (rendered = forgeMemoryContext(result, { ...options, renderMemory: forgeStoryMemoryText })),
+  });
+  for (let chapter = 1; chapter <= 4; chapter += 1) f.plan(chapter);
+  Object.assign(f.plan("event-1", ["story"]), { eventId: "event-record-1", after: 1, opened: 100 });
+  Object.assign(f.plan("event-3", ["story"]), { eventId: "event-record-3", after: 3, opened: 300 });
+  f.session.progress = {
+    1: { normal: 3 },
+    2: { normal: 3 },
+    3: { normal: 3 },
+    "event-1": { normal: 1 },
+    "event-3": { normal: 1 },
+  };
+  // As the bundle's _r returns it: a Character Story opened before chapter 1, chapters 1-3 with one opened after
+  // chapter 2, the chapter so far and locked decisions; starts[n] is where chapter n's turn begins, the last its end.
+  const blocks = [
+    "# Bond before 1\nBOND_0",
+    "# Chapter 1\nCanonical 1:0\n\nCanonical 1:1",
+    "# Chapter 2\nCanonical 2:0\n\nCanonical 2:1",
+    "# Bond after 2\nBOND_2",
+    "# Chapter 3\nCanonical 3:0\n\nCanonical 3:1",
+    "# Chapter 4 so far\nCURRENT_BEAT",
+    "LOCKED_DECISION",
+  ];
+  const starts = [];
+  Object.assign(starts, { 1: 1, 2: 2, 3: 4, 4: 5 });
+  const event1 = "# Story event: Chapter event-1\nCanonical event-1:0";
+  const event3 = "# Story event: Chapter event-3\nCanonical event-3:0";
+  await f.memory.context({
+    runId: f.runId,
+    chapter: 4,
+    storyIndex: 1,
+    prefix: "CURRENT_BEAT",
+    fallback: () => ({ blocks, starts }),
+  });
+  assert.equal(rendered.text, [...blocks, event1, event3].join("\n\n"), "the same history, byte for byte");
+  assert.deepEqual(rendered.optional, [blocks[1], blocks[2], blocks[0], event1, blocks[3]]);
+  // A digest covering the previous chapter keeps its turn, and the previous chapter in full is added after it.
+  const digested = [
+    "# Chapter 1\nCanonical 1:0\n\nCanonical 1:1",
+    "# Chapters 2-3 (summary)\nDIGEST",
+    "# Chapter 4 so far\nCURRENT_BEAT",
+  ];
+  await f.memory.context({
+    runId: f.runId,
+    chapter: 4,
+    storyIndex: 1,
+    prefix: "CURRENT_BEAT",
+    fallback: () => ({ blocks: digested, starts: Object.assign([], { 1: 0, 2: 1, 4: 2 }) }),
+  });
+  assert.deepEqual(rendered.optional, [digested[0], event1]);
+  assert.match(rendered.text, /# Chapters 2-3 \(summary\)\nDIGEST\n\n# Chapter 4 so far/u);
+  assert.match(rendered.text, /# Previous chapter in full: Chapter 3\nCanonical 3:0\n\nCanonical 3:1$/u);
+  // Through the fitter: nothing goes while the reply keeps its floor, then the oldest chapter first.
+  const estimate = (messages) => messages.reduce((sum, message) => sum + [...message.content].length + 4, 0);
+  await f.memory.context({
+    runId: f.runId,
+    chapter: 4,
+    storyIndex: 1,
+    prefix: "CURRENT_BEAT",
+    fallback: () => ({ blocks, starts }),
+  });
+  const messages = forgeComposeMemoryPrompt((history) => [{ role: "user", content: history }], [rendered]);
+  const size = estimate(messages);
+  const roomy = fitForgeMemoryPrompt(messages, {
+    maxContext: size + 512 + 8192,
+    maxTokens: 20000,
+    estimateMessages: estimate,
+  });
+  assert.equal(roomy.messages, messages);
+  const tight = fitForgeMemoryPrompt(messages, {
+    maxContext: size + 512 + 8192 - blocks[1].length - 2,
+    maxTokens: 20000,
+    estimateMessages: estimate,
+  });
+  assert.equal(tight.droppedSummaries, 1);
+  assert.equal(tight.messages[0].content, [blocks[0], ...blocks.slice(2), event1, event3].join("\n\n"));
+  const kept = [...blocks.slice(4), event3].join("\n\n");
+  const least = fitForgeMemoryPrompt(messages, {
+    maxContext: 8192 + 512 + kept.length + 4,
+    maxTokens: 20000,
+    estimateMessages: estimate,
+  });
+  assert.equal(least.droppedSummaries, 5);
+  assert.equal(least.messages[0].content, kept, "the previous chapter onward stays");
+  const short = fitForgeMemoryPrompt(messages, {
+    maxContext: 8192 + 512 + kept.length + 3,
+    maxTokens: 20000,
+    estimateMessages: estimate,
+  });
+  assert.equal(short.fits, true, "required canon is never left out, even when the reply then gets less than its floor");
+  assert.equal(short.messages[0].content, kept);
+  // A builder that repeats the history is never rewritten.
+  const doubled = forgeComposeMemoryPrompt(
+    (history) => [{ role: "user", content: `${history}\n${history}` }],
+    [rendered],
+  );
+  const repeated = fitForgeMemoryPrompt(doubled, {
+    maxContext: estimate(doubled) + 512 + 8192 - 1,
+    maxTokens: 20000,
+    estimateMessages: estimate,
+  });
+  assert.equal(repeated.reason, "memory-context-ambiguous");
+  assert.equal(repeated.messages, doubled);
 });
