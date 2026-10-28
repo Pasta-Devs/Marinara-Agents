@@ -1,7 +1,8 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the `${R}:state` document (Starlight and each love interest's points and stage), and the RunView
 // ──────────────────────────────────────────────
-// Later milestones add their own fields here, each with a default, so older states keep reading. M3: `home`.
+// Later milestones add their own fields here, each with a default, so older states keep reading. M3: `home`. M6 adds
+// none: the period tracker and caring messages never reach a server document (plan §1.9).
 import { z, type ZodType } from "zod";
 import type {
   ChapterProgress,

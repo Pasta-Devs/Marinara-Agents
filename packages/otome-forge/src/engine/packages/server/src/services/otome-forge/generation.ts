@@ -65,6 +65,11 @@ export interface GenerateJsonRequest<T extends object> {
   lane: GenerationLane;
   /** Replaced by `[cycle state redacted]` in the logged prompt; the provider still receives them. */
   redact?: string[];
+  /**
+   * Asked before every provider call, the repair turn's included: false stops the request there with a 503, before
+   * anything is logged or sent (P27 passes careLineAllowed, so a debug switch turned on mid-call holds the line back).
+   */
+  mayCall?: () => boolean;
   /** A connection id that wins over the world's (premise suggestions and background jobs name theirs directly). */
   connectionId?: string;
   signal?: AbortSignal;
@@ -175,6 +180,9 @@ export async function generateJson<T extends object>(
 
   const budget = outputBudget(request.maxTokens, model.maxOutputTokens);
   const complete = async (messages: OtomeMessage[], label: string) => {
+    if (request.mayCall && !request.mayCall()) {
+      throw new OtomeForgeError(503, `${request.label} was held back before it was sent.`);
+    }
     const fitted = model.fitContext(messages, { maxTokens: budget });
     const sent = fitted.messages as OtomeMessage[];
     logOtomePrompt(runtime, label, sent, { debugMode: request.debugMode, redact: request.redact });

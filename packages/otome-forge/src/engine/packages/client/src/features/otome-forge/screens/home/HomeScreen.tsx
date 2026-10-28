@@ -1,20 +1,24 @@
 // ──────────────────────────────────────────────
 // Otome Forge: Home. The love interest the player chose (or the player, in her own look) stands in a layered scene
 // tinted by the time of day, breathing, with a handwritten message of the day, his mood, tap zones that answer at once
-// from lines written in advance, the phone, Rough day? and Him / Me. Everything works without images or audio.
+// from lines written in advance, the phone, Rough day?, Remind Me, Him / Me, and (M6) Caring message on a day the
+// period tracker has something to say. Everything works without images or audio.
 // ──────────────────────────────────────────────
 // Routes (S/routes/home.ts): GET /runs/:run/home → HomeView; POST .../home/set {li?, show?} → {home};
 // POST .../home/note {li} → {note} (written by the local day's first call, the same note after); GET
 // .../lis/:li/lines → LinesView. The note is asked for once per love interest, local day and rupture state from this
 // page (a rupture that opens or is repaired makes the day's note stale, and Home's answer then has none): one request
 // in flight, and a failure waits for Try again instead of asking the model again on every visit.
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { HeartHandshake, RotateCcw, Smartphone, UsersRound } from "lucide-react";
+import { CalendarDays, HandHeart, HeartHandshake, RotateCcw, Smartphone, UsersRound } from "lucide-react";
 import { useOtomeApi } from "../../api";
+import { CaringMessage } from "../../components/CaringMessage";
 import { runPath, useReducedMotion } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
+import { careStateKey, cycleToday, type CycleData } from "../../lib/cycle";
+import { CYCLE_STORAGE_KEY, dropStaleCareNotes, readCycle, updateCycle } from "../../lib/cycle-storage";
 import {
   fallbackTapKeys,
   localDay,
@@ -91,14 +95,47 @@ const noteFailures = new Map<string, unknown>();
 const BUBBLE_MS = 4_600;
 const MINUTE_MS = 60_000;
 
-/** The time, once a minute: the tint, the part of the day and the local day follow it. */
-function useMinute(): number {
+/** The time, once a minute: the tint, the part of the day and the local day follow it (Remind Me's today too). */
+export function useMinute(): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), MINUTE_MS);
     return () => clearInterval(timer);
   }, []);
   return now;
+}
+
+/**
+ * The period tracker as this browser holds it (Home, Remind Me and Settings → Tracker), kept in step with other tabs
+ * and windows: a change there, Delete all included, arrives as a `storage` event. `update` applies a change to the
+ * stored copy as it is now (C/lib/cycle-storage.ts updateCycle), so nothing deleted elsewhere is written back, and
+ * says whether this browser kept it; `reload` reads it again.
+ */
+export function useCycle() {
+  const [cycle, setCycle] = useState<CycleData>(() => readCycle());
+  const held = useRef(cycle);
+  // True while this browser has kept none of this screen's changes: the screen's copy is then the only one.
+  const heldOnly = useRef(false);
+  const reload = useCallback(() => {
+    heldOnly.current = false;
+    held.current = readCycle();
+    setCycle(held.current);
+  }, []);
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === CYCLE_STORAGE_KEY) reload();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [reload]);
+  const update = (change: (data: CycleData) => CycleData): boolean => {
+    const { data, kept } = updateCycle(held.current, heldOnly.current, change);
+    heldOnly.current = !kept;
+    held.current = data;
+    setCycle(data);
+    return kept;
+  };
+  return { cycle, update, reload };
 }
 
 const uncut = (url: string): HomeLook => ({ url, source: "look", cutoutState: "uncut" });
@@ -128,9 +165,10 @@ interface HomeScreenProps {
   onOpenPhone: (open: PhoneOpen | null) => void;
   onOpenCast: () => void;
   onOpenStories: () => void;
+  onOpenRemind: () => void;
 }
 
-export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStories }: HomeScreenProps) {
+export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStories, onOpenRemind }: HomeScreenProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
@@ -287,7 +325,26 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
     setAnnounce(t("ui.otomeForge.home.said", { name: li.name, line }));
   };
 
-  const [sheet, setSheet] = useState<"rough" | "pick" | null>(null);
+  const [sheet, setSheet] = useState<"rough" | "pick" | "care" | null>(null);
+
+  // ── The period tracker (this browser only): Caring message shows on a day it has something to say, once Home knows
+  // whose home it is. Followed in other tabs too; a caring message from another day is dropped as the day changes. ──
+  const { cycle } = useCycle();
+  const care = cycleToday(cycle, day);
+  useEffect(() => dropStaleCareNotes(day), [day]);
+  // What it was pressed for (the day, the love interest and today's state): when any of them changes while it is open
+  // (midnight, another pick of Who's home, a change in another tab), it closes rather than ask again by itself.
+  const careFrom = care && li ? `${day} ${li.id} ${careStateKey(care)}` : null;
+  const [careFor, setCareFor] = useState<string | null>(null);
+  const careOpen = sheet === "care" && careFrom !== null && careFor === careFrom;
+  const caringRef = useRef<HTMLButtonElement>(null);
+  const remindRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (sheet !== "care" || careOpen) return;
+    setSheet(null);
+    // The dialog gives focus back to Caring message; when that button went with the day, focus waits on Remind Me.
+    if (!caringRef.current) remindRef.current?.focus({ preventScroll: true });
+  }, [careOpen, sheet]);
 
   if (!li) return null;
   const said = bubble?.li === li.id ? bubble : null;
@@ -391,6 +448,24 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
             <HeartHandshake size={17} strokeWidth={1.9} aria-hidden="true" />
             <span>{t("ui.otomeForge.home.roughDay")}</span>
           </button>
+          {careFrom && data ? (
+            <button
+              ref={caringRef}
+              type="button"
+              className="of-home-action of-home-action--care of-glass"
+              onClick={() => {
+                setCareFor(careFrom);
+                setSheet("care");
+              }}
+            >
+              <HandHeart size={17} strokeWidth={1.9} aria-hidden="true" />
+              <span>{t("ui.otomeForge.tracker.caringMessage")}</span>
+            </button>
+          ) : null}
+          <button ref={remindRef} type="button" className="of-home-action of-glass" onClick={onOpenRemind}>
+            <CalendarDays size={17} strokeWidth={1.9} aria-hidden="true" />
+            <span>{t("ui.otomeForge.common.screenRemind")}</span>
+          </button>
           <button type="button" className="of-home-action of-glass" onClick={() => setSheet("pick")}>
             <UsersRound size={17} strokeWidth={1.9} aria-hidden="true" />
             <span>{t("ui.otomeForge.home.whoIsHome")}</span>
@@ -428,6 +503,17 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
 
       {sheet === "rough" ? (
         <RoughDaySheet runKey={runKey} li={li} lines={ownLines} onClose={() => setSheet(null)} />
+      ) : careOpen && care ? (
+        <CaringMessage
+          key={careFrom}
+          runKey={runKey}
+          li={li}
+          player={view.player}
+          today={care}
+          dayKey={day}
+          lines={ownLines}
+          onClose={() => setSheet(null)}
+        />
       ) : sheet === "pick" ? (
         <HomeLiPicker
           lis={view.lis}

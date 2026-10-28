@@ -13,6 +13,8 @@ import { INDEX_QUERY_KEY, useOtomeIndex } from "./hooks/use-index";
 import { useLook, type LookPreference } from "./hooks/use-look";
 import { fetchRunView, runQueryKey, useRun } from "./hooks/use-run";
 import { accentOf } from "./lib/accent";
+import { dropStaleCareNotes } from "./lib/cycle-storage";
+import { localDay } from "./lib/tap-mood";
 import { OtomePropsContext, readOtomeProps } from "./props";
 import { BibleView } from "./screens/BibleView";
 import { ForgeProgress } from "./screens/ForgeProgress";
@@ -20,8 +22,9 @@ import { HomeScreen, useHomeLi } from "./screens/home/HomeScreen";
 import { PhoneScreen, type PhoneOpen } from "./screens/phone/PhoneScreen";
 import { Placeholder } from "./screens/Placeholder";
 import { Reader } from "./screens/reader/Reader";
+import { RemindMe } from "./screens/remind/RemindMe";
 import { DOCK_SCREENS, RUN_SCREENS, type DockScreen, type ScreenId } from "./screens/screens";
-import { Settings } from "./screens/settings/Settings";
+import { Settings, type SettingsTab } from "./screens/settings/Settings";
 import { SetupWizard } from "./screens/setup/SetupWizard";
 import { StoryHome } from "./screens/story/StoryHome";
 import { WorldPicker } from "./screens/WorldPicker";
@@ -43,6 +46,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   const run = useRun(activeRun);
   const [chosen, setChosen] = useState<ScreenId | null>(null);
   const [settingsReturn, setSettingsReturn] = useState<ScreenId>("picker");
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("look");
   const [bibleLi, setBibleLi] = useState<string | null>(null);
   const [chapterKey, setChapterKey] = useState<string | null>(null);
   // The thread Home's Reply or Phone button opens (with the note it quotes), or null for the thread list.
@@ -164,8 +168,9 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     go("forge");
   };
 
-  const openSettings = () => {
+  const openSettings = (tab: SettingsTab = "look") => {
     setSettingsReturn(screen);
+    setSettingsTab(tab);
     go("settings");
   };
   const selectDockScreen = (next: DockScreen) => go(next === screen ? "home" : next);
@@ -179,6 +184,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     bible: "forge",
     reader: "story",
     phone: "home",
+    remind: "home",
     home: activeRun ? undefined : "picker",
   };
   const backTo = back[screen];
@@ -207,7 +213,12 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     ) : screen === "bible" && activeRun && bibleOf && view ? (
       <BibleView runKey={activeRun} li={bibleOf} lis={view.lis} />
     ) : screen === "settings" ? (
-      <Settings run={view} lookPreference={lookPreference} onLookPreference={onLookPreference} />
+      <Settings
+        run={view}
+        lookPreference={lookPreference}
+        onLookPreference={onLookPreference}
+        initialTab={settingsTab}
+      />
     ) : screen === "story" && activeRun && view ? (
       <StoryHome
         runKey={activeRun}
@@ -236,9 +247,12 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         }}
         onOpenCast={() => go("forge")}
         onOpenStories={() => go("picker")}
+        onOpenRemind={() => go("remind")}
       />
     ) : screen === "phone" && activeRun && view ? (
       <PhoneScreen runKey={activeRun} view={view} initial={phoneOpen} />
+    ) : screen === "remind" && activeRun && view ? (
+      <RemindMe runKey={activeRun} view={view} onOpenTracker={() => openSettings("tracker")} />
     ) : (
       <Placeholder screen={screen} />
     );
@@ -258,7 +272,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
           }
           onBack={backTo ? () => go(backTo) : undefined}
           onHome={() => go("home")}
-          onSettings={screen === "settings" ? undefined : openSettings}
+          onSettings={screen === "settings" ? undefined : () => openSettings()}
         />
       )}
       <div
@@ -289,6 +303,10 @@ export function OtomeForgeView({ capabilityProps }: { capabilityProps: Record<st
   // that language too, so English under a right-to-left Engine locale keeps its punctuation where it belongs.
   const { i18n } = useTranslation();
   const language = i18n.resolvedLanguage ?? "en";
+  // A caring message from another day goes as Otome Forge opens, whichever screen it opens on (Home also drops one as
+  // it sees the day change). ponytail: nothing can run while the page is closed, or at midnight on another screen, so
+  // until the next open (or Home) yesterday's note stays in this browser. Upgrade path: a day timer here.
+  useEffect(() => dropStaleCareNotes(localDay(props.timeZone, new Date())), [props.timeZone]);
   return (
     <div className="of-root" data-look={look} dir={i18n.dir(language)} lang={language} data-otome-forge-root="">
       <OtomePropsContext.Provider value={props}>

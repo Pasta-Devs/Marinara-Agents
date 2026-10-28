@@ -2,7 +2,7 @@
 
 Otome Forge will be a single-player otome game made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. There is no real money in it.
 
-This is an early test build. You set up a story: a premise, your protagonist from one of your personas, and two to five love interests from your character cards or from original archetypes. The forge then plans the story's mystery and writes a hidden character bible for each love interest, and can paint the cast's base looks. Then you play its main chapters, come Home to the love interest you pick, and text each one on the phone. Dates and wishes arrive in later builds. The plan is in [Pasta-Devs/Marinara-Agents#1781](https://github.com/Pasta-Devs/Marinara-Agents/issues/1781).
+This is an early test build. You set up a story: a premise, your protagonist from one of your personas, and two to five love interests from your character cards or from original archetypes. The forge then plans the story's mystery and writes a hidden character bible for each love interest, and can paint the cast's base looks. Then you play its main chapters, come Home to the love interest you pick, text each one on the phone, and keep their days in Remind Me. Dates and wishes arrive in later builds. The plan is in [Pasta-Devs/Marinara-Agents#1781](https://github.com/Pasta-Devs/Marinara-Agents/issues/1781).
 
 ## Install and open it
 
@@ -38,10 +38,21 @@ Home shows the love interest you pick, or you (**Him / Me** shows their name and
 
 Each love interest has one private thread, in their own colour, with suggested replies and their faces as stickers. Only one reply is written at a time. **Close and remember** saves the conversation as a memory that only that love interest recalls, and earns 20 affection (within the daily cap for everything outside the story).
 
+## Remind Me and the period tracker
+
+**Remind Me** (on Home) shows a month at a time: each love interest's birthday, the day your story began, the dated firsts of your Love Timeline, and your own birthday if you add it, which stays on this device and is never sent with a prompt. Wish banners' last days join it once banners arrive. Arrow keys move through the days, Home and End to the ends of a week, Page Up and Page Down by month; **Coming up** lists the next two months.
+
+**Settings → Tracker** holds an optional period tracker, for anyone who has periods, off by default:
+
+- It is stored only in this browser (`otome-forge:cycle:v1`), never in package documents, backups, story memory, ledgers or logs. **Delete all cycle data** (here or in **Privacy & data**) removes it and today's caring messages in one click, and an export file moves it to another device. Safari may clear browser storage after about 7 days without a visit, which is what the export is for.
+- You log first days; it predicts the next from your cycle length, or not at all when your cycle is irregular. Remind Me shows logged days as filled hearts and predicted ones as outlined hearts labelled "predicted". It never computes "late": a predicted day that passes simply gives way to the next one. It isn't medical advice.
+- On a day it has something to say (a day of a logged period, or a predicted start within three days), Home offers **Caring message**. Pressing it sends one line about today, such as "Mira has told you: today is day 2 of her period." (with your protagonist's own pronoun, "their" by default), to the model provider of the story's chat connection, and nothing else: never the history. Pressing Play also sends the note to your voice provider, with no audio cache. The note is kept in this browser for that day only, and is never quoted into a reply.
+- **Keep it off the model** sends nothing: a comfort line written in advance answers instead. The same happens whenever a debug condition is on (the Engine's debug mode, `DEBUG_AGENTS`, or a debug log level), because the Engine's providers log whole requests then. Otome Forge redacts the line from its own prompt log, and the server stores nothing about it. Love interests comfort and never diagnose or prescribe.
+
 ## Content settings and the 18+ gate
 
 Each story has its own Heat (SFW, NSFW: Fade or NSFW: Explicit; SFW by default), Darkness (Gentle, Angst or Dark romance; Angst by default), Lines & Veils (a Line is never written; a Veil happens only off the page), and image rating (SFW, Suggestive or Explicit; SFW by default). NSFW Heat, Dark romance and the image ratings above SFW unlock only after a one-time confirmation: "I am 18 or older. Love interests are always adults. This is fiction." The confirmation is self-reported, stored with its time, and checked by the server on every change. Turning a setting down never asks, and withdrawing the confirmation turns every story back to SFW, Angst and SFW images. Love interests are always adults, and non-consent and pregnancy start as Lines.
 
 ## Your data
 
-Otome Forge keeps its saves in Marinara Engine's package storage, in documents whose ids start with `otome-forge:`, so it works alongside Gacha Forge. They travel with your backups and profile exports, and they are not isolated from other packages in the Engine's storage. Messages of the day, phone threads and line packs are saved there too. Painted looks and Home cut-outs are saved in the Global Gallery, and deleting a story deletes them too. The look you pick (Midnight, Pearl or Follow system) and an unfinished setup are kept only in this browser, in storage the Engine's page shares with other installed packages.
+Otome Forge keeps its saves in Marinara Engine's package storage, in documents whose ids start with `otome-forge:`, so it works alongside Gacha Forge. They travel with your backups and profile exports, and they are not isolated from other packages in the Engine's storage. Messages of the day, phone threads and line packs are saved there too. Painted looks and Home cut-outs are saved in the Global Gallery, and deleting a story deletes them too. The look you pick (Midnight, Pearl or Follow system), an unfinished setup, the period tracker, today's caring messages and your own birthday are kept only in this browser, in storage the Engine's page shares with other installed packages.

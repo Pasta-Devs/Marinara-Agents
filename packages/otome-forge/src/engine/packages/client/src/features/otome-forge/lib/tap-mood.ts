@@ -5,7 +5,7 @@
 // the catalog's fallback lines until then. Pure: a tap never waits for a request.
 // ──────────────────────────────────────────────
 import type { LinesView } from "../shared/api-types";
-import type { TapZone, TimeOfDay } from "../shared/home";
+import { soundsMedical, type TapZone, type TimeOfDay } from "../shared/home";
 
 /** Home's time-of-day tint, a little finer than the packs' three parts of the day. */
 export type SkyPhase = "dawn" | "day" | "dusk" | "night";
@@ -71,9 +71,12 @@ export function tapPool(lines: LinesView | null, zone: TapZone, part: TimeOfDay,
   return usable(mode === "cold" ? lines.cold : mode === "annoyed" ? lines.annoyed : lines.tap?.[zone]?.[part]);
 }
 
-/** His comfort lines for Rough day?, or [] until his fixed lines exist. */
+/**
+ * His comfort lines for Rough day? and the Caring message, or [] until his fixed lines exist. A line that prescribes or
+ * diagnoses is left out (the comfort rule), so the catalog's lines stand in when none is left.
+ */
 export function comfortPool(lines: LinesView | null): string[] {
-  return usable(lines?.comfort);
+  return usable(lines?.comfort).filter((line) => !soundsMedical(line));
 }
 
 // The catalog's lines (ui.otomeForge.fallback.*) until his own exist, as many as a pack holds (SH/home.ts

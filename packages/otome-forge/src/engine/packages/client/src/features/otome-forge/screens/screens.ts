@@ -5,6 +5,7 @@ import {
   BookHeart,
   BookLock,
   BookOpen,
+  CalendarDays,
   CalendarHeart,
   Gem,
   Heart,
@@ -31,6 +32,7 @@ export type ScreenId =
   | "wardrobe"
   | "album"
   | "phone"
+  | "remind"
   | "settings";
 
 /** The Dock's screens, in order; Wish is the raised one in the middle. */
@@ -46,6 +48,7 @@ export const RUN_SCREENS: ReadonlySet<ScreenId> = new Set([
   "wardrobe",
   "album",
   "phone",
+  "remind",
 ]);
 
 export const SCREEN_NAME_KEYS: Record<ScreenId, string> = {
@@ -61,6 +64,7 @@ export const SCREEN_NAME_KEYS: Record<ScreenId, string> = {
   wardrobe: "ui.otomeForge.common.screenWardrobe",
   album: "ui.otomeForge.common.screenAlbum",
   phone: "ui.otomeForge.common.screenPhone",
+  remind: "ui.otomeForge.common.screenRemind",
   settings: "ui.otomeForge.common.screenSettings",
 };
 
@@ -77,5 +81,6 @@ export const SCREEN_ICONS: Record<ScreenId, LucideIcon> = {
   wardrobe: Shirt,
   album: Images,
   phone: Smartphone,
+  remind: CalendarDays,
   settings: Settings,
 };

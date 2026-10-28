@@ -1,5 +1,11 @@
 # Otome Forge release notes
 
+## 0.0.8 — 2026-10-28
+
+- Remind Me, from Home: a month of your story's days, with each love interest's birthday, the day your story began, its dated firsts, and your own birthday if you add it (kept only on this device).
+- A period tracker for anyone who has periods, off by default and stored only in this browser. Logged days show as filled hearts, predicted ones as outlined hearts, and it never calls a period late. Export moves it; one click deletes all of it.
+- On a tracked day, Caring message asks the love interest on Home for a note. Only one line about today reaches your model provider, never the history; with Keep it off the model, or while debug logging is on, a comfort line written in advance answers instead. The note stays in this browser for the day only.
+
 ## 0.0.5 — 2026-10-28
 
 - Home now shows the love interest you pick, or you in your own look, in a layered scene tinted by your time of day. A painted look is cut out of its background when the Engine can, and pans slowly when it cannot; with no images, initials on a gradient. Reduced motion stills it.

@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.0.8",
+          "date": "2026-10-28",
+          "notes": "- Remind Me, from Home: a month of your story's days, with each love interest's birthday, the day your story began, its dated firsts, and your own birthday if you add it (kept only on this device).\n- A period tracker for anyone who has periods, off by default and stored only in this browser. Logged days show as filled hearts, predicted ones as outlined hearts, and it never calls a period late. Export moves it; one click deletes all of it.\n- On a tracked day, Caring message asks the love interest on Home for a note. Only one line about today reaches your model provider, never the history; with Keep it off the model, or while debug logging is on, a comfort line written in advance answers instead. The note stays in this browser for the day only.",
+          "highlight": false
+        },
+        {
           "version": "0.0.5",
           "date": "2026-10-28",
           "notes": "- Home now shows the love interest you pick, or you in your own look, in a layered scene tinted by your time of day. A painted look is cut out of its background when the Engine can, and pans slowly when it cannot; with no images, initials on a gradient. Reduced motion stills it.\n- Each love interest leaves one handwritten note a day, with a mood; Reply opens their thread. During a rupture the note is curt and taps get only cold lines.\n- Tap head, hand or heart for lines written ahead in their voice, so a tap never waits; too many pokes annoy them. Rough day? offers comfort with no model call.\n- The phone: one private thread per love interest, with suggested replies and stickers. Close and remember saves the talk as a memory only that love interest recalls (+20 affection, capped daily).",

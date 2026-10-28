@@ -414,6 +414,31 @@ export interface PhoneCloseResult {
   grants: PhoneGrant[];
 }
 
+// ── Remind Me and the caring message (M6). Tracker data never reaches a server document: the client works out
+// today's state (C/lib/cycle.ts) and sends at most its one templated line. ──
+
+/**
+ * GET /runs/:run/calendar: the story's days. `md` is "MM-DD", every year; `day` is a local date ("YYYY-MM-DD").
+ * Anniversaries are the world's first day and the Love Timeline's dated firsts; `label` is shown as written (story
+ * text) and `year`, when given, is the year it happened (none is drawn before it).
+ */
+export interface CalendarView {
+  birthdays: Array<{ li: LiId; md: string }>;
+  anniversaries: Array<{ md: string; label: string; li?: LiId; year?: number }>;
+  /** Wish banners' last days (M4); empty before any banner exists. */
+  bannerEnds: Array<{ day: string; banner: string }>;
+}
+
+/**
+ * POST /runs/:run/care-note {li, careLine?}. `careLine` is one of C/lib/cycle.ts careLines, exactly; without it, or
+ * while any debug condition holds, the server answers from their comfort lines (`note` null while those aren't written
+ * yet: the client shows one of the catalog's). Nothing is stored (Cache-Control: no-store).
+ */
+export interface CareNoteResult {
+  note: string | null;
+  source: "model" | "pool";
+}
+
 // ── State (M1, with M2a's angst, ledgers and reading progress). Trust and tension are never shown to the player. ──
 
 export type GrievanceSeverity = "minor" | "major" | "rupture";

@@ -9,6 +9,7 @@ import { createBackgroundQueue } from "./background-queue.js";
 import { createHandle, type OtomeRouter, type RouteDeps } from "./http.js";
 import { INDEX_ID } from "./ids.js";
 import { createOtomeMemory } from "./memory/memory.js";
+import { registerCareRoutes } from "./routes/care.js";
 import { registerHomeRoutes } from "./routes/home.js";
 import { registerIndexRoutes } from "./routes/index.js";
 import { registerMemoryRoutes } from "./routes/memory.js";
@@ -52,6 +53,7 @@ export async function activate({ api }: ActivationContext) {
       registerMemoryRoutes(router, { store, handle, memory });
       registerHomeRoutes(router, deps);
       registerPhoneRoutes(router, deps);
+      registerCareRoutes(router, deps);
     },
     { prefix: "/api/otome-forge" },
   );

@@ -67,3 +67,16 @@ export function sentenceCount(text: string): number {
   const cjk = value.match(/[。！？]+/gu)?.length ?? 0;
   return latin + cjk + (/[.!?…。！？]["'”’」』)]*$/u.test(value) ? 0 : 1);
 }
+
+/**
+ * English words that diagnose, prescribe or guess about the body (the comfort rule, plan §1.7). P27's reply that uses
+ * one gets the repair turn, and a pre-written comfort line that uses one is never shown or sent as comfort (S/care,
+ * C/lib/tap-mood.ts comfortPool). The comfort rule in the prompts covers every language; this catches the common
+ * English slips.
+ */
+const MEDICAL =
+  /\b(?:ibuprofen|paracetamol|acetaminophen|aspirin|naproxen|painkillers?|pain ?relievers?|medications?|medicines?|pills?|tablets?|doses?|dosage|\d+ ?mg|prescri\w*|diagnos\w*|symptoms?|cramps?|pregnan\w*|fertil\w*|ovulat\w*|hormon\w*|contracepti\w*|birth control|see a doctor|doctor(?:'|’)?s orders|gyn(?:a)?ecolog\w*|endometriosis|PMS|PMDD)\b/i;
+
+export function soundsMedical(text: string): boolean {
+  return MEDICAL.test(text);
+}
