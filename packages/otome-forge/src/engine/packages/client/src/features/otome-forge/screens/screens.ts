@@ -4,6 +4,7 @@
 import {
   BookHeart,
   BookLock,
+  BookOpen,
   CalendarHeart,
   Gem,
   Heart,
@@ -24,6 +25,7 @@ export type ScreenId =
   | "bible"
   | "home"
   | "story"
+  | "reader"
   | "dates"
   | "wish"
   | "wardrobe"
@@ -53,6 +55,7 @@ export const SCREEN_NAME_KEYS: Record<ScreenId, string> = {
   bible: "ui.otomeForge.common.screenBible",
   home: "ui.otomeForge.common.screenHome",
   story: "ui.otomeForge.common.screenStory",
+  reader: "ui.otomeForge.common.screenReader",
   dates: "ui.otomeForge.common.screenDates",
   wish: "ui.otomeForge.common.screenWish",
   wardrobe: "ui.otomeForge.common.screenWardrobe",
@@ -68,6 +71,7 @@ export const SCREEN_ICONS: Record<ScreenId, LucideIcon> = {
   bible: BookLock,
   home: House,
   story: BookHeart,
+  reader: BookOpen,
   dates: CalendarHeart,
   wish: Sparkles,
   wardrobe: Shirt,

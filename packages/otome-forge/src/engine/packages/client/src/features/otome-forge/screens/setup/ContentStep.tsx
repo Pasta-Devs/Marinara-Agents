@@ -28,7 +28,7 @@ import { ChoiceCards, Pills, Section, type Choice } from "./parts";
 
 export type AgeGate = ReturnType<typeof useAgeGate>;
 
-const LIMIT_LABEL_KEYS: Record<LimitId, string> = {
+export const LIMIT_LABEL_KEYS: Record<LimitId, string> = {
   "violence-others": "ui.otomeForge.setup.limitViolenceOthers",
   gore: "ui.otomeForge.setup.limitGore",
   threats: "ui.otomeForge.setup.limitThreats",

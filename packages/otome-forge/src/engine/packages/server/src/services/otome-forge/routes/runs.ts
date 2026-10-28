@@ -45,7 +45,7 @@ import {
 import { PronounsSchema, field } from "../schemas/common.js";
 import { normalizeIndex } from "../schemas/index.js";
 import { PLAYER_GOAL_MAX, PLAYER_TRAITS_MAX, normalizePlayer } from "../schemas/player.js";
-import { FIRST_STAGE, normalizeState, readRun, toRunView, type RunDocuments } from "../schemas/state.js";
+import { defaultLiState, normalizeState, readRun, toRunView, type RunDocuments } from "../schemas/state.js";
 import { ACCENT_PATTERN, BibleSchema, LI_NOTES_MAX, normalizeUnit } from "../schemas/unit.js";
 import {
   ConnectionsSchema,
@@ -186,7 +186,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       }));
       await store.mutateDoc(runDocTarget("state", stateId(runId)), normalizeState, (state) => ({
         ...state,
-        lis: Object.fromEntries(liIds.map((id) => [id, { points: 0, stage: FIRST_STAGE }])),
+        lis: Object.fromEntries(liIds.map((id) => [id, defaultLiState()])),
       }));
       const world = await store.mutateDoc(runDocTarget("world", worldId(runId)), normalizeWorld, (current) => ({
         ...current,
@@ -301,6 +301,9 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         runs: current.runs.filter((run) => run.runKey !== runKey),
         activeRun: current.activeRun === runKey ? null : current.activeRun,
       }));
+      // Its story writes and memory upkeep stop; anything they still save is refused or removed with the rest.
+      deps.cancellation?.cancel(runId);
+      deps.memory?.invalidate(runId);
       const images = new Set<string>();
       for (const kind of RUN_DOC_KINDS) {
         for (const document of await store.listRun(kind, runId)) {

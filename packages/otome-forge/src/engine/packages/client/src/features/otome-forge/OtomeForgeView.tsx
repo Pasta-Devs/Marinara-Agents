@@ -17,9 +17,11 @@ import { OtomePropsContext, readOtomeProps } from "./props";
 import { BibleView } from "./screens/BibleView";
 import { ForgeProgress } from "./screens/ForgeProgress";
 import { Placeholder } from "./screens/Placeholder";
+import { Reader } from "./screens/reader/Reader";
 import { DOCK_SCREENS, RUN_SCREENS, type DockScreen, type ScreenId } from "./screens/screens";
 import { Settings } from "./screens/settings/Settings";
 import { SetupWizard } from "./screens/setup/SetupWizard";
+import { StoryHome } from "./screens/story/StoryHome";
 import { WorldPicker } from "./screens/WorldPicker";
 import type { OtomeIndex, RunView } from "./shared/api-types";
 
@@ -40,6 +42,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   const [chosen, setChosen] = useState<ScreenId | null>(null);
   const [settingsReturn, setSettingsReturn] = useState<ScreenId>("picker");
   const [bibleLi, setBibleLi] = useState<string | null>(null);
+  const [chapterKey, setChapterKey] = useState<string | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const screenRef = useRef<HTMLDivElement>(null);
@@ -168,6 +171,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     setup: "picker",
     forge: view?.forge.phase === "ready" ? "home" : "picker",
     bible: "forge",
+    reader: "story",
     phone: "home",
     home: activeRun ? undefined : "picker",
   };
@@ -198,6 +202,24 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
       <BibleView runKey={activeRun} li={bibleOf} lis={view.lis} />
     ) : screen === "settings" ? (
       <Settings run={view} lookPreference={lookPreference} onLookPreference={onLookPreference} />
+    ) : screen === "story" && activeRun && view ? (
+      <StoryHome
+        runKey={activeRun}
+        view={view}
+        onOpenChapter={(key) => {
+          navigated.current = true;
+          setChapterKey(key);
+          setChosen("reader");
+        }}
+      />
+    ) : screen === "reader" && activeRun && view && chapterKey ? (
+      <Reader
+        runKey={activeRun}
+        chapterKey={chapterKey}
+        view={view}
+        onExit={() => go("story")}
+        onHome={() => go("home")}
+      />
     ) : screen === "home" && view ? (
       <Placeholder screen="home">
         <div className="of-actions">
@@ -218,20 +240,27 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   const firstLi = view?.lis[0] ?? null;
   return (
     <>
-      <TopBar
-        run={
-          RUN_SCREENS.has(screen)
-            ? {
-                li: firstLi ? { name: firstLi.name, accent: accentOf(firstLi), portraitUrl: firstLi.portrait } : null,
-                starlight: view?.starlight ?? null,
-              }
-            : null
-        }
-        onBack={backTo ? () => go(backTo) : undefined}
-        onHome={() => go("home")}
-        onSettings={screen === "settings" ? undefined : openSettings}
-      />
-      <div key={screen === "bible" ? `bible-${bibleLi}` : screen} ref={screenRef} className="of-screen">
+      {/* The reader is full-stage: its own header carries the way out. */}
+      {screen === "reader" ? null : (
+        <TopBar
+          run={
+            RUN_SCREENS.has(screen)
+              ? {
+                  li: firstLi ? { name: firstLi.name, accent: accentOf(firstLi), portraitUrl: firstLi.portrait } : null,
+                  starlight: view?.starlight ?? null,
+                }
+              : null
+          }
+          onBack={backTo ? () => go(backTo) : undefined}
+          onHome={() => go("home")}
+          onSettings={screen === "settings" ? undefined : openSettings}
+        />
+      )}
+      <div
+        key={screen === "bible" ? `bible-${bibleLi}` : screen === "reader" ? `reader-${chapterKey}` : screen}
+        ref={screenRef}
+        className="of-screen"
+      >
         {content}
       </div>
       {DOCKED.has(screen) ? <Dock active={screen} onSelect={selectDockScreen} /> : null}

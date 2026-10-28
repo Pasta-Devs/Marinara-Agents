@@ -7,7 +7,9 @@
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type { ZodType } from "zod";
 import type { OtomeErrorCode } from "../../../../client/src/features/otome-forge/shared/api-types.js";
+import type { ForgeStoryCancellation } from "@forge-kit/story-cancel-server.mjs";
 import type { ImageClient } from "./art/image-client.js";
+import type { OtomeMemory } from "./memory/memory.js";
 import { isLiId, isRunKey, runIdOf } from "./ids.js";
 import type { OtomeStore } from "./store.js";
 
@@ -85,6 +87,10 @@ export interface RouteDeps {
   handle: Handle;
   /** The loopback image client by default (art/paint.ts imagesOf); tests pass a fake. */
   images?: ImageClient;
+  /** Private story memory (S/memory/memory.ts); without it prompts carry no recall. */
+  memory?: OtomeMemory;
+  /** The run-scoped Cancel for story writes (forge-kit story-cancel-server). */
+  cancellation?: ForgeStoryCancellation;
 }
 
 export type RegisterRoutes = (router: OtomeRouter, deps: RouteDeps) => void;

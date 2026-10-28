@@ -2,7 +2,8 @@
 // Otome Forge: the wire contract between the package's routes and its client (types only)
 // ──────────────────────────────────────────────
 // Imported by both bundles, so a code or field added on one side has to be handled on the other.
-import type { ContentSettings, ImageRating } from "./content";
+import type { ContentSettings, ImageRating, LimitId } from "./content";
+import type { Face, MusicMood } from "./faces";
 
 /** The `code` of a failed route's `{error, code?}`; the client shows ui.otomeForge.errors.<code> (plan §1.5). */
 export type OtomeErrorCode =
@@ -218,11 +219,289 @@ export interface Unit {
   createdAt: string;
 }
 
+// ── State (M1, with M2a's angst, ledgers and reading progress). Trust and tension are never shown to the player. ──
+
+export type GrievanceSeverity = "minor" | "major" | "rupture";
+export type GrievanceStatus = "open" | "addressed" | "forgiven" | "festering";
+
+/** A hurt between a love interest and the protagonist, either way round. Never closes in the beat that opened it. */
+export interface Grievance {
+  id: string;
+  li: LiId;
+  /** Who holds it: the love interest against her, or the protagonist against him. */
+  by: "li" | "protagonist";
+  text: string;
+  severity: GrievanceSeverity;
+  /** `${chapterKey}/${beatIndex}`: where it was opened. */
+  opened: string;
+  status: GrievanceStatus;
+}
+
+/** One love interest's progress and the state of things between him and the protagonist. */
+export interface LiState {
+  /** Affection points; they only rise. Level = min(10, 1 + floor(points / 300)). */
+  points: number;
+  stage: number;
+  /** −3..+3, starting at 0; moved only by first-play choices, capped per beat and per chapter. */
+  trust: number;
+  /** 0..3, starting at 0. */
+  tension: number;
+  /** How far trust and tension moved in the chapter `key` (the per-chapter cap), and in its beat `beat.i`. */
+  chapterDelta: { key: string; trust: number; tension: number; beat?: { i: number; trust: number; tension: number } };
+  grievances: Grievance[];
+  /** An open rupture shuts his gates until a repair scene. Nothing unlocked is taken back. */
+  rupture: { grievanceId: string; since: string } | null;
+  /** What the protagonist has told him (he may know it; scene cards carry it). `ref` is `${key}/${i}`. */
+  disclosures: Array<{ text: string; at: string; ref: string }>;
+  /** Ids of his bible secrets the protagonist has learned. */
+  revealed: string[];
+  /** The main chapter number he last led, or null if he never has. */
+  lastLead: number | null;
+  /** The kinds of angst planted for him, newest last (a new conflict never repeats his last two). */
+  angst: string[];
+  /** Dated firsts for the Love Timeline: first-kind → ISO time. */
+  firsts: Record<string, string>;
+}
+
+/** A chapter's reading progress. `applied` holds `${i}/${choiceId}` for every pick whose effects reached the state. */
+export interface ChapterProgress {
+  /** Beats read to the end, in order: beat `beatsRead` is the one being read. */
+  beatsRead: number;
+  /** When the last node was read, or null. */
+  completed: string | null;
+  applied: string[];
+}
+
+export type ConflictAction = "plant" | "escalate" | "complicate" | "resolve";
+export type ConflictStatus = "open" | "resolved";
+
+/** Counted, never guessed: what the story has spent, what is still owed, and where each absent LI is. */
+export interface Ledgers {
+  relationship: Array<{ key: string; li: LiId; line: string }>;
+  /** `chapter`: the main chapter number it was planted in. */
+  conflicts: Array<{ id: string; li: LiId; type: string; status: ConflictStatus; chapter: number }>;
+  offscreen: Array<{ key: string; li: LiId; line: string }>;
+}
+
+export interface TimelineEntry {
+  at: string;
+  li: LiId;
+  kind: string;
+  text: string;
+  ref?: string;
+}
+
+export interface Favorite {
+  at: string;
+  li?: LiId;
+  text: string;
+  /**
+   * The line: `${chapterKey}/${beatIndex}r${rewrites}/${segmentIndex}`, then `:${optionId}+n` for a picked option's
+   * lines (C/hooks/use-reader.ts).
+   */
+  ref: string;
+}
+
 /** `${R}:state`. Later milestones add fields with defaults. */
 export interface RunState {
   version: 1;
   wallet: { starlight: number };
-  lis: Record<LiId, { points: number; stage: number }>;
+  lis: Record<LiId, LiState>;
+  /** Today's capped earnings, keyed by the request's local day. Story earnings are never capped. */
+  daily: { dayKey: string; starlight: number; affection: Record<LiId, number> };
+  chapters: Record<string, ChapterProgress>;
+  ledgers: Ledgers;
+  timeline: TimelineEntry[];
+  favorites: Favorite[];
+}
+
+// ── Story (M2a): chapters, beats, choices. Chapter keys: `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`,
+// `story-<itemId>`, `date-<n>`. ──
+
+export type ChapterKind = "main" | "route" | "repair" | "story" | "date";
+export type NodeKind = "beat" | "moment" | "confrontation";
+/** A moment node's framing: reading his face, a phone call, a date gone wrong. Written as a beat until M2b/M5. */
+export type MomentKind = "read-him" | "call" | "date";
+
+export interface ChapterNode {
+  i: number;
+  kind: NodeKind;
+  moment?: MomentKind;
+  /** What happens in this node, for the narrator (hidden from the client). */
+  guide: string;
+  /** The love interests present. */
+  cast: LiId[];
+  place?: string;
+  /** This node may carry one key image (a brief is stored; M2b paints it). */
+  cg?: boolean;
+  /** A stage-gate node (route chapters, M2b). */
+  gate?: boolean;
+  /** Grievance ids this node may resolve. */
+  resolves?: string[];
+}
+
+/** What the planner wrote for the ledgers; saved to the state when the chapter's last node is read. */
+export interface ChapterLedger {
+  relationship: Array<{ li: LiId; line: string }>;
+  conflict: Array<{ id: string; li: LiId; type: string; action: ConflictAction }>;
+  offscreen: Array<{ li: LiId; line: string }>;
+}
+
+/** `${R}:chapter:${key}`: a chapter's plan. */
+export interface Chapter {
+  key: string;
+  kind: ChapterKind;
+  /** Main chapters are numbered from 1. */
+  number?: number;
+  /** The love interest a route, repair or story chapter belongs to. */
+  li?: LiId;
+  lead: LiId;
+  foil?: LiId;
+  title: string;
+  /** Content tags shown before a dark chapter: LimitIds plus jealousy, grief, possessiveness, betrayal, violence. */
+  tags: string[];
+  /** One or two lines on what the chapter is about, without its turns (shown to the player). */
+  summary: string;
+  nodes: ChapterNode[];
+  ledger: ChapterLedger;
+  plannedAt: string;
+  connectionId: string;
+}
+
+/** A segment of a beat: one line of dialogue, one thought, or one piece of narration. */
+export interface Segment {
+  /** "" for narration. */
+  speaker: string;
+  text: string;
+  /** An inner line: his (at most one per beat, from stage 2) or the protagonist's thoughts. */
+  thought?: boolean;
+  /** One of the five faces (SH/faces.ts), on a dialogue or thought line; "" or absent shows his plain portrait. */
+  expression?: Face | "";
+  place?: string;
+  /** The speaker's voice ("male" | "female"), from the beat's `voices`. */
+  gender?: string;
+}
+
+export interface ChoiceOption {
+  /** `option-<n>`, from the option's place in the model's reply. */
+  id: string;
+  /** The pill's short intent label. */
+  text: string;
+  /** What the protagonist says or does once picked. */
+  selection: { kind: "dialogue" | "action"; text: string };
+  /** The branch (empty for a big choice). */
+  segments: Segment[];
+}
+
+/** The kit's choice shape (player-choices-server.mjs): small choices reconverge; one big choice may end a chapter. */
+export interface ForgeChoice {
+  /** `choice-<n>`, from the choice's place in the model's reply. */
+  id: string;
+  kind: "small" | "big";
+  /** The zero-based mainline segment after which the options appear. */
+  at: number;
+  options: ChoiceOption[];
+}
+
+/** What one option changes between the protagonist and one love interest (hidden; clamped when applied). */
+export interface Effect {
+  li: LiId;
+  trust?: -1 | 0 | 1;
+  tension?: -1 | 0 | 1;
+  grievance?: { by: Grievance["by"]; text: string; severity: GrievanceSeverity };
+  /** Something the protagonist tells him: he may know it from now on. */
+  disclose?: string;
+  resolve?: { id: string; status: Exclude<GrievanceStatus, "open"> };
+}
+
+/** `${R}:beat:${key}:${i}`: one written node. */
+export interface Beat {
+  key: string;
+  i: number;
+  kind: NodeKind;
+  places: Array<{ name: string; tags: string }>;
+  segments: Segment[];
+  choices: ForgeChoice[];
+  /** First-play canon: choiceId → optionId. Set once; a replay never changes it. */
+  choiceCanon: Record<string, string>;
+  /** choiceId → optionId → effects (hidden from the client). */
+  effects: Record<string, Record<string, Effect[]>>;
+  /** Picks whose effects were applied (hidden from the client). */
+  applied: Record<string, true>;
+  musicMood: MusicMood;
+  /** A key image's brief: `at` is the segment it opens on; `brief` is English. Painted in M2b. */
+  cg?: { at: number; brief: string; cast: string[] };
+  /** The furthest mainline segment read (skip-read starts here). */
+  readThrough: number;
+  /** The player ended the scene at segment `at` (no model call); `veil` is what they chose to veil from then on. */
+  easedOff?: { at: number; veil?: LimitId[] };
+  written: { at: string; connectionId: string; model: string };
+  rewrites: number;
+}
+
+// ── Story wire shapes ──
+
+export type ChapterState = "unplanned" | "in-progress" | "done";
+export type BeatState = "unwritten" | "ready" | "read";
+
+/** A chapter as the client sees it: no guides and no ledger (the plan is the hidden story). */
+export type ChapterView = Omit<Chapter, "nodes" | "ledger" | "connectionId"> & {
+  nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;
+};
+
+/** A beat as the client sees it: without its effects. */
+export type BeatView = Omit<Beat, "effects" | "applied">;
+
+export interface StoryChapterEntry {
+  key: string;
+  kind: ChapterKind;
+  title: string;
+  li?: LiId;
+  lead: LiId;
+  state: ChapterState;
+  beatsRead: number;
+  /** How many nodes the chapter has. */
+  nodes: number;
+}
+
+export type LeadReason = "least-recent" | "ripe-conflict";
+
+/** GET /runs/:run/story */
+export interface StoryView {
+  chapters: StoryChapterEntry[];
+  /** The next main chapter and its two Lead candidates; null while a chapter is unfinished or a big choice waits. */
+  next: { kind: "main"; number: number; candidates: Array<{ li: LiId; reason: LeadReason }> } | null;
+}
+
+/** GET /runs/:run/chapters/:key */
+export interface ChapterDetail {
+  chapter: ChapterView;
+  beats: Array<{ i: number; state: BeatState }>;
+}
+
+/** What one request earned. */
+export interface Grant {
+  source: "beat" | "chapter" | "lead" | "foil";
+  starlight?: number;
+  li?: LiId;
+  affection?: number;
+}
+
+/** POST .../beats/:i/read */
+export interface ReadResult {
+  grants: Grant[];
+  starlight: number;
+  /** True once the chapter's last node has been read (by this read or an earlier one). */
+  chapterDone: boolean;
+}
+
+/** GET /runs/:run/memory/status and POST .../memory/retry → {status}: the kit's story memory status (Debug only). */
+export interface MemoryStatus {
+  phase: "ready" | "pending" | "stale" | "error" | "context-unknown";
+  retryable: boolean;
+  /** English, for Debug: not-prepared, interrupted, configure-context, generation-failed, … */
+  reason?: string;
+  recordCount?: number;
 }
 
 // ── Wire shapes ──
