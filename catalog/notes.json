@@ -172,6 +172,18 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.27.3",
+          "date": "2026-10-28",
+          "notes": "- Characters can equip their designated weapons even when a saved weapon has a different type from their role. The intended owner sees it in Gear and can equip it without regenerating the weapon. Signature skills still activate only for their owner; other characters keep the normal weapon-type rules.\n- On short landscape screens, Gear details keep their full height and the panel scrolls, so Choose and Change remain clickable instead of being clipped inside the card.",
+          "highlight": false
+        },
+        {
+          "version": "1.27.2",
+          "date": "2026-10-28",
+          "notes": "- The narrator, the chapter planners and characters writing messages are asked to read every character's mind more carefully: what each one knows, wants and feels.",
+          "highlight": false
+        },
+        {
           "version": "1.27.1",
           "date": "2026-10-28",
           "notes": "- Scenes, key images, story event art, chat photos, Bond backgrounds and banners now send each character's face (their card's avatar, your persona's, or their saved portrait) and, when the picture paints them in the outfit they have on, that outfit's image too. A character card's unit used to send only its card avatar.\n- Banners and Bond backgrounds now paint a unit in the outfit it has on while **Outfits** is on, as chat photos do. Scenes and key images paint and send it only when **The story uses worn outfits** is on (off by default) and the scene does not dress the character itself.\n- Faces go before outfits, at most four images, the Engine's limit: outfits are left out first, and the log says so.\n- A new portrait or outfit is painted from the face alone, so the outfit a unit has on no longer leaks into its new look.",
@@ -278,18 +290,6 @@
           "date": "2026-10-26",
           "notes": "- Personas use their assigned Engine voice for story dialogue and newly sent character messages when dialogue audio is enabled.",
           "highlight": false
-        },
-        {
-          "version": "1.24.1",
-          "date": "2026-10-26",
-          "notes": "- Formation fights can no longer stall. An enemy that keeps turning immune can be hit again after two turns, Retreat Echo repeats one real cast only once, and a summon with no free Front Row seat waits without spending energy.\n- Remaking older Formation kits no longer locks battles. Battles wait only while a remake runs, cancelling it keeps your current kits (new characters still get theirs), a kit that failed waits for Retry in Story Continuity, and story work is never cancelled. A game left open from 1.24.0 asks you to reload first.\n- Story, event and boss fights in Formation no longer fail over a slightly wrong kit, keep the boss in the fight, and skip element barriers your team cannot meet.\n- In battle, the boss bar no longer covers row tags on phones, team editor names are readable, Echoes show their own name, Fight with fighters unplanned opens the plan, energy skills pay for later steps, and a keyboard can plan a whole turn.",
-          "highlight": false
-        },
-        {
-          "version": "1.24.0",
-          "date": "2026-10-26",
-          "notes": "- Formation combat is rebuilt. Tap each Front Row fighter, pick its Normal skill, Ultimate, move/swap or Hold and its target, check the plan and the energy it spends, then press Fight. Every skill shows what it does and costs. Auto still plays a whole turn.\n- Teams seat six: up to three Front Row fighters and three Back Row supports. Supports make one energy of their element each turn, cannot be attacked and carry strong passives. Energy never expires.\n- Kits from older Formation rules are remade automatically before a world's next battle and keep fighting until then. Story, event and boss fights in Formation get front fighters, back-row supports and clearer boss rules.\n- Classic combat is unchanged.",
-          "highlight": true
         }
       ]
     },
@@ -363,6 +363,12 @@
     },
     "long-term-memory": {
       "versions": [
+        {
+          "version": "1.5.8",
+          "date": "2026-10-29",
+          "notes": "- Other Agents that read memories, such as Slurp and Noodle, can ask for whole memories instead of the parts that fit what they are writing. The same memories are shared either way.",
+          "highlight": false
+        },
         {
           "version": "1.5.7",
           "date": "2026-10-28",
@@ -475,12 +481,6 @@
           "version": "1.4.85",
           "date": "2026-10-22",
           "notes": "- Five keyboard and focus fixes. In Sources, Tab now reaches the name of each chat or character source in the list, and Enter or Space opens it, so Re-extract, Manage, Review and Open memory work without a mouse. Accepting a change in the Review Queue no longer hides the queue while the memories it shows reload: the list, your place in it and the keyboard position stay, a small spinner shows beside \"Review Queue\", and Accept waits until the memories have reloaded. On a narrow panel, the Memory Vault's \"Rename details\" and unsaved-changes dialogs now show instead of leaving the screen frozen. Arrow keys in the place picker keep the highlighted place in view. In Memory Settings, Tab after \"Choose backup\" goes straight to \"Reset settings\", and screen readers name \"Choose backup\" once.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.84",
-          "date": "2026-10-22",
-          "notes": "- Other Agents can now ask Long-Term Memory for memories about the characters they write as, ranked against what they are about to write. They get only memories available to that character everywhere: never memories limited to a chat or group, archived memories or suggestions, and they can't change anything. A new setting in Memory Settings, \"Other Agents can read memories\" (on by default), turns this off, also for Slurp's \"What your other Agents know\", and names the Agents that read memories lately. Each read shows in Activity as \"Read by another Agent\".",
           "highlight": false
         }
       ]

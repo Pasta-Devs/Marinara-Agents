@@ -237,8 +237,8 @@
         },
         "id": "otome-forge",
         "name": "Otome Hearth",
-        "version": "0.1.0",
-        "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
+        "version": "0.0.9",
+        "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. An early test build. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
         "engine": {
           "min": "2.5.1",
           "maxExclusive": "4.0.0"
@@ -266,18 +266,18 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "2f973c4e1269b616a070fe1d141b3ab75ec68ecea6324f485d6bf026f48d5bcd",
-            "bytes": 685
+            "sha256": "5712b5dc4d2258ca1de9a43017ea35be73b0a4336ddb7360bf7e16d4916c9b99",
+            "bytes": 706
           },
           {
             "path": "server.mjs",
-            "sha256": "71c3f2e79b140a69afead7ddbefa13c92ca3da7c9e30fb00e2cc478adae43220",
-            "bytes": 380095
+            "sha256": "0fc3103d7d132944b741f075d8ab70df50c34cdb1eee083a2a827495ceaa82c6",
+            "bytes": 379855
           },
           {
             "path": "client.js",
-            "sha256": "9e937b6ce55aa4e11ffea6521a3914c1e8da90b0ccdb96888b8556e6af04b678",
-            "bytes": 1081994
+            "sha256": "75eaa6e3e3b7446f56a488c8b511f58bc79076a1ddd6707c8364e5f0bc515abd",
+            "bytes": 1078595
           },
           {
             "path": "otome-hearth-icon.png",
@@ -300,9 +300,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/otome-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.1.0.zip",
-        "sha256": "8808175f46440b4f8c0a45e03f25302a72850de514593e14a0d99182261ac3c8",
-        "bytes": 1611177
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.0.9.zip",
+        "sha256": "b8b6bcde3cfdc42e229c888a8726d40aab432474bd1ea7cdba0afddffd8e1b43",
+        "bytes": 1607580
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/otome-forge/README.md"
     },

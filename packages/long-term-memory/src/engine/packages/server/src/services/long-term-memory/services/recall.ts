@@ -1,11 +1,15 @@
 import { z } from "zod";
 import type { LtmNote, LtmNoteType } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import type { LongTermMemoryStorage } from "../persistence/storage.js";
+import { estimateTokens } from "../recall/budget.js";
+import { chunkNoteSections } from "../recall/chunking.js";
 import { retrieveLongTermMemory } from "../recall/retrieval.js";
 import { getLtmGlobalSettings } from "../settings.js";
 import { isLtmNoteShareable, ltmPackageCallerSchema, recordLtmPackageRead } from "./storage-read.js";
 
 const LTM_RECALL_SERVICE_VERSION = 1;
+/** The most sections a whole-memory recall returns. */
+const WHOLE_RECALL_MAX_SECTIONS = 20;
 
 /** The order sections come back in: what is still going on and what happened, then who, then the backdrop. */
 const SECTION_TYPES: readonly LtmNoteType[] = [
@@ -24,6 +28,7 @@ const recallInputSchema = z.object({
   personaId: z.string().trim().min(1).max(120).optional(),
   mode: z.enum(["roleplay", "conversation"]).optional(),
   maxTokens: z.number().int().min(50).max(4_000).default(800),
+  whole: z.boolean().default(false),
 });
 
 type LtmRecallServiceSection = { noteId: string; type: LtmNoteType; title?: string; text: string };
@@ -52,7 +57,7 @@ export function createLtmRecallService(storage: Pick<LongTermMemoryStorage, "lis
           : undefined;
       const parsed = recallInputSchema.safeParse(input);
       if (!parsed.success || signal?.aborted) return null;
-      const { caller, queryText, characterIds, personaId, mode, maxTokens } = parsed.data;
+      const { caller, queryText, characterIds, personaId, mode, maxTokens, whole } = parsed.data;
       if (!characterIds.length && !personaId) return null;
       try {
         const settings = await getLtmGlobalSettings(storage.root);
@@ -72,7 +77,32 @@ export function createLtmRecallService(storage: Pick<LongTermMemoryStorage, "lis
             .map((note) => [note.id, note]),
         );
         const sections = new Map<string, LtmRecallServiceSection>();
-        if (notes.size) {
+        if (whole) {
+          // Newest first within a type. A memory that does not fit is skipped, never cut, so a later one can still fit.
+          const wholeOrder = [...notes.values()].sort(
+            (left, right) =>
+              SECTION_TYPES.indexOf(left.type) - SECTION_TYPES.indexOf(right.type) ||
+              Date.parse(right.updatedAt) - Date.parse(left.updatedAt),
+          );
+          let usedTokens = 0;
+          for (const note of wholeOrder) {
+            if (sections.size >= WHOLE_RECALL_MAX_SECTIONS) break;
+            const text = chunkNoteSections(note)
+              .map((chunk) => chunk.text)
+              .filter(Boolean)
+              .join("\n");
+            if (!text) continue;
+            const tokens = estimateTokens(text);
+            if (usedTokens + tokens > maxTokens) continue;
+            usedTokens += tokens;
+            sections.set(note.id, {
+              noteId: note.id,
+              type: note.type,
+              ...(note.title ? { title: note.title } : {}),
+              text,
+            });
+          }
+        } else if (notes.size) {
           const retrieval = await retrieveLongTermMemory({
             root: storage.root,
             queryText,

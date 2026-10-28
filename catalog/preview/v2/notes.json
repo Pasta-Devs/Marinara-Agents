@@ -72,10 +72,10 @@
     "otome-forge": {
       "versions": [
         {
-          "version": "0.1.0",
+          "version": "0.0.9",
           "date": "2026-10-28",
-          "notes": "- First Date: release 1 of Otome Hearth, an otome game made from your own characters, still for Engine staging testers.\n- Set up a story from a premise, your persona and two to five love interests of any gender, from your cards or six archetypes. Each gets a hidden bible, a route from Mask to Bond, and memories of only what they saw.\n- Main chapters build to a confrontation. Your first choice is canon, and a rift lasts until you make it right.\n- Home brings a note a day and lines written ahead, and each love interest has a private phone thread. Wish for Memories and looks with Starlight you earn (no real money; banners never expire), for the Wardrobe and the Album.\n- Dates: Read Them, Date Night and the Claw Machine. Remind Me keeps their days, with an opt-in period tracker kept only in this browser.\n- Your limits hold: Heat, Darkness, Lines & Veils and an 18+ gate. It all works without images or sound, and paid work is labelled and never retried by itself.",
-          "highlight": true
+          "notes": "- Every prompt that writes the story or a character's words asks the model to read each character's mind more carefully: what they know, want and feel.\n- In NSFW mode the content contract opens by stating that the request complies with the adult fiction content policy.",
+          "highlight": false
         },
         {
           "version": "0.0.8",
