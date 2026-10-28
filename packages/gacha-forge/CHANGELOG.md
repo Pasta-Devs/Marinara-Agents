@@ -1,6 +1,6 @@
 ## 1.26.1 — 2026-10-28
 
-- A chapter you forged before starting a story event no longer keeps pre-forging while the event holds it, and a big choice it already wrote no longer stops the event from starting, its scenes or its pre-forge. Once the event is finished, ends or Seasonal events is turned off, the chapter's pre-forge picks up again and its choice waits for you as before.
+- A chapter you forged before starting a story event no longer keeps pre-forging while the event holds it, and a big choice it already wrote no longer stops the event from starting, its scenes or its pre-forge. Once the event is finished, ends or Seasonal events is turned off, **Continue** on the chapter's map picks its pre-forge up again, and its choice waits for you as before. A Character Story's pending choice still stops the event from starting.
 - While story memory catches up, a companion chat, a character message or a Character Story knows only the scenes you have played, not the ones pre-forge wrote ahead or a Compress summary of them.
 
 ## 1.26.0 — 2026-10-28

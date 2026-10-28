@@ -344,9 +344,10 @@ export function createForgeSeasonalEvents({
       if (!forgeSeasonalEnabled(run)) return { ok: false, error: "events-off" };
       const boundary = await frontier(runId, target.data);
       if (!boundary.ready) return { ok: false, error: "event-needs-chapter-boundary" };
-      // The event follows chapter `after`: a choice in a chapter after it (forged, not played yet) is held with that
-      // chapter once the event opens, so it does not stop the event from opening.
-      const waiting = await choices.guard(runId, { beforeChapter: boundary.after + 1 });
+      // The event follows chapter `after`: a choice in a main chapter after it (forged, not played yet) is held with
+      // that chapter once the event opens, so it does not stop the event from opening. Character Story and event
+      // choices are not held, so they still do.
+      const waiting = await choices.guard(runId, { heldAfter: boundary.after });
       if (waiting) return waiting;
       const result = await generatePlan({ runId, run, event: target.event, after: boundary.after });
       if (!result?.ok || !allNodes(result.plan).length) return result || { ok: false, error: "generation-failed" };

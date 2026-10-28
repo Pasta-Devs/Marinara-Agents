@@ -2147,7 +2147,7 @@
             },
             {
               "find": "var oy=[{version:null,new:[",
-              "replace": "var oy=[{version:null,fixed:[\"A chapter you forged before starting a story event no longer keeps writing ahead while the event holds it, and a big choice it already wrote no longer stops the event from starting or its scenes. It picks up again, and its choice waits for you, once the event is done.\",\"While story memory catches up, a companion chat, a character message or a Character Story knows only the scenes you have played, not the ones pre-forge wrote ahead or a Compress summary of them.\"]},{version:\"1.26.0\",new:["
+              "replace": "var oy=[{version:null,fixed:[\"A chapter you forged before starting a story event no longer keeps writing ahead while the event holds it, and a big choice it already wrote no longer stops the event from starting or its scenes. Once the event is done, its choice waits for you, and Continue on its map picks it up again.\",\"While story memory catches up, a companion chat, a character message or a Character Story knows only the scenes you have played, not the ones pre-forge wrote ahead or a Compress summary of them.\"]},{version:\"1.26.0\",new:["
             }
           ]
         }
@@ -3848,6 +3848,10 @@
             {
               "find": "fallback:()=>_r(runId,chapter,storyIndex,null,options.reader,true)});",
               "replace": "fallback:async()=>_r(runId,chapter,storyIndex,null,options.reader,true,await forgePlayedFrontier(runId))});"
+            },
+            {
+              "find": "let L=_.find(Ne=>!Ne.bond&&y(b,Number(Ne.to)||Number(Ne.chapter))<Ic);",
+              "replace": "let L=_.find(Ne=>Ne.bond?yo(b?.bondChapters?.[Ne.unitId],Ne.part)<zt:y(b,Number(Ne.to)||Number(Ne.chapter))<Ic);"
             }
           ]
         }

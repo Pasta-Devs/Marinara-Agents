@@ -31,7 +31,7 @@ const marker = (chapter, scene) => `SCENE_${chapter}_${scene}`;
 
 // Chapters 1-2 played in full. Chapter 3: scenes 0-1 played (node 3 done), scenes 2-3 pre-forged and unplayed.
 // Chapter 4 is forged ahead with two scenes: a plan and scenes no play has reached.
-function world({ bond = null, full = false } = {}) {
+function world({ bond = null, full = false, finished = false } = {}) {
   const docs = new Map();
   const seed = (id, kind, data) => docs.set(id, { id, kind, packageId, name: id, revision: 1, data });
   seed("index", "index", {
@@ -63,7 +63,8 @@ function world({ bond = null, full = false } = {}) {
     roster: { [arden]: { level: 20, bondFights: 100000 } },
     wallet: { vigor: 1000, funds: 10000, aether: 1000 },
     account: { level: 100, xp: 0 },
-    progress: { 1: { normal: 8 }, 2: { normal: 8 }, 3: { normal: 3 } },
+    // finished: chapter 3 played to its end as well (a merge counts a chapter finished at the standard 10 nodes).
+    progress: { 1: { normal: 8 }, 2: { normal: 8 }, 3: { normal: finished ? 10 : 3 } },
     bondChapters: {},
   };
   if (bond) {
@@ -233,4 +234,15 @@ test("a manual summary of pre-forged scenes is not known before they are played"
   assertPlayedOnly(prompt, "chat after Compress");
   assert.doesNotMatch(prompt, /DIGEST|SCENE_3_[45]|BOND_SCENE_[12]/u, "no summary or scene past what was played");
   assert.match(prompt, /BOND_SCENE_0/u, "the played Character Story scene stays");
+});
+
+test("a Compress merge refuses a Character Story that is not played to its end", async () => {
+  const forge = await harness({ bond: true, full: true, finished: true });
+  assert.equal((await forge.post("/compress", { chapter: 3 })).ok, true);
+  assert.equal((await forge.post("/compress", { unitId: arden, part: 1 })).ok, true);
+  const merged = await forge.post("/compress/merge", { rows: ["3", "bond-arden"] });
+  assert.equal(merged.error, "not-finished", JSON.stringify(merged));
+  const sent = await forge.post("/chat/send", { unitId: arden, text: "Do you remember?" });
+  assert.equal(sent.ok, true, JSON.stringify(sent));
+  assert.doesNotMatch(forge.prompts.at(-1), /BOND_SCENE_[12]/u, "no unplayed Character Story scene, merged or not");
 });

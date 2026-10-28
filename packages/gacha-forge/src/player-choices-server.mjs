@@ -271,7 +271,7 @@ export function forgeCreateChoiceRuntime({
     return nodeIndex >= 0 && Number(session?.progress?.[String(chapter)]?.normal || 0) === nodeIndex;
   }
 
-  async function pending(runId, { beforeChapter, chapter, throughStoryIndex, includeSmall = false } = {}) {
+  async function pending(runId, { beforeChapter, heldAfter, chapter, throughStoryIndex, includeSmall = false } = {}) {
     const prefix = `${runId}:beat:`;
     const rows = await documents.list(packageId, "beat");
     for (const row of rows) {
@@ -286,6 +286,8 @@ export function forgeCreateChoiceRuntime({
           if (!plan?.data || Number(plan.data.after) >= beforeChapter) continue;
         }
       }
+      // A main chapter after an event's boundary is held with it once the event opens; nothing else is.
+      if (heldAfter != null && Number.isInteger(Number(data.chapter)) && Number(data.chapter) > heldAfter) continue;
       if (chapter != null && String(data.chapter) !== String(chapter)) continue;
       if (throughStoryIndex != null && Number(data.storyIndex) > throughStoryIndex) continue;
       const choice = forgePendingChoice(data, includeSmall ? undefined : "big");

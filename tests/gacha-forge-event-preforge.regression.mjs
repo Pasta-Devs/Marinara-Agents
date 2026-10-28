@@ -308,6 +308,7 @@ async function harness({
     routes,
     post,
     data: (id) => clone(docs.get(id)?.data),
+    put: seed,
     session: () => docs.get(sessionId).data,
     kinds: (...only) => calls.map((call) => call.kind).filter((kind) => !only.length || only.includes(kind)),
     setRun(change) {
@@ -795,6 +796,35 @@ await test("a chapter forged ahead that ends on a big choice does not stop the e
   const next = await host.post("/chapter-plan", { chapter: 3 });
   assert.deepEqual({ error: next.error, chapter: next.chapter }, { error: "choice-required", chapter: 2 });
   assert.equal((await host.post("/story/start", { chapter: 2, storyIndex: 0, nodeIndex: 0 })).ok, true);
+});
+
+await test("a Character Story's pending choice still stops the event from opening: the event holds only main chapters", async () => {
+  // Forged while chapter 2 was forged, the Character Story follows it (after: 2) and was pre-forged to its choice.
+  const host = await harness({ story: { preforge: "story", choices: true }, mainChapters: [mainPlan(2)] });
+  const story = "bond-arden";
+  host.put(`${runId}:chapter:${story}`, "chapter-plan", {
+    title: "Arden's Story",
+    premise: "A walk on the pier.",
+    nodes: [0, 1, 2].map((index) => ({ type: "story", title: `Bond scene ${index}`, goal: "Talk.", guide: "Bond." })),
+    bondUnitId: unitId,
+    bondPart: 1,
+    after: 2,
+  });
+  for (let index = 0; index < 3; index += 1)
+    host.put(`${runId}:beat:${story}:${index}`, "beat", {
+      chapter: story,
+      storyIndex: index,
+      segments: scene(`Bond scene ${index}`).segments,
+      choices: index === 2 ? [bigChoice] : [],
+      choiceCanon: {},
+    });
+  host.session().bondChapters = { [unitId]: { beats: 0, after: 2, opened: Date.now() - 1000 } };
+  assert.equal((await host.post("/story-events")).events[0].canStart, true);
+  const opened = await host.post("/story-event/plan", { chapter });
+  assert.deepEqual(
+    { ok: opened.ok, error: opened.error, chapter: opened.chapter },
+    { ok: false, error: "choice-required", chapter: story },
+  );
 });
 
 console.log(`${cases} Gacha Forge event pre-forge regression cases passed.`);
