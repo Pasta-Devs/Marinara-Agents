@@ -34,6 +34,7 @@ import {
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/tap-mood.ts";
 import { typingDelay } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/typing-delay.ts";
 import {
+  createCutoutClient,
   cutoutsSettled,
   type CutoutClient,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
@@ -401,7 +402,7 @@ test("a rupture that opens or is repaired later the same day replaces the day's 
         ...state.lis,
         [KAI]: {
           ...state.lis[KAI]!,
-          grievances: [{ ...grievance, status: open ? "open" : "repaired" }],
+          grievances: [{ ...grievance, status: open ? "open" : "addressed" }],
           rupture: open ? { grievanceId: grievance.id, since: "2026-10-28T12:00:00.000Z" } : null,
         },
       },
@@ -742,6 +743,24 @@ test("L0 is his newest unlocked CG, else the newest painted place, never another
 });
 
 // ── Home set, Him and Me, unread ──
+
+test("a stalled loopback read or cleanup times out, so the cut-out fails instead of holding the queue", async () => {
+  // Answers the look itself at once; every other request (the cleanup) waits until its signal aborts.
+  const look = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489", "hex");
+  const stalled = (answerSource: boolean): typeof fetch =>
+    ((input: string | URL | Request, init?: RequestInit) => {
+      const signal = init?.signal;
+      if (!signal) return Promise.reject(new Error("a loopback request without a timeout"));
+      if (answerSource && String(input).endsWith("/look.png")) {
+        return Promise.resolve(new Response(look, { headers: { "content-type": "image/png" } }));
+      }
+      return new Promise<Response>((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
+    }) as typeof fetch;
+  for (const answerSource of [false, true]) {
+    const client = createCutoutClient({ baseUrl: "http://127.0.0.1:9", fetch: stalled(answerSource), timeoutMs: 20 });
+    await assert.rejects(client.cutOut("/api/global-gallery/file/look.png"), { name: "TimeoutError" });
+  }
+});
 
 test("Home shows the chosen love interest or the protagonist, and counts unread replies", async () => {
   const t = await homeWorld(
