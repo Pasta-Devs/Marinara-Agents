@@ -53,8 +53,10 @@ try {
 
   const prerelease = await readFor("3.0.0-beta.1", {});
   assert.deepEqual(prerelease.requested.toSorted(), [`${live}/preview/v3/catalog.json`, `${live}/v3/catalog.json`]);
-  // A missing overlay is the normal state, not a warning.
-  assert.deepEqual(prerelease.warnings, []);
+  // A missing overlay is the normal state, not a warning; a missing published lane warns.
+  assert.equal(prerelease.warnings.length, 1);
+  assert.match(prerelease.warnings[0], /\/v3\/catalog\.json/);
+  assert.doesNotMatch(prerelease.warnings[0], /preview/);
 
   const development = await readFor("development", {});
   assert.deepEqual(development.requested.toSorted(), [`${live}/catalog.json`, `${live}/preview/catalog.json`]);

@@ -49,11 +49,16 @@ export async function readLiveCatalogVersions({ engineRoot, env = process.env, f
   const { version } = JSON.parse(await readFile(join(engineRoot, "package.json"), "utf8"));
   const major = ENGINE_RELEASE_VERSION.exec(String(version).trim())?.[1];
   const lane = major ? `v${Number(major)}/catalog.json` : "catalog.json";
-  for (const url of [`${LIVE_CATALOG_ROOT}/preview/${lane}`, `${LIVE_CATALOG_ROOT}/${lane}`]) {
+  // The overlay first, so the published lane read after it overwrites any entry both list (a published entry wins).
+  const documents = [
+    { url: `${LIVE_CATALOG_ROOT}/preview/${lane}`, optional: true },
+    { url: `${LIVE_CATALOG_ROOT}/${lane}`, optional: false },
+  ];
+  for (const { url, optional } of documents) {
     try {
       const response = await fetchDocument(url, { signal: AbortSignal.timeout(15_000) });
-      // The overlay is absent whenever no package is staging-only.
-      if (response.status === 404) continue;
+      // The overlay is absent whenever no package is staging-only; a missing published lane is worth a warning.
+      if (response.status === 404 && optional) continue;
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       for (const { manifest } of (await response.json()).packages) versions.set(manifest.id, manifest.version);
     } catch (error) {
