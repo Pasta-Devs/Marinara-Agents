@@ -51,7 +51,10 @@ import {
   noteDay,
   serveNote,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/note.ts";
-import { NO_ABSENCE_RULE } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/prompts.ts";
+import {
+  mentionsAbsence,
+  NO_ABSENCE_RULE,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/prompts.ts";
 import type {
   OtomeReply,
   RouteHandler,
@@ -844,6 +847,14 @@ test("tap annoyance, time of day, the word counts, line picks and the typing del
   assert.equal(sentenceCount("You left it on. I turned it off. Don't thank me."), 3);
   assert.equal(sentenceCount("灯りを消した。礼はいらない。"), 2);
   assert.equal(sentenceCount("No full stop at the end"), 1);
+  assert.equal(sentenceCount("Rest well. ♡"), 1, "a trailing symbol is not a sentence");
+  assert.equal(sentenceCount("Hi! :)"), 1);
+  assert.equal(sentenceCount("Rest well.♡"), 1, "a symbol glued to the terminator still closes the sentence");
+  assert.equal(sentenceCount("One. Two. Three.♡"), 3);
+  assert.equal(sentenceCount("Wait...what"), 1, "an ellipsis glued to a word is one mark, not a closed sentence");
+  assert.equal(mentionsAbsence("You’re back"), true, "a curly apostrophe is the same contraction");
+  assert.equal(mentionsAbsence("you’ve been gone"), true);
+  assert.equal(mentionsAbsence("you're back"), true);
 
   // A tap never repeats the line just shown while the pool has another; the phone types 40 ms a character, 4 s at most,
   // less what the player already waited.

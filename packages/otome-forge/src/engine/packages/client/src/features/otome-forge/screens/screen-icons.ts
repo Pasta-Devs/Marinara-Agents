@@ -5,6 +5,7 @@ import {
   BookHeart,
   BookLock,
   BookOpen,
+  CalendarDays,
   CalendarHeart,
   Eye,
   Gem,
@@ -38,5 +39,6 @@ export const SCREEN_ICONS: Record<ScreenId, LucideIcon> = {
   wardrobe: Shirt,
   album: Images,
   phone: Smartphone,
+  remind: CalendarDays,
   settings: Settings,
 };

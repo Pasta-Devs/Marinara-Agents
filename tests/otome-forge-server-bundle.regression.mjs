@@ -13,15 +13,20 @@ const { activate, selfCheck } = await import(serverPath);
 async function activatePackage(fake = createFakeDocuments()) {
   const { runtime, logs } = createFakeRuntime({ documents: fake.documents });
   const routes = new Map();
+  // Fastify route options, as the Engine's collector takes them: (path, handler) or (path, options, handler).
+  const routeOptions = new Map();
   const prefixes = [];
+  const collect =
+    (method, prefix) =>
+    (path, ...rest) => {
+      routes.set(`${method} ${prefix}${path}`, rest.at(-1));
+      if (rest.length > 1) routeOptions.set(`${method} ${prefix}${path}`, rest[0]);
+    };
   const api = {
     runtime,
     async registerPrivilegedRoutes(register, options) {
       prefixes.push(options.prefix);
-      await register({
-        get: (path, handler) => routes.set(`GET ${options.prefix}${path}`, handler),
-        post: (path, handler) => routes.set(`POST ${options.prefix}${path}`, handler),
-      });
+      await register({ get: collect("GET", options.prefix), post: collect("POST", options.prefix) });
       return () => routes.clear();
     },
   };
@@ -44,7 +49,7 @@ async function activatePackage(fake = createFakeDocuments()) {
     const result = await handler({ method, url, params: {}, query: {}, body }, reply);
     return { status: reply.statusCode, body: result === reply ? reply.payload : result };
   };
-  return { fake, logs, routes, prefixes, cleanup, call };
+  return { fake, logs, routes, routeOptions, prefixes, cleanup, call };
 }
 
 test("the bundle registers its routes under /api/otome-forge, keeps the id prefix and cleans up", async () => {
@@ -57,6 +62,7 @@ test("the bundle registers its routes under /api/otome-forge, keeps the id prefi
     "GET /api/otome-forge/runs/:run",
     "GET /api/otome-forge/runs/:run/album",
     "GET /api/otome-forge/runs/:run/art/scene",
+    "GET /api/otome-forge/runs/:run/calendar",
     "GET /api/otome-forge/runs/:run/chapters/:key",
     "GET /api/otome-forge/runs/:run/dates",
     "GET /api/otome-forge/runs/:run/home",
@@ -88,6 +94,7 @@ test("the bundle registers its routes under /api/otome-forge, keeps the id prefi
     "POST /api/otome-forge/runs/:run/audio/settings",
     "POST /api/otome-forge/runs/:run/audio/track",
     "POST /api/otome-forge/runs/:run/cancel",
+    "POST /api/otome-forge/runs/:run/care-note",
     "POST /api/otome-forge/runs/:run/chapters/:key/beats/:i",
     "POST /api/otome-forge/runs/:run/chapters/:key/beats/:i/choose",
     "POST /api/otome-forge/runs/:run/chapters/:key/beats/:i/ease-off",
@@ -129,6 +136,11 @@ test("the bundle registers its routes under /api/otome-forge, keeps the id prefi
     "POST /api/otome-forge/runs/:run/wish/open",
     "POST /api/otome-forge/runs/:run/wish/pull",
   ]);
+  // The Caring message is the one route the Engine writes no request line for (incoming request, request completed):
+  // its button shows only on a day the period tracker marks, so a timestamped line would date one.
+  assert.deepEqual(Object.fromEntries(host.routeOptions), {
+    "POST /api/otome-forge/runs/:run/care-note": { logLevel: "silent" },
+  });
 
   await selfCheck();
   assert.deepEqual([...fake.rows.keys()], ["index"], "selfCheck and reads create nothing");

@@ -222,10 +222,17 @@ export function normalizeChatReply(raw: ChatReplyRaw, names: ThreadNames): ChatR
   let stickers = 0;
   for (const entry of raw.messages) {
     let text = (entry.text ?? "").trim();
-    const prefix = speakerPrefix(text);
-    if (prefix && names.player && sameName(prefix.speaker, names.player)) {
+    // Any line of the message may be the protagonist's, not only the first.
+    const asPlayer =
+      !!names.player &&
+      text.split(/\r?\n/u).some((line) => {
+        const spoken = speakerPrefix(line.trim());
+        return !!spoken && sameName(spoken.speaker, names.player);
+      });
+    if (asPlayer) {
       return `a message was written as ${names.player}: write only ${names.li}'s own messages, never their reply`;
     }
+    const prefix = speakerPrefix(text);
     if (prefix && sameName(prefix.speaker, names.li)) text = prefix.rest;
     const sticker = isFace(entry.sticker) && stickers === 0 ? entry.sticker : undefined;
     if (sticker) stickers += 1;

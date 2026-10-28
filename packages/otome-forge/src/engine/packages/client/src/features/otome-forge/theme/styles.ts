@@ -2105,6 +2105,17 @@ ${R} .of-home-rail {
   display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
 }
 ${R} .of-home-rail > * { max-width: 100%; }
+/* M6's Remind Me and Caring message: round, side by side at the rail's foot; only the buttons take the pointer. */
+${R} .of-home-rail-row { display: flex; gap: 8px; pointer-events: none; }
+${R} .of-home-rail-row > * { pointer-events: auto; }
+/* A short stage (a 360 × 600 phone under the Engine's own bars leaves about 500 px): the rail tightens by 30 px, every
+   button still at least 30 px tall, so the note keeps a line of its words above M6's row. */
+@container of-frame (max-height: 540px) {
+  ${R} .of-home-rail { gap: 5px; }
+  ${R} .of-home-rail .of-home-action { min-height: 36px; }
+  ${R} .of-home-rail .of-himme-option { min-height: 30px; }
+  ${R} .of-home-rail-row .of-icon-button { width: 36px; height: 36px; }
+}
 ${R} .of-home-action {
   display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding-block: 0; padding-inline: 11px 15px;
   border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 0.82rem; letter-spacing: 0.02em;
@@ -2118,8 +2129,11 @@ ${R} .of-home-badge {
 }
 ${R} .of-himme { display: inline-flex; gap: 3px; margin: 0; padding: 3px; border-radius: 999px; min-width: 0; }
 ${R} .of-himme-option + .of-himme-option { flex: none; }
+/* His side gives way to the rail's width (min-width 0), so a long name is cut short inside the rail rather than push
+   Me out over his cell. */
 ${R} .of-himme-option {
-  position: relative; display: inline-flex; align-items: center; min-height: 34px; max-width: 8.5rem; padding: 0 13px;
+  position: relative; display: inline-flex; align-items: center; min-width: 0; min-height: 34px; max-width: 8.5rem;
+  padding: 0 13px;
   border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 0.82rem; color: var(--of-text-soft);
   transition: color 360ms var(--of-ease), background-color 360ms var(--of-ease);
 }
@@ -2604,6 +2618,119 @@ ${R} .of-range:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--of
 ${R} .of-range:focus-visible::-moz-range-thumb { outline: 2px solid var(--of-focus); outline-offset: 2px; }
 ${R} .of-range:disabled { opacity: 0.5; cursor: default; }`;
 
+// Remind Me (M6): the month and its hearts, the chosen day, what is coming up, the cycle and the player's birthday;
+// the period tracker's settings; and the caring message on Home. A logged period day is a filled heart on a rose wash,
+// a predicted one an outlined heart on a dashed cell, so neither depends on colour.
+const REMIND_RULES = `
+${R} .of-month { display: flex; flex-direction: column; gap: 10px; padding: 12px 10px 14px; border-radius: 22px; }
+${R} .of-month-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+${R} .of-month-title {
+  font-family: var(--of-font-display); font-weight: 600; font-size: clamp(1.3rem, 6.2cqw, 1.62rem); line-height: 1.1;
+  text-align: center; overflow-wrap: anywhere;
+}
+${R}[dir="rtl"] .of-month-step svg { transform: scaleX(-1); }
+${R} .of-month-today { align-self: center; margin-top: -6px; }
+${R} .of-month-grid { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 3px; margin: -3px 0; }
+${R} .of-month-grid th {
+  padding: 2px 0 4px; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  text-align: center; color: var(--of-champagne-text);
+}
+${R} .of-day {
+  height: 50px; padding: 4px 1px 3px; border-radius: 14px; border: 1px solid transparent; text-align: center;
+  vertical-align: top; cursor: pointer; background: var(--of-surface-hover);
+  transition: border-color 360ms var(--of-ease), box-shadow 360ms var(--of-ease), background-color 360ms var(--of-ease);
+}
+${R} .of-day--blank { background: transparent; cursor: default; }
+${R} .of-day:not(.of-day--blank):hover { border-color: var(--of-border-strong); }
+${R} .of-day:focus { outline: none; }
+${R} .of-day:focus-visible { outline: 2px solid var(--of-focus); outline-offset: 1px; }
+${R} .of-day[data-cycle="logged"] { background: linear-gradient(180deg, var(--of-tint-strong), var(--of-tint)); }
+${R} .of-day[data-cycle="predicted"] { border: 1px dashed var(--of-border-strong); }
+${R} .of-day[aria-selected="true"] {
+  border: 1px solid rgb(230 201 138 / 0.85);
+  box-shadow: inset 0 0 0 1px rgb(230 201 138 / 0.45), 0 4px 14px var(--of-glow-soft);
+}
+/* Pale gold vanishes on Pearl's near-white cells: its deeper champagne (about 5:1) marks the selection there, 2 px
+   wide, with the padding trimmed so the cell keeps its size. */
+${R}[data-look="pearl"] .of-day[aria-selected="true"] { border: 2px solid var(--of-champagne-text); padding: 3px 0 2px; }
+${R} .of-day-number {
+  display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 4px; border-radius: 999px;
+  font-size: 0.86rem; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+${R} .of-day[aria-current="date"] .of-day-number {
+  color: ${PALETTE.ink}; background: linear-gradient(135deg, #f3dcaa, ${PALETTE.rose}); box-shadow: 0 0 10px var(--of-glow);
+}
+${R} .of-day-marks { display: flex; justify-content: center; align-items: center; gap: 2px; min-height: 13px; margin-top: 2px; }
+${R} .of-cycle-heart { flex: none; color: var(--of-accent-text); }
+${R} .of-event-icon { flex: none; color: var(--of-event); }
+${R}[data-look="pearl"] .of-event-icon { filter: brightness(0.7) saturate(1.4); }
+${R} .of-cycle-legend {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 16px;
+  font-size: 0.8rem; font-weight: 700; color: var(--of-text-soft);
+}
+${R} .of-cycle-key { display: inline-flex; align-items: center; gap: 6px; }
+${R} .of-month > .of-notice { align-items: center; justify-content: space-between; flex-wrap: wrap; }
+${R} .of-day-detail .of-section-title { font-size: 1.12rem; }
+${R} .of-day-detail > .of-button { align-self: flex-start; }
+${R} :is(.of-day-events, .of-upcoming) { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+${R} :is(.of-day-events, .of-upcoming) li {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 0.9rem;
+}
+${R} .of-day-events li > span, ${R} .of-upcoming-what { overflow-wrap: anywhere; font-weight: 600; }
+${R} .of-upcoming-when { font-size: 0.78rem; font-weight: 800; white-space: nowrap; color: var(--of-champagne-text); }
+${R} .of-cycle-card .of-section-title { display: flex; align-items: center; gap: 8px; }
+${R} .of-cycle-card .of-section-title svg, ${R} .of-cycle-today svg { flex: none; color: var(--of-accent-text); }
+${R} .of-cycle-card > .of-button { align-self: flex-start; }
+${R} .of-cycle-today {
+  display: flex; align-items: center; gap: 8px; font-family: var(--of-font-hand); font-weight: 500; font-size: 1.42rem;
+  line-height: 1.15; color: var(--of-text);
+}
+${R} .of-birthday-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+${R} .of-birthday-form > .of-inline-actions { grid-column: 1 / -1; }
+${R} .of-birthday-shown {
+  display: inline-flex; align-items: center; gap: 7px; margin-inline-end: 4px;
+  font-family: var(--of-font-display); font-weight: 600; font-size: 1.22rem;
+}
+${R} .of-birthday-shown svg { color: var(--of-accent-text); }
+${R} .of-tracker .of-section > .of-button { align-self: flex-start; }
+${R} .of-tracker-line { display: block; }
+${R} .of-tracker-line + .of-tracker-line { margin-top: 4px; }
+${R} .of-tracker-lengths { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+${R} .of-starts { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+${R} .of-starts li {
+  display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  padding-block: 2px; padding-inline: 12px 2px; border-radius: 12px; background: var(--of-surface-hover);
+  font-size: 0.88rem; font-weight: 600;
+}
+${R} .of-starts li > svg { color: var(--of-accent-text); }
+${R} .of-starts-remove { width: 34px; height: 34px; border: 0; background: transparent; color: var(--of-text-soft); }
+${R} .of-file-button { position: relative; }
+${R} .of-file-button:has(input:focus-visible) { outline: 2px solid var(--of-focus); outline-offset: 3px; }
+${R} .of-delete-cycle { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+/* Caring message: a rose rim, a light rose wash and a slow glow over the strong glass, its icon in the text colour,
+   so it reads over his look in both moods (at least 3:1, as an icon needs). */
+${R} .of-home-care {
+  border-color: rgb(231 166 184 / 0.7);
+  background: linear-gradient(135deg, rgb(231 166 184 / 0.2), rgb(230 201 138 / 0.12)), var(--of-surface-strong);
+  animation: of-care-glow 3.2s ease-in-out infinite alternate;
+}
+${R} .of-care-seal { position: relative; display: inline-grid; }
+${R} .of-care-heart {
+  position: absolute; bottom: -3px; inset-inline-end: -5px; color: ${PALETTE.rose};
+  filter: drop-shadow(0 0 6px var(--of-glow));
+}
+${R} .of-care-body { display: flex; align-items: center; justify-content: center; min-height: 3.4em; }
+${R} .of-care-body > .of-notice { text-align: start; }
+${R} .of-care-writing {
+  display: flex; align-items: center; gap: 8px; font-family: var(--of-font-hand); font-size: 1.36rem; line-height: 1.15;
+  color: var(--of-text-soft);
+}
+${R} .of-care-source { text-align: center; }
+@keyframes of-care-glow {
+  from { box-shadow: inset 0 1px 0 var(--of-highlight), 0 0 0 0 var(--of-glow-soft); }
+  to { box-shadow: inset 0 1px 0 var(--of-highlight), 0 0 18px 2px var(--of-glow-soft); }
+}`;
+
 // Dialogs render into the stage's own layer (Stage.tsx), over the top bar and the dock.
 const DIALOG_RULES = `
 ${R} .of-stage-layer { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
@@ -3048,6 +3175,7 @@ export function otomeForgeStyles(): string {
     PRESENTATION_RULES,
     HOME_RULES,
     PHONE_RULES,
+    REMIND_RULES,
     DATES_RULES,
     DATE_NIGHT_RULES,
     READ_HIM_RULES,

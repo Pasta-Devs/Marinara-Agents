@@ -45,7 +45,7 @@ export const NO_ABSENCE_RULE =
  * rule covers every language; this catches the common English slips.
  */
 const ABSENCE =
-  /\b(?:where (?:have|were) you|welcome back|you(?:'re| are) back|(?:you )?came back|been (?:a while|ages|so long|too long|forever)|long time no|(?:have )?missed you|you(?:'ve| have) been (?:gone|away)|finally (?:here|back)|left me waiting)\b/i;
+  /\b(?:where (?:have|were) you|welcome back|you(?:['’]re| are) back|(?:you )?came back|been (?:a while|ages|so long|too long|forever)|long time no|(?:have )?missed you|you(?:['’]ve| have) been (?:gone|away)|finally (?:here|back)|left me waiting)\b/i;
 
 export function mentionsAbsence(text: string): boolean {
   return ABSENCE.test(text);

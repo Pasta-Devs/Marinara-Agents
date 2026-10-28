@@ -48,6 +48,7 @@ import {
   sessionSourceId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/chat.ts";
 import { phoneMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/memory.ts";
+import { normalizeChatReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/prompts.ts";
 import { registerPhoneRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/phone.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import {
@@ -281,6 +282,15 @@ test("a failed reply keeps her message; the same id or Retry answers it once", a
     (await u.thread(KAI))!.messages.map((message) => message.who),
     ["player", "li", "li"],
   );
+});
+
+test("a reply written as the protagonist on a later line is refused, an ordinary colon is not", () => {
+  const names = { li: "Kai", player: "Ines" };
+  const refused = (text: string) => normalizeChatReply({ messages: [{ text }] }, names);
+  assert.match(refused("Kai: hey\nInes: fine, I'll sleep.") as string, /^a message was written as Ines/);
+  assert.match(refused("He waits.\nInes: fine") as string, /^a message was written as Ines/);
+  const kept = refused("Kai: Meet at 7:30\nBring the key.");
+  assert.deepEqual(kept, { messages: [{ text: "Meet at 7:30\nBring the key." }], suggestions: [] });
 });
 
 test("P17 is a message from him alone: boundary, chat contract, comfort rule, stage, rupture, the note, nothing hidden", async () => {

@@ -43,9 +43,18 @@ export interface OtomeReply {
 
 export type RouteHandler = (request: OtomeRequest, reply: OtomeReply) => Promise<unknown>;
 
+/**
+ * Fastify route options, which the Engine's collector hands to app.route as they are. `logLevel: "silent"` drops the
+ * Engine's own lines for the request (incoming request, request completed, an aborted client, Fastify's error line).
+ */
+export interface OtomeRouteOptions {
+  logLevel: "silent";
+}
+
 export interface OtomeRouter {
   get(path: string, handler: RouteHandler): void;
   post(path: string, handler: RouteHandler): void;
+  post(path: string, options: OtomeRouteOptions, handler: RouteHandler): void;
 }
 
 export interface OtomeLogger {

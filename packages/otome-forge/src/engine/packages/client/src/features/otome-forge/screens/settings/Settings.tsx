@@ -1,12 +1,14 @@
 // ──────────────────────────────────────────────
-// Otome Forge: Settings. Tabs for the look, the current story's content, connections, images and audio, Privacy &
-// data, and Debug. Story settings edit the active run; the look and the 18+ confirmation are the player's own.
+// Otome Forge: Settings. Tabs for the look, the current story's content, connections, images and audio, the period
+// tracker, Privacy & data, and Debug. Story settings edit the active run; the look, the tracker and the 18+
+// confirmation are the player's own.
 // ──────────────────────────────────────────────
-import { useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AudioLines,
   Bug,
+  Flower2,
   Images,
   Palette,
   PlugZap,
@@ -23,9 +25,11 @@ import { ContentSettings } from "./ContentSettings";
 import { DebugSettings } from "./Debug";
 import { ImagesSettings } from "./Images";
 import { PrivacyData } from "./PrivacyData";
+import { TrackerSettings } from "./Tracker";
 
-const TABS = ["look", "content", "connections", "images", "audio", "privacy", "debug"] as const;
-type Tab = (typeof TABS)[number];
+const TABS = ["look", "content", "connections", "images", "audio", "tracker", "privacy", "debug"] as const;
+export type SettingsTab = (typeof TABS)[number];
+type Tab = SettingsTab;
 
 const TAB_META: Record<Tab, { labelKey: string; Icon: LucideIcon }> = {
   look: { labelKey: "ui.otomeForge.settings.tabLook", Icon: Palette },
@@ -33,6 +37,7 @@ const TAB_META: Record<Tab, { labelKey: string; Icon: LucideIcon }> = {
   connections: { labelKey: "ui.otomeForge.settings.tabConnections", Icon: PlugZap },
   images: { labelKey: "ui.otomeForge.settings.tabImages", Icon: Images },
   audio: { labelKey: "ui.otomeForge.audio.tab", Icon: AudioLines },
+  tracker: { labelKey: "ui.otomeForge.settings.tabTracker", Icon: Flower2 },
   privacy: { labelKey: "ui.otomeForge.settings.tabPrivacy", Icon: ShieldCheck },
   debug: { labelKey: "ui.otomeForge.settings.tabDebug", Icon: Bug },
 };
@@ -42,13 +47,28 @@ interface SettingsProps {
   run: RunView | null;
   lookPreference: LookPreference;
   onLookPreference: (preference: LookPreference) => void;
+  /** The tab it opens on (Remind Me opens the tracker); the look otherwise. */
+  initialTab?: SettingsTab;
 }
 
-export function Settings({ run, lookPreference, onLookPreference }: SettingsProps) {
+export function Settings({ run, lookPreference, onLookPreference, initialTab = "look" }: SettingsProps) {
   const { t } = useTranslation();
   const id = useId();
-  const [tab, setTab] = useState<Tab>("look");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
+  // A tab opened from elsewhere (Remind Me's tracker) may sit past the strip's edge at phone width: bring it in. Only
+  // the strip scrolls, sideways, in either direction of text.
+  useEffect(() => {
+    const selected = tabRefs.current[initialTab];
+    const strip = selected?.parentElement;
+    if (!selected || !strip) return;
+    const [inner, outer] = [selected.getBoundingClientRect(), strip.getBoundingClientRect()];
+    if (inner.left < outer.left || inner.right > outer.right) {
+      strip.scrollBy({ left: inner.left - outer.left - (outer.width - inner.width) / 2 });
+    }
+    // Once, as Settings opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Arrow keys move between tabs (and select them), Home and End jump to the ends.
   const onKeyDown = (event: KeyboardEvent) => {
@@ -83,6 +103,8 @@ export function Settings({ run, lookPreference, onLookPreference }: SettingsProp
       <ImagesSettings run={run} />
     ) : tab === "audio" ? (
       <AudioSettings run={run} />
+    ) : tab === "tracker" ? (
+      <TrackerSettings run={run} />
     ) : tab === "privacy" ? (
       <PrivacyData />
     ) : (

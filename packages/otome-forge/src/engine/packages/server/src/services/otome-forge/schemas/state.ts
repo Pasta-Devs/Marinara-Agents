@@ -5,6 +5,7 @@
 // `pity`, `owned`, `selector` and `pulls` (S/wish/pull.ts writes them, in the same write as the Starlight they cost).
 // M5: each love interest's `tellsLearned`, the plush shelf (`owned.plush`), each love interest's newest Claw Machine
 // rounds (`claw.rounds`) and the newest paid Read Him sets (`readHim.paid`).
+// M6 adds none: the period tracker and caring messages never reach a server document (plan §1.9).
 import { forgeStoryExpressionCast, forgeStoryExpressionsOn } from "@forge-kit/story-expressions-server.mjs";
 import { z, type ZodType } from "zod";
 import type {
