@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.5.6 — 2026-10-28
 
 - In Sources → Chat Messages, a row with a long chat name cuts the name and keeps the message range visible, so pieces of one chat can be told apart. The range label is also translated (English and Korean).
 
