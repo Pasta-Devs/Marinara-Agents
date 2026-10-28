@@ -220,6 +220,7 @@ recall({
   personaId?: string,      // only when the persona's own account writes
   mode?: "roleplay" | "conversation",
   maxTokens?: number,      // 50-4,000, default 800
+  whole?: boolean,         // default false: whole memories instead of ranked parts
   signal?: AbortSignal,
 }): Promise<{ version: 1; sections: { noteId; type; title?; text }[] } | null>
 ```
@@ -235,6 +236,14 @@ recall({
   within a type the order chat recall ranks them in (the user's recall
   weights). `text` is the recalled part of each memory, within `maxTokens` and
   at most 20 recalled parts in all. Recall receipts and usage are not touched.
+- `whole: true` returns every memory that passes the rules above with all its
+  text instead of the parts that fit `queryText`: no ranking and no
+  embeddings, but `queryText` is still required, so one call serves both
+  modes. Order is the type order above, then newest first (`updatedAt`). A
+  memory is added while its estimated tokens still fit `maxTokens`; one that
+  does not fit is skipped, never cut, and later smaller ones can still fit.
+  At most 20 sections. An older Long-Term Memory ignores `whole` and answers
+  with ranked parts.
 - A new section field can be added without a version change; removing or
   renaming one raises `version`.
 
