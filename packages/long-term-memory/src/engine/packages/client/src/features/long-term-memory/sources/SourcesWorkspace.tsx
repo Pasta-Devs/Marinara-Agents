@@ -1542,7 +1542,7 @@ export default function SourcesWorkspace({
             {range ? (
               <>
                 {/* A long chat name is what gets cut; the range and badge stay whole and wrap before the name drops below 8rem. */}
-                <strong className="min-w-[8rem] flex-1 truncate text-sm" data-ltm-source-chat-name>
+                <strong className="min-w-32 flex-1 truncate text-sm" data-ltm-source-chat-name>
                   {range.chatName}
                 </strong>
                 <span
