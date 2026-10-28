@@ -166,10 +166,9 @@ export function forgeSeasonalOpenCard(event, arrow) {
   );
 }
 // The side stories that follow the chapters placed(after) picks: each finished Character Story (stories, drawn by
-// drawStory) and each played event, right after the chapter it followed. Several after one chapter are drawn in the
-// order they were opened, as story memory tells them (forge-kit orderForgeStorySources); a Character Story from
-// before 1.8.12 has no opening time (0) and leads, as there. The event the next-story choice draws (options.event)
-// keeps its own card.
+// drawStory) and each played event, right after the chapter it followed. Several after one chapter are drawn by when
+// each was opened, then by seq; a Character Story from before 1.8.12 has no opening time (0) and comes first. The
+// event the next-story choice draws (options.event) keeps its own card.
 export function forgeSeasonalTimelineCards(options, placed, arrow, stories = [], drawStory = () => "") {
   const after = (entry) => Math.max(0, Number(entry.after) || 0),
     opened = (entry) => Math.max(0, Number(entry.opened) || 0),

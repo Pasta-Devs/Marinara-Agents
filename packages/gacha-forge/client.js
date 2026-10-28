@@ -7213,9 +7213,9 @@ const forgeSeasonalEnglish = {
     "A story event: seven scenes and three fights. Chapter {chapter} stays where it is, but waits until you finish.",
   "events.choice.open": "Story event \u00b7 Open",
   "events.choice.waits": "The main story waits until you finish it.",
-  "events.timeline.done": "Story event · Done",
-  "events.timeline.ended": "Story event · Ended",
-  "events.timeline.paused": "Story event · Paused",
+  "events.timeline.done": "Story event \u00b7 Done",
+  "events.timeline.ended": "Story event \u00b7 Ended",
+  "events.timeline.paused": "Story event \u00b7 Paused",
   "events.timeline.body": "Played. Enter to read it again; reading changes nothing.",
   "events.forge.eyebrow": "Forging a story event",
   "events.forge.note": "story event",
@@ -7393,10 +7393,9 @@ function forgeSeasonalOpenCard(event, arrow) {
   );
 }
 // The side stories that follow the chapters placed(after) picks: each finished Character Story (stories, drawn by
-// drawStory) and each played event, right after the chapter it followed. Several after one chapter are drawn in the
-// order they were opened, as story memory tells them (forge-kit orderForgeStorySources); a Character Story from
-// before 1.8.12 has no opening time (0) and leads, as there. The event the next-story choice draws (options.event)
-// keeps its own card.
+// drawStory) and each played event, right after the chapter it followed. Several after one chapter are drawn by when
+// each was opened, then by seq; a Character Story from before 1.8.12 has no opening time (0) and comes first. The
+// event the next-story choice draws (options.event) keeps its own card.
 function forgeSeasonalTimelineCards(options, placed, arrow, stories = [], drawStory = () => "") {
   const after = (entry) => Math.max(0, Number(entry.after) || 0),
     opened = (entry) => Math.max(0, Number(entry.opened) || 0),
