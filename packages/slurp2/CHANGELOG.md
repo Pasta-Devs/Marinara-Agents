@@ -1,5 +1,12 @@
 # Slurp release notes
 
+## Unreleased
+
+- Creators' posts and DM replies now use what Long-Term Memory remembers about them, through its recall service. A new "Long-term memory" choice in Backstage (Engine link) sets whether they get whole memories (the default) or only the parts that fit the post or message. It shows while "What your other Agents know" is on.
+- Backstage says when Long-Term Memory is missing, or is not sharing ("Other Agents can read memories" is off in its Memory Settings).
+- A DM brings in the persona's memories only when that persona's Slurp page uses Linked identity. A hinted or concealed page never does.
+- The Creator brief no longer reads Long-Term Memory's storage; the Character Tracker, World State and Persona Stats lines are unchanged.
+
 ## 0.4.8 — 2026-10-28
 
 - World lens: the canon-anchor reading also returns `world` (era, device, money, festivals). Cache version v4 → v5, so each card is read once more in the background. A modern card has no lens and nothing changes.

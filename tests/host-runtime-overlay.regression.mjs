@@ -234,8 +234,8 @@ try {
   const services = await load("services/capability-packages/capability-service-registry.service.ts");
   assert.deepEqual(commands.parseCapabilityConversationCommands("[uno]"), [], "no commands on an older Engine");
   assert.equal(commands.stripCapabilityConversationCommands("hi [uno]"), "hi [uno]");
-  assert.equal(services.getCapabilityService("long-term-memory:storage"), null);
-  const ltm = { storage: {} };
+  assert.equal(services.getCapabilityService("long-term-memory:recall"), null);
+  const ltm = { recall: {} };
   host.bindHostRuntime({
     logger: runtimeLogger,
     persistence: {},
@@ -246,13 +246,13 @@ try {
       strip: (content) => content.replace("[uno]", "").trim(),
       instructions: () => [],
     },
-    services: { get: (key) => (key === "long-term-memory:storage" ? ltm : null) },
+    services: { get: (key) => (key === "long-term-memory:recall" ? ltm : null) },
   });
   assert.deepEqual(commands.parseCapabilityConversationCommands("[uno]"), [
     { type: "capability", commandType: "uno", payload: null },
   ]);
   assert.equal(commands.stripCapabilityConversationCommands("hi [uno]"), "hi");
-  assert.equal(services.getCapabilityService("long-term-memory:storage"), ltm);
+  assert.equal(services.getCapabilityService("long-term-memory:recall"), ltm);
 
   // --- Package-owned code calls api.runtime directly ------------------------------------------------------------
   const routesSource = await readFile(
@@ -278,15 +278,16 @@ try {
     );
   }
   assert.doesNotMatch(routesSource, /import\("\.\.\/services\/haptic/u, "no second Intiface client");
-  // Slurp's "lately" reads Long-Term Memory's service through the registry overlay (api.runtime.services).
+  // Slurp reads Long-Term Memory's recall service through the registry overlay (api.runtime.services).
   const memorySource = await readFile(
-    join(root, "packages/slurp2/src/engine/packages/server/src/slp/data/creators/slp-agent-memory-source.ts"),
+    join(root, "packages/slurp2/src/engine/packages/server/src/slp/data/creators/slp-ltm-recall.ts"),
     "utf8",
   );
   assert.match(
     memorySource,
     /from "\.\.\/\.\.\/\.\.\/services\/capability-packages\/capability-service-registry\.service\.js"/u,
   );
+  assert.match(memorySource, /"long-term-memory:recall"/u);
 
   console.log("host runtime overlay regression passed");
 } finally {

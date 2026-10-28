@@ -159,6 +159,7 @@ export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBac
     "world state",
     "persona stats",
   ),
+  memoryRecall: place("engine", "all-slurp", "long-term memory", "whole memories", "memory parts"),
   postPlanner: slurp("general", "post ideas", "post planner", "beats", "subjects"),
   lifeMomentRate: slurp("general", "daily life", "life moments", "everyday"),
   storyJobs: slurp("general", "story jobs", "what stories do", "countdown", "poll", "story mix"),

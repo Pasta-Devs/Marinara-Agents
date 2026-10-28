@@ -1,7 +1,9 @@
 import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 import { Field, NumberSetting, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
-import { useSlurpCarryoverReach } from "./slp-settings-hooks";
+import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
+import type { SlurpSettings } from "./slp-settings-contract";
+import { useSlurpCarryoverReach, useSlurpMemoryStatus } from "./slp-settings-hooks";
 
 /**
  * Engine link: everything that crosses between Slurp and the rest of Marinara. Engine chats that
@@ -9,6 +11,7 @@ import { useSlurpCarryoverReach } from "./slp-settings-hooks";
  */
 export function SlpEngineLinkPanel({ t, settings, update }: SlpBackstagePageProps) {
   const reach = useSlurpCarryoverReach(settings.carryoverModes.length > 0).data;
+  const memoryStatus = useSlurpMemoryStatus(settings.flavourFromAgents).data?.status;
   return (
     <div className="space-y-4">
       <BackstagePageHeader
@@ -92,6 +95,30 @@ export function SlpEngineLinkPanel({ t, settings, update }: SlpBackstagePageProp
           value={settings.flavourFromAgents}
           onChange={(value) => update("flavourFromAgents", value)}
         />
+        {settings.flavourFromAgents && (
+          <>
+            <ChoiceSetting
+              settingKey="memoryRecall"
+              label={t("ui.slurp.settings.prompts.memoryRecall")}
+              detail={t("ui.slurp.settings.prompts.memoryRecallDetail")}
+              options={[
+                { value: "whole", label: t("ui.slurp.settings.prompts.memoryRecallWhole") },
+                { value: "relevant", label: t("ui.slurp.settings.prompts.memoryRecallRelevant") },
+              ]}
+              value={settings.memoryRecall}
+              onChange={(value: SlurpSettings["memoryRecall"]) => update("memoryRecall", value)}
+            />
+            {memoryStatus && memoryStatus !== "ok" && (
+              <p role="status" className="text-xs leading-5 text-[var(--slurp-muted)]">
+                {memoryStatus === "missing"
+                  ? t("ui.slurp.settings.prompts.memoryStatusMissing")
+                  : memoryStatus === "off"
+                    ? t("ui.slurp.settings.prompts.memoryStatusOff")
+                    : t("ui.slurp.settings.prompts.memoryStatusError")}
+              </p>
+            )}
+          </>
+        )}
       </SettingsGroup>
     </div>
   );
