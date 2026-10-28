@@ -16,6 +16,7 @@
 // its people are drawn from their identity lines alone (an outfit line would dress the moment). The adult negatives
 // stay on every image, whatever the rating or the player's edit, and above SFW no part of a prompt names a minor
 // (adultsOnly). At SFW every prompt is what it was before.
+// M5 adds a date's keepsake: a story CG of the two of them (never explicit) with the keepsake's own framing.
 import { forgeStoryExpressionPrompt } from "@forge-kit/story-expressions-server.mjs";
 import type { Presentation, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import type { ImageRating } from "../../../../../client/src/features/otome-forge/shared/content.js";
@@ -215,6 +216,8 @@ export interface CgInput {
   use: Extract<ImageUse, "cg" | "clothed">;
   /** The story CG's brief set `explicit` (beat.cg.explicit). */
   explicit?: boolean;
+  /** The shot's framing tags; CG_FRAMING by default (a keepsake has its own). */
+  framing?: string;
 }
 
 /** A story CG: the brief, each person's look, then the framing, rating and adult tags for every person. */
@@ -234,7 +237,12 @@ export function cgPrompt(input: CgInput, edited: Partial<ImagePrompt> = {}): Ima
   return finish(
     world,
     () => ({
-      prompt: [style.styleText, sentence(input.brief), ...looks, mergeTags(CG_FRAMING, required, style.positiveTags)]
+      prompt: [
+        style.styleText,
+        sentence(input.brief),
+        ...looks,
+        mergeTags(input.framing ?? CG_FRAMING, required, style.positiveTags),
+      ]
         .filter(Boolean)
         .join(" "),
       // One person: nobody else may appear. Two or more: the Engine's own "extra people" is left out on purpose.
@@ -244,6 +252,24 @@ export function cgPrompt(input: CgInput, edited: Partial<ImagePrompt> = {}): Ima
     negative,
     edited,
   );
+}
+
+// ── M5: a date's keepsake ──
+
+const KEEPSAKE_FRAMING = "two people, romantic date, candid moment, cinematic composition, detailed background";
+
+/** A person in the keepsake: who they are and what they wear (English, visual only), drawn as an adult. */
+export type KeepsakePerson = CgPerson;
+export type KeepsakeInput = Omit<CgInput, "framing" | "use" | "explicit">;
+
+/**
+ * A date's keepsake (S/minigames/date-night.ts): a CG of the two of them (the plan's English brief, each person's look,
+ * then the rating and an adult tag for every person) with the keepsake's framing. A story CG whose brief never sets
+ * `explicit` (the date planner writes no explicit brief), so it stays at most Suggestive. An edited prompt keeps its
+ * wording with every safety tag put back.
+ */
+export function keepsakePrompt(input: KeepsakeInput, edited: Partial<ImagePrompt> = {}): ImagePrompt {
+  return cgPrompt({ ...input, use: "cg", framing: KEEPSAKE_FRAMING }, edited);
 }
 
 export interface ExpressionInput {

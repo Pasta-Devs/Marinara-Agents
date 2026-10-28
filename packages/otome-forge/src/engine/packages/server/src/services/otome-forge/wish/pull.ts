@@ -113,6 +113,7 @@ export function applyPull(
       wallet: { ...state.wallet, starlight: state.wallet.starlight - cost + refunds },
       pity: { ...state.pity, [banner.kind]: pity },
       owned: {
+        ...state.owned,
         items: [...state.owned.items, ...won],
         at: { ...state.owned.at, ...Object.fromEntries(won.map((id) => [id, at])) },
       },
@@ -216,7 +217,11 @@ export async function claimSelector(
     }
     return {
       ...current,
-      owned: { items: [...current.owned.items, item], at: { ...current.owned.at, [item]: new Date().toISOString() } },
+      owned: {
+        ...current.owned,
+        items: [...current.owned.items, item],
+        at: { ...current.owned.at, [item]: new Date().toISOString() },
+      },
       selector: { ...current.selector, [li]: item },
     };
   });

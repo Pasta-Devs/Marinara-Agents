@@ -10,6 +10,9 @@ export type ScreenId =
   | "story"
   | "reader"
   | "dates"
+  | "read-him"
+  | "date-night"
+  | "claw"
   | "wish"
   | "wardrobe"
   | "album"
@@ -26,6 +29,9 @@ export const RUN_SCREENS: ReadonlySet<ScreenId> = new Set([
   "home",
   "story",
   "dates",
+  "read-him",
+  "date-night",
+  "claw",
   "wish",
   "wardrobe",
   "album",
@@ -52,6 +58,9 @@ export const SCREEN_NAME_KEYS: Record<ScreenId, string> = {
   story: "ui.otomeForge.common.screenStory",
   reader: "ui.otomeForge.common.screenReader",
   dates: "ui.otomeForge.common.screenDates",
+  "read-him": "ui.otomeForge.common.screenReadHim",
+  "date-night": "ui.otomeForge.common.screenDateNight",
+  claw: "ui.otomeForge.common.screenClaw",
   wish: "ui.otomeForge.common.screenWish",
   wardrobe: "ui.otomeForge.common.screenWardrobe",
   album: "ui.otomeForge.common.screenAlbum",

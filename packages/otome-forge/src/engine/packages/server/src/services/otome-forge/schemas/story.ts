@@ -3,8 +3,8 @@
 // ──────────────────────────────────────────────
 // Both are written once by the story (S/story/*) and only ever read here, so a damaged list item is dropped and a
 // damaged field takes its default; a document with no key or no index reads as missing (null), and is written again.
-// The hidden parts (node guides, the ledger, a beat's effects) are stripped by toChapterView and toBeatView before
-// anything reaches the client.
+// The hidden parts (node guides, the ledger, a beat's effects, a date's plan and its scores) are stripped by
+// toChapterView and toBeatView before anything reaches the client.
 import { z, type ZodType } from "zod";
 import type {
   Beat,
@@ -27,6 +27,11 @@ import {
   STANCES,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { LIMIT_IDS } from "../../../../../client/src/features/otome-forge/shared/content.js";
+import {
+  DATE_PLACE_KINDS,
+  type DatePlan,
+  type DateScore,
+} from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { FACES, MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { isChapterKey } from "../ids.js";
 import { PaintSchema, isRecord, readFields, validItems } from "./common.js";
@@ -128,10 +133,43 @@ export const ConfrontationSchema: ZodType<Confrontation> = z.object({
   ending: z.enum(CONFRONTATION_ENDINGS).optional(),
 });
 
+/** A date's plan (M5, SH/dates.ts); a damaged one reads as none, so the chapter is not a playable date. */
+const DatePlanSchema: ZodType<DatePlan> = z.object({
+  li: z.string(),
+  place: z.enum(DATE_PLACE_KINDS as [DatePlan["place"], ...DatePlan["place"][]]),
+  placeName: short(120),
+  herLook: short(80),
+  hisLook: short(80),
+  goesWrong: z.boolean(),
+  makeItRight: short(80).nullable(),
+  keepsake: z.object({ brief: short(1200), art: PaintSchema.optional() }),
+});
+
+const SCORE_VALUES: ReadonlySet<unknown> = new Set([-1, 0, 1]);
+
+/** A date beat's hidden scores: choiceId → optionId → −1/0/1; anything else is dropped. */
+function readScores(value: unknown): Beat["scores"] {
+  if (!isRecord(value)) return undefined;
+  const scores: NonNullable<Beat["scores"]> = {};
+  for (const [choice, options] of Object.entries(value)) {
+    if (!isRecord(options)) continue;
+    const kept = Object.entries(options).filter(([, score]) => SCORE_VALUES.has(score));
+    if (kept.length) scores[choice] = Object.fromEntries(kept) as Record<string, DateScore>;
+  }
+  return Object.keys(scores).length ? scores : undefined;
+}
+
+/** `value` without its `key` field when that field is undefined (an optional field is absent, never undefined). */
+function withoutEmpty<T extends object, K extends keyof T>(value: T, key: K): T {
+  if (value[key] !== undefined) return value;
+  const { [key]: _empty, ...rest } = value;
+  return rest as T;
+}
+
 /** A stored chapter plan, or null when there is none (or it has no valid key). */
 export function normalizeChapter(data: unknown): Chapter | null {
   if (!isRecord(data) || !isChapterKey(data.key)) return null;
-  const chapter = readFields<Chapter>(
+  const read = readFields<Chapter>(
     {
       key: z.string(),
       kind: z.enum(["main", "route", "repair", "story", "date"]),
@@ -149,6 +187,10 @@ export function normalizeChapter(data: unknown): Chapter | null {
       plannedAt: z.string(),
       connectionId: z.string(),
       voicedLine: short().optional(),
+      date: (value) => {
+        const parsed = DatePlanSchema.safeParse(value);
+        return parsed.success ? parsed.data : undefined;
+      },
     },
     () => ({
       key: data.key as string,
@@ -164,6 +206,7 @@ export function normalizeChapter(data: unknown): Chapter | null {
     }),
     data,
   );
+  const chapter = withoutEmpty(read, "date");
   return chapter.nodes.length ? chapter : null;
 }
 
@@ -173,7 +216,7 @@ export function normalizeChapter(data: unknown): Chapter | null {
  */
 export function normalizeBeat(data: unknown): Beat | null {
   if (!isRecord(data) || !isChapterKey(data.key) || !Number.isInteger(data.i)) return null;
-  const beat = readFields<Beat>(
+  const read = readFields<Beat>(
     {
       key: z.string(),
       i: z.number().int().min(0),
@@ -189,6 +232,7 @@ export function normalizeBeat(data: unknown): Beat | null {
             .filter(([, flag]) => flag === true)
             .map(([id]) => [id, true as const]),
         ),
+      scores: readScores,
       musicMood: z.enum(MUSIC_MOODS),
       cg: z
         .object({
@@ -223,12 +267,16 @@ export function normalizeBeat(data: unknown): Beat | null {
     }),
     data,
   );
+  const beat = withoutEmpty(read, "scores");
   return beat.segments.length || beat.easedOff ? beat : null;
 }
 
-/** The plan as the client sees it: no guides, casts, reveals, ledger or the grievance a repair is for. */
+/**
+ * The plan as the client sees it: no guides, casts, reveals, ledger, the grievance a repair is for, or a date's plan
+ * (GET .../dates shows a date).
+ */
 export function toChapterView(chapter: Chapter): ChapterView {
-  const { nodes, ledger: _ledger, connectionId: _connection, grievance: _grievance, ...rest } = chapter;
+  const { nodes, ledger: _ledger, connectionId: _connection, grievance: _grievance, date: _date, ...rest } = chapter;
   return {
     ...rest,
     nodes: nodes.map(({ i, kind, moment, cg, gate }) => ({
@@ -241,8 +289,11 @@ export function toChapterView(chapter: Chapter): ChapterView {
   };
 }
 
-/** The beat as the client sees it: without its effects, and without its stored confrontation (it gets a view). */
+/**
+ * The beat as the client sees it: without its effects, its stored confrontation (it gets a view) or a date beat's
+ * scores.
+ */
 export function toBeatView(beat: Beat): BeatView {
-  const { effects: _effects, applied: _applied, confrontation: _confrontation, ...rest } = beat;
+  const { effects: _effects, applied: _applied, confrontation: _confrontation, scores: _scores, ...rest } = beat;
   return rest;
 }

@@ -21,6 +21,10 @@
 //   beat counts as read, and the lookahead written from the uncut scene is removed (again on a retry, and by the
 //   lookahead itself when it was saved just after the cut). A Confrontation eased off after its ending keeps its canon
 //   whole, so its lookahead stays.
+// - A date's beat (M5, chapter kind "date") has exactly one small choice whose options each carry a hidden `score`
+//   (−1/0/1, how the date's love interest takes it; at least one scores 1), read by index like the effects and saved
+//   as `beat.scores`. A date never ends on a big choice, and an option opens a grievance only on a date planned to go
+//   wrong, and then at most a minor one. S/minigames/date-night.ts totals the scores of the first-play picks.
 // M2b:
 // - A confrontation node with a love interest in it is written by P12 as a stance game (S/story/confrontation.ts):
 //   the beat's segments are its opening. Each stance is saved on the beat once (chooseStance) and its effects reach
@@ -53,6 +57,7 @@ import type {
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { stageRow, type Stance } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import type { DateScore } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import {
   FACES,
@@ -137,6 +142,8 @@ export interface BeatContext {
   last: boolean;
   /** The beat must end on one big choice (a stage-5 route chapter's gate). */
   mustChoose?: boolean;
+  /** A date's beat (M5): one scored choice, no big choice, and a grievance only when the date was planned to go wrong. */
+  date?: { goesWrong: boolean };
 }
 
 interface NormalizeOptions {
@@ -277,7 +284,7 @@ export function normalizeBeatReply(reply: BeatReply, context: BeatContext): Norm
     reply,
     { start: context.node.place, cgOpen: !!context.node.cg, context } as NormalizeOptions,
     normalizeBeatBody,
-    { enabled: true, terminal: context.last, label: forgeChoiceLabel },
+    { enabled: true, terminal: context.last && !context.date, label: forgeChoiceLabel },
   );
   if (!beat) {
     return "the segments or choices did not follow the format (check the PLAYER CHOICES rules: 2-4 options, a selection each, branches of 1-8 segments, distinct `at` indexes)";
@@ -286,7 +293,8 @@ export function normalizeBeatReply(reply: BeatReply, context: BeatContext): Norm
   if (context.mustChoose && !choices.some((choice) => choice.kind === "big")) {
     return "this node must end on ONE big choice (see the PLAYER CHOICES rules for a big choice)";
   }
-  return { ...beat, choices };
+  const dateProblem = context.date ? dateChoiceProblem(reply, choices) : "";
+  return dateProblem || { ...beat, choices };
 }
 
 /** P6's segment rules, lent to P12 (S/story/confrontation.ts normalizes each of its lists with them). */
@@ -295,6 +303,48 @@ export function segmentLists(context: BeatContext): SegmentLists {
     list: (raw, start) => normalizeBeatBody(raw, { start, context }),
     thoughts: (raw, counts) => thoughtProblem(context, raw, counts),
   };
+}
+
+/** A score as stored: 1, 0 or −1; anything else (missing, a word, 2) is null. */
+function readScore(value: unknown): DateScore | null {
+  const number = typeof value === "string" && value.trim() ? Number(value) : value;
+  return number === 1 || number === 0 || number === -1 ? number : null;
+}
+
+/** The raw options of the reply's choice `choice-<c+1>`, by index. */
+function rawOptionsOf(reply: BeatReply, c: number): unknown[] {
+  const raw = Array.isArray(reply.choices) ? reply.choices[c] : undefined;
+  const options = (raw as { options?: unknown } | undefined)?.options;
+  return Array.isArray(options) ? options : [];
+}
+
+/** Why a date beat's choices break the date's rules (exactly one small choice, every option scored, one scoring 1). */
+function dateChoiceProblem(reply: BeatReply, choices: readonly ForgeChoice[]): string {
+  if (choices.length !== 1 || choices[0]!.kind !== "small") {
+    return "a date's beat needs exactly ONE small choice (2 to 4 options), never more and never a big one";
+  }
+  const scores = rawOptionsOf(reply, 0).map((option) => readScore((option as { score?: unknown } | null)?.score));
+  if (scores.length !== choices[0]!.options.length || scores.some((score) => score === null)) {
+    return 'every option of the date\'s choice needs a "score" of 1, 0 or -1';
+  }
+  if (!scores.includes(1)) return "at least one option of the date's choice must score 1 (something they would love)";
+  return "";
+}
+
+/** A date beat's hidden scores, read from the raw reply at the indexes the kit numbered the choices and options by. */
+export function scoresOf(reply: BeatReply, choices: readonly ForgeChoice[]): NonNullable<Beat["scores"]> {
+  const scores: NonNullable<Beat["scores"]> = {};
+  for (const [c, choice] of choices.entries()) {
+    if (choice.id !== `choice-${c + 1}`) continue;
+    const raw = rawOptionsOf(reply, c);
+    const own: Record<string, DateScore> = {};
+    for (const option of choice.options) {
+      const index = Number(/^option-(\d+)$/.exec(option.id)?.[1] ?? 0) - 1;
+      own[option.id] = readScore((raw[index] as { score?: unknown } | undefined)?.score) ?? 0;
+    }
+    scores[choice.id] = own;
+  }
+  return scores;
 }
 
 const unitSign = (value: unknown): -1 | 0 | 1 => {
@@ -337,10 +387,13 @@ export function effectsOf(reply: BeatReply, choices: readonly ForgeChoice[], con
         if (tension) effect.tension = tension;
         const grievance = source.grievance as Record<string, unknown> | undefined;
         const grievanceText = str(grievance?.text, EFFECT_TEXT_MAX);
-        if (grievanceText && (grievance?.by === "li" || grievance?.by === "protagonist")) {
-          const severity = ["minor", "major", "rupture"].includes(grievance.severity as string)
-            ? (grievance.severity as "minor" | "major" | "rupture")
-            : "minor";
+        // A date opens a grievance only when it was planned to go wrong, and never more than a minor one.
+        const mayOpen = !context.date || context.date.goesWrong;
+        if (mayOpen && grievanceText && (grievance?.by === "li" || grievance?.by === "protagonist")) {
+          const severity =
+            !context.date && ["minor", "major", "rupture"].includes(grievance.severity as string)
+              ? (grievance.severity as "minor" | "major" | "rupture")
+              : "minor";
           effect.grievance = { by: grievance.by, text: grievanceText, severity };
         }
         const disclose = str(source.disclose, EFFECT_TEXT_MAX);
@@ -451,7 +504,15 @@ async function generateBeat(
   const mustChoose =
     chapter.kind === "route" && !!node.gate && !!chapter.stage && stageRow(chapter.stage).gate === "confrontation";
   const cgExplicit = explicitCgAllowed(run.world);
-  const context: BeatContext = { node, units, state: run.state, last, mustChoose, cgExplicit };
+  const context: BeatContext = {
+    node,
+    units,
+    state: run.state,
+    last,
+    mustChoose,
+    cgExplicit,
+    ...(chapter.kind === "date" ? { date: { goesWrong: chapter.date?.goesWrong ?? false } } : {}),
+  };
   const opponent = confrontationOpponent(chapter, node, units);
   const input = { world: run.world, player: run.player, units, state: run.state, chapter, node, storySoFar, memory };
   let body: Omit<Beat, "key" | "i" | "kind" | "choiceCanon" | "applied" | "readThrough" | "written" | "rewrites">;
@@ -515,6 +576,7 @@ async function generateBeat(
       segments: scene.segments,
       choices: scene.choices,
       effects: effectsOf(value, scene.choices, context),
+      ...(context.date ? { scores: scoresOf(value, scene.choices) } : {}),
       musicMood: scene.musicMood,
       ...(scene.cg ? { cg: scene.cg } : {}),
     };
@@ -927,7 +989,9 @@ export async function chooseStance(
 // ── Reading, and the end of a chapter ──
 
 /** The first-play picks a beat's canon holds: each choice picked, up to its Ease off cut. */
-const canonPicks = (beat: Beat): Array<[choice: string, option: string]> => {
+export const canonPicks = (
+  beat: Pick<Beat, "choices" | "choiceCanon" | "easedOff">,
+): Array<[choice: string, option: string]> => {
   const cut = beat.easedOff?.at ?? Infinity;
   return beat.choices.flatMap((choice) => {
     const option = beat.choiceCanon[choice.id];

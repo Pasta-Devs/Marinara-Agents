@@ -10,6 +10,7 @@ import {
   otomeSceneCard,
   SCENE_CARD_MAX_TOKENS,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/scene-card.ts";
+import { remapLearnedTells } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeBible } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { otomeWritingRules } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/writing-rules.ts";
 
@@ -127,6 +128,31 @@ test("a love interest whose bible is still being written gets only a name line; 
   assert.equal(otomeSceneCard({ name: "Sol", pronouns: THEY, bible: null }, { stage: 1 }), "Sol (they/them).");
   assert.match(otomeSceneCard(unit(), { stage: 9 }), /stage 6 \(Bond\)\. Changed toward the protagonist only\./);
   assert.match(otomeSceneCard(unit(), { stage: 0 }), /stage 1 \(Mask\)/);
+});
+
+test("an edited bible moves the learned tells with their text, never onto a tell that was not read", () => {
+  const before = bible().mask.tells;
+  const presents = bible().mask.presents;
+  const learnedLine = (card: string) => card.split("\n").find((line) => line.startsWith("The protagonist has learned"));
+  const cardFor = (tells: string[], tellsLearned: number[]) =>
+    otomeSceneCard(unit({ mask: { presents, tells } }), { stage: 1, tellsLearned });
+
+  // Tell 0 was read, then deleted: index 0 now holds another tell, and the card must not call that one out.
+  const deleted = before.slice(1);
+  assert.deepEqual(remapLearnedTells([0], before, deleted), []);
+  assert.equal(learnedLine(cardFor(deleted, remapLearnedTells([0], before, deleted))), undefined);
+  // A tell that was reworded is not the one that was read.
+  const reworded = ["polishes clean glass", "counts the steps", "won't sit", "hums"];
+  assert.deepEqual(remapLearnedTells([1], before, reworded), []);
+  // Reordered, the learned tell is the same one at its new place.
+  const reversed = [...before].reverse();
+  assert.deepEqual(remapLearnedTells([0, 2], before, reversed), [3, 1]);
+  assert.match(learnedLine(cardFor(reversed, [3, 1]))!, /: polishes clean glass; won't sit\.$/u);
+  assert.doesNotMatch(learnedLine(cardFor(reversed, [3, 1]))!, /hums|counts the bells/u);
+  // Appending a tell after the learned ones changes nothing.
+  const appended = [...before, "taps the rail"];
+  assert.deepEqual(remapLearnedTells([0, 2], before, appended), [0, 2]);
+  assert.equal(learnedLine(cardFor(appended, [0, 2])), learnedLine(cardFor(before, [0, 2])));
 });
 
 test("writing rules: story prompts get the knowledge boundary first, planners never; banned phrases are listed", () => {

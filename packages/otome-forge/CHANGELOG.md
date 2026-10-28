@@ -7,6 +7,14 @@
 - On a tracked day, Caring message asks the love interest on Home for a note. Only one line about today reaches your model provider, never the history; with Keep it off the model, or while debug logging is on, a comfort line written in advance answers instead. The note stays in this browser for the day only.
 - Home: on the shortest phones the rail tightens so the note keeps a line of its words, and a long name on Him / Me is cut short inside the rail rather than reach over the love interest's tap zones.
 
+## 0.0.7 — 2026-10-28
+
+- Dates opens: pick a love interest, then play Read Them, Date Night or the Claw Machine. Every activity pays even when it goes badly; only the day's rewards are capped (400 Starlight from activities, 300 affection per love interest), never play.
+- Read Them: over five moments, read what your love interest really feels behind the face they wear, hear the thought, and learn tells later scenes remember.
+- Date Night: pick a place, even one your story painted, and what you both wear for three scenes of choices judged by what your love interest likes, with an optional keepsake image. During a rupture it becomes Make it right.
+- The Claw Machine makes no model or image call: take turns at a swinging claw, cheer until they cheat in their own way, and line a shelf with six plushies and one of each love interest. It plays by keyboard, with reduced motion and without images.
+- With voices on, their lines are read aloud. Each love interest alone remembers the games you played together.
+
 ## 0.0.6 — 2026-10-28
 
 - Wish opens: three banners every 14 days (Memories, a love interest's wardrobe, and yours), paid only with Starlight you earn (100 a wish; there is no real money). The pity count is exact ("5★ in 23"): a 5★ comes by the 60th wish and is always the featured one, and past banners wait in Echoes on the same pity. Wishing never calls a model, and duplicates refund Starlight.

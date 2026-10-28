@@ -4,7 +4,10 @@
 // Imported by both bundles, so a code or field added on one side has to be handled on the other.
 import type { ConfrontationEnding, RouteEntry, Stance } from "./arcs";
 import type { ContentSettings, ImageRating, LimitId } from "./content";
+import type { DatePlan, DateScore } from "./dates";
 import type { Face, MusicMood } from "./faces";
+import type { ClawRound } from "./claw";
+import type { ReadHimPaid } from "./read-him";
 import type { ClawLineKind, TapZone, TimeOfDay } from "./home";
 import type { BannerKind, PityCounter, Rarity } from "./wish";
 
@@ -578,6 +581,8 @@ export interface LiState {
   angst: string[];
   /** Dated firsts for the Love Timeline: first-kind → ISO time. */
   firsts: Record<string, string>;
+  /** Indexes into his bible's `mask.tells` the protagonist has learned to read (Read Him, M5). */
+  tellsLearned: number[];
 }
 
 /** A chapter's reading progress. `applied` holds `${i}/${choiceId}` for every pick whose effects reached the state. */
@@ -648,8 +653,11 @@ export interface RunState {
   album: { cgs: AlbumCg[] };
   /** M4: each banner kind's pity (GF's counter names), carried over from banner to banner and shared by Echoes. */
   pity: Record<BannerKind, PityCounter>;
-  /** M4: the item ids the player owns, in the order won, and when each was won (an ISO time, by item id). */
-  owned: { items: string[]; at: Record<string, string> };
+  /**
+   * What the player owns. M4: the item ids, in the order won, and when each was won (an ISO time, by item id). M5: the
+   * plush shelf, prize id → how many (SH/claw.ts).
+   */
+  owned: { items: string[]; at: Record<string, string>; plush: Record<string, number> };
   /**
    * M4: the love interests whose Memory Selector (affection 10) has been used, each with the Memory it claimed (`true`:
    * an early claim that did not record which).
@@ -657,6 +665,10 @@ export interface RunState {
   selector: Record<LiId, string | true>;
   /** M4: the newest pulls by request id, so a retried pull answers with the same results and charges once. */
   pulls: WishPullRecord[];
+  /** Each LI's newest finished Claw Machine rounds (M5): a repeated finish is answered from here; each is his memory. */
+  claw: { rounds: ClawRound[] };
+  /** The newest paid Read Him sets (M5): the finish's once-only mark, in the same write as its pay. */
+  readHim: { paid: ReadHimPaid[] };
 }
 
 /** One pull as the state keeps it (S/wish/pull.ts), for answering a retried request. */
@@ -726,6 +738,8 @@ export interface Chapter {
   connectionId: string;
   /** A Memory's Character Story (M4): the line its card voices, kept with the chapter so the item is always given it. */
   voicedLine?: string;
+  /** A date's own plan (M5, SH/dates.ts); hidden from the chapter view. */
+  date?: DatePlan;
 }
 
 /** A segment of a beat: one line of dialogue, one thought, or one piece of narration. */
@@ -788,6 +802,8 @@ export interface Beat {
   effects: Record<string, Record<string, Effect[]>>;
   /** Picks whose effects were applied (hidden from the client). */
   applied: Record<string, true>;
+  /** A date's beat (M5): choiceId → optionId → how the date's love interest takes it (hidden from the client). */
+  scores?: Record<string, Record<string, DateScore>>;
   musicMood: MusicMood;
   /**
    * A key image's brief: `at` is the segment it opens on; `brief` is English. `art` is its paint (M2b, S/art/cg.ts).
@@ -895,12 +911,15 @@ export type ChapterState = "unplanned" | "in-progress" | "done";
 export type BeatState = "unwritten" | "ready" | "read";
 
 /** A chapter as the client sees it: no guides and no ledger (the plan is the hidden story). */
-export type ChapterView = Omit<Chapter, "nodes" | "ledger" | "connectionId"> & {
+export type ChapterView = Omit<Chapter, "nodes" | "ledger" | "connectionId" | "date"> & {
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;
 };
 
-/** A beat as the client sees it: without its effects or its stored confrontation (POST .../beats/:i sends a view). */
-export type BeatView = Omit<Beat, "effects" | "applied" | "confrontation">;
+/**
+ * A beat as the client sees it: without its effects, its stored confrontation (POST .../beats/:i sends a view) or a
+ * date's scores.
+ */
+export type BeatView = Omit<Beat, "effects" | "applied" | "confrontation" | "scores">;
 
 /** GET /runs/:run/art/scene (M2b): what the reader polls while a beat's art is painting. */
 export interface SceneArt {
@@ -956,6 +975,14 @@ export interface ChapterDetail {
 /** What one request earned. */
 export interface Grant {
   source: "beat" | "chapter" | "lead" | "foil";
+  starlight?: number;
+  li?: LiId;
+  affection?: number;
+}
+
+/** What an activity (Read Him, a date, a Claw round) earned, within the day's caps. */
+export interface ActivityGrant {
+  source: "read-him" | "date" | "claw";
   starlight?: number;
   li?: LiId;
   affection?: number;

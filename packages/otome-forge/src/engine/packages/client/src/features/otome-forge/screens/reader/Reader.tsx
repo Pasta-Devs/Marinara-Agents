@@ -63,6 +63,8 @@ interface ReaderProps {
   /** The way out's label when it leads somewhere other than the Story screen (M4: Wish, the Wardrobe, the Album). */
   exitLabel?: string;
   onHome: () => void;
+  /** Called once the last node is read, in place of the chapter's end card (a date shows its own ending, M5). */
+  onFinished?: () => void;
 }
 
 const INTERACTIVE = "button, a, input, select, textarea, summary, [role='dialog']";
@@ -82,7 +84,7 @@ const AUDIO_NOTICE_KEYS = {
   voiceFailed: "ui.otomeForge.audio.voiceFailed",
 } as const;
 
-function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, onHome }: ReaderProps) {
+function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, onHome, onFinished }: ReaderProps) {
   const { t } = useTranslation();
   const reducedMotion = useReducedMotion();
   const audio = useOtomeAudio();
@@ -112,6 +114,11 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
 
   const chapter = reader.detail?.chapter ?? null;
   const { beat, current } = reader;
+  const finishedRef = useRef(onFinished);
+  finishedRef.current = onFinished;
+  useEffect(() => {
+    if (reader.finished) finishedRef.current?.();
+  }, [reader.finished]);
   const protagonist = view.player.name;
   const voice = current ? voiceOf(current.segment, view.lis, protagonist) : null;
   const aftermath = current?.kind === "aftermath";
@@ -413,6 +420,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
             onExit={onExit}
             exitLabel={exitLabel}
             onHome={onHome}
+            ownEnding={!!onFinished}
             onEaseOff={() => openDialog("ease")}
           />
         )}
@@ -478,6 +486,8 @@ interface BottomPanelProps {
   onExit: () => void;
   exitLabel?: string;
   onHome: () => void;
+  /** The screen that opened the reader shows the ending itself. */
+  ownEnding: boolean;
   onEaseOff: () => void;
 }
 
@@ -510,6 +520,7 @@ function BottomPanel(props: BottomPanelProps) {
       </section>
     );
   }
+  if (reader.finished && chapter && props.ownEnding) return null;
   if (reader.finished && chapter) {
     return (
       <ChapterEnd
