@@ -1,3 +1,7 @@
+## 1.27.3 — 2026-10-28
+
+- Characters can equip their designated weapons even when a saved weapon has a different type from their role. The intended owner sees it in Gear and can equip it without regenerating the weapon. Signature skills still activate only for their owner; other characters keep the normal weapon-type rules.
+
 ## 1.27.2 — 2026-10-28
 
 - The narrator, the chapter planners and characters writing messages are asked to read every character's mind more carefully: what each one knows, wants and feels.

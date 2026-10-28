@@ -372,7 +372,9 @@ async function shippedGrowthRoutes({ weapon = {}, combatMode = "classic" } = {})
   let beforeSessionWrite;
   const seed = (id, kind, data) =>
     docs.set(id, { id, kind, packageId: "gacha-forge", revision: 1, data: structuredClone(data) });
-  seed("index", "index", { runs: [{ runId, name: "Synthetic upgrade world", combatMode }] });
+  seed("index", "index", {
+    runs: [{ runId, name: "Synthetic upgrade world", combat: { mode: combatMode, revision: 0 } }],
+  });
   const character = {
     kind: "character",
     name: "Arden",
@@ -503,7 +505,7 @@ test("shipped weapon choices and equip honor the designated owner while preservi
 });
 
 test("shipped onlyFree equipment route rejects occupied weapons/relics and loses an occupancy race safely", async () => {
-  const fixture = await shippedGrowthRoutes();
+  const fixture = await shippedGrowthRoutes({ weapon: { weaponType: "focus", dedicatedTo: "Arden" } });
   const roster = fixture.session().roster;
   roster[fixture.otherId].weapon = fixture.weaponId;
   roster[fixture.otherId].core = "core-free";
@@ -531,6 +533,22 @@ test("shipped onlyFree equipment route rejects occupied weapons/relics and loses
   assert.equal(manual.ok, true, "explicit manual transfer remains available");
   assert.equal(fixture.session().roster[fixture.otherId].weapon, undefined);
   assert.equal(fixture.session().roster[fixture.unitId].weapon, fixture.weaponId);
+});
+
+test("the designated weapon exception still requires owned characters and weapons from the same run", async () => {
+  const fixture = await shippedGrowthRoutes({ weapon: { weaponType: "focus", dedicatedTo: "Arden" } });
+  assert.equal((await fixture.call("/equip", { weaponId: "another-run:unit:signature" })).error, "bad-request");
+  assert.equal(
+    (await fixture.call("/equip", { weaponId: "upgrade-route-fixture:unit:missing" })).error,
+    "not-a-weapon",
+  );
+  assert.equal((await fixture.call("/equip", { weaponId: fixture.otherId })).error, "not-a-weapon");
+  delete fixture.session().roster[fixture.weaponId];
+  assert.equal((await fixture.call("/unit")).gear.options.length, 0);
+  assert.equal((await fixture.call("/equip", { weaponId: fixture.weaponId })).error, "not-owned-weapon");
+  fixture.session().roster[fixture.weaponId] = { level: 1 };
+  delete fixture.session().roster[fixture.unitId];
+  assert.equal((await fixture.call("/equip", { weaponId: fixture.weaponId })).error, "not-owned");
 });
 
 test("shipped bulk-training route charges all tier costs once, enforces caps and preserves a competing save", async () => {
