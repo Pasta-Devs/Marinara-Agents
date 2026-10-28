@@ -124,26 +124,26 @@ function storyPrompts(content: ContentSettings): Record<string, string> {
 }
 
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerHis: "7df8126d60d98fdb",
-  bannerMemories: "66fb123754df5ad6",
-  bannerMine: "e849bc253bece7d4",
-  beat: "65aebb304c7ef10d",
-  beatWithCg: "f704d3fd3825f875",
-  chapterPlan: "a51e0301a4c039a0",
-  confrontation: "627894dcb2c7da69",
-  repairPlan: "b723cadb25fc5560",
-  routePlan: "8587f25b314d301f",
+  bannerHis: "9f88358b3085ce91",
+  bannerMemories: "0169fd58890dfe72",
+  bannerMine: "3d8c1ced038c15cb",
+  beat: "26ae7c03c6477077",
+  beatWithCg: "e4c9fb19f55a5c0c",
+  chapterPlan: "b0b864adf6e88763",
+  confrontation: "e884776c61d0e05d",
+  repairPlan: "bbb961b32cd87134",
+  routePlan: "a317d3f37a10c227",
 };
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerHis: "dec58b6fc7b894f1",
-  bannerMemories: "61c1ee1f7d766c06",
-  bannerMine: "50e8ea2b9623f9bc",
-  beat: "e495e25bda2cb8a6",
-  beatWithCg: "08bfa62ed904ebf7",
-  chapterPlan: "5e39e185b47904e7",
-  confrontation: "5e66707013252540",
-  repairPlan: "3dfe0a4be93ebbf5",
-  routePlan: "68f7b0cd75aac72b",
+  bannerHis: "774b75feb9439096",
+  bannerMemories: "c737709b895607d1",
+  bannerMine: "838a68a677d26442",
+  beat: "7bcc1b345f2c3094",
+  beatWithCg: "54c95d13ff323ecc",
+  chapterPlan: "79f1f0c45ee46aad",
+  confrontation: "39f5ad1acb0a4d09",
+  repairPlan: "cac8ded5e9b4e8d2",
+  routePlan: "d04ec65ae81cbe97",
 };
 
 test("the SFW defaults send the story and banner prompts they sent before NSFW mode, byte for byte", () => {

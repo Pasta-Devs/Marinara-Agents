@@ -8,6 +8,7 @@ import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs"
 import { BANNED_PHRASES } from "../../../../client/src/features/otome-forge/shared/banned-phrases.js";
 
 export const WRITING_RULES = [
+  "Put on your I-Have-Good-Theory-Of-Mind Hat.",
   "An open grievance stays open until a scene resolves it.",
   "Before stage 4, tenderness costs a love interest something.",
   "A love interest wants something besides the protagonist in every scene.",

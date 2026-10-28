@@ -1,3 +1,7 @@
+## 1.27.2 — 2026-10-28
+
+- The narrator, the chapter planners and characters writing messages are asked to read every character's mind more carefully: what each one knows, wants and feels.
+
 ## 1.27.1 — 2026-10-28
 
 - Scenes, key images, story event art, chat photos, Bond backgrounds and banners now send each character's face (their card's avatar, your persona's, or their saved portrait) and, when the picture paints them in the outfit they have on, that outfit's image too. A character card's unit used to send only its card avatar.
