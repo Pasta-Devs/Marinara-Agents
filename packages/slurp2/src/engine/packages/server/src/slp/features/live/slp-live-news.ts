@@ -1,6 +1,6 @@
 import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
-import { slpLiveTopTipper } from "../../../../../shared/src/slp/slp-live.js";
+import { slpLiveSummaryText } from "../../../../../shared/src/slp/slp-live.js";
 import type { SlurpLiveShow } from "../../data/live/slp-live-storage.js";
 import { createSlurpEventsStorage } from "../../data/notifications/slp-notification-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
@@ -30,26 +30,13 @@ export async function notifySlurpLiveStart(db: DB, show: SlurpLiveShow) {
   }
 }
 
-/** The Creator's thank-you post after a show, written by code from the show's own numbers. */
-export function slpLiveSummaryText(show: SlurpLiveShow) {
-  const top = slpLiveTopTipper(show.state);
-  const thanks = top ? ` Extra love to ${top.name} for the biggest tips.` : "";
-  const lines = [
-    `That stream was so much fun, thank you all for hanging out!${thanks}`,
-    `Still buzzing from tonight's live. ${show.state.raised} coins raised, you are the best chat.${thanks}`,
-    `Live is over, thank you for every tip and every message.${thanks} See you next time.`,
-  ];
-  const seed = [...show.id].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return lines[seed % lines.length]!;
-}
-
 export async function postSlurpLiveSummary(db: DB, show: SlurpLiveShow) {
   // Nobody tipped and nobody talked: a quiet show leaves no post behind.
   if (!show.state.raised && !show.state.log.some((event) => event.kind === "you")) return;
   await createSlurpStorage(db)
     .createPost({
       authorAccountId: show.hostId,
-      content: slpLiveSummaryText(show),
+      content: slpLiveSummaryText(show.id, show.state),
       source: "generated",
       metadata: { liveShowId: show.id },
     })
