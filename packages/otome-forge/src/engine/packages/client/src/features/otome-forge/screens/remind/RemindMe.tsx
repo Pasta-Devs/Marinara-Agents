@@ -293,6 +293,8 @@ export function RemindMe({ runKey, view, onOpenTracker }: RemindMeProps) {
 
   const column = (day: string) => (weekdayOf(day) - weekStart + 7) % 7;
   const onGridKeyDown = (event: KeyboardEvent<HTMLTableElement>) => {
+    // Alt+Arrow (history), Cmd+Arrow and Ctrl/Cmd+Home/End belong to the browser.
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
     const rtl = (event.currentTarget.closest("[dir]")?.getAttribute("dir") ?? "ltr") === "rtl";
     const step: Record<string, () => string> = {
       ArrowRight: () => addDays(selected, rtl ? -1 : 1),

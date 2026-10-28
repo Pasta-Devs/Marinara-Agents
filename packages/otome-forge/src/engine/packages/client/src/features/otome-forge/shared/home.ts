@@ -59,14 +59,16 @@ export function wordCount(text: string): number {
 
 /**
  * Sentences in `text`, counted by their closing punctuation: Latin marks before a space, a quote or the end, CJK marks
- * anywhere. An unclosed last sentence counts too.
+ * anywhere. An unclosed last sentence counts too, when it holds a letter or digit.
  */
 export function sentenceCount(text: string): number {
   const value = text.trim();
   if (!value) return 0;
   const latin = value.match(/[.!?…]+(?=\s|$|["'”’」』)])/gu)?.length ?? 0;
   const cjk = value.match(/[。！？]+/gu)?.length ?? 0;
-  return latin + cjk + (/[.!?…。！？]["'”’」』)]*$/u.test(value) ? 0 : 1);
+  // The text after the last terminator is another sentence only when it holds a word (a trailing ♡ or :) is not one).
+  const tail = value.replace(/^[\s\S]*[.!?…。！？]/u, "");
+  return latin + cjk + (/[\p{L}\p{N}]/u.test(tail) ? 1 : 0);
 }
 
 /**

@@ -57,8 +57,11 @@ export function CaringMessage({ runKey, li, player, today, dayKey, lines, onClos
   const key = careNoteKey(runKey, li.id);
   const [state, setState] = useState<CareState>(() => {
     // A note kept for another state of the day (due, then a start logged) no longer answers it.
+    // A comfort line kept for a mode that is off now (Keep it off the model, debug mode) is asked for again.
     const kept = readCareNote(dayKey, key);
-    return kept && kept.state === careStateKey(today) ? { kind: "ready", entry: kept } : { kind: "writing" };
+    const holds =
+      kept?.reason === "kept-off" ? readCycle().mode === "keep-off-model" : kept?.reason === "debug" ? debugMode : true;
+    return kept && holds && kept.state === careStateKey(today) ? { kind: "ready", entry: kept } : { kind: "writing" };
   });
   const [attempt, setAttempt] = useState(0);
   const closeRef = useRef<HTMLButtonElement>(null);

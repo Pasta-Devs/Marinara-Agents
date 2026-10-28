@@ -204,7 +204,7 @@ export function Thread({ runKey, li, quote: initialQuote, focusHeading, onBack, 
         // Unknown: keep her words.
       }
       if (local && !saved) {
-        setDraft((current) => current || local.text);
+        if (fromDraft) setDraft((current) => current || local.text);
         if (local.quote) setQuote((current) => current ?? local.quote ?? null);
       }
       setOutgoing(null);

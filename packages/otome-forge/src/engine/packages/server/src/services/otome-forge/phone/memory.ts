@@ -26,7 +26,6 @@ import type {
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { AFFECTION_EARNINGS } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { generateJson, runForeground } from "../generation.js";
-import { OtomeForgeError } from "../http.js";
 import { chatId, runDocTarget, stateId } from "../ids.js";
 import { normalizeState } from "../schemas/state.js";
 import { grant } from "../state/rewards.js";
@@ -121,9 +120,12 @@ async function close(deps: PhoneDeps, runId: string, li: LiId, debugMode: boolea
       });
     } catch (error) {
       // The session is saved; its affection is not paid twice by a retry, so a grant that cannot land is let go.
-      if (!(error instanceof OtomeForgeError)) throw error;
       affection = 0;
-      deps.runtime.logger.warn("[otome-forge] Close and remember for %s kept no affection: %s", li, error.message);
+      deps.runtime.logger.warn(
+        "[otome-forge] Close and remember for %s kept no affection: %s",
+        li,
+        error instanceof Error ? error.message : String(error),
+      );
     }
     if (affection) grants.push({ source: "close-and-remember", li, affection });
   }

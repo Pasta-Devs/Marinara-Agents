@@ -60,7 +60,7 @@
   "ui.otomeForge.audio.stopVoice": "Stop the voice",
   "ui.otomeForge.audio.tab": "Audio",
   "ui.otomeForge.audio.tts": "Voice the dialogue",
-  "ui.otomeForge.audio.ttsHint": "Love interests speak with their Engine voice, or a default one, in the story and on Home; you speak with your persona’s voice. Each line is voiced once, then kept, except a Rough day? comfort line.",
+  "ui.otomeForge.audio.ttsHint": "Love interests speak with their Engine voice, or a default one, in the story and on Home; you speak with your persona’s voice. Each line is voiced once, then kept, except a Rough day? comfort line and a Caring message.",
   "ui.otomeForge.audio.voiceFailed": "A line couldn’t be voiced. The scene goes on without it.",
   "ui.otomeForge.audio.voicesHint": "Voices are the Engine’s: assign them in its voice settings. Narration and thoughts stay silent.",
   "ui.otomeForge.audio.voicesTitle": "Voices",
