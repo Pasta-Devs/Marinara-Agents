@@ -256,7 +256,7 @@ async function openOtome(page: Page, { reviewPrompts = false }: { reviewPrompts?
     { version: appVersion, review: reviewPrompts },
   );
   await page.goto("/");
-  await page.getByRole("tab", { name: "Open Otome Forge" }).click();
+  await page.getByRole("tab", { name: "Open Otome Hearth" }).click();
   const root = page.locator("marinara-capability-otome-forge .of-root");
   await expect(root).toBeVisible({ timeout: 60_000 });
   return root;
