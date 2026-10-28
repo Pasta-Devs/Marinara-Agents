@@ -42,7 +42,12 @@ export type SlurpPostJob = {
 export const SLURP_POST_JOBS: readonly SlurpPostJob[] = [
   { id: "mirror-selfie", niches: [], line: "a mirror selfie: one quick shot of how you look right now." },
   { id: "try-on-haul", niches: [], line: "an outfit try-on haul: a few new pieces, one picture in your favourite." },
-  { id: "get-ready", niches: [], line: "get ready with me: hair, make-up or getting dressed before you go out." },
+  {
+    id: "get-ready",
+    niches: [],
+    place: "your mirror",
+    line: "get ready with me: hair, make-up or getting dressed before you go out.",
+  },
   {
     id: "morning-bed",
     niches: [],
@@ -82,10 +87,15 @@ export const SLURP_POST_JOBS: readonly SlurpPostJob[] = [
     minHeat: 1,
     line: "a thank-you for a tip goal you hit: the reward picture you promised.",
   },
-  { id: "day-off", niches: [], line: "a day off at home: comfy clothes, couch, snacks, no plans." },
-  { id: "night-out", niches: [], line: "a night-out look: dressed up just before you leave." },
+  { id: "day-off", niches: [], place: "your home", line: "a day off at home: comfy clothes, couch, snacks, no plans." },
+  { id: "night-out", niches: [], place: "your hallway", line: "a night-out look: dressed up just before you leave." },
   { id: "workout-set", niches: ["fitness"], line: "a workout set: mid-training.", place: "the gym" },
-  { id: "post-gym", niches: ["fitness"], line: "a post-gym set: flushed and sweaty, still in your training clothes." },
+  {
+    id: "post-gym",
+    niches: ["fitness"],
+    place: "the gym",
+    line: "a post-gym set: flushed and sweaty, still in your training clothes.",
+  },
   {
     id: "progress-check",
     niches: ["fitness"],
@@ -142,6 +152,12 @@ export const SLURP_POST_JOBS: readonly SlurpPostJob[] = [
     line: "an outdoor set: out in nature.",
     place: "outdoors: a trail, a lake or a beach",
   },
+  { id: "song-clip", niches: ["music"], line: "a music post: a clip, a lyric or a track you are working on." },
+  { id: "move-clip", niches: ["dance"], line: "a dance post: a move or a short routine you are proud of." },
+  { id: "build-log", niches: ["tech"], line: "a tech post: a gadget, a build or a bug you finally fixed." },
+  { id: "geek-out", niches: ["nerd"], line: "a nerd post: something you geeked out over today." },
+  { id: "trip-find", niches: ["outdoors"], line: "an outdoors post: a view or a find from your latest trip." },
+  { id: "dish-photo", niches: ["cooking"], line: "a cooking post: the dish you made and how it turned out." },
   { id: "fit-check", niches: ["fashion", "alt"], line: "a fit check: today's whole look, head to toe." },
   {
     id: "kitchen-set",

@@ -180,7 +180,13 @@ export async function saveSlurpCanonAnchors(
       anchors && unread && !anchors.essentials?.length
         ? normalizeSlurpCanonAnchors({ ...anchors, essentials: undefined })
         : anchors;
-    return { key: stored?.key ?? "", anchors: mine, edited: true, ...(extracted === undefined ? {} : { extracted }) };
+    // The editor does not edit niches, so a stale body must not erase the stored ones.
+    return {
+      key: stored?.key ?? "",
+      anchors: mine && { ...mine, niches: stored?.anchors?.niches ?? mine.niches },
+      edited: true,
+      ...(extracted === undefined ? {} : { extracted }),
+    };
   });
 }
 

@@ -78,6 +78,18 @@ assert.ok(
   "a post with no place may take a placed job",
 );
 
+// A Creator whose day sets the place still gets a niche job, and no implied-setting job.
+for (const main of ["music", "dance", "tech", "nerd", "outdoors", "cooking"] as const) {
+  const jobs = Array.from({ length: 100 }, (_, sequence) =>
+    selectSlurpPostJob("fit", sequence, { main, side: [] }, {}, { heatMax: 3, placeFree: false }),
+  );
+  assert.ok(
+    jobs.some((job) => job!.niches.includes(main)),
+    `${main} has a place-free job`,
+  );
+  assert.ok(jobs.every((job) => !job!.place && !["day-off", "night-out", "post-gym", "get-ready"].includes(job!.id)));
+}
+
 // No niche (an old cache): everyday jobs only.
 for (let sequence = 0; sequence < 50; sequence += 1)
   assert.deepEqual(selectSlurpPostJob("old", sequence, undefined, {})!.niches, []);
