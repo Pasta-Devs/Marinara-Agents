@@ -7,8 +7,13 @@
 // text and tags are added here. A prompt the player edited in the review dialog keeps every rating and adult tag:
 // the missing ones are appended again. Image prompts are always English. GF's buildImagePromptsMessages (server.mjs,
 // offset 574915) is the reference for the wording.
-import type { Presentation, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+// M2b adds a place (scenery from the beat's English tags, no people), a story CG (the narrator's English brief, then
+// each person's identity and outfit lines; at most 4 people, matching the references) and an expression edit (the
+// kit's edit instruction, which changes only the face). Each one carries the rating and adult tags the same way.
+import { forgeStoryExpressionPrompt } from "@forge-kit/story-expressions-server.mjs";
+import type { Presentation, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import type { ImageRating } from "../../../../../client/src/features/otome-forge/shared/content.js";
+import { FACE_LOOKS, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { otomeContentContract } from "../content-contract.js";
 import type { StyleProfile } from "./image-client.js";
 
@@ -92,4 +97,143 @@ export function lookPrompt(input: LookInput, edited: Partial<ImagePrompt> = {}):
     ? withTags(edited.negativePrompt, requiredNegative)
     : mergeTags(LOOK_NEGATIVE, requiredNegative, style.negativeTags);
   return { prompt, negativePrompt };
+}
+
+// ── M2b: places, story CGs and expressions ──
+
+export const PLACE_FRAMING = "scenery, no humans, wide establishing shot, detailed background, atmospheric lighting";
+const PLACE_NEGATIVE =
+  "people, person, humans, crowd, character, text, captions, logos, watermarks, borders, UI, collage layouts";
+export const CG_FRAMING = "cinematic composition, detailed background, dramatic lighting, emotional moment";
+const CG_NEGATIVE =
+  "text, captions, logos, watermarks, borders, UI, collage layouts, duplicate faces, cropped-off heads, extra limbs";
+/** At most this many people are drawn in a CG (and sent as references). */
+export const CG_PEOPLE_MAX = 4;
+
+const sentence = (value: string) => {
+  const text = value.trim().replace(/[,\s]+$/, "");
+  return !text || /[.!?…]$/.test(text) ? text : `${text}.`;
+};
+
+/** The negative prompt every image keeps: adults only and the rating's exclusions, then the kind's own. */
+function safeNegative(world: Pick<World, "images">, ...parts: string[]): string {
+  return mergeTags(...parts, ADULT_NEGATIVE, RATING_NEGATIVE[world.images.rating]);
+}
+
+/** An edited prompt keeps its wording with every required tag put back; otherwise `built()`. */
+function finish(
+  built: () => ImagePrompt,
+  required: string,
+  requiredNegative: string,
+  edited: Partial<ImagePrompt>,
+): ImagePrompt {
+  const fresh = edited.prompt?.trim() && edited.negativePrompt?.trim() ? null : built();
+  return {
+    prompt: edited.prompt?.trim() ? withTags(edited.prompt, required) : fresh!.prompt,
+    negativePrompt: edited.negativePrompt?.trim()
+      ? withTags(edited.negativePrompt, requiredNegative)
+      : fresh!.negativePrompt,
+  };
+}
+
+export interface PlaceInput {
+  /** The place's name in the world's language (only its English tags describe it). */
+  name: string;
+  /** 4–8 English image tags, from the beat. */
+  tags: string;
+  world: Pick<World, "content" | "images">;
+  style: StyleProfile;
+}
+
+/** A place: the beat's English tags as scenery, with no people in it. */
+export function placePrompt(input: PlaceInput, edited: Partial<ImagePrompt> = {}): ImagePrompt {
+  const { world, style } = input;
+  const required = otomeContentContract({ world, lis: [], kind: "image" });
+  const requiredNegative = safeNegative(world);
+  return finish(
+    () => ({
+      prompt: [style.styleText, mergeTags(input.tags, PLACE_FRAMING, required, style.positiveTags)]
+        .filter(Boolean)
+        .join(", "),
+      negativePrompt: mergeTags(PLACE_NEGATIVE, requiredNegative, style.negativeTags),
+    }),
+    required,
+    requiredNegative,
+    edited,
+  );
+}
+
+/** A person in a CG: who they are and what they wear (English, visual only), drawn as an adult. */
+export interface CgPerson {
+  name: string;
+  identityLine: string;
+  outfitLine: string;
+  presentation: Presentation;
+}
+
+export interface CgInput {
+  /** The narrator's English brief: where and how the moment is shot, never anyone's looks. */
+  brief: string;
+  people: readonly CgPerson[];
+  world: Pick<World, "content" | "images">;
+  style: StyleProfile;
+}
+
+/** A story CG: the brief, each person's look, then the framing, rating and adult tags for every person. */
+export function cgPrompt(input: CgInput, edited: Partial<ImagePrompt> = {}): ImagePrompt {
+  const { world, style } = input;
+  const people = input.people.slice(0, CG_PEOPLE_MAX);
+  const required = otomeContentContract({ world, lis: people, kind: "image" });
+  const requiredNegative = safeNegative(world);
+  const looks = people.map((person) => {
+    const look = [person.identityLine, person.outfitLine].map((line) => line.trim()).filter(Boolean);
+    const first = person.name.trim().split(/\s+/)[0] ?? "";
+    return look.length ? sentence(`${first}: ${look.join("; ")}`) : "";
+  });
+  return finish(
+    () => ({
+      prompt: [style.styleText, sentence(input.brief), ...looks, mergeTags(CG_FRAMING, required, style.positiveTags)]
+        .filter(Boolean)
+        .join(" "),
+      // One person: nobody else may appear. Two or more: the Engine's own "extra people" is left out on purpose.
+      negativePrompt: mergeTags(
+        CG_NEGATIVE,
+        people.length <= 1 ? "extra people" : "",
+        requiredNegative,
+        style.negativeTags,
+      ),
+    }),
+    required,
+    requiredNegative,
+    edited,
+  );
+}
+
+export interface ExpressionInput {
+  /** The love interest as stored: his name, identity and outfit lines, and his bible's presentation. */
+  unit: Pick<Unit, "name" | "identityLine" | "outfitLine" | "portrait" | "outfits" | "bible">;
+  /** The image the face is painted onto (his worn look, or his portrait). */
+  base: string;
+  face: Face;
+  world: Pick<World, "content" | "images">;
+  style: StyleProfile;
+}
+
+/**
+ * An expression: the kit's edit instruction (change only the face, from SH/faces.ts FACE_LOOKS, as a sentence or as
+ * tags for a tag profile), with the rating and adult tags appended and the safety negatives.
+ */
+export function expressionPrompt(input: ExpressionInput): ImagePrompt {
+  const { world, style, unit } = input;
+  const presentation = unit.bible?.look.presentation ?? "person";
+  const required = otomeContentContract({ world, lis: [{ name: unit.name, presentation }], kind: "image" });
+  const { prompt } = forgeStoryExpressionPrompt(unit, input.base, input.face, style, {
+    tagged: style.tagged === true,
+    looks: FACE_LOOKS,
+  });
+  return {
+    // A tag profile gets the tags; an edit instruction gets them as its closing sentence.
+    prompt: style.tagged ? withTags(prompt, required) : [sentence(prompt), sentence(required)].join(" "),
+    negativePrompt: mergeTags(safeNegative(world), style.negativeTags),
+  };
 }

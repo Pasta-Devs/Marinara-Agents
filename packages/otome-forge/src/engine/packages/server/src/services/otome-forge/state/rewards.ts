@@ -132,7 +132,7 @@ function saveLedger(state: RunState, chapter: ReadChapter): RunState {
     const index = conflicts.findIndex((entry) => entry.id === row.id);
     const li = lis[row.li];
     if (row.action === "plant" && index < 0 && li) {
-      conflicts.push({ id: row.id, li: row.li, type: row.type, status: "open", chapter: number });
+      conflicts.push({ id: row.id, li: row.li, type: row.type, status: "open", chapter: number, key });
       lis[row.li] = { ...li, angst: keepNewest([...li.angst, row.type], STATE_LIMITS.list) };
     } else if (row.action === "resolve" && index >= 0) {
       conflicts[index] = { ...conflicts[index]!, status: "resolved" };

@@ -1,6 +1,9 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the Home tab. Reads the host props, applies the look, and routes between the screens on the stage.
 // ──────────────────────────────────────────────
+// The active story's audio (M2b, hooks/use-otome-audio.ts) is held here for every screen, so its player and its music
+// carry on from Home to the Story screen, the reader and back: the reader's own provider then adds nothing. Its music
+// claims each scene's cue; the screens of a story play the home cue, and the others are silent.
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
@@ -11,6 +14,7 @@ import { Stage } from "./components/Stage";
 import { TopBar } from "./components/TopBar";
 import { INDEX_QUERY_KEY, useOtomeIndex } from "./hooks/use-index";
 import { useLook, type LookPreference } from "./hooks/use-look";
+import { OtomeAudioProvider } from "./hooks/use-otome-audio";
 import { fetchRunView, runQueryKey, useRun } from "./hooks/use-run";
 import { accentOf } from "./lib/accent";
 import { OtomePropsContext, readOtomeProps } from "./props";
@@ -238,8 +242,9 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     );
 
   const firstLi = view?.lis[0] ?? null;
+  const inStory = RUN_SCREENS.has(screen) || (screen === "settings" && RUN_SCREENS.has(settingsReturn));
   return (
-    <>
+    <OtomeAudioProvider run={view} cue={inStory ? "home" : null}>
       {/* The reader is full-stage: its own header carries the way out. */}
       {screen === "reader" ? null : (
         <TopBar
@@ -264,7 +269,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         {content}
       </div>
       {DOCKED.has(screen) ? <Dock active={screen} onSelect={selectDockScreen} /> : null}
-    </>
+    </OtomeAudioProvider>
   );
 }
 

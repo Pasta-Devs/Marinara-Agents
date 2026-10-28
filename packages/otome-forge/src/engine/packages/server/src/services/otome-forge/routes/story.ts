@@ -4,7 +4,10 @@
 // GET  /runs/:run/story                                        → StoryView
 // POST /runs/:run/chapters/next {lead}                         → {chapter: ChapterView}
 // GET  /runs/:run/chapters/:key                                → ChapterDetail
-// POST /runs/:run/chapters/:key/beats/:i {rewrite?}            → {beat: BeatView}; then the next node is queued
+// POST /runs/:run/chapters/:key/beats/:i {rewrite?, reviewImagePrompts?} → {beat, confrontation?: ConfrontationView};
+//                                                                 then the next node is queued (M2b: a confrontation
+//                                                                 node carries its stance game; S/routes/arcs.ts
+//                                                                 takes its stances)
 // POST /runs/:run/chapters/:key/beats/:i/choose {choice, option} → {beat: BeatView, remembered, rememberedBy}
 // POST /runs/:run/chapters/:key/beats/:i/read {segment}        → ReadResult {grants, starlight, chapterDone}
 // POST /runs/:run/chapters/:key/beats/:i/ease-off {segment}    → {beat: BeatView, veilSuggestions} & ReadResult
@@ -13,15 +16,27 @@
 // POST /runs/:run/favorites {text, ref, li?, keep?}            → {favorites}; keeps the line (keep: false lets it go),
 //                                                                 so sending it twice changes nothing
 // Writing a plan or a beat may fail with 503 `no-connection`, 422 `declined` (nothing is written) or 502
-// `bad-format`; a Cancel while it runs is a 409 `conflict`. Hidden parts (node guides, the ledger, effects, trust and
-// tension) never leave the server.
+// `bad-format`; a Cancel while it runs is a 409 `conflict`; a beat of a route chapter while a rupture stands is a 409
+// `locked`. Hidden parts (node guides, the ledger, effects, trust and tension, a confrontation's composure and the
+// endings not reached) never leave the server.
 import { z } from "zod";
-import type { Favorite } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import type { Beat, BeatView, Favorite } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { LIMIT_IDS } from "../../../../../client/src/features/otome-forge/shared/content.js";
-import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRequest, type RegisterRoutes } from "../http.js";
+import {
+  OtomeForgeError,
+  debugModeOf,
+  parseBody,
+  reviewModeOf,
+  runParam,
+  type OtomeRequest,
+  type RegisterRoutes,
+} from "../http.js";
 import { isChapterKey, isLiId, runDocTarget, stateId, worldId } from "../ids.js";
 import { STATE_LIMITS, keepNewest, normalizeState } from "../schemas/state.js";
+import { cgView } from "../art/cg.js";
+import { withPlaceViews } from "../art/places.js";
 import { toBeatView, toChapterView } from "../schemas/story.js";
+import { toConfrontationView } from "../story/confrontation.js";
 import { normalizeWorld, toWorldView } from "../schemas/world.js";
 import { cancellable, chooseOption, easeOff, readTo, serveBeat } from "../story/beats.js";
 import { chapterDetail, planNextChapter, storyView } from "../story/chapters.js";
@@ -46,7 +61,7 @@ const param = (request: OtomeRequest, name: string) => {
 };
 
 /** The `:key` and `:i` params, or a 404 (a malformed one names no chapter or beat). */
-function beatParams(request: OtomeRequest): { key: string; i: number } {
+export function beatParams(request: OtomeRequest): { key: string; i: number } {
   const key = param(request, "key");
   const index = Number(param(request, "i"));
   if (!isChapterKey(key)) throw new OtomeForgeError(404, "No such chapter.", "not-found");
@@ -55,6 +70,12 @@ function beatParams(request: OtomeRequest): { key: string; i: number } {
 }
 
 const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+
+/** The beat as the client sees it, its CG's paint left pending by a restart reading as `stopped` (S/art/cg.ts). */
+function beatView(runId: string, beat: Beat): BeatView {
+  const cg = cgView(runId, beat);
+  return { ...toBeatView(beat), ...(cg ? { cg } : {}) };
+}
 
 export const registerStoryRoutes: RegisterRoutes = (router, deps) => {
   const { store, handle } = deps;
@@ -94,8 +115,13 @@ export const registerStoryRoutes: RegisterRoutes = (router, deps) => {
       const { rewrite } = parseBody(BeatBody, request.body);
       const { runId } = runParam(request);
       const { key, i } = beatParams(request);
-      const beat = await serveBeat(deps, runId, key, i, { rewrite, debugMode: debugModeOf(request) });
-      return { beat: toBeatView(beat) };
+      const beat = await serveBeat(deps, runId, key, i, {
+        rewrite,
+        debugMode: debugModeOf(request),
+        review: reviewModeOf(request),
+      });
+      const confrontation = toConfrontationView(beat);
+      return { beat: beatView(runId, beat), ...(confrontation ? { confrontation } : {}) };
     }),
   );
 
@@ -106,7 +132,7 @@ export const registerStoryRoutes: RegisterRoutes = (router, deps) => {
       const { runId } = runParam(request);
       const { key, i } = beatParams(request);
       const { beat, remembered, rememberedBy } = await chooseOption(deps, runId, key, i, choice, option);
-      return { beat: toBeatView(beat), remembered, rememberedBy };
+      return { beat: beatView(runId, beat), remembered, rememberedBy };
     }),
   );
 
@@ -127,7 +153,7 @@ export const registerStoryRoutes: RegisterRoutes = (router, deps) => {
       const { runId } = runParam(request);
       const { key, i } = beatParams(request);
       const { beat, ...rest } = await easeOff(deps, runId, key, i, segment, { debugMode: debugModeOf(request) });
-      return { beat: toBeatView(beat), ...rest };
+      return { beat: beatView(runId, beat), ...rest };
     }),
   );
 
@@ -143,7 +169,7 @@ export const registerStoryRoutes: RegisterRoutes = (router, deps) => {
         return { ...current, content: { ...current.content, limits: next } };
       });
       if (!world) throw runNotFound();
-      return { world: toWorldView(world) };
+      return { world: toWorldView(withPlaceViews(runId, world)) };
     }),
   );
 
