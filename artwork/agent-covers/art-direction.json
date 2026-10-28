@@ -118,6 +118,12 @@
       "palette": "electric blue, orange, mint, violet"
     },
     {
+      "id": "stick-illustration",
+      "name": "Stick Illustration",
+      "concept": "Drawn by code, not generated: two stick figures, one pink and one blue, high-five while they dance on a ground line inside the medallion; no Mari, matching the Agent's own output style.",
+      "palette": "dusty pink, slate blue, cream, deep navy"
+    },
+    {
       "id": "inventory-tracker",
       "name": "Inventory Tracker",
       "concept": "Mari cheerfully inventories adventuring equipment in a neatly divided tray, presenting one gold coin while a sword, shield, potion, rope, and pouch remain clearly organized; no moustache or facial hair.",

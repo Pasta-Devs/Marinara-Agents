@@ -949,6 +949,22 @@
         }
       ]
     },
+    "stick-illustration": {
+      "versions": [
+        {
+          "version": "1.0.1",
+          "date": "2026-10-28",
+          "notes": "- Choose when it draws, per chat: Clear poses (default), Any body description, or Every reply.",
+          "highlight": false
+        },
+        {
+          "version": "1.0.0",
+          "date": "2026-10-28",
+          "notes": "- New Roleplay Agent: after an AI message with a clear pose — a fight, a dance, a hug, a sex scene — it adds a small stick-figure picture of the characters under the message.\n- Each character keeps one color, with a name legend at the top of the picture. Messages with only dialogue get no picture.",
+          "highlight": false
+        }
+      ]
+    },
     "story-writer": {
       "versions": [
         {

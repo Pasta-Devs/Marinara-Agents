@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "stick-illustration",
+  "name": "Stick Illustration",
+  "version": "1.0.1",
+  "description": "Draws a small stick-figure picture of the characters' poses under AI messages. Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",
+  "engine": {
+    "min": "2.3.0",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "5109edf4e3cdd85061ea954539bff10c73d81603835cdb2aa8fe31d62142b7f7",
+      "bytes": 11276
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Stick Illustration",
+    "description": "Draws a small stick-figure picture of the characters' poses under AI messages. Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode."
+  },
+  "agents": {
+    "stick-illustration": {
+      "name": "Stick Illustration",
+      "description": "Draws a small stick-figure picture of the characters' poses under AI messages.",
+      "promptTemplates": {
+        "any-body": {
+          "name": "Any body description",
+          "description": "Also draw small body details such as crossed arms or leaning on a wall."
+        },
+        "every-reply": {
+          "name": "Every reply",
+          "description": "Draw a picture under every reply, also for pure dialogue."
+        }
+      }
+    }
+  }
+}
