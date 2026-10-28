@@ -932,7 +932,8 @@ function homeLayout(root: Locator) {
       targets,
       /** How much of the note's own words shows (it scrolls when the stage is short). */
       noteText: element.querySelector(".of-note-text")?.clientHeight ?? 0,
-      rail: named(".of-home-rail > *", (node) => `rail: ${label(node)}`),
+      // M6's round Remind Me and Caring message share a row at the rail's foot: each counts as a button of its own.
+      rail: named(".of-home-rail > :not(.of-home-rail-row), .of-home-rail-row > *", (node) => `rail: ${label(node)}`),
       covers: [
         ...named(".of-note", () => "note"),
         ...named(".of-home-plate", () => "nameplate"),
@@ -944,19 +945,23 @@ function homeLayout(root: Locator) {
   });
 }
 
-/** M6 adds Remind Me and Caring message to the rail: two more buttons there, as a later milestone renders them. */
-const addRailButtons = (root: Locator) =>
-  root.evaluate((element) => {
-    const rail = element.querySelector(".of-home-rail")!;
-    const model = rail.querySelector(".of-home-action")!;
-    for (const text of ["Remind Me", "Caring message"]) {
-      const added = model.cloneNode(true) as HTMLElement;
-      added.dataset.later = "true";
-      added.querySelector("span")!.textContent = text;
-      added.querySelector(".of-home-badge")?.remove();
-      rail.append(added);
-    }
+/** The same checks on a desktop window, where the stage stands 9:16 in the middle. */
+const SIZES = [...PHONE_SIZES, { width: 1280, height: 800 }];
+
+/**
+ * M6's rail ends with Remind Me, always, and Caring message beside it on a day the period tracker marks: this logs a
+ * period that began the day before (UTC, so day 1 to 3 in any zone) as another tab would, through a `storage` event.
+ */
+async function showCaringMessage(page: Page, root: Locator) {
+  await page.evaluate(() => {
+    const key = "otome-forge:cycle:v1";
+    const starts = [new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)];
+    const cycle = { version: 1, enabled: true, mode: "send-today", cycleLength: 28, periodLength: 5, irregular: false };
+    localStorage.setItem(key, JSON.stringify({ ...cycle, starts }));
+    window.dispatchEvent(new StorageEvent("storage", { key }));
   });
+  await expect(root.getByRole("button", { name: "Caring message" })).toBeVisible();
+}
 
 for (const images of [true, false]) {
   for (const look of ["dark", "light"] as const) {
@@ -971,17 +976,22 @@ for (const images of [true, false]) {
       await expect(root.getByRole("article", { name: "A note from Ilvar Thorne" })).toContainText(NOTE);
       await expect(root.locator(images ? ".of-tap-zone" : ".of-tap-pill")).toHaveCount(3);
 
-      for (const later of [false, true]) {
-        if (later) await addRailButtons(root);
-        for (const size of PHONE_SIZES) {
+      await expect(root.getByRole("button", { name: "Remind Me" })).toBeVisible();
+      await expect(root.getByRole("button", { name: "Caring message" })).toHaveCount(0);
+      for (const caring of [false, true]) {
+        if (caring) await showCaringMessage(page, root);
+        for (const size of SIZES) {
           await page.setViewportSize(size);
           await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
           const layout = await homeLayout(root);
-          const at = `${size.width}x${size.height}${later ? " with Remind Me and Caring message" : ""}`;
+          const at = `${size.width}x${size.height}${caring ? " with Caring message" : ""}`;
           expect(layout.targets, at).toHaveLength(3);
-          expect(layout.rail.length, at).toBe(later ? 6 : 4);
-          // Rail as M3 has it: the note keeps at least a line of its words in view.
-          if (!later) expect(layout.noteText, `the note's words at ${at}`).toBeGreaterThanOrEqual(24);
+          expect(layout.rail, at).toHaveLength(caring ? 6 : 5);
+          expect(layout.rail.map((button) => button.name).slice(4), at).toEqual(
+            caring ? ["rail: Remind Me", "rail: Caring message"] : ["rail: Remind Me"],
+          );
+          // The note keeps at least a line of its words in view.
+          expect(layout.noteText, `the note's words at ${at}`).toBeGreaterThanOrEqual(24);
           for (const target of layout.targets) {
             const big = target.box.width >= 24 && target.box.height >= 24;
             expect(big, `${target.name} is at least 24 px square at ${at}`).toBe(true);
@@ -996,9 +1006,10 @@ for (const images of [true, false]) {
               expect(overlaps(target.box, cover.box), `${cover.name} over ${target.name} at ${at}`).toBe(false);
             }
           }
-          // The rail, with room for the later buttons: clear of the note, the top bar and the dock.
+          // Every rail button, M6's two included: clear of the note (its Play and Reply inside it), the nameplate, the
+          // top bar and the dock.
           for (const button of layout.rail) {
-            for (const cover of layout.covers.filter((item) => item.name !== "nameplate")) {
+            for (const cover of layout.covers) {
               expect(overlaps(button.box, cover.box), `${cover.name} and ${button.name} at ${at}`).toBe(false);
             }
           }

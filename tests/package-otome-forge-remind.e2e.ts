@@ -3,14 +3,15 @@
 // its agreed copy; opting in and logging a first day; filled "logged" and outlined "predicted" hearts; a stubbed
 // Caring message that carries exactly one line about today (no other request, query string or body says anything
 // about the cycle), kept for the day with no second request and voiced in his voice through M2b's audio with no
-// cacheKey (a spy on the host's voice service); "Keep it off the model" sending nothing; and Delete all. Then, with Otome Forge's storage blocked (a private
-// window), Remind Me and the tracker still render and say what they could not keep. Across midnight, an open caring
-// message closes, one still on its way is not kept for yesterday, and focus stays on Home when its button goes. In two
-// tabs, a mode, a change or a Delete all made in the other one is what counts, and focus waits on Remind Me when Caring
-// message goes while it holds focus. At common phone sizes, on M3's Home with a painted look and place or with neither,
-// with long names, a four-word mood and a two-sentence note: Remind Me and Caring message (round buttons in the foot,
-// which never wraps) never cover the note or his tap zones, and M3's rail never hides a button without fading at that
-// end. Over his painted look, in Midnight and Pearl, any label the foot's buttons show keeps 4.5:1 and each icon 3:1.
+// cacheKey (a spy on the host's voice service); "Keep it off the model" sending nothing; and Delete all. Then, with
+// Otome Forge's storage blocked (a private window), Remind Me and the tracker still render and say what they could not
+// keep. Across midnight, an open caring message closes, one still on its way is not kept for yesterday, and focus
+// stays on Home when its button goes. In two tabs, a mode, a change or a Delete all made in the other one is what
+// counts, and focus waits on Remind Me when Caring message goes while it holds focus. At common phone sizes and on a
+// desktop, on M3's Home with a painted look and place or with neither, with long names, a four-word mood and a
+// two-sentence note: Remind Me and Caring message (round buttons side by side at the foot of M3's rail) are wholly on
+// screen, and no rail button covers the note, the nameplate, the top bar, the dock or his tap zones. Over his painted
+// look, in Midnight and Pearl, any label they show keeps 4.5:1 and each icon 3:1.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-remind.e2e.ts
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -902,9 +903,9 @@ function lowestContrast(page: Page, png: string, color: string) {
   );
 }
 
-// Over his painted look, a mid-tone outfit and a pale one, in both moods: any label the foot's buttons show keeps 4.5:1
-// against what is behind it, and each icon, which alone carries the meaning of a round button, 3:1 (WCAG 1.4.3 and
-// 1.4.11), Caring message's rose wash included.
+// Over his painted look, a mid-tone outfit and a pale one, in both moods: any label the rail's round buttons show
+// keeps 4.5:1 against what is behind it, and each icon, which alone carries the meaning of a round button, 3:1 (WCAG
+// 1.4.3 and 1.4.11), Caring message's rose wash included.
 for (const scheme of ["dark", "light"] as const) {
   for (const lookFill of [LOOK_FILL, "#d9d3e6"]) {
     test(`Otome Forge Caring message and Remind Me over his painted look (${lookFill}) in ${scheme === "dark" ? "Midnight" : "Pearl"}: labels keep 4.5:1 and icons 3:1`, async ({
@@ -953,8 +954,8 @@ const overlaps = (a: Box, b: Box) =>
   a.x < b.x + b.width - 0.5 && b.x < a.x + a.width - 0.5 && a.y < b.y + b.height - 0.5 && b.y < a.y + a.height - 0.5;
 
 // Phone browsers' common sizes (with their bars), the smallest first, on M3's Home with and without art; then long names
-// and a four-word mood (the nameplate wraps inside itself, never the foot) and a two-sentence note (M3's rail in a
-// short row), and a desktop window.
+// and a four-word mood (the nameplate wraps inside itself) and a two-sentence note (the note's row giving way to the
+// rail), and a desktop window.
 const PHONES = [
   { width: 360, height: 640 },
   { width: 375, height: 667 },
@@ -993,7 +994,7 @@ for (const layout of LAYOUTS) {
   ]
     .filter(Boolean)
     .join(", ");
-  test(`Otome Forge Home at ${width} × ${height} ${what}: Remind Me and Caring message leave the note and his tap zones free, and the rail never hides a button unsaid`, async ({
+  test(`Otome Forge Home at ${width} × ${height} ${what}: Remind Me and Caring message, at the rail's foot, leave the note, the nameplate and his tap zones free`, async ({
     page,
   }) => {
     test.setTimeout(120_000);
@@ -1018,85 +1019,58 @@ for (const layout of LAYOUTS) {
     await expect.poll(() => spoken).toContain(noteText ?? "The lab light was on again.");
     const note = (await root.locator(".of-note").first().boundingBox())!;
 
-    // The foot keeps one row: Remind Me and Caring message sit on the nameplate's bottom line, clear of the note.
-    const remind = root.getByRole("button", { name: "Remind Me" });
-    const plate = (await root.locator(".of-home-plate").boundingBox())!;
-    for (const button of [remind, caring]) {
-      await expect(button).toBeInViewport({ ratio: 1 });
-      const box = (await button.boundingBox())!;
-      expect(overlaps(box, note), "the foot's buttons are clear of the note").toBe(false);
-      expect(Math.abs(box.y + box.height - (plate.y + plate.height)), "one row with the nameplate").toBeLessThan(1.5);
-    }
-
-    // M3's rail: one column under the note (never a second one over his figure). Every button is wholly inside the
-    // rail as it opens, or the rail fades at the end that hides one (data-hidden), and scrolls to show it whole.
+    // M3's rail with M6's row at its foot: one column under the note (never a second one over his figure), every
+    // button wholly on screen and clear of the note (its Play and Reply inside it), the nameplate, the top bar and the
+    // dock. Remind Me and Caring message sit side by side.
     const rail = root.locator(".of-home-rail");
-    const shown = () =>
-      rail.evaluate((element) => {
-        const clip = element.getBoundingClientRect();
-        return {
-          scrollTop: element.scrollTop,
-          hidden: element.dataset.hidden ?? null,
-          mask: getComputedStyle(element).maskImage || getComputedStyle(element).webkitMaskImage || "none",
-          chevron: getComputedStyle(element.parentElement!, "::after").content,
-          whole: [...element.children].map((child) => {
-            const box = child.getBoundingClientRect();
-            return box.top >= clip.top - 0.5 && box.bottom <= clip.bottom + 0.5;
-          }),
-        };
-      });
-    const opened = await shown();
-    expect(opened.whole).toHaveLength(4);
-    expect(opened.scrollTop).toBe(0);
-    if (opened.whole.every(Boolean)) {
-      expect(opened.hidden, "a rail that shows everything says nothing is hidden").toBeNull();
-      expect(opened.chevron, "and points nowhere").toBe("none");
-    } else {
-      expect(opened.hidden, "a rail that hides a button below says so").toBe("end");
-      expect(opened.mask, "and fades at that end").not.toBe("none");
-      expect(opened.chevron, "with a chevron there").not.toBe("none");
-      await rail.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
-      await expect.poll(async () => (await shown()).whole.at(-1)).toBe(true);
-      await expect.poll(async () => (await shown()).hidden).toBe("start");
+    const items = rail.locator(":scope > :not(.of-home-rail-row), .of-home-rail-row > *");
+    await expect(items).toHaveCount(6);
+    const remind = root.getByRole("button", { name: "Remind Me" });
+    await expect(items.nth(4)).toHaveAccessibleName("Remind Me");
+    await expect(items.nth(5)).toHaveAccessibleName("Caring message");
+    const covers = await root.evaluate((element) =>
+      [...element.querySelectorAll(".of-note, .of-home-plate, .of-topbar, .of-dock, .of-dock-item")].map((node) => {
+        const rect = node.getBoundingClientRect();
+        const name = node.getAttribute("aria-label") ?? node.className.split(" ")[0]!;
+        return { name, box: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } };
+      }),
+    );
+    for (const item of await items.all()) {
+      await expect(item).toBeInViewport({ ratio: 1 });
+      const box = (await item.boundingBox())!;
+      const label = (await item.getAttribute("aria-label")) ?? (await item.textContent());
+      for (const cover of covers) expect(overlaps(box, cover.box), `${cover.name} and ${label}`).toBe(false);
     }
+    const [remindBox, caringBox] = [(await remind.boundingBox())!, (await caring.boundingBox())!];
+    expect(Math.abs(remindBox.y - caringBox.y), "Remind Me and Caring message share a row").toBeLessThan(1.5);
     const railBoxes: Box[] = [];
-    for (const button of await root.locator(".of-home-rail > *").all()) railBoxes.push((await button.boundingBox())!);
+    for (const button of await rail.locator(":scope > *").all()) railBoxes.push((await button.boundingBox())!);
     expect(new Set(railBoxes.map((box) => Math.round(box.x))).size, "the rail keeps to one column").toBe(1);
     const railBox = (await rail.boundingBox())!;
-    expect(railBox.y + 6, "the rail stays under the note").toBeGreaterThanOrEqual(note.y + note.height - 1);
-    await rail.evaluate((element) => element.scrollTo({ top: 0 }));
+    expect(railBox.y, "the rail stays under the note").toBeGreaterThanOrEqual(note.y + note.height - 1);
 
-    // His tap zones: no tap meant for one ever lands on Remind Me or Caring message (every point of each zone's own
-    // rounded shape, every 3 px, is checked by hit testing), and with his usual name no rail button sits on a zone's
-    // centre. (M3's rail buttons may cover a zone's edge beside his figure at narrow widths, and M3's Him / Me toggle,
-    // as wide as a long name makes it, a zone's centre too: M3's own layout.)
+    // His tap zones: no tap meant for one ever lands on the rail (every point of each zone's own rounded shape, every
+    // 3 px, is checked by hit testing), M6's buttons included, whatever his name.
     const zones = root.getByRole("group", { name: `Touch ${name}` }).getByRole("button");
     await expect(zones).toHaveCount(3);
-    const centreTakers = layout.name ? ".of-home-foot > button" : ".of-home-rail, .of-home-foot > button";
-    const taken = await root.evaluate((element, centreTakers) => {
+    const taken = await root.evaluate((element) => {
       const scope = element.getRootNode() as Document | ShadowRoot;
       const found: string[] = [];
       for (const zone of element.querySelectorAll<HTMLElement>(".of-tap-zone, .of-tap-pill")) {
         const box = zone.getBoundingClientRect();
         const label = zone.getAttribute("aria-label") ?? zone.textContent?.trim() ?? "";
-        const centre = scope.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-        const onCentre = centre?.closest(centreTakers);
-        if (onCentre)
-          found.push(
-            `${onCentre.getAttribute("aria-label") ?? onCentre.textContent?.trim()} on the centre of ${label}`,
-          );
         for (let x = box.left + 1; x < box.right; x += 3) {
           for (let y = box.top + 1; y < box.bottom; y += 3) {
             const stack = scope.elementsFromPoint(x, y);
             if (!stack.includes(zone)) continue;
-            const over = stack[0]?.closest(".of-home-foot > button");
-            if (over) found.push(`${over.getAttribute("aria-label")} over ${label}`);
+            const over = stack[0]?.closest(".of-home-rail button, .of-home-rail .of-himme");
+            if (over) found.push(`${over.getAttribute("aria-label") ?? over.textContent?.trim()} over ${label}`);
           }
         }
       }
       return [...new Set(found)];
-    }, centreTakers);
-    expect(taken, "no tap meant for his zones lands on the foot's buttons or the rail").toEqual([]);
+    });
+    expect(taken, "no tap meant for his zones lands on the rail").toEqual([]);
     expect(pageErrors).toEqual([]);
   });
 }

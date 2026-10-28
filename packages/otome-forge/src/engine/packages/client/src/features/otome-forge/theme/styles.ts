@@ -1495,8 +1495,11 @@ ${R} .of-home-badge {
 }
 ${R} .of-himme { display: inline-flex; gap: 3px; margin: 0; padding: 3px; border-radius: 999px; min-width: 0; }
 ${R} .of-himme-option + .of-himme-option { flex: none; }
+/* His side gives way to the rail's width (min-width 0), so a long name is cut short inside the rail rather than push
+   Me out over his cell. */
 ${R} .of-himme-option {
-  position: relative; display: inline-flex; align-items: center; min-height: 34px; max-width: 8.5rem; padding: 0 13px;
+  position: relative; display: inline-flex; align-items: center; min-width: 0; min-height: 34px; max-width: 8.5rem;
+  padding: 0 13px;
   border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 0.82rem; color: var(--of-text-soft);
   transition: color 360ms var(--of-ease), background-color 360ms var(--of-ease);
 }
