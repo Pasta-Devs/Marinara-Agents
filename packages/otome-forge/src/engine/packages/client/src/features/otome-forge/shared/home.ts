@@ -65,7 +65,7 @@ export function wordCount(text: string): number {
 export function sentenceCount(text: string): number {
   const value = text.trim();
   if (!value) return 0;
-  const latin = value.match(/[.!?…]+(?![.!?…\p{L}\p{N}])/gu)?.length ?? 0;
+  const latin = value.match(/[.!?…]+(?![.!?…,;。！？\p{L}\p{N}])/gu)?.length ?? 0;
   const cjk = value.match(/[。！？]+/gu)?.length ?? 0;
   // The text after the last terminator is another sentence only when it holds a word (a trailing ♡ or :) is not one).
   const tail = value.replace(/^[\s\S]*[.!?…。！？]/u, "");
