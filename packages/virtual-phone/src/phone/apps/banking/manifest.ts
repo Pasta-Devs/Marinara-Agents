@@ -63,10 +63,27 @@ export function formatMoney(amount: number, currency: string) {
 /** "+120 :: sold the bike" or "-40 :: taxi across town". */
 export function parseProposal(line: string): { amount: number; description: string } | null {
   const [amountPart, ...rest] = line.split(" :: ");
-  const amount = Number.parseInt((amountPart ?? "").replace(/[^0-9+-]/gu, ""), 10);
+  const normalized = (amountPart ?? "").trim().replace(/,/gu, "");
+  if (!/^[+-]\d+$/u.test(normalized)) return null;
+  const amount = Number.parseInt(normalized, 10);
   if (!Number.isFinite(amount) || amount === 0) return null;
   const description = rest.join(" :: ").trim();
   return { amount, description: description.slice(0, 200) || "Unexplained movement" };
+}
+
+/** Add genuinely new suggestions while keeping a retried check from filling the review tray. */
+export function mergeProposals(account: BankAccount, proposals: BankProposal[]): BankAccount {
+  const known = new Set([
+    ...account.pending.map((entry) => `${entry.amount}:${entry.description.trim().toLocaleLowerCase()}`),
+    ...account.transactions.map((entry) => `${entry.amount}:${entry.description.trim().toLocaleLowerCase()}`),
+  ]);
+  const unique = proposals.filter((entry) => {
+    const key = `${entry.amount}:${entry.description.trim().toLocaleLowerCase()}`;
+    if (known.has(key)) return false;
+    known.add(key);
+    return true;
+  });
+  return { ...account, pending: [...unique, ...account.pending].slice(0, 20) };
 }
 
 export function applyTransaction(account: BankAccount, entry: BankTransaction): BankAccount {
@@ -83,7 +100,20 @@ export function readAccount(value: unknown): BankAccount {
   return {
     balance: Number.isFinite(Number(record.balance)) ? Number(record.balance) : 0,
     currency: typeof record.currency === "string" && record.currency.trim() ? record.currency : "credits",
-    transactions: Array.isArray(record.transactions) ? record.transactions.filter((entry): entry is BankTransaction => !!entry && typeof entry.id === "string") : [],
-    pending: Array.isArray(record.pending) ? record.pending.filter((entry): entry is BankProposal => !!entry && typeof entry.id === "string") : [],
+    transactions: Array.isArray(record.transactions) ? record.transactions.filter((entry): entry is BankTransaction => {
+      if (!entry || typeof entry !== "object") return false;
+      const transaction = entry as Partial<BankTransaction>;
+      return typeof transaction.id === "string" && typeof transaction.at === "string"
+        && Number.isFinite(transaction.amount) && transaction.amount !== 0
+        && typeof transaction.description === "string"
+        && (transaction.source === "user" || transaction.source === "story");
+    }).slice(0, 200) : [],
+    pending: Array.isArray(record.pending) ? record.pending.filter((entry): entry is BankProposal => {
+      if (!entry || typeof entry !== "object") return false;
+      const proposal = entry as Partial<BankProposal>;
+      return typeof proposal.id === "string" && typeof proposal.at === "string"
+        && Number.isFinite(proposal.amount) && proposal.amount !== 0
+        && typeof proposal.description === "string";
+    }).slice(0, 20) : [],
   };
 }

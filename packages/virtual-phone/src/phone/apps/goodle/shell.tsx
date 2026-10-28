@@ -1,19 +1,33 @@
 import React from "react";
-import { Globe, Image as ImageIcon, LayoutList, Search, Star } from "lucide-react";
+import { Clock3, FilePlus2, Globe, Home, Image as ImageIcon, LayoutList, Search, Star, Trash2 } from "lucide-react";
 import { fallbackSearchResults, looksLikeUrl, normalizeUrl, parseLinkedText, parseResultItem, slugify } from "./manifest";
 import { guessSiteKind, parseImageResult, parsePageSection } from "./sites";
 import { MediaBox, SiteBody, type SitePage } from "./templates";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { usePhoneStore } from "../../platform/use-phone-store";
-import { phoneRequest, recordActivity, rememberWorldFact } from "../../platform/api";
+import { phoneRequest, recordActivity } from "../../platform/api";
 import { hueFor } from "../../platform/avatars";
 
 const MAX_RECENTS = 8;
+const MAX_HISTORY = 40;
 const LOGO_COLORS = ["#4285f4", "#ea4335", "#fbbc05", "#4285f4", "#34a853", "#ea4335"];
 
 interface PageState extends SitePage {
   url: string;
   loading: boolean;
+}
+
+interface HistoryEntry extends PageState {
+  visitedAt: string;
+}
+
+function isStoredPage(value: unknown): value is PageState {
+  if (!value || typeof value !== "object") return false;
+  const page = value as Partial<PageState>;
+  return typeof page.url === "string" && typeof page.title === "string" && typeof page.site === "string"
+    && Array.isArray(page.links) && page.links.every((item) => typeof item === "string")
+    && Array.isArray(page.sections) && page.sections.every((item) => typeof item === "string")
+    && Array.isArray(page.media) && page.media.every((item) => typeof item === "string");
 }
 
 /** A page before its content lands, so the frame can draw with the right template immediately. */
@@ -23,8 +37,9 @@ const pendingPage = (title: string, url: string, site?: string): PageState => ({
   url, loading: true,
 });
 
-export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { phoneId: string; initialQuery?: string; onBack: () => void; onClose: () => void }) {
+export function GoodleShell({ phoneId, initialQuery = "", openNotes, onBack, onClose }: { phoneId: string; initialQuery?: string; openNotes?: (noteId?: string) => void; onBack: () => void; onClose: () => void }) {
   const store = usePhoneStore(phoneId, "goodle");
+  const notesStore = usePhoneStore(phoneId, "notes");
   const [query, setQuery] = React.useState(initialQuery);
   const [recents, setRecents] = React.useState<string[]>([]);
   const [results, setResults] = React.useState(() => fallbackSearchResults(""));
@@ -33,12 +48,18 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
   // Pages popped by Back, kept so Forward can re-enter them without regenerating.
   const [forward, setForward] = React.useState<PageState[]>([]);
   const [bookmarks, setBookmarks] = React.useState<PageState[]>([]);
+  const [history, setHistory] = React.useState<HistoryEntry[]>([]);
+  const [submittedQuery, setSubmittedQuery] = React.useState("");
   const [tab, setTab] = React.useState<"all" | "images">("all");
   const [images, setImages] = React.useState<string[] | null>(null);
   const [imagesFor, setImagesFor] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
+  const [savedNotice, setSavedNotice] = React.useState("");
+  const [savedNoteId, setSavedNoteId] = React.useState<string | null>(null);
   const page = pages.at(-1) ?? null;
   const recentsRef = React.useRef(recents);
+  const searchRequestRef = React.useRef(0);
+  const imageRequestRef = React.useRef(0);
   recentsRef.current = recents;
 
   React.useEffect(() => {
@@ -48,7 +69,12 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
     }).catch(() => undefined);
     void store.get("bookmarks").then((value) => {
       if (active && Array.isArray(value)) {
-        setBookmarks(value.filter((item): item is PageState => !!item && typeof (item as PageState).url === "string"));
+        setBookmarks(value.filter(isStoredPage).map((item) => ({ ...item, loading: false })).slice(0, 30));
+      }
+    }).catch(() => undefined);
+    void store.get("history").then((value) => {
+      if (active && Array.isArray(value)) {
+        setHistory(value.filter((item): item is HistoryEntry => isStoredPage(item) && typeof (item as HistoryEntry).visitedAt === "string").map((item) => ({ ...item, loading: false })).slice(0, MAX_HISTORY));
       }
     }).catch(() => undefined);
     return () => { active = false; };
@@ -58,20 +84,27 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
     const trimmed = term.trim();
     setResults(fallbackSearchResults(trimmed));
     if (!trimmed) return;
+    const requestId = ++searchRequestRef.current;
+    setSubmittedQuery(trimmed);
+    setTab("all");
+    setImages(null);
+    setImagesFor("");
+    setError(null);
     const next = [trimmed, ...recentsRef.current.filter((recent) => recent !== trimmed)].slice(0, MAX_RECENTS);
     setRecents(next);
     void store.set("recents", next).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Recent searches could not be saved."));
     setSearching(true);
-    void recordActivity(phoneId, `looked up "${trimmed}"`).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The search action could not be recorded."));
+    void recordActivity(phoneId, "searched the web on Goodle").catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The search action could not be recorded."));
     void phoneRequest<{ results: ReturnType<typeof fallbackSearchResults> }>(`/phones/${encodeURIComponent(phoneId)}/goodle/search`, {
       method: "POST", body: JSON.stringify({ query: trimmed }),
     })
-      .then((response) => setResults(response.results))
+      .then((response) => { if (searchRequestRef.current === requestId) setResults(response.results); })
       .catch((cause: unknown) => {
+        if (searchRequestRef.current !== requestId) return;
         setError(cause instanceof Error ? cause.message : "Goodle could not complete the search.");
         setResults(fallbackSearchResults(trimmed));
       })
-      .finally(() => setSearching(false));
+      .finally(() => { if (searchRequestRef.current === requestId) setSearching(false); });
   }, [phoneId, store]);
 
   React.useEffect(() => {
@@ -85,12 +118,25 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
   const openPage = (title: string, url: string, site?: string) => {
     setForward([]);
     setPages((current) => [...current, pendingPage(title, url, site)]);
-    const settle = (loaded: PageState) => setPages((current) =>
-      current.map((entry) => entry.url === url && entry.loading ? loaded : entry));
+    const settle = (loaded: PageState) => setPages((current) => {
+      const index = current.findLastIndex((entry) => entry.url === url && entry.loading);
+      if (index < 0) return current;
+      const next = [...current];
+      next[index] = loaded;
+      return next;
+    });
     void phoneRequest<{ page: SitePage }>(`/phones/${encodeURIComponent(phoneId)}/goodle/page`, {
-      method: "POST", body: JSON.stringify({ title, url, query: query.trim(), ...(site ? { site } : {}) }),
+      method: "POST", body: JSON.stringify({ title, url, query: submittedQuery, ...(site ? { site } : {}) }),
     })
-      .then((response) => settle({ ...response.page, title: response.page.title || title, url, loading: false }))
+      .then((response) => {
+        const loaded = { ...response.page, title: response.page.title || title, url, loading: false };
+        settle(loaded);
+        setHistory((current) => {
+          const next = [{ ...loaded, visitedAt: new Date().toISOString() }, ...current.filter((entry) => entry.url !== url)].slice(0, MAX_HISTORY);
+          void store.set("history", next).catch(() => undefined);
+          return next;
+        });
+      })
       .catch(() => settle({
         ...pendingPage(title, url, site),
         sections: ["Offline :: Goodle can't reach this page right now."], loading: false,
@@ -126,15 +172,45 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
       return;
     }
     if (!bookmarked) {
-      const summary = page.sections.map(parsePageSection).map((section) => `${section.heading}: ${section.body}`).join(" ").slice(0, 180);
-      void rememberWorldFact(phoneId, `Learned from ${page.site}: ${page.title}${summary ? ` — ${summary}` : ""}`, "Goodle bookmark")
-        .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The discovery could not be shared with the phone."));
-      void recordActivity(phoneId, `bookmarked "${page.title}" on Goodle`).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The bookmark action could not be recorded."));
+      void recordActivity(phoneId, "saved a private Goodle bookmark").catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The bookmark action could not be recorded."));
+    }
+  };
+  const saveToNotes = async () => {
+    if (!page || page.loading) return;
+    setSavedNotice("");
+    setSavedNoteId(null);
+    try {
+      const existing = await notesStore.get("notes");
+      const notes = Array.isArray(existing) ? existing : [];
+      const summary = page.sections.map((section) => parsePageSection(section).body).filter(Boolean).slice(0, 2).join("\n\n");
+      const note = { id: crypto.randomUUID(), text: `${page.title}\n${page.url}${summary ? `\n\n${summary}` : ""}`, updatedAt: new Date().toISOString(), source: { label: "Goodle", url: page.url } };
+      await notesStore.set("notes", [note, ...notes]);
+      setSavedNoteId(note.id);
+      setSavedNotice("Saved to Notes.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "This page could not be saved to Notes.");
     }
   };
   const openBookmark = (entry: PageState) => {
     setForward([]);
     setPages((current) => [...current, entry]);
+  };
+  const openStoredPage = (entry: PageState) => {
+    setForward([]);
+    setPages((current) => [...current, { ...entry, loading: false }]);
+  };
+  const goHome = () => {
+    searchRequestRef.current += 1;
+    imageRequestRef.current += 1;
+    setPages([]);
+    setForward([]);
+    setResults(fallbackSearchResults(""));
+    setSubmittedQuery("");
+    setQuery("");
+    setTab("all");
+    setImages(null);
+    setSearching(false);
+    setError(null);
   };
   const submitQuery = () => {
     const trimmed = query.trim();
@@ -150,13 +226,15 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
   const searchImages = React.useCallback((term: string) => {
     const trimmed = term.trim();
     if (!trimmed || imagesFor === trimmed) return;
+    const requestId = ++imageRequestRef.current;
     setImagesFor(trimmed);
     setImages(null);
     void phoneRequest<{ images: string[] }>(`/phones/${encodeURIComponent(phoneId)}/goodle/images`, {
       method: "POST", body: JSON.stringify({ query: trimmed }),
     })
-      .then((response) => setImages(response.images))
+      .then((response) => { if (imageRequestRef.current === requestId) setImages(response.images); })
       .catch((cause: unknown) => {
+        if (imageRequestRef.current !== requestId) return;
         setError(cause instanceof Error ? cause.message : "Goodle Images could not load.");
         setImages([]);
       });
@@ -165,12 +243,16 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
   const showTab = (next: "all" | "images") => {
     setTab(next);
     // Pictures cost a generation, so they are fetched when the tab is actually opened.
-    if (next === "images") searchImages(query || results.title);
+    if (next === "images") searchImages(submittedQuery || results.title);
   };
 
   const clearRecents = () => {
     setRecents([]);
     void store.remove("recents").catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Recent searches could not be cleared."));
+  };
+  const clearHistory = () => {
+    setHistory([]);
+    void store.remove("history").catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Browsing history could not be cleared."));
   };
 
   const domain = page?.url.split("/")[0] ?? "goodle.web";
@@ -184,7 +266,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
   const hue = hueFor(page?.site ?? "");
 
   return (
-    <section aria-labelledby="goodle-title" className="vp-appview">
+    <section aria-labelledby="goodle-title" className="vp-appview" data-phone-app="goodle">
       <PhoneAppHeader
         title={page ? page.site : "Goodle"}
         titleId="goodle-title"
@@ -197,6 +279,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
           <span className="vp-urlbar">
             <Globe size="0.75rem" aria-hidden="true" />
             <span>{page.url}</span>
+            <button type="button" onClick={goHome} aria-label="Goodle home" className="vp-urlbar-btn"><Home size="0.72rem" aria-hidden="true" /></button>
             <button type="button" onClick={goForward} disabled={forward.length === 0} aria-label="Forward" className="vp-urlbar-btn">›</button>
             <button type="button" onClick={toggleBookmark} disabled={page.loading} aria-label={bookmarked ? "Remove bookmark" : "Bookmark this page"} aria-pressed={bookmarked} className="vp-urlbar-btn">
               <Star size="0.75rem" aria-hidden="true" fill={bookmarked ? "currentColor" : "none"} />
@@ -205,6 +288,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
         ) : undefined}
       />
       {error ? <p role="alert" className="vp-muted-note">{error}</p> : null}
+      {savedNotice ? <div className="vp-goodle-savebar" role="status"><span><FilePlus2 size="0.8rem" aria-hidden="true" />{savedNotice}</span>{openNotes ? <button type="button" onClick={() => openNotes(savedNoteId ?? undefined)}>Open note</button> : null}</div> : null}
       {page ? (
         <div className="vp-site" aria-busy={page.loading}>
           {page.loading ? (
@@ -218,6 +302,7 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
             </div>
           ) : (
             <>
+              {openNotes ? <button type="button" className="vp-goodle-save" disabled={page.loading} onClick={() => void saveToNotes()}><FilePlus2 size="0.8rem" aria-hidden="true" /> Save page to Notes</button> : null}
               <header className="vp-site-masthead" style={{ background: `linear-gradient(135deg, hsl(${hue} 62% 42%), hsl(${(hue + 40) % 360} 62% 30%))` }}>
                 <span className="vp-site-name">{page.site}</span>
                 {page.tagline ? <span className="vp-site-tagline">{page.tagline}</span> : null}
@@ -251,13 +336,25 @@ export function GoodleShell({ phoneId, initialQuery = "", onBack, onClose }: { p
               ))}
             </div>
           ) : null}
-          {bookmarks.length && !searching && !results.items.length ? (
-            <div className="vp-chip-row" aria-label="Bookmarks">
-              {bookmarks.map((entry) => (
-                <button key={entry.url} type="button" onClick={() => openBookmark(entry)} className="vp-chip">
-                  <Star size="0.625rem" aria-hidden="true" fill="currentColor" /> {entry.site || entry.url}
-                </button>
-              ))}
+          {!searching && !results.items.length && (bookmarks.length || history.length) ? (
+            <div className="vp-goodle-library">
+              {bookmarks.length ? <section aria-labelledby="goodle-bookmarks-title">
+                <h3 id="goodle-bookmarks-title"><Star size="0.75rem" fill="currentColor" aria-hidden="true" /> Bookmarks</h3>
+                <div className="vp-goodle-saved-grid">{bookmarks.slice(0, 6).map((entry) => (
+                  <button key={entry.url} type="button" onClick={() => openBookmark(entry)} className="vp-goodle-saved">
+                    <span className="vp-goodle-favicon" style={{ background: `hsl(${hueFor(entry.site)} 55% 44%)` }}>{entry.site.slice(0, 1).toUpperCase()}</span>
+                    <span><strong>{entry.title}</strong><small>{entry.url}</small></span>
+                  </button>
+                ))}</div>
+              </section> : null}
+              {history.length ? <section aria-labelledby="goodle-history-title">
+                <div className="vp-goodle-section-head"><h3 id="goodle-history-title"><Clock3 size="0.75rem" aria-hidden="true" /> Recently visited</h3><button type="button" onClick={clearHistory}><Trash2 size="0.68rem" aria-hidden="true" /> Clear</button></div>
+                <div className="vp-goodle-history">{history.slice(0, 5).map((entry) => (
+                  <button key={`${entry.url}-${entry.visitedAt}`} type="button" onClick={() => openStoredPage(entry)}>
+                    <span><strong>{entry.title}</strong><small>{entry.site} · {new Date(entry.visitedAt).toLocaleDateString()}</small></span><span aria-hidden="true">›</span>
+                  </button>
+                ))}</div>
+              </section> : null}
             </div>
           ) : null}
           {results.items.length || searching || images ? (

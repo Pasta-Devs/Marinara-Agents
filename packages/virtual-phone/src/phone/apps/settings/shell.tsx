@@ -1,5 +1,5 @@
 import React from "react";
-import { RotateCcw, Search } from "lucide-react";
+import { BookOpen, ChevronRight, Grid2X2, Info, LockKeyhole, Palette, RotateCcw, Search } from "lucide-react";
 import type { Phone } from "../../system/PhonesSettings";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
@@ -72,7 +72,7 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
   const [connections, setConnections] = React.useState<EngineConnection[] | null>(null);
   const [lorebooks, setLorebooks] = React.useState<LorebookOption[] | null>(null);
   const [showOtherLorebooks, setShowOtherLorebooks] = React.useState(false);
-  const [tab, setTab] = React.useState<"device" | "generation" | "about">("device");
+  const [tab, setTab] = React.useState<"overview" | "appearance" | "home" | "scene" | "ai" | "about">("overview");
   const [loreQuery, setLoreQuery] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [cropSrc, setCropSrc] = React.useState<string | null>(null);
@@ -156,6 +156,7 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
   const otherLorebooks = visibleLorebooks.filter((lorebook) => lorebook.scope === null);
   const chatLorebooks = lorebooks?.filter((lorebook) => lorebook.scope !== null) ?? [];
   const selectedLorebooks = settings.lorebookIds.length;
+  const sectionTitle = tab === "appearance" ? "Appearance" : tab === "home" ? "Home Screen" : tab === "scene" ? "Phone State" : tab === "ai" ? "Roleplay & AI" : tab === "about" ? "About" : "Settings";
   const toggleRow = (label: string, description: string, checked: boolean, patch: Record<string, unknown>) => (
     <label className="vp-setting-toggle">
       <span className="vp-setting-copy"><span>{label}</span><small>{description}</small></span>
@@ -163,16 +164,23 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
     </label>
   );
   return (
-    <section aria-labelledby="device-settings-title" className="vp-appview vp-appview--fixed">
-      <PhoneAppHeader title="Settings" titleId="device-settings-title" closeLabel="Close settings" onBack={onBack} onClose={onClose} />
-      <div className="vp-settings-tabs" aria-label="Settings sections">
-        {(["device", "generation", "about"] as const).map((id) => (
-          <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)}>{id === "device" ? "Device" : id === "generation" ? "Generation" : "About"}</button>
-        ))}
-      </div>
+    <section aria-labelledby="device-settings-title" className="vp-appview vp-appview--fixed" data-phone-app="settings">
+      <PhoneAppHeader title={sectionTitle} titleId="device-settings-title" closeLabel="Close settings" onBack={() => tab === "overview" ? onBack() : setTab("overview")} onClose={onClose} />
       {error ? <p role="alert" className="vp-settings-alert">{error}</p> : null}
       <div className="vp-settings-scroll">
-      {tab === "device" ? <div className="vp-settings-sections">
+      {tab === "overview" ? <div className="vp-settings-sections">
+        <section><h3 className="vp-section-label">Phone</h3><div className="vp-settings-menu">
+          <button type="button" onClick={() => setTab("appearance")}><span className="vp-settings-menu-icon is-blue"><Palette size="1rem" aria-hidden="true" /></span><span><strong>Appearance</strong><small>Theme, wallpaper and screen effects</small></span><ChevronRight size="0.9rem" aria-hidden="true" /></button>
+          <button type="button" onClick={() => setTab("home")}><span className="vp-settings-menu-icon is-teal"><Grid2X2 size="1rem" aria-hidden="true" /></span><span><strong>Home Screen</strong><small>Choose apps for the dock</small></span><ChevronRight size="0.9rem" aria-hidden="true" /></button>
+          <button type="button" onClick={() => setTab("scene")}><span className="vp-settings-menu-icon is-orange"><LockKeyhole size="1rem" aria-hidden="true" /></span><span><strong>Phone State</strong><small>Power, access, signal and scene time</small></span><ChevronRight size="0.9rem" aria-hidden="true" /></button>
+        </div></section>
+        <section><h3 className="vp-section-label">Roleplay</h3><div className="vp-settings-menu">
+          <button type="button" onClick={() => setTab("ai")}><span className="vp-settings-menu-icon is-purple"><BookOpen size="1rem" aria-hidden="true" /></span><span><strong>Roleplay &amp; AI</strong><small>Story activity, generation and lore</small></span><ChevronRight size="0.9rem" aria-hidden="true" /></button>
+        </div></section>
+        <section><h3 className="vp-section-label">General</h3><div className="vp-settings-menu">
+          <button type="button" onClick={() => setTab("about")}><span className="vp-settings-menu-icon is-gray"><Info size="1rem" aria-hidden="true" /></span><span><strong>About</strong><small>Phone details, storage and reset</small></span><ChevronRight size="0.9rem" aria-hidden="true" /></button>
+        </div></section>
+      </div> : tab === "appearance" ? <div className="vp-settings-sections">
         <section><h3 className="vp-section-label">Appearance</h3><div className="vp-group">
           <label className="vp-row"><span>Device name</span><input key={`${phone.phoneId}:${settings.deviceName}`} defaultValue={settings.deviceName} placeholder={`${phone.ownerName}'s phone`} onBlur={(event) => void update({ deviceName: event.target.value })} className="vp-row-control" /></label>
           <label className="vp-row"><span>Theme</span><select value={settings.theme} onChange={(event) => void update({ theme: event.target.value })} className="vp-row-control"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
@@ -210,39 +218,30 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
           <label className="vp-row vp-row--stacked"><span>Overlay intensity</span><input type="range" min="0" max="3" step="1" value={settings.screenEffectIntensity} onChange={(event) => void update({ screenEffectIntensity: Number(event.target.value) })} className="vp-range" /></label>
           {toggleRow("Reduce effects", "Disables screen damage and decorative motion.", settings.reduceDeviceEffects, { reduceDeviceEffects: settings.reduceDeviceEffects })}
         </div></section>
-        <section><h3 className="vp-section-label">Status bar</h3><div className="vp-group">
-          <p className="vp-muted-note">This is the character's phone, not yours — set these to fit the story.</p>
-          <label className="vp-row vp-row--stacked"><span>Battery ({settings.batteryLevel}%)</span><input type="range" min="0" max="100" step="1" value={settings.batteryLevel} onChange={(event) => void update({ batteryLevel: Number(event.target.value) })} className="vp-range" /></label>
-          <label className="vp-row"><span>Signal</span><select value={settings.cellularSignal} onChange={(event) => void update({ cellularSignal: Number(event.target.value) })} className="vp-row-control"><option value="4">Full</option><option value="3">Good</option><option value="2">Fair</option><option value="1">Weak</option><option value="0">No signal</option></select></label>
+      </div> : tab === "home" ? <div className="vp-settings-sections">
+        <section><h3 className="vp-section-label">Dock</h3><div className="vp-group">
+          {[0, 1, 2, 3].map((slot) => <label key={slot} className="vp-row"><span>Position {slot + 1}</span><select value={settings.dockApps[slot] ?? ""} onChange={(event) => { const next = [...settings.dockApps]; if (event.target.value) next[slot] = event.target.value; else next.splice(slot, 1); void update({ dockApps: [...new Set(next)].slice(0, 4) }); }} className="vp-row-control"><option value="">Empty</option>{settings.installedApps.filter((id) => id !== "settings").map((id) => <option key={id} value={id}>{id.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ")}</option>)}</select></label>)}
+        </div><p className="vp-settings-footnote">These apps stay at the bottom of the Home Screen. Settings always remains in the app grid.</p></section>
+      </div> : tab === "scene" ? <div className="vp-settings-sections">
+        <section><h3 className="vp-section-label">Device</h3><div className="vp-group">
+          <label className="vp-row"><span>Power</span><select value={settings.power} onChange={(event) => void update({ power: event.target.value })} className="vp-row-control"><option value="on">On</option><option value="off">Off</option></select></label>
+          <label className="vp-row"><span>Connection</span><select value={settings.connectivity} onChange={(event) => void update({ connectivity: event.target.value })} className="vp-row-control"><option value="online">Online</option><option value="limited">Limited</option><option value="offline">Offline</option></select></label>
+          <label className="vp-row"><span>Ringer</span><select value={settings.ringer} onChange={(event) => void update({ ringer: event.target.value })} className="vp-row-control"><option value="sound">Sound</option><option value="vibrate">Vibrate</option><option value="silent">Silent</option></select></label>
+          <label className="vp-row vp-row--stacked"><span>Battery · {settings.batteryLevel}%</span><input type="range" min="0" max="100" step="1" value={settings.batteryLevel} onChange={(event) => void update({ batteryLevel: Number(event.target.value) })} className="vp-range" /></label>
+          <label className="vp-row"><span>Cellular signal</span><select value={settings.cellularSignal} onChange={(event) => void update({ cellularSignal: Number(event.target.value) })} className="vp-row-control"><option value="4">Full</option><option value="3">Good</option><option value="2">Fair</option><option value="1">Weak</option><option value="0">None</option></select></label>
         </div></section>
-        <section><h3 className="vp-section-label">Story time</h3><div className="vp-group">
-          <p className="vp-muted-note">Set what time it is in the scene. The clock keeps running from there, and every timestamp on the phone follows it.</p>
-          <label className="vp-row"><span>Time on this phone</span>
-            <input
-              type="time"
-              value={storyClockValue}
-              onChange={(event) => {
-                if (!event.target.value) return;
-                void update({ storyClockOffsetMinutes: offsetForStoryTime(event.target.value, settings.storyClockOffsetMinutes) });
-              }}
-              className="vp-row-control"
-            />
-          </label>
-          <button
-            type="button"
-            className="vp-row vp-row--action"
-            disabled={settings.storyClockOffsetMinutes === 0}
-            onClick={() => void update({ storyClockOffsetMinutes: 0 })}
-          >
-            <span>Match real time</span>
-          </button>
-        </div></section>
-      </div> : tab === "generation" ? <div className="vp-settings-sections">
-        <section><h3 className="vp-section-label">Models &amp; activity</h3><div className="vp-group">
+        <section><h3 className="vp-section-label">In the scene</h3><div className="vp-group">
+          <label className="vp-row"><span>Where is the phone?</span><select value={settings.availability} onChange={(event) => void update({ availability: event.target.value })} className="vp-row-control"><option value="carried">With its owner</option><option value="nearby">Nearby</option><option value="absent">Elsewhere</option><option value="lost">Lost</option></select></label>
+          <label className="vp-row"><span>Access</span><select value={settings.access} onChange={(event) => void update({ access: event.target.value })} className="vp-row-control"><option value="unlocked">Unlocked</option><option value="owner-locked">Owner only</option><option value="story-locked">Locked by story</option></select></label>
+          <label className="vp-row"><span>Phone time</span><input type="time" value={storyClockValue} onChange={(event) => { if (event.target.value) void update({ storyClockOffsetMinutes: offsetForStoryTime(event.target.value, settings.storyClockOffsetMinutes) }); }} className="vp-row-control" /></label>
+          <button type="button" className="vp-row vp-row--action" disabled={settings.storyClockOffsetMinutes === 0} onClick={() => void update({ storyClockOffsetMinutes: 0 })}><span>Match real time</span></button>
+        </div><p className="vp-settings-footnote">These are scene facts about the handset, not actions performed by its owner.</p></section>
+      </div> : tab === "ai" ? <div className="vp-settings-sections">
+        <section><h3 className="vp-section-label">Story behavior</h3><div className="vp-group">
           <label className="vp-row"><span>Replies</span><select value={settings.lightConnectionId} disabled={!connections} onChange={(event) => void update({ lightConnectionId: event.target.value })} className="vp-row-control">{connectionOptions(settings.lightConnectionId)}</select></label>
-          <label className="vp-row"><span>Feeds &amp; sites</span><select value={settings.heavyConnectionId} disabled={!connections} onChange={(event) => void update({ heavyConnectionId: event.target.value })} className="vp-row-control">{connectionOptions(settings.heavyConnectionId)}</select></label>
-          {toggleRow("The story notices", "Phone events appear in the scene: what you did when you put it down, and a text arriving unasked.", settings.storyNotices, { storyNotices: settings.storyNotices })}
-          {toggleRow("Characters text first", "Allows occasional background replies and uses tokens.", settings.unpromptedTexts, { unpromptedTexts: settings.unpromptedTexts })}
+          <label className="vp-row"><span>Rich content</span><select value={settings.heavyConnectionId} disabled={!connections} onChange={(event) => void update({ heavyConnectionId: event.target.value })} className="vp-row-control">{connectionOptions(settings.heavyConnectionId)}</select></label>
+          {toggleRow("Share phone activity", "Adds significant phone actions to the story.", settings.storyNotices, { storyNotices: settings.storyNotices })}
+          {toggleRow("Spontaneous messages", "Characters can text without being prompted.", settings.unpromptedTexts, { unpromptedTexts: settings.unpromptedTexts })}
         </div></section>
         <section className="vp-lore-section"><div className="vp-settings-heading"><h3 className="vp-section-label">Lorebooks</h3><span>{settings.lorebookMode === "chat" ? "This chat" : settings.lorebookMode === "none" ? "Off" : `${selectedLorebooks} chosen`}</span></div>
           <div className="vp-group vp-lore-picker">
@@ -279,24 +278,24 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
               </div>
             </> : settings.lorebookMode === "chat" ? (
               <div className="vp-lore-summary">
-                <p>This phone reads the lorebooks this chat is using. Nothing from your other stories reaches it.</p>
+                <p>Uses only lorebooks attached to this story.</p>
                 {chatLorebooks.length ? (
                   <ul className="vp-lore-inplay">
                     {chatLorebooks.map((lorebook) => (
                       <li key={lorebook.id}><span>{lorebook.name}</span><small>{SCOPE_LABELS[lorebook.scope!]}</small></li>
                     ))}
                   </ul>
-                ) : <p className="vp-muted-note">This chat has no lorebooks, so the phone invents the world as it goes.</p>}
+                ) : <p className="vp-muted-note">No lorebooks are active in this story.</p>}
               </div>
             ) : <p className="vp-lore-summary">Lorebooks are excluded from phone generation.</p>}
           </div>
         </section>
-        <section><h3 className="vp-section-label">Instructions &amp; jailbreak</h3><div className="vp-group"><label className="vp-row vp-row--stacked"><span>System prompt / jailbreak</span>
+        <section><h3 className="vp-section-label">Generation guidance</h3><div className="vp-group"><label className="vp-row vp-row--stacked"><span>Author instructions</span>
             <textarea
               key={`${phone.phoneId}:instructions`}
               defaultValue={settings.generationInstructions}
               onBlur={(event) => void update({ generationInstructions: event.target.value })}
-              placeholder="Added to the end of the system prompt for everything this phone generates. Paste a jailbreak or preset system prompt here to match your Marinara preset's tone and lift filtering."
+              placeholder="Tone, genre, or world rules for generated phone content."
               maxLength={12000}
               className="vp-textarea"
               style={{ minHeight: "5.5rem", width: "100%" }}
@@ -305,14 +304,15 @@ export function SettingsShell({ phone, onPhoneChange, onBack, onClose }: Setting
         </div></section>
       </div> : <div className="vp-settings-sections">
         <section><h3 className="vp-section-label">This phone</h3><div className="vp-group">
-          <div className="vp-row"><span>Owner</span><span className="vp-muted-note">{about ? `${about.ownerName} (${about.ownerType})` : "…"}</span></div>
+          <div className="vp-row"><span>Owner</span><span className="vp-muted-note">{about?.ownerName ?? "…"}</span></div>
+          <div className="vp-row"><span>Phone type</span><span className="vp-muted-note">{about ? (about.ownerType === "character" ? "Character phone" : "Persona phone") : "…"}</span></div>
           <div className="vp-row"><span>Device name</span><span className="vp-muted-note">{about?.deviceName || "Not set"}</span></div>
           <div className="vp-row"><span>Chats</span><span className="vp-muted-note">{about ? about.chats : "…"}</span></div>
           <div className="vp-row"><span>Installed apps</span><span className="vp-muted-note">{about ? about.installedApps : "…"}</span></div>
           <div className="vp-row"><span>Storage used</span><span className="vp-muted-note">{about ? formatBytes(about.storageBytes) : "…"}</span></div>
         </div></section>
         <section><div className="vp-group">
-          <button type="button" onClick={() => { if (window.confirm("Reset this phone's device settings?")) void reset(); }} className="vp-row vp-row--danger"><RotateCcw size="0.875rem" aria-hidden="true" /> Reset device settings</button>
+          <button type="button" onClick={() => { if (window.confirm("Reset appearance, phone state, dock, and roleplay settings? Apps and their data will be kept.")) void reset(); }} className="vp-row vp-row--danger"><RotateCcw size="0.875rem" aria-hidden="true" /> Reset all settings</button>
         </div></section>
       </div>}
       </div>

@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "virtual-phone",
   "name": "Virtual Phone",
-  "version": "2.9.1",
-  "description": "Adds persistent in-story phones for personas and configured characters, with per-phone baseline themes and a docked device shell. Add the Agent in Chat Settings → Agents → Misc Agents, then open the phone from the chat toolbar.",
+  "version": "2.10.1",
+  "description": "Adds persistent in-story phones for personas and configured characters, with Engine-backed calls, apps, notifications, and a polished docked device shell. Add the Agent in Chat Settings → Agents → Misc Agents, then open the phone from the chat toolbar.",
   "engine": {
     "min": "2.4.2",
     "maxExclusive": "4.0.0"
@@ -31,21 +31,23 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "662bd5c424cd4f96c4e6b779acb01ff9c3b1473ac3fc3e62f5c33a3957177382",
-      "bytes": 659
+      "sha256": "b9ad08df3d646be9cba0d91dfa7c1d9cc3948835fa4059288bd8fc63cfb6505a",
+      "bytes": 684
     },
     {
       "path": "server.mjs",
-      "sha256": "15f7de188b2d02bd0791ef4565163bf60b84d1f63b9092674c9c793e216aa73b",
-      "bytes": 112345
+      "sha256": "8d111c6945f74a00033f32703f6c938a73e5280f40aab283396ac9cb8480e7af",
+      "bytes": 149607
     },
     {
       "path": "client.js",
-      "sha256": "09944d4a43411aee9433ce28e83a62fc7d67270df3f2658cb7ed6b018d044699",
-      "bytes": 487093
+      "sha256": "0ed29880bc27a158da9ee4b99ca80a91f4a4723ae5635b0c423b210218305bdc",
+      "bytes": 640612
     }
   ],
   "permissions": [
+    "conversation-actions",
+    "chat-read",
     "prompt-context",
     "routes",
     "storage",

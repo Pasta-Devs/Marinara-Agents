@@ -1,59 +1,81 @@
 import React from "react";
+import { Check, ChevronRight, Search, ShieldCheck, Sparkles } from "lucide-react";
 import type { AppManifest } from "../../platform/app-manifest";
-import { appDescription, modelUseLabel } from "./manifest";
 import { PhoneAppHeader } from "../../platform/app-header";
+import { PhoneEmptyState } from "../../platform/empty-state";
 import { appGlyph, appIconClass } from "../../platform/app-icons";
+import { appDescription, capabilitySummary, modelUseLabel, privacyLabel, storyImpactLabel } from "./manifest";
 
-function titleCase(value: string) {
-  return value ? value[0]!.toUpperCase() + value.slice(1) : value;
-}
+type StoreApp = { manifest: AppManifest; installed: boolean };
 
 interface AppStoreShellProps {
-  apps: Array<{ manifest: AppManifest; installed: boolean }>;
+  apps: StoreApp[];
   onInstalledChange: (appId: string, installed: boolean) => void;
   onOpenApp: (appId: string) => void;
   onBack: () => void;
   onClose: () => void;
 }
 
+function titleCase(value: string) {
+  return value ? value[0]!.toUpperCase() + value.slice(1) : value;
+}
+
+function AppIcon({ manifest, large = false }: { manifest: AppManifest; large?: boolean }) {
+  return (
+    <span className={`vp-card-icon ${large ? "vp-store-icon--large" : ""} ${appIconClass(manifest.id)}`} aria-hidden="true">
+      {React.createElement(appGlyph(manifest.id), { size: large ? "1.5rem" : "1rem" })}
+    </span>
+  );
+}
+
 export function AppStoreShell({ apps, onInstalledChange, onOpenApp, onBack, onClose }: AppStoreShellProps) {
   const [query, setQuery] = React.useState("");
+  const [section, setSection] = React.useState<"discover" | "installed">("discover");
   const [openId, setOpenId] = React.useState<string | null>(null);
   const open = apps.find(({ manifest }) => manifest.id === openId) ?? null;
+  const installedCount = apps.filter(({ installed }) => installed).length;
 
-  /** Removing an app can destroy that app's storage, so it asks first. Installing stays instant. */
   const remove = (manifest: AppManifest) => {
-    if (!window.confirm(`Remove ${manifest.name}? Anything it saved on this phone goes with it.`)) return;
+    if (!window.confirm(`Remove ${manifest.name} from this phone? Its saved information will stay here if you install it again.`)) return;
     onInstalledChange(manifest.id, false);
     setOpenId(null);
   };
-  const needle = query.trim().toLowerCase();
-  const filtered = needle
-    ? apps.filter(({ manifest }) => manifest.name.toLowerCase().includes(needle) || manifest.category.toLowerCase().includes(needle))
-    : apps;
-  const categories = [...new Set(filtered.map(({ manifest }) => manifest.category))].sort();
-  const featured = !needle ? apps.filter(({ manifest, installed }) => !installed && manifest.removable) : [];
 
-  const row = ({ manifest, installed }: { manifest: AppManifest; installed: boolean }) => (
-    <article key={manifest.id} className="vp-card vp-card-row">
-      <span className={`vp-card-icon ${appIconClass(manifest.id)}`} aria-hidden="true">{React.createElement(appGlyph(manifest.id), { size: "1rem" })}</span>
-      <button type="button" className="vp-card-body" onClick={() => setOpenId(manifest.id)} style={{ textAlign: "left", background: "none", border: 0, font: "inherit", color: "inherit", cursor: "pointer" }}>
-        <h3>{manifest.name}</h3>
-        <p>{titleCase(manifest.category)} · {modelUseLabel(manifest.modelUse)}</p>
-      </button>
-      <div className="vp-store-actions">
-        {installed
-          ? <button type="button" onClick={() => onOpenApp(manifest.id)} className="vp-store-get">Open</button>
-          : <button type="button" onClick={() => onInstalledChange(manifest.id, true)} className="vp-store-get">Get</button>}
-        {installed && manifest.removable
-          ? <button type="button" onClick={() => remove(manifest)} className="vp-store-remove">Remove</button>
-          : null}
-      </div>
-    </article>
+  const needle = query.trim().toLocaleLowerCase();
+  const searched = apps.filter(({ manifest }) => {
+    if (!needle) return true;
+    return [manifest.name, manifest.category, appDescription(manifest.id)]
+      .some((value) => value.toLocaleLowerCase().includes(needle));
+  });
+  const visible = section === "installed" ? searched.filter(({ installed }) => installed) : searched;
+  const categories = [...new Set(visible.map(({ manifest }) => manifest.category))].sort();
+
+  const installButton = ({ manifest, installed }: StoreApp) => installed ? (
+    <button type="button" onClick={() => onOpenApp(manifest.id)} className="vp-store-get">Open</button>
+  ) : (
+    <button type="button" onClick={() => onInstalledChange(manifest.id, true)} className="vp-store-get" aria-label={`Install ${manifest.name}`}>Get</button>
   );
 
+  const row = (app: StoreApp) => {
+    const { manifest, installed } = app;
+    return (
+      <article key={manifest.id} className="vp-store-row">
+        <button type="button" className="vp-store-row-main" onClick={() => setOpenId(manifest.id)} aria-label={`View ${manifest.name}`}>
+          <AppIcon manifest={manifest} />
+          <span className="vp-store-row-copy">
+            <strong>{manifest.name}</strong>
+            <small>{appDescription(manifest.id)}</small>
+            <span>{modelUseLabel(manifest.modelUse)}</span>
+          </span>
+          <ChevronRight size="0.875rem" aria-hidden="true" />
+        </button>
+        <div className="vp-store-actions">{installButton(app)}</div>
+      </article>
+    );
+  };
+
   return (
-    <section aria-labelledby="app-store-title" className="vp-appview">
+    <section aria-labelledby="app-store-title" className="vp-appview" data-phone-app="app-store">
       <PhoneAppHeader
         title={open ? open.manifest.name : "App Store"}
         titleId="app-store-title"
@@ -61,49 +83,74 @@ export function AppStoreShell({ apps, onInstalledChange, onOpenApp, onBack, onCl
         onBack={() => open ? setOpenId(null) : onBack()}
         onClose={onClose}
       />
+
       {open ? (
-        <div className="vp-stack" style={{ gap: "0.75rem" }}>
-          <div className="vp-card vp-card-row">
-            <span className={`vp-card-icon ${appIconClass(open.manifest.id)}`} aria-hidden="true">{React.createElement(appGlyph(open.manifest.id), { size: "1rem" })}</span>
-            <div className="vp-card-body">
+        <div className="vp-store-detail">
+          <div className="vp-store-detail-hero">
+            <AppIcon manifest={open.manifest} large />
+            <div>
               <h3>{open.manifest.name}</h3>
-              <p>{titleCase(open.manifest.category)} · {modelUseLabel(open.manifest.modelUse)}</p>
+              <p>{titleCase(open.manifest.category)}</p>
             </div>
+            {installButton(open)}
           </div>
-          <p className="vp-page-body">{appDescription(open.manifest.id) || "No description available."}</p>
-          <div className="vp-store-actions">
-            {open.installed
-              ? <button type="button" onClick={() => onOpenApp(open.manifest.id)} className="vp-store-get">Open</button>
-              : <button type="button" onClick={() => onInstalledChange(open.manifest.id, true)} className="vp-store-get">Get</button>}
-            {open.installed && open.manifest.removable
-              ? <button type="button" onClick={() => remove(open.manifest)} className="vp-store-remove">Remove</button>
-              : null}
-          </div>
-          {open.manifest.removable ? null : <p className="vp-muted-note">This app is part of the phone and cannot be removed.</p>}
+
+          <p className="vp-store-description">{appDescription(open.manifest.id) || "No description available."}</p>
+
+          <section aria-labelledby="store-access-title">
+            <h3 id="store-access-title" className="vp-section-label">Before you install</h3>
+            <div className="vp-store-disclosures">
+              <div><Sparkles size="1rem" aria-hidden="true" /><span><strong>How it responds</strong><small>{modelUseLabel(open.manifest.modelUse)}</small></span></div>
+              <div><ShieldCheck size="1rem" aria-hidden="true" /><span><strong>Data</strong><small>{privacyLabel(open.manifest)}</small></span></div>
+              <div><Check size="1rem" aria-hidden="true" /><span><strong>Roleplay</strong><small>{storyImpactLabel(open.manifest)}</small></span></div>
+            </div>
+          </section>
+
+          <section aria-labelledby="store-access-list-title">
+            <h3 id="store-access-list-title" className="vp-section-label">Access</h3>
+            <div className="vp-group">
+              {capabilitySummary(open.manifest).map((item) => <p key={item} className="vp-store-access-row">{item}</p>)}
+            </div>
+          </section>
+
+          {open.installed && open.manifest.removable ? (
+            <button type="button" onClick={() => remove(open.manifest)} className="vp-store-remove-wide">Remove App</button>
+          ) : null}
+          {!open.manifest.removable ? <p className="vp-muted-note vp-store-system-note">Built into this phone. This app cannot be removed.</p> : null}
         </div>
       ) : (
-      <>
-      <div className="vp-search-go" style={{ marginBottom: "0.75rem" }}>
-        <label><span className="vp-sr-only">Search apps</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search apps" className="vp-input" /></label>
-      </div>
-      {featured.length ? (
         <>
-          <h3 className="vp-section-label">Not on this phone</h3>
-          <div className="vp-stack" style={{ gap: "0.5rem", marginTop: "0.625rem", marginBottom: "0.875rem" }}>
-            {featured.map(row)}
+          <label className="vp-store-search">
+            <Search size="0.875rem" aria-hidden="true" />
+            <span className="vp-sr-only">Search apps</span>
+            <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search apps" />
+          </label>
+
+          <div className="vp-filter-tabs" role="tablist" aria-label="App Store section">
+            <button type="button" role="tab" aria-selected={section === "discover"} onClick={() => setSection("discover")}>Discover</button>
+            <button type="button" role="tab" aria-selected={section === "installed"} onClick={() => setSection("installed")}>Installed · {installedCount}</button>
           </div>
+
+          {!query && section === "discover" ? (
+            <div className="vp-store-intro">
+              <Sparkles size="1.125rem" aria-hidden="true" />
+              <div><strong>Apps for this phone</strong><span>Add tools, social spaces, and story features. Products are sold in Shop; used listings belong in Bazaar.</span></div>
+            </div>
+          ) : null}
+
+          {visible.length === 0 ? (
+            <PhoneEmptyState
+              icon={Search}
+              title={section === "installed" ? "No installed app found" : "No app found"}
+              body={query ? "Try an app name, category, or what you want to do." : "Installed apps will appear here."}
+            />
+          ) : categories.map((category) => (
+            <section key={category} className="vp-store-category">
+              <h3 className="vp-section-label">{titleCase(category)}</h3>
+              <div className="vp-store-list">{visible.filter(({ manifest }) => manifest.category === category).map(row)}</div>
+            </section>
+          ))}
         </>
-      ) : null}
-      {filtered.length === 0 ? <p className="vp-muted-note">No apps match "{query}".</p> : null}
-      {categories.map((category) => (
-        <React.Fragment key={category}>
-          <h3 className="vp-section-label">{titleCase(category)}</h3>
-          <div className="vp-stack" style={{ gap: "0.5rem", marginTop: "0.625rem", marginBottom: "0.875rem" }}>
-            {filtered.filter(({ manifest }) => manifest.category === category).map(row)}
-          </div>
-        </React.Fragment>
-      ))}
-      </>
       )}
     </section>
   );

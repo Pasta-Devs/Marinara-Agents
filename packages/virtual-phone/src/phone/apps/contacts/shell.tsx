@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronRight, MessageSquare, Plus, Sparkles, Users } from "lucide-react";
+import { ChevronRight, MessageSquare, Phone, Plus, Search, Star, Users } from "lucide-react";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { PhoneAvatar, useAvatarMap } from "../../platform/avatars";
@@ -10,6 +10,7 @@ type Contact = {
   kind: "phone" | "contact";
   phoneId: string | null;
   ownerId?: string;
+  ownerType?: "character" | "persona";
   name: string;
   phoneLabel?: string;
   bio?: string;
@@ -44,6 +45,9 @@ export function ContactsShell({ phoneId, chatId, openApp, installedApps = [], on
   onBack: () => void;
   onClose: () => void;
 }) {
+  const [query, setQuery] = React.useState("");
+  const [filter, setFilter] = React.useState<"all" | "favorites">("all");
+  const [favorites, setFavorites] = React.useState<string[]>([]);
   const [data, setData] = React.useState<ContactsPayload | null>(null);
   const [error, setError] = React.useState("");
   const avatars = useAvatarMap();
@@ -71,6 +75,16 @@ export function ContactsShell({ phoneId, chatId, openApp, installedApps = [], on
       .catch((requestError) => { if (active) setError(requestError instanceof Error ? requestError.message : "Contacts could not be loaded"); });
     return () => { active = false; };
   }, [phoneId, chatId]);
+
+  React.useEffect(() => {
+    let active = true;
+    void phoneRequest<{ value?: unknown }>(`/phones/${encodeURIComponent(phoneId)}/apps/contacts/storage/favorites`)
+      .then(({ value }) => {
+        if (active) setFavorites(Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : []);
+      })
+      .catch(() => { if (active) setFavorites([]); });
+    return () => { active = false; };
+  }, [phoneId]);
 
   const threadStatus = (contactPhoneId: string) => {
     const thread = data?.threads.find((candidate) => candidate.otherPhoneId === contactPhoneId);
@@ -119,16 +133,37 @@ export function ContactsShell({ phoneId, chatId, openApp, installedApps = [], on
         method: "DELETE",
       });
       setData((current) => current ? { ...current, contacts: current.contacts.filter((entry) => entry.id !== contact.id) } : current);
+      if (favorites.includes(contact.id)) void toggleFavorite(contact.id);
       setOpenId(null);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Contact could not be deleted");
     }
   };
 
+  const toggleFavorite = async (contactId: string) => {
+    const previous = favorites;
+    const next = previous.includes(contactId) ? previous.filter((id) => id !== contactId) : [...previous, contactId];
+    setFavorites(next);
+    try {
+      await phoneRequest(`/phones/${encodeURIComponent(phoneId)}/apps/contacts/storage/favorites`, {
+        method: "PUT",
+        body: JSON.stringify({ value: next }),
+      });
+    } catch (requestError) {
+      setFavorites(previous);
+      setError(requestError instanceof Error ? requestError.message : "Favorite could not be saved");
+    }
+  };
+
   const openContact = data?.contacts.find((contact) => contact.id === openId) ?? null;
+  const visibleContacts = data?.contacts.filter((contact) => {
+    if (filter === "favorites" && !favorites.includes(contact.id)) return false;
+    return !query.trim() || `${contact.name} ${contact.bio ?? ""} ${contact.phoneLabel ?? ""} ${contact.source ?? ""}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
+  }) ?? [];
+  const favoriteCount = data?.contacts.filter((contact) => favorites.includes(contact.id)).length ?? 0;
 
   return (
-    <section aria-labelledby="contacts-title" className="vp-appview">
+    <section aria-labelledby="contacts-title" className="vp-appview" data-phone-app="contacts">
       <PhoneAppHeader
         title={openContact ? openContact.name : view === "add" ? "Add someone" : "Contacts"}
         titleId="contacts-title"
@@ -150,40 +185,28 @@ export function ContactsShell({ phoneId, chatId, openApp, installedApps = [], on
       {error ? <p role="alert" className="vp-muted-note">{error}</p> : null}
 
       {openContact ? (
-        <div className="vp-stack" style={{ gap: "0.75rem" }}>
-          <div className="vp-card vp-stack" style={{ gap: "0.5rem", alignItems: "center", textAlign: "center" }}>
+        <div className="vp-contact-detail">
+          <div className="vp-contact-hero">
             <PhoneAvatar name={openContact.name} url={openContact.ownerId ? avatars?.get(openContact.ownerId) : null} />
-            <span className="vp-thread-name">{openContact.name}</span>
-            {openContact.phoneLabel?.trim() ? <span className="vp-thread-preview">{openContact.phoneLabel}</span> : null}
-            {openContact.bio?.trim() ? <p className="vp-thread-preview">{openContact.bio}</p> : null}
-            {openContact.source?.trim() ? <span className="vp-muted-note">{openContact.source}</span> : null}
-            {openContact.kind === "phone" ? <span className="vp-muted-note">Engine character or persona</span> : null}
-            <span className="vp-muted-note">
-              {openContact.phoneId ? threadStatus(openContact.phoneId) : "No phone in this chat"}
-            </span>
+            <h3>{openContact.name}</h3>
+            {openContact.phoneLabel?.trim() ? <p>{openContact.phoneLabel}</p> : null}
           </div>
-          {/* A contact you can only look at is an address book from before phones. */}
           {openApp ? (
             <div className="vp-contact-actions">
-              <button
-                type="button"
-                className="vp-contact-action"
-                disabled={!openContact.phoneId || !installedApps.includes("messages")}
-                title={openContact.phoneId ? undefined : "This person has no phone in this chat"}
-                onClick={() => openContact.phoneId && openApp("messages", openContact.phoneId)}
-              >
-                <MessageSquare size="1rem" aria-hidden="true" /><span>Message</span>
-              </button>
-              <button
-                type="button"
-                className="vp-contact-action"
-                disabled={!installedApps.includes("noodler")}
-                onClick={() => openApp("noodler", openContact.name)}
-              >
-                <Sparkles size="1rem" aria-hidden="true" /><span>Noodle</span>
-              </button>
+              {openContact.ownerType === "character" && openContact.ownerId && installedApps.includes("calls") ? <button type="button" className="vp-contact-action" onClick={() => openApp("calls", openContact.ownerId)}><Phone size="1rem" aria-hidden="true" /><span>Call</span></button> : null}
+              {openContact.phoneId && installedApps.includes("messages") ? <button type="button" className="vp-contact-action" onClick={() => openApp("messages", openContact.phoneId!)}><MessageSquare size="1rem" aria-hidden="true" /><span>Message</span></button> : null}
+              <button type="button" className="vp-contact-action" aria-pressed={favorites.includes(openContact.id)} onClick={() => void toggleFavorite(openContact.id)}><Star size="1rem" fill={favorites.includes(openContact.id) ? "currentColor" : "none"} aria-hidden="true" /><span>{favorites.includes(openContact.id) ? "Favorite" : "Favorite"}</span></button>
             </div>
           ) : null}
+          {openContact.bio?.trim() ? <section><h4 className="vp-section-label">About</h4><div className="vp-card vp-contact-copy">{openContact.bio}</div></section> : null}
+          <section>
+            <h4 className="vp-section-label">Contact</h4>
+            <div className="vp-group">
+              {openContact.phoneLabel?.trim() ? <div className="vp-row"><span>Details</span><span className="vp-contact-value">{openContact.phoneLabel}</span></div> : null}
+              <div className="vp-row"><span>Messages</span><span className="vp-contact-value">{openContact.phoneId ? threadStatus(openContact.phoneId) : "Unavailable"}</span></div>
+            </div>
+          </section>
+          {openContact.source?.trim() ? <section><h4 className="vp-section-label">Relationship</h4><div className="vp-card vp-contact-copy">{openContact.source}</div></section> : null}
         </div>
       ) : view === "add" ? (
         <>
@@ -233,8 +256,13 @@ export function ContactsShell({ phoneId, chatId, openApp, installedApps = [], on
           ) : null}
           {data?.contacts.length ? (
             <>
+              <label className="vp-inline-search"><Search size="0.875rem" aria-hidden="true" /><span className="vp-sr-only">Search contacts</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search contacts" /></label>
+              <div className="vp-filter-tabs" role="tablist" aria-label="Contact list">
+                <button type="button" role="tab" aria-selected={filter === "all"} onClick={() => setFilter("all")}>All <span>{data.contacts.length}</span></button>
+                <button type="button" role="tab" aria-selected={filter === "favorites"} onClick={() => setFilter("favorites")}>Favorites <span>{favoriteCount}</span></button>
+              </div>
               <div className="vp-list-group">
-                {groupContacts(data.contacts).map(([letter, group]) => (
+                {groupContacts(visibleContacts).map(([letter, group]) => (
                   <section key={letter}>
                     <h3 className="vp-index-head">{letter}</h3>
                     <div className="vp-list vp-list--inset-rules">
@@ -242,10 +270,8 @@ export function ContactsShell({ phoneId, chatId, openApp, installedApps = [], on
                         <button key={contact.id} type="button" onClick={() => setOpenId(contact.id)} className="vp-thread-row">
                           <PhoneAvatar name={contact.name} url={contact.ownerId ? avatars?.get(contact.ownerId) : null} />
                           <span className="vp-thread-body">
-                            <span className="vp-thread-name">{contact.name}</span>
-                            {contact.bio?.trim() ? <span className="vp-thread-preview">{contact.bio}</span> : null}
-                            {contact.source?.trim() ? <span className="vp-thread-preview">{contact.source}</span> : null}
-                            <span className="vp-thread-preview">{contact.phoneLabel?.trim() ? `${contact.phoneLabel} · ` : ""}{contact.phoneId ? threadStatus(contact.phoneId) : "No phone in this chat"}</span>
+                            <span className="vp-thread-name">{contact.name}{favorites.includes(contact.id) ? <Star className="vp-contact-star" size="0.65rem" fill="currentColor" aria-label="Favorite" /> : null}</span>
+                            <span className="vp-thread-preview">{contact.phoneLabel?.trim() || contact.bio?.trim() || contact.source?.trim() || (contact.phoneId ? threadStatus(contact.phoneId) : "No contact details")}</span>
                           </span>
                           <ChevronRight size="1rem" aria-hidden="true" className="vp-row-chevron" />
                         </button>
@@ -254,6 +280,8 @@ export function ContactsShell({ phoneId, chatId, openApp, installedApps = [], on
                   </section>
                 ))}
               </div>
+              {query.trim() && visibleContacts.length === 0 ? <PhoneEmptyState icon={Search} title="No contact found" body="Try a name, note, or saved contact detail." /> : null}
+              {!query.trim() && filter === "favorites" && visibleContacts.length === 0 ? <PhoneEmptyState icon={Star} title="No favorites" body="Open a contact and tap the star to keep important people close." action={{ label: "Show all contacts", onClick: () => setFilter("all") }} /> : null}
               <div className="vp-fab-layer">
                 <button type="button" className="vp-fab" aria-label="Add someone" onClick={() => setView("add")}><Plus size="1.375rem" aria-hidden="true" /></button>
               </div>

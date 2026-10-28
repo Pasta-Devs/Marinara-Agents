@@ -2,6 +2,7 @@ import type { ComponentType, LazyExoticComponent } from "react";
 import { validateAppManifest, type AppManifest } from "./app-manifest";
 import type { Phone } from "../system/PhonesSettings";
 import type { DeviceSettings } from "../device/settings";
+import type { PhoneLaunchIntent } from "./launch-intent";
 
 /**
  * Everything the device shell needs to render an app. Adding an app means adding one entry
@@ -19,7 +20,7 @@ export interface AppRenderContext {
    * to look up. Apps were reachable only from the home screen, so a contact and their conversation
    * were two unconnected screens with the same person on them.
    */
-  openApp: (appId: string, target?: string) => void;
+  openApp: (appId: string, target?: string | Omit<PhoneLaunchIntent, "version">) => void;
   /** What the last openApp call handed this app, if anything. */
   launchTarget: string;
   installedApps: Array<{ manifest: AppManifest; installed: boolean }>;

@@ -95,7 +95,7 @@
       "type": "array",
       "uniqueItems": true,
       "items": {
-        "enum": ["agent-runtime", "chat-read", "chat-write", "network", "prompt-context", "routes", "storage", "ui"]
+        "enum": ["agent-runtime", "chat-read", "chat-write", "conversation-actions", "network", "prompt-context", "routes", "storage", "ui"]
       }
     },
     "restartRequired": { "type": "boolean", "default": false }

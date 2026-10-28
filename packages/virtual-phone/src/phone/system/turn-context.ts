@@ -63,6 +63,8 @@ export interface TurnPhoneState {
   note?: { text: string; fresh: boolean };
   /** Set only when it is low enough to matter to a scene. */
   batteryLevel?: number;
+  /** Only exceptional physical/device facts; defaults stay silent. */
+  operational?: string[];
 }
 
 export interface TurnSceneState {
@@ -83,15 +85,16 @@ export function buildTurnContext(phones: TurnPhoneState[], scene?: TurnSceneStat
     if (phone.clock) parts.push(`it is ${sanitizeForPrompt(phone.clock, 12)}`);
     for (const thread of phone.unread.slice(0, MAX_THREADS)) {
       const from = sanitizeForPrompt(thread.from, 40) || "an unknown number";
-      const latest = sanitizeForPrompt(thread.latest);
       parts.push(thread.fresh
-        ? `${thread.count} new from ${from}${latest ? `: "${latest}"` : ""}`
+        ? `${thread.count} new from ${from}; contents unread`
         : `${thread.count} still unread from ${from}`);
     }
-    if (phone.note?.fresh) parts.push(`a note just written reads "${sanitizeForPrompt(phone.note.text)}"`);
+    // Stored content is not owner knowledge. The operator may have written a note while secretly
+    // holding somebody else's phone; it enters context only after an explicit knowledge grant.
     if (typeof phone.batteryLevel === "number" && phone.batteryLevel <= 15) {
       parts.push(`battery ${Math.round(phone.batteryLevel)}%`);
     }
+    for (const fact of phone.operational ?? []) parts.push(sanitizeForPrompt(fact, 60));
     if (!parts.length) continue;
     lines.push(`${owner}'s phone: ${parts.join("; ")}.`);
   }
@@ -102,9 +105,9 @@ export function buildTurnContext(phones: TurnPhoneState[], scene?: TurnSceneStat
    */
   const anythingNew = phones.some((phone) =>
     phone.unread.some((thread) => thread.fresh)
-    || phone.note?.fresh
     || (typeof phone.batteryLevel === "number" && phone.batteryLevel <= 15)
-    || phone.unread.length > 0);
+    || Boolean(phone.operational?.length)
+  );
   if (!anythingNew) return null;
 
   const sceneParts = [scene?.time, scene?.location, scene?.weather]

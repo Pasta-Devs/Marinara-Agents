@@ -1,5 +1,7 @@
 import React from "react";
+import { ChevronLeft, ChevronRight, Images, RotateCcw, Share2, Star, Trash2 } from "lucide-react";
 import { PhoneAppHeader } from "../../platform/app-header";
+import { PhoneEmptyState } from "../../platform/empty-state";
 import { useStoryClock } from "../../platform/story-clock";
 import { phoneRequest, recordActivity } from "../../platform/api";
 import { usePhoneStore } from "../../platform/use-phone-store";
@@ -8,17 +10,44 @@ interface Shot {
   id: string;
   text: string;
   at: string;
+  lens?: "front" | "rear";
+  favorite?: boolean;
 }
 
 const MAX_SHOTS = 24;
 
-export function CameraShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
+export function readCameraShots(value: unknown): Shot[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((shot): shot is Shot => !!shot
+    && typeof (shot as Shot).text === "string"
+    && !!(shot as Shot).text.trim()
+    && typeof (shot as Shot).id === "string"
+    && typeof (shot as Shot).at === "string")
+    .map((shot) => ({
+      id: shot.id,
+      text: shot.text.trim().slice(0, 800),
+      at: shot.at,
+      lens: shot.lens === "front" ? "front" : "rear",
+      favorite: shot.favorite === true,
+    }))
+    .slice(0, MAX_SHOTS);
+}
+
+export function CameraShell({ phoneId, openGallery, openMessages, onBack, onClose }: {
+  phoneId: string;
+  openGallery?: () => void;
+  openMessages?: (draft: string) => void;
+  onBack: () => void;
+  onClose: () => void;
+}) {
   const store = usePhoneStore(phoneId, "camera");
   const clock = useStoryClock();
   const [shots, setShots] = React.useState<Shot[] | null>(null);
   const [shooting, setShooting] = React.useState(false);
   const [subject, setSubject] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
+  const [lens, setLens] = React.useState<"front" | "rear">("rear");
+  const [openShotId, setOpenShotId] = React.useState<string | null>(null);
   /**
    * The shutter produces a description you can edit before it is committed. Refining the prompt is
    * the interesting half of the interaction and it needs no Engine change; committing produces a
@@ -33,9 +62,7 @@ export function CameraShell({ phoneId, onBack, onClose }: { phoneId: string; onB
     let active = true;
     void store.get("shots").then((value) => {
       if (!active) return;
-      setShots(Array.isArray(value)
-        ? value.filter((shot): shot is Shot => !!shot && typeof (shot as Shot).text === "string" && typeof (shot as Shot).id === "string")
-        : []);
+      setShots(readCameraShots(value));
     }).catch(() => { if (active) setShots([]); });
     return () => { active = false; };
   }, [store]);
@@ -48,11 +75,15 @@ export function CameraShell({ phoneId, onBack, onClose }: { phoneId: string; onB
   };
 
   const shoot = () => {
+    if ((shots?.length ?? 0) >= MAX_SHOTS) {
+      setError("The camera roll is full. Delete a photo before taking another.");
+      return;
+    }
     setShooting(true);
     setError(null);
     void phoneRequest<{ photo: string }>(`/phones/${encodeURIComponent(phoneId)}/camera/shot`, {
       method: "POST",
-      body: JSON.stringify({ subject: subject.trim() }),
+      body: JSON.stringify({ subject: subject.trim(), lens }),
     })
       .then((response) => {
         if (!response.photo.trim()) {
@@ -69,9 +100,10 @@ export function CameraShell({ phoneId, onBack, onClose }: { phoneId: string; onB
 
   const commit = () => {
     if (!draft?.trim()) return;
-    const shot: Shot = { id: crypto.randomUUID(), text: draft.trim(), at: new Date().toISOString() };
-    persist([shot, ...(shots ?? [])].slice(0, MAX_SHOTS));
-    void recordActivity(phoneId, `took a photo — ${shot.text.slice(0, 120)}`)
+    if ((shots?.length ?? 0) >= MAX_SHOTS) return;
+    const shot: Shot = { id: crypto.randomUUID(), text: draft.trim(), at: new Date().toISOString(), lens };
+    persist([shot, ...(shots ?? [])]);
+    void recordActivity(phoneId, "took a photo with the Phone")
       .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The photo action could not be recorded."));
     setDraft(null);
     setSubject("");
@@ -79,36 +111,65 @@ export function CameraShell({ phoneId, onBack, onClose }: { phoneId: string; onB
 
   const deleteShot = (id: string) => {
     if (!shots) return;
+    if (!window.confirm("Delete this photo from the camera roll?")) return;
     persist(shots.filter((shot) => shot.id !== id));
+    setOpenShotId(null);
+  };
+
+  const updateShot = (id: string, patch: Partial<Shot>) => {
+    if (!shots) return;
+    persist(shots.map((shot) => shot.id === id ? { ...shot, ...patch } : shot));
   };
 
   const latest = shots?.[0] ?? null;
+  const openShotIndex = openShotId ? (shots ?? []).findIndex((shot) => shot.id === openShotId) : -1;
+  const openShot = openShotIndex >= 0 ? shots?.[openShotIndex] ?? null : null;
+  const stepShot = (delta: number) => {
+    if (!shots?.length || openShotIndex < 0) return;
+    setOpenShotId(shots[(openShotIndex + delta + shots.length) % shots.length]!.id);
+  };
 
   return (
-    <section aria-labelledby="camera-title" className="vp-appview vp-appview--fixed vp-camera">
+    <section aria-labelledby="camera-title" className="vp-appview vp-appview--fixed vp-camera" data-phone-app="camera">
       <PhoneAppHeader
-        title={view === "roll" ? "Camera roll" : "Camera"}
+        title={openShot ? "Photo" : view === "roll" ? "Camera roll" : "Camera"}
         titleId="camera-title"
         closeLabel="Close Camera"
-        onBack={() => view === "roll" ? setView("camera") : onBack()}
+        onBack={() => openShot ? setOpenShotId(null) : view === "roll" ? setView("camera") : onBack()}
         onClose={onClose}
+        actions={view === "roll" && openGallery ? [{ id: "gallery", icon: "menu", label: "Open Gallery", kind: "button" }] : []}
+        onAction={(actionId) => { if (actionId === "gallery") openGallery?.(); }}
       />
       {error ? <p role="alert" className="vp-muted-note">{error}</p> : null}
       {view === "roll" ? (
-        shots?.length ? (
-          <div className="vp-roll-grid">
+        openShot ? (
+          <article className="vp-camera-photo">
+            <div className="vp-camera-photo-frame"><p>{openShot.text}</p>{openShot.favorite ? <Star size="1rem" fill="currentColor" aria-label="Favorite" /> : null}</div>
+            <div className="vp-camera-photo-meta">
+              <span>{`${clock.shortDate(openShot.at)}, ${clock.time(openShot.at)}`}</span>
+              <span>{openShot.lens === "front" ? "Front camera" : "Rear camera"}</span>
+            </div>
+            {shots && shots.length > 1 ? <div className="vp-camera-pager">
+              <button type="button" onClick={() => stepShot(-1)} aria-label="Previous photo" className="vp-icon-btn"><ChevronLeft size="1rem" /></button>
+              <span>{openShotIndex + 1} of {shots.length}</span>
+              <button type="button" onClick={() => stepShot(1)} aria-label="Next photo" className="vp-icon-btn"><ChevronRight size="1rem" /></button>
+            </div> : null}
+            <div className="vp-camera-photo-actions">
+              <button type="button" onClick={() => updateShot(openShot.id, { favorite: !openShot.favorite })} className="vp-surface-btn"><Star size="0.9rem" fill={openShot.favorite ? "currentColor" : "none"} />{openShot.favorite ? "Unfavorite" : "Favorite"}</button>
+              {openMessages ? <button type="button" onClick={() => openMessages(`📷 ${openShot.text}`)} className="vp-surface-btn"><Share2 size="0.9rem" />Share</button> : null}
+              <button type="button" onClick={() => deleteShot(openShot.id)} className="vp-surface-btn vp-camera-delete"><Trash2 size="0.9rem" />Delete</button>
+            </div>
+          </article>
+        ) : shots?.length ? (
+          <div className="vp-roll-grid" aria-label="Camera roll">
             {shots.map((shot) => (
-              <figure key={shot.id} className="vp-card vp-polaroid">
-                <p>{shot.text}</p>
-                <figcaption>
-                  {`${clock.shortDate(shot.at)}, ${clock.time(shot.at)}`}
-                  <button type="button" onClick={() => deleteShot(shot.id)} className="vp-surface-btn">Delete</button>
-                </figcaption>
-              </figure>
+              <button key={shot.id} type="button" onClick={() => setOpenShotId(shot.id)} className="vp-camera-roll-cell" aria-label={`Open photo: ${shot.text}`}>
+                <span>{shot.text}</span>{shot.favorite ? <Star size="0.75rem" fill="currentColor" aria-label="Favorite" /> : null}
+              </button>
             ))}
           </div>
         ) : (
-          <p className="vp-muted-note">Nothing on the roll yet.</p>
+          <PhoneEmptyState icon={Images} title="Camera roll is empty" body="Take a shot, review what the camera saw, and keep it here." action={{ label: "Open camera", onClick: () => setView("camera") }} />
         )
       ) : (
         <>
@@ -126,10 +187,13 @@ export function CameraShell({ phoneId, onBack, onClose }: { phoneId: string; onB
             )}
           </div>
           {draft === null ? (
-            <label className="vp-camera-subject">
-              <span className="vp-sr-only">What are you aiming at?</span>
-              <input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Aim at something (optional)" maxLength={200} className="vp-input" />
-            </label>
+            <div className="vp-camera-aim-row">
+              <label className="vp-camera-subject">
+                <span className="vp-sr-only">What are you aiming at?</span>
+                <input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder={lens === "front" ? "Selfie focus (optional)" : "Aim at something (optional)"} maxLength={200} className="vp-input" />
+              </label>
+              <button type="button" onClick={() => setLens((current) => current === "rear" ? "front" : "rear")} className="vp-icon-btn" aria-label={`Switch to ${lens === "rear" ? "front" : "rear"} camera`} title={`${lens === "front" ? "Front" : "Rear"} camera`}><RotateCcw size="1rem" /></button>
+            </div>
           ) : null}
           {/* Controls at the bottom, where a thumb is: last shot, shutter, roll. */}
           <div className="vp-camera-bar">
@@ -149,7 +213,7 @@ export function CameraShell({ phoneId, onBack, onClose }: { phoneId: string; onB
                 >
                   {latest ? <span>{latest.text.slice(0, 40)}</span> : null}
                 </button>
-                <button type="button" aria-label="Take photo" onClick={shoot} disabled={shooting} className="vp-shutter" />
+                <button type="button" aria-label="Take photo" onClick={shoot} disabled={shooting || (shots?.length ?? 0) >= MAX_SHOTS} className="vp-shutter" />
                 <span className="vp-camera-count">{shots?.length ?? 0}/{MAX_SHOTS}</span>
               </>
             )}

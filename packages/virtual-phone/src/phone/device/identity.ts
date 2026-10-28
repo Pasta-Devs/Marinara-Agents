@@ -1,5 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { defaultDeviceSettings, normalizeDeviceSettings, type DeviceSettings } from "./settings";
+import {
+  appendKnowledgeClaim as appendKnowledgeClaimToLedger,
+  appendPhoneEvent as appendPhoneEventToLedger,
+  normalizeKnowledgeClaim,
+  normalizePhoneEvent,
+  normalizePhoneInteractionLedger,
+  normalizePhoneProcess,
+  upsertPhoneProcess as upsertPhoneProcessInLedger,
+  type KnowledgeClaim,
+  type PhoneEvent,
+  type PhoneInteractionLedger,
+  type PhoneProcess,
+} from "../system/interaction-model";
 
 export type PhoneOwnerType = "persona" | "character";
 export type PhoneBaselineTheme = "system" | "light" | "dark";
@@ -138,6 +151,7 @@ function isPhoneDocument(value: unknown): value is PhoneDocument {
 }
 
 const APP_STORAGE_LIMIT = 256 * 1024;
+const INTERACTION_WRITE_ATTEMPTS = 8;
 
 function validateAppStorageId(value: string, field: string) {
   if (!value.trim() || value.includes("\0") || value.length > 200) throw new Error(`Invalid phone storage ${field}`);
@@ -586,12 +600,99 @@ export class PhoneIdentityService {
     return fact;
   }
 
-  async worldFactsFor(phoneId: string) {
+  async worldFactsFor(phoneId: string, chatId?: string) {
     const phone = await this.requirePhone(phoneId);
     const facts = Array.isArray(phone.document.namespaces.phone.worldFacts)
       ? phone.document.namespaces.phone.worldFacts as PhoneWorldFact[]
       : [];
-    return facts;
+    return chatId ? facts.filter((fact) => fact.chatId === chatId) : facts;
+  }
+
+  /**
+   * Commit a canonical phone action once. Idempotency is scoped to a phone: a retried UI request,
+   * model swipe, or branch replay receives the already committed event instead of replacing it.
+   */
+  async appendPhoneEvent(phoneId: string, value: PhoneEvent): Promise<PhoneEvent> {
+    const event = normalizePhoneEvent(value);
+    if (!event) throw new Error("Invalid phone event");
+    if (event.phoneId !== phoneId) throw new Error("Phone event belongs to another phone");
+    return this.mutateInteractionLedger(phoneId, (ledger, phone) => {
+      if (!phone.identity.chatScope.includes(event.chatId)) throw new Error("This phone is not part of this chat");
+      const committed = ledger.events.find((candidate) => candidate.idempotencyKey === event.idempotencyKey);
+      if (committed) return { ledger, result: committed, changed: false };
+      return {
+        ledger: { ...ledger, events: appendPhoneEventToLedger(ledger.events, event) },
+        result: event,
+        changed: true,
+      };
+    });
+  }
+
+  async listPhoneEvents(phoneId: string, chatId?: string): Promise<PhoneEvent[]> {
+    const phone = await this.requirePhone(phoneId);
+    const events = normalizePhoneInteractionLedger(phone.document.namespaces.phone.interactions).events;
+    return chatId ? events.filter((event) => event.chatId === chatId) : events;
+  }
+
+  /** Claims are idempotent by their stable claim id; merely storing content never creates one. */
+  async appendKnowledgeClaim(phoneId: string, value: KnowledgeClaim): Promise<KnowledgeClaim> {
+    const claim = normalizeKnowledgeClaim(value);
+    if (!claim) throw new Error("Invalid phone knowledge claim");
+    return this.mutateInteractionLedger(phoneId, (ledger, phone) => {
+      if (!phone.identity.chatScope.includes(claim.chatId)) throw new Error("This phone is not part of this chat");
+      const committed = ledger.knowledge.find((candidate) => candidate.id === claim.id);
+      if (committed) return { ledger, result: committed, changed: false };
+      return {
+        ledger: { ...ledger, knowledge: appendKnowledgeClaimToLedger(ledger.knowledge, claim) },
+        result: claim,
+        changed: true,
+      };
+    });
+  }
+
+  async listKnowledgeClaims(phoneId: string, chatId?: string): Promise<KnowledgeClaim[]> {
+    const phone = await this.requirePhone(phoneId);
+    const claims = normalizePhoneInteractionLedger(phone.document.namespaces.phone.interactions).knowledge;
+    return chatId ? claims.filter((claim) => claim.chatId === chatId) : claims;
+  }
+
+  /**
+   * Create or transition a delayed process. A state change must name the state it observed, which
+   * prevents two background workers from silently overwriting one another after an optimistic retry.
+   */
+  async upsertPhoneProcess(phoneId: string, value: PhoneProcess): Promise<PhoneProcess> {
+    const requested = normalizePhoneProcess(value);
+    if (!requested) throw new Error("Invalid phone process");
+    if (requested.phoneId !== phoneId) throw new Error("Phone process belongs to another phone");
+    return this.mutateInteractionLedger(phoneId, (ledger, phone) => {
+      if (!phone.identity.chatScope.includes(requested.chatId)) throw new Error("This phone is not part of this chat");
+      const committed = ledger.processes.find((candidate) => candidate.id === requested.id);
+      if (committed) {
+        if (requested.updatedAt < committed.updatedAt) throw new Error("Phone process update is stale");
+        if (requested.state !== committed.state && requested.previousState !== committed.state) {
+          throw new Error("Phone process previous state does not match");
+        }
+        if (requested.state === committed.state && requested.sourceEventId === committed.sourceEventId) {
+          return { ledger, result: committed, changed: false };
+        }
+      } else if (requested.previousState) {
+        throw new Error("A new phone process cannot have a previous state");
+      }
+      const process: PhoneProcess = committed
+        ? { ...requested, createdAt: committed.createdAt }
+        : requested;
+      return {
+        ledger: { ...ledger, processes: upsertPhoneProcessInLedger(ledger.processes, process) },
+        result: process,
+        changed: true,
+      };
+    });
+  }
+
+  async listPhoneProcesses(phoneId: string, chatId?: string): Promise<PhoneProcess[]> {
+    const phone = await this.requirePhone(phoneId);
+    const processes = normalizePhoneInteractionLedger(phone.document.namespaces.phone.interactions).processes;
+    return chatId ? processes.filter((process) => process.chatId === chatId) : processes;
   }
 
   /** Reads and clears the pending activity for one chat. Clearing is what makes the flush once-only. */
@@ -627,17 +728,58 @@ export class PhoneIdentityService {
     return phone;
   }
 
+  private async mutateInteractionLedger<T>(
+    phoneId: string,
+    mutate: (
+      ledger: PhoneInteractionLedger,
+      phone: PhoneDocument,
+    ) => { ledger: PhoneInteractionLedger; result: T; changed: boolean },
+  ): Promise<T> {
+    for (let attempt = 0; attempt < INTERACTION_WRITE_ATTEMPTS; attempt += 1) {
+      const phone = await this.requirePhone(phoneId);
+      const current = normalizePhoneInteractionLedger(phone.document.namespaces.phone.interactions);
+      const changed = mutate(current, phone.document);
+      if (!changed.changed) return changed.result;
+      const updatedAt = this.now();
+      const document: PhoneDocument = {
+        ...phone.document,
+        namespaces: { phone: { ...phone.document.namespaces.phone, interactions: changed.ledger } },
+      };
+      const updated = await this.documents.update({
+        id: phone.record.id,
+        packageId: PACKAGE_ID,
+        expectedRevision: phone.record.revision,
+        name: ownerKey(document.identity.ownerType, document.identity.ownerId),
+        description: document.identity.ownerName,
+        data: document,
+        updatedAt,
+      });
+      if (updated) return changed.result;
+    }
+    throw new Error("Phone interaction ledger changed too often; try again");
+  }
+
   private async writeAppStorage(phoneId: string, appId: string, mutate: (app: Record<string, unknown>) => Record<string, unknown>) {
     validateAppStorageId(appId, "appId");
+    return this.mutateAppStorage(phoneId, (all) => ({ storage: { ...all, [appId]: mutate({ ...(all[appId] ?? {}) }) }, result: undefined }));
+  }
+
+  /**
+   * Change several app namespaces in the same optimistic document update. Cross-app actions such
+   * as a purchase must not debit Banking and then fail before the receipt is written.
+   */
+  async mutateAppStorage<T>(phoneId: string, mutate: (storage: Record<string, Record<string, unknown>>) => { storage: Record<string, Record<string, unknown>>; result: T }) {
     const phone = await this.requirePhone(phoneId);
     const all = readAppStorage(phone.document);
-    const app = mutate({ ...(all[appId] ?? {}) });
-    if (new TextEncoder().encode(JSON.stringify(app)).byteLength > APP_STORAGE_LIMIT) {
-      throw new Error("Phone app storage exceeds 256KB");
+    const { storage, result } = mutate(Object.fromEntries(Object.entries(all).map(([id, app]) => [id, { ...app }])));
+    for (const app of Object.values(storage)) {
+      if (new TextEncoder().encode(JSON.stringify(app)).byteLength > APP_STORAGE_LIMIT) {
+        throw new Error("Phone app storage exceeds 256KB");
+      }
     }
     const document: PhoneDocument = {
       ...phone.document,
-      namespaces: { phone: { ...phone.document.namespaces.phone, appStorage: { ...all, [appId]: app } } },
+      namespaces: { phone: { ...phone.document.namespaces.phone, appStorage: storage } },
     };
     const updated = await this.documents.update({
       id: phone.record.id,
@@ -648,8 +790,8 @@ export class PhoneIdentityService {
       data: document,
       updatedAt: this.now(),
     });
-    if (!updated) return this.writeAppStorage(phoneId, appId, mutate);
-    return parsePhoneRecord(updated);
+    if (!updated) return this.mutateAppStorage(phoneId, mutate);
+    return result;
   }
 
   async listAppStorage(phoneId: string, appId: string) {

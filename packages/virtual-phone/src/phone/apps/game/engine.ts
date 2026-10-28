@@ -6,6 +6,8 @@ const COLORS: Tile[] = ["red", "yellow", "green", "blue", "pink"];
 export const randomTile = () => COLORS[Math.floor(Math.random() * COLORS.length)]!;
 export const newBoard = () => Array.from({ length: SIZE * SIZE }, randomTile);
 
+export type Move = { from: number; to: number };
+
 /** Every horizontal or vertical run of 3+ of the same tile. Overlapping triples cover longer runs. */
 export function findMatches(board: Cell[]): Set<number> {
   const found = new Set<number>();
@@ -49,7 +51,9 @@ export function resolve(start: Cell[]): { board: Tile[]; cleared: number; cascad
 /** A board with no matches sitting on it, so the player starts at zero. */
 export function freshBoard(): Tile[] {
   let board = newBoard();
-  while (findMatches(board).size > 0) board = resolve(board).board;
+  while (findMatches(board).size > 0 || !findMove(board)) {
+    board = newBoard();
+  }
   return board;
 }
 
@@ -57,3 +61,17 @@ export const adjacent = (a: number, b: number) => {
   const ra = Math.floor(a / SIZE), ca = a % SIZE, rb = Math.floor(b / SIZE), cb = b % SIZE;
   return (ra === rb && Math.abs(ca - cb) === 1) || (ca === cb && Math.abs(ra - rb) === 1);
 };
+
+
+/** The first swap that creates a match, or null when the board is stuck. */
+export function findMove(board: Tile[]): Move | null {
+  for (let from = 0; from < board.length; from += 1) {
+    for (const to of [from + 1, from + SIZE]) {
+      if (to >= board.length || !adjacent(from, to)) continue;
+      const swapped = board.slice();
+      [swapped[from], swapped[to]] = [swapped[to]!, swapped[from]!];
+      if (findMatches(swapped).size > 0) return { from, to };
+    }
+  }
+  return null;
+}

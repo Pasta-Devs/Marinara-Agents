@@ -13,7 +13,7 @@ export interface RememberPersonInput {
 export async function rememberPerson(phoneId: string, input: RememberPersonInput) {
   const name = input.name.trim();
   if (!name) return null;
-  return phoneRequest<{ contact: { id: string; name: string } }>(
+  return phoneRequest<{ contact: { id: string; name: string; phoneId: string } }>(
     `/phones/${encodeURIComponent(phoneId)}/contacts`,
     { method: "POST", body: JSON.stringify({ ...input, name }) },
   );

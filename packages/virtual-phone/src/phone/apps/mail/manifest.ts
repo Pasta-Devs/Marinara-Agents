@@ -32,7 +32,7 @@ export function parseEmail(item: string) {
   };
 }
 
-export type MailFolder = "inbox" | "sent" | "archive";
+export type MailFolder = "inbox" | "sent" | "archive" | "trash";
 
 export interface MailMessage {
   id: string;
@@ -87,6 +87,31 @@ export function mergeMail(held: MailMessage[], incoming: MailMessage[]): MailMes
   const key = (mail: MailMessage) => `${mail.from}\u0000${mail.subject}\u0000${mail.body}`;
   const seen = new Set(held.map(key));
   return [...incoming.filter((mail) => !seen.has(key(mail))), ...held];
+}
+
+/** Return the small reply chain around a message in chronological order. */
+export function mailThread(mail: MailMessage[], selectedId: string): MailMessage[] {
+  const byId = new Map(mail.map((item) => [item.id, item]));
+  let root = byId.get(selectedId);
+  const ancestorIds = new Set<string>();
+  while (root?.replyTo && !ancestorIds.has(root.id)) {
+    ancestorIds.add(root.id);
+    root = byId.get(root.replyTo) ?? root;
+    if (!root.replyTo || !byId.has(root.replyTo)) break;
+  }
+  if (!root) return [];
+
+  const thread = [root];
+  const visited = new Set([root.id]);
+  let current = root;
+  while (true) {
+    const reply = mail.find((item) => item.replyTo === current.id && !visited.has(item.id));
+    if (!reply) break;
+    visited.add(reply.id);
+    thread.push(reply);
+    current = reply;
+  }
+  return thread;
 }
 
 /**

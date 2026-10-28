@@ -11,6 +11,8 @@ export interface ThreadMessage {
   from: string;
   text: string;
   at: string;
+  /** Delivery is explicit even though the local phone network currently completes it immediately. */
+  deliveredAt?: string;
 }
 
 /**
@@ -84,7 +86,7 @@ export class PhoneMessagingService {
     if (!fromPhoneId || !toPhoneId || fromPhoneId === toPhoneId) throw new Error("A message needs two different phones");
     const participants = [fromPhoneId, toPhoneId].sort() as [string, string];
     const at = this.now();
-    const message: ThreadMessage = { id: this.createId(), from: fromPhoneId, text, at };
+    const message: ThreadMessage = { id: this.createId(), from: fromPhoneId, text, at, deliveredAt: at };
     const existing = (await this.listThreads()).find(
       ({ document }) => document.participants[0] === participants[0] && document.participants[1] === participants[1],
     );

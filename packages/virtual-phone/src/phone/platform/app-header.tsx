@@ -1,10 +1,12 @@
 import React from "react";
-import { ArrowLeft, Heart, MoreHorizontal, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { ArrowLeft, Heart, MoreHorizontal, Package, Plus, RotateCcw, Search, ShoppingCart, Trash2, X } from "lucide-react";
 import { normalizeTopBarActions, type TopBarAction } from "./top-bar";
 
 const actionIcons: Record<string, typeof ArrowLeft> = {
   add: Plus,
   heart: Heart,
+  cart: ShoppingCart,
+  package: Package,
   menu: MoreHorizontal,
   refresh: RotateCcw,
   search: Search,

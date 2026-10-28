@@ -10,9 +10,16 @@ export const noodlerManifest: AppManifest = {
   capabilities: ["storage.local", "context.read"],
   modelUse: "heavy",
   removable: true,
-  routes: [{ id: "feed", path: "/", title: "Noodler" }],
-  records: [{ type: "feed-cache", ownership: "phone-local" }],
-  actions: [{ id: "refresh-feed", tier: "ambient" }],
+  routes: [{ id: "feed", path: "/", title: "Noodle" }],
+  records: [
+    { type: "noodle-feed", ownership: "story-shared" },
+    { type: "saved-posts", ownership: "phone-local" },
+  ],
+  actions: [
+    { id: "refresh-feed", tier: "ambient" },
+    { id: "publish-post", tier: "story" },
+    { id: "react-to-post", tier: "participant" },
+  ],
   content: { feed: { fields: { posts: "string[]" } } },
   notifications: null,
 };

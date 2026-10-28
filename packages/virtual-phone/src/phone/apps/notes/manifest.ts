@@ -14,7 +14,11 @@ export const notesManifest: AppManifest = {
     { id: "note", path: "/note", title: "Note" },
   ],
   records: [{ type: "note", ownership: "phone-local" }],
-  actions: [{ id: "save-note", tier: "local", immediate: true }],
+  actions: [
+    { id: "save-note", tier: "local", immediate: true },
+    { id: "pin-note", tier: "local", immediate: true },
+    { id: "archive-note", tier: "local", immediate: true },
+  ],
   content: { list: {}, note: {} },
   notifications: null,
 };

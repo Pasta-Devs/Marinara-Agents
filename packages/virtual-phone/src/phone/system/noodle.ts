@@ -73,6 +73,7 @@ export interface NoodlerPagePost {
   id: string;
   text: string;
   locked: boolean;
+  at?: string;
 }
 
 export interface NoodlerPageDocument {
@@ -123,6 +124,19 @@ export class NoodlerPageService {
   }
 
   async savePage(input: { chatId: string; creatorPhoneId: string; creatorName: string; tagline: string; price: string; posts: Array<{ text: string; locked: boolean }> }) {
+    const existing = await this.pageFor(input.chatId, input.creatorPhoneId);
+    const freshPosts = input.posts
+      .map((post) => ({ id: this.createId(), text: post.text.trim().slice(0, MAX_TEXT), locked: post.locked, at: this.now() }))
+      .filter((post) => post.text);
+    const seen = new Set<string>();
+    const posts = [...freshPosts, ...(existing?.document.posts ?? [])]
+      .filter((post) => {
+        const key = `${post.locked ? "locked" : "free"}:${post.text.toLocaleLowerCase()}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, MAX_PAGE_POSTS);
     const document: NoodlerPageDocument = {
       schemaVersion: 1,
       chatId: input.chatId,
@@ -130,13 +144,9 @@ export class NoodlerPageService {
       creatorName: input.creatorName.trim().slice(0, 80) || "Creator",
       tagline: input.tagline.trim().slice(0, 200),
       price: input.price.trim().slice(0, 40),
-      posts: input.posts
-        .map((post) => ({ id: this.createId(), text: post.text.trim().slice(0, MAX_TEXT), locked: post.locked }))
-        .filter((post) => post.text)
-        .slice(0, MAX_PAGE_POSTS),
+      posts,
     };
     const at = this.now();
-    const existing = await this.pageFor(input.chatId, input.creatorPhoneId);
     if (!existing) {
       const record = await this.documents.create({
         id: `noodler-page:${input.chatId}:${input.creatorPhoneId}`,

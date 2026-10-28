@@ -12,10 +12,17 @@ export const galleryManifest: AppManifest = {
   routes: [
     { id: "grid", path: "/", title: "Gallery" },
     { id: "photo", path: "/photo", title: "Photo" },
+    { id: "favorites", path: "/favorites", title: "Favorites" },
+    { id: "hidden", path: "/hidden", title: "Hidden" },
   ],
   records: [],
-  actions: [{ id: "refresh-gallery", tier: "ambient" }],
-  content: { grid: {}, photo: {} },
+  actions: [
+    { id: "refresh-gallery", tier: "ambient" },
+    { id: "favorite-photo", tier: "ambient" },
+    { id: "hide-photo", tier: "ambient" },
+    { id: "restore-photo", tier: "ambient" },
+  ],
+  content: { grid: {}, photo: {}, favorites: {}, hidden: {} },
   notifications: null,
 };
 

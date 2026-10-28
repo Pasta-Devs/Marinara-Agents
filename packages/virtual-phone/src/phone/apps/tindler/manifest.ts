@@ -12,11 +12,20 @@ export const tindlerManifest: AppManifest = {
   routes: [
     { id: "deck", path: "/", title: "Tindler" },
     { id: "matches", path: "/matches", title: "Matches" },
+    { id: "preferences", path: "/preferences", title: "Discovery settings" },
   ],
-  records: [{ type: "dating-profile", ownership: "phone-local" }],
-  actions: [{ id: "swipe", tier: "local", immediate: true }],
-  content: { deck: { fields: { profiles: "string[]" } }, matches: {} },
-  notifications: null,
+  records: [
+    { type: "dating-profile", ownership: "phone-local" },
+    { type: "dating-preferences", ownership: "permissioned-private" },
+    { type: "mutual-match", ownership: "participant-shared" },
+  ],
+  actions: [
+    { id: "pass", tier: "local", immediate: true },
+    { id: "like", tier: "participant", immediate: true },
+    { id: "remove-match", tier: "local", immediate: true },
+  ],
+  content: { deck: { fields: { profiles: "string[]" } }, matches: { fields: { profile: "string", contactPhoneId: "string?" } } },
+  notifications: { tier: "participant", dedupeBy: "mutual-match" },
 };
 
 export function parseProfile(item: string) {

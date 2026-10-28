@@ -19,6 +19,15 @@ function adminHeaders() {
  */
 let activeChatId: string | null = null;
 const pendingPhoneWrites = new Map<string, Set<Promise<unknown>>>();
+const phoneAccessTokens = new Map<string, string>();
+
+export function grantPhoneAccess(phoneId: string, token: string) {
+  if (token) phoneAccessTokens.set(phoneId, token);
+}
+
+export function releasePhoneAccess(phoneId: string) {
+  phoneAccessTokens.delete(phoneId);
+}
 
 function trackPhoneWrite<T>(phoneId: string, write: Promise<T>) {
   const pending = pendingPhoneWrites.get(phoneId) ?? new Set<Promise<unknown>>();
@@ -42,6 +51,11 @@ export function setActiveChatId(chatId: string | null) {
 
 export async function phoneRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
+  const encodedPhoneId = /\/phones\/([^/?]+)/u.exec(path)?.[1];
+  if (encodedPhoneId) {
+    const token = phoneAccessTokens.get(decodeURIComponent(encodedPhoneId));
+    if (token) headers.set("X-Virtual-Phone-Access", token);
+  }
   for (const [name, value] of Object.entries(adminHeaders())) headers.set(name, value);
   if (init.method && init.method !== "GET") headers.set(CSRF_HEADER, "1");
   if (init.body) headers.set("Content-Type", "application/json");
@@ -57,12 +71,14 @@ export async function phoneRequest<T>(path: string, init: RequestInit = {}): Pro
 }
 
 /**
- * Records something the owner did that the story should be able to react to. Fire and forget —
+ * Records something the user operating this phone did that the story should be able to react to.
+ * The operator and owner may differ when the user has gained access to a character's phone. Fire and forget —
  * nothing in the UI should ever wait on it, and a failure to record is not worth interrupting
  * anyone over. Flushed as one line when the phone is put down (see the `/session` route).
  *
- * Only call this for things with consequence. "Opened Mail" is not consequence; "sent mail to the
- * harbour master" is.
+ * This becomes scene narration, so it must describe only the externally observable action. Never
+ * put search terms, recipients, private message bodies, note text, locations, or screen contents
+ * here. Explicit Show/Reference actions are the only bridge for private content.
  */
 export function recordActivity(phoneId: string, text: string) {
   return trackPhoneWrite(phoneId, phoneRequest(`/phones/${encodeURIComponent(phoneId)}/activity`, {

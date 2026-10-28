@@ -1,11 +1,11 @@
 import React from "react";
-import { Receipt } from "lucide-react";
+import { Receipt, Search } from "lucide-react";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { useStoryClock } from "../../platform/story-clock";
 import { PhoneEmptyState } from "../../platform/empty-state";
-import { phoneRequest, recordActivity } from "../../platform/api";
+import { phoneRequest } from "../../platform/api";
 import { usePhoneStore } from "../../platform/use-phone-store";
-import { applyTransaction, emptyAccount, formatMoney, parseProposal, readAccount, type BankAccount } from "./manifest";
+import { applyTransaction, emptyAccount, formatMoney, mergeProposals, parseProposal, readAccount, type BankAccount, type BankTransaction } from "./manifest";
 
 const newId = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `tx-${Math.random().toString(36).slice(2)}`);
 
@@ -17,6 +17,8 @@ export function BankingShell({ phoneId, onBack, onClose }: { phoneId: string; on
   const [adjust, setAdjust] = React.useState({ amount: "", description: "" });
   const [checking, setChecking] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [historyFilter, setHistoryFilter] = React.useState<"all" | "in" | "out">("all");
+  const [historyQuery, setHistoryQuery] = React.useState("");
 
   React.useEffect(() => {
     let active = true;
@@ -71,7 +73,12 @@ export function BankingShell({ phoneId, onBack, onClose }: { phoneId: string; on
           setError("Nothing in the story moved any money.");
           return;
         }
-        persist({ ...account, pending: [...proposals, ...account.pending].slice(0, 20) });
+        const next = mergeProposals(account, proposals);
+        if (next.pending.length === account.pending.length) {
+          setError("Those entries are already in your account or waiting for review.");
+          return;
+        }
+        persist(next);
       })
       .catch((cause: unknown) => {
         setError(cause instanceof Error ? cause.message : "Could not reach the bank.");
@@ -84,8 +91,6 @@ export function BankingShell({ phoneId, onBack, onClose }: { phoneId: string; on
     const proposal = account.pending.find((entry) => entry.id === id);
     if (!proposal) return;
     const withoutProposal = { ...account, pending: account.pending.filter((entry) => entry.id !== id) };
-    void recordActivity(phoneId, `${proposal.amount > 0 ? "received" : "paid"} ${Math.abs(proposal.amount)} — ${proposal.description}`)
-      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The transaction action could not be recorded."));
     persist(applyTransaction(withoutProposal, {
       id: proposal.id,
       at: new Date().toISOString(),
@@ -94,13 +99,24 @@ export function BankingShell({ phoneId, onBack, onClose }: { phoneId: string; on
       source: "story",
     }));
   };
+  const moneyIn = account?.transactions.filter((entry) => entry.amount > 0).reduce((sum, entry) => sum + entry.amount, 0) ?? 0;
+  const moneyOut = Math.abs(account?.transactions.filter((entry) => entry.amount < 0).reduce((sum, entry) => sum + entry.amount, 0) ?? 0);
+  const visibleTransactions = account?.transactions.filter((entry) => {
+    if (historyFilter === "in" && entry.amount < 0) return false;
+    if (historyFilter === "out" && entry.amount > 0) return false;
+    return entry.description.toLocaleLowerCase().includes(historyQuery.trim().toLocaleLowerCase());
+  }) ?? [];
+  const transactionKind = (entry: BankTransaction) => {
+    if (/^(shop|bazaar|noodler-r):/u.test(entry.id)) return "Card purchase";
+    return entry.source === "story" ? "Confirmed activity" : "Manual entry";
+  };
   const reject = (id: string) => {
     if (!account) return;
     persist({ ...account, pending: account.pending.filter((entry) => entry.id !== id) });
   };
 
   return (
-    <section aria-labelledby="banking-title" className="vp-appview">
+    <section aria-labelledby="banking-title" className="vp-appview" data-phone-app="banking">
       <PhoneAppHeader
         title={view === "history" ? "Transactions" : "Banking"}
         titleId="banking-title"
@@ -119,17 +135,29 @@ export function BankingShell({ phoneId, onBack, onClose }: { phoneId: string; on
           <span className="vp-skeleton vp-skeleton--line" style={{ width: "80%" }} />
         </div>
       ) : view === "history" ? (
-        <div className="vp-stack" style={{ gap: "0.5rem" }}>
+        <div className="vp-stack vp-bank-history" style={{ gap: "0.5rem" }}>
+          <label className="vp-inline-search">
+            <Search size={14} aria-hidden="true" />
+            <span className="vp-sr-only">Search transactions</span>
+            <input value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Search transactions" />
+          </label>
+          <div className="vp-filter-tabs" role="tablist" aria-label="Transaction type">
+            {([['all', 'All'], ['in', 'Money in'], ['out', 'Money out']] as const).map(([id, label]) => (
+              <button key={id} type="button" role="tab" aria-selected={historyFilter === id} onClick={() => setHistoryFilter(id)}>{label}</button>
+            ))}
+          </div>
           {account.transactions.length === 0 ? (
             <PhoneEmptyState icon={Receipt} title="No transactions" body="Money the story moves, and anything you adjust by hand, is listed here." />
+          ) : visibleTransactions.length === 0 ? (
+            <PhoneEmptyState icon={Search} title="No matches" body="Try another search or transaction type." />
           ) : null}
-          {account.transactions.map((entry) => (
+          {visibleTransactions.map((entry) => (
             <div key={entry.id} className="vp-ledger-row">
               <span className="vp-ledger-what">
                 <span className="vp-ledger-desc">{entry.description}</span>
                 <span className="vp-ledger-meta">
                   {`${clock.shortDate(entry.at)}, ${clock.time(entry.at)}`}
-                  {entry.source === "story" ? " · from the story" : " · you"}
+                  {` · ${transactionKind(entry)}`}
                 </span>
               </span>
               <span className={`vp-ledger-amount vp-ledger-amount--${entry.amount > 0 ? "in" : "out"}`}>
@@ -147,7 +175,19 @@ export function BankingShell({ phoneId, onBack, onClose }: { phoneId: string; on
               {account.transactions.length} transaction{account.transactions.length === 1 ? "" : "s"}
             </span>
           </div>
-          <button type="button" className="vp-surface-btn" onClick={() => setView("history")}>View transactions</button>
+          <div className="vp-bank-summary"><button type="button" onClick={() => setView("history")}><span>Money in</span><strong>{formatMoney(moneyIn, account.currency)}</strong></button><button type="button" onClick={() => setView("history")}><span>Money out</span><strong>{formatMoney(moneyOut, account.currency)}</strong></button></div>
+
+          {account.transactions.length ? (
+            <section className="vp-bank-recent" aria-labelledby="bank-recent-title">
+              <span className="vp-bank-section-head"><h3 id="bank-recent-title" className="vp-section-label">Recent activity</h3><button type="button" onClick={() => setView("history")}>See all</button></span>
+              {account.transactions.slice(0, 3).map((entry) => (
+                <button key={entry.id} type="button" className="vp-ledger-row" onClick={() => setView("history")}>
+                  <span className="vp-ledger-what"><span className="vp-ledger-desc">{entry.description}</span><span className="vp-ledger-meta">{transactionKind(entry)} · {clock.shortDate(entry.at)}</span></span>
+                  <span className={`vp-ledger-amount vp-ledger-amount--${entry.amount > 0 ? "in" : "out"}`}>{entry.amount > 0 ? "+" : "−"}{formatMoney(Math.abs(entry.amount), account.currency)}</span>
+                </button>
+              ))}
+            </section>
+          ) : null}
 
           {account.pending.length ? (
             <>
@@ -159,12 +199,12 @@ export function BankingShell({ phoneId, onBack, onClose }: { phoneId: string; on
                       <span className={`vp-ledger-amount vp-ledger-amount--${proposal.amount > 0 ? "in" : "out"}`} style={{ fontSize: "1.125rem" }}>
                         {proposal.amount > 0 ? "+" : "−"}{formatMoney(Math.abs(proposal.amount), account.currency)}
                       </span>
-                      <span className="vp-ledger-meta">proposed by the story</span>
+                      <span className="vp-ledger-meta">Not added yet</span>
                     </span>
                     <span className="vp-ledger-desc" style={{ whiteSpace: "normal" }}>{proposal.description}</span>
                     <div className="vp-review-actions">
-                      <button type="button" className="vp-accent-btn" onClick={() => accept(proposal.id)}>Approve</button>
-                      <button type="button" className="vp-store-remove" onClick={() => reject(proposal.id)}>Reject</button>
+                      <button type="button" className="vp-accent-btn" onClick={() => accept(proposal.id)}>Confirm</button>
+                      <button type="button" className="vp-store-remove" onClick={() => reject(proposal.id)}>Dismiss</button>
                     </div>
                   </div>
                 ))}
@@ -172,9 +212,9 @@ export function BankingShell({ phoneId, onBack, onClose }: { phoneId: string; on
             </>
           ) : null}
 
-          <h3 className="vp-section-label">Adjust the balance</h3>
+          <h3 className="vp-section-label">Add a transaction</h3>
           <form className="vp-card vp-stack" style={{ gap: "0.5rem" }} onSubmit={submitAdjustment}>
-            <p className="vp-muted-note">Your account, your rules. Nothing here asks the story for permission.</p>
+            <p className="vp-muted-note">Use a positive amount for money in or a negative amount for money out.</p>
             <label><span className="vp-sr-only">Amount</span>
               <input
                 value={adjust.amount}
@@ -188,12 +228,12 @@ export function BankingShell({ phoneId, onBack, onClose }: { phoneId: string; on
               <input
                 value={adjust.description}
                 onChange={(event) => setAdjust({ ...adjust, description: event.target.value })}
-                placeholder="What for (optional)"
+                placeholder="Description (optional)"
                 maxLength={200}
                 className="vp-input"
               />
             </label>
-            <button type="submit" className="vp-accent-btn" disabled={!adjust.amount.trim()}>Apply</button>
+            <button type="submit" className="vp-accent-btn" disabled={!adjust.amount.trim()}>Add transaction</button>
           </form>
         </div>
       )}

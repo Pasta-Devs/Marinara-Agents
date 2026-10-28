@@ -1,16 +1,18 @@
 import React from "react";
-import { ChevronRight, MessageSquare, Send } from "lucide-react";
+import { ChevronRight, MessageSquare, Search, Send } from "lucide-react";
 import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { PhoneAvatar, useAvatarMap } from "../../platform/avatars";
 import { useStoryClock } from "../../platform/story-clock";
 import { PhoneEmptyState } from "../../platform/empty-state";
+import { decodeLaunchIntent } from "../../platform/launch-intent";
 
 interface ThreadMessage {
   id: string;
   from: string;
   text: string;
   at: string;
+  deliveredAt?: string;
 }
 interface Thread {
   id: string;
@@ -24,7 +26,7 @@ interface Thread {
   mode?: "conversation" | "roleplay" | "game";
 }
 interface MessagingPayload {
-  contacts: Array<{ phoneId: string; ownerId?: string; ownerName: string }>;
+  contacts: Array<{ phoneId: string; ownerId?: string; ownerName: string; bio?: string }>;
   threads: Thread[];
 }
 
@@ -45,6 +47,10 @@ export function MessagesShell({ phoneId, openWith = "", onBack, onClose }: {
   onBack: () => void;
   onClose: () => void;
 }) {
+  const [query, setQuery] = React.useState("");
+  const [filter, setFilter] = React.useState<"all" | "unread">("all");
+  const [composing, setComposing] = React.useState(false);
+  const launchIntent = React.useMemo(() => decodeLaunchIntent(openWith), [openWith]);
   const [data, setData] = React.useState<MessagingPayload | null>(null);
   const [error, setError] = React.useState("");
   const [activeThreadId, setActiveThreadId] = React.useState<string | null>(null);
@@ -54,9 +60,12 @@ export function MessagesShell({ phoneId, openWith = "", onBack, onClose }: {
    * different place from every message after it.
    */
   const [newTo, setNewTo] = React.useState<{ phoneId: string; name: string } | null>(null);
-  const [draft, setDraft] = React.useState("");
+  // Drafts belong to recipients. A single shared draft can accidentally put words intended for
+  // one character into another character's conversation after navigating back.
+  const [drafts, setDrafts] = React.useState<Record<string, string>>({});
   const [sending, setSending] = React.useState(false);
   const bubblesRef = React.useRef<HTMLDivElement>(null);
+  const handledLaunchRef = React.useRef("");
   const avatars = useAvatarMap();
   const clock = useStoryClock();
   const avatarFor = (contactPhoneId: string) => {
@@ -76,6 +85,8 @@ export function MessagesShell({ phoneId, openWith = "", onBack, onClose }: {
   React.useEffect(() => {
     setData(null);
     setActiveThreadId(null);
+    setNewTo(null);
+    setComposing(false);
     void load();
     const timer = window.setInterval(() => void load(), 30_000);
     return () => window.clearInterval(timer);
@@ -118,7 +129,9 @@ export function MessagesShell({ phoneId, openWith = "", onBack, onClose }: {
       });
       updateThread(response.thread);
       setActiveThreadId(response.thread.id);
-      setDraft("");
+      setDrafts((current) => ({ ...current, [toPhoneId]: "" }));
+      setNewTo(null);
+      setComposing(false);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Message could not be sent");
     } finally {
@@ -128,14 +141,26 @@ export function MessagesShell({ phoneId, openWith = "", onBack, onClose }: {
 
   /**
    * Opening straight into a conversation, when Contacts sent us here. Runs once the threads land,
-   * and only for a thread that exists — a contact with no history drops you on the list with their
-   * composer visible, which is where you would start one anyway.
+   * then opens either the existing thread or a fresh composer for that contact.
    */
   React.useEffect(() => {
-    if (!openWith || !data) return;
-    const existing = data.threads.find((thread) => thread.otherPhoneId === openWith);
+    if (!data) return;
+    const launchKey = `${phoneId}:${openWith}`;
+    if (handledLaunchRef.current === launchKey) return;
+    handledLaunchRef.current = launchKey;
+    if (launchIntent.draft && launchIntent.target) {
+      const target = launchIntent.target;
+      const incomingDraft = launchIntent.draft;
+      setDrafts((current) => current[target] ? current : { ...current, [target]: incomingDraft });
+    }
+    if (!launchIntent.target) return;
+    const existing = data.threads.find((thread) => thread.otherPhoneId === launchIntent.target);
     if (existing) setActiveThreadId(existing.id);
-  }, [openWith, data]);
+    else {
+      const contact = data.contacts.find((candidate) => candidate.phoneId === launchIntent.target);
+      if (contact) setNewTo({ phoneId: contact.phoneId, name: contact.ownerName });
+    }
+  }, [phoneId, openWith, launchIntent, data]);
 
   /** The open conversation: an existing thread, or a new one aimed at someone with no history. */
   const conversation = activeThread
@@ -149,20 +174,46 @@ export function MessagesShell({ phoneId, openWith = "", onBack, onClose }: {
     : newTo
       ? { name: newTo.name, otherPhoneId: newTo.phoneId, messages: [] as ThreadMessage[], reply: null, kind: "phone" as const }
       : null;
+  const draft = conversation ? drafts[conversation.otherPhoneId] ?? "" : "";
+  const setDraft = (value: string) => {
+    if (!conversation) return;
+    setDrafts((current) => ({ ...current, [conversation.otherPhoneId]: value }));
+  };
 
-  const startedContactIds = new Set(data?.threads.map((thread) => thread.otherPhoneId));
-  const newContacts = data?.contacts.filter((contact) => !startedContactIds.has(contact.phoneId)) ?? [];
+  const needle = query.trim().toLocaleLowerCase();
+  const visibleThreads = data?.threads.filter((thread) => {
+    const searchableMessages = thread.messages.map((message) => message.text).join(" ");
+    return (filter === "all" || thread.unread > 0) && (!needle || `${thread.otherName} ${searchableMessages}`.toLocaleLowerCase().includes(needle));
+  }) ?? [];
+  const visibleContacts = data?.contacts.filter((contact) => !needle || `${contact.ownerName} ${contact.bio ?? ""}`.toLocaleLowerCase().includes(needle)) ?? [];
 
   return (
-    <section aria-labelledby="messages-title" className={`vp-appview${activeThread ? " vp-appview--fixed" : ""}`}>
+    <section aria-labelledby="messages-title" className={`vp-appview${conversation ? " vp-appview--fixed" : ""}`} data-phone-app="messages">
       <PhoneAppHeader
-        title={conversation ? conversation.name : "Messages"}
+        title={conversation ? conversation.name : composing ? "New Message" : "Messages"}
         titleId="messages-title"
         closeLabel="Close Messages"
-        onBack={() => conversation ? (setActiveThreadId(null), setNewTo(null)) : onBack()}
+        center={conversation ? (
+          <div className="vp-conversation-person">
+            <PhoneAvatar name={conversation.name} url={avatarFor(conversation.otherPhoneId)} />
+            <span><strong>{conversation.name}</strong><small>{conversation.kind === "chat" ? "Story conversation" : "Contact"}</small></span>
+          </div>
+        ) : undefined}
+        onBack={() => conversation
+          ? (setActiveThreadId(null), setNewTo(null))
+          : composing
+            ? (setComposing(false), setQuery(""))
+            : onBack()}
         onClose={onClose}
-        actions={[{ id: "refresh", icon: "refresh", label: "Refresh messages", kind: "button" }]}
-        onAction={(actionId) => { if (actionId === "refresh") void load(); }}
+        actions={conversation
+          ? [{ id: "refresh", icon: "refresh", label: "Check for new messages", kind: "button" }]
+          : composing
+            ? []
+            : [{ id: "compose", icon: "add", label: "New message", kind: "button" }]}
+        onAction={(actionId) => {
+          if (actionId === "refresh") void load();
+          if (actionId === "compose") { setComposing(true); setFilter("all"); setQuery(""); }
+        }}
       />
       {error ? <p role="alert" className="vp-muted-note" style={{ marginBottom: "0.75rem" }}>{error}</p> : null}
       {!data ? (
@@ -179,6 +230,9 @@ export function MessagesShell({ phoneId, openWith = "", onBack, onClose }: {
         </div>
       ) : conversation ? (
         <div className="vp-thread-view">
+          {conversation.kind === "chat" ? (
+            <p className="vp-story-thread-note">Messages sent here enter the current story and can shape what happens next.</p>
+          ) : null}
           <div ref={bubblesRef} className="vp-bubbles" aria-label={`Conversation with ${conversation.name}`}>
             {conversation.messages.length === 0 ? (
               <p className="vp-thread-intro">This is the start of your conversation with {conversation.name}.</p>
@@ -198,7 +252,7 @@ export function MessagesShell({ phoneId, openWith = "", onBack, onClose }: {
                     {message.at ? <span className="vp-bubble-time">{clock.time(message.at)}</span> : null}
                   </div>
                   {mine && last && conversation.reply?.status !== "pending" ? (
-                    <span className="vp-receipt">Delivered</span>
+                    <span className="vp-receipt">{message.deliveredAt ? "Delivered" : "Sent"}</span>
                   ) : null}
                 </React.Fragment>
               );
@@ -209,34 +263,59 @@ export function MessagesShell({ phoneId, openWith = "", onBack, onClose }: {
               </div>
             ) : null}
             {conversation.reply?.status === "failed" ? (
-              <p role="alert" className="vp-muted-note">{conversation.reply.error ?? "The reply could not be generated."}</p>
+              <p role="alert" className="vp-reply-failed" title={conversation.reply.error}>No reply arrived. Check again in a moment.</p>
             ) : null}
           </div>
           <form className="vp-composer" onSubmit={(event) => { event.preventDefault(); if (draft.trim()) void send(conversation.otherPhoneId, draft); }}>
             <label style={{ flex: 1, minWidth: 0 }}><span className="vp-sr-only">Message {conversation.name}</span>
-              <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={conversation.kind === "chat" ? "Text into the story" : "Message"} maxLength={2000} disabled={sending} className="vp-input" autoFocus={conversation.messages.length === 0} />
+              <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={`Message ${conversation.name}`} maxLength={2000} disabled={sending} className="vp-input" autoFocus={conversation.messages.length === 0} />
             </label>
             <button type="submit" aria-label="Send message" disabled={sending || !draft.trim()} className="vp-icon-btn" style={{ background: "var(--vp-accent)", color: "#fff" }}><Send size="1rem" aria-hidden="true" /></button>
           </form>
         </div>
+      ) : composing ? (
+        <div className="vp-list-group vp-message-compose">
+          <label className="vp-inline-search"><Search size="0.875rem" aria-hidden="true" /><span className="vp-sr-only">Choose a recipient</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="To: search contacts" autoFocus /></label>
+          {visibleContacts.length ? (
+            <div className="vp-list vp-list--inset-rules">
+              {visibleContacts.map((contact) => {
+                const existing = data.threads.find((thread) => thread.otherPhoneId === contact.phoneId);
+                return (
+                  <button key={contact.phoneId} type="button" className="vp-thread-row" onClick={() => {
+                    setQuery("");
+                    setComposing(false);
+                    if (existing) setActiveThreadId(existing.id);
+                    else setNewTo({ phoneId: contact.phoneId, name: contact.ownerName });
+                  }}>
+                    <PhoneAvatar name={contact.ownerName} url={contact.ownerId ? avatars?.get(contact.ownerId) : null} />
+                    <span className="vp-thread-body"><span className="vp-thread-name">{contact.ownerName}</span><span className="vp-thread-preview">{contact.bio || (existing ? "Open conversation" : "Start a conversation")}</span></span>
+                    <ChevronRight size="1rem" aria-hidden="true" className="vp-row-chevron" />
+                  </button>
+                );
+              })}
+            </div>
+          ) : <PhoneEmptyState icon={Search} title="No contact found" body="Try another name, or add someone in Contacts first." />}
+        </div>
       ) : (
         <div className="vp-list-group">
-          {data.threads.length === 0 && newContacts.length === 0 ? (
+          <label className="vp-inline-search"><Search size="0.875rem" aria-hidden="true" /><span className="vp-sr-only">Search conversations</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search conversations" /></label>
+          <div className="vp-filter-tabs" role="tablist" aria-label="Conversation filter"><button type="button" role="tab" aria-selected={filter === "all"} onClick={() => setFilter("all")}>All</button><button type="button" role="tab" aria-selected={filter === "unread"} onClick={() => setFilter("unread")}>Unread{data.threads.some((thread) => thread.unread > 0) ? ` (${data.threads.reduce((sum, thread) => sum + thread.unread, 0)})` : ""}</button></div>
+          {data.threads.length === 0 && !needle && filter === "all" ? (
             <PhoneEmptyState
               icon={MessageSquare}
               title="No conversations"
-              body="Nobody else in this scene has a phone yet. Turn on more character phones in Agent Settings."
+              body={data.contacts.length ? "Start a message with the + button." : "Add a contact or enable another character’s phone to start messaging."}
             />
           ) : null}
-          {data.threads.length ? (
+          {visibleThreads.length ? (
             <div className="vp-list vp-list--inset-rules">
-              {data.threads.map((thread) => {
+              {visibleThreads.map((thread) => {
                 const last = thread.messages.at(-1);
                 return (
                   <button key={thread.id} type="button" onClick={() => setActiveThreadId(thread.id)} className="vp-thread-row">
                     <PhoneAvatar name={thread.otherName} url={avatarFor(thread.otherPhoneId)} />
                     <span className="vp-thread-body">
-                     <span className="vp-thread-name">{thread.otherName}{thread.kind === "chat" ? <span className="vp-muted-note"> · {thread.mode ?? "roleplay"}</span> : null}</span>
+                     <span className="vp-thread-name">{thread.otherName}{thread.kind === "chat" ? <span className="vp-thread-kind">Story</span> : null}</span>
                       <span className="vp-thread-preview">{last ? `${last.from === phoneId ? "You: " : ""}${last.text}` : "No messages yet"}</span>
                     </span>
                     {last?.at ? <span className="vp-row-stamp">{clock.stamp(last.at)}</span> : null}
@@ -246,28 +325,7 @@ export function MessagesShell({ phoneId, openWith = "", onBack, onClose }: {
               })}
             </div>
           ) : null}
-          {newContacts.length ? (
-            <div className="vp-stack">
-              <h3 className="vp-section-label">Start a chat</h3>
-              <div className="vp-list vp-list--inset-rules">
-                {newContacts.map((contact) => (
-                  <button
-                    key={contact.phoneId}
-                    type="button"
-                    className="vp-thread-row"
-                    onClick={() => { setDraft(""); setNewTo({ phoneId: contact.phoneId, name: contact.ownerName }); }}
-                  >
-                    <PhoneAvatar name={contact.ownerName} url={contact.ownerId ? avatars?.get(contact.ownerId) : null} />
-                    <span className="vp-thread-body">
-                      <span className="vp-thread-name">{contact.ownerName}</span>
-                      <span className="vp-thread-preview">No messages yet</span>
-                    </span>
-                    <ChevronRight size="1rem" aria-hidden="true" className="vp-row-chevron" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
+          {(needle || filter === "unread") && visibleThreads.length === 0 ? <PhoneEmptyState icon={filter === "unread" ? MessageSquare : Search} title={filter === "unread" ? "No unread messages" : "No conversation found"} body={filter === "unread" ? "You’re caught up." : "Try a person’s name or words from the latest message."} /> : null}
         </div>
       )}
     </section>

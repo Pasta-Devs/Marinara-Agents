@@ -1,27 +1,30 @@
 import type { AppManifest } from "../../platform/app-manifest";
 import { emojiFor } from "../../platform/emoji";
 
-export const marketplaceManifest: AppManifest = {
-  id: "marketplace",
-  name: "Marketplace",
+export const bazaarManifest: AppManifest = {
+  id: "bazaar",
+  name: "Bazaar",
   version: "1.0.0",
-  icon: "marketplace",
+  icon: "bazaar",
   category: "lifestyle",
-  capabilities: ["storage.local", "context.read"],
+  capabilities: ["storage.local", "context.read", "story.write"],
   modelUse: "heavy",
   removable: true,
   routes: [
-    { id: "listings", path: "/", title: "Marketplace" },
+    { id: "listings", path: "/", title: "Bazaar" },
     { id: "listing", path: "/listing", title: "Listing" },
     { id: "yours", path: "/yours", title: "Your stuff" },
   ],
   records: [
     { type: "listing-cache", ownership: "phone-local" },
-    { type: "purchase", ownership: "phone-local" },
+    { type: "saved-listing", ownership: "phone-local" },
+    { type: "seller-thread", ownership: "phone-local" },
+    { type: "completed-deal", ownership: "story-shared" },
     { type: "own-listing", ownership: "phone-local" },
   ],
   actions: [
     { id: "refresh-listings", tier: "ambient" },
+    { id: "save-listing", tier: "local" },
     { id: "buy", tier: "story" },
     { id: "haggle", tier: "ambient" },
     { id: "sell", tier: "story" },

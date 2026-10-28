@@ -1,6 +1,6 @@
 import React from "react";
-import { Inbox } from "lucide-react";
-import { draftMail, mailFromLine, mergeMail, parseEmail, readStoredMail, type MailFolder, type MailMessage } from "./manifest";
+import { Archive, Inbox, Search, Send, Trash2 } from "lucide-react";
+import { draftMail, mailFromLine, mailThread, mergeMail, parseEmail, readStoredMail, type MailFolder, type MailMessage } from "./manifest";
 import { phoneRequest, recordActivity } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { useStoryClock } from "../../platform/story-clock";
@@ -13,6 +13,7 @@ const FOLDERS: Array<{ id: MailFolder; label: string }> = [
   { id: "inbox", label: "Inbox" },
   { id: "sent", label: "Sent" },
   { id: "archive", label: "Archive" },
+  { id: "trash", label: "Trash" },
 ];
 
 
@@ -23,6 +24,8 @@ export function MailShell({ phoneId, ownerName = "Me", chatId, onBack, onClose }
   const when = (at: string) => (Number.isNaN(new Date(at).getTime()) ? "" : clock.stamp(at));
   const [mail, setMail] = React.useState<MailMessage[] | null>(null);
   const [folder, setFolder] = React.useState<MailFolder>("inbox");
+  const [query, setQuery] = React.useState("");
+  const [unreadOnly, setUnreadOnly] = React.useState(false);
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [composing, setComposing] = React.useState<{ to: string; subject: string; body: string; replyTo?: string } | null>(null);
   const [contacts, setContacts] = React.useState<Array<{ name: string; ownerId?: string; phoneId?: string }>>([]);
@@ -91,19 +94,26 @@ export function MailShell({ phoneId, ownerName = "Me", chatId, onBack, onClose }
   }, [phoneId]);
 
   const openMail = mail?.find((item) => item.id === openId) ?? null;
+  const openThread = openMail ? mailThread(mail ?? [], openMail.id) : [];
   const shown = (mail ?? []).filter((item) => item.folder === folder);
   const unreadInbox = (mail ?? []).filter((item) => item.folder === "inbox" && !item.read).length;
 
   const open = (item: MailMessage) => {
     setOpenId(item.id);
-    if (!item.read && mail) persist(mail.map((entry) => entry.id === item.id ? { ...entry, read: true } : entry));
+    if (!item.read && mail) {
+      persist(mail.map((entry) => entry.id === item.id ? { ...entry, read: true } : entry));
+      void phoneRequest(`/phones/${encodeURIComponent(phoneId)}/mail/open`, {
+        method: "POST",
+        body: JSON.stringify({ id: item.id, from: item.from, subject: item.subject, body: item.body, at: item.at }),
+      }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The message was opened, but its story state could not be recorded."));
+    }
   };
   const move = (item: MailMessage, next: MailFolder) => {
     if (!mail) return;
     persist(mail.map((entry) => entry.id === item.id ? { ...entry, folder: next } : entry));
     setOpenId(null);
   };
-  const remove = (item: MailMessage) => {
+  const removeForever = (item: MailMessage) => {
     if (!mail) return;
     persist(mail.filter((entry) => entry.id !== item.id));
     setOpenId(null);
@@ -113,24 +123,27 @@ export function MailShell({ phoneId, ownerName = "Me", chatId, onBack, onClose }
     if (!composing || sending) return;
     setSending(true);
     setError(null);
-    const sent = draftMail({ from: ownerName, to: composing.to, subject: composing.subject, body: composing.body, ...(composing.replyTo ? { replyTo: composing.replyTo } : {}) });
-    const afterSend = [sent, ...(mail ?? [])];
-    persist(afterSend);
-    void recordActivity(phoneId, `emailed ${composing.to}${composing.subject.trim() ? ` about "${composing.subject.trim()}"` : ""}`)
-      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The email action could not be recorded."));
-    setComposing(null);
-    setFolder("sent");
     try {
-      const response = await phoneRequest<{ reply: { from: string; to: string; subject: string; body: string } | null }>(
+      const response = await phoneRequest<{ sentAt: string; reply: { id: string; at: string; from: string; to: string; subject: string; body: string } | null }>(
         `/phones/${encodeURIComponent(phoneId)}/mail/send`,
         { method: "POST", body: JSON.stringify({ to: composing.to, subject: composing.subject, body: composing.body }) },
       );
+      const sent = {
+        ...draftMail({ from: ownerName, to: composing.to, subject: composing.subject, body: composing.body, ...(composing.replyTo ? { replyTo: composing.replyTo } : {}) }),
+        at: response.sentAt,
+      };
+      const afterSend = [sent, ...(mail ?? [])];
+      persist(afterSend);
+      void recordActivity(phoneId, "sent a private email from the Phone")
+        .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The email action could not be recorded."));
+      setComposing(null);
+      setFolder("sent");
       if (response.reply) {
-        const answer = mailFromLine(
+        const answer = { ...mailFromLine(
           `${response.reply.from} | ${response.reply.subject} | ${response.reply.body}`,
           ownerName,
-          new Date().toISOString(),
-        );
+          response.reply.at,
+        ), id: response.reply.id };
         persist([{ ...answer, replyTo: sent.id }, ...afterSend]);
         try {
           await rememberPerson(phoneId, {
@@ -145,14 +158,15 @@ export function MailShell({ phoneId, ownerName = "Me", chatId, onBack, onClose }
         setFolder("inbox");
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The mail was saved to Sent but could not be delivered.");
+      setError(cause instanceof Error ? cause.message : "The email could not be sent. Your draft is still open.");
     } finally {
       setSending(false);
     }
   };
 
+  const visibleMail = shown.filter((item) => (!unreadOnly || !item.read) && (!query.trim() || `${item.from} ${item.to} ${item.subject} ${item.body}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())));
   return (
-    <section aria-labelledby="mail-title" className="vp-appview">
+    <section aria-labelledby="mail-title" className="vp-appview" data-phone-app="mail">
       <PhoneAppHeader
         title={composing ? "New message" : openMail ? openMail.subject : "Mail"}
         titleId="mail-title"
@@ -164,7 +178,7 @@ export function MailShell({ phoneId, ownerName = "Me", chatId, onBack, onClose }
         }}
         onClose={onClose}
         actions={composing ? [] : openMail
-          ? [{ id: "delete-mail", icon: "trash", label: "Delete", kind: "button" }]
+          ? [{ id: "delete-mail", icon: "trash", label: openMail.folder === "trash" ? "Delete forever" : "Move to Trash", kind: "button" }]
           : [
             { id: "compose", icon: "add", label: "New message", kind: "button" },
             { id: "refresh-inbox", icon: "refresh", label: "Refresh inbox", kind: "button", disabled: loading, reason: "Refreshing" },
@@ -172,7 +186,7 @@ export function MailShell({ phoneId, ownerName = "Me", chatId, onBack, onClose }
         onAction={(actionId) => {
           if (actionId === "compose") setComposing({ to: "", subject: "", body: "" });
           if (actionId === "refresh-inbox") refresh();
-          if (actionId === "delete-mail" && openMail) remove(openMail);
+          if (actionId === "delete-mail" && openMail) openMail.folder === "trash" ? removeForever(openMail) : move(openMail, "trash");
         }}
       />
       {error ? <p role="alert" className="vp-muted-note">{error}</p> : null}
@@ -184,7 +198,7 @@ export function MailShell({ phoneId, ownerName = "Me", chatId, onBack, onClose }
               list="vp-mail-contacts"
               value={composing.to}
               onChange={(event) => setComposing({ ...composing, to: event.target.value })}
-              placeholder="To — a name, or any address you invent"
+              placeholder="To — name or email address"
               maxLength={200}
               required
               autoFocus
@@ -207,13 +221,20 @@ export function MailShell({ phoneId, ownerName = "Me", chatId, onBack, onClose }
       ) : openMail ? (
         <div className="vp-mail-read">
           <h3 className="vp-page-heading">{openMail.subject}</h3>
-          <p className="vp-mail-meta">
-            {openMail.folder === "sent" ? `To ${openMail.to}` : `From ${openMail.from}`}
-            {when(openMail.at) ? ` · ${when(openMail.at)}` : ""}
-          </p>
-          <div className="vp-page-body"><p style={{ whiteSpace: "pre-wrap" }}>{openMail.body}</p></div>
+          <div className="vp-mail-thread" aria-label="Conversation">
+            {openThread.map((message) => (
+              <article key={message.id} className={`vp-mail-message${message.id === openMail.id ? " vp-mail-message--selected" : ""}`}>
+                <div className="vp-mail-message-head">
+                  <PhoneAvatar name={message.folder === "sent" ? ownerName : message.from} url={null} />
+                  <span><strong>{message.folder === "sent" ? ownerName : message.from}</strong><small>{message.folder === "sent" ? `to ${message.to}` : `to ${ownerName}`}</small></span>
+                  {when(message.at) ? <time>{when(message.at)}</time> : null}
+                </div>
+                <p>{message.body}</p>
+              </article>
+            ))}
+          </div>
           <div className="vp-store-actions" style={{ marginTop: "0.75rem" }}>
-            {openMail.folder !== "sent" ? (
+            {openMail.folder === "inbox" || openMail.folder === "archive" ? (
               <button type="button" className="vp-accent-btn" onClick={() => setComposing({
                 to: openMail.from,
                 subject: openMail.subject.startsWith("Re:") ? openMail.subject : `Re: ${openMail.subject}`,
@@ -225,25 +246,31 @@ export function MailShell({ phoneId, ownerName = "Me", chatId, onBack, onClose }
               ? <button type="button" className="vp-surface-btn" onClick={() => move(openMail, "inbox")}>Move to Inbox</button>
               : openMail.folder === "inbox"
                 ? <button type="button" className="vp-surface-btn" onClick={() => move(openMail, "archive")}>Archive</button>
+                : openMail.folder === "trash"
+                  ? <button type="button" className="vp-surface-btn" onClick={() => move(openMail, "inbox")}>Restore</button>
                 : null}
+            {openMail.folder === "inbox" && openMail.read ? <button type="button" className="vp-surface-btn" onClick={() => { if (mail) persist(mail.map((item) => item.id === openMail.id ? { ...item, read: false } : item)); setOpenId(null); }}>Mark unread</button> : null}
           </div>
         </div>
       ) : (
         <>
-          <div className="vp-chip-row" role="tablist" aria-label="Mail folders">
+          <div className="vp-mail-folders" role="tablist" aria-label="Mail folders">
             {FOLDERS.map((entry) => (
               <button
                 key={entry.id}
                 type="button"
                 role="tab"
                 aria-selected={folder === entry.id}
-                onClick={() => setFolder(entry.id)}
-                className={`vp-chip${folder === entry.id ? " vp-chip--active" : ""}`}
+                onClick={() => { setFolder(entry.id); setUnreadOnly(false); }}
+                className={`vp-mail-folder${folder === entry.id ? " vp-mail-folder--active" : ""}`}
               >
-                {entry.label}{entry.id === "inbox" && unreadInbox ? ` (${unreadInbox})` : ""}
+                {entry.id === "inbox" ? <Inbox size="0.85rem" aria-hidden="true" /> : entry.id === "sent" ? <Send size="0.85rem" aria-hidden="true" /> : entry.id === "archive" ? <Archive size="0.85rem" aria-hidden="true" /> : <Trash2 size="0.85rem" aria-hidden="true" />}
+                <span>{entry.label}</span>{entry.id === "inbox" && unreadInbox ? <strong>{unreadInbox}</strong> : null}
               </button>
             ))}
           </div>
+          <label className="vp-inline-search"><Search size="0.875rem" aria-hidden="true" /><span className="vp-sr-only">Search mail</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search mail" /></label>
+          {folder === "inbox" && shown.length ? <div className="vp-filter-tabs" aria-label="Inbox filter"><button type="button" aria-pressed={!unreadOnly} onClick={() => setUnreadOnly(false)}>All</button><button type="button" aria-pressed={unreadOnly} onClick={() => setUnreadOnly(true)}>Unread {unreadInbox || ""}</button></div> : null}
           {loading && !mail?.length ? (
             <div role="status" aria-label="Loading mail" className="vp-stack" style={{ gap: "0.5rem" }}>
               {[0, 1, 2, 3].map((index) => (
@@ -256,16 +283,16 @@ export function MailShell({ phoneId, ownerName = "Me", chatId, onBack, onClose }
               ))}
             </div>
           ) : null}
-          {mail && shown.length === 0 && !loading ? (
+          {mail && shown.length === 0 && !loading && !query.trim() ? (
             <PhoneEmptyState
               icon={Inbox}
-              title={folder === "inbox" ? "Inbox is empty" : folder === "sent" ? "Nothing sent" : "Nothing archived"}
-              body={folder === "inbox" ? "Mail arrives from the world the story is set in. Refresh to check." : undefined}
+              title={folder === "inbox" ? "Inbox is empty" : folder === "sent" ? "Nothing sent" : folder === "archive" ? "Nothing archived" : "Trash is empty"}
+              body={folder === "inbox" ? "Refresh to check for new messages." : undefined}
             />
           ) : null}
-          {shown.length ? (
+          {visibleMail.length ? (
             <div className="vp-list vp-list--inset-rules" aria-busy={loading}>
-              {shown.map((item) => (
+              {visibleMail.map((item) => (
                 <button key={item.id} type="button" onClick={() => open(item)} className="vp-thread-row">
                   <PhoneAvatar name={item.folder === "sent" ? item.to : item.from} url={null} />
                   <span className="vp-thread-body">
@@ -281,6 +308,8 @@ export function MailShell({ phoneId, ownerName = "Me", chatId, onBack, onClose }
               ))}
             </div>
           ) : null}
+          {query.trim() && visibleMail.length === 0 ? <PhoneEmptyState icon={Search} title="No mail found" body="Try a sender, subject, or phrase from the message." /> : null}
+          {!query.trim() && unreadOnly && visibleMail.length === 0 ? <PhoneEmptyState icon={Inbox} title="You're all caught up" body="There is no unread mail." /> : null}
         </>
       )}
     </section>

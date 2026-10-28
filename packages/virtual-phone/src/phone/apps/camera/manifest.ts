@@ -3,7 +3,7 @@ import type { AppManifest } from "../../platform/app-manifest";
 export const cameraManifest: AppManifest = {
   id: "camera",
   name: "Camera",
-  version: "1.0.0",
+  version: "1.1.0",
   icon: "camera",
   category: "media",
   capabilities: ["storage.local", "context.read"],
@@ -11,7 +11,10 @@ export const cameraManifest: AppManifest = {
   removable: true,
   routes: [{ id: "viewfinder", path: "/", title: "Camera" }],
   records: [{ type: "described-shot", ownership: "phone-local" }],
-  actions: [{ id: "shoot", tier: "local", immediate: true }],
+  actions: [
+    { id: "shoot", tier: "local", immediate: true },
+    { id: "share-shot", tier: "local" },
+  ],
   content: { viewfinder: { fields: { photo: "string" } } },
   notifications: null,
 };

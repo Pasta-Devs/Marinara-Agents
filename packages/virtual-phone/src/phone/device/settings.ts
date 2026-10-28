@@ -2,6 +2,11 @@ import type { PhoneBaselineTheme } from "./identity";
 
 export type PhonePattern = "none" | "dots" | "grid" | "noise" | "waves";
 export type ScreenEffect = "none" | "cracks" | "smudge" | "blood" | "scanlines";
+export type PhonePower = "on" | "off";
+export type PhoneConnectivity = "online" | "limited" | "offline";
+export type PhoneRinger = "sound" | "vibrate" | "silent";
+export type PhoneAvailability = "carried" | "nearby" | "absent" | "lost";
+export type PhoneAccess = "unlocked" | "owner-locked" | "story-locked";
 
 export interface DeviceSettings {
   deviceName: string;
@@ -24,7 +29,14 @@ export interface DeviceSettings {
    */
   batteryLevel: number;
   cellularSignal: 0 | 1 | 2 | 3 | 4;
+  power: PhonePower;
+  connectivity: PhoneConnectivity;
+  ringer: PhoneRinger;
+  availability: PhoneAvailability;
+  access: PhoneAccess;
   installedApps: string[];
+  /** Four owner-chosen launchers shown in the home dock, filtered against installed apps at render. */
+  dockApps: string[];
   /**
    * Lorebooks read on every generation for this phone, whether or not they are active in chat
    * context. The default is the chat's own lorebooks — the ones it has active, plus any bound to
@@ -106,7 +118,13 @@ export function defaultDeviceSettings(theme: PhoneBaselineTheme = "dark"): Devic
     reduceDeviceEffects: false,
     batteryLevel: 80,
     cellularSignal: 4,
-    installedApps: ["settings", "app-store", "goodle", "messages", "notes", "contacts", "gallery", "camera", "pastasafari", "azmoron", "maps", "find"],
+    power: "on",
+    connectivity: "online",
+    ringer: "sound",
+    availability: "carried",
+    access: "owner-locked",
+    installedApps: ["settings", "app-store", "calls", "goodle", "messages", "notes", "contacts", "gallery", "camera", "game", "shop", "maps", "find"],
+    dockApps: ["calls", "messages", "camera", "goodle"],
     lorebookIds: [],
     lorebookMode: "chat",
     unpromptedTexts: false,
@@ -145,9 +163,17 @@ export function normalizeDeviceSettings(value: unknown, theme: PhoneBaselineThem
     cellularSignal: [0, 1, 2, 3, 4].includes(Number(input.cellularSignal))
       ? Number(input.cellularSignal) as 0 | 1 | 2 | 3 | 4
       : defaults.cellularSignal,
+    power: input.power === "off" ? "off" : "on",
+    connectivity: input.connectivity === "limited" || input.connectivity === "offline" ? input.connectivity : "online",
+    ringer: input.ringer === "vibrate" || input.ringer === "silent" ? input.ringer : "sound",
+    availability: input.availability === "nearby" || input.availability === "absent" || input.availability === "lost" ? input.availability : "carried",
+    access: input.access === "unlocked" || input.access === "story-locked" ? input.access : "owner-locked",
     installedApps: Array.isArray(input.installedApps)
-      ? [...new Set(["settings", "app-store", ...input.installedApps.filter((appId): appId is string => typeof appId === "string" && appId.trim().length > 0)])]
+      ? [...new Set(["settings", "app-store", "calls", ...input.installedApps.filter((appId): appId is string => typeof appId === "string" && appId.trim().length > 0)])]
       : defaults.installedApps,
+    dockApps: Array.isArray(input.dockApps)
+      ? [...new Set(input.dockApps.filter((appId): appId is string => typeof appId === "string" && appId.trim().length > 0))].slice(0, 4)
+      : defaults.dockApps,
     lorebookIds: Array.isArray(input.lorebookIds)
       ? [...new Set(input.lorebookIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0))].slice(0, 50)
       : defaults.lorebookIds,

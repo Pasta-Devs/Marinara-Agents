@@ -1,25 +1,46 @@
 import React from "react";
-import { Heart, X } from "lucide-react";
+import { Heart, MessageCircle, ShieldCheck, Sparkles, X } from "lucide-react";
 import { parseProfile } from "./manifest";
-import { phoneRequest, recordActivity } from "../../platform/api";
+import { phoneRequest } from "../../platform/api";
 import { PhoneAppHeader } from "../../platform/app-header";
 import { useDebouncedSave, usePhoneStore } from "../../platform/use-phone-store";
 import { hueFor, initials } from "../../platform/avatars";
 import { rememberPerson } from "../../platform/people";
+import { PhoneEmptyState } from "../../platform/empty-state";
 
 /** Past this much horizontal travel, letting go commits the swipe instead of springing back. */
 const COMMIT_PX = 96;
 
-export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; onBack: () => void; onClose: () => void }) {
+type Match = { profile: string; contactPhoneId?: string };
+type MatchNotice = Match & { name: string; opener: string };
+
+const readMatches = (value: unknown): Match[] => Array.isArray(value)
+  ? value.flatMap((item) => {
+    if (typeof item === "string") return [{ profile: item }];
+    if (!item || typeof item !== "object" || typeof (item as Match).profile !== "string") return [];
+    return [{ profile: (item as Match).profile, ...typeof (item as Match).contactPhoneId === "string" ? { contactPhoneId: (item as Match).contactPhoneId } : {} }];
+  })
+  : [];
+
+export function TindlerShell({ phoneId, openMessages, onBack, onClose }: {
+  phoneId: string;
+  openMessages?: (phoneId: string) => void;
+  onBack: () => void;
+  onClose: () => void;
+}) {
   const store = usePhoneStore(phoneId, "tindler");
   const [deck, setDeck] = React.useState<string[] | null>(null);
   const [index, setIndex] = React.useState(0);
-  const [matches, setMatches] = React.useState<string[]>([]);
+  const [matches, setMatches] = React.useState<Match[]>([]);
   const [preferences, setPreferences] = React.useState("");
+  const [intent, setIntent] = React.useState("Open to dating");
   const [view, setView] = React.useState<"deck" | "matches" | "preferences">("deck");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [checkingLike, setCheckingLike] = React.useState(false);
+  const [matchNotice, setMatchNotice] = React.useState<MatchNotice | null>(null);
   const { save: savePreference } = useDebouncedSave(store, "preferences", setError);
+  const { save: saveIntent } = useDebouncedSave(store, "intent", setError);
 
   /** Live drag offset, and the direction a committed card is flying out in. */
   const [drag, setDrag] = React.useState(0);
@@ -43,16 +64,17 @@ export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
 
   React.useEffect(() => {
     let active = true;
-    void Promise.all([store.get("deck"), store.get("deckIndex"), store.get("matches"), store.get("preferences")]).then(([savedDeck, savedIndex, savedMatches, savedPrefs]) => {
+    void Promise.all([store.get("deck"), store.get("deckIndex"), store.get("matches"), store.get("preferences"), store.get("intent")]).then(([savedDeck, savedIndex, savedMatches, savedPrefs, savedIntent]) => {
       if (!active) return;
-      if (Array.isArray(savedMatches)) setMatches(savedMatches.filter((item): item is string => typeof item === "string"));
+      setMatches(readMatches(savedMatches));
       const prefs = typeof savedPrefs === "string" ? savedPrefs : "";
       setPreferences(prefs);
+      if (typeof savedIntent === "string" && savedIntent) setIntent(savedIntent);
       if (Array.isArray(savedDeck) && savedDeck.length) {
         setDeck(savedDeck.filter((item): item is string => typeof item === "string"));
         setIndex(typeof savedIndex === "number" ? savedIndex : 0);
       } else {
-        fetchDeck(prefs);
+        fetchDeck([typeof savedIntent === "string" ? savedIntent : "Open to dating", prefs].filter(Boolean).join("; "));
       }
     }).catch(() => { if (active) fetchDeck(""); });
     return () => { active = false; };
@@ -73,30 +95,43 @@ export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
   }, [store]);
 
   /** The card flies out first, then the deck advances — committing instantly reads as a glitch. */
-  const commit = React.useCallback((decision: "like" | "pass") => {
-    if (!current || flying) return;
-    if (decision === "like") {
-      const matched = parseProfile(current);
-      void recordActivity(phoneId, `matched with ${matched.name} on Tindler`)
-        .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The match action could not be recorded."));
-      void rememberPerson(phoneId, {
+  const checkForMatch = React.useCallback(async (entry: string) => {
+    setCheckingLike(true);
+    try {
+      const result = await phoneRequest<{ matched: boolean; opener: string }>(`/phones/${encodeURIComponent(phoneId)}/tindler/match`, {
+        method: "POST",
+        body: JSON.stringify({ profile: entry, preferences: [intent, preferences].filter(Boolean).join("; ") }),
+      });
+      if (!result.matched) return;
+      const matched = parseProfile(entry);
+      const remembered = await rememberPerson(phoneId, {
         name: matched.name,
         bio: [matched.tagline, matched.bio].filter(Boolean).join(" — "),
         phoneLabel: "Tindler",
-        source: "Matched on Tindler",
-        firstMessage: matched.tagline ? `${matched.tagline} — hey, it's a match.` : "Hey — it's a match.",
-      }).catch((cause: unknown) => {
-        setError(cause instanceof Error ? cause.message : `${matched.name} could not be added to Contacts.`);
+        source: "Mutual match on Tindler",
+        firstMessage: result.opener || "Hey — it's a match.",
       });
+      const nextMatch: Match = { profile: entry, contactPhoneId: remembered?.contact.phoneId };
       setMatches((currentMatches) => {
-        const next = [current, ...currentMatches];
+        if (currentMatches.some((match) => match.profile === entry)) return currentMatches;
+        const next = [nextMatch, ...currentMatches];
         void store.set("matches", next).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The match could not be saved."));
         return next;
       });
+      setMatchNotice({ ...nextMatch, name: matched.name, opener: result.opener });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Your like could not be sent.");
+    } finally {
+      setCheckingLike(false);
     }
+  }, [phoneId, intent, preferences, store]);
+
+  const commit = React.useCallback((decision: "like" | "pass") => {
+    if (!current || flying) return;
+    if (decision === "like") void checkForMatch(current);
     setFlying(decision);
     window.setTimeout(advance, 260);
-  }, [current, flying, store, advance]);
+  }, [current, flying, advance, checkForMatch]);
 
   React.useEffect(() => {
     if (view !== "deck") return;
@@ -127,6 +162,11 @@ export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
   };
 
   const profile = current ? parseProfile(current) : null;
+  const removeMatch = (index: number) => {
+    const next = matches.filter((_, matchIndex) => matchIndex !== index);
+    setMatches(next);
+    void store.set("matches", next).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "The match could not be removed."));
+  };
   const offset = flying ? (flying === "like" ? 520 : -520) : drag;
   const cardStyle: React.CSSProperties = {
     transform: `translateX(${offset}px) rotate(${offset / 26}deg)`,
@@ -141,7 +181,7 @@ export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
   });
 
   return (
-    <section aria-labelledby="tindler-title" className="vp-appview vp-appview--fixed">
+    <section aria-labelledby="tindler-title" className="vp-appview vp-appview--fixed" data-phone-app="tindler">
       <PhoneAppHeader
         title={view === "matches" ? "Matches" : view === "preferences" ? "Looking for" : "Tindler"}
         titleId="tindler-title"
@@ -159,37 +199,44 @@ export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
             setView("matches");
             void store.set("lastSeenMatches", matches.length).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Matches could not be marked as seen."));
           }
-          if (actionId === "refresh-deck") fetchDeck(preferences);
+          if (actionId === "refresh-deck") fetchDeck([intent, preferences].filter(Boolean).join("; "));
         }}
       />
       {error ? <p role="alert" className="vp-muted-note">{error}</p> : null}
 
       {view === "preferences" ? (
-        <div className="vp-card vp-stack" style={{ gap: "0.5rem" }}>
-          <p className="vp-muted-note">This shapes who turns up. Leave it empty and the world decides.</p>
+        <div className="vp-tindler-preferences">
+          <div className="vp-tindler-assurance"><ShieldCheck size="1.1rem" aria-hidden="true" /><p><strong>Your choices stay yours.</strong><span>These guide discovery. They are not shown as your bio or sent to people.</span></p></div>
+          <fieldset className="vp-tindler-intents">
+            <legend>What are you open to?</legend>
+            {["Open to dating", "A relationship", "Something casual", "New connections"].map((option) => <button key={option} type="button" aria-pressed={intent === option} onClick={() => { setIntent(option); saveIntent(option, true); }}>{option}</button>)}
+          </fieldset>
           <label><span className="vp-sr-only">Looking for</span>
+            <span className="vp-field-label">People and boundaries</span>
             <input
               value={preferences}
               onChange={(event) => { setPreferences(event.target.value); savePreference(event.target.value); }}
-              placeholder="Looking for…"
-              autoFocus
+              placeholder="Kind, nearby, no coworkers…"
               className="vp-input"
+              maxLength={200}
             />
           </label>
-          <button type="button" className="vp-accent-btn" onClick={() => { setView("deck"); fetchDeck(preferences); }}>Find people</button>
+          <button type="button" className="vp-accent-btn" onClick={() => { setView("deck"); fetchDeck([intent, preferences].filter(Boolean).join("; ")); }}>Update discovery</button>
         </div>
       ) : view === "matches" ? (
-        matches.length === 0 ? <p className="vp-muted-note">No matches yet. Go like someone.</p> : (
+        matches.length === 0 ? <PhoneEmptyState icon={Heart} title="No matches yet" body="People you both choose appear here and are added to Contacts." action={{ label: "Browse people", onClick: () => setView("deck") }} /> : (
           <div className="vp-stack" style={{ gap: "0.5rem", overflowY: "auto" }}>
             {matches.map((match, matchIndex) => {
-              const matched = parseProfile(match);
+              const matched = parseProfile(match.profile);
               return (
-                <div key={matchIndex} className="vp-thread-row">
+                <div key={`${match.profile}-${matchIndex}`} className="vp-tindler-match">
                   <span className="vp-thread-avatar" style={{ background: `linear-gradient(180deg, hsl(${hueFor(matched.name)} 65% 60%), hsl(${hueFor(matched.name)} 65% 42%))` }} aria-hidden="true">{initials(matched.name)}</span>
                   <span className="vp-thread-body">
                     <span className="vp-thread-name">{matched.name}{matched.age ? `, ${matched.age}` : ""}</span>
                     <span className="vp-thread-preview">{matched.tagline || "It's a match"}</span>
                   </span>
+                  {match.contactPhoneId && openMessages ? <button type="button" className="vp-tindler-message" aria-label={`Message ${matched.name}`} onClick={() => openMessages(match.contactPhoneId!)}><MessageCircle size="1rem" aria-hidden="true" /></button> : null}
+                  <button type="button" className="vp-store-remove vp-tindler-unmatch" aria-label={`Remove match with ${matched.name}`} title="Remove match" onClick={() => removeMatch(matchIndex)}><X size="0.9rem" aria-hidden="true" /></button>
                 </div>
               );
             })}
@@ -257,6 +304,20 @@ export function TindlerShell({ phoneId, onBack, onClose }: { phoneId: string; on
         <div className="vp-tinder-actions">
           <button type="button" aria-label={`Pass on ${profile.name}`} onClick={() => commit("pass")} className="vp-tinder-btn vp-tinder-btn--pass"><X size="1.375rem" aria-hidden="true" /></button>
           <button type="button" aria-label={`Like ${profile.name}`} onClick={() => commit("like")} className="vp-tinder-btn vp-tinder-btn--like"><Heart size="1.375rem" aria-hidden="true" /></button>
+        </div>
+      ) : null}
+      {view === "deck" && profile ? <p className="vp-tindler-private-note">Likes are private unless you both choose each other.</p> : null}
+      {checkingLike ? <div className="vp-tindler-toast" role="status"><Sparkles size="0.9rem" aria-hidden="true" /> Like sent</div> : null}
+      {matchNotice ? (
+        <div className="vp-tindler-match-sheet" role="dialog" aria-modal="true" aria-labelledby="tindler-match-title">
+          <div className="vp-tindler-match-burst" style={photoFor(matchNotice.name)}>{initials(matchNotice.name)}</div>
+          <span className="vp-section-label">It’s mutual</span>
+          <h3 id="tindler-match-title">You matched with {matchNotice.name}</h3>
+          {matchNotice.opener ? <p>“{matchNotice.opener}”</p> : <p>You can start a conversation whenever you’re ready.</p>}
+          <div className="vp-review-actions">
+            {matchNotice.contactPhoneId && openMessages ? <button type="button" className="vp-accent-btn" onClick={() => { const target = matchNotice.contactPhoneId!; setMatchNotice(null); openMessages(target); }}>Message</button> : null}
+            <button type="button" className="vp-surface-btn" onClick={() => setMatchNotice(null)}>Keep browsing</button>
+          </div>
         </div>
       ) : null}
     </section>

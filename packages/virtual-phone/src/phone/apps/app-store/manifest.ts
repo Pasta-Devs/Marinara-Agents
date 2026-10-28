@@ -23,9 +23,41 @@ export const appStoreManifest: AppManifest = {
 };
 
 export function modelUseLabel(modelUse: AppManifest["modelUse"]) {
-  if (modelUse === "none") return "Works without a model";
-  if (modelUse === "light") return "Uses the model lightly";
-  return "Model-heavy";
+  if (modelUse === "none") return "Instant · no generation";
+  if (modelUse === "light") return "Quick generation";
+  return "Rich world generation";
+}
+
+export function privacyLabel(manifest: AppManifest) {
+  const ownership = new Set(manifest.records.map((record) => record.ownership));
+  if (ownership.has("participant-shared")) return "Shared with the people involved";
+  if (ownership.has("story-shared")) return "Shared across this story";
+  if (ownership.has("permissioned-private")) return "Private unless access is granted";
+  if (ownership.has("phone-local")) return "Saved only on this phone";
+  return "Does not keep its own records";
+}
+
+export function storyImpactLabel(manifest: AppManifest) {
+  const tiers = new Set(manifest.actions.map((action) => action.tier));
+  if (tiers.has("story")) return "Can create events the story remembers";
+  if (tiers.has("participant")) return "Acts with other people in the story";
+  if (tiers.has("ambient")) return "Reads the world when you ask";
+  return "Stays on the phone until you share it";
+}
+
+const capabilityLabels: Partial<Record<AppManifest["capabilities"][number], string>> = {
+  "storage.local": "Saves information on this phone",
+  "context.read": "Can read the current story when you ask it to",
+  notify: "Can send phone notifications",
+  "share.screen": "Can show its current screen in the conversation",
+  "story.write": "Can create actions or events in the story",
+  "net.search": "Can search the fictional world's web",
+  participants: "Can interact with characters in the conversation",
+};
+
+export function capabilitySummary(manifest: AppManifest) {
+  const labels = manifest.capabilities.map((capability) => capabilityLabels[capability]).filter((label): label is string => Boolean(label));
+  return labels.length ? labels : ["No additional access"];
 }
 
 /**
@@ -34,7 +66,8 @@ export function modelUseLabel(modelUse: AppManifest["modelUse"]) {
  */
 export const appDescriptions: Record<string, string> = {
   settings: "Appearance, screen condition, and which model connections this phone generates with.",
-  "app-store": "Install and remove the apps on this phone.",
+  "app-store": "Find, install, open, and remove apps made for this phone.",
+  calls: "Place and receive story calls with configured characters, with a real shared call session.",
   goodle: "Search this world's web and read the pages it invents, following links as you go.",
   messages: "Texts with anyone else in this chat who has a phone, and the story's own conversations.",
   notes: "Private notes. Nothing written here leaves the phone.",
@@ -45,12 +78,12 @@ export const appDescriptions: Record<string, string> = {
   tindler: "Dating profiles of people who live in this world. Swipe, match, and talk.",
   "noodler-r": "Creator pages with subscriber-only posts, for the cast and for strangers.",
   camera: "Point at the story and take a photo. You can edit what it saw before keeping it.",
-  marketplace: "What the world is selling — the odd, the desperate and the mundane, listed by strangers and occasionally by someone you know.",
+  bazaar: "Local person-to-person classifieds. Message sellers, haggle, buy used things, or list your own.",
   banking: "A balance that follows this persona across chats, with a transaction history. The story proposes what moved; you approve, reject, or set the number yourself.",
-  pastasafari: "A match-three pasta game. Scores, streaks, and the moments you played can become part of the phone owner's story.",
-  azmoron: "A world-aware marketplace where useful, suspicious, and sentimental parcels can arrive at your door and in your story.",
-  maps: "Search the world around you. Places you look up become somewhere the owner knows and the story can use.",
-  find: "See where the people you know are right now. What Find shows, the owner learns.",
+  game: "A private match-three game with saved progress, hints, and high scores.",
+  shop: "Retail shopping from established stores, with receipts, tracked orders, and deliveries that arrive in the story.",
+  maps: "Privately preview places and routes from this world, then explicitly show or reference one in the scene.",
+  find: "Check locations that contacts shared or the story already established. Find does not guess.",
 };
 
 export function appDescription(appId: string) {
