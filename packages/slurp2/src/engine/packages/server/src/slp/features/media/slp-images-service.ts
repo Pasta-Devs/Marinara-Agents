@@ -607,7 +607,8 @@ async function generateCreatorPostImageRun(
       : withoutDevice;
   // The Creator's medium: an anime, furry or dragon Creator is drawn, so the brief's photo words go
   // and their style leads. A photo-style Creator, and a prompt a human approved, stay as they are.
-  const styleSource = `${characterDescription}\n${characterImageInstructions}`;
+  // The player's style profile counts too; in the story it is still a photo (prod: painted mixes).
+  const styleSource = `${characterDescription}\n${characterImageInstructions}\n${styleGuidance}`;
   const artStyle = skipInterpretation ? null : slurpArtStyle(styleSource);
   // The viewpoint in the image model's words: tags for a tag model, e621 tags for a drawn furry.
   const promptFamily = slurpPromptFamily({

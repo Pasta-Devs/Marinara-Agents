@@ -44,7 +44,7 @@ import {
 } from "../../modules/feed/slp-post-variation.js";
 import { slurpArcPoll, slurpArcRotation, slurpProjectChapter } from "../../modules/projects/slp-arc-progress.js";
 import { slurpPurposeMetadata } from "../../modules/feed/slp-post-purpose.js";
-import { resolveSlurpCreatorScheduleContext } from "../creators/slp-creators-contract.js";
+import { ensureSlurpCreatorWardrobe, resolveSlurpCreatorScheduleContext } from "../creators/slp-creators-contract.js";
 import { type SlpCreatorContentFormat } from "../../base/prompting/slp-content-format.js";
 import { resolveSlurpLoreContext } from "../../data/host/slp-lore-context.js";
 import { pickGalleryAttachmentForAccount } from "./slp-generated-activity-service.js";
@@ -61,6 +61,7 @@ import {
   slpCreatorTitleFromContent,
   completeSlurpCreatorPost,
   slurpLockedTeaserMetadata,
+  SLURP_FORMAT_CEILING,
 } from "./slp-post-prompt.js";
 export type { SlpCreatorContentFormat } from "../../base/prompting/slp-content-format.js";
 
@@ -141,7 +142,12 @@ export async function generateCreatorPost(
   // Rotating angle, skipped for directed posts; one sequence keeps project and variation in step.
   const sequence = await noodle.countNoodlerPostsByAccount(account.id);
   const story = await loadSlurpStoryState(db, account.id, at); // closet, brief lines and deck beats
-  const looks = await noodle.listWardrobeLooks(account.id).catch(() => []);
+  const looks = await ensureSlurpCreatorWardrobe(db, {
+    accountId: account.id,
+    displayName: account.displayName,
+    connection: input.connection,
+    sourceText: sourceCharacterContext,
+  });
   const wardrobeLooks = slurpConditionCloset(looks, story.state.wardrobe);
   const recentWardrobeIds = recentPosts
     .map((post) => (typeof post.metadata.wardrobeLookId === "string" ? post.metadata.wardrobeLookId : null))
@@ -462,7 +468,8 @@ export async function generateCreatorPost(
     generated.content,
     disclosureMode,
     publicIdentity,
-    settings.postMaxLength,
+    // Models overshoot the caption target (prod median 309 for a 40-220 aim): cut at a sentence end.
+    Math.min(settings.postMaxLength, SLURP_FORMAT_CEILING[format] ?? settings.postMaxLength),
   );
   if (!protectedContent) throw new Error("Slurp generation returned no usable post content.");
 

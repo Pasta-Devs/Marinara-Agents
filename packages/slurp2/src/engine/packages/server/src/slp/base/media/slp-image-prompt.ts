@@ -159,7 +159,7 @@ const ART_STYLES: readonly { tag: string; negative: string; pattern: RegExp }[] 
     tag: "digital illustration",
     negative: "photograph, photorealistic",
     pattern:
-      /\b(?:illustrat(?:ed|ion)|drawn (?:in|as|like)|cartoon(?:ish|y)?|comic(?:[- ]book)? style|painterly|pixel art|3d render(?:ed)?|cgi)\b/iu,
+      /\b(?:illustrat(?:ed|ion)|drawn (?:in|as|like)|cartoon(?:ish|y)?|comic(?:[- ]book)? style|painterly|digital painting|oil painting|concept art|watercolou?r|pixel art|3d render(?:ed)?|cgi)\b/iu,
   },
 ];
 const PHOTO_STYLE =

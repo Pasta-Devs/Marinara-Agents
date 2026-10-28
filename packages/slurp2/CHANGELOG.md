@@ -1,5 +1,15 @@
 # Slurp release notes
 
+## 0.4.5 — 2026-10-28
+
+- Outfits change: a Creator with an empty wardrobe gets one filled from the card once, so pictures stop showing the same clothes.
+- Pictures follow your image style: a painted style no longer gets "personal photograph" words. In the story it is still a photo.
+- Captions are short lines under the picture (about 40–160 characters, cut at a sentence end above 280).
+- Halloween costume contest (Settings › Stir › Drama): three Creators post costumes, you pick the winner, the winner posts a reward set.
+- Live recaps are built from the show (what you got, goals, coins, top tipper), so two shows never post the same text.
+- The daily world tick sees the recent themes, so the feed no longer gets "Cozy" trends day after day.
+- Fewer wasted slots: the planner stops adding post slots past posts per day, and one slot opens one campaign.
+
 ## 0.4.4 — 2026-10-26
 
 - Live shows, rebuilt: code runs every show minute by minute (fans, tips, menu orders, goals); while you watch, the model writes the host and the chat, and the host answers you by name.

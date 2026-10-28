@@ -1,7 +1,7 @@
 import { SLURP2_LEGACY_RELEASES } from "./slp-release-archive";
 
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.4.4";
+export const SLURP2_VERSION = "0.4.5";
 
 export interface Slurp2ReleaseEntry {
   version: string;

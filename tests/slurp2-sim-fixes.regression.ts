@@ -2,6 +2,7 @@
  * Task G: fixes from the 7-day text simulation (`SIM-REPORT.md`, findings F1–F14).
  * One block per fix; each reproduces the simulated failure with the real module.
  */
+import { SLURP_BUILTIN_DRAMAS } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/events/slp-drama-packs.ts";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { slurpPickCreatorForSlot } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-posting-interval.ts";
@@ -113,6 +114,14 @@ const read = (path: string) => readFileSync(new URL(path, root), "utf8");
   assert.equal(slurpArtStyle(goth), null, "a human with a dragon tattoo is a photo-style Creator");
   assert.equal(slurpArtStyle(`${fox} Photorealistic.`), null, "a card that asks for photo realism keeps it");
   assert.match(slurpArtStyle(fox)?.negative ?? "", /fursuit/u);
+  // A painted image style profile is a drawn medium too; painted nails are not.
+  assert.match(slurpArtStyle("digital painting, concept art, refined brushwork")?.tag ?? "", /digital illustration/u);
+  assert.equal(slurpArtStyle("Short hair, painted nails, freckles."), null);
+  assert.match(
+    read("server/src/slp/features/media/slp-images-service.ts"),
+    /styleSource = `[^`]*\$\{styleGuidance\}`/u,
+    "the style profile decides the medium words",
+  );
   for (const look of [anime, fox, dragon]) {
     const styled = slurpStyledImagePrompt(`${look}\n${brief}`, look);
     assert.ok(styled.startsWith(slurpArtStyle(look)!.tag), `style leads: ${styled.slice(0, 60)}`);
@@ -488,6 +497,30 @@ async function g8() {
   assert.equal(single.stats().refused, true);
   assert.equal(single.stats().peakAfterRefusal, 1, "after the first refusal it goes one at a time");
 }
+// Halloween costume contest: the player judges, and each pick leads to that Creator's reward set.
+{
+  const contest = SLURP_BUILTIN_DRAMAS.find((drama) => drama.id === "costume-contest");
+  assert.ok(contest, "the costume contest ships");
+  const vote = contest.stages.find((stage) => stage.choice)!;
+  assert.equal(vote.choice!.asks, "player");
+  for (const option of vote.choice!.options) {
+    const win = contest.stages.find((stage) => stage.key === option.next)!;
+    assert.ok(
+      win.beats.some((beat) => beat.channel === "post" && beat.heat?.for === "you"),
+      option.next,
+    );
+  }
+  // An empty closet is filled once from the card, so outfits change between posts.
+  assert.match(
+    read("server/src/slp/features/creators/slp-wardrobe-import-service.ts"),
+    /if \(looks\.length \|\| !input\.sourceText \|\| wardrobeFillTried\.has\(input\.accountId\)\) return looks;/u,
+  );
+  assert.match(
+    read("server/src/slp/features/feed/slp-generation-service.ts"),
+    /const looks = await ensureSlurpCreatorWardrobe\(db,/u,
+  );
+}
+
 g8().then(
   () => console.log("slurp2-sim-fixes regression passed"),
   (error: unknown) => {
