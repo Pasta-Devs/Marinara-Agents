@@ -83,6 +83,7 @@ Size: S ≈ a day, M ≈ a few days, L ≈ a week or more. Each line is one PR u
 
 | Rank | Item | Size | Engine dependency | Reuse |
 |---|---|---|---|---|
+| P0 | **Make the phone work in chats again — before anything else.** Install 2.10.1 on a throwaway native staging Engine and walk the core loop in a Conversation and a Roleplay chat: enable the agent, open the phone from the toolbar, persona phone and character phone, send and receive a text, Noodle post, Camera shot, the character `[phone]` command in a reply, the prompt-context line on the next turn, settings and app install/remove, mobile width. Fix every break. Static check only so far: the three slots (`conversation-toolbar`, `conversation-surface`, `chat-settings`) and the persistence / roleplay-event APIs still exist on staging; nothing has run live since August. | M | none | — |
 | P1 | **Fix Calls**: drop `runtime.calls`; Calls app and the `place_call` command hand off to the Conversation Calls package when it is installed (its `/start` route + surface), else show "install Conversation Calls". Keep the phone call log. | M | Conversation Calls package; no new Engine API | `packages/conversation-calls` routes, TTS voice resolution |
 | P2 | **Real photos**: Camera shot, DM selfie, Goodle Images and Tindler profile pictures through `images.generate`, saved with `addToChatGallery`; text card stays as fallback when no image connection exists. Gallery reads them back. | M | cap API 1.341, `network` (optional permission) | Slurp2 `slp-generation-integrations.ts` (null-safe host pattern), `slp-camera-source.ts` (selfie / mirror / tripod framing, pure), `slurpViewerPhotoPrompt`, `sources/forge-kit/image-avatar-references.mjs` |
 | P3 | **Phone memory in the roleplay prompt**: each phone action that a character does (post, sent text, mail, purchase, note) writes a short `promptSummary`; the prompt context lists the owner's last few actions for the target character within a fixed budget. | S | none (`prompt-context` already granted) | Slurp2 `buildSlurpChatContextBlock` (pure, budgeted block) |
@@ -100,7 +101,7 @@ Not planned: follow-gated knowledge (item 3 of the brief). The phone has no foll
 
 ### Suggested order
 
-P12 (split) → P1 (calls) → P3 (memory) → P2 (photos) → P4 (text first, uses P2) → P6 → P5 → P10, then P7–P9 and P11 as capacity allows. P1–P3 are each small enough to ship as 2.10.x patches; P4 is the headline of the next release.
+P0 (works in chats, live) → P12 (split) → P1 (calls) → P3 (memory) → P2 (photos) → P4 (text first, uses P2) → P6 → P5 → P10, then P7–P9 and P11 as capacity allows. P1–P3 are each small enough to ship as 2.10.x patches; P4 is the headline of the next release.
 
 ### Decisions needed
 
