@@ -65,7 +65,7 @@ async function forgeSubjectReference(client, unit) {
   return null;
 }
 
-export function forgeWrapImageReferenceClient(client, logger) {
+export function forgeWrapImageReferenceClient(client, logger, { logPrefix = "[gacha-forge]" } = {}) {
   for (const method of ["generateBannerArt", "generatePortrait", "generateOutfit"]) {
     const generate = client[method];
     client[method] = async function (options) {
@@ -83,7 +83,7 @@ export function forgeWrapImageReferenceClient(client, logger) {
       if (subjects.length) {
         const level = resolved === subjects.length ? "debug" : "warn";
         logger?.[level]?.(
-          "[gacha-forge] %s: avatar references resolved for %d/%d subjects (%d distinct); Engine/provider reference limits still apply",
+          `${logPrefix} %s: avatar references resolved for %d/%d subjects (%d distinct); Engine/provider reference limits still apply`,
           method,
           resolved,
           subjects.length,
