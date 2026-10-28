@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { installPackageBrowserFixture } from "./install-package-browser-fixture.mjs";
+import { installPackageBrowserFixture, readLiveCatalogVersions } from "./install-package-browser-fixture.mjs";
 
 const agentsRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || resolve(agentsRoot, "../Marinara-Engine"));
@@ -109,7 +109,7 @@ async function waitForUrl(url) {
   throw new Error(`Package browser server did not become ready at ${url}: ${String(lastError)}`);
 }
 
-async function startProject(name, clientPort, serverPort) {
+async function startProject(name, clientPort, serverPort, liveVersions) {
   const dataDir = resolve(dataRoot, name);
   await mkdir(dataDir, { recursive: true });
   await installPackageBrowserFixture({
@@ -117,6 +117,7 @@ async function startProject(name, clientPort, serverPort) {
     engineRoot,
     dataDir,
     packageIds,
+    liveVersions,
   });
   const child = spawnChild(process.execPath, [resolve(engineRoot, "scripts/dev.mjs")], {
     env: {
@@ -154,9 +155,11 @@ process.on("exit", () => stopChildren());
 
 try {
   await rm(dataRoot, { recursive: true, force: true });
+  // Read once, so both Engines decline the same live versions.
+  const liveVersions = await readLiveCatalogVersions({ engineRoot });
   await runPnpm(["--filter", "@marinara-engine/shared", "build:preserve"]);
-  await startProject("mobile", mobileClientPort, mobileServerPort);
-  await startProject("desktop", desktopClientPort, desktopServerPort);
+  await startProject("mobile", mobileClientPort, mobileServerPort, liveVersions);
+  await startProject("desktop", desktopClientPort, desktopServerPort, liveVersions);
 } catch (error) {
   stopChildren();
   console.error(error instanceof Error ? error.message : error);
