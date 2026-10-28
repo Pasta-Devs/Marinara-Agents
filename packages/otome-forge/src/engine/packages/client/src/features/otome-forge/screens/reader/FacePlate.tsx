@@ -32,8 +32,8 @@ const FACE_ICONS: Record<Face, LucideIcon> = {
 /** Face images already asked for in this page, so each one is fetched once. */
 const preloaded = new Set<string>();
 
-/** Decodes every ready face of the love interest on stage, so a face change never waits on the network. */
-function usePreloadedFaces(expressions: RunLiView["expressions"]) {
+/** Decodes every ready face of the love interest on stage (or on Home), so a face change never waits on the network. */
+export function usePreloadedFaces(expressions: RunLiView["expressions"]) {
   useEffect(() => {
     for (const url of Object.values(expressions ?? {})) {
       if (typeof url !== "string" || !url || preloaded.has(url)) continue;

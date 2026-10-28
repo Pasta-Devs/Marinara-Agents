@@ -15,8 +15,8 @@
 //   the likeness reference. her-look5, her-look4: the protagonist's.
 // A look's image, once ready, is added to its wearer's `outfits` (the kit's outfit shape), which is what makes it
 // wearable; his faces for it are painted when he wears it (S/routes/wardrobe.ts, through M2b's expressions).
-// ponytail: M3's Home cut-out (S/art/cutout.ts queueCutouts) is not on this branch; Home cuts out whatever
-// wornLookUrl(unit) gives, lazily, so a new look needs no call here. Upgrade path: queue the cut-out when the look lands.
+// Home cuts out his worn look and its ready faces lazily, on the next Home read (S/art/cutout.ts queueCutouts, plan M3
+// "Cut-outs"), so a new look needs no cut-out call here.
 // A banner's featured 5★ and the banner share one picture (S/wish/banners.ts): an open while the banner's art paints
 // waits for it rather than paying again, and whichever of the two is painted first becomes the other's art too, in
 // the same paint slot, so the other's paint queued behind it finds its record replaced and pays for nothing.

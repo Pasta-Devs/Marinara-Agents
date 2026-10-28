@@ -19,9 +19,11 @@ interface DialogProps {
   /** Where focus starts; the first field or button otherwise. */
   initialFocus?: RefObject<HTMLElement | null>;
   wide?: boolean;
+  /** The id of what a screen reader reads with the title as the dialog opens (its aria-describedby). */
+  describedBy?: string;
 }
 
-export function Dialog({ title, children, onClose, actions, initialFocus, wide }: DialogProps) {
+export function Dialog({ title, children, onClose, actions, initialFocus, wide, describedBy }: DialogProps) {
   const stage = useStageLayer();
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -78,6 +80,7 @@ export function Dialog({ title, children, onClose, actions, initialFocus, wide }
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        aria-describedby={describedBy}
         tabIndex={-1}
         onKeyDown={onKeyDown}
       >

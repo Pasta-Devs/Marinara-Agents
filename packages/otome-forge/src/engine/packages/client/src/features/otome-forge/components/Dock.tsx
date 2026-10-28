@@ -2,7 +2,8 @@
 // Otome Forge: the dock. Story · Dates · Wish (raised) · Wardrobe · Album
 // ──────────────────────────────────────────────
 import { useTranslation } from "react-i18next";
-import { DOCK_SCREENS, SCREEN_ICONS, SCREEN_NAME_KEYS, type DockScreen, type ScreenId } from "../screens/screens";
+import { SCREEN_ICONS } from "../screens/screen-icons";
+import { DOCK_SCREENS, SCREEN_NAME_KEYS, type DockScreen, type ScreenId } from "../screens/screens";
 
 interface DockProps {
   active: ScreenId;

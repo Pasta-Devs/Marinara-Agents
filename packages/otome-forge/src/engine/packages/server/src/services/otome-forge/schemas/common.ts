@@ -87,13 +87,5 @@ export function readWornOutfit(outfits: readonly Outfit[], worn: unknown): strin
   return typeof worn === "string" && outfits.some((outfit) => outfit.id === worn) ? worn : undefined;
 }
 
-/**
- * The image a person wears now: their worn outfit's, else their base portrait; "" with neither. Faces
- * (art/expressions.ts, schemas/state.ts readyFaces) are painted and read on it.
- * ponytail: M3's Home (its look and cut-out, S/routes/home.ts) is not on this branch and stands up `portrait`; when M3
- * merges, Home's look calls wornLookUrl for him and for her, so Wear at home (S/routes/wardrobe.ts) shows there.
- */
-export function wornLookUrl(person: { outfits: readonly Outfit[]; wornOutfit?: string; portrait?: string }): string {
-  const worn = person.wornOutfit ? person.outfits.find((outfit) => outfit.id === person.wornOutfit) : undefined;
-  return worn?.url ?? person.portrait ?? "";
-}
+/** The image a person wears now (SH/wardrobe.ts, which Home's client reads too). */
+export { wornLookUrl } from "../../../../../client/src/features/otome-forge/shared/wardrobe.js";

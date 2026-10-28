@@ -46,7 +46,7 @@ export function SlpCanonAnchorsEditor({ creatorId }: { creatorId: string }) {
           ? t("ui.slurp.canonAnchors.edited")
           : t("ui.slurp.canonAnchors.extracted");
   const onSave = () =>
-    save.mutate(slpCanonAnchorsFromDraft(draft, state.anchors?.palette ?? {}), {
+    save.mutate(slpCanonAnchorsFromDraft(draft, state.anchors?.palette ?? {}, state.anchors?.niches), {
       onSuccess: () => toast.success(t("ui.slurp.canonAnchors.saved")),
       onError: (error) => toast.error(errorMessage(error)),
     });

@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the `${R}:state` document (Starlight and each love interest's points and stage), and the RunView
 // ──────────────────────────────────────────────
-// Later milestones add their own fields here, each with a default, so older states keep reading. M4: `pity`, `owned`,
-// `selector` and `pulls` (S/wish/pull.ts writes them, in the same write as the Starlight they cost).
+// Later milestones add their own fields here, each with a default, so older states keep reading. M3: `home`. M4:
+// `pity`, `owned`, `selector` and `pulls` (S/wish/pull.ts writes them, in the same write as the Starlight they cost).
 import { forgeStoryExpressionCast, forgeStoryExpressionsOn } from "@forge-kit/story-expressions-server.mjs";
 import { z, type ZodType } from "zod";
 import type {
@@ -10,6 +10,7 @@ import type {
   ChapterProgress,
   Favorite,
   Grievance,
+  HomeState,
   Ledgers,
   LiState,
   Player,
@@ -173,10 +174,28 @@ function normalizePity(raw: unknown): Record<BannerKind, PityCounter> {
   return pity;
 }
 
-/** The owned item ids (M4), each once, in the order won. Never capped: ownership is never dropped. */
-function normalizeOwned(raw: unknown): string[] {
-  const items = field(raw, "items");
-  return [...new Set((Array.isArray(items) ? items : []).filter(isItemId))];
+/**
+ * The owned item ids (M4), each once, in the order won, and when each was won (kept only for an owned id). Never
+ * capped: ownership is never dropped.
+ */
+function normalizeOwned(raw: unknown): RunState["owned"] {
+  const rawItems = field(raw, "items");
+  const items = [...new Set((Array.isArray(rawItems) ? rawItems : []).filter(isItemId))];
+  const at: Record<string, string> = {};
+  for (const id of items) {
+    const won = field(field(raw, "at"), id);
+    if (typeof won === "string" && won.length <= 40) at[id] = won;
+  }
+  return { items, at };
+}
+
+/** Who Home shows (M3): a love interest of the run, else the first in cast order; him unless the player picked Me. */
+function normalizeHome(raw: unknown, lis: RunState["lis"]): HomeState {
+  const li = field(raw, "li");
+  return {
+    li: typeof li === "string" && lis[li] ? li : null,
+    show: field(raw, "show") === "me" ? "me" : "him",
+  };
 }
 
 export function normalizeState(data: unknown): RunState {
@@ -239,9 +258,10 @@ export function normalizeState(data: unknown): RunState {
       : defaultLedgers(),
     timeline: validItems(TimelineSchema, field(data, "timeline"), TIMELINE_MAX),
     favorites: validItems(FavoriteSchema, field(data, "favorites"), FAVORITES_MAX),
+    home: normalizeHome(field(data, "home"), lis),
     album: { cgs: validItems(AlbumCgSchema, field(field(data, "album"), "cgs"), ALBUM_MAX) },
     pity: normalizePity(field(data, "pity")),
-    owned: { items: normalizeOwned(field(data, "owned")) },
+    owned: normalizeOwned(field(data, "owned")),
     selector,
     pulls: validItems(PullRecordSchema, field(data, "pulls"), PULLS_MAX),
   };

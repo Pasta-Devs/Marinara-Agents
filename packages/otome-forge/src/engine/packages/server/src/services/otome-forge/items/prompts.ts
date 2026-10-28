@@ -10,7 +10,8 @@
 //   it is first opened. It is private: only he is in it. The narrator writes its nodes with P6's Character Story
 //   framing (P22, P23).
 // - P19 (chat job, 0.9, `home`: SFW whatever the Heat) and P24 (chat job, 0.9, `chat` for that love interest) write
-//   one line about the protagonist's look, from his scene card. Neither is a scene: nothing happens because of it.
+//   one line about the protagonist's look, from his scene card as his own reader sees it (S/story/prompts.ts ownView,
+//   as M3's P16 and P17). Neither is a scene: nothing happens because of it.
 // Prompts are English and never localized; every line is written in the world's language. Outfit lines are English
 // image tags, so the prompt asks for the look in his own words. A love interest may be any gender, and so may the
 // protagonist: prompts name them or use their pronouns, never a fixed "he" or "she".
@@ -34,6 +35,7 @@ import {
   ChapterPlanSchema,
   bibleBlock,
   ledgerBlock,
+  ownView,
   protagonistBlock,
   sceneCardBlock,
   type ChapterPlanReply,
@@ -201,7 +203,8 @@ function lineRules(name: string, world: World, words: number): string[] {
 function lookUser({ player, unit, state, look }: LookLineInput, task: string, kind: "home" | "chat"): string {
   return [
     "LOVE INTEREST",
-    sceneCardBlock(unit, state.lis[unit.id] ?? defaultLiState()),
+    // As their own reader sees it (M3's ownView, as P16 and P17): nothing of another love interest's own chapters.
+    sceneCardBlock(unit, ownView(state, unit.id).liState),
     "",
     "PROTAGONIST",
     protagonistBlock(player),

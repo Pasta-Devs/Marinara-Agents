@@ -4,8 +4,9 @@
 // applyPull is the whole state change of one pull of 1 or 10, applied inside ONE revision-checked write of
 // `${R}:state`: the Starlight check (409 `insufficient`, and nothing is rolled), the charge, the rolls with GF's
 // interpolated pity on that banner kind's counter (SH/wish.ts rollRarity), the featured 5★ and the uniform 4★ and 3★,
-// a refund for each duplicate (also one won earlier in the same ten), the new items appended to `owned`, each new
-// Snapshot on the Love Timeline (and a couple set the pull completes), and the pull kept by its request id. Another writer that got there first (a read paying
+// a refund for each duplicate (also one won earlier in the same ten), the new items appended to `owned` with when each
+// was won (the Album and Home date a Memory's CG by it), each new Snapshot on the Love Timeline (and a couple set the
+// pull completes), and the pull kept by its request id. Another writer that got there first (a read paying
 // Starlight, a second pull) makes the store re-read and apply it again on top, rolling again from the new counter, so
 // the charge, the roll and the counter always land together and a pull is never paid twice or lost. A request id seen
 // before answers with that pull and changes nothing: a retried request (a dropped reply, a double tap) charges once.
@@ -111,7 +112,10 @@ export function applyPull(
       ...state,
       wallet: { ...state.wallet, starlight: state.wallet.starlight - cost + refunds },
       pity: { ...state.pity, [banner.kind]: pity },
-      owned: { items: [...state.owned.items, ...won] },
+      owned: {
+        items: [...state.owned.items, ...won],
+        at: { ...state.owned.at, ...Object.fromEntries(won.map((id) => [id, at])) },
+      },
       timeline: keepNewest([...state.timeline, ...timeline], STATE_LIMITS.timeline),
       pulls: requestId
         ? keepNewest([...state.pulls, { id: requestId, banner: banner.key, at, results }], STATE_LIMITS.pulls)
@@ -212,7 +216,7 @@ export async function claimSelector(
     }
     return {
       ...current,
-      owned: { items: [...current.owned.items, item] },
+      owned: { items: [...current.owned.items, item], at: { ...current.owned.at, [item]: new Date().toISOString() } },
       selector: { ...current.selector, [li]: item },
     };
   });

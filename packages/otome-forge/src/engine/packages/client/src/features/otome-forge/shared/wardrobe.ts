@@ -6,12 +6,22 @@
 // once it is painted. A her-look5 names the his-look5 it pairs with as a couple set (SH/wish.ts `coupleWith`).
 // Showing a love interest one of her looks pays affection once per look and love interest (SH/economy.ts showHim,
 // within the day's activity cap). A love interest may be any gender: the client names them or uses their pronouns.
-import type { Favorite, LiId, Noticed, Paint, SoundtrackTrack, TimelineEntry } from "./api-types";
+import type { Favorite, LiId, Noticed, Outfit, Paint, SoundtrackTrack, TimelineEntry } from "./api-types";
 import type { Face, MusicMood } from "./faces";
 import type { ItemKind, ItemView, Rarity } from "./wish";
 
 /** The look everyone starts in. A wardrobe look id is this, or the id of the look's item. */
 export const BASE_LOOK = "base";
+
+/**
+ * The image a person wears now: their worn outfit's (Wear at home), else their base portrait; "" with neither. Home
+ * shows it for each side of Him / Me (S/routes/home.ts and its client), and faces (S/art/expressions.ts,
+ * S/schemas/state.ts readyFaces) are painted and read on it.
+ */
+export function wornLookUrl(person: { outfits: readonly Outfit[]; wornOutfit?: string; portrait?: string }): string {
+  const worn = person.wornOutfit ? person.outfits.find((outfit) => outfit.id === person.wornOutfit) : undefined;
+  return worn?.url ?? person.portrait ?? "";
+}
 
 /** P19: what a love interest says on noticing her new look, at most this many words. */
 export const NOTICED_WORDS_MAX = 20;

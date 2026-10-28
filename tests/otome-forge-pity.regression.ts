@@ -3,6 +3,7 @@
 // a 4★ at 10%, and every 10th pull a 4★ at least; a 5★ resets both. Pity is per banner kind, carried over and shared
 // by Echoes. The charge and the roll land in one state write, which re-rolls on a conflict; a pull the wallet cannot
 // pay rolls nothing; duplicates refund; a retried request id charges once; the Memory Selector opens at level 10, once.
+// Each item won is kept with when it was won, in the same write.
 // Seeded Math.random, as in Gacha Forge's summon-rates regression.
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -187,6 +188,8 @@ test("duplicates refund by rarity, Snapshots join the timeline once, and a retri
   }
   const state = await t.state();
   assert.deepEqual(state.owned.items, [...seen]);
+  const [pulledAt] = state.pulls.map((entry) => entry.at);
+  assert.deepEqual(state.owned.at, Object.fromEntries([...seen].map((id) => [id, pulledAt])), "each won when pulled");
   const snapshots = state.timeline.filter((entry) => entry.kind === "snapshot");
   assert.deepEqual(
     snapshots.map((entry) => entry.ref),
@@ -307,12 +310,14 @@ test("the Memory Selector opens at level 10, once per love interest, for one of 
   assert.equal((await claim(KAI, "not-an-item")).status, 404);
 
   const before = await t.state();
+  const claiming = new Date().toISOString();
   const claimed = await claim(KAI, "memories-0-f");
   assert.equal(claimed.status, 200);
   assert.equal(claimed.body.item.owned, true);
   assert.deepEqual([claimed.body.selector.available, claimed.body.selector.used], [false, true]);
   const after = await t.state();
   assert.deepEqual(after.owned.items, ["memories-0-f"]);
+  assert.ok(after.owned.at["memories-0-f"]! >= claiming, "and when it was won (the Album and Home date its CG so)");
   assert.deepEqual(after.selector, { [KAI]: "memories-0-f" }, "it records which Memory it claimed");
   assert.equal(after.wallet.starlight, before.wallet.starlight, "it costs nothing");
   assert.deepEqual(after.pity, before.pity, "and moves no pity");

@@ -7,7 +7,7 @@
 // Routes (S/routes/wardrobe.ts): GET /runs/:run/wardrobe → WardrobeView; POST .../wardrobe/wear {owner, look} →
 // {wardrobe} (her new look is noticed by a love interest: P19, written in the background while `noticing`); POST
 // .../wardrobe/show {li, look} → ShowResult (P24). An unopened look is opened here as anywhere else (hooks/use-items).
-// Home (M3) uses HeNoticed and useWearLook from here: see their notes.
+// Home (M3) shows the worn looks and HeNoticed (components/HeNoticed.tsx) too; useWearLook is exported for it.
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,6 +15,7 @@ import { BookOpen, Check, Heart, House, Paintbrush, RotateCcw, Sparkle, Sparkles
 import { useOtomeApi } from "../../api";
 import { CostHint } from "../../components/CostHint";
 import { Dialog } from "../../components/Dialog";
+import { HeNoticed } from "../../components/HeNoticed";
 import {
   imagesOn,
   invalidateCollection,
@@ -29,7 +30,7 @@ import {
 import { useAudioSnapshot, useOtomeAudio } from "../../hooks/use-otome-audio";
 import { runPath } from "../../hooks/use-reader";
 import { accentOf, initialsOf } from "../../lib/accent";
-import type { LiId, Noticed, RunLiView, RunView } from "../../shared/api-types";
+import type { LiId, RunLiView, RunView } from "../../shared/api-types";
 import { FACES } from "../../shared/faces";
 import type { CoupleSet, LookView, ShowResult, WardrobeOwner, WardrobeView, WearResult } from "../../shared/wardrobe";
 import type { ItemView } from "../../shared/wish";
@@ -83,23 +84,6 @@ export function useWearLook(runKey: string) {
     }
   };
   return { wear, wearing, error };
-}
-
-/**
- * "{name} noticed: …", their line about the look she wears now (P19). Home's Me view shows it under her look.
- * ponytail: M3's Home is not on this branch; its Me side renders <HeNoticed view={view} /> once both merge.
- */
-export function HeNoticed({ view, noticed }: { view: RunView; noticed?: Noticed | null }) {
-  const { t } = useTranslation();
-  const line = noticed === undefined ? (view.player.noticed ?? null) : noticed;
-  const li = line ? view.lis.find((item) => item.id === line.li) : null;
-  if (!line || !li) return null;
-  return (
-    <figure className="of-noticed of-glass" style={{ "--of-li-accent": accentOf(li) } as CSSProperties}>
-      <figcaption className="of-noticed-who">{t("ui.otomeForge.wardrobe.noticed", { name: li.name })}</figcaption>
-      <blockquote className="of-noticed-line">“{line.text}”</blockquote>
-    </figure>
-  );
 }
 
 const ownerName = (t: ReturnType<typeof useTranslation>["t"], owner: WardrobeOwner, lis: RunLiView[]) =>
@@ -212,14 +196,15 @@ export function Wardrobe({ runKey, view, onOpenStory, initialOwner }: WardrobePr
             ? t("ui.otomeForge.wardrobe.myLooks")
             : t("ui.otomeForge.wardrobe.theirLooks", { name: li?.name ?? "" })}
         </h2>
+        {/* One live region for the hint and the line that replaces it, so the line itself is announced. */}
         {owner === "me" ? (
-          data.noticing ? (
-            <p className="of-hint" role="status">
-              {t("ui.otomeForge.wardrobe.noticing")}
-            </p>
-          ) : (
-            <HeNoticed view={view} noticed={data.noticed} />
-          )
+          <div className="of-live" role="status">
+            {data.noticing ? (
+              <p className="of-hint">{t("ui.otomeForge.wardrobe.noticing")}</p>
+            ) : (
+              <HeNoticed view={view} noticed={data.noticed} />
+            )}
+          </div>
         ) : null}
         {looks.length ? (
           <ul className="of-ward-grid">

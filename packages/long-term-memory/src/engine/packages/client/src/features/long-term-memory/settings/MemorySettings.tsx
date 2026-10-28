@@ -11,6 +11,7 @@ import { Button, InfoPopover, NumberField, StatusSurface, inputClass, lockedActi
 import { nextTabIndex } from "../tab-keys";
 import type { LongTermMemoryDestinationProps } from "../types";
 import ActivityView from "./ActivityView";
+import { formatAge } from "./debug-activity";
 import { ExtractionPromptTemplates } from "./ExtractionPromptTemplates";
 import { MaintenancePanel } from "./MaintenancePanel";
 import { confirm, Toggle, type SettingsRebuildOutcome } from "./settings-shared";
@@ -187,7 +188,7 @@ export default function MemorySettings({
   openActivityMemoryId,
   onOpenActivityHandled,
 }: LongTermMemoryDestinationProps) {
-  const { t: localizeUi } = useLtmTranslation();
+  const { t: localizeUi, locale } = useLtmTranslation();
   const memorySettingsTitleId = useId();
   const recallStyleLabelId = useId();
   const recallGroupId = useId();
@@ -209,7 +210,9 @@ export default function MemorySettings({
   const packageReaders = useQuery({
     queryKey: queryKeys.packageReaders,
     queryFn: () =>
-      request<{ readers: Array<{ caller: string | null; lastReadAt: string }> }>("/settings/package-readers"),
+      request<{ readers: Array<{ caller: string | null; lastReadAt: string; reads: number; memories: number }> }>(
+        "/settings/package-readers",
+      ),
   });
   const availableConnections = (connections.data ?? []).filter(
     (connection) => connection.provider !== "image_generation" && connection.provider !== "video_generation",
@@ -877,18 +880,45 @@ export default function MemorySettings({
               onChange={(value) => setGlobalForm({ ...globalForm, longTermMemoryShareWithPackages: value })}
             />
             {packageReaders.data ? (
-              <p className="text-xs text-[var(--muted-foreground)]">
-                {packageReaders.data.readers.length
-                  ? localizeUi("ui.longTermMemory.memorysettings.readLatelyBy", {
-                      names: packageReaders.data.readers
-                        .map(
-                          (reader) =>
-                            reader.caller ?? localizeUi("ui.longTermMemory.memorysettings.anAgentWithoutAName"),
-                        )
-                        .join(", "),
-                    })
-                  : localizeUi("ui.longTermMemory.memorysettings.noOtherAgentHasReadMemoriesLately")}
-              </p>
+              packageReaders.data.readers.length ? (
+                <table
+                  aria-label={localizeUi("ui.longTermMemory.memorysettings.otherAgentsCanReadMemories")}
+                  className="w-full text-left text-xs text-[var(--muted-foreground)]"
+                >
+                  <thead>
+                    <tr>
+                      <th scope="col" className="py-1 pr-3 font-medium">
+                        {localizeUi("ui.longTermMemory.memorysettings.otherAgentsAgent")}
+                      </th>
+                      <th scope="col" className="py-1 pr-3 font-medium">
+                        {localizeUi("ui.longTermMemory.memorysettings.otherAgentsLastRead")}
+                      </th>
+                      <th scope="col" className="py-1 pr-3 text-right font-medium">
+                        {localizeUi("ui.longTermMemory.memorysettings.otherAgentsReadsThisWeek")}
+                      </th>
+                      <th scope="col" className="py-1 text-right font-medium">
+                        {localizeUi("ui.longTermMemory.memorysettings.otherAgentsMemoriesThisWeek")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {packageReaders.data.readers.map((reader) => (
+                      <tr key={reader.caller ?? ""}>
+                        <th scope="row" className="py-1 pr-3 font-normal">
+                          {reader.caller ?? localizeUi("ui.longTermMemory.memorysettings.anAgentWithoutAName")}
+                        </th>
+                        <td className="py-1 pr-3">{formatAge(reader.lastReadAt, locale, Date.now())}</td>
+                        <td className="py-1 pr-3 text-right tabular-nums">{reader.reads.toLocaleString(locale)}</td>
+                        <td className="py-1 text-right tabular-nums">{reader.memories.toLocaleString(locale)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  {localizeUi("ui.longTermMemory.memorysettings.noOtherAgentHasReadMemoriesLately")}
+                </p>
+              )
             ) : null}
           </div>
         </div>

@@ -3,9 +3,10 @@
 // tap is one charged wish with one request id; a wish whose answer was lost is sent again with the same id; a single
 // wish opens by dragging the seal up into a 5★ reveal, whose first open is one request however often it is tapped; at
 // reduced motion the keyboard alone opens the letter; a wish without enough Starlight sends nothing. The Wardrobe's
-// toggle moves between a love interest's looks and mine, wears a look at home and shows one of mine; the Album opens a
-// CG large and saves it through the Engine. With the Engine's prompt review on, an open on the 5★ reveal hands focus
-// to Continue, and the review a wish's results open is the dialog on top, and it paints.
+// toggle moves between a love interest's looks and mine, wears a look at home (his line about it replaces the
+// "noticing" hint in one live region) and shows one of mine; the Album opens a CG large and saves it through the
+// Engine. With the Engine's prompt review on, an open on the 5★ reveal hands focus to Continue, and the review a wish's
+// results open is the dialog on top, and it paints.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-wish.e2e.ts
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -257,7 +258,11 @@ function look(id: string, owner: string, name: string, extra: Json = {}): Json {
   };
 }
 
-function wardrobeView(herWorn = "base"): Json {
+/** What Ilvar says on seeing the Starlit Gown (P19), once the Wardrobe has asked while it was being written. */
+const GOWN_NOTICED = "Starlight on you. I forgot what I was saying.";
+
+/** `noticing`: P19 is still writing what he noticed about the look she wears now. */
+function wardrobeView(herWorn = "base", noticing = false): Json {
   return {
     him: {
       [ILVAR]: [
@@ -285,8 +290,12 @@ function wardrobeView(herWorn = "base"): Json {
         canPaintPair: false,
       },
     ],
-    noticed: { li: ILVAR, text: "You wore the blue one. I noticed. That is all.", look: "base", at: now() },
-    noticing: false,
+    noticed: noticing
+      ? null
+      : herWorn === "base"
+        ? { li: ILVAR, text: "You wore the blue one. I noticed. That is all.", look: "base", at: now() }
+        : { li: ILVAR, text: GOWN_NOTICED, look: herWorn, at: now() },
+    noticing,
   };
 }
 
@@ -604,16 +613,21 @@ test("Otome Forge Wardrobe: the toggle moves between their looks and mine, wears
   const calls: Call[] = [];
   const view = runView(2000);
   let herWorn = "base";
+  // Reads of the wardrobe since she put the gown on: the first is told the line is on its way.
+  let readsSinceWear = 0;
   await stubRoutes(
     page,
     (call) => {
       const path = call.path.replace("/api/otome-forge", "");
       if (path === "/index" || path === "/index/opened") return { status: 200, json: { index: index() } };
       if (path === `/runs/${RUN}`) return { status: 200, json: { view } };
-      if (path === `/runs/${RUN}/wardrobe`) return { status: 200, json: wardrobeView(herWorn) };
+      if (path === `/runs/${RUN}/wardrobe`) {
+        if (herWorn !== "base") readsSinceWear += 1;
+        return { status: 200, json: wardrobeView(herWorn, herWorn !== "base" && readsSinceWear <= 1) };
+      }
       if (path === `/runs/${RUN}/wardrobe/wear`) {
         herWorn = String(call.body?.look);
-        return { status: 200, json: { wardrobe: wardrobeView(herWorn) }, delay: 120 };
+        return { status: 200, json: { wardrobe: wardrobeView(herWorn, true) }, delay: 120 };
       }
       if (path === `/runs/${RUN}/wardrobe/show`) {
         return {
@@ -653,6 +667,11 @@ test("Otome Forge Wardrobe: the toggle moves between their looks and mine, wears
   expect(posts(calls, "/wardrobe/wear").map((call) => call.body)).toEqual([
     expect.objectContaining({ owner: "me", look: "my-wardrobe-0-f" }),
   ]);
+  // He is noticing the gown, then his line takes the hint's place in the same live region, so it is announced.
+  const status = root.getByRole("status").filter({ hasText: /noticed|noticing/i });
+  await expect(status).toContainText("Your new look is being noticed");
+  await expect(status).toContainText(GOWN_NOTICED, { timeout: 15_000 });
+  await expect(status.getByText("Ilvar Thorne noticed")).toBeVisible();
 
   await root.getByRole("button", { name: "Show off: Starlit Gown" }).click();
   const dialog = page.getByRole("dialog", { name: "Who should see Starlit Gown?" });

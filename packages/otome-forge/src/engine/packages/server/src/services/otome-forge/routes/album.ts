@@ -23,7 +23,7 @@ import { pairKey } from "../art/outfits.js";
 import { playableTracks } from "../audio/music.js";
 import { OtomeForgeError, runParam, type RegisterRoutes, type RouteDeps } from "../http.js";
 import { couplesOf, itemView, ownedItems, readItems } from "../items/open.js";
-import { readRun } from "../schemas/state.js";
+import { readRun, type RunDocuments } from "../schemas/state.js";
 
 const MEMORY_KINDS: ReadonlySet<Item["kind"]> = new Set(["memory5", "moment4", "snapshot3"]);
 
@@ -53,34 +53,44 @@ function readState(state: RunState, item: Item): AlbumMemory["read"] {
   return progress?.completed ? "done" : progress?.beatsRead ? "in-progress" : "unread";
 }
 
-export async function albumView(deps: Pick<RouteDeps, "store">, runId: string): Promise<AlbumView> {
-  const run = await readRun(deps.store, runId);
-  if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
-  const items = await readItems(deps.store, runId);
+/**
+ * The Album's CGs, oldest first: story CGs once seen, couple sets' pair portraits, and each owned Memory's CG once
+ * painted, dated when it was won or, when it was painted later, painted (a featured Memory shares its banner's art,
+ * painted before anyone wins it). Home's back layer (S/routes/home.ts backdropOf) picks its love interest's newest.
+ */
+export function albumCgs(run: Pick<RunDocuments, "state">, items: readonly Item[]): AlbumImage[] {
   const owned = ownedItems(run, items);
   const pairs = new Map(couplesOf(items).map((row) => [pairKey(row.hers.id), row]));
-  const cgs: AlbumImage[] = [
+  return [
     ...run.state.album.cgs.map((cg): AlbumImage => {
       const pair = pairs.get(cg.key);
       const title = pair ? [pair.his.look?.name, pair.hers.look?.name].filter(Boolean).join(" · ") : "";
       return { ...cg, source: cg.key.startsWith("pair:") ? "pair" : "story", ...(title ? { title } : {}) };
     }),
-    ...owned.flatMap((item): AlbumImage[] =>
-      item.kind === "memory5" && item.art?.state === "ready" && item.art.url
-        ? [
-            {
-              key: `item:${item.id}`,
-              url: item.art.url,
-              ...(item.art.ref ? { ref: item.art.ref } : {}),
-              at: item.art.at,
-              ...(item.li ? { li: item.li } : {}),
-              source: "memory",
-              title: item.title,
-            },
-          ]
-        : [],
-    ),
+    ...owned.flatMap((item): AlbumImage[] => {
+      if (item.kind !== "memory5" || item.art?.state !== "ready" || !item.art.url) return [];
+      const won = run.state.owned.at[item.id] ?? "";
+      return [
+        {
+          key: `item:${item.id}`,
+          url: item.art.url,
+          ...(item.art.ref ? { ref: item.art.ref } : {}),
+          at: won > item.art.at ? won : item.art.at,
+          ...(item.li ? { li: item.li } : {}),
+          source: "memory",
+          title: item.title,
+        },
+      ];
+    }),
   ].sort((a, b) => a.at.localeCompare(b.at));
+}
+
+export async function albumView(deps: Pick<RouteDeps, "store">, runId: string): Promise<AlbumView> {
+  const run = await readRun(deps.store, runId);
+  if (!run) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+  const items = await readItems(deps.store, runId);
+  const owned = ownedItems(run, items);
+  const cgs = albumCgs(run, items);
   const tracks = playableTracks(run.world.audio);
   const tells: AlbumView["tells"] = {};
   for (const unit of run.units) {

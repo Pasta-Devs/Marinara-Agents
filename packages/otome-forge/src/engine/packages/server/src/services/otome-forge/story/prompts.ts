@@ -85,8 +85,9 @@ const stageOf = (state: RunState, li: LiId) => liStateOf(state, li).stage;
  * `${key}/${i}` as a grievance's `opened` and a disclosure's `ref` are. A main chapter is everyone's; a love interest's
  * own chapter only theirs, as recall keeps it (S/story/canon.ts mayKnow), so its ledger lines, conflicts, grievances
  * and disclosures never reach another love interest's plan. ponytail: a ref that does not name its love interest (a
- * story or date chapter, a phone session) is taken as private to `about`, the one it concerns; the upgrade path is a
- * ref that names its owner when those milestones write ledgers.
+ * story or date chapter, a phone session) is taken as private to `about`, the one it concerns. M4's Character Stories
+ * keep only their owner's rows and cast (S/items/character-story.ts), so for them `about` is the owner; the upgrade
+ * path is a ref that names its owner when the date chapters (M5) write ledgers.
  */
 function knownTo(knows: readonly LiId[], ref: string, about: LiId): boolean {
   const key = ref.split("/")[0] ?? "";
@@ -104,6 +105,21 @@ function seenBy(liState: LiState, li: LiId, knows: readonly LiId[]): LiState {
     ...liState,
     grievances: liState.grievances.filter((grievance) => knownTo(knows, grievance.opened, li)),
     disclosures: liState.disclosures.filter((disclosure) => knownTo(knows, disclosure.ref, li)),
+  };
+}
+
+/**
+ * What a love interest's own reader (M3's note P16 and chat reply P17) may know of the state, as a planner for them
+ * sees it: their state without another love interest's own chapter (seenBy), and their latest relationship and
+ * off-screen lines among the rows they may see (knownRows), "" for none.
+ */
+export function ownView(state: RunState, li: LiId): { liState: LiState; relationship: string; offscreen: string } {
+  const latest = (rows: RunState["ledgers"]["offscreen"]) =>
+    [...knownRows(rows, [li])].reverse().find((row) => row.li === li)?.line ?? "";
+  return {
+    liState: seenBy(liStateOf(state, li), li, [li]),
+    relationship: latest(state.ledgers.relationship),
+    offscreen: latest(state.ledgers.offscreen),
   };
 }
 

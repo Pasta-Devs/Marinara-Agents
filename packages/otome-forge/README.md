@@ -2,7 +2,7 @@
 
 Otome Forge will be a single-player otome game made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. There is no real money in it.
 
-This is an early test build. You set up a story: a premise, your protagonist from one of your personas, and two to five love interests from your character cards or from original archetypes. The forge then plans the story's mystery and writes a hidden character bible for each love interest, and can paint the cast's base looks. Then you play its main chapters and each love interest's own route, and wish for their side stories and looks. Home, the phone and dates arrive in later builds. The plan is in [Pasta-Devs/Marinara-Agents#1781](https://github.com/Pasta-Devs/Marinara-Agents/issues/1781).
+This is an early test build. You set up a story: a premise, your protagonist from one of your personas, and two to five love interests from your character cards or from original archetypes. The forge then plans the story's mystery and writes a hidden character bible for each love interest, and can paint the cast's base looks. Then you play its main chapters and each love interest's own route, come Home to the love interest you pick, text each one on the phone, and wish for their side stories and looks. Dates arrive in a later build. The plan is in [Pasta-Devs/Marinara-Agents#1781](https://github.com/Pasta-Devs/Marinara-Agents/issues/1781).
 
 ## Install and open it
 
@@ -20,7 +20,7 @@ Each main chapter is led by one love interest. Otome Forge offers two to choose 
 
 - Every line shows who speaks, and each love interest's line names one of five faces: tender, flustered, cold, hurt or angry (a later build paints them). Thoughts are set apart, and from the second stage of a love interest's story you may hear one of their own.
 - Your first choice in a scene is canon. Replaying a chapter shows the other branches without changing anything, and a choice that changes things between you names who will remember it. The last scene may end on one lasting choice.
-- Each love interest remembers only what they saw, did or were told: every scene is written with that boundary, and a private moment (a date; later a phone thread) is recalled only in scenes that love interest is in, never in the shared story summary. Finished chapters are summarized in the background; **Settings → Debug** shows the story memory's status, with Retry when a summary failed.
+- Each love interest remembers only what they saw, did or were told: every scene is written with that boundary, and a private moment (their own route or repair chapter, a date, a phone thread) is recalled only in scenes that love interest is in and on their own Home and phone, never in the shared story summary. Finished chapters are summarized in the background; **Settings → Debug** shows the story memory's status, with Retry when a summary failed.
 - **Rewrite** writes the scene you are reading again before you make any of its choices; it costs one model call. **Ease off** ends a scene at once with no model call, and can veil that kind of content from then on. If your model declines a scene, it says so and nothing is saved; you can ease off past it, try again, or switch the connection.
 - Reading earns Starlight (30 for each scene read to its end, 160 for a chapter) and affection (150 for the chapter's lead, 60 for the second love interest). Story earnings are never capped.
 
@@ -40,6 +40,22 @@ Everything works without images or sound: a place without art shows a gradient f
 - Music follows each scene's mood: the Engine's own music, or, with **Generate music** on and an audio connection, a track written for this world, made once per mood and never retried by itself.
 - Dialogue can be voiced through the Engine's voice settings: a love interest from a card uses the voice assigned to that card, the others a default voice, and you speak with your persona's voice. Narration and thoughts stay silent, and the backlog can play a line again.
 
+## Home
+
+Home shows the love interest you pick, or you (**Him / Me** shows their name and "Me"), in the look each of you wears at home, standing in a scene tinted by the time of day where you are. Behind them is the newest CG you have unlocked with that love interest (a Memory's too), else the newest painted place, else a gradient.
+
+- A love interest's painted look is cut out of its flat background by the Engine's sprite cleanup (the background remover when it is installed), on the first Home visit that shows it. When that fails, Home pans slowly over the uncut look and does not try again. Your own look is shown uncut. Without images, Home shows initials on a gradient; it never needs audio either.
+- Each love interest leaves one handwritten message of the day, written by the first visit of your local day and kept for the rest of it, with their mood. **Reply** opens their thread with the note quoted. During a rupture the note is curt.
+- Tap their head, hand or heart for a line written ahead in their own voice, so a tap never waits for the model. Too many pokes in a row annoy them, and during a rupture every line is cold. The lines are written in the background on your first Home visit and again when a love interest reaches a new stage; until then Home uses a few stock lines.
+- **Rough day?** offers comfort from lines written ahead, with no model call. Comfort lines never give medical advice or guess about your body.
+- Their face follows the note's mood, each tap and a rift, painted once their five faces are (and cut out like the look); before that, their look or initials name the face.
+- With voices on in **Settings → Audio**, **Play** reads the note, and taps and **Rough day?** are read aloud, in the voice the story gives them. Comfort lines are never kept in the Engine's audio cache. Home plays the story's home music.
+- Reduced motion turns off the parallax and the breathing.
+
+## The phone
+
+Each love interest has one private thread, in their own colour, with suggested replies and their faces as stickers. Only one reply is written at a time. **Close and remember** saves the conversation as a memory that only that love interest recalls, and earns 20 affection (within the daily cap for everything outside the story).
+
 ## Wish, the Wardrobe and the Album
 
 Wishes cost Starlight you earn by playing (100 each, 1,000 for ten; there is no real money), and a new story starts with 2,000. Every 14 days, counted from the day the story began, the next time you open Wish it creates three banners, each featuring the love interest featured least recently: **Memories**, that love interest's **wardrobe**, and **yours**. Creating them takes one model call per banner, and painting their art up to three images. Banners never expire: past ones wait in **Echoes**, and you can still wish on them.
@@ -47,7 +63,7 @@ Wishes cost Starlight you earn by playing (100 each, 1,000 for ten; there is no 
 - A banner holds one featured 5★, three 4★s and six 3★ Snapshots. A Memory (5★) is a key image, a short Character Story and a voiced line; a Moment (4★) is one scene; a look (5★ or 4★) is a complete outfit; a Snapshot is a short vignette that joins that love interest's Love Timeline, and only they remember it.
 - The pity count is exact and shown as "5★ in 23". A 5★ starts at 1.5% a wish, rises from the 46th wish without one, and the 60th is always one; every 10th wish is a 4★ at least. The 5★ is always the featured item, with no 50/50. Pity is kept per kind of banner and carries over, Echoes included. A wish charges and rolls in one save, so it is never paid twice, and it never calls a model. A duplicate refunds 400, 60 or 10 Starlight by rarity.
 - A banner's art is its featured item's picture, painted when the banner is created, or held for your tap with **Ask before painting** or the Engine's prompt review. Other items are painted, and stories written, the first time you open them, and only once.
-- In the **Wardrobe**, a love interest's looks and yours can be worn at home, shown to them, and your featured look and theirs from the same two weeks make a couple set. A look they wear gets its own faces.
+- In the **Wardrobe**, a love interest's looks and yours can be worn at home, which is the look Home shows, and shown to them; your featured look and theirs from the same two weeks make a couple set. A look they wear gets its own faces. When you wear a new look of yours, the love interest on Home notices it (one model call), and Home's **Me** shows their line beside your look while you wear it.
 - At affection 10, each love interest gives one **Memory Selector**: claim any of their Memories from past banners (Echoes) that you do not have yet, at no cost.
 - The **Album** keeps the CGs you have seen, your Memories, the Love Timeline, your favourite lines and the soundtrack, and saves an image through the Engine.
 
@@ -57,4 +73,4 @@ Each story has its own Heat (SFW, NSFW: Fade or NSFW: Explicit; SFW by default),
 
 ## Your data
 
-Otome Forge keeps its saves in Marinara Engine's package storage, in documents whose ids start with `otome-forge:`, so it works alongside Gacha Forge. They travel with your backups and profile exports, and they are not isolated from other packages in the Engine's storage. Banners and the items you win are documents of the story too. Painted looks, places, faces, CGs and banner art are saved in the Global Gallery, and deleting a story deletes them too. Generated music is kept by the Engine with its other generated audio. The look you pick (Midnight, Pearl or Follow system) and an unfinished setup are kept only in this browser, in storage the Engine's page shares with other installed packages.
+Otome Forge keeps its saves in Marinara Engine's package storage, in documents whose ids start with `otome-forge:`, so it works alongside Gacha Forge. They travel with your backups and profile exports, and they are not isolated from other packages in the Engine's storage. Messages of the day, phone threads, line packs, banners and the items you win are saved there too. Painted looks, places, faces, CGs, banner art and Home cut-outs are saved in the Global Gallery, and deleting a story deletes them too. Generated music is kept by the Engine with its other generated audio. The look you pick (Midnight, Pearl or Follow system) and an unfinished setup are kept only in this browser, in storage the Engine's page shares with other installed packages.

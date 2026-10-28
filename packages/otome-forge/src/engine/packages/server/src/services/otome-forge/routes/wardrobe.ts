@@ -5,9 +5,10 @@
 // GET  /runs/:run/wardrobe                                   → WardrobeView {him, me, couples, noticed, noticing}
 // POST /runs/:run/wardrobe/wear {owner, look, li?}           → {wardrobe}; owner "me" or a love interest's id (also
 //                                                               "player" or "li:<id>"); look "base" or an owned,
-//                                                               painted look item. Her new look is noticed (P19, by `li`
-//                                                               or the first love interest) in the background; his new
-//                                                               look gets its faces (M2b expressions), in the background
+//                                                               painted look item. Her new look is noticed (P19, by `li`,
+//                                                               else the love interest on Home) in the background; his
+//                                                               new look gets its faces (M2b expressions), in the
+//                                                               background
 // POST /runs/:run/wardrobe/show {li, look}                   → ShowResult {line, face?, grants}; P24, and +20 affection
 //                                                               the first time she shows him that look
 // POST /runs/:run/wardrobe/pair {hers, prompt?, negativePrompt?} → {art}; paints the set's pair portrait (1 image)
@@ -16,11 +17,9 @@
 // its affection lands once per look and love interest, in one revision-checked write of the state, within the day's
 // activity cap (one the cap took entirely stays owed to a later Show). Two Shows of the same look to the same love
 // interest at once share one call.
-// ponytail: M3's Home (GET /runs/:run/home) is not on this branch. Its hooks are these: the look on Home is
-// wornLookUrl(unit) or wornLookUrl(player) (S/schemas/common.ts), and the Me view's "noticed" line is `player.noticed`
-// (P19, written here); whoNotices picks the noticer. Ceiling: until M3 merges, the noticer is the `li` the Wardrobe
-// sends, else the first love interest. Upgrade path: M3's home route calls wornLookUrl and returns `player.noticed`,
-// and whoNotices defaults to `state.home.li`.
+// Home (S/routes/home.ts) shows what is worn: wornLookUrl(unit) on him, cut out there as M3 cuts out every worn look,
+// and wornLookUrl(player) on Me with `player.noticed` (P19, written here) under it; `noticingLook` tells it the line
+// is on its way.
 import { forgeStoryExpressionCast } from "@forge-kit/story-expressions-server.mjs";
 import { z } from "zod";
 import type {
@@ -151,7 +150,12 @@ function facesOn(world: World, unit: Unit, url: string | undefined): Partial<Rec
 /** Love interests noticing her look right now, by `${runId}|${look}` (P19 runs in the background). */
 const noticing = new Set<string>();
 
+/** True while a love interest of the run is noticing her look (the Wardrobe and Home ask again until it lands). */
+export const noticingLook = (runId: string) => [...noticing].some((key) => key.startsWith(`${runId}|`));
+
 export async function wardrobeView(deps: Pick<RouteDeps, "store">, runId: string): Promise<WardrobeView> {
+  // Asked before the reads: a line that lands while they run then answers "on its way", never "none and done".
+  const stillNoticing = noticingLook(runId);
   const run = await readRun(deps.store, runId);
   if (!run) throw notFound("Otome Forge run");
   const allItems = await readItems(deps.store, runId);
@@ -210,7 +214,7 @@ export async function wardrobeView(deps: Pick<RouteDeps, "store">, runId: string
     me,
     couples,
     noticed: run.player.noticed,
-    noticing: [...noticing].some((key) => key.startsWith(`${runId}|`)),
+    noticing: stillNoticing,
   };
 }
 
@@ -239,12 +243,13 @@ function wearing<T extends { outfits: Array<{ id: string }>; wornOutfit?: string
 }
 
 /**
- * Who notices her new look: `li` when it is one of the cast (the love interest on Home), else the first in cast order.
- * ponytail: M3's `state.home.li` is not on this branch; see the header for its upgrade path.
+ * Who notices her new look: `li` when it is one of the cast, else the love interest on Home (`state.home.li`, M3),
+ * else the first in cast order (as Home shows the first when none was picked).
  */
 export function whoNotices(run: RunDocuments, li?: string): Unit | undefined {
   const cast = castOf(run);
-  return cast.find((candidate) => candidate.id === li) ?? cast[0];
+  const of = (id: string | null | undefined) => (id ? cast.find((candidate) => candidate.id === id) : undefined);
+  return of(li) ?? of(run.state.home.li) ?? cast[0];
 }
 
 /** P19 in the background: the line a love interest says on noticing the look she wears now, once per look worn. */

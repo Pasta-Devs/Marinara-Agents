@@ -7,7 +7,15 @@
 // the bible editor checks too.
 // A stored bible is read field by field (readFields), so one damaged field keeps its default and not the whole bible.
 import { z, type ZodType } from "zod";
-import type { Bible, Unit } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import type {
+  ArcStageKey,
+  Bible,
+  FixedLines,
+  LinePacks,
+  Paint,
+  StageLines,
+  Unit,
+} from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import {
   BIRTHDAY_PATTERN,
   MASK_TELLS_MAX,
@@ -150,6 +158,53 @@ export function normalizeBible(data: unknown): Bible | null {
   return isRecord(data) ? readFields<Bible>(BIBLE_FIELDS, defaultBible, data) : null;
 }
 
+// ── Home lines and cut-outs (M3) ──
+
+/** A stored line: what P15's checks let through, with room for a hand edit. */
+const LineList = z.array(z.string().min(1).max(300)).max(12);
+
+const TimesSchema = z.object({ morning: LineList, day: LineList, night: LineList });
+
+export const StageLinesSchema: ZodType<StageLines> = z.object({
+  stage: z.number().int().min(1).max(6),
+  tap: z.object({ head: TimesSchema, hand: TimesSchema, heart: TimesSchema }),
+  annoyed: LineList,
+  cold: LineList,
+  at: z.string(),
+});
+
+export const FixedLinesSchema: ZodType<FixedLines> = z.object({
+  comfort: LineList,
+  claw: z.object({ cheer: LineList, cheat: LineList, win: LineList, miss: LineList, plush: LineList }),
+  at: z.string(),
+});
+
+const STAGE_KEYS: readonly ArcStageKey[] = ["1", "2", "3", "4", "5", "6"];
+
+/** Stored line packs, each stage on its own: one damaged pack is dropped (and written again), the others kept. */
+export function normalizeLinePacks(value: unknown): LinePacks | undefined {
+  if (!isRecord(value)) return undefined;
+  const stages: LinePacks["stages"] = {};
+  const raw = isRecord(value.stages) ? value.stages : {};
+  for (const key of STAGE_KEYS) {
+    const parsed = StageLinesSchema.safeParse(raw[key]);
+    if (parsed.success && String(parsed.data.stage) === key) stages[key] = parsed.data;
+  }
+  const fixed = FixedLinesSchema.safeParse(value.fixed);
+  return { stages, fixed: fixed.success ? fixed.data : null };
+}
+
+/** Stored cut-out records, keyed by the look's URL; a bad record is dropped (the cut-out is made again). */
+function normalizeCutouts(value: unknown): Record<string, Paint> {
+  const cutouts: Record<string, Paint> = {};
+  if (!isRecord(value)) return cutouts;
+  for (const [url, record] of Object.entries(value)) {
+    const parsed = PaintSchema.safeParse(record);
+    if (url && parsed.success) cutouts[url] = parsed.data;
+  }
+  return cutouts;
+}
+
 const defaultUnit = (): Unit => ({
   kind: "character",
   id: "",
@@ -165,6 +220,7 @@ const defaultUnit = (): Unit => ({
   bible: null,
   bibleEdited: false,
   createdAt: "",
+  cutouts: {},
 });
 
 export function normalizeUnit(data: unknown): Unit {
@@ -191,11 +247,15 @@ export function normalizeUnit(data: unknown): Unit {
       bible: normalizeBible,
       bibleEdited: z.boolean(),
       createdAt: z.string(),
+      lines: normalizeLinePacks,
+      cutouts: normalizeCutouts,
     },
     defaultUnit,
     isRecord(data) ? data : undefined,
   );
-  // A worn look that is not one of his (a damaged document) wears his base portrait.
+  // An LI with no pack yet has no `lines` key at all, as before M3.
+  if (!unit.lines) delete unit.lines;
+  // A worn look that is not one of theirs (a damaged document) wears the base portrait.
   const { wornOutfit: _worn, ...rest } = unit;
   const worn = readWornOutfit(unit.outfits, field(data, "wornOutfit"));
   return worn ? { ...rest, wornOutfit: worn } : rest;

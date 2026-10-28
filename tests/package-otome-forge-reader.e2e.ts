@@ -422,20 +422,24 @@ async function hold(page: Page, url: string) {
   return release;
 }
 
-/** Shows the line whole if it is still typing, then goes on. */
+/**
+ * Goes on once the line has typed itself out. It waits rather than reading data-done once and pressing to show the
+ * line whole: a line that finished between that read and the press made the press go on, and the second one a step
+ * too far (CI's real-Engine runner).
+ */
 async function next(root: Locator) {
   const button = root.locator(".of-next");
-  if ((await button.getAttribute("data-done")) !== "true") await button.click();
+  await expect(button).toHaveAttribute("data-done", "true");
   await button.click();
 }
 
 const line = (root: Locator) => root.locator(".of-dialogue .of-line");
 
-/** The same with the keyboard, from the focused Next button (or wherever focus is): → finishes the line, then goes on. */
+/** The same with the keyboard (→), from the focused Next button (or wherever focus is). */
 async function nextByKey(page: Page, root: Locator, fromNext = true) {
   const button = root.locator(".of-next");
   if (fromNext) await button.focus();
-  if ((await button.getAttribute("data-done")) !== "true") await page.keyboard.press("ArrowRight");
+  await expect(button).toHaveAttribute("data-done", "true");
   await page.keyboard.press("ArrowRight");
 }
 
@@ -468,6 +472,18 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   // Faces line by line (initials and a labelled face without art); her thought in pale italics; his rare thought.
   await expect(line(root)).toContainText("Rain needles the glass dome.");
   await expect(root.getByRole("heading", { level: 1 })).toContainText("The Observation Room");
+  // A press while the line types shows it whole and goes no further. Pressed and read back in one task (React applies a
+  // press in microtasks, before any timer can type on), so it never races the typing; a runner too slow to catch the
+  // line typing skips it.
+  const pressed = await root.locator(".of-next").evaluate(async (button: HTMLElement) => {
+    if (button.dataset.done === "true") return null;
+    button.click();
+    for (let turn = 0; turn < 5; turn += 1) await Promise.resolve();
+    const rest = button.closest(".of-dialogue")?.querySelector(".of-line-rest");
+    return { done: button.dataset.done, typing: !!rest };
+  });
+  if (pressed) expect(pressed).toEqual({ done: "true", typing: false });
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
   // A click on the dialogue box goes on, and the keys still work after it: focus stays in the reader.
   await expect(root.locator(".of-next")).toHaveAttribute("data-done", "true");
   await line(root).click();

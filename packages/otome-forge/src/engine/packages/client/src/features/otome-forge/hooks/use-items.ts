@@ -12,6 +12,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useOtomeApi, type RequestBody } from "../api";
 import type { ImagePrompt } from "../components/PromptReviewDialog";
 import { useOtomeProps } from "../props";
+import { homeQueryKey } from "../screens/home/HomeScreen";
 import type { Paint, RunView } from "../shared/api-types";
 import type { ItemOpenResult } from "../shared/wardrobe";
 import { isLookKind, type BannerView, type ItemKind, type ItemView } from "../shared/wish";
@@ -21,9 +22,6 @@ import { runQueryKey } from "./use-run";
 export const wishQueryKey = (runKey: string) => ["otome-forge", "wish", runKey] as const;
 export const wardrobeQueryKey = (runKey: string) => ["otome-forge", "wardrobe", runKey] as const;
 export const albumQueryKey = (runKey: string) => ["otome-forge", "album", runKey] as const;
-// ponytail: M3's homeQueryKey (screens/home/HomeScreen.tsx) is not on this branch yet; this is the same key, so once
-// M3 merges import it instead.
-const homeQueryKey = (runKey: string) => ["otome-forge", "home", runKey] as const;
 
 /**
  * Everything an item can change: what Wish, the Wardrobe, the Album, Home and the run view show. Resolves once the

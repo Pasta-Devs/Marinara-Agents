@@ -4,7 +4,15 @@
 
 - Wish opens: three banners every 14 days (Memories, a love interest's wardrobe, and yours), paid only with Starlight you earn (100 a wish; there is no real money). The pity count is exact ("5★ in 23"): a 5★ comes by the 60th wish and is always the featured one, and past banners wait in Echoes on the same pity. Wishing never calls a model, and duplicates refund Starlight.
 - Memories hold a Character Story to read; looks go to the Wardrobe, where your look and theirs make a couple set; Snapshots join that love interest's Love Timeline, and only they remember them.
+- Wear at home puts a look on Home, and the love interest on Home notices a new look of yours. A Memory's CG can stand behind them.
 - At affection 10, each love interest gives a Memory Selector. Banner and item art follows your image settings and is painted once.
+
+## 0.0.5 — 2026-10-28
+
+- Home now shows the love interest you pick, or you in your own look, before their newest CG or a painted place, tinted by your time of day. A painted look is cut out of its background when the Engine can, and pans slowly when it cannot; with no images, initials on a gradient. Reduced motion stills it.
+- Each love interest leaves one handwritten note a day, with a mood; Reply opens their thread. During a rupture the note is curt and taps get only cold lines.
+- Tap head, hand or heart for lines written ahead in their voice, so a tap never waits; too many pokes annoy them, and their face shows it. Rough day? offers comfort with no model call. With voices on, taps, the note and comfort are read aloud.
+- The phone: one private thread per love interest, with suggested replies and stickers. Close and remember saves the talk as a memory only that love interest recalls (+20 affection, capped daily).
 
 ## 0.0.4 — 2026-10-28
 

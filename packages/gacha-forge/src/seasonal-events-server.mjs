@@ -539,7 +539,9 @@ export function createForgeSeasonalEvents({
       return mainHold(runId, chapter);
     },
     async runBattle(body, start = false) {
-      const target = await guardNode(body, "combat", "combatIndex", !start);
+      // A cleared fight is never loaded either: it could not start (events are Normal-only and pay once), so the
+      // fight screen says why at once instead of offering a Start that is refused.
+      const target = await guardNode(body, "combat", "combatIndex", false);
       return target.ok ? battle({ body, target, start }) : target;
     },
     async mediaBanner(runId, bannerId) {

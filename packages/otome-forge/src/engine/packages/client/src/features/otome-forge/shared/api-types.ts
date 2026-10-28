@@ -5,6 +5,7 @@
 import type { ConfrontationEnding, RouteEntry, Stance } from "./arcs";
 import type { ContentSettings, ImageRating, LimitId } from "./content";
 import type { Face, MusicMood } from "./faces";
+import type { ClawLineKind, TapZone, TimeOfDay } from "./home";
 import type { BannerKind, PityCounter, Rarity } from "./wish";
 
 export type { ConfrontationEnding, RouteEntry, RouteNext, Stance } from "./arcs";
@@ -294,6 +295,212 @@ export interface Unit {
   bible: Bible | null;
   bibleEdited: boolean;
   createdAt: string;
+  /** His pre-written Home lines (P15), written in the background; absent until the first pack lands. */
+  lines?: LinePacks;
+  /** Home cut-outs, keyed by the look's URL: `ready` carries the cut-out; `failed` means pan over the uncut look. */
+  cutouts: Record<string, Paint>;
+}
+
+// ── Home (M3): line packs, the message of the day, and what Home shows ──
+
+/** Tap lines: three per zone and time of day. */
+export type TapLines = Record<TapZone, Record<TimeOfDay, string[]>>;
+
+/** One stage's lines (P15): taps, the lines for too many pokes, and the cold lines a rupture shows instead. */
+export interface StageLines {
+  stage: number;
+  tap: TapLines;
+  annoyed: string[];
+  cold: string[];
+  at: string;
+}
+
+export type ClawLines = Record<ClawLineKind, string[]>;
+
+/** Lines written once (with his first stage pack): generic rough-day comfort, and the Claw Machine's. */
+export interface FixedLines {
+  comfort: string[];
+  claw: ClawLines;
+  at: string;
+}
+
+export interface LinePacks {
+  stages: Partial<Record<ArcStageKey, StageLines>>;
+  fixed: FixedLines | null;
+}
+
+/** GET /runs/:run/lis/:li/lines. During a rupture only `cold` is his to say: `tap` is null and `annoyed` empty. */
+export interface LinesView {
+  /** True once the pack for his current stage exists; until then the nearest stage's pack, or none (catalog lines). */
+  ready: boolean;
+  stage: number;
+  rupture: boolean;
+  tap: TapLines | null;
+  annoyed: string[];
+  cold: string[];
+  /** Empty until his fixed lines exist (Rough day? then uses the catalog's comfort lines). */
+  comfort: string[];
+  claw: ClawLines | null;
+}
+
+/** The message of the day's mood chip: one word, and a reason of four words or fewer. */
+export interface NoteMood {
+  word: string;
+  reason: string;
+}
+
+/** `${R}:note:${dayKey}:${li}`: one love interest's message of the day (never a care note). */
+export interface Note {
+  li: LiId;
+  /** The local day it was written for, "YYYY-MM-DD" in the request's time zone. */
+  dayKey: string;
+  text: string;
+  /** The face it is written with; "" for his plain look. */
+  face: Face | "";
+  mood: NoteMood;
+  /**
+   * Written while a rupture stood between them. A note whose `curt` no longer matches (a rupture opened or was repaired
+   * since) is stale: Home shows none and the next request writes the day's note again.
+   */
+  curt: boolean;
+  at: string;
+  connectionId: string;
+  model: string;
+}
+
+export type NoteView = Omit<Note, "connectionId" | "model">;
+
+export type HomeShow = "him" | "me";
+
+/** `state.home`: who Home shows. `li` null means the first love interest in cast order. */
+export interface HomeState {
+  li: LiId | null;
+  show: HomeShow;
+}
+
+/**
+ * What Home stands up: `look` is his worn look ("him") or the protagonist's ("me"): a painted full-body `look`, or the
+ * persona's `avatar`. Null shows initials on a gradient. `cutoutState` "pending" means a cut-out is on its way (ask
+ * again later); "uncut" means none will come, so Home pans slowly over the uncut image.
+ */
+export interface HomeLook {
+  url: string;
+  source: "look" | "avatar";
+  cutout?: string;
+  cutoutState: "ready" | "pending" | "uncut";
+}
+
+/** GET /runs/:run/home */
+export interface HomeView {
+  /** The love interest Home is about (state.home.li, else the first in cast order); null with no cast. */
+  li: LiId | null;
+  show: HomeShow;
+  /** Today's note from `li`, or null until POST .../home/note writes it. */
+  note: NoteView | null;
+  look: HomeLook | null;
+  /**
+   * His ready faces for the worn look (painted in the background from M2b), each with its cut-out once ready and the
+   * cut-out's state, as the look's: Home asks again while one is "pending".
+   */
+  faces: Partial<Record<Face, { url: string; cutout?: string; cutoutState: HomeLook["cutoutState"] }>>;
+  /**
+   * L0: his newest unlocked CG (a story CG once seen, a pair portrait, an owned Memory's CG: the Album's), else the
+   * newest painted place; null shows the gradient alone.
+   */
+  backdrop: { url: string; kind: "cg" | "place" } | null;
+  lines: { ready: boolean };
+  /** A rupture stands between him and the protagonist: the note is curt and Home shows his cold lines. */
+  rupture: boolean;
+  /** Replies waiting unread across every phone thread. */
+  unread: number;
+  /** M4: what a love interest said on noticing the look she wears now (P19), shown under her look on Me. */
+  noticed: Noticed | null;
+  /** M4: a love interest is noticing her new look right now: Home asks again until the line lands. */
+  noticing: boolean;
+}
+
+// ── Phone (M3): one private thread per love interest. S/phone/chat.ts reads and writes these shapes. ──
+
+export interface PhoneMessage {
+  /** `m-<time base36>-<8 hex>`, or the client's own id for the player's message. */
+  id: string;
+  who: "player" | "li";
+  /** "" for a sticker on its own. */
+  text: string;
+  /** One of his faces, sent as a sticker (by either of them). */
+  sticker?: Face;
+  /** ISO time it was saved. */
+  at: string;
+  /** The note of the day this message replies to (Reply on Home). */
+  quote?: string;
+}
+
+/** A closed conversation: messages `start`..`start + count - 1`, and what he remembers of it. */
+export interface PhoneSession {
+  start: number;
+  count: number;
+  memory: { text: string; quote: string };
+  closedAt: string;
+  /** His name when it closed, so a later rename does not rewrite the memory's title. */
+  name?: string;
+}
+
+/** `${R}:chat:${li}`. */
+export interface PhoneThread {
+  version: 1;
+  li: LiId;
+  messages: PhoneMessage[];
+  sessions: PhoneSession[];
+  seenAt: string | null;
+  suggestions: string[];
+}
+
+/** GET /runs/:run/phone */
+export interface PhoneListView {
+  threads: Array<{ li: LiId; last: PhoneMessage | null; unread: number; busy: boolean }>;
+}
+
+/** GET /runs/:run/phone/:li?page= : the kit's forgeChatHistoryPage, plus what the thread screen shows around it. */
+export interface PhoneHistoryPage {
+  /** This page, oldest first; `archived` marks the messages of closed conversations. */
+  messages: Array<PhoneMessage & { archived: boolean }>;
+  /** 1 is the newest page. */
+  page: number;
+  pages: number;
+  /** The thread-wide index of this page's first message (session `start`s count from it). */
+  from: number;
+  /** How many conversations are closed. */
+  past: number;
+  /** Messages in the open conversation. */
+  activeCount: number;
+  /** His reply (or a close) is being written right now. */
+  busy: boolean;
+  /** The protagonist's last message is still waiting for a reply: offer Retry. */
+  retry: boolean;
+  sessions: PhoneSession[];
+  suggestions: string[];
+  seenAt: string | null;
+}
+
+/** POST .../send */
+export interface PhoneSendResult {
+  /** What this request added or found: the player's message (when it was new or named by `id`), then his reply. */
+  messages: PhoneMessage[];
+  suggestions: string[];
+}
+
+/** Affection from Close and remember (the Grant shape, with its own source). */
+export interface PhoneGrant {
+  source: "close-and-remember";
+  li: LiId;
+  affection: number;
+}
+
+/** POST .../close */
+export interface PhoneCloseResult {
+  memory: PhoneSession["memory"];
+  /** Empty when nothing was earned: a replay, a one-sided conversation, or the day's cap. */
+  grants: PhoneGrant[];
 }
 
 // ── State (M1, with M2a's angst, ledgers and reading progress). Trust and tension are never shown to the player. ──
@@ -409,12 +616,14 @@ export interface RunState {
   ledgers: Ledgers;
   timeline: TimelineEntry[];
   favorites: Favorite[];
+  /** Who Home shows (M3). */
+  home: HomeState;
   /** M2b: the CGs unlocked once seen. */
   album: { cgs: AlbumCg[] };
   /** M4: each banner kind's pity (GF's counter names), carried over from banner to banner and shared by Echoes. */
   pity: Record<BannerKind, PityCounter>;
-  /** M4: the item ids the player owns, in the order won. */
-  owned: { items: string[] };
+  /** M4: the item ids the player owns, in the order won, and when each was won (an ISO time, by item id). */
+  owned: { items: string[]; at: Record<string, string> };
   /**
    * M4: the love interests whose Memory Selector (affection 10) has been used, each with the Memory it claimed (`true`:
    * an early claim that did not record which).

@@ -111,6 +111,20 @@ export const beatId = (runId: string, key: string, i: number) => `${runId}:beat:
 /** `${R}:memory`: the kit's story memory (summaries, overview, recall records). */
 export const memoryId = (runId: string) => `${runId}:memory`;
 
+// ── Home and phone (M3). Kinds: "note", "chat". ──
+
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** "YYYY-MM-DD", as the kit's forgeDayKey gives it. */
+export function isDayKey(value: unknown): value is string {
+  return typeof value === "string" && DAY_KEY.test(value);
+}
+
+/** `${R}:note:${dayKey}:${li}`: a love interest's message of the day for one local day (never a care note). */
+export const noteId = (runId: string, dayKey: string, li: string) => `${runId}:note:${dayKey}:${li}`;
+/** `${R}:chat:${li}`: a love interest's private phone thread (the shape the kit's forgeChatHistoryPage reads). */
+export const chatId = (runId: string, li: string) => `${runId}:chat:${li}`;
+
 // ── Wish (M4). Kinds: "banner", "item". Keys and item ids come from SH/wish.ts (bannerKey, itemIdOf). ──
 
 /** `${R}:banner:${kind}-${rotation}`: a banner and the ids of its items. */
@@ -129,6 +143,8 @@ export const RUN_DOC_KINDS = [
   "chapter",
   "beat",
   "memory",
+  "note",
+  "chat",
   "banner",
   "item",
 ] as const;
