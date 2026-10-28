@@ -27,6 +27,7 @@ import { slurpUsableSharedIdeas, type SlurpSharedIdea } from "../../modules/feed
 import { slurpLifeBeat, type SlurpLifeMomentRate } from "../../modules/feed/slp-life-moments.js";
 import { readSlurpLifeSignals } from "../../data/feed/slp-life-signals.js";
 import { planSlurpOccasionBeat } from "./slp-occasion-service.js";
+import { selectSlurpPostJob } from "../../modules/feed/slp-post-jobs.js";
 import { selectSlurpReference, slurpReferenceCandidates } from "../../modules/feed/slp-post-reference.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
@@ -225,6 +226,17 @@ export async function planSlurpBeat(
     });
     if (trend) return trend;
     const history = await readSlurpBeatHistory(db, input.accountId, input.at);
+    // An ordinary post gets a job; a drama, trend, occasion, tie or the player's idea has its own content.
+    const withJob = (beat: SlurpBeat): SlurpBeat => {
+      const placeFree = !beat.place && !input.context.day?.current;
+      const job = selectSlurpPostJob(input.accountId, input.sequence, read?.niches, history, {
+        heatMax: read?.heat.max,
+        placeFree,
+        avoid: input.context.steering?.avoid,
+      });
+      if (!job) return beat;
+      return { ...beat, job: job.id, ...(job.place && placeFree ? { place: job.place } : {}) };
+    };
     // A pack occasion running now (SlurpCon, a holiday, their birthday week): only one that fits them.
     const occasion = await planSlurpOccasionBeat(db, {
       accountId: input.accountId,
@@ -248,7 +260,7 @@ export async function planSlurpBeat(
           avoid: input.context.steering?.avoid,
         })
       : null;
-    if (condition) return condition;
+    if (condition) return withJob(condition);
     const steered = slurpSteeredBeat(input.accountId, input.sequence, input.context.steering, read, input.intents);
     if (steered) return steered;
     // Drama bonds: now and then a friend, roommate or coworker is in the post.
@@ -275,7 +287,7 @@ export async function planSlurpBeat(
         input.context.day?.current ?? null,
         input.context.life.rate,
       );
-      if (life) return life;
+      if (life) return withJob(life);
     }
     const shared = input.shared
       ? slurpUsableSharedIdeas({ ...input.shared, usedToday: history.sharedToday ?? {} })
@@ -296,7 +308,7 @@ export async function planSlurpBeat(
       await readReferenceCandidates(db, input.accountId, input.at),
       history.recentReferences ?? [],
     );
-    return reference ? { ...beat, reference } : beat;
+    return withJob(reference ? { ...beat, reference } : beat);
   } catch (error) {
     logger.warn(error, "[slurp] Beat planning failed; this post uses the classic planner");
     return null;
@@ -463,7 +475,30 @@ async function readReferenceCandidates(db: DB, accountId: string, at: Date) {
       listSlurpContinuityFor(db, accountId, "public_post", { at }),
       listSlurpOpportunities(db, accountId, 40),
     ]);
+    const titles = new Map(posts.map((post) => [post.id, post.title]));
+    const comments = await createSlurpStorage(db)
+      .listNoodlerInteractions(posts.map((post) => post.id))
+      .catch(() => []);
+    // A fan's own top-level question; the newest ten are plenty to draw one from.
+    const questions = comments
+      .filter(
+        (entry) =>
+          entry.type === "reply" &&
+          !entry.parentInteractionId &&
+          entry.actorAccountId !== accountId &&
+          entry.actorSnapshot?.handle &&
+          entry.content?.trim().endsWith("?"),
+      )
+      .reverse()
+      .map((entry) => ({
+        id: entry.id,
+        handle: entry.actorSnapshot!.handle,
+        question: entry.content!.trim().slice(0, 200),
+        postTitle: titles.get(entry.postId) ?? null,
+        createdAt: entry.createdAt,
+      }));
     return slurpReferenceCandidates({
+      questions,
       posts,
       chatMoments: continuity.facts.filter((fact) => fact.source === "chat"),
       keptPromises: plans

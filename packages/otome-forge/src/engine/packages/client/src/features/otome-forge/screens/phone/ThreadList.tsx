@@ -13,7 +13,7 @@ import { accentOf } from "../../lib/accent";
 import { useOtomeProps } from "../../props";
 import type { LiId, PhoneListView, PhoneMessage, RunView } from "../../shared/api-types";
 import { FACE_LABEL_KEYS } from "../reader/FacePlate";
-import { phonePath, phoneQueryKey } from "./PhoneScreen";
+import { BUSY_POLL_MS, phonePath, phoneQueryKey } from "./PhoneScreen";
 
 /** "14:05" for today, else a short date, in the player's zone. */
 export function messageTime(at: string, locale: string, timeZone: string, now = new Date()): string {
@@ -42,9 +42,13 @@ export function ThreadList({ runKey, view, onOpen, rowRef }: ThreadListProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const { localization, timeZone } = useOtomeProps();
+  // Read again whenever the list opens, and while a reply is being written: one that lands after the player left its
+  // thread (that page wrote nothing then) moves the preview.
   const threads = useQuery({
     queryKey: phoneQueryKey(runKey),
     queryFn: () => otome.get<PhoneListView>(phonePath(runKey)),
+    refetchOnMount: "always",
+    refetchInterval: (query) => (query.state.data?.threads.some((thread) => thread.busy) ? BUSY_POLL_MS : false),
   });
   const byLi = new Map((threads.data?.threads ?? []).map((thread) => [thread.li, thread]));
   const order = (id: LiId) => view.lis.findIndex((li) => li.id === id);

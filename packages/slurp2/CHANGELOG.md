@@ -1,5 +1,19 @@
 # Slurp release notes
 
+## 0.4.7 — 2026-10-28
+
+- Fan comments see the post: a short title (40 characters or fewer) gets quoted in some questions and reactions, the question bank has 16 more lines, and a fan line is skipped when the same text is already under the post.
+- Fan questions as callbacks: a top-level fan question under the Creator's recent posts (1–30 days old) is a new callback kind, `question`, so a later post may answer it.
+- Five business arcs join the built-in arc library: sale week, burnout and comeback, new gear, leak scare and page anniversary. Saved libraries get them through the existing normalize step.
+
+## 0.4.6 — 2026-10-28
+
+- Niches: the card reading now names each Creator's page niche (main + up to two side niches, from a fixed list). The reading refreshes once for every Creator.
+- Post jobs: each ordinary post gets a kind (try-on haul, gym set, finished commission, stream setup, fan request, teaser, …). The niche weighs the jobs, the main niche keeps at most half of the last 8 posts, and a Creator never repeats one of their last 3 jobs. Spice is not changed.
+- Card notes edits keep the niche.
+- Jobs fit the post: a job with its own place (gym, kitchen, stage) only goes on a post with no place yet, intimate jobs need a card heat of at least flirty, and avoided topics drop the job.
+- The card reading refreshes once for every Creator; on a card you never edited, the heat range may shift a little with the new reading.
+
 ## 0.4.5 — 2026-10-28
 
 - Outfits change: a Creator who never had a wardrobe gets one filled from the card once (a closet you emptied stays empty), so pictures stop showing the same clothes.

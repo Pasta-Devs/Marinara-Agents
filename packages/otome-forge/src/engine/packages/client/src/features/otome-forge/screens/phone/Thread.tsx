@@ -30,7 +30,7 @@ import type { Face } from "../../shared/faces";
 import { homeQueryKey } from "../home/HomeScreen";
 import { FACE_LABEL_KEYS } from "../reader/FacePlate";
 import { CloseAndRemember } from "./CloseAndRemember";
-import { phonePath, phoneQueryKey, threadQueryKey } from "./PhoneScreen";
+import { BUSY_POLL_MS, phonePath, phoneQueryKey, threadQueryKey } from "./PhoneScreen";
 import { Sticker, StickerPicker } from "./StickerPicker";
 import { SuggestionChips } from "./SuggestionChips";
 import { messageTime } from "./ThreadList";
@@ -38,7 +38,6 @@ import { TypingIndicator } from "./TypingIndicator";
 
 const TEXT_MAX = 1_000;
 const COUNTER_FROM = 900;
-const BUSY_POLL_MS = 2_000;
 const NEAR_BOTTOM_PX = 96;
 
 /** Threads with a send or close on its way from this page. */
@@ -79,9 +78,11 @@ interface ThreadProps {
   /** Opened from the thread list: focus moves to the heading (a screen change already does). */
   focusHeading: boolean;
   onBack: () => void;
+  /** The quote still waiting for her next message, or null once it went with one or she removed it. */
+  onQuoteChange: (quote: string | null) => void;
 }
 
-export function Thread({ runKey, li, quote: initialQuote, focusHeading, onBack }: ThreadProps) {
+export function Thread({ runKey, li, quote: initialQuote, focusHeading, onBack, onQuoteChange }: ThreadProps) {
   const { t } = useTranslation();
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
@@ -92,9 +93,12 @@ export function Thread({ runKey, li, quote: initialQuote, focusHeading, onBack }
   const accent = accentOf(li);
 
   const fetchPage = (page: number) => otome.get<PhoneHistoryPage>(path, { page });
+  // Read again whenever the thread opens: a reply that landed after the player left (this page wrote nothing then) is
+  // in the server's page, and so is `busy` while it is still being written, which polls until it clears.
   const latest = useQuery({
     queryKey: key,
     queryFn: () => fetchPage(1),
+    refetchOnMount: "always",
     refetchInterval: (query) => (query.state.data?.busy ? BUSY_POLL_MS : false),
   });
 
@@ -102,6 +106,12 @@ export function Thread({ runKey, li, quote: initialQuote, focusHeading, onBack }
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState("");
   const [quote, setQuote] = useState<string | null>(initialQuote?.trim() || null);
+  // The phone keeps the quote while it waits, so the thread opened again (after Settings) never brings back one spent.
+  useEffect(() => {
+    onQuoteChange(quote);
+    // Only when the quote changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quote]);
   /** Her message on its way (null when asking again), from when it was sent. */
   const [outgoing, setOutgoing] = useState<{ local: PhoneMessage | null; started: number } | null>(null);
   const [incoming, setIncoming] = useState<Incoming | null>(null);
@@ -147,7 +157,8 @@ export function Thread({ runKey, li, quote: initialQuote, focusHeading, onBack }
   const busy = !!outgoing || remoteBusy;
   const canSend = !busy && draft.trim().length > 0;
 
-  const send = async (body: SendBody) => {
+  /** `fromDraft`: the box's own words are sent (a sticker or a suggestion leaves them where they are). */
+  const send = async (body: SendBody, fromDraft = false) => {
     if (busy || sending.has(threadKey)) return;
     sending.add(threadKey);
     const started = Date.now();
@@ -170,7 +181,7 @@ export function Thread({ runKey, li, quote: initialQuote, focusHeading, onBack }
     setClosedGrant(0);
     setAnnounce(t("ui.otomeForge.phone.typing", { name: li.name }));
     if (local) {
-      setDraft("");
+      if (fromDraft) setDraft("");
       setQuote(null);
     }
     try {
@@ -317,7 +328,7 @@ export function Thread({ runKey, li, quote: initialQuote, focusHeading, onBack }
 
   const submit = () => {
     if (!canSend) return;
-    void send({ text: draft.trim(), id: messageId(), ...(quote ? { quote } : {}) });
+    void send({ text: draft.trim(), id: messageId(), ...(quote ? { quote } : {}) }, true);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;

@@ -372,30 +372,47 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
       onPointerMove={parallax.onPointerMove}
       onPointerLeave={parallax.onPointerLeave}
     >
-      <HomeLayers sky={sky} backdrop={about?.backdrop ?? null}>
-        {show === "him" ? (
-          <CutoutFigure
-            key={`him-${li.id}`}
-            who="him"
-            name={li.name}
-            accent={accent}
-            art={himArt}
-            label={figureLabel}
-            face={face}
-            mood={rupture ? "cold" : (said?.mode ?? "fond")}
-            onTap={onTap}
-          />
-        ) : (
-          // "He noticed: …" under her look arrives with the Wardrobe's Show him (M4).
-          <CutoutFigure
-            key="me"
-            who="me"
-            name={playerName}
-            accent={PALETTE.rose}
-            art={toFigureArt(herLook)}
-            label={t("ui.otomeForge.home.figureMe", { name: playerName })}
-          />
-        )}
+      <HomeLayers backdrop={about?.backdrop ?? null}>
+        <div className="of-home-main">
+          <div className="of-home-stage">
+            {show === "him" ? (
+              <CutoutFigure
+                key={`him-${li.id}`}
+                who="him"
+                name={li.name}
+                accent={accent}
+                art={himArt}
+                label={figureLabel}
+                face={face}
+                mood={rupture ? "cold" : (said?.mode ?? "fond")}
+                onTap={onTap}
+              />
+            ) : (
+              // "He noticed: …" under her look arrives with the Wardrobe's Show him (M4).
+              <CutoutFigure
+                key="me"
+                who="me"
+                name={playerName}
+                accent={PALETTE.rose}
+                art={toFigureArt(herLook)}
+                label={t("ui.otomeForge.home.figureMe", { name: playerName })}
+              />
+            )}
+          </div>
+          <div className="of-home-foot">
+            {saveError ? (
+              <p className="of-notice of-notice--error" role="alert">
+                {saveError}
+              </p>
+            ) : null}
+            <div className="of-home-plate of-glass">
+              <h1 className="of-home-name" tabIndex={-1}>
+                {show === "me" ? playerName : li.name}
+              </h1>
+              {show === "him" && note ? <MoodChip mood={note.mood} /> : null}
+            </div>
+          </div>
+        </div>
       </HomeLayers>
 
       <div className="of-home-top">
@@ -419,53 +436,33 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
         ) : null}
       </div>
 
-      <div className="of-home-middle">
-        <div className="of-home-rail">
-          <button type="button" className="of-home-action of-glass" onClick={() => onOpenPhone(null)}>
-            <Smartphone size={17} strokeWidth={1.9} aria-hidden="true" />
-            <span>{t("ui.otomeForge.common.screenPhone")}</span>
-            {unread > 0 ? (
-              <span className="of-home-badge">
-                <span aria-hidden="true">{unread}</span>
-                <span className="of-visually-hidden">{t("ui.otomeForge.home.unread", { count: unread })}</span>
-              </span>
-            ) : null}
-          </button>
-          <HimMeToggle name={li.name} show={show} onChange={(next) => void save({ show: next })} />
-          <button type="button" className="of-home-action of-glass" onClick={() => setSheet("rough")}>
-            <HeartHandshake size={17} strokeWidth={1.9} aria-hidden="true" />
-            <span>{t("ui.otomeForge.home.roughDay")}</span>
-          </button>
-          <button type="button" className="of-home-action of-glass" onClick={() => setSheet("pick")}>
-            <UsersRound size={17} strokeWidth={1.9} aria-hidden="true" />
-            <span>{t("ui.otomeForge.home.whoIsHome")}</span>
-          </button>
-        </div>
-        {said && show === "him" ? (
-          <p
-            key={said.id}
-            className="of-home-bubble of-glass of-glass--strong"
-            data-mode={said.mode}
-            aria-hidden="true"
-          >
-            {said.text}
-          </p>
-        ) : null}
+      <div className="of-home-rail">
+        <button type="button" className="of-home-action of-glass" onClick={() => onOpenPhone(null)}>
+          <Smartphone size={17} strokeWidth={1.9} aria-hidden="true" />
+          <span>{t("ui.otomeForge.common.screenPhone")}</span>
+          {unread > 0 ? (
+            <span className="of-home-badge">
+              <span aria-hidden="true">{unread}</span>
+              <span className="of-visually-hidden">{t("ui.otomeForge.home.unread", { count: unread })}</span>
+            </span>
+          ) : null}
+        </button>
+        <HimMeToggle name={li.name} show={show} onChange={(next) => void save({ show: next })} />
+        <button type="button" className="of-home-action of-glass" onClick={() => setSheet("rough")}>
+          <HeartHandshake size={17} strokeWidth={1.9} aria-hidden="true" />
+          <span>{t("ui.otomeForge.home.roughDay")}</span>
+        </button>
+        <button type="button" className="of-home-action of-glass" onClick={() => setSheet("pick")}>
+          <UsersRound size={17} strokeWidth={1.9} aria-hidden="true" />
+          <span>{t("ui.otomeForge.home.whoIsHome")}</span>
+        </button>
       </div>
 
-      <div className="of-home-foot">
-        {saveError ? (
-          <p className="of-notice of-notice--error" role="alert">
-            {saveError}
-          </p>
-        ) : null}
-        <div className="of-home-plate of-glass">
-          <h1 className="of-home-name" tabIndex={-1}>
-            {show === "me" ? playerName : li.name}
-          </h1>
-          {show === "him" && note ? <MoodChip mood={note.mood} /> : null}
-        </div>
-      </div>
+      {said && show === "him" ? (
+        <p key={said.id} className="of-home-bubble of-glass of-glass--strong" data-mode={said.mode} aria-hidden="true">
+          {said.text}
+        </p>
+      ) : null}
 
       <p className="of-visually-hidden" aria-live="polite">
         {announce}

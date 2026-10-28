@@ -34,6 +34,7 @@ import {
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/tap-mood.ts";
 import { typingDelay } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/typing-delay.ts";
 import {
+  createCutoutClient,
   cutoutsSettled,
   type CutoutClient,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
@@ -46,6 +47,7 @@ import {
   normalizeLinePack,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/lines.ts";
 import {
+  checkNote,
   noteDay,
   serveNote,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/note.ts";
@@ -345,15 +347,23 @@ test("a rupture makes the note curt and the lines cold", async () => {
   const long = noteReply("I left the lamp lit, and the kettle, and a note on the stair, because I still cannot stop.");
   const t = await homeWorld("r-rupt-aaaaaa", {
     lis: { [KAI]: { grievances: [grievance], rupture: { grievanceId: "g-north", since: "2026-10-28T09:00:00.000Z" } } },
-    replies: [json(long), json(noteReply("The lamp is lit. Nothing else."))],
+    replies: [json(long), json(noteReply("The lamp is lit."))],
   });
   const written = await t.call("POST", "/runs/:run/home/note", note(KAI, "UTC"));
   assert.equal(written.status, 200, JSON.stringify(written.body));
-  assert.equal(written.body.note.text, "The lamp is lit. Nothing else.");
+  assert.equal(written.body.note.text, "The lamp is lit.");
   const [firstTry, repair] = t.notes();
   assert.match(system(firstTry!.messages), /curt: one short, distant sentence of at most 14 words/);
   assert.match(firstTry!.messages.at(-1)!.content, /A rupture stands between them \(g-north\)/);
   assert.match(repair!.messages.at(-1)!.content, /14 words or fewer/, "a warm, long note is sent back");
+  // A curt note is one sentence; a warm one may be two.
+  const curt = checkNote(true, []);
+  assert.equal(curt(noteReply("I am busy. Do not wait.")), "text must be one sentence");
+  assert.equal((curt(noteReply("I am busy today.")) as { text: string }).text, "I am busy today.");
+  assert.equal(
+    (checkNote(false, [])(noteReply("I am busy. Do not wait.")) as { text: string }).text,
+    "I am busy. Do not wait.",
+  );
 
   const pack: StageLines = {
     stage: 1,
@@ -401,7 +411,7 @@ test("a rupture that opens or is repaired later the same day replaces the day's 
         ...state.lis,
         [KAI]: {
           ...state.lis[KAI]!,
-          grievances: [{ ...grievance, status: open ? "open" : "repaired" }],
+          grievances: [{ ...grievance, status: open ? "open" : "addressed" }],
           rupture: open ? { grievanceId: grievance.id, since: "2026-10-28T12:00:00.000Z" } : null,
         },
       },
@@ -743,6 +753,24 @@ test("L0 is his newest unlocked CG, else the newest painted place, never another
 
 // ── Home set, Him and Me, unread ──
 
+test("a stalled loopback read or cleanup times out, so the cut-out fails instead of holding the queue", async () => {
+  // Answers the look itself at once; every other request (the cleanup) waits until its signal aborts.
+  const look = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489", "hex");
+  const stalled = (answerSource: boolean): typeof fetch =>
+    ((input: string | URL | Request, init?: RequestInit) => {
+      const signal = init?.signal;
+      if (!signal) return Promise.reject(new Error("a loopback request without a timeout"));
+      if (answerSource && String(input).endsWith("/look.png")) {
+        return Promise.resolve(new Response(look, { headers: { "content-type": "image/png" } }));
+      }
+      return new Promise<Response>((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
+    }) as typeof fetch;
+  for (const answerSource of [false, true]) {
+    const client = createCutoutClient({ baseUrl: "http://127.0.0.1:9", fetch: stalled(answerSource), timeoutMs: 20 });
+    await assert.rejects(client.cutOut("/api/global-gallery/file/look.png"), { name: "TimeoutError" });
+  }
+});
+
 test("Home shows the chosen love interest or the protagonist, and counts unread replies", async () => {
   const t = await homeWorld(
     "r-show-aaaaaa",
@@ -808,6 +836,11 @@ test("tap annoyance, time of day, the word counts, line picks and the typing del
   ]);
   assert.equal(wordCount("You left the lab light on again."), 7);
   assert.equal(wordCount("灯りを消しておいた。"), 5, "CJK: one word per two characters");
+  assert.equal(
+    wordCount("그는 아침에도 연구실의 불을 끄고 아무런 말도 없이 조용히 돌아왔습니다."),
+    10,
+    "Korean puts spaces between its words: 10 words of 30 syllables are 10, within a line's 14",
+  );
   assert.equal(sentenceCount("You left it on. I turned it off. Don't thank me."), 3);
   assert.equal(sentenceCount("灯りを消した。礼はいらない。"), 2);
   assert.equal(sentenceCount("No full stop at the end"), 1);

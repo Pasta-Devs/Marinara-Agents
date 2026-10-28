@@ -135,6 +135,7 @@ for (const theme of ["dark", "light"]) {
           path === "/beat/mark" ||
           path === "/story/cancel" ||
           path === "/run/sources" ||
+          path === "/formation" ||
           path === "/login"
         ) {
           const body = route.request().postDataJSON();
@@ -282,6 +283,107 @@ for (const theme of ["dark", "light"]) {
       await expect.poll(() => requests.filter((row) => row.path === "/story-event/beat").length).toBeGreaterThan(0);
       await expect(forge.getByText("We keep the promise together.", { exact: true })).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`seasonal-story-${theme}.png`) });
+      // 1.27.0: a finished, live event opens its fights on Hard. It is seeded as a played world holds it: every node
+      // played, each fight designed on Normal, a team and the protagonist's signature weapon, so a Hard fight makes
+      // no provider request.
+      const skill = {
+        name: "Lighthouse strike",
+        effect: "damage",
+        power: 100,
+        target: "enemy",
+        description: "A strike.",
+      };
+      const hero = {
+        ...f.docs.get(unitId).data,
+        name: "Arden",
+        role: "Mage",
+        affinity: "Water",
+        position: "front",
+        stats: { hp: 100, atk: 100, def: 100, spd: 100 },
+        skill,
+      };
+      f.docs.get(unitId).data = hero;
+      const leader = `${runId}:unit:protagonist`,
+        weapon = `${runId}:unit:protagonist-weapon`;
+      f.seed(leader, "unit", { ...hero, name: "Mari", cardId: "", isProtagonist: true });
+      f.seed(weapon, "unit", {
+        kind: "weapon",
+        name: "Kept blade",
+        rarity: 5,
+        weaponType: "blade",
+        mainStat: { key: "atk", value: 1 },
+        subStat: { key: "crit", value: 0 },
+      });
+      const session = f.session();
+      Object.assign(session.roster, {
+        [unitId]: { ...session.roster[unitId], level: 100 },
+        [leader]: { level: 100, bondFights: 0, weapon },
+        [weapon]: { level: 1, bondFights: 0 },
+      });
+      session.presets = [{ name: "Fixture team", board: { front: [unitId, null, null], back: [null, null, null] } }];
+      session.activePreset = 0;
+      session.progress["event-1"] = { normal: 10 };
+      for (const combatIndex of [0, 1, 2])
+        f.seed(`${runId}:combat:event-1:${combatIndex}`, "combat", {
+          chapter: "event-1",
+          combatIndex,
+          enemy: "Clockwork sentinel",
+          tier: "soldier",
+          opening: "The festival's practice guard awakens.",
+          objective: "Win the friendly trial.",
+          outcomeOnWin: "The lantern procession continues.",
+          formation: [
+            {
+              name: "Clockwork sentinel",
+              role: "Warrior",
+              affinity: "Fire",
+              position: "front",
+              stats: { hp: 10, atk: 10, def: 10, spd: 10 },
+              skill,
+              tier: "soldier",
+              anonymous: true,
+            },
+          ],
+        });
+      const hardCalls = f.calls.length;
+      await forge.evaluate((node) => {
+        const game = node as any;
+        game._clearBeat();
+        game._forgeSeasonalState = null;
+        game._forgeSeasonalLoading = false;
+        game._hudView = "chapters";
+        game._renderKey = null;
+        game._renderBrowser();
+      });
+      const done = forge.locator('[data-chapters-list] > [data-story-event-open="event-1"]');
+      await expect(done).toContainText("Story event · Done");
+      await expect(done.locator(".diffs span")).toHaveText(["N", "H", "V"]);
+      await page.screenshot({ path: testInfo.outputPath(`seasonal-done-hard-${theme}.png`) });
+      await done.getByRole("button", { name: /Enter event/u }).click();
+      await expect.poll(() => forge.evaluate((node) => (node as any)._planChapter)).toBe("event-1");
+      await expect(forge.locator('[data-diff="hard"]')).toBeEnabled();
+      await expect(forge.locator('[data-diff="veryhard"]')).toBeDisabled();
+      await forge.locator('[data-diff="hard"]').click();
+      await expect(forge.locator(".node-row")).toHaveCount(3);
+      await expect(forge.locator(".diff-hint")).toContainText("Recommended BP 3,000");
+      await page.screenshot({ path: testInfo.outputPath(`seasonal-hard-map-${theme}.png`) });
+      await forge.locator(".node-row.current [data-start]").click();
+      await forge.locator("[data-into-battle]").click();
+      await expect
+        .poll(() => requests.findLast((row) => row.path === "/story-event/battle")?.body)
+        .toMatchObject({ chapter: "event-1", combatIndex: 0, difficulty: "hard" });
+      const hardStart = forge.locator("button.fstart[data-start]");
+      await expect(hardStart).toBeEnabled();
+      await hardStart.click();
+      await expect
+        .poll(() => requests.findLast((row) => row.path === "/story-event/battle/start")?.body)
+        .toMatchObject({ chapter: "event-1", combatIndex: 0, difficulty: "hard" });
+      await expect
+        .poll(() => f.session().progress["event-1"].hard || f.session().combatPending?.difficulty)
+        .toBeTruthy();
+      expect(f.calls.length).toBe(hardCalls);
+      await page.screenshot({ path: testInfo.outputPath(`seasonal-hard-fight-${theme}.png`) });
+      await forge.evaluate((node) => (node as any)._stopCombat?.());
       // Archive is the actual played beat. Expire only its immutable event deadline; no fabricated story text.
       const eventDoc = f.docs.get(`${runId}:story-event:1`);
       eventDoc.data.endsAt = Date.now() - 1000;
@@ -295,14 +397,12 @@ for (const theme of ["dark", "light"]) {
         game._renderKey = null;
         game._renderBrowser();
       });
-      const archive = forge.locator("[data-story-event-archive]");
-      await expect(
-        archive
-          .locator('[data-story-event-card="event-1"]')
-          .getByRole("heading", { name: "The Lantern Crossing", exact: true }),
-      ).toBeVisible();
+      // Since 1.26.3 a played event sits in the chapter timeline after the chapter it followed, not below it.
+      const played = forge.locator('[data-chapters-list] > [data-story-event-open="event-1"]');
+      await expect(played.getByRole("heading", { name: "The Lantern Crossing", exact: true })).toBeVisible();
+      await expect(played).toContainText("Story event · Ended");
       await page.screenshot({ path: testInfo.outputPath(`seasonal-archive-${theme}.png`) });
-      await archive.locator('[data-story-event-open="event-1"]').click();
+      await played.getByRole("button").click();
       await expect.poll(() => forge.evaluate((node) => (node as any)._planChapter)).toBe("event-1");
       await expect(forge.locator("[data-start]").first()).toBeDisabled();
       await forge.locator('[data-replay="0"]').click();

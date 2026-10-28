@@ -45,6 +45,8 @@ export function placeKey(name: string): string {
 const ownerOf = (key: string): PaintOwner => `place:${key}`;
 const worldTarget = (runId: string) => runDocTarget("world", worldId(runId));
 const notFound = () => new OtomeForgeError(404, "No such place in this story.", "not-found");
+/** A tap holds to the rule automatic paints keep: a place with no tags is never painted. */
+const untagged = () => new OtomeForgeError(409, "This place has no description to paint yet.", "conflict");
 
 /** The place as the client should see it: a pending paint this process is not painting reads as stopped. */
 export function placeView(runId: string, key: string, place: PlaceArt): PlaceArt {
@@ -278,6 +280,7 @@ export async function paintPlaceNow(
       if (!world) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
       if (!world.places[key]) throw notFound();
       if (world.places[key].art?.state === "ready") return read();
+      if (!world.places[key].tags.trim()) throw untagged();
       const connectionId = world.images.connectionId;
       if (!connectionId) throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
       const at = new Date().toISOString();
@@ -285,6 +288,7 @@ export async function paintPlaceNow(
       const claim = await updateIfChanged(deps.store, worldTarget(runId), normalizeWorld, (current) => {
         const place = current.places[key];
         if (!place) throw notFound();
+        if (!place.tags.trim()) throw untagged();
         return place.art?.state !== "ready" && current.images.connectionId === connectionId
           ? { ...current, places: { ...current.places, [key]: { ...place, art: pending } } }
           : undefined;

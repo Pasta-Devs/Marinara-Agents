@@ -1029,6 +1029,33 @@ async function main() {
               nextCursor: null,
             });
           }
+          if (body.source === "messages") {
+            const chatName = "My Very Long Adventure With Some Friends In The City Of A Thousand Lanterns";
+            return send(200, {
+              source: "messages",
+              scanned: 2,
+              draftable: 2,
+              importedCount: 0,
+              samples: [
+                [1, 120],
+                [121, 121],
+              ].map(([first, last]) => ({
+                sourceId: `chat-long:messages:m${first}`,
+                title: `${chatName}, ${first === last ? "message" : "messages"} ${first === last ? first : `${first}-${last}`}`,
+                messageRange: { chatName, first, last },
+                importMode: "roleplay",
+                mutationCount: 0,
+                summary: "Messages from a long chat.",
+                snippet: "Aster: the lanterns light.",
+                status: "pending",
+                freshness: "new",
+              })),
+              totals: { matches: 2, ready: 2, imported: 0 },
+              truncated: false,
+              hasMore: false,
+              nextCursor: null,
+            });
+          }
           return send(200, {
             source: body.source ?? "chats",
             scanned: 2,
@@ -2009,6 +2036,8 @@ async function main() {
       assert.doesNotMatch(destinationText, /this memory/u);
       await page.locator("[data-ltm-destination-stay]").click();
       await destinationDescription.waitFor({ state: "detached" });
+      // Stay hands focus back to the Review button on the next frame; moving on earlier lets it steal the picker's.
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]:focus').waitFor();
       const focusedPlaceButton = memoryScope.locator("[data-ltm-scope-picker-trigger]:focus");
       await choosePlaceByKeyboard("vault", "character", "character:character-a");
       await page.locator("[data-ltm-unsaved-stay]:focus").waitFor();
@@ -3759,6 +3788,8 @@ async function main() {
         const searchBox = activity.locator("[data-ltm-debug-search]");
         await searchBox.fill("fixture-model");
         await activity.locator('[data-ltm-debug-operation="estimated"]').waitFor();
+        // The estimated row is on screen before the search, and the filter runs on a deferred value.
+        await activity.locator('[data-ltm-debug-operation="reported"]').waitFor({ state: "detached" });
         assert.equal(await activity.locator('[data-ltm-debug-operation="reported"]').count(), 0);
         const searchedEstimated = await operation("estimated");
         assert.match(searchedEstimated, /AI extraction/u);
@@ -4942,10 +4973,11 @@ async function main() {
         await reset.click();
         assert.equal(await style.inputValue(), "exact", "Reset to preset restores the preset it came from");
         // NumberField copies the new value into its text in an effect, so give it a frame or two.
-        for (let attempt = 0; attempt < 40; attempt += 1) {
-          if ((await recall.getByLabel("Meaning match", { exact: true }).inputValue()) === exactWeight) break;
-          await recallPage.waitForTimeout(50);
-        }
+        const meaningMatch = await recall.getByLabel("Meaning match", { exact: true }).elementHandle();
+        await recallPage.waitForFunction(([input, want]) => (input as HTMLInputElement).value === want, [
+          meaningMatch,
+          exactWeight,
+        ] as const);
         assert.equal(await recall.getByLabel("Meaning match", { exact: true }).inputValue(), exactWeight);
         assert.equal((await note.innerText()).trim(), "", "the note clears once the preset is back");
         // Choosing Custom by hand, with no edit, still resets to the last preset. Balanced is the saved style,
@@ -4954,10 +4986,7 @@ async function main() {
         await style.selectOption("custom");
         await recall.getByRole("button", { name: "Reset to preset" }).click();
         assert.equal(await style.inputValue(), "balanced", "choosing Custom by hand still resets to the last preset");
-        for (let attempt = 0; attempt < 40; attempt += 1) {
-          if ((await recallPage.getByRole("button", { name: "Save settings" }).count()) === 0) break;
-          await recallPage.waitForTimeout(50);
-        }
+        await recallPage.getByRole("button", { name: "Save settings" }).waitFor({ state: "detached" });
         assert.equal(
           await recallPage.getByRole("button", { name: "Save settings" }).count(),
           0,
@@ -8657,6 +8686,42 @@ async function main() {
         await page.locator('[data-ltm-surface="sources"]').innerText(),
         /character card|Summary Prompt|lorebook entries as source notes/iu,
       );
+      // #1783: on a Chat Messages row with a long chat name, the name is cut and the range stays whole.
+      await page.locator('[data-ltm-source-tab="messages"]').click();
+      await page.locator('[data-ltm-source-group="ready"] > summary').click();
+      await page.locator('[data-ltm-source-id="chat-long:messages:m1"] [data-ltm-source-message-range]').waitFor();
+      const rangeViewport = page.viewportSize();
+      await page.setViewportSize({ width: 320, height: 844 });
+      for (const [sourceId, label] of [
+        ["chat-long:messages:m1", "messages 1–120"],
+        ["chat-long:messages:m121", "message 121"],
+      ]) {
+        const longRow = page.locator(`[data-ltm-source-id="${sourceId}"][data-ltm-source-row-status]`);
+        const rangeLabel = longRow.locator("[data-ltm-source-message-range]");
+        const nameLabel = longRow.locator("[data-ltm-source-chat-name]");
+        assert.equal((await rangeLabel.innerText()).trim(), label);
+        const rowBox = (await longRow.boundingBox())!;
+        const rangeBox = (await rangeLabel.boundingBox())!;
+        assert.ok(
+          rangeBox.x + rangeBox.width <= rowBox.x + rowBox.width,
+          `${sourceId}: the range label is inside the row`,
+        );
+        const badgeBox = (await longRow.locator("[data-ltm-source-status]").boundingBox())!;
+        assert.ok(
+          badgeBox.x + badgeBox.width <= rowBox.x + rowBox.width,
+          `${sourceId}: the status badge is inside the row`,
+        );
+        assert.ok(
+          (await nameLabel.evaluate((element) => element.clientWidth)) >= 100,
+          `${sourceId}: the chat name keeps a readable width`,
+        );
+        assert.equal(
+          await nameLabel.evaluate((element) => element.scrollWidth > element.clientWidth),
+          true,
+          `${sourceId}: the chat name is the element that is cut`,
+        );
+      }
+      if (rangeViewport) await page.setViewportSize(rangeViewport);
       await page.locator('[data-ltm-source-tab="chats"]').click();
       await page.locator('[data-ltm-source-status-filter="imported"]').click();
       assert.match(await page.locator('[data-ltm-source-status-filter="imported"]').innerText(), /\([1-9]\d*\)/u);

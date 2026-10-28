@@ -55,7 +55,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   const [settingsReturn, setSettingsReturn] = useState<ScreenId>("picker");
   const [bibleLi, setBibleLi] = useState<string | null>(null);
   const [chapterKey, setChapterKey] = useState<string | null>(null);
-  // The thread Home's Reply or Phone button opens (with the note it quotes), or null for the thread list.
+  // The thread the phone shows (Home's Reply opens one with the note it quotes; the phone keeps it as the player moves
+  // between threads and spends the quote), or null for the thread list.
   const [phoneOpen, setPhoneOpen] = useState<PhoneOpen | null>(null);
   // Who Dates is about: the love interest picked there, kept while a game opens and closes.
   const [datesLi, setDatesLi] = useState<string | null>(null);
@@ -256,7 +257,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         onOpenStories={() => go("picker")}
       />
     ) : screen === "phone" && activeRun && view ? (
-      <PhoneScreen runKey={activeRun} view={view} initial={phoneOpen} />
+      <PhoneScreen runKey={activeRun} view={view} open={phoneOpen} onOpenChange={setPhoneOpen} />
     ) : screen === "dates" && activeRun && view ? (
       <DatesHub
         runKey={activeRun}
@@ -310,11 +311,9 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
             ? `bible-${bibleLi}`
             : screen === "reader"
               ? `reader-${chapterKey}`
-              : screen === "phone"
-                ? `phone-${phoneOpen?.li ?? ""}`
-                : screen === "read-him" || screen === "date-night" || screen === "claw"
-                  ? `${screen}-${datesOf?.id ?? ""}`
-                  : screen
+              : screen === "read-him" || screen === "date-night" || screen === "claw"
+                ? `${screen}-${datesOf?.id ?? ""}`
+                : screen
         }
         ref={screenRef}
         className="of-screen"

@@ -1195,9 +1195,12 @@ ${R} .of-log-line[data-voice="narration"] .of-log-said { color: var(--of-text-so
 ${R} .of-log-star { width: 34px; height: 34px; border: 0; background: transparent; color: var(--of-text-soft); }
 ${R} .of-log-star[aria-pressed="true"] { color: var(--of-champagne-text); }`;
 
-// Home (M3). The layers fill the whole stage, behind the top bar and the dock: .of-home is not positioned, so its
-// layers and figure anchor to the stage body, and the note, the rail and the nameplate sit over them. The pointer
-// sets --of-px and --of-py (−1..1); L0 moves 6 px, the figure 14 px (plus a 5 px drift), the light 20 px.
+// Home (M3). The layers fill the whole stage, behind the top bar and the dock: .of-home is not positioned, so they
+// anchor to the stage body. Its grid keeps everything that takes a tap apart: the note across the top, the rail at the
+// inline start, and beside it the figure's cell with his nameplate under it. The figure stands in its cell (its art may
+// run on behind the rail, the nameplate and the dock), and his tap zones and pills never leave it, so nothing covers
+// them at any size. The pointer sets --of-px and --of-py (−1..1); L0 moves 6 px, the figure 14 px (plus a 5 px drift),
+// the light 20 px.
 const SKIES = {
   dawn: {
     tint: "linear-gradient(180deg, rgb(255 170 140 / 0.24) 0%, rgb(255 210 170 / 0.1) 42%, transparent 72%)",
@@ -1237,19 +1240,25 @@ const skyRules = () =>
   Object.entries(SKIES)
     .map(
       ([sky, value]) =>
-        `${R} .of-home-layers[data-sky="${sky}"] { --of-home-tint: ${value.tint}; --of-home-light: ${value.light}; ` +
+        `${R} .of-home[data-sky="${sky}"] { --of-home-tint: ${value.tint}; --of-home-light: ${value.light}; ` +
         `--of-home-window-top: ${value.top}; --of-home-window-bottom: ${value.bottom}; ` +
         `--of-home-window-glow: ${value.glow}; --of-home-stars: ${value.stars}; }`,
     )
     .join("\n");
 
 const HOME_RULES = `
+/* The note's row gives way first (its text scrolls), so the rail and the figure's cell always have their room: the
+   second row is at least as tall as the rail, and as the cell's minimum plus the nameplate. */
 ${R} .of-home {
   --of-px: 0; --of-py: 0;
-  flex: 1; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px;
-  padding: 2px 12px 10px;
+  flex: 1; min-height: 0; display: grid; gap: 8px; padding: 2px 12px 10px;
+  grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, auto) minmax(auto, 1fr);
+  grid-template-areas: "top top" "rail main";
 }
-${R} .of-home-layers { position: absolute; inset: 0; z-index: 0; overflow: clip; pointer-events: none; }
+${R} :is(.of-home-layers, .of-home-front) { position: absolute; inset: 0; overflow: clip; pointer-events: none; }
+${R} .of-home-layers { z-index: 0; }
+/* After the figure's cell, at its z-index: the light and the shade fall over him, under the note, rail and plate. */
+${R} .of-home-front { z-index: 1; }
 ${skyRules()}
 ${R} .of-home-l0 {
   position: absolute; inset: -24px; background: ${MOODS.midnight.home};
@@ -1268,7 +1277,7 @@ ${R} .of-home-stars {
     radial-gradient(1.8px 1.8px at 88% 22%, var(--of-star) 50%, transparent 52%),
     radial-gradient(1px 1px at 16% 52%, var(--of-star) 50%, transparent 52%),
     radial-gradient(1.2px 1.2px at 47% 44%, var(--of-star) 50%, transparent 52%);
-  animation: of-twinkle 7s ease-in-out infinite alternate;
+  animation: of-home-twinkle 7s ease-in-out infinite alternate;
 }
 /* An arched window onto the sky: the room's only light, in the colour of the hour. */
 ${R} .of-home-window {
@@ -1290,7 +1299,7 @@ ${R} .of-home-backdrop {
 }
 ${R}[data-look="pearl"] .of-home-backdrop { filter: brightness(0.96) saturate(0.9); }
 ${R} .of-home-l1 { position: absolute; inset: 0; background: var(--of-home-tint); }
-${R}[data-look="pearl"] .of-home-layers[data-sky="night"] {
+${R}[data-look="pearl"] .of-home[data-sky="night"] {
   --of-home-tint: linear-gradient(180deg, rgb(110 110 190 / 0.24) 0%, rgb(140 120 200 / 0.1) 62%, transparent 100%);
 }
 ${R} .of-home-l3 {
@@ -1325,11 +1334,20 @@ ${R}[data-look="pearl"] .of-home-shade {
 }
 ${R} .of-home[data-rupture="true"] .of-home-l1 { background: var(--of-home-tint), linear-gradient(rgb(90 110 160 / 0.16), rgb(90 110 160 / 0.16)); }
 
-/* L2: the figure. A cut-out or a look stands at the bottom; initials or an avatar sit higher, as a medallion or cameo.
-   A full-body look starts below the top bar and an open note (about 244 px), so his face is never under the note. */
+/* L2: the figure's cell (a size container: cqw and cqh below are its own) and his nameplate under it. */
+${R} .of-home-main { grid-area: main; min-width: 0; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+/* Its basis is a length, not 0 %: on a percentage basis Chrome reads the cell's cqh as 0 while it sits at its minimum. */
+${R} .of-home-stage { position: relative; z-index: 1; flex: 1 1 128px; min-height: 128px; container-type: size; }
+/* A cut-out or a look (832 × 1216) stands in the cell: as wide as keeps his head and heart zones inside it (its end
+   may reach the stage's edge, 12 px past the cell), and no taller than 1 / 0.62 of the cell, so his hand zone (down to
+   56 % of the art) stays in it. His head sits as high as keeps his feet behind the dock (96 px under the cell) and
+   8 px under the note, but never lower than puts the art's 58 % line on the cell's floor. Initials or an avatar stand
+   in its middle, as a medallion or cameo. */
 ${R} .of-figure {
-  position: absolute; left: 50%; bottom: -2%; height: min(70%, calc(100% - 244px)); aspect-ratio: 832 / 1216;
-  translate: -50% 0;
+  --of-figure-w: min((100cqw + 12px) / 0.67, 100cqh * 1.1036);
+  position: absolute; width: var(--of-figure-w); aspect-ratio: 832 / 1216;
+  inset-inline-start: min((100cqw - var(--of-figure-w)) / 2, 100cqw + 12px - var(--of-figure-w));
+  top: min(100cqh - var(--of-figure-w) * 0.848, max(8px, 100cqh + 96px - var(--of-figure-w) * 1.4615));
   pointer-events: none; animation: of-fade-in 700ms var(--of-ease) both;
 }
 ${R} :is(.of-figure-parallax, .of-figure-drift, .of-figure-breathe) { position: absolute; inset: 0; }
@@ -1369,15 +1387,18 @@ ${R} .of-figure[data-art="look"][data-cut="false"] .of-figure-img {
 }
 ${R} .of-figure[data-mood="cold"] .of-figure-breathe { filter: saturate(0.7) brightness(0.93); }
 ${R} .of-figure[data-mood="annoyed"] .of-figure-drift { animation: of-pout 420ms ease-in-out 2; }
-/* Without a full-body look the medallion or cameo stands at the inline end, clear of the note and the rail. */
+/* Without a full-body look the medallion or cameo and its pills fill the cell's middle: the medallion leaves room for
+   its ring above (12 px), the 18 px gap its ring reaches into and the pills (54 px), 84 px in all. */
 ${R} .of-figure:is([data-art="none"], [data-art="avatar"]) {
-  top: max(31%, 256px); bottom: auto; left: auto; inset-inline-end: 7%; translate: none; height: auto;
-  width: min(46cqw, 220px);
-  aspect-ratio: auto; display: flex; flex-direction: column; align-items: center; gap: 22px;
+  --of-medallion: min(220px, 100cqw - 32px, 100cqh - 84px);
+  inset: 0; width: auto; aspect-ratio: auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
 }
 ${R} .of-figure:is([data-art="none"], [data-art="avatar"]) :is(.of-figure-parallax, .of-figure-drift, .of-figure-breathe) {
   position: relative; inset: auto; width: 100%;
 }
+${R} .of-figure[data-art="avatar"] { --of-medallion: min(220px, 100cqw - 32px, (100cqh - 84px) * 0.8); }
+${R} .of-figure:is([data-art="none"], [data-art="avatar"]) .of-figure-parallax { flex: none; width: var(--of-medallion); }
 ${R} .of-figure[data-art="none"] .of-figure-breathe { aspect-ratio: 1; }
 ${R} .of-figure[data-art="avatar"] .of-figure-breathe { aspect-ratio: 4 / 5; }
 ${R} .of-figure:is([data-art="none"], [data-art="avatar"]) .of-figure-aura { inset: -28%; filter: blur(24px); opacity: 0.6; }
@@ -1399,31 +1420,39 @@ ${R} .of-figure-ring {
   box-shadow: 0 0 0 8px color-mix(in srgb, var(--of-li-accent) 14%, transparent);
 }
 ${R} .of-figure-initials {
-  position: relative; font-family: var(--of-font-display); font-weight: 600; font-size: min(17cqw, 5.4rem);
+  position: relative; font-family: var(--of-font-display); font-weight: 600;
+  font-size: min(5.4rem, var(--of-medallion) * 0.37);
   letter-spacing: 0.02em; color: ${PALETTE.ink}; text-shadow: 0 1px 0 rgb(255 255 255 / 0.45);
 }
 ${R} .of-figure[data-art="avatar"] .of-figure-img {
   object-fit: cover; object-position: 50% 18%; border-radius: 999px 999px 40% 40% / 999px 999px 30% 30%;
   box-shadow: 0 0 0 3px var(--of-wish-ring), 0 0 0 9px rgb(230 201 138 / 0.22), 0 24px 50px rgb(0 0 0 / 0.3);
 }
-/* His tap zones: invisible over the art (a soft glow on hover, a dashed ring on focus), labelled pills without it. */
-${R} .of-tap-zones { position: absolute; inset: 0; }
+/* His tap zones: invisible over the art (a soft glow on hover, a dashed ring on focus), labelled pills without it.
+   A zone stops at the cell's inline start (--of-cell-start, in the art's own box), so the rail never covers one. */
+${R} .of-tap-zones {
+  position: absolute; inset: 0;
+  --of-cell-start: max((100% - 100cqw) / 2, 100% - 100cqw - 12px);
+}
 ${R} .of-tap-zone {
   position: absolute; padding: 0; border: 0; border-radius: 46%; background: transparent; cursor: pointer;
   pointer-events: auto;
 }
-${R} .of-tap-zone[data-zone="head"] { left: 33%; top: 2%; width: 34%; height: 16%; }
-${R} .of-tap-zone[data-zone="heart"] { left: 34%; top: 23%; width: 32%; height: 15%; }
-${R} .of-tap-zone[data-zone="hand"] { left: 14%; top: 42%; width: 72%; height: 14%; }
+${R} .of-tap-zone[data-zone="head"] { inset-inline: max(33%, var(--of-cell-start)) 33%; top: 2%; height: 16%; }
+${R} .of-tap-zone[data-zone="heart"] { inset-inline: max(34%, var(--of-cell-start)) 34%; top: 23%; height: 15%; }
+${R} .of-tap-zone[data-zone="hand"] { inset-inline: max(14%, var(--of-cell-start)) 14%; top: 42%; height: 14%; }
 ${R} .of-tap-zone:hover { background: radial-gradient(closest-side, rgb(255 255 255 / 0.14), transparent); }
 ${R} .of-tap-zone:focus-visible {
   outline: 2px dashed var(--of-focus); outline-offset: 0;
   background: radial-gradient(closest-side, var(--of-glow-soft), transparent);
 }
-${R} .of-tap-pills { position: relative; display: flex; justify-content: center; gap: 6px; pointer-events: auto; }
+${R} .of-tap-pills {
+  position: relative; display: flex; justify-content: center; gap: 6px; max-width: 100%; pointer-events: auto;
+}
 ${R} .of-tap-pill {
-  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 60px;
-  min-height: 54px; padding: 6px 4px; border-radius: 18px; font-weight: 700; font-size: 0.72rem; cursor: pointer;
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  width: 60px; min-width: 0; min-height: 54px; padding: 6px 4px; border-radius: 18px; overflow-wrap: anywhere;
+  font-weight: 700; font-size: 0.72rem; cursor: pointer;
 }
 ${R} .of-tap-pill svg { color: var(--of-accent-text); }
 ${R} .of-tap-pill:hover { background: var(--of-surface-strong); }
@@ -1438,12 +1467,20 @@ ${R} .of-tap-burst[data-zone="heart"] { top: 30%; }
 ${R} .of-tap-burst[data-zone="hand"] { top: 49%; }
 ${R} .of-tap-pills .of-tap-burst { top: -60%; }
 
-/* The rows over the figure let taps through to it; only what they hold takes the pointer. */
-${R} :is(.of-home-top, .of-home-middle, .of-home-foot) { pointer-events: none; }
+/* The note, the rail and the nameplate sit over the art; only what they hold takes the pointer. */
+${R} :is(.of-home-top, .of-home-rail, .of-home-foot) { pointer-events: none; }
 ${R} :is(.of-home-top, .of-home-rail, .of-home-foot) > * { pointer-events: auto; }
-${R} .of-home-top { position: relative; z-index: 2; display: flex; justify-content: center; padding-top: 4px; }
-${R} .of-home-middle { position: relative; z-index: 2; min-height: 0; display: flex; align-items: flex-end; }
-${R} .of-home-rail { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+${R} .of-home-top {
+  grid-area: top; position: relative; z-index: 2; min-height: 0; display: flex; justify-content: center;
+  padding-top: 4px;
+}
+/* The rail stands at the inline start, as wide as its widest button up to 11rem (less on a narrow stage): a longer
+   label is cut short (the Him option) or wraps. It ends 16 px over the dock, clear of the Wish orb rising out of it. */
+${R} .of-home-rail {
+  grid-area: rail; align-self: end; position: relative; z-index: 2; max-width: min(11rem, 46cqw); margin-bottom: 16px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+}
+${R} .of-home-rail > * { max-width: 100%; }
 ${R} .of-home-action {
   display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding-block: 0; padding-inline: 11px 15px;
   border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 0.82rem; letter-spacing: 0.02em;
@@ -1456,6 +1493,7 @@ ${R} .of-home-badge {
   background: linear-gradient(135deg, #f3dcaa, ${PALETTE.rose}); box-shadow: 0 0 10px var(--of-glow-soft);
 }
 ${R} .of-himme { display: inline-flex; gap: 3px; margin: 0; padding: 3px; border-radius: 999px; min-width: 0; }
+${R} .of-himme-option + .of-himme-option { flex: none; }
 ${R} .of-himme-option {
   position: relative; display: inline-flex; align-items: center; min-height: 34px; max-width: 8.5rem; padding: 0 13px;
   border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 0.82rem; color: var(--of-text-soft);
@@ -1469,8 +1507,10 @@ ${R} .of-himme-option[data-checked="true"] {
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 3px 12px var(--of-glow-soft);
 }
 ${R} .of-himme-option:has(input:focus-visible) { outline: 2px solid var(--of-focus); outline-offset: 2px; }
+/* His line, at the top of the figure's cell (aria-hidden, and it lets taps through). */
 ${R} .of-home-bubble {
-  position: absolute; top: 4%; inset-inline-end: 0; z-index: 3; max-width: min(64%, 270px); margin: 0; padding: 11px 16px;
+  grid-area: main; align-self: start; justify-self: end; position: relative; z-index: 3; max-width: min(100%, 270px);
+  margin: 4px 0 0; padding: 11px 16px;
   border-radius: 20px 20px 20px 6px; pointer-events: none;
   font-family: var(--of-font-display); font-style: italic; font-weight: 600; font-size: 1.14rem; line-height: 1.3;
   box-shadow: inset 0 1px 0 var(--of-highlight), var(--of-panel-shadow),
@@ -1478,21 +1518,20 @@ ${R} .of-home-bubble {
   animation: of-bubble 4.6s var(--of-ease) both;
 }
 ${R}[dir="rtl"] .of-home-bubble { border-radius: 20px 20px 6px 20px; }
-/* Beside a medallion (no full-body look) the bubble takes the free side under the note. */
-${R} .of-home[data-figure="medallion"] .of-home-bubble {
-  inset-inline-end: auto; inset-inline-start: 0; border-radius: 20px 20px 6px 20px;
-}
+/* Beside a medallion (no full-body look) the bubble takes the cell's inline start. */
+${R} .of-home[data-figure="medallion"] .of-home-bubble { justify-self: start; border-radius: 20px 20px 6px 20px; }
 ${R}[dir="rtl"] .of-home[data-figure="medallion"] .of-home-bubble { border-radius: 20px 20px 20px 6px; }
 ${R} .of-home-bubble[data-mode="cold"] { font-style: normal; color: var(--of-text-soft); }
 ${R} .of-home-bubble[data-mode="annoyed"] { box-shadow: var(--of-panel-shadow), 0 0 0 1px rgb(240 138 164 / 0.7); }
 ${R} .of-home-foot { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 ${R} .of-home-plate {
-  display: flex; flex-direction: column; align-items: flex-end; gap: 3px; max-width: 78%; padding: 8px 16px 9px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 3px; max-width: 100%; padding: 8px 16px 9px;
   border-radius: 20px 20px 6px 20px; text-align: end; border-inline-end: 3px solid var(--of-li-accent);
 }
 ${R}[dir="rtl"] .of-home-plate { border-radius: 20px 20px 20px 6px; }
+/* Sized to keep a name of two short words on one line beside the rail on a narrow stage (a longer one wraps). */
 ${R} .of-home-name {
-  font-family: var(--of-font-display); font-weight: 600; font-size: clamp(1.5rem, 7.4cqw, 2.05rem); line-height: 1.02;
+  font-family: var(--of-font-display); font-weight: 600; font-size: clamp(1.3rem, 6.2cqw, 2.05rem); line-height: 1.02;
   overflow-wrap: anywhere; padding-bottom: 0.04em;
 }
 ${R} .of-home-name:focus { outline: none; }
@@ -1503,10 +1542,12 @@ ${R} .of-mood-chip {
 }
 ${R} .of-mood-chip svg { flex: none; color: var(--of-champagne-text); }
 
-/* The message of the day: a slip of paper taped over the scene, in his handwriting. Paper and ink in both looks. */
+/* The message of the day: a slip of paper taped over the scene, in his handwriting. Paper and ink in both looks. On a
+   short stage its row gives way to the rail and his cell, and the text scrolls inside it (Play and Reply stay). */
 ${R} .of-note {
   --of-focus: #8E3F5E; --of-paper-ink: #3a2a42;
-  position: relative; width: min(100%, 340px); padding: 14px 16px 10px; border-radius: 4px 16px 6px 18px;
+  position: relative; display: flex; flex-direction: column; width: min(100%, 340px); max-height: 100%;
+  padding: 14px 16px 10px; border-radius: 4px 16px 6px 18px;
   color: var(--of-paper-ink);
   background:
     repeating-linear-gradient(180deg, transparent 0 27px, rgb(160 77 107 / 0.1) 27px 28px) 0 40px / 100% calc(100% - 52px) no-repeat,
@@ -1534,10 +1575,11 @@ ${R} .of-note-fold {
   padding: 0; border: 0; border-radius: 50%; background: transparent; color: #8e3f5e; cursor: pointer;
 }
 ${R} .of-note-fold:hover { background: rgb(160 77 107 / 0.1); }
-${R} .of-note-body { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+${R} .of-note-body { display: flex; flex-direction: column; gap: 8px; min-height: 0; margin-top: 6px; }
 ${R} .of-note-body[hidden] { display: none; }
 ${R} .of-note-text {
-  font-family: var(--of-font-hand); font-weight: 500; font-size: 1.5rem; line-height: 1.14; overflow-wrap: anywhere;
+  min-height: 0; overflow-y: auto; font-family: var(--of-font-hand); font-weight: 500; font-size: 1.5rem;
+  line-height: 1.14; overflow-wrap: anywhere;
 }
 ${R} .of-note-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 ${R} .of-note-sign {
@@ -2327,6 +2369,8 @@ const MOTION_RULES = `
 @keyframes of-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes of-rise { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
 @keyframes of-twinkle { from { opacity: calc(var(--of-star-opacity) * 0.55); } to { opacity: var(--of-star-opacity); } }
+/* Home's stars twinkle within the sky's own opacity (none at dawn or by day). */
+@keyframes of-home-twinkle { from { opacity: calc(var(--of-home-stars, 0) * 0.55); } to { opacity: var(--of-home-stars, 0); } }
 @keyframes of-drift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(14%, 8%, 0) scale(1.12); } }
 @keyframes of-spin { to { transform: rotate(360deg); } }
 @keyframes of-sheen { 0%, 62% { transform: translateX(-70%); } 100% { transform: translateX(70%); } }

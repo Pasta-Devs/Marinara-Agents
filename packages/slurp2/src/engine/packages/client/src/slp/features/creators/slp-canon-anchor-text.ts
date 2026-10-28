@@ -14,6 +14,8 @@ export type SlpCanonAnchors = {
   routine?: { time: string; activity: string }[];
   /** What must always hold about them. Absent until the card was read for them. */
   essentials?: string[];
+  /** The page's niche (it weighs post jobs); not edited here. */
+  niches?: { main: string | null; side: string[] };
 };
 
 export type SlpCanonAnchorDraft = Record<
@@ -44,8 +46,12 @@ export function slpCanonAnchorDraft(anchors: SlpCanonAnchors | null): SlpCanonAn
   };
 }
 
-/** Back to anchors. The palette is not edited here, so the stored one is kept. */
-export function slpCanonAnchorsFromDraft(draft: SlpCanonAnchorDraft, palette: Record<string, number>): SlpCanonAnchors {
+/** Back to anchors. The palette and niches are not edited here, so the stored ones are kept. */
+export function slpCanonAnchorsFromDraft(
+  draft: SlpCanonAnchorDraft,
+  palette: Record<string, number>,
+  niches?: SlpCanonAnchors["niches"],
+): SlpCanonAnchors {
   const heatMin = Math.min(3, Math.max(0, draft.heatMin));
   return {
     people: lines(draft.people).map((line) => {
@@ -64,5 +70,6 @@ export function slpCanonAnchorsFromDraft(draft: SlpCanonAnchorDraft, palette: Re
       return match ? [{ time: match[1]!, activity: match[2]!.trim() }] : [];
     }),
     essentials: lines(draft.essentials),
+    ...(niches ? { niches } : {}),
   };
 }
