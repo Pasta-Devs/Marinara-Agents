@@ -202,7 +202,8 @@ test("Otome Forge: the wizard makes a world, asks the 18+ gate for Explicit, and
   // The stage: 9:16 and centred on desktop, full-bleed on a phone.
   const stage = (await root.locator(".of-stage").boundingBox())!;
   const viewport = page.viewportSize()!;
-  if (mobile) expect(Math.round(stage.width)).toBe(viewport.width);
+  // Full-bleed on a phone: the stage spans the viewport but for its 1px edge on each side.
+  if (mobile) expect(Math.abs(stage.width - viewport.width)).toBeLessThanOrEqual(2);
   else expect(Math.abs(stage.width / stage.height - 9 / 16)).toBeLessThan(0.01);
   await page.screenshot({ path: testInfo.outputPath("01-picker.png") });
 
