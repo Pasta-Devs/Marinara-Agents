@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.0.9 — 2026-10-28
+
+- Every prompt that writes the story or a character's words asks the model to read each character's mind more carefully: what they know, want and feel.
+- In NSFW mode the content contract opens by stating that the request complies with the adult fiction content policy.
+
 ## 0.0.8 — 2026-10-28
 
 - Remind Me, from Home: a month of your story's days, with each love interest's birthday, the day your story began, its firsts with each love interest, and your own birthday if you add it (kept only on this device).
