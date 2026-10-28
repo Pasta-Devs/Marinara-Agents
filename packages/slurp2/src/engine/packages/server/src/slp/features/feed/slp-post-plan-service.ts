@@ -359,13 +359,23 @@ export async function planSlurpPost(
       ? await topSlurpDemandTrend(db, account.id, at).catch(() => null)
       : null;
   // What Long-Term Memory remembers about them that fits this beat (none without a beat: their name).
-  const noodle = createSlurpStorage(db);
-  const { lines: memories } = await recallSlurpMemories({
-    settings: await noodle.getSettings(),
-    source: await noodle.resolveAccountSource(account as SlurpAccount),
-    disclosureMode: account.settings.privacy.identityDisclosure ?? "open",
-    queryText: [beat?.line, beat?.place, beat?.anchor].filter(Boolean).join(" ") || account.displayName,
-  }).catch(() => ({ lines: [] as string[] }));
+  // The settings and source lookups are part of it: no failure here fails the post.
+  const memories = await (async () => {
+    try {
+      const noodle = createSlurpStorage(db);
+      return (
+        await recallSlurpMemories({
+          settings: await noodle.getSettings(),
+          source: await noodle.resolveAccountSource(account as SlurpAccount),
+          disclosureMode: account.settings.privacy.identityDisclosure ?? "open",
+          queryText: [beat?.line, beat?.place, beat?.anchor].filter(Boolean).join(" ") || account.displayName,
+        })
+      ).lines;
+    } catch (error) {
+      logger.warn(error, "[slurp] Could not read memories for a post; it is written without them");
+      return [] as string[];
+    }
+  })();
   // What this Creator may use about themselves in this post: their own public and private notes,
   // and what they have been doing. A fan's thread never reaches a post; `slurpContinuityReadable`
   // decides that, not this call site.

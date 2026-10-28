@@ -19,7 +19,10 @@ export async function slurpReplyContinuity(
 ): Promise<string> {
   const { lines: memories } = await recallSlurpMemories({
     ...recall,
-    queryText: input.history.findLast((message) => message.role === "viewer")?.content ?? input.creator.displayName,
+    // A tip or picture has no words: ask about the last thing the fan actually said.
+    queryText:
+      input.history.findLast((message) => message.role === "viewer" && message.content.trim())?.content ??
+      input.creator.displayName,
     personaId: slurpRecallPersonaId(input.viewer, recall.viewerPage, recall.fanVoice),
   });
   const ledger = input.threadId

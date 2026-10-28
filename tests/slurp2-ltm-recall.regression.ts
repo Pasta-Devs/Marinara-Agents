@@ -94,7 +94,7 @@ async function main() {
       characterIds: ["c1"],
       personaId: undefined,
       mode: "roleplay",
-      maxTokens: 800,
+      maxTokens: 4_000,
       whole: true,
       signal: undefined,
     },
@@ -108,7 +108,31 @@ async function main() {
 
   calls = fake(() => ({ version: 1, sections }));
   await ask({ settings: { flavourFromAgents: true, memoryRecall: "relevant" } });
-  assert.equal(calls[0]?.whole, false, "the relevant-parts choice reaches Long-Term Memory");
+  assert.deepEqual(
+    [calls[0]?.whole, calls[0]?.maxTokens],
+    [false, 800],
+    "the relevant-parts choice reaches Long-Term Memory with its small budget",
+  );
+
+  // Long-Term Memory skips a whole memory that does not fit the budget, so whole mode asks for the ceiling.
+  service = {
+    version: 1,
+    recall: async (input: Call) => {
+      const budget = input.maxTokens as number;
+      return {
+        version: 1,
+        sections: [{ noteId: "long", type: "character", text: "Kai ".repeat(1_000) }].filter(
+          (section) => Math.ceil(section.text.length / 4) <= budget,
+        ),
+      };
+    },
+  };
+  assert.equal((await ask()).lines.length, 1, "a long character note still reaches a whole-memory prompt");
+  assert.equal(
+    (await ask({ settings: { flavourFromAgents: true, memoryRecall: "relevant" } })).lines.length,
+    0,
+    "the ranked branch keeps its small budget",
+  );
 
   calls = fake(() => ({ version: 1, sections }));
   await ask({ source: { kind: "persona", entityId: "p1" }, personaId: "p9" });
@@ -153,6 +177,11 @@ async function main() {
   fake(() => null);
   assert.deepEqual(await ask(), { status: "off", lines: [] });
   assert.equal(recall.lastSlurpMemoryStatus(), "off");
+  assert.deepEqual(
+    await ask({ signal: AbortSignal.abort() }),
+    { status: "error", lines: [] },
+    "a call that timed out is not reported as sharing switched off",
+  );
   service = {
     recall: async () => {
       throw new Error("boom");
@@ -236,6 +265,17 @@ async function main() {
     fanVoice: undefined,
   });
   assert.equal(dmCalls.at(-1)?.queryText, "Kai", "a Creator-started DM asks about the Creator");
+  const dmWith = (history: { role: string; content: string }[]) =>
+    reply.slurpReplyContinuity(dmInput(history), {
+      ...base,
+      disclosureMode: "open",
+      viewerPage: page("open"),
+      fanVoice: undefined,
+    });
+  await dmWith([...fanSays, { role: "viewer", content: "" }]);
+  assert.equal(dmCalls.at(-1)?.queryText, "how was the night shift", "a tip or picture does not blank the question");
+  await dmWith([{ role: "viewer", content: "  \n " }]);
+  assert.equal(dmCalls.at(-1)?.queryText, "Kai", "no words from the fan asks about the Creator");
   const before = dmCalls.length;
   await reply.slurpReplyContinuity(dmInput(fanSays), {
     ...base,
@@ -263,9 +303,10 @@ async function main() {
   const plan = server("features/feed/slp-post-plan-service.ts");
   assert.match(
     plan,
-    /recallSlurpMemories\(\{\s*settings: await noodle\.getSettings\(\),\s*source: await noodle\.resolveAccountSource\(account as SlurpAccount\),\s*disclosureMode: account\.settings\.privacy\.identityDisclosure \?\? "open",\s*queryText: \[beat\?\.line, beat\?\.place, beat\?\.anchor\]/u,
+    /try \{\s*const noodle = createSlurpStorage\(db\);\s*return \(\s*await recallSlurpMemories\(\{\s*settings: await noodle\.getSettings\(\),\s*source: await noodle\.resolveAccountSource\(account as SlurpAccount\),\s*disclosureMode: account\.settings\.privacy\.identityDisclosure \?\? "open",\s*queryText: \[beat\?\.line, beat\?\.place, beat\?\.anchor\]/u,
     "a post asks about its beat, for the Creator's own source and disclosure",
   );
+  assert.match(plan, /Could not read memories for a post; it is written without them/u, "no lookup fails the post");
   assert.match(plan, /slurpContinuityInstruction\(\{ \.\.\.ledger, memories \}\)/u);
   assert.match(
     plan,
@@ -273,7 +314,11 @@ async function main() {
     "a failed ledger read keeps the memories",
   );
   const dm = server("features/messages/slp-reply-continuity.ts");
-  assert.match(dm, /message\.role === "viewer"\)\?\.content/u, "a reply asks about the fan's last message");
+  assert.match(
+    dm,
+    /message\.role === "viewer" && message\.content\.trim\(\)\)\?\.content/u,
+    "a reply asks about the fan's last message",
+  );
   assert.match(dm, /personaId: slurpRecallPersonaId\(input\.viewer, recall\.viewerPage, recall\.fanVoice\)/u);
   assert.match(dm, /slurpContinuityInstruction\(\{ \.\.\.ledger, threadId: input\.threadId, memories \}\)/u);
   assert.match(

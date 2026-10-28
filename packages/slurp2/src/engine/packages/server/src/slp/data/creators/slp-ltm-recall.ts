@@ -14,7 +14,10 @@ import type { SlurpSettings } from "../../modules/settings/slp-settings.js";
 const SERVICE = "long-term-memory:recall";
 const MAX_LINES = 6;
 const MAX_QUERY = 8_000;
-const MAX_TOKENS = 800;
+// Whole memories are skipped, never cut, when over the budget: ask for the service ceiling and let the line caps
+// below bound the prompt. Relevant parts are ranked into a small budget.
+const WHOLE_TOKENS = 4_000;
+const RELEVANT_TOKENS = 800;
 const MAX_LINE = 300;
 const TIMEOUT_MS = 5_000;
 
@@ -66,17 +69,20 @@ export async function recallSlurpMemories(input: {
   try {
     const service = getCapabilityService<LtmRecall>(SERVICE);
     if (!service?.recall) return done("missing");
+    const whole = input.settings.memoryRecall !== "relevant";
+    const signal = input.signal ?? AbortSignal.timeout(TIMEOUT_MS);
     const answer = await service.recall({
       caller: "slurp2",
       queryText,
       characterIds: source.kind === "character" ? [source.entityId] : [],
       personaId: source.kind === "persona" ? source.entityId : input.personaId,
       mode: "roleplay",
-      maxTokens: MAX_TOKENS,
-      whole: input.settings.memoryRecall !== "relevant",
-      signal: input.signal ?? AbortSignal.timeout(TIMEOUT_MS),
+      maxTokens: whole ? WHOLE_TOKENS : RELEVANT_TOKENS,
+      whole,
+      signal,
     });
-    if (!answer) return done("off");
+    // It also answers null when the call timed out, which is not the same as its sharing switch being off.
+    if (!answer) return done(signal.aborted ? "error" : "off");
     const lines = (answer.sections ?? [])
       .map((section) => {
         const title = collapse(section.title);
