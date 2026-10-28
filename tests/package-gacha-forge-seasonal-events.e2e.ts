@@ -131,6 +131,7 @@ for (const theme of ["dark", "light"]) {
           });
         if (
           path.startsWith("/story-event") ||
+          path.startsWith("/preforge") ||
           path === "/beat/mark" ||
           path === "/story/cancel" ||
           path === "/run/sources" ||
@@ -145,9 +146,7 @@ for (const theme of ["dark", "light"]) {
           json:
             path === "/setup/draft"
               ? { ok: true, draft: null }
-              : path === "/preforge"
-                ? { ok: true, preforge: { mode: "off", locked: false } }
-                : { ok: true, chapters: [], locations: [], memory: { phase: "ready", retryable: false } },
+              : { ok: true, chapters: [], locations: [], memory: { phase: "ready", retryable: false } },
         });
       });
       await page.goto("/");
@@ -275,6 +274,9 @@ for (const theme of ["dark", "light"]) {
       await page.screenshot({ path: testInfo.outputPath(`seasonal-events-${theme}.png`) });
       await card.locator("[data-story-event-open]").click();
       await expect.poll(() => requests.filter((row) => row.path === "/story-event/plan").length).toBeGreaterThan(0);
+      // The event's pre-forge asks the main route with its event key (pre-forge is Off in this fixture).
+      await expect.poll(() => requests.find((row) => row.path === "/preforge/start")?.body.chapter).toBe("event-1");
+      expect(requests.some((row) => row.path === "/story-event/preforge")).toBe(false);
       await expect(forge.locator("[data-play]").first()).toBeVisible();
       await forge.locator("[data-play]").first().click();
       await expect.poll(() => requests.filter((row) => row.path === "/story-event/beat").length).toBeGreaterThan(0);

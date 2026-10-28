@@ -29,4 +29,14 @@ export const forgeSeasonalEnglish = {
   "events.openFailed": "The event could not be opened. Finish the current chapter, then try again.",
   "events.toggleFailed": "The setting could not be saved.",
   "events.archive": "Played story events",
+  "events.choice.body":
+    "A story event: seven scenes and three fights. Chapter {chapter} stays where it is, but waits until you finish.",
+  "events.choice.open": "Story event \u00b7 Open",
+  "events.choice.waits": "The main story waits until you finish it.",
+  "events.forge.eyebrow": "Forging a story event",
+  "events.forge.note": "story event",
+  "events.forge.foot":
+    "Forging {title} from everything that has happened \u2014 seven scenes and three fights, written before you play them.",
+  "events.forge.error": "Couldn't read the forged event.",
+  "events.forge.errorBody": "The model's event plan couldn't be read. Nothing was saved.",
 };

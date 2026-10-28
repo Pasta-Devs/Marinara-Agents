@@ -6,7 +6,8 @@ Seasonal story events are optional, self-contained story and combat adventures i
 
 - Enable Seasonal events beside a smaller Player choices control in setup or Story Continuity.
 - An enabled world prepares the current event overview, known cast, theme and bounded rewards before the player starts its detailed story. Generate optional banner image, animation and soundtrack through the existing media settings and providers.
-- At a main chapter boundary, the player can choose the event instead of the next chapter. Detailed chapters are written then, grounded in current story continuity and authored character canon.
+- At a main chapter boundary, the player can choose the event instead of the next chapter: Chapters → What happens next offers it beside the next chapter and any Character Story while the next chapter is not forged yet and no Character Story is open (otherwise Events → Story events starts it), and starts it the way a Character Story starts. Detailed chapters are written then, grounded in current story continuity and authored character canon.
+- With Pre-forge story on, a started event is pre-forged like a main chapter on the same chain: scenes ahead at no Vigor cost, fights designed after the scene before them, art in Story and images, and the same pre-forge bar, Cancel and Resume. Pre-forge stops once the event ends or events are turned off.
 - The event runs for 21 local-calendar days using the existing timezone contract. Persist its window and expiry; do not recreate it on refresh, clock changes or restart. Skip missed windows instead of generating a paid backlog.
 - Expiry closes new progress and rewards. Played scenes remain in Chapters for rereading. Disabling events must preserve earned rewards and played history.
 
