@@ -361,7 +361,7 @@ async function openHome(page: Page): Promise<Locator> {
     );
   }, appVersion);
   await page.goto("/");
-  await page.getByRole("tab", { name: "Open Otome Forge" }).click();
+  await page.getByRole("tab", { name: "Open Otome Hearth" }).click();
   const root = page.locator("marinara-capability-otome-forge .of-root");
   await expect(root).toBeVisible({ timeout: 60_000 });
   return root;
@@ -447,7 +447,7 @@ test("Otome Forge Remind Me: the calendar, the tracker off by default, hearts, a
   expect(tabBox!.x + tabBox!.width).toBeLessThanOrEqual(stripBox!.x + stripBox!.width + 1);
   const toggle = root.getByRole("switch", { name: "Period tracker — for anyone who has periods. Off by default." });
   await expect(toggle).not.toBeChecked();
-  await expect(root.getByText("Stored only in Otome Forge's storage on this device.")).toBeVisible();
+  await expect(root.getByText("Stored only in Otome Hearth's storage on this device.")).toBeVisible();
   await toggle.check();
   await expect(
     root.getByText(
@@ -618,7 +618,7 @@ test("Otome Forge Remind Me with its storage blocked, at reduced motion in Pearl
     root.getByText("This browser didn’t keep that change: it lasts only while this screen is open."),
   ).toBeVisible();
   await root.getByRole("button", { name: "Delete all cycle data" }).click();
-  await expect(root.getByText(/Cleared here. This browser blocks Otome Forge’s storage/)).toBeVisible();
+  await expect(root.getByText(/Cleared here. This browser blocks Otome Hearth’s storage/)).toBeVisible();
   await expect(toggle).not.toBeChecked();
   const breathe = await root.locator(".of-screen").evaluate((element) => getComputedStyle(element).animationName);
   expect(breathe).toBe("none");
