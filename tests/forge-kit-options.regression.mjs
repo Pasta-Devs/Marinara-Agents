@@ -495,13 +495,13 @@ test("(a, b, c) image reference logs keep GF's prefix by default and use another
     generateBannerArt: async (options) => options,
   });
   const format =
-    "%s: avatar references resolved for %d/%d subjects (%d distinct); Engine/provider reference limits still apply";
+    "%s: identity references resolved for %d/%d subjects, %d worn outfit(s); sending %d distinct of at most %d (a provider may keep fewer)";
   const gf = capture();
   await forgeWrapImageReferenceClient(client(), gf.logger).generatePortrait({ unit: { kind: "character" } });
-  assert.deepEqual(gf.calls, [["warn", `[gacha-forge] ${format}`, "generatePortrait", 0, 1, 0]]);
+  assert.deepEqual(gf.calls, [["warn", `[gacha-forge] ${format}`, "generatePortrait", 0, 1, 0, 0, 4]]);
   const otome = capture();
   await forgeWrapImageReferenceClient(client(), otome.logger, { logPrefix: "[otome-forge]" }).generatePortrait({
     unit: { kind: "character" },
   });
-  assert.deepEqual(otome.calls, [["warn", `[otome-forge] ${format}`, "generatePortrait", 0, 1, 0]]);
+  assert.deepEqual(otome.calls, [["warn", `[otome-forge] ${format}`, "generatePortrait", 0, 1, 0, 0, 4]]);
 });

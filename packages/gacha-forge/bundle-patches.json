@@ -2229,6 +2229,20 @@
               "replace": "pay:forgeSeasonalNodePay(this,this._nodePay&&this._nodePay[this._difficulty])"
             }
           ]
+        },
+        {
+          "version": "1.27.1",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.27.0\"",
+              "replace": "ds=\"1.27.1\""
+            },
+            {
+              "find": "var oy=[{version:null,new:[",
+              "replace": "var oy=[{version:null,fixed:[\"Scene, banner and Bond art now sends each character's avatar and, when the picture shows them in the outfit they have on, that outfit too, faces first. Banners and Bond backgrounds now paint a unit in the outfit it has on while Outfits is on. A new portrait or outfit is painted from the face alone, so the outfit worn now no longer leaks into it.\"]},{version:\"1.27.0\",new:["
+            }
+          ]
         }
       ]
     },
@@ -3941,6 +3955,32 @@
             {
               "find": "beats:yo(x,M),after:Math.max(0,Math.round(Number(x[M<=1?\"after\":\"after\"+M])||0))})",
               "replace": "beats:yo(x,M),after:Math.max(0,Math.round(Number(x[M<=1?\"after\":\"after\"+M])||0)),opened:Math.max(0,Number(x[M<=1?\"opened\":\"opened\"+M])||0)})"
+            }
+          ]
+        },
+        {
+          "version": "1.27.1",
+          "commits": [],
+          "edits": [
+            {
+              "find": "if(ma(s)&&k){let N=await Rw(s,c,d);if(N)return N}",
+              "replace": "if(ma(s)&&k){let N=await Rw(s,c,d);if(N)return{...N,worn:!0}}",
+              "reason": "Say when a scene subject is painted in its worn outfit"
+            },
+            {
+              "find": "appearance:re||l(N.appearance),identitySex:l(N.identitySex)}}",
+              "replace": "appearance:re||l(N.appearance),identitySex:l(N.identitySex),wornOutfit:K.worn?l(N.wornOutfit):\"\"}}",
+              "reason": "A scene subject keeps wornOutfit only when its clothes are that outfit, so the outfit reference never contradicts the prompt"
+            },
+            {
+              "find": "let Q=(await Promise.all(L.map(j=>ya(w,j)))).filter(Boolean);",
+              "replace": "let Q=(await Promise.all(L.map(async j=>{let N=await ya(w,j);return N&&l(N.wornOutfit)?ch(w,j,N,\"\",!1,!0):N}))).filter(Boolean);",
+              "reason": "A banner paints a unit that has an outfit on in that outfit, as a chat photo does, so its prompt and outfit reference agree; a unit without one keeps its whole look"
+            },
+            {
+              "find": "let re=await ya(c,d)||H,oe=",
+              "replace": "let re=await ya(c,d)||H;l(re.wornOutfit)&&(re=await ch(c,d,re,\"\",!1,!0));let oe=",
+              "reason": "A Bond background paints a unit that has an outfit on in that outfit, so its prompt and outfit reference agree"
             }
           ]
         }
