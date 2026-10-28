@@ -1,5 +1,10 @@
 # Long-Term Memory changelog
 
+## 1.5.4 — 2026-10-28
+
+- Re-extract says why it is waiting while settings load, and Run maintenance keeps your place after it finishes.
+- Loading placeholders stop pulsing when reduced motion is on, source tool results are announced to screen readers, and a save waiting on recall no longer ends in a stray colon.
+
 ## 1.5.3 — 2026-10-27
 
 - Long-Term Memory now has a Korean interface. It follows the Engine's language setting and shows English for any text without a Korean version. The translation is machine-made and awaits review by a Korean speaker.

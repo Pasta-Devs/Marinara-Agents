@@ -14,7 +14,7 @@ import {
 import type { LtmStatusResponse } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { errorMessage, queryKeys, request } from "./api";
 import { LongTermMemoryNavigation } from "./LongTermMemoryNavigation";
-import { Button, IconButton, InfoPopover, StatusSurface } from "./shared-controls";
+import { Button, IconButton, InfoPopover, StatusSurface, lockedActionProps } from "./shared-controls";
 import type {
   CapabilityProps,
   LongTermMemoryDestination,
@@ -317,10 +317,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     }
   };
   const repairButton = () => (
-    <Button
-      {...(repairPending ? ({ "aria-disabled": true, className: "opacity-50" } as const) : {})}
-      onClick={() => void repairRecall()}
-    >
+    <Button {...lockedActionProps(repairPending)} onClick={() => void repairRecall()}>
       <RefreshCw
         aria-hidden="true"
         size="0.75rem"
@@ -399,9 +396,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       setActivationPending(false);
     }
   };
-  const navigationBusyProps = navigationSaveInFlight
-    ? ({ "aria-disabled": true, className: "opacity-50" } as const)
-    : {};
+  const navigationBusyProps = lockedActionProps(navigationSaveInFlight);
 
   return (
     <main
