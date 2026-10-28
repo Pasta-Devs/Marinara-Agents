@@ -126,7 +126,7 @@ for (const method of ["generateBannerArt", "generatePortrait", "generateOutfit"]
   });
 }
 
-test("scene character references preserve cast order, use the real persona and deduplicate bytes without a new subject cap", async () => {
+test("scene character references preserve cast order, use the real persona, deduplicate bytes and keep the Engine's four", async () => {
   const host = engine({ personas: { mari: avatar("mari") } });
   await host.client.generateBannerArt({
     ...options,
@@ -138,11 +138,11 @@ test("scene character references preserve cast order, use the real persona and d
       unit("b again", { portrait: gallery("b") }),
     ],
   });
-  assert.deepEqual(host.generations[0].referenceImages, [data("mari"), data("b"), data("c"), data("d"), data("e")]);
-  // Engine's pre-existing four-reference/provider limits remain outside the package.
+  // The Engine's avatar-generation route keeps the first four, so the package sends no more than that.
+  assert.deepEqual(host.generations[0].referenceImages, [data("mari"), data("b"), data("c"), data("d")]);
 });
 
-test("removed/unreadable card falls back only to the same unit's displayed saved outfit", async () => {
+test("removed/unreadable card falls back to the same unit's base portrait, and only a scene adds the worn outfit", async () => {
   const host = engine({
     cards: { gone: { name: "Ann", avatarPath: avatar("missing") } },
     missing: [avatar("missing")],
@@ -157,8 +157,10 @@ test("removed/unreadable card falls back only to the same unit's displayed saved
     ],
   });
   await host.client.generatePortrait({ ...options, unit: subject });
-  assert.deepEqual(host.generations[0].referenceImages, [data("winter-ann")]);
-  assert.ok(!host.requests.some(({ path }) => path.includes("other-ann") || path.includes("base-ann")));
+  assert.deepEqual(host.generations[0].referenceImages, [data("base-ann")]);
+  await host.client.generateBannerArt({ ...options, framing: "scene", scene: "At the gate", units: [subject] });
+  assert.deepEqual(host.generations[1].referenceImages, [data("base-ann"), data("winter-ann")]);
+  assert.ok(!host.requests.some(({ path }) => path.includes("other-ann")));
 });
 
 test("unavailable identity references keep text generation compatible without an invented attachment", async () => {
@@ -222,6 +224,10 @@ async function routes({
   cached = false,
   duplicate = false,
   battle = false,
+  worn = false,
+  outfitCanon = false,
+  outfits = true,
+  bond = false,
 } = {}) {
   const host = engine({
     cards: { ann: { name: "Ann", avatarPath: avatar("ann") }, anna: { name: "Anna", avatarPath: avatar("anna") } },
@@ -237,7 +243,23 @@ async function routes({
     unitId: `${runId}:unit:ann`,
     cardId: "ann",
     portrait: gallery("old-ann"),
-    outfits: [{ id: "winter", name: "Winter", prompt: "A winter coat.", tags: [], url: gallery("old-winter-ann") }],
+    // Her default clothes differ from the outfit she can wear, so a prompt shows which one it paints.
+    appearance: "A person in a red dress.",
+    imageTags: ["red dress"],
+    outfitTags: ["red dress"],
+    outfitLine: "Wearing a red dress.",
+    outfits: [
+      {
+        id: "winter",
+        name: "Winter",
+        prompt: "A winter coat.",
+        tags: [],
+        outfitTags: ["winter coat"],
+        outfitLine: "Wearing a winter coat.",
+        url: gallery("old-winter-ann"),
+      },
+    ],
+    ...(worn ? { wornOutfit: "winter" } : {}),
   });
   seed("index", "index", {
     activeRunId: runId,
@@ -254,13 +276,23 @@ async function routes({
           styleProfileId: "fixture-style",
           enemyArt: true,
           battleBackgrounds: false,
+          outfitCanon,
+          outfits,
         },
       },
     ],
   });
-  seed(`${runId}:session`, "session", { roster: {}, progress: {}, wallet: {} });
+  seed(`${runId}:session`, "session", {
+    roster: bond ? { [ann.unitId]: { bondFights: 9999 } } : {},
+    progress: {},
+    wallet: {},
+  });
   seed(ann.unitId, "unit", ann);
-  seed(`${runId}:unit:anna`, "unit", unit("Anna", { cardId: "anna" }));
+  seed(
+    `${runId}:unit:anna`,
+    "unit",
+    unit("Anna", { cardId: "anna", appearance: "A person in a grey cloak.", imageTags: ["grey cloak"] }),
+  );
   if (duplicate) seed(`${runId}:unit:ann-duplicate`, "unit", unit("Ann", { cardId: "anna" }));
   seed(`${runId}:cg:1:0`, "cg", {
     title: "At the gate",
@@ -444,6 +476,8 @@ test("actual standard banner route uses exactly the selected banner units' curre
   const result = await host.post("/banner-art", { banner: "char-standard" });
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.deepEqual(host.generations[0].referenceImages, [data("ann"), data("anna")]);
+  // A unit with nothing on keeps its whole look on a banner.
+  assert.match(host.generations[0].promptOverrides[0].prompt, /A person in a red dress\./u);
   assert.equal((await host.post("/banner-art", { banner: "char-standard" })).cached, true);
   assert.equal(host.generations.length, 1);
 });
@@ -455,4 +489,80 @@ test("actual battle enemy-art path reuses only the uniquely matched world charac
   await new Promise(setImmediate); // Let the actual background art task drain its mocked I/O.
   assert.equal(host.generations.length, 1);
   assert.deepEqual(host.generations[0].referenceImages, [data("ann")]);
+});
+
+test("actual scene-CG route sends a carded unit's card avatar and the outfit it has on, faces first", async () => {
+  const host = await routes({ worn: true, outfitCanon: true });
+  const result = await host.post("/cg-art", { chapter: 1, storyIndex: 0 });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.deepEqual(host.generations[0].referenceImages, [data("ann"), data("mari"), data("old-winter-ann")]);
+  assert.match(host.generations[0].appearance, /winter coat/u);
+});
+
+test("a scene that paints other clothes than the worn outfit never sends it", async () => {
+  // "The story uses worn outfits" is off: the scene paints Ann's default clothes.
+  const canonOff = await routes({ worn: true });
+  assert.equal((await canonOff.post("/cg-art", { chapter: 1, storyIndex: 0 })).ok, true);
+  assert.deepEqual(canonOff.generations[0].referenceImages, [data("ann"), data("mari")]);
+  assert.match(canonOff.generations[0].appearance, /red dress/u);
+  // The beat dressed her itself.
+  const dressed = await routes({
+    worn: true,
+    outfitCanon: true,
+    characters: [{ name: "Ann", wearing: "a red swimsuit" }, { name: "Mari" }],
+  });
+  assert.equal((await dressed.post("/cg-art", { chapter: 1, storyIndex: 0 })).ok, true);
+  assert.deepEqual(dressed.generations[0].referenceImages, [data("ann"), data("mari")]);
+  assert.match(dressed.generations[0].appearance, /red swimsuit/u);
+  assert.ok(![...canonOff.requests, ...dressed.requests].some(({ path }) => path.includes("old-winter-ann")));
+});
+
+test("actual banner route adds the worn outfit after both faces; portrait and outfit redo keep the face alone", async () => {
+  const host = await routes({ worn: true });
+  const banner = await host.post("/banner-art", { banner: "char-standard" });
+  assert.equal(banner.ok, true, JSON.stringify(banner));
+  assert.deepEqual(host.generations[0].referenceImages, [data("ann"), data("anna"), data("old-winter-ann")]);
+  const unitId = `${host.runId}:unit:ann`;
+  assert.equal((await host.post("/portrait", { unitId, force: true })).ok, true);
+  assert.equal((await host.post("/outfit/redo", { unitId, outfitId: "winter" })).ok, true);
+  assert.deepEqual(
+    host.generations.slice(1).map((body) => body.referenceImages),
+    [[data("ann")], [data("ann")]],
+  );
+});
+
+const prompt = (body) => body.promptOverrides[0].prompt;
+
+test("actual banner and Bond routes paint the outfit a unit has on and send it after the faces", async () => {
+  const host = await routes({ worn: true, bond: true });
+  assert.equal((await host.post("/banner-art", { banner: "char-standard" })).ok, true);
+  const unitId = `${host.runId}:unit:ann`;
+  const bond = await host.post("/bond/repaint", { unitId });
+  assert.equal(bond.ok, true, JSON.stringify(bond));
+  assert.deepEqual(
+    host.generations.map((body) => body.referenceImages),
+    [
+      [data("ann"), data("anna"), data("old-winter-ann")],
+      [data("ann"), data("old-winter-ann")],
+    ],
+  );
+  for (const body of host.generations) {
+    assert.match(prompt(body), /winter coat/u);
+    assert.doesNotMatch(prompt(body), /red dress/u);
+  }
+});
+
+test("with Outfits off, banner and Bond art paint the default clothes and send the faces alone", async () => {
+  const host = await routes({ worn: true, bond: true, outfits: false });
+  assert.equal((await host.post("/banner-art", { banner: "char-standard" })).ok, true);
+  assert.equal((await host.post("/bond/repaint", { unitId: `${host.runId}:unit:ann` })).ok, true);
+  assert.deepEqual(
+    host.generations.map((body) => body.referenceImages),
+    [[data("ann"), data("anna")], [data("ann")]],
+  );
+  for (const body of host.generations) {
+    assert.match(prompt(body), /red dress/u);
+    assert.doesNotMatch(prompt(body), /winter coat/u);
+  }
+  assert.ok(!host.requests.some(({ path }) => path.includes("old-winter-ann")));
 });
