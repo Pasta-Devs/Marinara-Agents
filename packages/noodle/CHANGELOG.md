@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## Unreleased
+
+- New, off by default: Advanced → "Use memories from Long-Term Memory". Posts can draw on what Long-Term Memory remembers about each account's character, as whole memories or only the parts that fit the posts. Turning it on asks first, and a note appears if Long-Term Memory isn't installed or isn't sharing memories.
+
 ## 1.5.10 — 2026-10-25
 
 - Posts, replies, and expanded prompt editors keep the text you are typing visible above the mobile landscape keyboard. Noodle hides its mobile navigation while the keyboard is open and restores it when you finish typing.

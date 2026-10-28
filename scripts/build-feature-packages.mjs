@@ -152,6 +152,7 @@ const noodleOwnedSourcePaths = [
   "packages/server/src/services/noodle/noodle-image-prompt.ts",
   "packages/server/src/services/noodle/noodle-image-retry.ts",
   "packages/server/src/services/noodle/noodle-interaction-policy.ts",
+  "packages/server/src/services/noodle/noodle-ltm-recall.ts",
   "packages/server/src/services/noodle/noodle-model-capabilities.ts",
   "packages/server/src/services/noodle/noodle-operation-lock.ts",
   "packages/server/src/services/noodle/noodle-participant-selection.ts",

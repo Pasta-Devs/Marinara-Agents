@@ -46,6 +46,7 @@ export const noodleKeys = {
   all: ["noodle"] as const,
   bootstrap: () => [...noodleKeys.all, "bootstrap"] as const,
   feed: () => [...noodleKeys.all, "feed"] as const,
+  memoryStatus: () => [...noodleKeys.all, "memory-status"] as const,
 };
 
 export type NoodlePostPage = {
@@ -144,6 +145,16 @@ export function useNoodleUnseenCount(personaAccount: NoodleAccount | null, enabl
   );
 }
 
+/** Why Long-Term Memory gave nothing on the latest refresh; null until one has run since the server started. */
+export function useNoodleMemoryStatus(enabled: boolean) {
+  return useQuery({
+    queryKey: noodleKeys.memoryStatus(),
+    queryFn: () => api.get<{ status: "ok" | "missing" | "off" | "error" | null }>("/noodle/memory-status"),
+    enabled,
+    staleTime: 10_000,
+  });
+}
+
 export function useUpdateNoodleSettings() {
   const qc = useQueryClient();
   return useMutation({
@@ -170,7 +181,10 @@ export function useUpdateNoodleSettings() {
         current ? { ...current, settings } : current,
       );
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: noodleKeys.memoryStatus() });
+      return qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
+    },
   });
 }
 
@@ -453,7 +467,10 @@ export function useRefreshNoodle() {
       qc.setQueryData<NoodleBootstrap | undefined>(noodleKeys.bootstrap(), (current) =>
         preservePollVotes(current, result.bootstrap),
       ),
-    onSettled: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: noodleKeys.memoryStatus() });
+      return qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
+    },
   });
 }
 
