@@ -1,5 +1,13 @@
 # Otome Forge release notes
 
+## 0.0.7 — 2026-10-28
+
+- Dates opens: pick a love interest, then play Read Them, Date Night or the Claw Machine. Every activity pays even when it goes badly; only the day's rewards are capped (400 Starlight from activities, 300 affection per love interest), never play.
+- Read Them: over five moments, pick what your love interest really feels, hear the thought behind it, and learn tells that later scenes remember.
+- Date Night: pick a place and what you both wear for three scenes of choices judged by what your love interest likes, with an optional keepsake image. During a rupture it becomes Make it right.
+- The Claw Machine makes no model or image call: take turns at a swinging claw, cheer until they cheat in their own way, and line a shelf with six plushies and one of each love interest. It plays by keyboard, with reduced motion and without images.
+- Each love interest alone remembers the games you played together.
+
 ## 0.0.5 — 2026-10-28
 
 - Home now shows the love interest you pick, or you in your own look, in a layered scene tinted by your time of day. A painted look is cut out of its background when the Engine can, and pans slowly when it cannot; with no images, initials on a gradient. Reduced motion stills it.

@@ -32,12 +32,14 @@ interface ReaderProps {
   startNode?: number | null;
   onExit: () => void;
   onHome: () => void;
+  /** Called once the last node is read, in place of the chapter's end card (a date shows its own ending, M5). */
+  onFinished?: () => void;
 }
 
 const INTERACTIVE = "button, a, input, select, textarea, summary, [role='dialog']";
 const ADVANCE_KEYS = new Set(["Enter", " ", "ArrowRight", "PageDown"]);
 
-export function Reader({ runKey, chapterKey, view, startNode, onExit, onHome }: ReaderProps) {
+export function Reader({ runKey, chapterKey, view, startNode, onExit, onHome, onFinished }: ReaderProps) {
   const { t } = useTranslation();
   const reducedMotion = useReducedMotion();
   const reader = useReader({ runKey, chapterKey, view, startNode, reducedMotion });
@@ -53,6 +55,11 @@ export function Reader({ runKey, chapterKey, view, startNode, onExit, onHome }: 
 
   const chapter = reader.detail?.chapter ?? null;
   const { beat, current } = reader;
+  const finishedRef = useRef(onFinished);
+  finishedRef.current = onFinished;
+  useEffect(() => {
+    if (reader.finished) finishedRef.current?.();
+  }, [reader.finished]);
   const protagonist = view.player.name;
   const voice = current ? voiceOf(current.segment, view.lis, protagonist) : null;
   const aftermath = current?.kind === "aftermath";
@@ -225,6 +232,7 @@ export function Reader({ runKey, chapterKey, view, startNode, onExit, onHome }: 
             levelsBefore={levelsBefore}
             onExit={onExit}
             onHome={onHome}
+            ownEnding={!!onFinished}
             onEaseOff={() => openDialog("ease")}
           />
         )}
@@ -263,6 +271,8 @@ interface BottomPanelProps {
   levelsBefore: ReadonlyMap<string, number>;
   onExit: () => void;
   onHome: () => void;
+  /** The screen that opened the reader shows the ending itself. */
+  ownEnding: boolean;
   onEaseOff: () => void;
 }
 
@@ -293,6 +303,7 @@ function BottomPanel(props: BottomPanelProps) {
       </section>
     );
   }
+  if (reader.finished && chapter && props.ownEnding) return null;
   if (reader.finished && chapter) {
     return (
       <ChapterEnd

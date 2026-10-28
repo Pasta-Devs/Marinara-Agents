@@ -2,7 +2,7 @@
 
 Otome Forge will be a single-player otome game made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. There is no real money in it.
 
-This is an early test build. You set up a story: a premise, your protagonist from one of your personas, and two to five love interests from your character cards or from original archetypes. The forge then plans the story's mystery and writes a hidden character bible for each love interest, and can paint the cast's base looks. Then you play its main chapters, come Home to the love interest you pick, and text each one on the phone. Dates and wishes arrive in later builds. The plan is in [Pasta-Devs/Marinara-Agents#1781](https://github.com/Pasta-Devs/Marinara-Agents/issues/1781).
+This is an early test build. You set up a story: a premise, your protagonist from one of your personas, and two to five love interests from your character cards or from original archetypes. The forge then plans the story's mystery and writes a hidden character bible for each love interest, and can paint the cast's base looks. Then you play its main chapters, come Home to the love interest you pick, text each one on the phone, and spend time with them in Dates. Wishes arrive in a later build. The plan is in [Pasta-Devs/Marinara-Agents#1781](https://github.com/Pasta-Devs/Marinara-Agents/issues/1781).
 
 ## Install and open it
 
@@ -38,10 +38,19 @@ Home shows the love interest you pick, or you (**Him / Me** shows their name and
 
 Each love interest has one private thread, in their own colour, with suggested replies and their faces as stickers. Only one reply is written at a time. **Close and remember** saves the conversation as a memory that only that love interest recalls, and earns 20 affection (within the daily cap for everything outside the story).
 
+## Dates
+
+Dates is where you spend time with one love interest at a time. Every activity pays even when it goes badly. Only the rewards are capped each day (400 Starlight from activities in all, and 300 affection per love interest from outside the story); play never is, and the day ends at your own midnight.
+
+- **Read Them** (one model call): over five moments, pick what your love interest really feels from three or four readings, then hear the thought behind it. The tells you learn reach later scenes.
+- **Date Night** (four model calls, plus one image for a keepsake if you want one): pick a place and what you both wear (your everyday looks until the Wardrobe opens), then three scenes of choices judged by what they like. During a rupture it becomes **Make it right**.
+- **Claw Machine** (no model calls and no images): six drops, taking turns. Hold the arrows or drag on the glass to move the claw, which swings when it stops, and drop it before ten seconds run out. On their turns, cheer: the eighth cheer makes them cheat in their own way, steadying the claw, bumping the machine, slipping you an extra try, slowing your swing or showing you where to drop. A round pays 20 Starlight, 30 more for each plush, and 30 affection. Every plush either of you wins lines your shelf: six series plushies, and one of each love interest with their portrait or initials. It plays by keyboard (arrows to move, Space to drop or held down to cheer), resolves each drop at once under reduced motion, and its sounds and vibration can be turned off.
+- Each love interest alone remembers the games you played together: they never reach the shared story summary.
+
 ## Content settings and the 18+ gate
 
 Each story has its own Heat (SFW, NSFW: Fade or NSFW: Explicit; SFW by default), Darkness (Gentle, Angst or Dark romance; Angst by default), Lines & Veils (a Line is never written; a Veil happens only off the page), and image rating (SFW, Suggestive or Explicit; SFW by default). NSFW Heat, Dark romance and the image ratings above SFW unlock only after a one-time confirmation: "I am 18 or older. Love interests are always adults. This is fiction." The confirmation is self-reported, stored with its time, and checked by the server on every change. Turning a setting down never asks, and withdrawing the confirmation turns every story back to SFW, Angst and SFW images. Love interests are always adults, and non-consent and pregnancy start as Lines.
 
 ## Your data
 
-Otome Forge keeps its saves in Marinara Engine's package storage, in documents whose ids start with `otome-forge:`, so it works alongside Gacha Forge. They travel with your backups and profile exports, and they are not isolated from other packages in the Engine's storage. Messages of the day, phone threads and line packs are saved there too. Painted looks and Home cut-outs are saved in the Global Gallery, and deleting a story deletes them too. The look you pick (Midnight, Pearl or Follow system) and an unfinished setup are kept only in this browser, in storage the Engine's page shares with other installed packages.
+Otome Forge keeps its saves in Marinara Engine's package storage, in documents whose ids start with `otome-forge:`, so it works alongside Gacha Forge. They travel with your backups and profile exports, and they are not isolated from other packages in the Engine's storage. Messages of the day, phone threads, line packs, the plush shelf and your latest Claw Machine rounds are saved there too. Painted looks and Home cut-outs are saved in the Global Gallery, and deleting a story deletes them too. The look you pick (Midnight, Pearl or Follow system) and an unfinished setup are kept only in this browser, in storage the Engine's page shares with other installed packages.

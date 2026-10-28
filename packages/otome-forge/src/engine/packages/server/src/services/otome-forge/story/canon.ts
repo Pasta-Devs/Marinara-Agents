@@ -178,7 +178,8 @@ async function sourcesOf(
     sources.push({
       id: chapter.key,
       kind: MEMORY_KIND[chapter.kind],
-      title: chapter.title || chapter.key,
+      // A date (M5) says so, so his recall knows the evening was theirs alone.
+      title: chapter.kind === "date" ? `A date: ${chapter.title || chapter.key}` : chapter.title || chapter.key,
       content,
       order,
       ...(audience ? { audience } : {}),

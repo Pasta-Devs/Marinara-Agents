@@ -9,10 +9,13 @@ import { createBackgroundQueue } from "./background-queue.js";
 import { createHandle, type OtomeRouter, type RouteDeps } from "./http.js";
 import { INDEX_ID } from "./ids.js";
 import { createOtomeMemory } from "./memory/memory.js";
+import { registerClawRoutes } from "./routes/claw.js";
+import { registerDateRoutes } from "./routes/dates.js";
 import { registerHomeRoutes } from "./routes/home.js";
 import { registerIndexRoutes } from "./routes/index.js";
 import { registerMemoryRoutes } from "./routes/memory.js";
 import { registerPhoneRoutes } from "./routes/phone.js";
+import { registerReadHimRoutes } from "./routes/read-him.js";
 import { registerRunRoutes } from "./routes/runs.js";
 import { registerSetupRoutes } from "./routes/setup.js";
 import { registerStoryRoutes } from "./routes/story.js";
@@ -52,6 +55,9 @@ export async function activate({ api }: ActivationContext) {
       registerMemoryRoutes(router, { store, handle, memory });
       registerHomeRoutes(router, deps);
       registerPhoneRoutes(router, deps);
+      registerClawRoutes(router, deps);
+      registerReadHimRoutes(router, deps);
+      registerDateRoutes(router, deps);
     },
     { prefix: "/api/otome-forge" },
   );

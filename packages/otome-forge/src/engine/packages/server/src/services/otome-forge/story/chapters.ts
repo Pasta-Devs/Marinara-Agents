@@ -322,13 +322,17 @@ export async function planNextChapter(
 
 // ── The story view ──
 
-/** GET /runs/:run/story: every chapter planned so far, and the next main chapter's candidates when it may start. */
+/**
+ * GET /runs/:run/story: every chapter planned so far but dates, and the next main chapter's candidates when it may
+ * start.
+ */
 export async function storyView(deps: { store: OtomeStore }, runId: string): Promise<StoryView> {
   const run = await readRun(deps.store, runId);
   if (!run) throw notFound("Otome Forge run");
+  // Dates (M5) are played from Dates, not listed with the story.
   const chapters = (await deps.store.listRun("chapter", runId))
     .map((record) => normalizeChapter(record.data))
-    .filter((chapter): chapter is Chapter => !!chapter)
+    .filter((chapter): chapter is Chapter => !!chapter && chapter.kind !== "date")
     .sort(
       (a, b) =>
         (mainChapterNumber(a.key) ?? Infinity) - (mainChapterNumber(b.key) ?? Infinity) ||

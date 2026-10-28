@@ -5,6 +5,8 @@
 // `.of-root[data-look]` (tokens.ts); the stage sizes itself from the panel the Engine gives it (container queries), not
 // from the window, because the Engine may show its sidebar beside the tab. Motion is calm (400–700 ms) and all of it
 // stops under prefers-reduced-motion.
+import { DATE_NIGHT_RULES } from "../screens/dates/date-night-styles";
+import { READ_HIM_RULES } from "../screens/dates/ReadHim";
 import { fontFaceCss, FONT_STACKS } from "./fonts";
 import { LOOK_TOKENS, PALETTE, RARITY, type Look } from "./tokens";
 
@@ -1754,6 +1756,366 @@ ${R} .of-gate-statement {
 }
 ${R}[dir="rtl"] .of-gate-statement { border-radius: 14px 4px 4px 14px; }`;
 
+// Dates (M5): pick who to spend time with, the activities, today's capped rewards, and the plush shelf.
+const DATES_RULES = `
+${R} .of-partners { margin: 0; min-width: 0; }
+${R} .of-partners > legend { float: inline-start; width: 100%; padding: 0; margin-bottom: 10px; }
+${R} .of-partner-list { clear: both; display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: thin; }
+${R} .of-partner {
+  flex: 0 0 auto; min-width: 86px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 10px 8px 8px; border-radius: 18px; cursor: pointer; border: 1.5px solid transparent;
+  background: var(--of-surface-hover);
+  transition: border-color 360ms var(--of-ease), background-color 360ms var(--of-ease), box-shadow 360ms var(--of-ease);
+}
+${R} .of-partner:hover { border-color: var(--of-border-strong); }
+${R} .of-partner[data-checked="true"] {
+  border-color: var(--of-li-accent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--of-li-accent) 30%, transparent), transparent 82%), var(--of-surface);
+  box-shadow: 0 6px 18px var(--of-glow-soft);
+}
+${R} .of-partner:has(input:focus-visible) { outline: 2px solid var(--of-focus); outline-offset: 2px; }
+${R} .of-partner-name {
+  max-width: 9ch; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-family: var(--of-font-display); font-weight: 600; font-size: 1.06rem; line-height: 1.1;
+}
+${R} .of-partner-level {
+  display: inline-flex; align-items: center; gap: 3px; font-size: 0.68rem; font-weight: 800; color: var(--of-accent-text);
+}
+${R} .of-meter { display: flex; flex-direction: column; gap: 5px; }
+${R} .of-meter-head { display: flex; justify-content: space-between; gap: 8px; font-size: 0.84rem; font-weight: 700; }
+${R} .of-meter-value { flex: none; font-variant-numeric: tabular-nums; color: var(--of-champagne-text); }
+${R} .of-meter-bar {
+  height: 8px; overflow: hidden; border-radius: 999px; background: var(--of-surface-hover); border: 1px solid var(--of-border);
+}
+${R} .of-meter-bar > span {
+  display: block; height: 100%; border-radius: inherit;
+  background: linear-gradient(90deg, ${PALETTE.champagne}, ${PALETTE.rose});
+  transition: inline-size 700ms var(--of-ease);
+}
+${R} .of-activities { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+${R} .of-activity {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "icon body" "icon play";
+  column-gap: 12px; row-gap: 10px; padding: 14px; border-radius: 20px;
+  border-inline-start: 3px solid var(--of-li-accent, var(--of-rose));
+}
+${R} .of-activity[data-repair] { border-inline-start-color: var(--of-danger); }
+${R} .of-activity-icon {
+  grid-area: icon; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 15px; color: ${PALETTE.ink};
+  background: linear-gradient(135deg, color-mix(in srgb, var(--of-li-accent) 40%, #fff), var(--of-li-accent));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), 0 6px 14px var(--of-glow-soft);
+}
+${R} .of-activity-body { grid-area: body; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+${R} .of-activity-title {
+  font-family: var(--of-font-display); font-weight: 600; font-size: 1.3rem; line-height: 1.08; overflow-wrap: anywhere;
+}
+${R} .of-activity-text { font-size: 0.88rem; color: var(--of-text-soft); }
+${R} .of-activity-reward {
+  display: flex; align-items: flex-start; gap: 6px; font-size: 0.8rem; font-weight: 700; color: var(--of-champagne-text);
+}
+${R} .of-activity-reward svg { flex: none; margin-top: 2px; }
+${R} .of-activity-play { grid-area: play; justify-self: start; }
+${R} .of-shelf-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+${R} .of-shelf-head .of-badge { margin: 0; }
+/* The shelf: plushies stand on planks, one plank per row. */
+${R} .of-shelf {
+  --of-row: 90px; --of-plank: color-mix(in srgb, ${PALETTE.champagne} 62%, #8a5a3c);
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); grid-auto-rows: var(--of-row);
+  gap: 0 6px; margin: 0; padding: 0 4px; list-style: none; border-radius: 12px;
+  /* One plank per row, tiled (a repeating gradient would draw a seam at the top edge). */
+  background: linear-gradient(to bottom, transparent calc(100% - 10px), var(--of-plank) calc(100% - 10px) calc(100% - 4px),
+    color-mix(in srgb, var(--of-plank) 70%, #2b2236) calc(100% - 4px)) 0 0 / 100% var(--of-row) repeat-y;
+}
+${R} .of-shelf-slot { position: relative; display: grid; place-items: end center; padding-bottom: 10px; min-width: 0; }
+${R} .of-plush { display: block; overflow: visible; }
+${R} .of-shelf-plush { width: 62px; height: 62px; filter: drop-shadow(0 4px 3px rgb(43 34 54 / 0.25)); }
+${R} .of-shelf-slot[data-owned="false"] .of-shelf-plush { filter: grayscale(1) brightness(0.4) opacity(0.3); }
+${R} .of-shelf-slot[data-owned="false"]::after {
+  content: "?"; position: absolute; left: 50%; bottom: 28px; translate: -50% 0;
+  font-family: var(--of-font-display); font-weight: 700; font-size: 1.3rem; color: var(--of-text-faint);
+}
+${R} .of-shelf-count {
+  position: absolute; top: 6px; inset-inline-end: 4px; padding: 1px 6px; border-radius: 999px;
+  font-size: 0.68rem; font-weight: 800; font-variant-numeric: tabular-nums;
+  background: var(--of-surface-strong); border: 1px solid var(--of-border);
+}
+${R} .of-shelf-new {
+  position: absolute; bottom: 58px; inset-inline-start: 50%; translate: -50% 0; rotate: -6deg; z-index: 1; padding: 1px 6px; border-radius: 999px;
+  font-size: 0.6rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: ${PALETTE.ink};
+  background: linear-gradient(135deg, #f3dcaa, ${PALETTE.champagne}); box-shadow: 0 0 10px var(--of-wish-glow);
+}
+${R} .of-shelf-slot[data-new] .of-shelf-plush { animation: of-claw-land 760ms var(--of-ease) both; }`;
+
+// The Claw Machine (M5): the cabinet, the claw on its cable (driven by custom properties the game writes each frame:
+// --cx claw x, --cc cable 0–1, --co open 0–1, --ca swing angle, --gx landing guide; --px/--py a prize's place, and
+// --ax/--ay/--ar/--ao while it is carried), the turn pips, the cheer meter and the big buttons.
+const CLAW_RULES = `
+${R} .of-claw { gap: 10px; padding-top: 0; }
+${R} .of-claw-title { flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 4px 10px; padding-top: 0; }
+${R} .of-claw-title .of-subtitle { font-size: 1.06rem; max-width: none; }
+${R} .of-claw-game { display: flex; flex-direction: column; align-items: center; gap: 9px; }
+${R} :is(.of-claw-hud, .of-claw-partner, .of-claw-meter, .of-claw-controls) { width: min(100%, 360px); }
+${R} .of-claw-hud { display: flex; align-items: center; gap: 8px; }
+${R} .of-claw-pips { flex: 1; display: flex; flex-wrap: wrap; gap: 5px; margin: 0; padding: 0; list-style: none; }
+${R} .of-claw-pip {
+  display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+  font-size: 0.68rem; font-weight: 800; color: var(--of-text-soft); background: var(--of-surface);
+  border: 1.5px solid var(--of-border-strong);
+}
+${R} .of-claw-pip[data-who="partner"] { border-color: color-mix(in srgb, var(--of-li-accent) 75%, transparent); }
+${R} .of-claw-pip[data-bonus] { border-style: dashed; }
+${R} .of-claw-pip[data-state="current"] {
+  color: var(--of-text); border-color: ${PALETTE.champagne}; box-shadow: 0 0 0 3px var(--of-glow-soft);
+  animation: of-breathe 1.8s ease-in-out infinite;
+}
+${R} .of-claw-pip[data-state="caught"] {
+  color: ${PALETTE.ink}; border-color: transparent; background: linear-gradient(135deg, #f6e2b0, ${PALETTE.champagne});
+}
+${R} .of-claw-pip[data-state="missed"] { opacity: 0.45; }
+${R} .of-claw-toggles { display: flex; gap: 6px; }
+${R} .of-claw-toggles .of-icon-button { width: 34px; height: 34px; }
+${R} .of-claw-toggles .of-icon-button[aria-pressed="false"] { color: var(--of-text-faint); }
+${R} .of-claw-partner { display: flex; align-items: center; gap: 10px; min-height: 54px; }
+${R} .of-claw-bubble {
+  flex: 1; min-width: 0; padding: 8px 13px; border-radius: 16px 16px 16px 4px;
+  border-color: color-mix(in srgb, var(--of-li-accent) 55%, transparent);
+  font-family: var(--of-font-display); font-style: italic; font-weight: 600; font-size: 1.04rem; line-height: 1.22;
+}
+${R}[dir="rtl"] .of-claw-bubble { border-radius: 16px 16px 4px 16px; }
+${R} .of-claw-status {
+  flex: 1; font-size: 0.76rem; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--of-champagne-text);
+}
+/* The cabinet, in his colour, with a marquee of bulbs. */
+${R} .of-claw-cabinet {
+  position: relative; width: min(100%, 360px, 50svh); padding: 10px 10px 14px; border-radius: 30px 30px 22px 22px;
+  background: linear-gradient(165deg, color-mix(in srgb, var(--of-li-accent) 52%, #fff6f8) 0%, var(--of-li-accent) 44%,
+    color-mix(in srgb, var(--of-li-accent) 55%, #2b2236) 100%);
+  box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.55), inset 0 -6px 14px rgb(43 34 54 / 0.25), 0 18px 40px rgb(10 6 28 / 0.32),
+    0 0 34px var(--of-glow-soft);
+}
+${R} .of-claw-cabinet--preview { align-self: center; width: min(100%, 300px, 38svh); }
+${R} .of-claw-cabinet[data-shake] { animation: of-claw-shake 520ms ease-in-out; }
+${R} .of-claw-marquee {
+  display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 6px 8px; padding: 5px 12px;
+  border-radius: 999px; background: rgb(43 34 54 / 0.55); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.2);
+}
+${R} .of-claw-marquee-title {
+  min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-family: var(--of-font-display); font-weight: 700; font-size: 1.06rem; letter-spacing: 0.08em; color: #fff4e6;
+  text-shadow: 0 0 10px rgb(255 214 170 / 0.85);
+}
+${R} .of-claw-bulbs {
+  flex: 1; max-width: 72px; height: 8px;
+  background: radial-gradient(circle, #ffe9b8 0 2.4px, transparent 3px) 0 50% / 12px 8px repeat-x;
+  filter: drop-shadow(0 0 4px #ffd48a); animation: of-claw-bulbs 1.1s steps(2, jump-none) infinite;
+}
+${R} .of-claw-bulbs + .of-claw-marquee-title + .of-claw-bulbs { animation-delay: -0.55s; }
+/* The glass: back wall, floor, chute, rail, claw and prizes. Everything inside sizes from the glass (cqw, cqh). */
+${R} .of-claw-glass {
+  position: relative; aspect-ratio: 0.95; container-type: size; overflow: clip; border-radius: 20px;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+  background:
+    radial-gradient(70% 45% at 50% 0%, rgb(255 255 255 / 0.7), transparent 70%),
+    radial-gradient(2px 2px at 22% 30%, #fff 50%, transparent 52%), radial-gradient(1.5px 1.5px at 72% 22%, #fff 50%, transparent 52%),
+    radial-gradient(2px 2px at 84% 48%, #fff 50%, transparent 52%), radial-gradient(1.5px 1.5px at 40% 44%, #fff 50%, transparent 52%),
+    linear-gradient(180deg, #fdf1f6 0%, #f3e2f1 58%, #e8d6ef 100%);
+  box-shadow: inset 0 0 0 3px rgb(255 255 255 / 0.55), inset 0 10px 30px rgb(80 40 90 / 0.18);
+}
+${R}[data-look="midnight"] .of-claw-glass {
+  --of-claw-dot: rgb(255 255 255 / 0.13);
+  background:
+    radial-gradient(70% 45% at 50% 0%, rgb(255 210 230 / 0.32), transparent 70%),
+    radial-gradient(2px 2px at 22% 30%, #fff 50%, transparent 52%), radial-gradient(1.5px 1.5px at 72% 22%, #fff 50%, transparent 52%),
+    radial-gradient(2px 2px at 84% 48%, #fff 50%, transparent 52%), radial-gradient(1.5px 1.5px at 40% 44%, #fff 50%, transparent 52%),
+    linear-gradient(180deg, #3b2d5e 0%, #2c2249 60%, #231b3c 100%);
+  box-shadow: inset 0 0 0 3px rgb(255 255 255 / 0.18), inset 0 10px 30px rgb(0 0 0 / 0.3);
+}
+/* The back wall's soft polka dots, and the floor the pile lies on. */
+${R} .of-claw-wall {
+  position: absolute; inset: 0;
+  background: radial-gradient(circle, var(--of-claw-dot, rgb(255 255 255 / 0.42)) 0 1.6px, transparent 2.2px) 0 0 / 7cqw 7cqw;
+  -webkit-mask: linear-gradient(to bottom, #000 10%, transparent 80%); mask: linear-gradient(to bottom, #000 10%, transparent 80%);
+}
+${R} .of-claw-glass::before {
+  content: ""; position: absolute; inset: auto 0 0; height: 15cqh; border-top: 1px solid rgb(255 255 255 / 0.35);
+  background: linear-gradient(to top, rgb(120 70 120 / 0.28), rgb(255 255 255 / 0.06));
+}
+${R} .of-claw-chute {
+  position: absolute; left: 2%; bottom: 0; z-index: 6; width: 18%; height: 27cqh; display: grid; place-items: end center;
+  padding-bottom: 7cqh; border: 2px solid rgb(255 255 255 / 0.75); border-bottom: 0; border-radius: 10px 10px 0 0;
+  color: var(--of-li-accent);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.62), rgb(255 255 255 / 0.28));
+  box-shadow: inset 0 -10px 16px rgb(43 34 54 / 0.12);
+}
+${R} .of-claw-chute::before {
+  content: ""; position: absolute; top: -5px; left: 8%; right: 8%; height: 10px; border-radius: 50%;
+  background: rgb(43 34 54 / 0.45);
+}
+${R} .of-claw-chute svg { filter: drop-shadow(0 0 4px var(--of-li-accent)); }
+${R} .of-claw-rail {
+  position: absolute; top: 4cqh; left: 3%; right: 3%; z-index: 7; height: 2.2cqh; border-radius: 999px;
+  background: linear-gradient(180deg, #fff, #d9c6d8); box-shadow: 0 2px 4px rgb(43 34 54 / 0.25);
+}
+${R} .of-claw-rig { position: absolute; top: 5cqh; left: calc(var(--cx) * 100%); z-index: 8; width: 0; height: 0; }
+${R} .of-claw-carriage {
+  position: absolute; left: -7cqw; top: -3cqh; width: 14cqw; height: 5cqh; border-radius: 8px;
+  background: linear-gradient(180deg, #fff6fa, #e2cde0);
+  box-shadow: 0 3px 6px rgb(43 34 54 / 0.25), inset 0 -2px 0 rgb(43 34 54 / 0.12);
+}
+${R} .of-claw-arm { position: absolute; left: 0; top: 0; transform-origin: 0 0; rotate: var(--ca); }
+${R} .of-claw-cable {
+  position: absolute; left: -1.5px; top: 0; width: 3px; height: calc((0.1 + var(--cc) * 0.6) * 100cqh);
+  background: linear-gradient(90deg, #b9a5bd, #fff, #b9a5bd);
+}
+${R} .of-claw-head {
+  position: absolute; left: -12cqw; top: calc((0.1 + var(--cc) * 0.6) * 100cqh); width: 24cqw; height: 13cqh;
+  filter: drop-shadow(0 3px 2px rgb(43 34 54 / 0.3));
+}
+${R} .of-claw-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+${R} .of-claw-prong path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+${R} .of-claw-prong-edge { stroke: #8d7896; stroke-width: 6.4; }
+${R} .of-claw-prong-face { stroke: #f7eef5; stroke-width: 3.4; }
+${R} .of-claw-collar { fill: #d6c2d8; stroke: #8d7896; stroke-width: 1.2; }
+${R} .of-claw-prong { transform-box: view-box; }
+${R} .of-claw-prong--left { transform-origin: 20px 12px; transform: rotate(calc((var(--co) - 0.35) * 30deg)); }
+${R} .of-claw-prong--right { transform-origin: 28px 12px; transform: rotate(calc((var(--co) - 0.35) * -30deg)); }
+${R} .of-claw-hub { fill: #fff3f8; stroke: #8d7896; stroke-width: 1.4; }
+${R} .of-claw-light { fill: var(--of-li-accent); filter: drop-shadow(0 0 3px var(--of-li-accent)); }
+${R} .of-claw-glass[data-steady] .of-claw-head { filter: drop-shadow(0 0 7px #ffe29a) drop-shadow(0 0 14px var(--of-li-accent)); }
+${R} .of-claw-prize {
+  position: absolute; left: calc(var(--px) * 100%); bottom: calc(var(--py) * 100cqh); width: 18cqw; aspect-ratio: 1;
+  translate: -50% 0; rotate: var(--tilt); filter: drop-shadow(0 4px 3px rgb(43 34 54 / 0.22));
+  transition: left 420ms var(--of-ease);
+}
+${R} .of-claw-prize .of-plush { width: 100%; height: 100%; }
+${R} .of-claw-prize[data-anim] {
+  z-index: 5 !important; left: calc(var(--ax) * 100%); bottom: calc(var(--ay) * 100cqh); rotate: var(--ar);
+  opacity: var(--ao); transition: none;
+}
+${R} .of-claw-prize[data-leaving] { z-index: 5 !important; animation: of-claw-tumble 860ms cubic-bezier(0.5, 0, 0.7, 0.4) forwards; }
+${R} .of-claw-guide {
+  position: absolute; top: 20cqh; bottom: 3cqh; left: calc(var(--gx) * 100%); z-index: 4; width: 0;
+  border-left: 2px dashed var(--of-li-accent); filter: drop-shadow(0 0 4px var(--of-li-accent));
+}
+${R} .of-claw-guide::after {
+  content: ""; position: absolute; left: -9cqw; bottom: 0; width: 18cqw; height: 4cqh; border-radius: 50%;
+  border: 2px solid var(--of-li-accent); background: color-mix(in srgb, var(--of-li-accent) 25%, transparent);
+}
+${R} .of-claw-glass[data-frost]::after {
+  content: ""; position: absolute; inset: 0; z-index: 9; pointer-events: none;
+  background: radial-gradient(circle at 50% 35%, transparent 40%, rgb(200 228 255 / 0.4));
+  box-shadow: inset 0 0 26px rgb(205 232 255 / 0.9);
+}
+${R} .of-claw-shine {
+  position: absolute; inset: 0; z-index: 10; pointer-events: none;
+  background: linear-gradient(115deg, transparent 30%, rgb(255 255 255 / 0.22) 36%, transparent 42%),
+    linear-gradient(115deg, transparent 52%, rgb(255 255 255 / 0.12) 55%, transparent 58%);
+}
+${R} :is(.of-claw-banner, .of-claw-pop, .of-claw-countdown) {
+  position: absolute; left: 50%; translate: -50% -50%; z-index: 11; white-space: nowrap; pointer-events: none;
+}
+${R} .of-claw-banner {
+  top: 40%; padding: 8px 20px; border-radius: 16px; color: ${PALETTE.ink};
+  font-family: var(--of-font-display); font-weight: 700; font-size: 1.55rem; line-height: 1.1;
+  background: linear-gradient(135deg, #f3dcaa 0%, ${PALETTE.champagne} 30%, ${PALETTE.rose} 100%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.65), 0 10px 26px rgb(43 34 54 / 0.3);
+}
+${R} .of-claw-banner[data-who="partner"] {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--of-li-accent) 45%, #fff), var(--of-li-accent));
+}
+${R} .of-claw-cheat {
+  position: absolute; left: 6%; right: 6%; top: 22cqh; z-index: 11; display: flex; align-items: center; gap: 10px;
+  padding: 10px 13px; border-radius: 16px; color: ${PALETTE.ink}; background: rgb(255 250 245 / 0.95);
+  box-shadow: 0 10px 26px rgb(43 34 54 / 0.3), 0 0 0 2px var(--of-li-accent); pointer-events: none;
+}
+${R} .of-claw-cheat svg { flex: none; color: color-mix(in srgb, var(--of-li-accent) 70%, #2b2236); }
+${R} .of-claw-cheat strong { display: block; font-family: var(--of-font-display); font-size: 1.12rem; line-height: 1.1; }
+${R} .of-claw-cheat small { display: block; font-size: 0.78rem; color: rgb(43 34 54 / 0.78); }
+${R} .of-claw-pop {
+  top: 50%; display: inline-flex; align-items: center; gap: 6px; padding: 6px 15px; border-radius: 999px;
+  font-weight: 800; font-size: 0.95rem; color: ${PALETTE.ink}; background: rgb(255 255 255 / 0.92);
+  box-shadow: 0 8px 20px rgb(43 34 54 / 0.25);
+}
+${R} .of-claw-pop[data-caught="true"] { background: linear-gradient(135deg, #f6e2b0, ${PALETTE.champagne}); }
+${R} .of-claw-countdown {
+  top: 64%; padding: 4px 12px; border-radius: 999px; font-weight: 700; font-size: 0.85rem; color: #fff;
+  background: rgb(43 34 54 / 0.72);
+}
+/* The cheer meter: eight hearts in his colour. */
+${R} .of-claw-meter {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 0.8rem; font-weight: 700; color: var(--of-text-soft);
+}
+${R} .of-claw-meter-label { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+${R} .of-claw-hearts { flex: none; display: flex; gap: 3px; color: var(--of-li-accent); }
+${R}[data-look="pearl"] .of-claw-hearts { filter: brightness(0.8) saturate(1.35); }
+${R} .of-claw-hearts svg[data-on="false"] { color: var(--of-border-strong); }
+${R} .of-claw-meter[data-live] .of-claw-hearts { animation: of-claw-throb 0.9s ease-in-out infinite; }
+${R} .of-claw-meter[data-full] .of-claw-hearts { filter: drop-shadow(0 0 6px var(--of-li-accent)); }
+/* Big, pressable controls: hold the arrows, tap the middle. */
+${R} .of-claw-controls { display: grid; grid-template-columns: 64px minmax(0, 1fr) 64px; gap: 10px; }
+${R} :is(.of-claw-move, .of-claw-action) {
+  min-height: 64px; border-radius: 22px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none;
+  transition: transform 110ms ease-out, box-shadow 110ms ease-out, background-color 300ms var(--of-ease), opacity 300ms;
+}
+${R} .of-claw-move { display: grid; place-items: center; padding: 0; color: var(--of-text); }
+${R} .of-claw-move:active:not([aria-disabled="true"]) { transform: translateY(2px) scale(0.95); background: var(--of-surface-strong); }
+${R} :is(.of-claw-move, .of-claw-action)[aria-disabled="true"] { cursor: default; opacity: 0.5; }
+${R} .of-claw-action {
+  position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0;
+  padding: 0 46px 0 16px; border: 0; color: ${PALETTE.ink}; font-weight: 800; font-size: 1rem; letter-spacing: 0.02em;
+  background: linear-gradient(135deg, #f3dcaa 0%, ${PALETTE.champagne} 28%, ${PALETTE.rose} 100%);
+  box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.6), 0 6px 0 #b9748c, 0 12px 24px var(--of-glow-soft);
+}
+${R} .of-claw-action:not([data-mode="drop"]) { padding-inline-end: 16px; }
+${R} .of-claw-action:active:not([aria-disabled="true"]) {
+  transform: translateY(4px); box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.6), 0 2px 0 #b9748c, 0 6px 14px var(--of-glow-soft);
+}
+${R} .of-claw-action[data-mode="cheer"] {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--of-li-accent) 42%, #fff), var(--of-li-accent));
+  box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.6), 0 6px 0 color-mix(in srgb, var(--of-li-accent) 55%, #2b2236),
+    0 12px 24px var(--of-glow-soft);
+}
+${R} .of-claw-action[data-mode="cheer"]:active { transform: translateY(4px) scale(0.98); }
+${R} .of-claw-action-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+${R} .of-claw-timer {
+  position: absolute; inset-inline-end: 9px; top: 50%; translate: 0 -50%; display: grid; place-items: center;
+  width: 34px; height: 34px; border-radius: 50%; font-size: 0.84rem; font-weight: 800; font-variant-numeric: tabular-nums;
+  background: conic-gradient(rgb(43 34 54 / 0.78) calc(var(--tl, 1) * 1turn), rgb(43 34 54 / 0.14) 0);
+}
+${R} .of-claw-timer::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: #f7e4c6; }
+${R} .of-claw-timer { isolation: isolate; }
+${R} .of-claw-timer::before { z-index: -1; }
+${R} .of-claw-keys { max-width: 36ch; text-align: center; font-size: 0.76rem; }
+/* Touch screens have no keys: the intro's rules say how to play there (the hint still describes the buttons). */
+@media (pointer: coarse) { ${R} .of-claw-keys { display: none; } }
+/* Before and after a round. */
+${R} .of-claw-intro, ${R} .of-claw-result { align-items: stretch; }
+${R} .of-claw-result .of-section-title:focus-visible { outline-offset: 4px; border-radius: 6px; }
+${R} .of-claw-style { display: flex; flex-direction: column; gap: 3px; }
+${R} .of-claw-style-text { font-family: var(--of-font-display); font-style: italic; font-weight: 600; font-size: 1.12rem; line-height: 1.25; }
+${R} .of-claw-first { display: flex; flex-wrap: wrap; gap: 8px; }
+${R} .of-claw-first .of-button { flex: 1 1 140px; }
+${R} .of-claw-rules { display: flex; flex-direction: column; gap: 4px; margin: 0; padding-inline-start: 18px; font-size: 0.86rem; color: var(--of-text-soft); }
+${R} .of-claw-haul {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none;
+}
+${R} .of-claw-haul-item {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 16px;
+  text-align: center; background: var(--of-surface-hover);
+}
+${R} .of-claw-haul-item .of-plush { width: 56px; height: 56px; filter: drop-shadow(0 4px 3px rgb(43 34 54 / 0.25)); }
+${R} .of-claw-haul-name { font-size: 0.8rem; font-weight: 700; line-height: 1.2; }
+${R} .of-claw-haul-by { font-size: 0.72rem; color: var(--of-text-soft); }
+${R} .of-claw-quote {
+  display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 10px 12px; border-radius: 16px;
+  background: var(--of-tint); border-inline-start: 3px solid var(--of-li-accent);
+}
+${R} .of-claw-quote p { font-family: var(--of-font-display); font-style: italic; font-weight: 600; font-size: 1.1rem; line-height: 1.25; }
+${R} .of-claw-pay { display: flex; flex-direction: column; gap: 4px; }
+${R} .of-claw-pay-line { display: flex; align-items: center; gap: 6px; font-weight: 800; color: var(--of-champagne-text); }
+${R} .of-claw-result .of-actions { justify-content: flex-start; }`;
+
 const MOTION_RULES = `
 @keyframes of-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes of-rise { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
@@ -1766,6 +2128,16 @@ const MOTION_RULES = `
 @keyframes of-place-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @keyframes of-nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
 @keyframes of-write { 0%, 100% { transform: rotate(-8deg) translateX(-3px); } 50% { transform: rotate(6deg) translateX(3px); } }
+@keyframes of-claw-shake {
+  0%, 100% { transform: none; } 20% { transform: translateX(-6px) rotate(-1.2deg); }
+  40% { transform: translateX(5px) rotate(1deg); } 60% { transform: translateX(-4px) rotate(-0.6deg); } 80% { transform: translateX(2px); }
+}
+@keyframes of-claw-bulbs { 50% { opacity: 0.4; } }
+@keyframes of-claw-throb { 50% { transform: scale(1.07); } }
+@keyframes of-claw-land { 0% { transform: translateY(-36px) scale(0.9); } 60% { transform: translateY(0) scale(1.1, 0.88); } 100% { transform: none; } }
+@keyframes of-claw-tumble {
+  30% { translate: -50% -14cqh; rotate: -30deg; } 100% { left: 11%; bottom: -30cqh; translate: -50% 0; rotate: 260deg; opacity: 0.4; }
+}
 @keyframes of-toast {
   0% { opacity: 0; transform: translateY(8px) scale(0.97); } 12% { opacity: 1; transform: none; }
   82% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-6px); }
@@ -1795,6 +2167,10 @@ export function otomeForgeStyles(): string {
     READER_RULES,
     HOME_RULES,
     PHONE_RULES,
+    DATES_RULES,
+    DATE_NIGHT_RULES,
+    READ_HIM_RULES,
+    CLAW_RULES,
     DIALOG_RULES,
     MOTION_RULES,
   ].join("\n");

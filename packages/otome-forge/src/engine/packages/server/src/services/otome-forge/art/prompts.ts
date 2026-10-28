@@ -93,3 +93,55 @@ export function lookPrompt(input: LookInput, edited: Partial<ImagePrompt> = {}):
     : mergeTags(LOOK_NEGATIVE, requiredNegative, style.negativeTags);
   return { prompt, negativePrompt };
 }
+
+// ── M5: a date's keepsake ──
+
+const KEEPSAKE_FRAMING = "two people, romantic date, candid moment, cinematic composition, detailed background";
+// Two people are drawn, so the Engine's own "extra people" is left out on purpose.
+const KEEPSAKE_NEGATIVE =
+  "text, captions, logos, watermarks, borders, UI, collage layouts, duplicate faces, cropped-off heads, extra limbs";
+
+/** A person in the keepsake: who they are and what they wear (English, visual only), drawn as an adult. */
+export interface KeepsakePerson {
+  name: string;
+  identityLine: string;
+  outfitLine: string;
+  presentation: Presentation;
+}
+
+export interface KeepsakeInput {
+  /** The date plan's English brief: where and how the moment is shot, never anyone's looks. */
+  brief: string;
+  people: readonly KeepsakePerson[];
+  world: Pick<World, "content" | "images">;
+  style: StyleProfile;
+}
+
+/**
+ * A date's keepsake (S/minigames/date-night.ts): the brief, each person's look, the framing, then the rating and an
+ * adult tag for every person. An edited prompt keeps its wording with every safety tag put back.
+ * ponytail: written beside M1's look prompt; once M2b's cgPrompt lands this is cgPrompt with the keepsake's framing.
+ */
+export function keepsakePrompt(input: KeepsakeInput, edited: Partial<ImagePrompt> = {}): ImagePrompt {
+  const { world, style } = input;
+  const required = otomeContentContract({ world, lis: input.people, kind: "image" });
+  const requiredNegative = mergeTags(ADULT_NEGATIVE, RATING_NEGATIVE[world.images.rating]);
+  const sentence = (text: string) => {
+    const value = text.trim().replace(/[,\s]+$/, "");
+    return !value || /[.!?…]$/.test(value) ? value : `${value}.`;
+  };
+  const looks = input.people.map((person) => {
+    const look = [person.identityLine, person.outfitLine].map((line) => line.trim()).filter(Boolean);
+    const first = person.name.trim().split(/\s+/)[0] ?? "";
+    return look.length ? sentence(`${first}: ${look.join("; ")}`) : "";
+  });
+  const prompt = edited.prompt?.trim()
+    ? withTags(edited.prompt, required)
+    : [style.styleText, sentence(input.brief), ...looks, mergeTags(KEEPSAKE_FRAMING, required, style.positiveTags)]
+        .filter(Boolean)
+        .join(" ");
+  const negativePrompt = edited.negativePrompt?.trim()
+    ? withTags(edited.negativePrompt, requiredNegative)
+    : mergeTags(KEEPSAKE_NEGATIVE, requiredNegative, style.negativeTags);
+  return { prompt, negativePrompt };
+}

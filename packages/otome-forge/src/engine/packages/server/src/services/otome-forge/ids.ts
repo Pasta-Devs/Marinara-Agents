@@ -122,7 +122,18 @@ export const noteId = (runId: string, dayKey: string, li: string) => `${runId}:n
 export const chatId = (runId: string, li: string) => `${runId}:chat:${li}`;
 
 /** Every kind a run's documents have. Deleting a run removes each; a milestone that adds a kind adds it here. */
-export const RUN_DOC_KINDS = ["world", "player", "unit", "state", "chapter", "beat", "memory", "note", "chat"] as const;
+export const RUN_DOC_KINDS = [
+  "world",
+  "player",
+  "unit",
+  "state",
+  "chapter",
+  "beat",
+  "memory",
+  "note",
+  "chat",
+  "readhim",
+] as const;
 export type RunDocKind = (typeof RUN_DOC_KINDS)[number];
 /** The `{id, kind, name}` mutateDoc creates a run document with. */
 export const runDocTarget = (kind: RunDocKind, id: string) => ({ id, kind, name: `Otome Forge ${kind}` });

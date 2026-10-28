@@ -1,7 +1,9 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the `${R}:state` document (Starlight and each love interest's points and stage), and the RunView
 // ──────────────────────────────────────────────
-// Later milestones add their own fields here, each with a default, so older states keep reading. M3: `home`.
+// Later milestones add their own fields here, each with a default, so older states keep reading. M3: `home`. M5: each
+// love interest's `tellsLearned`, the plush shelf (`owned.plush`), each love interest's newest Claw Machine rounds
+// (`claw.rounds`) and the newest paid Read Him sets (`readHim.paid`).
 import { z, type ZodType } from "zod";
 import type {
   ChapterProgress,
@@ -17,6 +19,19 @@ import type {
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import {
+  CLAW_MAX_CATCHES,
+  CLAW_ROUNDS_KEPT,
+  CLAW_ROUND_ID,
+  isPlushSeries,
+  plushLi,
+  type ClawRound,
+} from "../../../../../client/src/features/otome-forge/shared/claw.js";
+import {
+  READ_HIM_PAID_KEPT,
+  READ_HIM_SET_ID,
+  type ReadHimPaid,
+} from "../../../../../client/src/features/otome-forge/shared/read-him.js";
 import {
   STARTING_STARLIGHT,
   TENSION_MAX,
@@ -42,6 +57,8 @@ const LIST_MAX = 200;
 const LEDGER_MAX = 300;
 const TIMELINE_MAX = 500;
 const FAVORITES_MAX = 300;
+/** Tells are 3–5 per bible; the room covers a hand-edited one. */
+const TELLS_MAX = 20;
 
 const wholeNumber = (value: unknown, fallback: number, min: number, max = Number.MAX_SAFE_INTEGER) =>
   typeof value === "number" && Number.isInteger(value) && value >= min && value <= max ? value : fallback;
@@ -82,6 +99,47 @@ const FavoriteSchema: ZodType<Favorite> = z.object({
   ref: short(200),
 });
 
+const ClawPlayerSchema = z.enum(["me", "partner"]);
+const ClawRoundSchema: ZodType<ClawRound> = z.object({
+  id: z.string().regex(CLAW_ROUND_ID),
+  li: z.string(),
+  name: short(200),
+  at: z.string(),
+  first: ClawPlayerSchema,
+  caught: z.array(z.object({ prize: short(100), by: ClawPlayerSchema })).max(CLAW_MAX_CATCHES),
+  cheat: z.enum(["steady", "nudge", "extra", "freeze", "calculate"]).nullable(),
+  paid: z.object({ starlight: z.number().int().min(0), affection: z.number().int().min(0) }),
+  capped: z.boolean(),
+  newPlush: z.array(short(100)).max(CLAW_MAX_CATCHES),
+  firstPlush: z.boolean(),
+  line: short(300).optional(),
+});
+const ReadHimPaidSchema: ZodType<ReadHimPaid> = z.object({
+  setId: z.string().regex(READ_HIM_SET_ID),
+  li: z.string(),
+  starlight: z.number().int().min(0),
+  affection: z.number().int().min(0),
+});
+
+/** A plush id the shelf can hold: a series plush, or `li:<li id>`. */
+const isPlushId = (id: string) => isPlushSeries(id) || isLiId(plushLi(id));
+
+/** The learned tells as distinct indexes, in the order they were learned. */
+function normalizeTells(value: unknown): number[] {
+  const tells: number[] = [];
+  for (const index of validItems(
+    z
+      .number()
+      .int()
+      .min(0)
+      .max(TELLS_MAX - 1),
+    value,
+  )) {
+    if (!tells.includes(index)) tells.push(index);
+  }
+  return tells.slice(0, TELLS_MAX);
+}
+
 /** A love interest's state with every M2a field defaulted (trust and tension 0, no grievances, never led). */
 export const defaultLiState = (): LiState => ({
   points: 0,
@@ -96,6 +154,7 @@ export const defaultLiState = (): LiState => ({
   lastLead: null,
   angst: [],
   firsts: {},
+  tellsLearned: [],
 });
 
 function normalizeLiState(raw: unknown): LiState {
@@ -113,6 +172,7 @@ function normalizeLiState(raw: unknown): LiState {
       lastLead: z.number().int().min(0).nullable(),
       angst: (value) => validItems(short(80), value, LIST_MAX),
       firsts: z.record(z.string(), z.string()),
+      tellsLearned: normalizeTells,
     },
     defaultLiState,
     isRecord(raw) ? raw : undefined,
@@ -163,6 +223,14 @@ export function normalizeState(data: unknown): RunState {
     }
   }
   const rawLedgers = field(data, "ledgers");
+  const plush: Record<string, number> = {};
+  const rawPlush = field(field(data, "owned"), "plush");
+  if (isRecord(rawPlush)) {
+    for (const [id, count] of Object.entries(rawPlush)) {
+      const value = wholeNumber(count, 0, 0);
+      if (isPlushId(id) && value > 0) plush[id] = value;
+    }
+  }
   return {
     version: 1,
     wallet: { starlight: wholeNumber(field(field(data, "wallet"), "starlight"), STARTING_STARLIGHT, 0) },
@@ -183,6 +251,11 @@ export function normalizeState(data: unknown): RunState {
     timeline: validItems(TimelineSchema, field(data, "timeline"), TIMELINE_MAX),
     favorites: validItems(FavoriteSchema, field(data, "favorites"), FAVORITES_MAX),
     home: normalizeHome(field(data, "home"), lis),
+    owned: { plush },
+    claw: { rounds: keepClawRounds(validItems(ClawRoundSchema, field(field(data, "claw"), "rounds"))) },
+    readHim: {
+      paid: keepNewest(validItems(ReadHimPaidSchema, field(field(data, "readHim"), "paid")), READ_HIM_PAID_KEPT),
+    },
   };
 }
 
@@ -190,7 +263,44 @@ export function normalizeState(data: unknown): RunState {
 export function keepNewest<T>(items: readonly T[], max: number): T[] {
   return items.length > max ? items.slice(items.length - max) : [...items];
 }
-export const STATE_LIMITS = { ledger: LEDGER_MAX, timeline: TIMELINE_MAX, favorites: FAVORITES_MAX, list: LIST_MAX };
+export const STATE_LIMITS = {
+  ledger: LEDGER_MAX,
+  timeline: TIMELINE_MAX,
+  favorites: FAVORITES_MAX,
+  list: LIST_MAX,
+  /** A timeline entry's text and the other short texts, in UTF-16 units (clipText). */
+  text: TEXT_MAX,
+};
+
+/**
+ * The Claw Machine rounds the state keeps, in the order they were played: each love interest's newest
+ * CLAW_ROUNDS_KEPT, and each one's first-plush round as well, so one love interest's play never evicts another's.
+ * ponytail: a love interest's rounds older than his newest CLAW_ROUNDS_KEPT leave his memory and the replay guard (a
+ * finish of one sent again by hand would pay again, within the day's cap); the upgrade path is rounds kept as their own
+ * documents, as Read Him sets are, or a digest of each love interest's older rounds.
+ */
+export function keepClawRounds(rounds: readonly ClawRound[], max = CLAW_ROUNDS_KEPT): ClawRound[] {
+  const room = new Map<string, number>();
+  const kept: ClawRound[] = [];
+  for (let index = rounds.length - 1; index >= 0; index -= 1) {
+    const round = rounds[index]!;
+    const left = room.get(round.li) ?? max;
+    if (left > 0 || round.firstPlush) kept.push(round);
+    if (left > 0) room.set(round.li, left - 1);
+  }
+  return kept.reverse();
+}
+
+/** `text` cut to at most `max` UTF-16 units (what the state's schemas count), never inside a surrogate pair. */
+export function clipText(text: string, max: number): string {
+  if (text.length <= max) return text;
+  let clipped = "";
+  for (const character of text) {
+    if (clipped.length + character.length > max) break;
+    clipped += character;
+  }
+  return clipped;
+}
 
 /**
  * What GET /runs/:run returns. LIs follow the order of `state.lis` (setup order); a unit missing from it goes last.
