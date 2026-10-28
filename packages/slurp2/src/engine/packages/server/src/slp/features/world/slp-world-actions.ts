@@ -355,8 +355,8 @@ export async function applyPulse(
             : partner
               ? slurpPartnerCommentBodies(partner)
               : slurpReactionBodiesForType(banks, fanTypeId, SLURP_SHIPPED_TYPE_REACTIONS[fanTypeId ?? ""] ?? []),
-          // A voiced pool (side, partner, lurker, troll) never gets a generic titled line.
-          sides || partner || fanTypeId === "lurker" || fanTypeId === "troll"
+          // Only the plain regular voice takes a generic titled line; every other voice keeps its own pool.
+          sides || partner || fanTypeId !== "regular"
             ? { ...(await pulseContext()), title: null }
             : await pulseContext(),
         )
