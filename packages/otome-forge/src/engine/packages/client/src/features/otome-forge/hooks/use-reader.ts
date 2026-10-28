@@ -157,8 +157,8 @@ const PAINT_POLL_TRIES = 36;
 /** Auto's pause after a voiced line ends. */
 const AFTER_VOICE_MS = 900;
 
-/** What a tap paints. */
-type PaintTarget = { kind: "cg" } | { kind: "place"; place: string };
+/** What a tap paints: a key image is held by its chapter and node, as the reader may move on before it is sent. */
+type PaintTarget = { kind: "cg"; key: string; i: number } | { kind: "place"; place: string };
 
 /** A paint whose prompt is shown for editing before it is sent. */
 export interface PaintReview {
@@ -579,12 +579,13 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
       try {
         if (target.kind === "cg") {
           const result = await otome.post<{ art?: Paint | null }>(`${runPath(runKey)}/art/cg`, {
-            key: chapterKey,
-            i: node,
+            key: target.key,
+            i: target.i,
             ...edited,
           });
           const art = result?.art;
-          if (art)
+          // Patched onto the scene on screen only when it is the one painted (the reader may have moved on).
+          if (art && target.key === chapterKey && target.i === node)
             setScene((shown) =>
               shown && shown.id === sceneId && shown.art.cg
                 ? { ...shown, art: { ...shown.art, cg: { ...shown.art.cg, art } } }
@@ -616,13 +617,15 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     async (target: PaintTarget) => {
       if (paintBusy.current || node === null || review) return;
       if (!reviewImagePromptsBeforeSend) return sendPaint(target);
+      // The review is a dialog: Auto stops, as it does for the Backlog and Ease off.
+      setAuto(false);
       paintBusy.current = true;
       setPainting(true);
       setNotice(null);
       try {
         const initial =
           target.kind === "cg"
-            ? await otome.post<ImagePrompt>(`${runPath(runKey)}/art/cg/prompt`, { key: chapterKey, i: node })
+            ? await otome.post<ImagePrompt>(`${runPath(runKey)}/art/cg/prompt`, { key: target.key, i: target.i })
             : await otome.post<ImagePrompt>(`${runPath(runKey)}/art/place/prompt`, { place: target.place });
         setReview({ target, initial, busy: false, error: null });
       } catch (error) {
@@ -632,10 +635,13 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
         setPainting(false);
       }
     },
-    [chapterKey, node, otome, review, reviewImagePromptsBeforeSend, runKey, sendPaint],
+    [node, otome, review, reviewImagePromptsBeforeSend, runKey, sendPaint],
   );
 
-  const paintCg = useCallback(() => paint({ kind: "cg" }), [paint]);
+  const paintCg = useCallback(
+    () => (node === null ? undefined : paint({ kind: "cg", key: chapterKey, i: node })),
+    [chapterKey, node, paint],
+  );
   const paintPlace = useCallback((place: string) => paint({ kind: "place", place }), [paint]);
   const sendReview = useCallback(
     (edited: ImagePrompt) => {

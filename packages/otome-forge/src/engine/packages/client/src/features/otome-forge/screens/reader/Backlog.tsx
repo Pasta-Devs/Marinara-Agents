@@ -123,7 +123,6 @@ export function Backlog({ entries, lis, protagonist, starred, onStar, voice: voi
                   <button
                     type="button"
                     className="of-icon-button of-log-voice"
-                    aria-pressed={voices.speaking === entry.ref}
                     aria-label={
                       voices.speaking === entry.ref
                         ? t("ui.otomeForge.audio.stopVoice")

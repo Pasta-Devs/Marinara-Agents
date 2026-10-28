@@ -7,7 +7,8 @@
 //   (POST .../audio/brief), then POST /api/audio/generate (with debugMode, so the Engine logs the prompt), then the track
 //   is recorded on the story (POST .../audio/track). A track the Engine already filed under the story's key (a record
 //   that failed last time) is reused, never paid for twice. A failed generation is not tried again until the music
-//   settings change; stock music plays meanwhile. Nothing is generated while generation is off, muted or silent.
+//   settings change; stock music plays meanwhile. Nothing is generated while generation is off, muted or silent as
+//   saved: Settings → Audio's unsaved preview of Mute and the volumes changes only what is heard.
 // - Voices: the kit's voice picking over the Engine's TTS settings (explicit assignments win; the protagonist uses her
 //   persona's voice or stays silent; love interests and, with "voice everyone else", anyone else get the Engine's pool
 //   voice for their gender). Narration and thoughts are never voiced. Each line has a cache key, so a replay from the
@@ -135,6 +136,8 @@ export class OtomeAudioController {
   private readonly manifest: Promise<AssetManifest | null>;
   private deps: ControllerDeps | null = null;
   private settings: AudioSettings = normalizeForgeAudio({});
+  /** The story's saved settings: only these start or stop music generation (`settings` may be a preview). */
+  private saved: AudioSettings = this.settings;
   private tracks: SoundtrackTrack[] = [];
   /** Tracks made in this visit: the manifest read at the start does not list them. */
   private readonly fresh = new Set<string>();
@@ -199,10 +202,13 @@ export class OtomeAudioController {
     return this.settings;
   }
 
-  configure(next: AudioSettings) {
+  /** `next` plays now; `saved` is the story's (Settings → Audio passes both while it previews Mute and the volumes). */
+  configure(next: AudioSettings, saved: AudioSettings = next) {
     const previous = this.settings;
+    const before = this.saved;
     this.settings = next;
-    const source = previous.generate !== next.generate || previous.audioConnectionId !== next.audioConnectionId;
+    this.saved = saved;
+    const source = before.generate !== saved.generate || before.audioConnectionId !== saved.audioConnectionId;
     if (source) {
       // A new source starts clean: what failed on the old one may work now (the player changed it, never a timer).
       this.abortGeneration();
@@ -210,14 +216,15 @@ export class OtomeAudioController {
       this.readiness = null;
       this.probedConnection = "";
     }
-    if (!next.generate || next.muted || next.musicVolume <= 0) this.abortGeneration();
+    if (!this.canGenerate()) this.abortGeneration();
     this.player?.setVolumes({ music: next.musicVolume, sfx: next.sfxVolume });
     this.player?.setMuted(next.muted);
     if (next.muted || !next.tts || next.dialogueVolume <= 0) this.stopVoice();
     else if (ttsService.getActiveId()?.startsWith(this.voicePrefix)) {
       ttsService.setCurrentPlaybackVolume(next.dialogueVolume, next.muted);
     }
-    if (source || previous.muted !== next.muted || previous.musicVolume <= 0 !== next.musicVolume <= 0) {
+    // A save that opens or closes generation plays the cue again (a preview only changes the levels it plays at).
+    if (source || before.muted !== saved.muted || before.musicVolume <= 0 !== saved.musicVolume <= 0) {
       void this.applyCue(true);
     }
     const voices = (value: AudioSettings) =>
@@ -273,9 +280,9 @@ export class OtomeAudioController {
     this.player?.unlock();
   }
 
-  /** Generation is on, and on the connection a request started with (settings compare by value, not identity). */
-  private canGenerate(connection = this.settings.audioConnectionId) {
-    const settings = this.settings;
+  /** Generation is on as saved, and on the connection a request started with (compared by value, not identity). */
+  private canGenerate(connection = this.saved.audioConnectionId) {
+    const settings = this.saved;
     return (
       settings.generate && !settings.muted && settings.musicVolume > 0 && settings.audioConnectionId === connection
     );
@@ -287,10 +294,14 @@ export class OtomeAudioController {
     this.currentTag = tag;
   }
 
+  /** A recorded track whose file the Engine still lists (or one made in this visit, which its manifest predates). */
+  private listed(track: SoundtrackTrack, manifest: AssetManifest | null) {
+    return !manifest || !!manifest.assets[track.tag] || this.fresh.has(track.tag);
+  }
+
   /** The story's track for a cue: the current connection's first, then any other (playing one costs nothing). */
   private trackFor(cue: MusicMood, connection: string, manifest: AssetManifest | null) {
-    const usable = (track: SoundtrackTrack) =>
-      track.cue === cue && (!manifest || !!manifest.assets[track.tag] || this.fresh.has(track.tag));
+    const usable = (track: SoundtrackTrack) => track.cue === cue && this.listed(track, manifest);
     return (
       this.tracks.find((track) => usable(track) && !!connection && track.connectionId === connection) ??
       this.tracks.find(usable) ??
@@ -350,17 +361,21 @@ export class OtomeAudioController {
 
   /** Makes the cue's track once on this story's audio connection; null when it cannot or did not. */
   private generate(cue: MusicMood): Promise<SoundtrackTrack | null> {
-    const chosen = this.settings.audioConnectionId;
+    const chosen = this.saved.audioConnectionId;
     const deps = this.deps;
     if (!deps) return Promise.resolve(null);
     const job = (async (): Promise<SoundtrackTrack | null> => {
       const readiness = await this.ready(chosen);
+      const manifest = await this.manifest;
       if (this.disposed || !this.canGenerate(chosen)) return null;
       if (!readiness?.configured || !readiness.connectionId || readiness.music !== true) return null;
       const connectionId = chosen || readiness.connectionId;
       this.probedConnection = connectionId;
       const id = `${connectionId}:${cue}`;
-      const owned = this.tracks.find((track) => track.cue === cue && track.connectionId === connectionId);
+      // A record whose file is gone from the Engine is made again (the stock track plays meanwhile).
+      const owned = this.tracks.find(
+        (track) => track.cue === cue && track.connectionId === connectionId && this.listed(track, manifest),
+      );
       if (owned) return owned;
       if (this.failed.has(id)) return null;
       const running = this.pending.get(id);
@@ -554,7 +569,7 @@ export class OtomeAudioController {
 
 // ── React ──
 
-const AudioContext = createContext<OtomeAudioController | null>(null);
+const OtomeAudioContext = createContext<OtomeAudioController | null>(null);
 
 interface ProviderProps {
   /** The story whose music and voices play; none, no audio. */
@@ -566,7 +581,7 @@ interface ProviderProps {
 
 /** The story's audio for everything inside it. Inside another provider it adds nothing: the outer one plays. */
 export function OtomeAudioProvider({ run, cue = null, children }: ProviderProps) {
-  const outer = useContext(AudioContext);
+  const outer = useContext(OtomeAudioContext);
   return outer ? createElement(Fragment, null, children) : createElement(AudioScope, { run, cue, children });
 }
 
@@ -601,8 +616,10 @@ function AudioScope({ run, cue = null, children }: ProviderProps) {
     },
   });
 
-  const rawAudio = run?.world.audio;
-  const settings = useMemo(() => normalizeForgeAudio(rawAudio), [rawAudio]);
+  // Keyed on the saved values, not the record: a track landing (or a refetch) gives world.audio a new identity, and
+  // configuring again then would undo a Settings → Audio preview of Mute or the volumes.
+  const settingsKey = JSON.stringify(normalizeForgeAudio(run?.world.audio));
+  const settings = useMemo(() => JSON.parse(settingsKey) as AudioSettings, [settingsKey]);
   useEffect(() => controller?.configure(settings), [controller, settings]);
   const world = run?.world ?? null;
   useEffect(() => {
@@ -625,12 +642,12 @@ function AudioScope({ run, cue = null, children }: ProviderProps) {
     };
   }, [controller]);
 
-  return createElement(AudioContext.Provider, { value: controller }, children);
+  return createElement(OtomeAudioContext.Provider, { value: controller }, children);
 }
 
 /** The story's audio controller, or null outside a provider (or before it is ready): then nothing plays. */
 export function useOtomeAudio(): OtomeAudioController | null {
-  return useContext(AudioContext);
+  return useContext(OtomeAudioContext);
 }
 
 const NO_SNAPSHOT: AudioSnapshot = { notice: null, speaking: null, settings: 0 };

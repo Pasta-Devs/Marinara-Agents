@@ -345,6 +345,12 @@ test("a place named with no description is never painted until a beat describes 
   await t.write(0, { places: [{ name: "The Rooftop", tags: "" }], cg: undefined });
   assert.equal(t.paid.length, 0, "nothing is paid for an image of nothing in particular");
   assert.equal((await t.world()).places[key]!.art, undefined);
+  // Nor on a tap: the route holds to the same rule, and the place still takes a later beat's description.
+  const tapped = await t.call("POST", "/runs/:run/art/place", { place: "The Rooftop" });
+  assert.equal(tapped.status, 409, JSON.stringify(tapped.body));
+  assert.equal(tapped.body.code, "conflict");
+  assert.equal(t.paid.length, 0);
+  assert.equal((await t.world()).places[key]!.art, undefined);
   await t.write(1, { places: [{ name: "The Rooftop", tags: "rooftop garden, lanterns, no humans" }], cg: undefined });
   const place = (await t.world()).places[key]!;
   assert.equal(place.tags, "rooftop garden, lanterns, no humans", "the first description is kept");
