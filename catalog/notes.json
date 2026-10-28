@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.26.3",
+          "date": "2026-10-28",
+          "notes": "- A story event you played now sits in **Chapters** right after the chapter it followed, as a finished Character Story does, instead of in a list below the next chapter. Its card says Done, Ended or Paused (Seasonal events off) and opens it to read its scenes again. Stories after the same chapter appear in the order you opened them. **Events → Story events** offers **Revisit played scenes** for a finished event, not **Continue event**.\n- A finished story event's map no longer offers Hard and Very Hard. Events are Normal-only, so those fights could never start, and **Start battle** did nothing. A fight that can't start now says why, with **Retry** and **Back**, in chapters, Character Stories, events, Materials and the Tower, and a cleared event fight is turned away before its briefing.\n- **Start battle** no longer stays disabled on a cheaper fight after another was refused for Vigor, and works at once in a world you switched to while a fight was starting.",
+          "highlight": false
+        },
+        {
           "version": "1.26.2",
           "date": "2026-10-28",
           "notes": "- Nothing changes in play. Expression portraits, choice labels, dialogue voice picking, music briefs, soundtracks and a few log lines now take optional settings, so another package can reuse them. Gacha Forge keeps its own values for all of them.",
@@ -284,12 +290,6 @@
           "date": "2026-10-26",
           "notes": "- In Formation, a unit's Skills tab shows its Formation kit (abilities, costs, triggers and special mechanics) instead of the classic skills, and the kit no longer appears as plain text on every tab.\n- Chapter plans, Character Story plans, story beats and event chapters request 16,384 answer tokens on top of the reasoning reserve.",
           "highlight": false
-        },
-        {
-          "version": "1.22.0",
-          "date": "2026-10-26",
-          "notes": "- Banner animations say why they failed, play on phones away from the server, and never offer a paid retry for a saved clip.\n- Water beats Fire, Fire beats Earth, Earth beats Wind, Wind beats Water, in both combat modes and on the Home chart.\n- Formation conversion handles five-star traits, converts one character at a time, explains failures and keeps ready kits.\n- The Vigor countdown always shows below full and stops flickering.\n- Story choices appear without reopening the story.\n- Letters fill the screen with a shorter reply box, and Read message lists your bonded units.\n- New messages show as a styled card on Home with the opening lines.\n- The story mute button and help marks match their neighbours.",
-          "highlight": true
         }
       ]
     },

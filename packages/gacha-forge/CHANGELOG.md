@@ -1,3 +1,9 @@
+## 1.26.3 — 2026-10-28
+
+- A story event you played now sits in **Chapters** right after the chapter it followed, as a finished Character Story does, instead of in a list below the next chapter. Its card says Done, Ended or Paused (Seasonal events off) and opens it to read its scenes again. Stories after the same chapter appear in the order you opened them. **Events → Story events** offers **Revisit played scenes** for a finished event, not **Continue event**.
+- A finished story event's map no longer offers Hard and Very Hard. Events are Normal-only, so those fights could never start, and **Start battle** did nothing. A fight that can't start now says why, with **Retry** and **Back**, in chapters, Character Stories, events, Materials and the Tower, and a cleared event fight is turned away before its briefing.
+- **Start battle** no longer stays disabled on a cheaper fight after another was refused for Vigor, and works at once in a world you switched to while a fight was starting.
+
 ## 1.26.2 — 2026-10-28
 
 - Nothing changes in play. Expression portraits, choice labels, dialogue voice picking, music briefs, soundtracks and a few log lines now take optional settings, so another package can reuse them. Gacha Forge keeps its own values for all of them.

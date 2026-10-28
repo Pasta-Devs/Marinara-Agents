@@ -204,6 +204,26 @@ try {
     }
   }
   assert.equal(f.session().progress[event.chapter].normal, 10);
+  // 1.26.3: a finished event's fights are cleared on Normal, its only difficulty. On any difficulty a cleared fight
+  // is turned away when it loads, not only when it starts, so its briefing never offers a Start that is refused.
+  const vigor = f.session().wallet.vigor;
+  for (const difficulty of ["normal", "hard", "veryhard"])
+    for (const index of [0, 1, 2])
+      for (const path of ["/story-event/battle", "/story-event/battle/start"])
+        assert.equal(
+          (await post(path, { chapter: event.chapter, storyRevision: revision, combatIndex: index, difficulty })).body
+            .error,
+          "event-already-played",
+          `${path} ${difficulty} #${index}`,
+        );
+  assert.equal(f.session().wallet.vigor, vigor, "No Vigor is spent on a cleared fight");
+  assert.equal(f.session().combatPending, undefined);
+  // What Chapters places the finished event by: played, opened and the chapter it followed.
+  const finished = (await post("/story-events")).body.events.find((entry) => entry.chapter === event.chapter);
+  assert.deepEqual(
+    { played: finished.played, opened: Number.isFinite(finished.opened), after: finished.after },
+    { played: 10, opened: true, after: 1 },
+  );
   assert.equal(f.session().wallet.funds, startFunds + 6000);
   assert.equal(f.session().wallet.aether, startAether + 320);
   assert.ok(f.session().roster[rewardId], "The prepared four-star character is actually claimed");

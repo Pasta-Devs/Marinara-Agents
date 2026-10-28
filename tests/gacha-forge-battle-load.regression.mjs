@@ -26,15 +26,21 @@ const methods = [
   cut("_towerFight(){", "_claimTower(){"),
   cut("_resultAgain(){", "_loadContinuity(){"),
   cut("_initState(){", "get capabilityProps(){"),
+  // The shipped Start battle; host() stubs it, and a test deletes the stub to press the real one.
+  cut("_vigorView(){", "_feedRoom(e){"),
 ].join("");
 const combatKeyExpr = cut("`combat:${this._combatPhase}", ':e==="unit"?');
 const { waitForgeFormationSave } = new Function(
   `${cut("const forgeFormationSaving = (host) =>", "// Reopening Formation")};return { waitForgeFormationSave };`,
 )();
 const ef = new Function(`${cut("function ef(", "function Ja(")};return ef`)();
+const forgeChapterCurrent = new Function(
+  `${cut("function forgeChapterCurrent(host) {", "function forgeChapterResetTarget(")};return forgeChapterCurrent`,
+)();
 const provided = {
   waitForgeFormationSave,
   ef,
+  forgeChapterCurrent,
   forgeWarmCombatVoices: (host) => (host.warmed = (host.warmed || 0) + 1),
   Wt: () => false,
 };
@@ -395,4 +401,125 @@ test("a fight that cannot be set up says why: a changed story has its own words,
   assert.ok(
     source.includes(`forgeFormationErrorLabel(o)||"Couldn't set up the battle."+(o?" ("+u(String(o))+")":""))`),
   );
+});
+
+test("a refused start says why on the fight screen and Retry loads it again; only no-vigor keeps the briefing", async () => {
+  // 1.26.3: a start the server refused (a cleared story event fight answered event-already-played) went to
+  // _combatVigorError, which the briefing never draws, so Start battle stayed and did nothing.
+  const h = host();
+  delete h._startBattle;
+  storyFight(h, 0, "A");
+  await h.land(0, ok("A"));
+  const start = async (reply) => {
+    h._startBattle();
+    await h.land(h.calls.length - 1, reply);
+    return { ...h.screen(), drawn: h.drawn.at(-1), starting: h._combatStarting, vigor: h._combatVigorError?.error };
+  };
+  const retry = async () => {
+    h._loadBattle(); // the error screen's Retry
+    await h.land(h.calls.length - 1, ok("A"));
+    return h.screen().phase;
+  };
+  const screen = (phase, error, vigor) => ({
+    view: "combat",
+    phase,
+    fight: "A",
+    payload: "A",
+    error,
+    drawn: `combat:${phase}:A:A`,
+    starting: false,
+    vigor,
+  });
+  const refused = await start({ ok: false, error: "event-already-played" });
+  const afterRefusal = await retry();
+  const dropped = await start(null);
+  const afterDrop = await retry();
+  const short = await start({ ok: false, error: "no-vigor", cost: 5, vigorNextMs: 60000 });
+  assert.deepEqual(
+    { sent: h.calls.map((call) => call.path), refused, afterRefusal, dropped, afterDrop, short },
+    {
+      sent: ["/battle", "/battle/start", "/battle", "/battle/start", "/battle", "/battle/start"],
+      refused: screen("error", "event-already-played", undefined),
+      afterRefusal: "prebattle",
+      dropped: screen("error", "failed", undefined),
+      afterDrop: "prebattle",
+      short: screen("prebattle", "", "no-vigor"),
+    },
+  );
+});
+
+test("a no-vigor answer stays with the fight it refused: the next fight's briefing reads its own cost", async () => {
+  // Before 1.26.3 only a successful start cleared _combatVigorError, so a 10-Vigor Materials start refused for Vigor
+  // left "7 of 10" and a disabled Start battle on a 5-Vigor story fight's briefing, though 7 Vigor covers it.
+  const h = host();
+  delete h._startBattle;
+  h._wallet = { vigor: 7 };
+  farmFight(h, "xp");
+  await h.land(0, { ...ok("farm A"), cost: 10 });
+  h._startBattle();
+  await h.land(1, { ok: false, error: "no-vigor", cost: 10, vigorNextMs: 60000 });
+  const refused = h._vigorView();
+  h._exitCombat(false);
+  storyFight(h, 0, "B");
+  await h.land(2, { ...ok("B"), cost: 5 });
+  assert.deepEqual(
+    { sent: h.calls.map((call) => call.path), refused, next: { ...h.screen(), vigor: h._vigorView() } },
+    {
+      sent: ["/farm/battle", "/farm/start", "/battle"],
+      refused: { have: 7, cost: 10, nextMs: 60000 },
+      next: {
+        view: "combat",
+        phase: "prebattle",
+        fight: "B",
+        payload: "B",
+        error: "",
+        vigor: { have: 7, cost: 5, nextMs: null },
+      },
+    },
+  );
+});
+
+test("a start in flight when the world changes: the new world's Start battle sends, and the old reply touches nothing", async () => {
+  // _initState never reset _combatStarting, so a chapter start answered after a world switch (null: _postJson drops
+  // a reply for a world no longer shown) left every Start battle in the new world doing nothing until a reload. A
+  // Materials or Tower start counted as current in any world, so its late reply turned the new fight to an error.
+  const results = [];
+  for (const [kind, enter] of [
+    ["chapter", (h) => storyFight(h, 0, "A")],
+    ["farm", (h) => farmFight(h, "xp")],
+  ]) {
+    const h = host();
+    delete h._startBattle;
+    enter(h);
+    await h.land(0, ok("A"));
+    h._startBattle();
+    h._initState(); // _adoptRun
+    h._run = { runId: "r2" };
+    storyFight(h, 1, "C");
+    await h.land(2, ok("C"));
+    await h.land(1, null);
+    const afterOld = h.screen();
+    h._startBattle();
+    results.push({
+      kind,
+      sent: h.calls.map((call) => call.path),
+      afterOld,
+      starting: h._combatStarting,
+    });
+  }
+  const screen = { view: "combat", phase: "prebattle", fight: "C", payload: "C", error: "" };
+  assert.deepEqual(results, [
+    {
+      kind: "chapter",
+      sent: ["/battle", "/battle/start", "/battle", "/battle/start"],
+      afterOld: screen,
+      starting: true,
+    },
+    {
+      kind: "farm",
+      sent: ["/farm/battle", "/farm/start", "/battle", "/battle/start"],
+      afterOld: screen,
+      starting: true,
+    },
+  ]);
 });

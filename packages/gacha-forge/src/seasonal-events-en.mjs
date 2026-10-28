@@ -33,6 +33,10 @@ export const forgeSeasonalEnglish = {
     "A story event: seven scenes and three fights. Chapter {chapter} stays where it is, but waits until you finish.",
   "events.choice.open": "Story event \u00b7 Open",
   "events.choice.waits": "The main story waits until you finish it.",
+  "events.timeline.done": "Story event · Done",
+  "events.timeline.ended": "Story event · Ended",
+  "events.timeline.paused": "Story event · Paused",
+  "events.timeline.body": "Played. Enter to read it again; reading changes nothing.",
   "events.forge.eyebrow": "Forging a story event",
   "events.forge.note": "story event",
   "events.forge.foot":

@@ -295,14 +295,12 @@ for (const theme of ["dark", "light"]) {
         game._renderKey = null;
         game._renderBrowser();
       });
-      const archive = forge.locator("[data-story-event-archive]");
-      await expect(
-        archive
-          .locator('[data-story-event-card="event-1"]')
-          .getByRole("heading", { name: "The Lantern Crossing", exact: true }),
-      ).toBeVisible();
+      // Since 1.26.3 a played event sits in the chapter timeline after the chapter it followed, not below it.
+      const played = forge.locator('[data-chapters-list] > [data-story-event-open="event-1"]');
+      await expect(played.getByRole("heading", { name: "The Lantern Crossing", exact: true })).toBeVisible();
+      await expect(played).toContainText("Story event · Ended");
       await page.screenshot({ path: testInfo.outputPath(`seasonal-archive-${theme}.png`) });
-      await archive.locator('[data-story-event-open="event-1"]').click();
+      await played.getByRole("button").click();
       await expect.poll(() => forge.evaluate((node) => (node as any)._planChapter)).toBe("event-1");
       await expect(forge.locator("[data-start]").first()).toBeDisabled();
       await forge.locator('[data-replay="0"]').click();
