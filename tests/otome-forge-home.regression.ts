@@ -849,6 +849,9 @@ test("tap annoyance, time of day, the word counts, line picks and the typing del
   assert.equal(sentenceCount("No full stop at the end"), 1);
   assert.equal(sentenceCount("Rest well. ♡"), 1, "a trailing symbol is not a sentence");
   assert.equal(sentenceCount("Hi! :)"), 1);
+  assert.equal(sentenceCount("Rest well.♡"), 1, "a symbol glued to the terminator still closes the sentence");
+  assert.equal(sentenceCount("One. Two. Three.♡"), 3);
+  assert.equal(sentenceCount("Wait...what"), 1, "an ellipsis glued to a word is one mark, not a closed sentence");
   assert.equal(mentionsAbsence("You’re back"), true, "a curly apostrophe is the same contraction");
   assert.equal(mentionsAbsence("you’ve been gone"), true);
   assert.equal(mentionsAbsence("you're back"), true);

@@ -204,7 +204,8 @@ export function Thread({ runKey, li, quote: initialQuote, focusHeading, onBack, 
         // Unknown: keep her words.
       }
       if (local && !saved) {
-        if (fromDraft) setDraft((current) => current || local.text);
+        // A suggestion's words return too; a sticker has none, and a newer draft is never overwritten.
+        setDraft((current) => current || local.text);
         if (local.quote) setQuote((current) => current ?? local.quote ?? null);
       }
       setOutgoing(null);
