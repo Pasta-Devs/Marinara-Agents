@@ -12,14 +12,15 @@ import { logger } from "../../../lib/logger.js";
 import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
 import type { SlurpCanonAnchors } from "../../modules/feed/slp-post-beat.js";
+import type { SlurpWorldLens } from "../../modules/creators/slp-world-lens.js";
 import { mergeSlurpCanonAnchors, normalizeSlurpCanonAnchors } from "../../modules/feed/slp-post-brief.js";
 
 /** One JSON blob in app settings. `slp-flavour-source.ts` reads it for the brief, stale or not. */
 export const SLURP_CANON_ANCHORS_KEY = "slurp2.canon-anchors";
 
 // Bumped when the extraction asks for more (v2 added the routine, v3 the essentials and the wider
-// card text, v4 the niches), so every cache refreshes once. The player's edits are merged into the new reading.
-const ANCHORS_VERSION = "v4";
+// card text, v4 the niches, v5 the world lens), so every cache refreshes once. The player's edits are merged into the new reading.
+const ANCHORS_VERSION = "v5";
 const anchorKey = (text: string) => createHash("sha256").update(`${ANCHORS_VERSION}:${text}`).digest("hex");
 const FAILED_WAIT_MS = 30 * 60_000;
 
@@ -191,6 +192,11 @@ export async function saveSlurpCanonAnchors(
 }
 
 /** Forget the anchors, the player's edits included, so the next post reads the card again. */
+/** The Creator's world lens from the stored reading, for prompts without the card at hand. */
+export async function readSlurpWorldLens(db: DB, accountId: string): Promise<SlurpWorldLens | undefined> {
+  return (await readAnchorCache(db).catch(() => ({}) as AnchorCache))[accountId]?.anchors?.world;
+}
+
 export async function clearSlurpCanonAnchors(db: DB, accountId: string): Promise<void> {
   failedUntil.delete(accountId);
   await updateAnchors(db, accountId, () => null);

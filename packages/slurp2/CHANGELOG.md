@@ -1,5 +1,14 @@
 # Slurp release notes
 
+## 0.4.8 — 2026-10-28
+
+- World lens: the canon-anchor reading also returns `world` (era, device, money, festivals). Cache version v4 → v5, so each card is read once more in the background. A modern card has no lens and nothing changes.
+- The Creator brief (posts, DMs, scenes, drama, Support) and both live show prompts get one "Your world" line for a non-modern lens.
+- Pictures: a non-modern Creator never gets the mirror, desk or screenshot camera source, so no phone or screen appears. The image model gets no world words.
+- Holidays: when events run, a non-modern Creator is told to play them as their world's nearest festival.
+- Culture-shock fans: about 1 in 4 regular fan comments under a non-modern Creator's post comes from a free bank per era.
+- Backstage: the canon-anchor editor shows and edits the world (era, device, money, festivals); a player's fix survives a new reading.
+
 ## 0.4.7 — 2026-10-28
 
 - Fan comments see the post: a short title (40 characters or fewer) gets quoted in some questions and reactions, the question bank has 16 more lines, and a fan line is skipped when the same text is already under the post.

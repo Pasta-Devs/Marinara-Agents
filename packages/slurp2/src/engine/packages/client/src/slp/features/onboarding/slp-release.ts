@@ -1,7 +1,7 @@
 import { SLURP2_LEGACY_RELEASES } from "./slp-release-archive";
 
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.4.7";
+export const SLURP2_VERSION = "0.4.8";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -14,6 +14,15 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.4.8",
+    date: "2026-10-28",
+    notes: [
+      "Creators from other worlds stay in their world: an elf posts through a scrying mirror and gets paid in crowns, a starship pilot in credits. Pictures stay photos, with no phones in them.",
+      'Holidays turn into each world\'s own festivals, and fans react to the culture shock ("is that sword real??").',
+      "Fix a wrong world on the Creator's card in Backstage, next to the other card facts.",
+    ],
+  },
   {
     version: "0.4.7",
     date: "2026-10-28",

@@ -14,6 +14,7 @@
  * before reaching for the model — the combinations here already run into the hundreds.
  */
 
+import type { SlurpWorldLens } from "../creators/slp-world-lens.js";
 import type { SlurpAudienceTone } from "../../../../../shared/src/slp/slp-tone.js";
 import {
   SLURP_COMMISSION_ASKS,
@@ -106,6 +107,45 @@ function pickFresh(seed: string, salt: string, bank: readonly string[], taken: r
 }
 
 /** What a fan's comment can see of the post: its title, and the comments already under it. */
+/** Fans meeting a Creator from another era or world (world lens): free, one per era. */
+const WORLD_SHOCK: Record<SlurpWorldLens["era"], readonly string[]> = {
+  historical: [
+    "the corset alone deserves its own page",
+    "sorry what year is it where you are",
+    "posting by candlelight is a choice and I respect it",
+    "the drama in your town is better than any show",
+    "someone get this person a hair dryer, they've earned it",
+    "no filter, just a century of good lighting",
+  ],
+  fantasy: [
+    "is that sword real??",
+    "the dragon in the back is doing half the work",
+    "what app is that mirror on",
+    "ok but does the potion actually work",
+    "sir this is a creator page, not a quest board",
+    "the elf ears are real? asking for me",
+    "how is the castle wifi",
+  ],
+  scifi: [
+    "what planet is this even",
+    "the lights in the back are from a spaceship right",
+    "you're posting from the future and still look this good",
+    "does the robot help with the photos",
+    "the outfit is three centuries ahead of me",
+    "zero gravity hair is unfair",
+  ],
+  other: [
+    "I don't know where you are but I want to go",
+    "every post from your world is a whole new map",
+    "the sky behind you is not a colour I know",
+    "explain your world to me slowly",
+    "where even is this place",
+  ],
+};
+
+export const slurpWorldShockBodies = (lens: SlurpWorldLens | undefined): readonly string[] =>
+  lens ? WORLD_SHOCK[lens.era] : [];
+
 export type SlurpCommentContext = { title?: string | null; taken?: readonly string[] };
 
 /** Deterministic index, so the same request always reads the same way. */

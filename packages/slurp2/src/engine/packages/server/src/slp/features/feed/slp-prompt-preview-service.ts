@@ -1,4 +1,5 @@
 import { resolveSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
+import { readSlurpWorldLens } from "../../data/creators/slp-canon-anchor-storage.js";
 import { SLURP_SECONDARY_IMAGE_COUNT } from "../media/slp-media-contract.js";
 import type { DB } from "../../../db/connection.js";
 import { listSlurpContinuityFor } from "../../data/continuity/slp-continuity-storage.js";
@@ -72,6 +73,7 @@ export async function previewSlurpPromptBlocks(
   const production = strategy.production;
   const camera = slurpPostCameraSource(account.id, sequence, {
     companyCanHoldCamera: variation.companyCanHoldCamera,
+    screens: !(await readSlurpWorldLens(db, account.id)),
     prefers: production.prefers,
   });
   const axes = slurpPostAxes(account.id, sequence, {

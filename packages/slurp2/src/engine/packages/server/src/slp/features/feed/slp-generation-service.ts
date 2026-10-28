@@ -1,4 +1,5 @@
 import { buildSlurpDeepDetailsRecord } from "./slp-deep-details-record.js";
+import { readSlurpWorldLens } from "../../data/creators/slp-canon-anchor-storage.js";
 import { saveSlurpNewPostDeepDetails } from "../../data/feed/slp-post-deep-details-storage.js";
 import type { SlpDeepDetailsFlavour } from "../../../../../shared/src/slp/slp-deep-details.js";
 import { prepareSlurpCreatorPost } from "./slp-prepared-post.js";
@@ -268,6 +269,7 @@ export async function generateCreatorPost(
   const cameraSource = variation
     ? slurpPostCameraSource(account.id, sequence, {
         companyCanHoldCamera: variation.companyCanHoldCamera,
+        screens: !(await readSlurpWorldLens(db, account.id)),
         prefers: production.prefers,
         intent: axes?.intent,
         effort,
