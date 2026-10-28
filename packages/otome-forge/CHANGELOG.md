@@ -1,5 +1,11 @@
 # Otome Forge release notes
 
+## 0.0.6 — 2026-10-28
+
+- Wish opens: three banners every 14 days (Memories, a love interest's wardrobe, and yours), paid only with Starlight you earn (100 a wish; there is no real money). The pity count is exact ("5★ in 23"): a 5★ comes by the 60th wish and is always the featured one, and past banners wait in Echoes on the same pity. Wishing never calls a model, and duplicates refund Starlight.
+- Memories hold a Character Story to read; looks go to the Wardrobe, where your look and theirs make a couple set; Snapshots join that love interest's Love Timeline, and only they remember them.
+- At affection 10, each love interest gives a Memory Selector. Banner and item art follows your image settings and is painted once.
+
 ## 0.0.4 — 2026-10-28
 
 - Each love interest now has a route: six stages from Mask to Bond, each opened by a free route chapter at an affection level and moved only by its last scene. The fourth reveals a secret; the fifth holds a confrontation and a choice that cannot be undone.

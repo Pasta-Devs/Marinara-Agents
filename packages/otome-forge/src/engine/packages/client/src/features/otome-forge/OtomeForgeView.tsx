@@ -4,6 +4,8 @@
 // The active story's audio (M2b, hooks/use-otome-audio.ts) is held here for every screen, so its player and its music
 // carry on from Home to the Story screen, the reader and back: the reader's own provider then adds nothing. Its music
 // claims each scene's cue; the screens of a story play the home cue, and the others are silent.
+// M4: Wish, the Wardrobe and the Album open an item's Character Story, Moment or first-wear beat in the reader, and the
+// reader's Back returns to the screen that opened it.
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,11 +23,14 @@ import { OtomePropsContext, readOtomeProps } from "./props";
 import { BibleView } from "./screens/BibleView";
 import { ForgeProgress } from "./screens/ForgeProgress";
 import { Placeholder } from "./screens/Placeholder";
+import { Album } from "./screens/album/Album";
 import { Reader } from "./screens/reader/Reader";
-import { DOCK_SCREENS, RUN_SCREENS, type DockScreen, type ScreenId } from "./screens/screens";
+import { DOCK_SCREENS, RUN_SCREENS, SCREEN_NAME_KEYS, type DockScreen, type ScreenId } from "./screens/screens";
 import { Settings } from "./screens/settings/Settings";
 import { SetupWizard } from "./screens/setup/SetupWizard";
 import { StoryHome } from "./screens/story/StoryHome";
+import { Wardrobe } from "./screens/wardrobe/Wardrobe";
+import { WishScreen } from "./screens/wish/WishScreen";
 import { WorldPicker } from "./screens/WorldPicker";
 import type { OtomeIndex, RunView } from "./shared/api-types";
 
@@ -47,6 +52,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   const [settingsReturn, setSettingsReturn] = useState<ScreenId>("picker");
   const [bibleLi, setBibleLi] = useState<string | null>(null);
   const [chapterKey, setChapterKey] = useState<string | null>(null);
+  // Where the reader's Back leads: the Story screen, or the Wish, Wardrobe or Album screen that opened an item's story.
+  const [readerReturn, setReaderReturn] = useState<ScreenId>("story");
   const [opening, setOpening] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const screenRef = useRef<HTMLDivElement>(null);
@@ -167,6 +174,13 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     go("settings");
   };
   const selectDockScreen = (next: DockScreen) => go(next === screen ? "home" : next);
+  /** Opens a chapter (or an item's story, `story-<itemId>`) in the reader, coming back to `from`. */
+  const openReader = (from: ScreenId) => (key: string) => {
+    navigated.current = true;
+    setChapterKey(key);
+    setReaderReturn(from);
+    setChosen("reader");
+  };
   const bibleOf = view?.lis.find((li) => li.id === bibleLi) ?? null;
 
   // Where Back leads. The opening screen and the dock's screens have none.
@@ -175,7 +189,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     setup: "picker",
     forge: view?.forge.phase === "ready" ? "home" : "picker",
     bible: "forge",
-    reader: "story",
+    reader: readerReturn,
     phone: "home",
     home: activeRun ? undefined : "picker",
   };
@@ -207,23 +221,29 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     ) : screen === "settings" ? (
       <Settings run={view} lookPreference={lookPreference} onLookPreference={onLookPreference} />
     ) : screen === "story" && activeRun && view ? (
-      <StoryHome
-        runKey={activeRun}
-        view={view}
-        onOpenChapter={(key) => {
-          navigated.current = true;
-          setChapterKey(key);
-          setChosen("reader");
-        }}
-      />
+      <StoryHome runKey={activeRun} view={view} onOpenChapter={openReader("story")} />
     ) : screen === "reader" && activeRun && view && chapterKey ? (
       <Reader
         runKey={activeRun}
         chapterKey={chapterKey}
         view={view}
-        onExit={() => go("story")}
+        onExit={() => go(readerReturn)}
+        {...(readerReturn === "story"
+          ? {}
+          : { exitLabel: t("ui.otomeForge.reader.backTo", { screen: t(SCREEN_NAME_KEYS[readerReturn]) }) })}
         onHome={() => go("home")}
       />
+    ) : screen === "wish" && activeRun && view ? (
+      <WishScreen
+        runKey={activeRun}
+        view={view}
+        onOpenStory={openReader("wish")}
+        onOpenWardrobe={() => go("wardrobe")}
+      />
+    ) : screen === "wardrobe" && activeRun && view ? (
+      <Wardrobe runKey={activeRun} view={view} onOpenStory={openReader("wardrobe")} />
+    ) : screen === "album" && activeRun && view ? (
+      <Album runKey={activeRun} view={view} onOpenStory={openReader("album")} />
     ) : screen === "home" && view ? (
       <Placeholder screen="home">
         <div className="of-actions">

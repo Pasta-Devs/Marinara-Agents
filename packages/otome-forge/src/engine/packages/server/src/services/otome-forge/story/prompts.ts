@@ -15,6 +15,8 @@
 // writes a whole Confrontation in one reply (the scene contract, scene cards). The game owns the stage: P10 is only told
 // the chapter MAY move him, and the gate scene's read moves it. A love interest may be any gender: prompts name him or
 // use the pronouns of his bible, never a fixed "he".
+// M4: P6 also writes a Character Story's nodes (P22, and P23 for a one-scene Moment or first-wear beat) with
+// storyFraming; its planner, P21, is S/items/prompts.ts, which reuses the blocks exported here.
 import { forgeChoiceMessages, forgeChoicePlanMessages } from "@forge-kit/player-choices-server.mjs";
 import { z, type ZodType } from "zod";
 import type {
@@ -142,7 +144,8 @@ export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: rea
   return lines.join("\n");
 }
 
-function protagonistBlock(player: Player): string {
+/** Who the protagonist is (name, pronouns, traits, goal), for every story prompt. */
+export function protagonistBlock(player: Player): string {
   return [
     `${player.name || "The protagonist"} (${pronounText(player.pronouns)}). Never assume a gender the pronouns do not state.`,
     player.traits.length ? `Traits: ${player.traits.join("; ")}` : "",
@@ -153,7 +156,7 @@ function protagonistBlock(player: Player): string {
 }
 
 /** The ledgers a planner for `knows` may see (knownTo): no line or conflict of another love interest's own chapter. */
-function ledgerBlock(state: RunState, units: readonly Unit[], knows: readonly LiId[]): string {
+export function ledgerBlock(state: RunState, units: readonly Unit[], knows: readonly LiId[]): string {
   const name = (li: LiId) => units.find((unit) => unit.id === li)?.name ?? li;
   const relationship = knownRows(state.ledgers.relationship, knows);
   const offscreen = knownRows(state.ledgers.offscreen, knows);
@@ -183,7 +186,7 @@ function ledgerBlock(state: RunState, units: readonly Unit[], knows: readonly Li
  * A love interest's full bible for the planner (it authors the hidden truth), without the drawing and claw fields, and
  * what stands between them as a planner for `knows` may see it (seenBy).
  */
-function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[]): string {
+export function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[]): string {
   const liState = seenBy(liStateOf(state, unit.id), unit.id, knows);
   const { look: _look, play: _play, ...bible } = unit.bible ?? ({} as NonNullable<Unit["bible"]>);
   return [
@@ -206,7 +209,8 @@ function webBlock(world: World, units: readonly Unit[]): string {
     .join("\n");
 }
 
-function sceneCardBlock(unit: Unit, liState: LiState, resolves: readonly string[]): string {
+/** A love interest's scene card and what stands between them and the protagonist (every prompt but the planners'). */
+export function sceneCardBlock(unit: Unit, liState: LiState, resolves: readonly string[] = []): string {
   return [`id ${unit.id}:`, otomeSceneCard(unit, liState), betweenYou(unit, liState, resolves)].join("\n");
 }
 
@@ -555,10 +559,25 @@ function chapterLabel(chapter: BeatMessagesInput["chapter"], units: readonly Uni
     return `${owner}'s route chapter, toward stage ${chapter.stage} (${stageTitle(chapter.stage)})`;
   }
   if (chapter.kind === "repair") return `a repair chapter with ${owner}`;
+  if (chapter.kind === "story") return `${owner}'s Character Story`;
   return `${chapter.kind} chapter`;
 }
 
-/** The lines P6 adds to a node of a route or repair chapter: its gate, what it reveals, the repair's rule. */
+/**
+ * P22 and P23 (M4): what P6 adds to a node of a Character Story (`story-<itemId>`, S/items/character-story.ts): a side
+ * story of one love interest's, written against the canon of the day it was first opened. One node is a Moment or a
+ * first-wear beat, whose guide says which; more is a Memory's 3–5 scene story. Private to him, like his route.
+ */
+function storyFraming(name: string, nodes: number): string[] {
+  return [
+    nodes > 1
+      ? `This is ${name}'s CHARACTER STORY: a ${nodes}-scene side story between ${name} and the protagonist, outside the main plot. Each node is one of its scenes; it has its own small arc and ends on its last.`
+      : `This is a ONE-SCENE side story of ${name}'s: one complete scene between ${name} and the protagonist, outside the main plot, with its own small beginning and end.`,
+    `It is private: no other love interest appears in it or learns of it. It does not move ${name}'s stage: how close they are follows the scene card. It never resolves the mystery or reveals a secret before its stage, and it never contradicts the story so far.`,
+  ];
+}
+
+/** The lines P6 adds to a node of a route, repair or story chapter: its gate, what it reveals, the repair's rule. */
 function arcFraming({
   chapter,
   node,
@@ -590,6 +609,7 @@ function arcFraming({
       `This is a REPAIR chapter: a rupture stands between ${name} and the protagonist${grievance ? ` (${grievance.text})` : ""}. The repair costs ${name} something; it does not erase what happened, and nobody apologizes on the spot.`,
     );
   }
+  if (chapter.kind === "story") lines.push(...storyFraming(name, chapter.nodes.length));
   return lines;
 }
 

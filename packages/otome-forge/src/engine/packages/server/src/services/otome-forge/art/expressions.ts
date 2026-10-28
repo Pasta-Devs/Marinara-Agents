@@ -18,6 +18,7 @@ import { createForgeStoryExpressions, type ForgeStoryExpressions } from "@forge-
 import type { Beat, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { FACE_LOOKS, FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { OTOME_FORGE_PACKAGE_ID, runDocTarget, worldId } from "../ids.js";
+import { wornLookUrl } from "../schemas/common.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { queueScenePaints, releaseBeatArt } from "./cg.js";
@@ -42,6 +43,8 @@ export interface OtomeArt {
   queueScenePaints(runId: string, beat: Beat, options: Omit<PaintOptions, "active">): Promise<void>;
   /** A beat replaced by a rewrite or removed: deletes its CG's gallery image unless the album keeps it. */
   releaseBeatArt(runId: string, beat: Pick<Beat, "cg">): Promise<void>;
+  /** False once torn down: an item's paint (M4, S/art/outfits.ts) still waiting in its lane stops before its paid call. */
+  active(): boolean;
   /** Package teardown: queued faces and scene paints stop before their paid call. */
   dispose(): void;
 }
@@ -50,8 +53,9 @@ interface ExpressionRun {
   world: World;
 }
 
-/** The base a love interest's faces are painted on. ponytail: his portrait until M4 adds a worn look (then its URL). */
-const baseOf = (unit: Pick<Unit, "portrait"> | null | undefined) => unit?.portrait ?? "";
+/** The base a love interest's faces are painted on: the look he wears (M4), else his portrait. */
+const baseOf = (unit: Pick<Unit, "portrait" | "outfits" | "wornOutfit"> | null | undefined) =>
+  unit ? wornLookUrl(unit) : "";
 
 /** The kit's view of a world's images: on only with a connection, at the look's size. */
 const imagesOfRun = (run: ExpressionRun) => ({
@@ -184,6 +188,7 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
     queueScenePaints: (runId, beat, options) =>
       disposed ? Promise.resolve() : queueScenePaints(deps, runId, beat, { ...options, active }),
     releaseBeatArt: (runId, beat) => releaseBeatArt(deps, runId, beat),
+    active,
     dispose() {
       disposed = true;
       for (const expressions of runs.values()) expressions.dispose();

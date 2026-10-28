@@ -2,7 +2,7 @@
 
 Otome Forge will be a single-player otome game made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. There is no real money in it.
 
-This is an early test build. You set up a story: a premise, your protagonist from one of your personas, and two to five love interests from your character cards or from original archetypes. The forge then plans the story's mystery and writes a hidden character bible for each love interest, and can paint the cast's base looks. Then you play its main chapters and each love interest's own route. Home, the phone, dates and wishes arrive in later builds. The plan is in [Pasta-Devs/Marinara-Agents#1781](https://github.com/Pasta-Devs/Marinara-Agents/issues/1781).
+This is an early test build. You set up a story: a premise, your protagonist from one of your personas, and two to five love interests from your character cards or from original archetypes. The forge then plans the story's mystery and writes a hidden character bible for each love interest, and can paint the cast's base looks. Then you play its main chapters and each love interest's own route, and wish for their side stories and looks. Home, the phone and dates arrive in later builds. The plan is in [Pasta-Devs/Marinara-Agents#1781](https://github.com/Pasta-Devs/Marinara-Agents/issues/1781).
 
 ## Install and open it
 
@@ -40,10 +40,21 @@ Everything works without images or sound: a place without art shows a gradient f
 - Music follows each scene's mood: the Engine's own music, or, with **Generate music** on and an audio connection, a track written for this world, made once per mood and never retried by itself.
 - Dialogue can be voiced through the Engine's voice settings: a love interest from a card uses the voice assigned to that card, the others a default voice, and you speak with your persona's voice. Narration and thoughts stay silent, and the backlog can play a line again.
 
+## Wish, the Wardrobe and the Album
+
+Wishes cost Starlight you earn by playing (100 each, 1,000 for ten; there is no real money), and a new story starts with 2,000. Every 14 days, counted from the day the story began, the next time you open Wish it creates three banners, each featuring the love interest featured least recently: **Memories**, that love interest's **wardrobe**, and **yours**. Creating them takes one model call per banner, and painting their art up to three images. Banners never expire: past ones wait in **Echoes**, and you can still wish on them.
+
+- A banner holds one featured 5★, three 4★s and six 3★ Snapshots. A Memory (5★) is a key image, a short Character Story and a voiced line; a Moment (4★) is one scene; a look (5★ or 4★) is a complete outfit; a Snapshot is a short vignette that joins that love interest's Love Timeline, and only they remember it.
+- The pity count is exact and shown as "5★ in 23". A 5★ starts at 1.5% a wish, rises from the 46th wish without one, and the 60th is always one; every 10th wish is a 4★ at least. The 5★ is always the featured item, with no 50/50. Pity is kept per kind of banner and carries over, Echoes included. A wish charges and rolls in one save, so it is never paid twice, and it never calls a model. A duplicate refunds 400, 60 or 10 Starlight by rarity.
+- A banner's art is its featured item's picture, painted when the banner is created, or held for your tap with **Ask before painting** or the Engine's prompt review. Other items are painted, and stories written, the first time you open them, and only once.
+- In the **Wardrobe**, a love interest's looks and yours can be worn at home, shown to them, and your featured look and theirs from the same two weeks make a couple set. A look they wear gets its own faces.
+- At affection 10, each love interest gives one **Memory Selector**: claim any of their Memories from past banners (Echoes) that you do not have yet, at no cost.
+- The **Album** keeps the CGs you have seen, your Memories, the Love Timeline, your favourite lines and the soundtrack, and saves an image through the Engine.
+
 ## Content settings and the 18+ gate
 
 Each story has its own Heat (SFW, NSFW: Fade or NSFW: Explicit; SFW by default), Darkness (Gentle, Angst or Dark romance; Angst by default), Lines & Veils (a Line is never written; a Veil happens only off the page), and image rating (SFW, Suggestive or Explicit; SFW by default). NSFW Heat, Dark romance and the image ratings above SFW unlock only after a one-time confirmation: "I am 18 or older. Love interests are always adults. This is fiction." The confirmation is self-reported, stored with its time, and checked by the server on every change. Turning a setting down never asks, and withdrawing the confirmation turns every story back to SFW, Angst and SFW images. Love interests are always adults, and non-consent and pregnancy start as Lines.
 
 ## Your data
 
-Otome Forge keeps its saves in Marinara Engine's package storage, in documents whose ids start with `otome-forge:`, so it works alongside Gacha Forge. They travel with your backups and profile exports, and they are not isolated from other packages in the Engine's storage. Painted looks, places, faces and CGs are saved in the Global Gallery, and deleting a story deletes them too. Generated music is kept by the Engine with its other generated audio. The look you pick (Midnight, Pearl or Follow system) and an unfinished setup are kept only in this browser, in storage the Engine's page shares with other installed packages.
+Otome Forge keeps its saves in Marinara Engine's package storage, in documents whose ids start with `otome-forge:`, so it works alongside Gacha Forge. They travel with your backups and profile exports, and they are not isolated from other packages in the Engine's storage. Banners and the items you win are documents of the story too. Painted looks, places, faces, CGs and banner art are saved in the Global Gallery, and deleting a story deletes them too. Generated music is kept by the Engine with its other generated audio. The look you pick (Midnight, Pearl or Follow system) and an unfinished setup are kept only in this browser, in storage the Engine's page shares with other installed packages.

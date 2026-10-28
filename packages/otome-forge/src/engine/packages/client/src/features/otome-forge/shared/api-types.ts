@@ -5,6 +5,7 @@
 import type { ConfrontationEnding, RouteEntry, Stance } from "./arcs";
 import type { ContentSettings, ImageRating, LimitId } from "./content";
 import type { Face, MusicMood } from "./faces";
+import type { BannerKind, PityCounter, Rarity } from "./wish";
 
 export type { ConfrontationEnding, RouteEntry, RouteNext, Stance } from "./arcs";
 
@@ -163,6 +164,30 @@ export interface World {
   places: Record<string, PlaceArt>;
 }
 
+/**
+ * A complete look won on Wish (M4), in the kit's outfit shape (image-avatar-references, story-expressions-server):
+ * `id` is the look's item id, which `wornOutfit` names; `url` is its painted full-body image.
+ */
+export interface Outfit {
+  id: string;
+  /** In the world's language. */
+  name: string;
+  /** English, visual only. */
+  outfitLine: string;
+  url: string;
+  ref?: string;
+  at: string;
+}
+
+/** P19 (M4): what a love interest noticed about the protagonist's new look, one line of 20 words or fewer. */
+export interface Noticed {
+  li: LiId;
+  text: string;
+  /** The outfit id she wore when he noticed. */
+  look: string;
+  at: string;
+}
+
 /** `${R}:player`: the protagonist, from an Engine persona. */
 export interface Player {
   personaId: string;
@@ -175,6 +200,12 @@ export interface Player {
   portrait?: string;
   portraitRef?: string;
   art?: Paint;
+  /** M4: her looks from My Wardrobe. */
+  outfits: Outfit[];
+  /** M4: the look she wears at home (an outfit id); absent wears her base look. */
+  wornOutfit?: string;
+  /** M4: his line about the look she wears now (P19), or null. */
+  noticed: Noticed | null;
 }
 
 export type ArcStageKey = "1" | "2" | "3" | "4" | "5" | "6";
@@ -253,8 +284,11 @@ export interface Unit {
   art?: Paint;
   identityLine: string;
   outfitLine: string;
-  /** Kit-owned shapes (outfits arrive in M4, expressions in M2b). */
-  outfits: unknown[];
+  /** M4: his looks from His Wardrobe (the kit reads them as references and as expression bases). */
+  outfits: Outfit[];
+  /** M4: the look he wears (an outfit id); absent wears his base portrait. */
+  wornOutfit?: string;
+  /** Kit-owned (M2b): the faces painted for each look, keyed by the look's URL. */
   expressions: Record<string, unknown>;
   /** Null until the forge's `bible:<li>` step writes it. */
   bible: Bible | null;
@@ -377,6 +411,25 @@ export interface RunState {
   favorites: Favorite[];
   /** M2b: the CGs unlocked once seen. */
   album: { cgs: AlbumCg[] };
+  /** M4: each banner kind's pity (GF's counter names), carried over from banner to banner and shared by Echoes. */
+  pity: Record<BannerKind, PityCounter>;
+  /** M4: the item ids the player owns, in the order won. */
+  owned: { items: string[] };
+  /**
+   * M4: the love interests whose Memory Selector (affection 10) has been used, each with the Memory it claimed (`true`:
+   * an early claim that did not record which).
+   */
+  selector: Record<LiId, string | true>;
+  /** M4: the newest pulls by request id, so a retried pull answers with the same results and charges once. */
+  pulls: WishPullRecord[];
+}
+
+/** One pull as the state keeps it (S/wish/pull.ts), for answering a retried request. */
+export interface WishPullRecord {
+  id: string;
+  banner: string;
+  at: string;
+  results: Array<{ item: string; rarity: Rarity; isNew: boolean; refund: number }>;
 }
 
 // ── Story (M2a): chapters, beats, choices. Chapter keys: `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`,
@@ -436,6 +489,8 @@ export interface Chapter {
   ledger: ChapterLedger;
   plannedAt: string;
   connectionId: string;
+  /** A Memory's Character Story (M4): the line its card voices, kept with the chapter so the item is always given it. */
+  voicedLine?: string;
 }
 
 /** A segment of a beat: one line of dialogue, one thought, or one piece of narration. */
@@ -713,6 +768,8 @@ export interface RunLiView {
   stage: number;
   /** M2b: his painted faces for the current look, once the whole set is ready and expressions are on. */
   expressions?: Partial<Record<Face, string>>;
+  /** M4: the look he wears from His Wardrobe, when not his base portrait (its outfit id and image). */
+  worn?: { id: string; url: string };
 }
 
 /** GET /runs/:run, and the `view` of POST /runs. */

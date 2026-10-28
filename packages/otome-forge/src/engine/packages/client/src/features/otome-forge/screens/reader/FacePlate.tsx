@@ -57,8 +57,9 @@ export function FacePlate({ li, face, speaking }: FacePlateProps) {
   const expressions = li?.expressions;
   usePreloadedFaces(expressions);
   if (!li) return null;
+  // The look he wears is his stage art: his faces are painted on it, so a plain line shows the same outfit.
   const shown = forgeStoryExpressionArt(
-    { art: li.portrait ?? "", expressions: expressions ?? {} },
+    { art: li.worn?.url ?? li.portrait ?? "", expressions: expressions ?? {} },
     { expression: face },
     FACES,
   );

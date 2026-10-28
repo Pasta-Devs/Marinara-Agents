@@ -5,7 +5,7 @@
 // there is no .default() or .catch(): readFields gives each field that is missing or fails its schema the default,
 // and a document from an older test build or a hand edit keeps every other field.
 import { z, type ZodType } from "zod";
-import type { Paint, Pronouns } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import type { Outfit, Paint, Pronouns } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 
 /** A field's schema, or a function that reads the raw value into its full shape (and supplies its own default). */
 export type Reader<V> = ZodType<V> | ((value: unknown) => V);
@@ -68,3 +68,32 @@ export const PaintSchema: ZodType<Paint> = z.object({
   ref: z.string().optional(),
   error: z.string().optional(),
 });
+
+/** A look won on Wish (M4), in the kit's outfit shape. */
+export const OutfitSchema: ZodType<Outfit> = z.object({
+  id: z.string().min(1).max(80),
+  name: z.string().max(200),
+  outfitLine: z.string().max(600),
+  url: z.string().min(1).max(2000),
+  ref: z.string().max(200).optional(),
+  at: z.string(),
+});
+
+/** At most this many looks per person: every look of every banner fits many times over. */
+export const OUTFITS_MAX = 400;
+
+/** The outfit `wornOutfit` names, when it is one of `outfits`; anything else wears the base look. */
+export function readWornOutfit(outfits: readonly Outfit[], worn: unknown): string | undefined {
+  return typeof worn === "string" && outfits.some((outfit) => outfit.id === worn) ? worn : undefined;
+}
+
+/**
+ * The image a person wears now: their worn outfit's, else their base portrait; "" with neither. Faces
+ * (art/expressions.ts, schemas/state.ts readyFaces) are painted and read on it.
+ * ponytail: M3's Home (its look and cut-out, S/routes/home.ts) is not on this branch and stands up `portrait`; when M3
+ * merges, Home's look calls wornLookUrl for him and for her, so Wear at home (S/routes/wardrobe.ts) shows there.
+ */
+export function wornLookUrl(person: { outfits: readonly Outfit[]; wornOutfit?: string; portrait?: string }): string {
+  const worn = person.wornOutfit ? person.outfits.find((outfit) => outfit.id === person.wornOutfit) : undefined;
+  return worn?.url ?? person.portrait ?? "";
+}

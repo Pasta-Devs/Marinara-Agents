@@ -65,8 +65,11 @@ const notFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not
 
 // ── Live paints in this process ──
 
-/** Whose paint: a look (`player`, `li:<id>`), a place (`place:<key>`) or a story CG (`cg:<key>/<i>@<written at>`). */
-export type PaintOwner = LookOwner | `place:${string}` | `cg:${string}`;
+/**
+ * Whose paint: a look (`player`, `li:<id>`), a place (`place:<key>`), a story CG (`cg:<key>/<i>@<written at>`), or (M4,
+ * S/art/outfits.ts) an item's art (`item:<item id>`) or a couple set's pair portrait (`item:<her look's id>/pair`).
+ */
+export type PaintOwner = LookOwner | `place:${string}` | `cg:${string}` | `item:${string}`;
 
 const live = new Map<string, { settled: Promise<void>; settle: () => void }>();
 const liveKey = (runId: string, owner: PaintOwner) => `${runId}|${owner}`;
@@ -270,7 +273,7 @@ export function paintRecord(deps: ArtDeps, job: PaintRecordJob): Promise<Paint |
 
 // ── Whose look, and how it reads ──
 
-interface LookSubject {
+export interface LookSubject {
   name: string;
   identityLine: string;
   outfitLine: string;
@@ -323,7 +326,8 @@ async function ensurePlayerLook(
   });
 }
 
-async function readSubject(
+/** Whose look `owner` names, as a look prompt draws them (the protagonist's lines are written first if missing). */
+export async function readSubject(
   deps: ArtDeps,
   runId: string,
   world: World,

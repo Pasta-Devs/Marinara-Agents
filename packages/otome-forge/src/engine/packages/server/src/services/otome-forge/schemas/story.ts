@@ -148,6 +148,7 @@ export function normalizeChapter(data: unknown): Chapter | null {
       ledger: (value) => (LedgerSchema.safeParse(value).success ? (value as ChapterLedger) : emptyLedger()),
       plannedAt: z.string(),
       connectionId: z.string(),
+      voicedLine: short().optional(),
     },
     () => ({
       key: data.key as string,

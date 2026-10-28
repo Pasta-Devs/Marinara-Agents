@@ -90,14 +90,14 @@ async function updateCg(
 
 // ── Who is in the frame ──
 
-interface CgSubject {
+export interface CgSubject {
   person: CgPerson;
   /** Whose likeness the reference keeps; none for someone the story only names. */
   image?: ImageSubject;
 }
 
 /** The CG's people, in the brief's order: a love interest, the protagonist, or someone only named (at most 4). */
-function cgSubjects(cast: readonly string[], units: readonly Unit[], player: Player): CgSubject[] {
+export function cgSubjects(cast: readonly string[], units: readonly Unit[], player: Player): CgSubject[] {
   const subjects: CgSubject[] = [];
   const seen = new Set<string>();
   for (const name of cast) {

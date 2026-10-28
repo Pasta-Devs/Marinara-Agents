@@ -6,8 +6,11 @@ declare module "@forge-kit/time-zone-server.mjs" {
   /** Wraps a router's get and post so each handler runs in the request's `timeZone` (body for POST, query for GET). */
   export function forgeTimeZoneRoutes<R extends object>(routes: R): R;
   export function forgeValidTimeZone(value: unknown): string;
-  /** "YYYY-MM-DD" of the instant in the current request's time zone. */
-  export function forgeDayKey(value?: number | string | Date): string;
+  /**
+   * "YYYY-MM-DD" of the instant in the current request's time zone. It reads Number(value), so an ISO string would read
+   * as now: pass Date.parse(iso).
+   */
+  export function forgeDayKey(value?: number | Date): string;
 }
 
 declare module "@forge-kit/character-card-context.mjs" {
