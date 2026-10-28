@@ -5,10 +5,12 @@
 // the care contract, the comfort rule, the knowledge boundary and his card without darkness, and its checks keep it
 // to comfort, and no comfort line that sounds medical stands in for it; a debug switch turned on mid-call stops the
 // repair turn; the store is byte-for-byte unchanged after every kind of care note and memory sources never hold it;
-// Otome's prompt log shows `[cycle state redacted]`; nothing about a care request is logged, its failures included
-// (a timestamped line would date a cycle day); every response is no-store;
+// Otome's prompt log shows `[cycle state redacted]`; Otome logs nothing about a care request, its failures included,
+// and the route silences the Engine's request lines (a timestamped line would date a cycle day); every response is
+// no-store;
 // the server's templates are exactly the client's careLines, and its speak request has no cacheKey; the calendar
-// reads birthdays, anniversaries in the request's zone and (defensively) banner end dates, labelled with story text.
+// reads birthdays, anniversaries in the request's zone (the Love Timeline's dated firsts, M2b's stages among them) and
+// (defensively) banner end dates, labelled with story text.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
@@ -46,6 +48,10 @@ import {
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
+import {
+  chatTarget,
+  normalizeThread,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/phone/chat.ts";
 import { REDACTED } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompt-log.ts";
 import {
   calendarView,
@@ -54,6 +60,7 @@ import {
 import { readRun } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
+import { passGate } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/state/stages.ts";
 import { createFakeRuntime, type FakeRuntimeOptions } from "./fixtures/otome-forge-fakes.ts";
 import { KAI, MIR, SOL, at, json, storyWorld } from "./fixtures/otome-forge-story.ts";
 
@@ -79,17 +86,22 @@ const DARK_MARKERS = [
   "polishes clean glass",
 ];
 
-/** The care routes on a fake router, wrapped in the kit's time zones as server-entry wraps them. */
+/**
+ * The care routes on a fake router, wrapped in the kit's time zones as server-entry wraps them. `options` holds the
+ * Fastify route options a route passes, as the Engine's collector takes them: (path, handler) or (path, options,
+ * handler).
+ */
 function careRoutes(deps: RouteDeps, runKey: string) {
   const routes = new Map<string, RouteHandler>();
-  registerCareRoutes(
-    forgeTimeZoneRoutes({
-      get: (path: string, handler: RouteHandler) => routes.set(`GET ${path}`, handler),
-      post: (path: string, handler: RouteHandler) => routes.set(`POST ${path}`, handler),
-    }),
-    deps,
-  );
-  return async (
+  const options = new Map<string, unknown>();
+  const collect =
+    (method: "GET" | "POST") =>
+    (path: string, ...rest: unknown[]) => {
+      routes.set(`${method} ${path}`, rest.at(-1) as RouteHandler);
+      if (rest.length > 1) options.set(`${method} ${path}`, rest[0]);
+    };
+  registerCareRoutes(forgeTimeZoneRoutes({ get: collect("GET"), post: collect("POST") }), deps);
+  const call = async (
     method: "GET" | "POST",
     path: string,
     {
@@ -131,6 +143,7 @@ function careRoutes(deps: RouteDeps, runKey: string) {
     );
     return { status, headers, body: (result === reply ? payload : result) as Record<string, any> };
   };
+  return Object.assign(call, { options });
 }
 
 /**
@@ -331,7 +344,26 @@ test("the store is byte-for-byte unchanged after every kind of care note, and me
       json({ note: WARM }),
     ],
   });
+  // A phone session Kai remembers (M3's chat source): the memory a care note could leak into, were it ever written.
+  await t.store.mutateDoc(chatTarget(t.runId, KAI), normalizeThread, (thread) => ({
+    ...thread,
+    li: KAI,
+    messages: [
+      { id: "m-care-1", who: "player", text: "Long day.", at: "2026-10-27T09:00:00.000Z" },
+      { id: "m-care-2", who: "li", text: "Then sit.", at: "2026-10-27T09:01:00.000Z" },
+    ],
+    sessions: [
+      {
+        start: 0,
+        count: 2,
+        memory: { text: "They talked by the lamp.", quote: "Then sit." },
+        closedAt: at,
+        name: "Kai",
+      },
+    ],
+  }));
   const sources = JSON.stringify(await readMemorySources(t.store, t.runId));
+  assert.ok(sources.includes("They talked by the lamp."), "the phone session is a memory source");
   const before = t.snapshot();
   const rows = t.fake.rows.size;
   const results = [
@@ -541,6 +573,9 @@ test("an unexpected failure of a care request is a plain 500 that is never logge
   assert.deepEqual(t.logs, [], "createHandle would log the care-note path; the route keeps it out of the log");
   assert.deepEqual(writtenAtDefault(t.logs), []);
   assert.equal(t.calls.length, 0);
+  // Nor does the Engine write its request lines (incoming request, request completed) for it, at any level: the
+  // route asks Fastify for silence. The calendar, which says nothing about the cycle, is logged as any route is.
+  assert.deepEqual(Object.fromEntries(call.options), { "POST /runs/:run/care-note": { logLevel: "silent" } });
 });
 
 test("the server accepts exactly the lines the client's careLine can give, for any protagonist", () => {
@@ -556,9 +591,8 @@ test("the server accepts exactly the lines the client's careLine can give, for a
 });
 
 test("the client's speak request for a caring message carries no cacheKey, so the Engine never caches its audio", () => {
-  const options = careSpeakOptions("Kai");
-  assert.deepEqual(options, { speaker: "Kai" });
-  assert.ok(!("cacheKey" in options));
+  // OtomeAudioController.speak (M2b) adds a cacheKey only while `cache` is on; the e2e spec checks the request itself.
+  assert.deepEqual(careSpeakOptions(), { cache: false });
 });
 
 test("P27's checks keep the note to comfort: short, no question, nothing about absence, nothing medical", () => {
@@ -617,6 +651,22 @@ test("404s for an unknown run or love interest, no-store and without the body", 
 
 // ── The calendar ──
 
+test("a stage M2b's gate moves dates a Love Timeline first, and the calendar shows it on that day every year", async () => {
+  const t = await careWorld("r-care13-aaaaaa");
+  const run = (await readRun(t.store, t.runId))!;
+  run.state.lis[KAI]!.stage = 1;
+  const gate = { kind: "beat" as const, guide: "The gate.", cast: [KAI], gate: true };
+  const { state, stageUp } = passGate(
+    run.state,
+    { key: `route-${KAI}-2`, kind: "route", li: KAI, stage: 2, title: "The Lamp at Midnight", nodes: [gate] },
+    0,
+    { secrets: [], at: "2026-11-03T22:30:00.000Z" },
+  );
+  assert.deepEqual(stageUp, { li: KAI, stage: 2 });
+  const view = calendarView({ ...run, state }, [], "2026-10-28");
+  assert.deepEqual(view.anniversaries.at(-1), { md: "11-03", label: "The Lamp at Midnight", li: KAI, year: 2026 });
+});
+
 test("the calendar lists birthdays in cast order and the story's first day on the request's own local day", async () => {
   const t = await careWorld("r-care11-aaaaaa");
   // 23:30 UTC is already the next day in Tokyo.
@@ -644,15 +694,12 @@ test("the calendar lists birthdays in cast order and the story's first day on th
 test("the calendar labels Love Timeline firsts and M4's banners from story text, and skips a bad row rather than fail", async () => {
   const t = await careWorld("r-care12-aaaaaa");
   const run = (await readRun(t.store, t.runId))!;
-  run.state.lis[KAI]!.firsts = {
-    "first-kiss": "2026-11-02T23:30:00.000Z",
-    "first-date": "not a time",
-    "first-call": "2026-11-05T10:00:00.000Z",
-  };
+  // The Love Timeline's dated firsts, each on its own day; an entry with no real time, or for someone no longer in the
+  // cast, is left out.
   run.state.timeline = [
-    { at, li: KAI, kind: "first-kiss", text: "  The first kiss,\n at the lamp.  " },
-    { at, li: KAI, kind: "first-date", text: "A date with no day." },
-    { at, li: MIR, kind: "first-call", text: "Mireille's first call, not Kai's." },
+    { at: "2026-11-02T23:30:00.000Z", li: KAI, kind: "first-kiss", text: "  The first kiss,\n at the lamp.  " },
+    { at: "not a time", li: KAI, kind: "first-date", text: "A date with no day." },
+    { at: "2026-11-05T10:00:00.000Z", li: "li-gone-zz99", kind: "first-call", text: "Someone long gone." },
   ];
   run.units.find((unit) => unit.id === SOL)!.bible!.birthday = "13-40";
   const banners = [

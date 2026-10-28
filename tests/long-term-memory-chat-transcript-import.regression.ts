@@ -53,10 +53,12 @@ async function main() {
     { configurePackageRuntime },
     { previewPackageInterop, sourcePackageDetails, importPackageInterop, transcriptPieces },
     { ltmImportSourceNotesResponseSchema, ltmInteropPreviewRequestSchema, ltmInteropPreviewResponseSchema },
+    { LongTermMemoryStorage },
   ] = await Promise.all([
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/interop.ts"),
     import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts"),
+    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/storage.ts"),
   ]);
 
   const speaker = (row: FixtureMessage) => row.role;
@@ -157,6 +159,9 @@ async function main() {
   ]);
   let releaseRuntime: (() => void) | undefined;
   let messageReads = 0;
+  // Each extraction prompt, and the units the fixture model answers it with.
+  const prompts: any[] = [];
+  let respond: (prompt: any) => unknown[] = () => [];
   await runWithSafeCleanup(
     "Long-Term Memory chat transcript import",
     async () => {
@@ -180,8 +185,10 @@ async function main() {
                   trimmed: false,
                 };
               },
-              async chatComplete() {
-                return { content: JSON.stringify({ summary: "", units: [] }), finishReason: "stop" };
+              async chatComplete(promptMessages: Array<{ content: string }>) {
+                const prompt = JSON.parse(promptMessages.at(-1)!.content);
+                prompts.push(prompt);
+                return { content: JSON.stringify({ summary: "", units: respond(prompt) }), finishReason: "stop" };
               },
             };
           },
@@ -389,11 +396,178 @@ async function main() {
         ],
         "hiding an imported piece's first message keeps the piece under its name",
       );
+
+      // A chat's second piece starts from the first piece's tail, events and open thread.
+      const sealChat = { ...roleplayChat, id: "chat-pieces", name: "Seal" };
+      chats.push(sealChat);
+      messages.set(sealChat.id, [
+        message(sealChat.id, "s1", "user", `${"x".repeat(23_950)} The seal cracks at dawn.`),
+        message(sealChat.id, "s2", "assistant", "The seal holds."),
+      ]);
+      const unit = (fields: Record<string, unknown>) => ({
+        claimKind: "static",
+        importance: "major",
+        confidence: 0.9,
+        salience: 0.8,
+        status: "active",
+        links: [],
+        subjectNames: [],
+        ...fields,
+      });
+      let scenario: "seal" | "leak" | "carry" = "seal";
+      respond = (prompt) => {
+        const from = { target: prompt.sourceNote.id, relation: "extracted_from" };
+        return prompt.sourceText.includes("The seal cracks")
+          ? [
+              unit({
+                bucket: "timeline_event",
+                subjectId: "seal_cracks",
+                sectionKey: "event",
+                title: "The seal cracks",
+                text: "The seal cracks at dawn.",
+                claimKind: "change",
+                links: [from],
+              }),
+              unit({
+                bucket: "thread",
+                subjectId: `${scenario}_mystery`,
+                sectionKey: "status",
+                title: `The ${scenario} mystery`,
+                text:
+                  scenario === "carry"
+                    ? `Nobody knows why the carry began. ${"The elders argue over it. ".repeat(30)}`.trim()
+                    : `Nobody knows why the ${scenario} began.`,
+              }),
+            ]
+          : [
+              unit({
+                bucket: "timeline_event",
+                subjectId: "seal_holds",
+                sectionKey: "event",
+                title: "The seal holds",
+                text: "The seal holds despite the crack.",
+                claimKind: "change",
+                links: [from, { target: prompt.previousPiece.events[0].id, relation: "caused_by" }],
+              }),
+              ...(scenario === "leak"
+                ? [
+                    unit({
+                      bucket: "timeline_event",
+                      subjectId: "seal_leaks",
+                      sectionKey: "event",
+                      title: "The seal leaks",
+                      text: "Light leaks through the seal.",
+                      claimKind: "change",
+                      links: [from, { target: "timeline_unlisted", relation: "caused_by" }],
+                    }),
+                  ]
+                : []),
+              ...(scenario === "carry"
+                ? [
+                    unit({
+                      bucket: "thread",
+                      subjectId: prompt.previousPiece.threads[0].subjectId,
+                      sectionKey: "status",
+                      title: `The ${scenario} mystery`,
+                      text: "The crack was made from the inside.",
+                    }),
+                  ]
+                : []),
+            ];
+      };
+      prompts.length = 0;
+      await importPackageInterop(
+        {
+          source: "messages",
+          chatId: sealChat.id,
+          sourceIds: ["chat-pieces:messages:s1", "chat-pieces:messages:s2"],
+          destinationScope: { characterIds: ["character-kirei"] },
+          extract: true,
+          applyLowRisk: true,
+          limit: 100,
+        },
+        root,
+        new AbortController().signal,
+      );
+      assert.equal(prompts.length, 2, "each piece is extracted once");
+      assert.ok(prompts[0].sourceText.includes("The seal cracks"), "the first piece is prepared first");
+      assert.equal("previousPiece" in prompts[0], false, "a chat's first piece keeps its prompt");
+      const previous = prompts[1].previousPiece;
+      assert.ok(previous.tail.endsWith("The seal cracks at dawn."), "the second piece sees the end of the first");
+      assert.ok(previous.tail.length <= 3_000, "the tail is bounded");
+      assert.deepEqual(
+        previous.events.map((event: { id: string; title: string }) => [
+          event.id.startsWith("timeline_seal_cracks"),
+          event.title,
+        ]),
+        [[true, "The seal cracks"]],
+        "the first piece's events are listed with their ids",
+      );
+      assert.deepEqual(
+        previous.threads.map((thread: { id: string; subjectId: string }) => thread.id.endsWith(thread.subjectId)),
+        [true],
+        "the first piece's open thread is listed with the subjectId to reuse",
+      );
+      const sealNotes = await new LongTermMemoryStorage(root).listNotes();
+      const linksOf = (id: string) => sealNotes.find((note) => note.id === id)?.links ?? [];
+      assert.ok(
+        linksOf(sealNotes.find((note) => note.id.startsWith("timeline_seal_holds"))!.id).some(
+          (link) => link.target === previous.events[0].id && link.relation === "caused_by",
+        ),
+        "a cause listed from the previous piece is linked and committed",
+      );
+
+      // Each of these runs on its own chat: a dropped candidate keeps a piece out of auto-apply, so the rejection
+      // cannot share a chat with the committed link.
+      const importPieces = (chatId: string, first: string, second: string): Promise<any> => {
+        chats.push({ ...sealChat, id: chatId });
+        messages.set(chatId, [
+          message(chatId, first, "user", `${"x".repeat(23_950)} The seal cracks at dawn.`),
+          message(chatId, second, "assistant", "The seal holds."),
+        ]);
+        return importPackageInterop(
+          {
+            source: "messages",
+            chatId,
+            sourceIds: [`${chatId}:messages:${first}`, `${chatId}:messages:${second}`],
+            destinationScope: { characterIds: ["character-kirei"] },
+            extract: true,
+            applyLowRisk: true,
+            limit: 100,
+          },
+          root,
+          new AbortController().signal,
+        );
+      };
+      scenario = "leak";
+      const leaked = await importPieces("chat-leak", "l1", "l2");
+      assert.equal(
+        leaked.imported[1].diagnostics.some(
+          (item: { details?: { linkTarget?: string } }) => item.details?.linkTarget === "timeline_unlisted",
+        ),
+        true,
+        "a link to an id the prompt did not list is still rejected",
+      );
+      // Continuing a listed thread rewrites it in place, which apply will not do beside other changes: the piece
+      // keeps its draft for review instead of failing.
+      scenario = "carry";
+      const continued = await importPieces("chat-thread", "t1", "t2");
+      assert.equal(continued.imported[1].extractionStatus, "succeeded", "a continued thread does not fail its piece");
+      const listedThread = prompts.at(-1).previousPiece.threads[0].id;
+      const listedText = prompts.at(-1).previousPiece.threads[0].text;
+      assert.ok(listedText.length > 600 && listedText.endsWith("argue over it."), "a listed thread is shown whole");
+      assert.deepEqual(
+        continued.imported[1].draft.mutations
+          .filter((mutation: any) => (mutation.noteId ?? mutation.note?.id)?.startsWith("thread_"))
+          .map((mutation: any) => [mutation.kind, mutation.noteId ?? mutation.note.id]),
+        [["update_section", listedThread]],
+        "reusing the listed subjectId updates that thread instead of adding another",
+      );
     },
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );
   process.stdout.write(
-    "Long-Term Memory chat transcript import regression: pieces, speakers, scope, mode, branches, append freshness, and kept piece cuts ok\n",
+    "Long-Term Memory chat transcript import regression: pieces, speakers, scope, mode, branches, append freshness, kept piece cuts, and previous-piece context ok\n",
   );
 }
 

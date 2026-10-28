@@ -132,6 +132,36 @@ test("a chapter moves each axis at most two steps; the next chapter starts again
   assert.equal(state.lis[KAI]!.trust, -2);
 });
 
+test("each chapter keeps its own cap while route and repair chapters are read alongside a main one", () => {
+  let state = fresh();
+  const step = (key: string, i: number, trust: -1 | 1) => {
+    state = saved(pick(state, [{ li: KAI, trust }], { key, i }).state);
+  };
+  step("main-2", 0, -1);
+  step("main-2", 1, -1);
+  step(`repair-${KAI}-1`, 0, 1);
+  step("main-2", 2, -1);
+  step("main-2", 3, -1);
+  assert.equal(state.lis[KAI]!.trust, -1, "main-2 moved trust by −2 in all, the repair by +1");
+  // A finished chapter's counters are let go; the unfinished ones stay.
+  state = { ...state, chapters: { ...state.chapters, "main-2": { ...state.chapters["main-2"]!, completed: AT } } };
+  step(`route-${KAI}-2`, 0, 1);
+  assert.deepEqual(Object.keys(state.lis[KAI]!.chapterDelta).sort(), [`repair-${KAI}-1`, `route-${KAI}-2`]);
+  // A state saved with the older single slot keeps its chapter's counters.
+  const legacy = normalizeState({
+    lis: {
+      [KAI]: {
+        trust: -2,
+        chapterDelta: { key: "main-1", trust: -2, tension: 0, beat: { i: 1, trust: -1, tension: 0 } },
+      },
+    },
+  });
+  assert.deepEqual(legacy.lis[KAI]!.chapterDelta, {
+    "main-1": { trust: -2, tension: 0, beat: { i: 1, trust: -1, tension: 0 } },
+  });
+  assert.equal(pick(legacy, [{ li: KAI, trust: -1 }], { i: 2 }).state.lis[KAI]!.trust, -2, "the cap still holds");
+});
+
 test("a pick applies once: a replay changes nothing", () => {
   const first = pick(fresh(), [{ li: KAI, trust: 1, disclose: "She told him her brother drowned." }], { i: 2 });
   assert.equal(first.remembered, true);
@@ -270,7 +300,7 @@ test("reading pays each beat once and the chapter once, saves its ledger and rec
   assert.deepEqual(done.lis[KAI]!.angst, ["pride"]);
   assert.deepEqual(done.ledgers, {
     relationship: [{ key: "main-1", li: KAI, line: "He let her hold the lantern." }],
-    conflicts: [{ id: "c1-1", li: KAI, type: "pride", status: "open", chapter: 1 }],
+    conflicts: [{ id: "c1-1", li: KAI, type: "pride", status: "open", chapter: 1, key: "main-1" }],
     offscreen: [{ key: "main-1", li: MIR, line: "Mireille audits the vault." }],
   });
   assert.equal(read(done, 2).chapterDone, true);

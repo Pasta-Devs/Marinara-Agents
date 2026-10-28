@@ -12,8 +12,9 @@
 //   session is saved is logged and lost, never paid twice.
 // - New sessions start memory upkeep in the background, which records them for recall.
 // phoneMemorySources turns every closed session into a `chat` memory source with `audience: [li]`: only his own
-// readers, and scenes he is in, recall it, and it never reaches the shared overview. S/memory/sources.ts adds it to
-// the run's sources. Care data is never a source.
+// readers, and scenes he is in, recall it, and it never reaches the shared overview. Its title says it is private, so a
+// scene with others in it knows they were not there. S/memory/sources.ts adds it to the run's sources. Care data is
+// never a source.
 import type { ForgeMemorySource } from "@forge-kit/story-memory.mjs";
 import type {
   LiId,
@@ -168,10 +169,13 @@ export async function phoneMemorySources(
   for (const { li, thread } of threads) {
     for (const session of thread?.sessions ?? []) {
       if (!session.memory.text.trim()) continue;
+      // Private, as S/story/canon.ts titles a love interest's own chapter: a scene with others in it recalls it as
+      // something they do not know.
+      const who = session.name || "its love interest";
       sources.push({
         id: sessionSourceId(li, session),
         kind: "chat",
-        title: session.name ? `${session.name}'s phone conversation` : "A phone conversation",
+        title: `${session.name ? `${who}'s` : "A"} phone conversation (private: only ${who} and the protagonist know what was said)`,
         content: [session.memory.text, session.memory.quote ? `"${session.memory.quote}"` : ""]
           .filter(Boolean)
           .join("\n"),

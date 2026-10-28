@@ -1,8 +1,11 @@
 // Otome Forge's Story screen and reader (M2a) in the Engine's Home tab, with /api/otome-forge/** stubbed: the Lead
-// dialog, a dark chapter's content tags, faces line by line, her thoughts and his, a choice and "He'll remember that.",
-// the backlog star, an end of a beat that was not saved (Next sends it again, nothing loops), → from the Next button,
-// the declined panel and Retry, Ease off with "Veil this from now on", a big choice, the chapter's Starlight and
-// affection with focus on its heading; then a replay at reduced motion that changes nothing.
+// dialog, a dark chapter's content tags, faces line by line, her thoughts and his, a choice and "{name} will remember
+// that.", the keys after a click on the dialogue box or the stage, the backlog star, an end of a beat that was not
+// saved (Next sends it again, nothing loops, Ease off comes back), → from the Next button, the declined panel and
+// Retry, Ease off with "Veil this from now on" (neither closes while its request runs), a big choice, Ease off gone
+// once the scene's end is saved, the chapter's Starlight and affection with focus on its heading; then a replay at
+// reduced motion that changes nothing, whose Ease off on a branch puts no line it skips in the backlog, and a chapter
+// with no title in the reader and on the Story screen.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-reader.e2e.ts
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -139,7 +142,7 @@ const CHAPTER = {
 };
 
 /** The M2a story routes, answered in memory by the server's rules (S/story/beats.ts). */
-function createStoryStub({ done = false } = {}) {
+function createStoryStub({ done = false, title = CHAPTER.title } = {}) {
   const calls: Call[] = [];
   const now = () => new Date().toISOString();
   const limits: Json = {
@@ -211,7 +214,7 @@ function createStoryStub({ done = false } = {}) {
     ageGate: null,
     lastOpenedAt: null,
   };
-  let chapter: Json | null = done ? structuredClone(CHAPTER) : null;
+  let chapter: Json | null = done ? { ...structuredClone(CHAPTER), title } : null;
   const beats = new Map<number, Json>();
   const progress = { beatsRead: done ? 3 : 0, completed: done ? now() : (null as string | null) };
   let declined = done;
@@ -261,7 +264,7 @@ function createStoryStub({ done = false } = {}) {
                 {
                   key: "main-1",
                   kind: "main",
-                  title: CHAPTER.title,
+                  title,
                   lead: ILVAR,
                   state: progress.completed ? "done" : "in-progress",
                   beatsRead: progress.beatsRead,
@@ -284,7 +287,7 @@ function createStoryStub({ done = false } = {}) {
       };
     }
     if (path === `${base}/chapters/next`) {
-      chapter = { ...structuredClone(CHAPTER), lead: call.body!.lead };
+      chapter = { ...structuredClone(CHAPTER), title, lead: call.body!.lead };
       return { status: 200, json: { chapter } };
     }
     if (path === `${base}/chapters/main-1`) {
@@ -408,6 +411,17 @@ async function openStory(page: Page): Promise<Locator> {
 const posts = (stub: ReturnType<typeof createStoryStub>, suffix: string) =>
   stub.calls.filter((call) => call.method === "POST" && call.path.endsWith(suffix));
 
+/** Holds every request to `url` until the returned function is called. */
+async function hold(page: Page, url: string) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  await page.route(url, async (route) => {
+    await gate;
+    await route.fallback();
+  });
+  return release;
+}
+
 /** Shows the line whole if it is still typing, then goes on. */
 async function next(root: Locator) {
   const button = root.locator(".of-next");
@@ -417,10 +431,10 @@ async function next(root: Locator) {
 
 const line = (root: Locator) => root.locator(".of-dialogue .of-line");
 
-/** The same with the keyboard, from the focused Next button: → finishes the line, then goes on. */
-async function nextByKey(page: Page, root: Locator) {
+/** The same with the keyboard, from the focused Next button (or wherever focus is): → finishes the line, then goes on. */
+async function nextByKey(page: Page, root: Locator, fromNext = true) {
   const button = root.locator(".of-next");
-  await button.focus();
+  if (fromNext) await button.focus();
   if ((await button.getAttribute("data-done")) !== "true") await page.keyboard.press("ArrowRight");
   await page.keyboard.press("ArrowRight");
 }
@@ -454,14 +468,17 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   // Faces line by line (initials and a labelled face without art); her thought in pale italics; his rare thought.
   await expect(line(root)).toContainText("Rain needles the glass dome.");
   await expect(root.getByRole("heading", { level: 1 })).toContainText("The Observation Room");
-  await next(root);
+  // A click on the dialogue box goes on, and the keys still work after it: focus stays in the reader.
+  await expect(root.locator(".of-next")).toHaveAttribute("data-done", "true");
+  await line(root).click();
   await expect(root.getByRole("img", { name: "Ilvar Thorne, cold" })).toBeVisible();
   await expect(root.locator(".of-nameplate")).toHaveText("Ilvar Thorne");
-  await next(root);
+  await expect(root.locator(".of-reader")).toBeFocused();
+  await nextByKey(page, root, false);
   await expect(root.locator(".of-line--thought")).toContainText("I should have stayed away.");
   await page.screenshot({ path: testInfo.outputPath("02-thought.png") });
 
-  // A first-play choice is saved, and "He'll remember that." rises over the scene.
+  // A first-play choice is saved, and "Ilvar Thorne will remember that." rises over the scene.
   const choice = root.getByRole("group", { name: "What do you do?" });
   await choice.getByRole("button", { name: "Tell him the truth." }).click();
   await expect(root.getByText("Ilvar Thorne will remember that.")).toBeVisible();
@@ -470,15 +487,18 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   await page.screenshot({ path: testInfo.outputPath("03-remembered.png") });
   await nextByKey(page, root);
   await expect(root.getByRole("img", { name: "Ilvar Thorne, flustered" })).toBeVisible();
-  await next(root);
+  // So does a click on the stage.
+  await expect(root.locator(".of-next")).toHaveAttribute("data-done", "true");
+  await root.locator(".of-reader-stage").click();
   await expect(root.locator(".of-line--his-thought")).toContainText("don’t leave again");
-  await next(root);
+  await nextByKey(page, root, false);
   // The end of the beat is not saved: the reader says so, stays, and sends it again only when Next is pressed.
   await expect(root.getByRole("alert")).toContainText("The end of this scene wasn’t saved. Press Next to try again.");
   const endReports = () => posts(stub, "/beats/0/read").filter((call) => call.body?.segment === 4).length;
   await page.waitForTimeout(300);
   expect(endReports()).toBe(1);
   await expect(line(root)).toContainText("Stay, then.");
+  await expect(root.getByRole("button", { name: "Ease off" }), "the scene is not counted as read yet").toBeVisible();
 
   // The backlog keeps a favourite line.
   await root.getByRole("button", { name: "Backlog" }).click();
@@ -504,13 +524,25 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   await expect(line(root)).toContainText("Past midnight");
   await expect(root.getByText("A call", { exact: true })).toBeVisible();
 
-  // Ease off: no model call, then "Veil this from now on" for the tags still allowed.
+  // Ease off: no model call, then "Veil this from now on" for the tags still allowed. While either request runs, Keep
+  // reading and Not now leave the dialog open.
   const writes = posts(stub, "/beats/1").length;
+  const easing = await hold(page, "**/beats/1/ease-off");
   await root.getByRole("button", { name: "Ease off" }).click();
-  await page.getByRole("dialog", { name: "Ease off?" }).getByRole("button", { name: "Ease off" }).click();
+  const ease = page.getByRole("dialog", { name: "Ease off?" });
+  await ease.getByRole("button", { name: "Ease off" }).click();
+  await ease.getByRole("button", { name: "Keep reading" }).click({ force: true });
+  await expect(ease).toBeVisible();
+  await expect(line(root)).toContainText("Past midnight");
+  easing();
   const veil = page.getByRole("dialog", { name: "Veil this from now on?" });
   await veil.getByRole("checkbox", { name: "Threats" }).check();
+  const veiling = await hold(page, "**/veil");
   await veil.getByRole("button", { name: "Veil it" }).click();
+  await veil.getByRole("button", { name: "Not now" }).click({ force: true });
+  await expect(veil).toBeVisible();
+  veiling();
+  await expect(veil).toBeHidden();
   expect(posts(stub, "/veil")[0]!.body).toMatchObject({ limits: ["threats"] });
   expect(posts(stub, "/beats/1").length).toBe(writes);
   await expect(line(root)).toContainText("The moment passes.");
@@ -518,11 +550,20 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   // The Confrontation ends on a big choice; the chapter's end shows its Starlight and affection.
   await next(root);
   await expect(line(root)).toContainText("The dome again.");
-  await next(root);
+  // Enter on the Next button still goes on.
+  await expect(root.locator(".of-next")).toHaveAttribute("data-done", "true");
+  await root.locator(".of-next").focus();
+  await page.keyboard.press("Enter");
+  await expect(line(root)).toContainText("I would rather hear it from you than guess.");
   const big = root.getByRole("group", { name: "A choice that lasts" });
   await expect(big).toContainText("It can’t be undone.");
+  // A choice waiting at the last line keeps Ease off; once the scene's end is saved, the server would refuse it.
+  const easeOff = root.getByRole("button", { name: "Ease off" });
+  await expect(easeOff).toBeVisible();
   await big.getByRole("button", { name: "Stay with him." }).click();
   await expect(line(root)).toContainText("I’m still here.");
+  await expect.poll(() => posts(stub, "/beats/2/read").length).toBeGreaterThan(0);
+  await expect(easeOff).toHaveCount(0);
   await next(root);
   await expect(root.getByRole("heading", { name: "Chapter complete" })).toBeFocused();
   await expect(root.getByText("+160 Starlight")).toBeVisible();
@@ -541,7 +582,7 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   expect(pageErrors).toEqual([]);
 });
 
-test("Otome Forge reader: a replay at reduced motion offers the first choice again and changes nothing", async ({
+test("Otome Forge reader: a replay at reduced motion offers the first choice again, changes nothing, and logs no line an Ease off skips", async ({
   page,
 }, testInfo) => {
   test.setTimeout(120_000);
@@ -569,4 +610,38 @@ test("Otome Forge reader: a replay at reduced motion offers the first choice aga
   expect(posts(stub, "/choose")).toHaveLength(0);
   expect(posts(stub, "/read")).toHaveLength(0);
   await page.screenshot({ path: testInfo.outputPath("06-replay.png") });
+
+  // Eased off on the pick's line, the scene jumps to its aftermath: the backlog has the lines read, never the rest of
+  // the branch the jump skipped.
+  await root.getByRole("button", { name: "Ease off" }).click();
+  await page.getByRole("dialog", { name: "Ease off?" }).getByRole("button", { name: "Ease off" }).click();
+  await page.getByRole("dialog", { name: "Veil this from now on?" }).getByRole("button", { name: "Not now" }).click();
+  await expect(line(root)).toContainText("The moment passes.");
+  await root.getByRole("button", { name: "Backlog" }).click();
+  const backlog = page.getByRole("dialog", { name: "Backlog" });
+  await expect(backlog).toContainText("You lift one shoulder");
+  await expect(backlog).toContainText("The moment passes.");
+  await expect(backlog).not.toContainText("Of course. Curiosity.");
+  expect(posts(stub, "/ease-off"), "a replay's Ease off changes no canon").toHaveLength(0);
+});
+
+test("Otome Forge reader: a chapter with no title is named as untitled, never as loading or blank", async ({
+  page,
+}) => {
+  const stub = createStoryStub({ title: "" });
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Choose who leads" }).click();
+  await page
+    .getByRole("dialog", { name: "Who walks with you this chapter?" })
+    .getByRole("button", { name: /Ilvar Thorne/ })
+    .click();
+  await expect(root.getByRole("heading", { name: "Before you begin" })).toBeVisible();
+  await expect(root.getByRole("heading", { level: 1 })).toContainText("Untitled chapter");
+  // Back on the Story screen, the chapter in progress: its Continue card and its row in the list.
+  await root.getByRole("button", { name: "Leave the chapter" }).click();
+  await expect(root.getByRole("heading", { name: "Story", exact: true })).toBeVisible();
+  await expect(root.locator("#of-story-continue")).toHaveText("Untitled chapter");
+  await expect(root.getByRole("region", { name: "Untitled chapter" })).toBeVisible();
+  await expect(root.getByRole("button", { name: "Continue: Untitled chapter" })).toBeVisible();
 });

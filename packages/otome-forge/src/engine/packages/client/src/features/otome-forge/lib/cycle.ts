@@ -235,9 +235,9 @@ export function isCareLine(line: unknown, protagonist: CareProtagonist): boolean
 }
 
 /**
- * The voice request for a caring message: the speaker only. No `cacheKey`, so its audio never lands in the Engine's
- * audio cache (plan §1.9).
+ * How a caring message is voiced (M2b's OtomeAudioController.speak): with no `cacheKey`, so its audio never lands in
+ * the Engine's audio cache (plan §1.9).
  */
-export function careSpeakOptions(speaker: string): { speaker: string } {
-  return { speaker };
+export function careSpeakOptions(): { cache: false } {
+  return { cache: false };
 }

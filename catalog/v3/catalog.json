@@ -2659,7 +2659,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.5.4",
+        "version": "1.5.5",
         "description": "Remembers important things from your chats, characters, and lorebooks, and brings them back when they matter. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.5.1",
@@ -2691,8 +2691,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "66c7c80b53aa2397fcab32e921325a8a264238f46ea77318b8e9ebc480536310",
-            "bytes": 492629
+            "sha256": "c759671cf1cf090e912722fa43ee2e10b1486d17615cb742a14cbdd6ea73b896",
+            "bytes": 495056
           },
           {
             "path": "client.js",
@@ -2712,9 +2712,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.5.4.zip",
-        "sha256": "a3706f86a505805684a301a1ec410bc09b691325644bc4c4a9601bd277452596",
-        "bytes": 1396556
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.5.5.zip",
+        "sha256": "b3cbbc59bf0a49b67308ec07c7b3a1acc6468545a174da1d34a646056567d32c",
+        "bytes": 1398983
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -3631,7 +3631,7 @@
         },
         "id": "slurp2",
         "name": "Slurp",
-        "version": "0.4.4",
+        "version": "0.4.5",
         "description": "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -3700,13 +3700,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "6bf0abb76d6f978b8e52d2c20ea761c69951114a92521ede94c1d2581d0d133a",
-            "bytes": 2044007
+            "sha256": "2014e58ef8a3f930747904068573753d693ba65601b9811f8fc09778d747c3e8",
+            "bytes": 2047878
           },
           {
             "path": "client.js",
-            "sha256": "e7154e8787e7af59f2c7648979e81af97f85b503a53eff09ae038f1a1f6dd8cd",
-            "bytes": 2882346
+            "sha256": "816a731b67777ab8e3ab67c2c582430da4301877ac8c12ef360dbb463928b9b6",
+            "bytes": 2894107
           },
           {
             "path": "slurp2-logo.png",
@@ -3759,9 +3759,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.4.zip",
-        "sha256": "e3c3adfd26cbfc636b3e8415193f5b26986734a1b9ea4427a3c8047b8be3b1bc",
-        "bytes": 5975516
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.5.zip",
+        "sha256": "2e38eec055e2dd6262b05fbe3c35cfb5d8f225c6081f540643ccfccb4754f3df",
+        "bytes": 5991148
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },

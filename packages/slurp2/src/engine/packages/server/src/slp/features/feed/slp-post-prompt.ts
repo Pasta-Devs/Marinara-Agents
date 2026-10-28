@@ -56,11 +56,14 @@ export type FormattedCreatorGenerationRequest = SlpCreatorGenerationRequest & {
 };
 
 /** Hard ceiling per format, below the page-wide maximum. */
-const SLURP_FORMAT_CEILING: Partial<Record<SlpCreatorContentFormat, number>> = { caption: 400, announcement: 900 };
+export const SLURP_FORMAT_CEILING: Partial<Record<SlpCreatorContentFormat, number>> = {
+  caption: 280,
+  announcement: 900,
+};
 
 const NOODLER_FORMAT_PROMPTS: Record<SlpCreatorContentFormat, string> = {
   caption:
-    "Format: caption. Aim for 40-220 characters in one short creator-feed caption. Go longer only when the moment really calls for it.",
+    "Format: caption. Aim for 40-160 characters: one or two short lines under the picture, like a real creator caption. The picture does the talking.",
   announcement: "Format: announcement. Aim for 80-600 body characters with the important news first.",
   long_form:
     "Format: long_form. Target 500-2000 body characters with readable paragraphs. Only this format can use long text.",

@@ -8,7 +8,9 @@
 //   seenAt       when the newest message the player has seen was sent; his messages after it are unread
 //   suggestions  the replies offered after his latest message (cleared by the next send or close)
 // A thread is private: only its own love interest's prompts read it, and its closed sessions reach memory only with
-// `audience: [li]` (S/phone/memory.ts phoneMemorySources).
+// `audience: [li]` (S/phone/memory.ts phoneMemorySources). His replies (P17) recall as his own reader, and read the
+// ledger lines and his grievances and disclosures his own reader may know (story/prompts.ts ownView), so another love
+// interest's route, repair or date chapter never reaches him here.
 //
 // Send (P17) and close (P18) each hold the thread's one write in flight (the kit's withForgeChatSend): a second while
 // one runs is a 409 `busy`, and forgeChatReplyBusy shows it on the history page. A send saves the player's message
@@ -39,6 +41,7 @@ import { readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
 import { recallText, type CanonBudget, type StoryMemory } from "../story/canon.js";
+import { ownView } from "../story/prompts.js";
 import { ChatReplySchema, SUGGESTIONS_MAX, chatReplyMessages, normalizeChatReply, type ChatReply } from "./prompts.js";
 
 // ── The thread document (its wire shapes are in SH/api-types.ts) ──
@@ -53,7 +56,8 @@ export const TAIL_MESSAGES = 16;
 /** His newest closed conversations P17 lists in full (and recall leaves out). */
 export const LISTED_SESSIONS = 6;
 /**
- * The canon P17 reads in full: the latest chapter's end, and the canon before it when memory cannot answer. The
+ * The canon P17 reads in full: the latest chapter's end, and the canon before it when memory cannot answer; his newest
+ * route, repair or date chapter goes in even when it is longer, as its end (S/story/canon.ts newestWithin). The
  * overview, the recalled details (older conversations among them) and the decisions always go in whole: the kit sizes
  * recall to the connection's context, as GF's chat fits its memory by dropping details, never by cutting the text.
  */
@@ -319,7 +323,7 @@ async function answer(
       debugMode,
       budget: CHAT_CANON_BUDGET,
     });
-    const offscreen = [...run.state.ledgers.offscreen].reverse().find((row) => row.li === li)?.line ?? "";
+    const { liState, offscreen } = ownView(run.state, li);
     const { value } = await generateJson(deps, {
       runId,
       job: "chat",
@@ -328,7 +332,7 @@ async function answer(
         world: run.world,
         player: run.player,
         unit,
-        liState: run.state.lis[li]!,
+        liState,
         tail,
         memories,
         story,

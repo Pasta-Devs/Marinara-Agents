@@ -364,6 +364,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.5.5",
+          "date": "2026-10-28",
+          "notes": "- A long chat imported from Chat Messages is read in order, one piece after another. From the second piece on, the model sees the end of the piece before it, that piece's events and its open threads, so a memory can say what caused an event or continue a thread across the cut. Different chats still import side by side.",
+          "highlight": false
+        },
+        {
           "version": "1.5.4",
           "date": "2026-10-28",
           "notes": "- Re-extract says why it is waiting while settings load, and Run maintenance keeps your place after it finishes.\n- Loading placeholders stop pulsing when reduced motion is on, source tool results are announced to screen readers, and a save waiting on recall no longer ends in a stray colon.",
@@ -475,12 +481,6 @@
           "version": "1.4.82",
           "date": "2026-10-22",
           "notes": "- Once the debug log reaches its 2 MB limit, Long-Term Memory now trims it to the newest 1.5 MB instead of to just under 2 MB. Before, every new debug line rewrote the whole file from then on, and saves and recalls waited for each rewrite. Now the lines after a trim are added to the end of the file again. The log keeps between 1.5 and 2 MB of the newest lines.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.81",
-          "date": "2026-10-22",
-          "notes": "- Memory Settings has a new setting beside \"Maximum output tokens\", \"Finish cut-off answers\", off by default. With it on, when the model's extraction answer stops at the output limit, Long-Term Memory asks the model for the rest, with up to 3 extra requests for that source, each sending the source again. With it off, a source cut off this way now says that Retry will stop at the same place and names the setting.",
           "highlight": false
         }
       ]
@@ -828,6 +828,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.5",
+          "date": "2026-10-28",
+          "notes": "- Outfits change: a Creator who never had a wardrobe gets one filled from the card once (a closet you emptied stays empty), so pictures stop showing the same clothes.\n- Pictures follow your image style: a painted style no longer gets \"personal photograph\" words. In the story it is still a photo.\n- Automatic captions are short lines under the picture (about 40–160 characters, cut at a sentence end above 280).\n- Halloween costume contest in October (Settings › Stir › Drama): three Creators post costumes, you pick the winner, the winner posts a reward set.\n- Live recaps are built from the show (what you got, goals, coins, top tipper), so two shows never post the same text.\n- The daily world tick sees the recent themes, so the feed no longer gets \"Cozy\" trends day after day.\n- Fewer wasted slots: the planner stops adding post slots past posts per day, and one slot opens one campaign.",
+          "highlight": false
+        },
+        {
           "version": "0.4.4",
           "date": "2026-10-26",
           "notes": "- Live shows, rebuilt: code runs every show minute by minute (fans, tips, menu orders, goals); while you watch, the model writes the host and the chat, and the host answers you by name.\n- Live pictures about once per minute, and private shows at the Backstage price and length.\n- Go live yourself as your persona's Creator, or as any Creator from Stir; the room reacts and suggests your next move.\n- \"X is live\" notices, a thank-you post after each show, and a Backstage > Live shows page.\n- The cam is told in words on the stage, so a show works without pictures; pictures follow those words. A live Creator's Moments tile opens the show. Live is portrait on every screen, with a slim top bar.",
@@ -939,12 +945,6 @@
           "version": "0.3.40",
           "date": "2026-10-14",
           "notes": "- Changed: Slurp follows a Creator's gender instead of calling everyone \"she\". Drama packs use the gender of whoever plays each role (\"{her:he}\" tokens), and pack names and descriptions no longer assume a woman. Post, DM and scene prompts tell the model the Creator's pronouns. A Creator without a gender is \"they\".\n- Added: a \"Clothing style\" choice in the Creator's stage profile: Auto, Feminine, Masculine or Neutral. Auto follows gender. It decides what a \"lingerie\" spice post is: lingerie for feminine, an underwear shoot with briefs for masculine, either for neutral. Male Creators no longer get bra-and-panties shoots unless their style is Feminine. The post prompt also names the style.\n- Added: a picture of a Creator whose appearance text does not say their sex starts with \"Male.\" or \"Female.\" from their gender, so the image model stops defaulting to a woman.\n- Changed: the stage profile field hints read \"he\", \"she\" or \"they\" from the gender you picked.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.39",
-          "date": "2026-10-14",
-          "notes": "- Fixed: on Android, choosing a picture for a post (in the composer, or \"replace\" while editing a post) no longer opens the system photo picker, which lists only a few albums such as Camera, Screenshots and Downloads. Android now offers its full file browser, so every folder is reachable. A file that is not a picture still gets \"Choose an image file.\". Other platforms keep the picture-only file dialog. (#1378)",
           "highlight": false
         }
       ]

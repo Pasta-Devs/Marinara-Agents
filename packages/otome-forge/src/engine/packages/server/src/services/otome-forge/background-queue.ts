@@ -91,6 +91,8 @@ export function createBackgroundQueue(runtime: Pick<CapabilityRuntimeHost, "inte
       enqueue({ job, refusals: 0 });
       return true;
     },
+    /** True while a job with this key waits, backs off or runs. */
+    has: (key: string) => keys.has(key),
     /** Drops every waiting job and backoff timer (on deactivate). A running job finishes on its own. */
     dispose() {
       disposed = true;

@@ -8,15 +8,21 @@
 
 ## 0.0.5 — 2026-10-28
 
-- Home now shows the love interest you pick, or you in your own look, in a layered scene tinted by your time of day. A painted look is cut out of its background when the Engine can, and pans slowly when it cannot; with no images, initials on a gradient. Reduced motion stills it.
+- Home now shows the love interest you pick, or you in your own look, before their newest CG or a painted place, tinted by your time of day. A painted look is cut out of its background when the Engine can, and pans slowly when it cannot; with no images, initials on a gradient. Reduced motion stills it.
 - Each love interest leaves one handwritten note a day, with a mood; Reply opens their thread. During a rupture the note is curt and taps get only cold lines.
-- Tap head, hand or heart for lines written ahead in their voice, so a tap never waits; too many pokes annoy them. Rough day? offers comfort with no model call.
+- Tap head, hand or heart for lines written ahead in their voice, so a tap never waits; too many pokes annoy them, and their face shows it. Rough day? offers comfort with no model call. With voices on, taps, the note and comfort are read aloud.
 - The phone: one private thread per love interest, with suggested replies and stickers. Close and remember saves the talk as a memory only that love interest recalls (+20 affection, capped daily).
+
+## 0.0.4 — 2026-10-28
+
+- Each love interest now has a route: six stages from Mask to Bond, each opened by a free route chapter at an affection level and moved only by its last scene. The fourth reveals a secret; the fifth holds a confrontation and a choice that cannot be undone.
+- Every main chapter builds to a confrontation: three rounds of Press, Hold, Yield or Reveal, ending in the truth, a walkout or a standoff. A walkout can open a rift that shuts their route until you Make it right.
+- With an image connection, places and key moments are painted (or wait for your tap with Ask before painting), CGs join the Album once seen, and faces are painted in the background. Music follows each scene's mood, and dialogue can be voiced.
 
 ## 0.0.3 — 2026-10-28
 
 - Now offered to Engine `staging` testers. The story begins: pick who leads each main chapter from two love interests, the one you have seen least and the one with the most unresolved between you, and play six to nine scenes that build to a confrontation.
-- Scenes mark each love interest's face line by line (a later build paints the faces), set thoughts apart, and offer choices. Your first choice is canon; replays show the other branches and change nothing, and a choice that matters shows "He'll remember that."
+- Scenes mark each love interest's face line by line (a later build paints the faces), set thoughts apart, and offer choices. Your first choice is canon; replays show the other branches and change nothing, and a choice that matters names who will remember it.
 - Trust, tension and grievances move only through your choices and are never shown. Each love interest remembers only what they saw or were told.
 - Rewrite a scene before choosing (one model call), or Ease off to end it at once with no model call, also when your model declines a scene. Settings → Debug shows the story memory.
 - Reading earns Starlight and affection. Every prompt that writes the story keeps your content settings and the 18+ gate.

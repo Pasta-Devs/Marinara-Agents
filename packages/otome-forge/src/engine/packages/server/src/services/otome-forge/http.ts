@@ -8,6 +8,7 @@ import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type { ZodType } from "zod";
 import type { OtomeErrorCode } from "../../../../client/src/features/otome-forge/shared/api-types.js";
 import type { ForgeStoryCancellation } from "@forge-kit/story-cancel-server.mjs";
+import type { OtomeArt } from "./art/expressions.js";
 import type { ImageClient } from "./art/image-client.js";
 import type { BackgroundQueue } from "./background-queue.js";
 import type { OtomeMemory } from "./memory/memory.js";
@@ -42,9 +43,18 @@ export interface OtomeReply {
 
 export type RouteHandler = (request: OtomeRequest, reply: OtomeReply) => Promise<unknown>;
 
+/**
+ * Fastify route options, which the Engine's collector hands to app.route as they are. `logLevel: "silent"` drops the
+ * Engine's own lines for the request (incoming request, request completed, an aborted client, Fastify's error line).
+ */
+export interface OtomeRouteOptions {
+  logLevel: "silent";
+}
+
 export interface OtomeRouter {
   get(path: string, handler: RouteHandler): void;
   post(path: string, handler: RouteHandler): void;
+  post(path: string, options: OtomeRouteOptions, handler: RouteHandler): void;
 }
 
 export interface OtomeLogger {
@@ -94,6 +104,11 @@ export interface RouteDeps {
   cancellation?: ForgeStoryCancellation;
   /** The package's background lane (line packs, M3); without it nothing is written in the background. */
   background?: BackgroundQueue;
+  /**
+   * The story's art (M2b, S/art/expressions.ts createOtomeArt): faces for each beat served, places and the CG for each
+   * beat written, a replaced beat's CG released. Without it nothing is painted.
+   */
+  art?: OtomeArt;
 }
 
 export type RegisterRoutes = (router: OtomeRouter, deps: RouteDeps) => void;
@@ -115,6 +130,17 @@ export function liParam(request: OtomeRequest): string {
   const li = param(request, "li");
   if (!isLiId(li)) throw new OtomeForgeError(404, "No such love interest.", "not-found");
   return li;
+}
+
+/**
+ * `reviewImagePrompts` from the body (POST) or the query (GET): the player reviews image prompts before they are sent
+ * (the Engine's reviewImagePromptsBeforeSend), so an automatic paint waits for the tap as with Ask before painting.
+ */
+export function reviewModeOf(request: OtomeRequest): boolean {
+  const from = (source: unknown) =>
+    source && typeof source === "object" ? (source as Record<string, unknown>).reviewImagePrompts : undefined;
+  const value = from(request.body) ?? from(request.query);
+  return value === true || value === "true";
 }
 
 /** `debugMode` from the body (POST) or the query (GET), as the client sends it on every request. */

@@ -1,24 +1,6 @@
 // ──────────────────────────────────────────────
-// Otome Forge: the screens OtomeForgeView routes between, with each one's name and icon
+// Otome Forge: the screens OtomeForgeView routes between, with each one's name (its icon: screen-icons.ts)
 // ──────────────────────────────────────────────
-import {
-  BookHeart,
-  BookLock,
-  BookOpen,
-  CalendarDays,
-  CalendarHeart,
-  Gem,
-  Heart,
-  House,
-  Images,
-  Settings,
-  Shirt,
-  Smartphone,
-  Sparkles,
-  WandSparkles,
-  type LucideIcon,
-} from "lucide-react";
-
 export type ScreenId =
   | "picker"
   | "setup"
@@ -51,6 +33,16 @@ export const RUN_SCREENS: ReadonlySet<ScreenId> = new Set([
   "remind",
 ]);
 
+/**
+ * Whether the home cue is the music beneath this screen (OtomeForgeView's audio): inside a run, in the reader too (its
+ * scenes hold their own cue once one arrives, so Home's plays on while the first scene loads), and in Settings opened
+ * from inside a run.
+ */
+export function playsHomeCue(screen: ScreenId, settingsReturn: ScreenId): boolean {
+  const inRun = (id: ScreenId) => RUN_SCREENS.has(id) || id === "reader";
+  return inRun(screen) || (screen === "settings" && inRun(settingsReturn));
+}
+
 export const SCREEN_NAME_KEYS: Record<ScreenId, string> = {
   picker: "ui.otomeForge.common.screenPicker",
   setup: "ui.otomeForge.common.screenSetup",
@@ -66,21 +58,4 @@ export const SCREEN_NAME_KEYS: Record<ScreenId, string> = {
   phone: "ui.otomeForge.common.screenPhone",
   remind: "ui.otomeForge.common.screenRemind",
   settings: "ui.otomeForge.common.screenSettings",
-};
-
-export const SCREEN_ICONS: Record<ScreenId, LucideIcon> = {
-  picker: Heart,
-  setup: WandSparkles,
-  forge: Gem,
-  bible: BookLock,
-  home: House,
-  story: BookHeart,
-  reader: BookOpen,
-  dates: CalendarHeart,
-  wish: Sparkles,
-  wardrobe: Shirt,
-  album: Images,
-  phone: Smartphone,
-  remind: CalendarDays,
-  settings: Settings,
 };

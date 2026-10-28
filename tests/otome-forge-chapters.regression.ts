@@ -3,18 +3,25 @@
 // love interest in chapter 1, an off-screen line for each absent one, no tag for a Line, and conflict seeds that never
 // repeat that love interest's last two kinds of angst, counting the same plan's), and the plan route: the prompt
 // carries the knowledge boundary, the content contract, the kit's PLAYER AGENCY and every Foil candidate's full bible; a
-// broken plan gets exactly one repair turn; a plan is written once; the next chapter waits.
+// broken plan gets exactly one repair turn; a plan is written once; the next chapter waits. The planner sees every
+// open grievance; the narrator the newest three, the rupture's and those its node may resolve.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
-import type { RunState } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
+import type {
+  ChapterNode,
+  RunState,
+} from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import { defaultContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
 import { chapterId } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import {
   defaultLiState,
   normalizeState,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeChapter } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
+import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
+import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import {
   leadCandidates,
   normalizeChapterPlan,
@@ -22,9 +29,11 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/chapters.ts";
 import {
   ChapterPlanSchema,
+  beatMessages,
+  chapterPlanMessages,
   type ChapterPlanReply,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
-import { CAST, KAI, MIR, SOL, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
+import { CAST, HE, KAI, MIR, SOL, bible, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
 
 function stateWith(lis: Record<string, Partial<RunState["lis"][string]>>, changes: Partial<RunState> = {}): RunState {
   const base = normalizeState(undefined);
@@ -219,6 +228,33 @@ test("a chapter that reaches for a Line is refused; open grievances may be resol
   const plan = normalizeChapterPlan(parse(planReply({ nodes })), context({ state }));
   assert.equal(typeof plan, "object");
   if (typeof plan !== "string") assert.deepEqual(plan.nodes[5]!.resolves, ["g1"]);
+});
+
+test("the planner sees every open grievance; the narrator the newest three, the rupture's and those its node resolves", () => {
+  const units = CAST.map((li) => ({ ...normalizeUnit({}), id: li.id, name: li.name, pronouns: HE, bible: bible() }));
+  const grievances = [0, 1, 2, 3, 4].map((n) => ({
+    ...grievance(`g${n}`, KAI),
+    text: `GRIEVANCE-${n}: the lamp was left dark.`,
+    severity: n === 0 ? ("rupture" as const) : ("minor" as const),
+  }));
+  const state = stateWith({ [KAI]: { grievances, rupture: { grievanceId: "g0", since: "main-1/2" } } });
+  const world = normalizeWorld({ connections: { narration: "conn-text" } });
+  const player = normalizePlayer({});
+  const shown = (messages: Array<{ content: string }>) => {
+    const prompt = messages.map((message) => message.content).join("\n");
+    return [0, 1, 2, 3, 4].filter((n) => prompt.includes(`GRIEVANCE-${n}`));
+  };
+  assert.deepEqual(
+    shown(chapterPlanMessages({ world, player, units, state, number: 2, lead: KAI, memory: "" })),
+    [0, 1, 2, 3, 4],
+  );
+  const beat = (resolves?: string[]) => {
+    const node = { i: 0, kind: "beat", guide: "Rain.", cast: [KAI], ...(resolves ? { resolves } : {}) } as ChapterNode;
+    const chapter = { kind: "main" as const, number: 2, title: "Rain", lead: KAI, foil: MIR, nodes: [node] };
+    return beatMessages({ world, player, units, state, chapter, node, storySoFar: "", memory: "" });
+  };
+  assert.deepEqual(shown(beat(["g1"])), [0, 1, 2, 3, 4], "a grievance the node may resolve keeps its text");
+  assert.deepEqual(shown(beat()), [0, 2, 3, 4], "the rupture's grievance, and the newest three");
 });
 
 test("POST /chapters/next plans once, with the boundary, the contract and one repair turn; the next one waits", async () => {

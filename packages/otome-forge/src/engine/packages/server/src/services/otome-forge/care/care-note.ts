@@ -10,9 +10,10 @@
 //
 // Nothing about a care note is written: no document, memory, ledger or note history, and no background job (a missing
 // comfort pool is not queued from here, since that would write his unit). The line is redacted from Otome's own prompt
-// log, the note is never logged, and nothing about a care request is logged at all, not even a failure (a line naming
-// it would date a cycle day). A pool line that sounds medical is never used. Two presses at once each get a
-// note of their own; nothing is written, so there is nothing to race (the client joins a press already in flight).
+// log, the note is never logged, and Otome logs nothing about a care request at all, not even a failure (a line naming
+// it would date a cycle day); its route silences the Engine's request lines too (S/routes/care.ts, with the one limit
+// it names). A pool line that sounds medical is never used. Two presses at once each get a note of their own; nothing
+// is written, so there is nothing to race (the client joins a press already in flight).
 import { randomInt } from "node:crypto";
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type { LiId, Player, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";

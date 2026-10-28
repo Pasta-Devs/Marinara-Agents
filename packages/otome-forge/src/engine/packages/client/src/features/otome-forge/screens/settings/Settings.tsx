@@ -1,14 +1,25 @@
 // ──────────────────────────────────────────────
-// Otome Forge: Settings. Tabs for the look, the current story's content, connections and images, the period tracker,
-// Privacy & data, and Debug. Story settings edit the active run; the look, the tracker and the 18+ confirmation are the
-// player's own.
+// Otome Forge: Settings. Tabs for the look, the current story's content, connections, images and audio, the period
+// tracker, Privacy & data, and Debug. Story settings edit the active run; the look, the tracker and the 18+
+// confirmation are the player's own.
 // ──────────────────────────────────────────────
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Bug, Flower2, Images, Palette, PlugZap, ShieldCheck, SlidersHorizontal, type LucideIcon } from "lucide-react";
+import {
+  AudioLines,
+  Bug,
+  Flower2,
+  Images,
+  Palette,
+  PlugZap,
+  ShieldCheck,
+  SlidersHorizontal,
+  type LucideIcon,
+} from "lucide-react";
 import { LookSwitch } from "../../components/LookSwitch";
 import type { LookPreference } from "../../hooks/use-look";
 import type { RunView } from "../../shared/api-types";
+import { AudioSettings } from "./Audio";
 import { ConnectionsSettings } from "./Connections";
 import { ContentSettings } from "./ContentSettings";
 import { DebugSettings } from "./Debug";
@@ -16,7 +27,7 @@ import { ImagesSettings } from "./Images";
 import { PrivacyData } from "./PrivacyData";
 import { TrackerSettings } from "./Tracker";
 
-const TABS = ["look", "content", "connections", "images", "tracker", "privacy", "debug"] as const;
+const TABS = ["look", "content", "connections", "images", "audio", "tracker", "privacy", "debug"] as const;
 export type SettingsTab = (typeof TABS)[number];
 type Tab = SettingsTab;
 
@@ -25,6 +36,7 @@ const TAB_META: Record<Tab, { labelKey: string; Icon: LucideIcon }> = {
   content: { labelKey: "ui.otomeForge.settings.tabContent", Icon: SlidersHorizontal },
   connections: { labelKey: "ui.otomeForge.settings.tabConnections", Icon: PlugZap },
   images: { labelKey: "ui.otomeForge.settings.tabImages", Icon: Images },
+  audio: { labelKey: "ui.otomeForge.audio.tab", Icon: AudioLines },
   tracker: { labelKey: "ui.otomeForge.settings.tabTracker", Icon: Flower2 },
   privacy: { labelKey: "ui.otomeForge.settings.tabPrivacy", Icon: ShieldCheck },
   debug: { labelKey: "ui.otomeForge.settings.tabDebug", Icon: Bug },
@@ -89,6 +101,8 @@ export function Settings({ run, lookPreference, onLookPreference, initialTab = "
       <ConnectionsSettings run={run} />
     ) : tab === "images" ? (
       <ImagesSettings run={run} />
+    ) : tab === "audio" ? (
+      <AudioSettings run={run} />
     ) : tab === "tracker" ? (
       <TrackerSettings run={run} />
     ) : tab === "privacy" ? (

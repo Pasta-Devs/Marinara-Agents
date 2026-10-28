@@ -60,6 +60,11 @@ export function EaseOffDialog({ onEaseOff, onVeil, onClose }: EaseOffDialogProps
     }
   };
 
+  // While a request runs, neither close button closes: its result still lands, and an error needs the dialog.
+  const close = () => {
+    if (!busy) onClose();
+  };
+
   const errorNote = error ? (
     <p className="of-notice of-notice--error" role="alert">
       {error}
@@ -73,7 +78,7 @@ export function EaseOffDialog({ onEaseOff, onVeil, onClose }: EaseOffDialogProps
         onClose={busy ? undefined : onClose}
         actions={
           <>
-            <button type="button" className="of-button of-button--quiet of-glass" onClick={onClose}>
+            <button type="button" className="of-button of-button--quiet of-glass" aria-disabled={busy} onClick={close}>
               {t("ui.otomeForge.reader.notNow")}
             </button>
             <button
@@ -121,7 +126,13 @@ export function EaseOffDialog({ onEaseOff, onVeil, onClose }: EaseOffDialogProps
       initialFocus={keepRef}
       actions={
         <>
-          <button ref={keepRef} type="button" className="of-button of-button--quiet of-glass" onClick={onClose}>
+          <button
+            ref={keepRef}
+            type="button"
+            className="of-button of-button--quiet of-glass"
+            aria-disabled={busy}
+            onClick={close}
+          >
             {t("ui.otomeForge.reader.keepReading")}
           </button>
           <button

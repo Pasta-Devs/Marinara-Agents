@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// Otome Forge: his faces as stickers. Only the faces already painted (M2b's expressions on the run view, read the way
+// Otome Forge: his faces as stickers. Only the faces already painted (M2b's ready set on the run view, read the way
 // the reader's FacePlate reads them) are offered; with none painted the picker is not shown. A sticker in a bubble
 // whose face is not painted shows as a labelled chip instead. The panel closes on Escape, on a press outside the
 // picker, and when focus moves to something outside it. A blur with nowhere to go is ignored: Safari and iOS never
@@ -13,13 +13,10 @@ import type { RunLiView } from "../../shared/api-types";
 import { FACES, type Face } from "../../shared/faces";
 import { FACE_LABEL_KEYS } from "../reader/FacePlate";
 
-/** The painted faces an LI view carries once M2b paints them (absent until then). */
-type WithExpressions = RunLiView & { expressions?: Record<string, unknown> };
-
 /** His painted face, or null while it isn't painted. */
 export function faceArt(li: RunLiView, face: Face): string | null {
   const shown = forgeStoryExpressionArt(
-    { art: li.portrait ?? "", expressions: (li as WithExpressions).expressions ?? {} },
+    { art: li.portrait ?? "", expressions: li.expressions ?? {} },
     { expression: face },
     FACES,
   );

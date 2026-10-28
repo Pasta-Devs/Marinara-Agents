@@ -30,6 +30,7 @@ export const MAX_CHARACTERS = 2_000;
 const DETAIL_CHARS = 140;
 const NON_TEXT_PROVIDERS = new Set(["image_generation", "video_generation", "audio_generation", "audio", "decision"]);
 const IMAGE_PROVIDER = "image_generation";
+const AUDIO_PROVIDER = "audio_generation";
 
 export const engineResourceKeys = {
   connections: ["otome-forge", "engine", "connections"] as const,
@@ -70,12 +71,14 @@ function toItem(row: Row): PickerItem[] {
 export interface ConnectionLists {
   text: ConnectionOption[];
   image: ConnectionOption[];
+  /** Audio connections that make music (`provider === "audio_generation"`, music on). */
+  music: ConnectionOption[];
 }
 
-const NO_CONNECTIONS: ConnectionLists = { text: [], image: [] };
+const NO_CONNECTIONS: ConnectionLists = { text: [], image: [], music: [] };
 
 function toConnectionLists(rows: Row[]): ConnectionLists {
-  const lists: ConnectionLists = { text: [], image: [] };
+  const lists: ConnectionLists = { text: [], image: [], music: [] };
   for (const row of rows) {
     const id = text(row.id);
     const provider = text(row.provider);
@@ -88,14 +91,17 @@ function toConnectionLists(rows: Row[]): ConnectionLists {
       isDefault: row.isDefault === "true" || row.isDefault === true,
     };
     if (provider === IMAGE_PROVIDER) lists.image.push(option);
-    else if (!NON_TEXT_PROVIDERS.has(provider)) lists.text.push(option);
+    else if (provider === AUDIO_PROVIDER) {
+      if (row.audioMusic === "true" || row.audioMusic === true) lists.music.push(option);
+    } else if (!NON_TEXT_PROVIDERS.has(provider)) lists.text.push(option);
   }
   lists.text.sort(byName);
   lists.image.sort(byName);
+  lists.music.sort(byName);
   return lists;
 }
 
-/** Text connections (for the story's jobs) and image connections (`provider === "image_generation"`). */
+/** Text connections (for the story's jobs), image connections and music connections. */
 export function useConnections() {
   const query = useQuery({
     queryKey: engineResourceKeys.connections,

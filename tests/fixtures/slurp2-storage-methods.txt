@@ -139,6 +139,7 @@ setWalletCoinsForDevelopment
 tipCreator
 spendCoins
 hasWalletSpendOperation
+hasWardrobeRecord
 refundCoins
 reverseCreatorIncome
 hasCreatorIncomeOperation

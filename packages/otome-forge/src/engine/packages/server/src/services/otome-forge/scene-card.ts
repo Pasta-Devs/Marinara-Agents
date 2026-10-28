@@ -7,21 +7,11 @@
 // (trust and tension, grievances, disclosures, learned tells). Prompt text: English, never localized.
 import { estimateTextTokens, sliceTextToTokenBudget } from "@forge-kit/shared-token-estimator.mjs";
 import type { ArcStageKey, RunState, Unit } from "../../../../client/src/features/otome-forge/shared/api-types.js";
-import { FIRST_STAGE, LAST_STAGE } from "./schemas/state.js";
+import { stageRow } from "../../../../client/src/features/otome-forge/shared/arcs.js";
 
 export const SCENE_CARD_MAX_TOKENS = 250;
 const LIST_MAX = 3;
 const NAME_MAX = 60;
-
-// ponytail: the stage names and balances live here until M2b's SH/arcs.ts owns the stage table; then import them.
-const STAGES: Record<number, { name: string; balance: string }> = {
-  1: { name: "Mask", balance: "Mask 90 / self 10" },
-  2: { name: "Crack", balance: "Mask 75 / self 25" },
-  3: { name: "Pull", balance: "Mask 60 / self 40" },
-  4: { name: "Wound", balance: "The mask breaks" },
-  5: { name: "Reckoning", balance: "Mask 40 / self 60" },
-  6: { name: "Bond", balance: "Changed toward the protagonist only" },
-};
 
 export type SceneCardUnit = Pick<Unit, "name" | "pronouns" | "bible">;
 export type SceneCardState = Pick<RunState["lis"][string], "stage">;
@@ -64,9 +54,10 @@ function render(unit: SceneCardUnit, stage: number, limits: Limits): string {
     .filter((secret) => secret.revealAt.stage <= stage)
     .sort((a, b) => b.revealAt.stage - a.revealAt.stage)
     .map((secret) => secret.truth);
-  const meta = STAGES[stage];
+  const meta = stageRow(stage);
+  const title = `${meta.name[0]!.toUpperCase()}${meta.name.slice(1)}`;
   return [
-    `${header} — stage ${stage} (${meta.name}). ${meta.balance}.`,
+    `${header} — stage ${stage} (${title}). ${meta.balance}.`,
     sentence(
       ["Voice: ", one(bible.voice.register)],
       ["Never: ", list(bible.voice.never)],
@@ -96,7 +87,7 @@ function render(unit: SceneCardUnit, stage: number, limits: Limits): string {
  * kit's token estimate, so CJK text counts as it should), lists lose their last items, then every field shortens.
  */
 export function otomeSceneCard(unit: SceneCardUnit, liState: SceneCardState): string {
-  const stage = Math.min(LAST_STAGE, Math.max(FIRST_STAGE, Math.trunc(liState.stage) || FIRST_STAGE));
+  const stage = stageRow(liState.stage).stage;
   let limits: Limits = { list: LIST_MAX, scalar: 160, item: 100 };
   let card = render(unit, stage, limits);
   while (estimateTextTokens(card) > SCENE_CARD_MAX_TOKENS && limits.item > 12) {

@@ -2,7 +2,8 @@
 // Otome Forge: angst as state (design "Angst as state", plan M2a "State rules")
 // ──────────────────────────────────────────────
 // Trust (−3..+3) and tension (0..3) move only through the effects of a first-play choice, at most ±1 within a beat and
-// ±2 within a chapter on each axis, and are never shown. Grievances run both ways: one never closes in the beat that
+// ±2 within a chapter on each axis, and are never shown. Each unfinished chapter keeps its own counters, since route
+// and repair chapters are read alongside a main one. Grievances run both ways: one never closes in the beat that
 // opened it, and closes only on a node whose plan lists it in `resolves`. A grievance of severity `rupture` opens a
 // rupture, which shuts his gates until a scene forgives or addresses it; while another rupture-severity grievance is
 // still owed, the rupture moves to it instead of closing. Nothing unlocked is ever taken back: nothing here touches
@@ -13,6 +14,7 @@
 import { z, type ZodType } from "zod";
 import type {
   ChapterProgress,
+  ChapterShift,
   Effect,
   Grievance,
   LiId,
@@ -27,6 +29,7 @@ import {
   TRUST_MAX,
   TRUST_MIN,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import { isChapterKey } from "../ids.js";
 
 /** The stored text limit of a grievance or a disclosure (S/schemas/state.ts reads longer ones as invalid). */
 const TEXT_MAX = 600;
@@ -34,18 +37,35 @@ const TEXT_MAX = 600;
 const GRIEVANCES_MAX = 60;
 const DISCLOSURES_MAX = 40;
 
-/**
- * `chapterDelta` with the beat it last moved in, for the per-beat cap. `beat` is optional so a state saved before it
- * existed still reads; S/schemas/state.ts must read the field through ChapterDeltaSchema, or the cap resets per pick.
- */
-export type ChapterDelta = LiState["chapterDelta"] & { beat?: { i: number; trust: number; tension: number } };
+/** Unfinished chapters whose counters a love interest keeps (more is never read alongside each other). */
+const DELTAS_MAX = 24;
 
-export const ChapterDeltaSchema: ZodType<ChapterDelta> = z.object({
-  key: z.string().max(120),
+const ChapterShiftSchema: ZodType<ChapterShift> = z.object({
   trust: z.number().int(),
   tension: z.number().int(),
   beat: z.object({ i: z.number().int().min(0), trust: z.number().int(), tension: z.number().int() }).optional(),
 });
+/** The single slot a state saved before M2b's parallel chapters holds: one chapter's counters, under its key. */
+const LegacyDeltaSchema = z.object({ key: z.string().max(120) }).and(ChapterShiftSchema);
+
+/**
+ * Reads `chapterDelta` (S/schemas/state.ts): chapter key → its counters, or the older single slot as its one entry.
+ * Anything else reads as no counters.
+ */
+export function readChapterDelta(value: unknown): LiState["chapterDelta"] {
+  const legacy = LegacyDeltaSchema.safeParse(value);
+  if (legacy.success) {
+    const { key, ...shift } = legacy.data;
+    return isChapterKey(key) ? { [key]: shift } : {};
+  }
+  const deltas: LiState["chapterDelta"] = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return deltas;
+  for (const [key, raw] of Object.entries(value).slice(-DELTAS_MAX)) {
+    const shift = ChapterShiftSchema.safeParse(raw);
+    if (isChapterKey(key) && shift.success) deltas[key] = shift.data;
+  }
+  return deltas;
+}
 
 /** A grievance still owed: open, or left to fester. */
 const isUnresolved = (grievance: Grievance) => grievance.status === "open" || grievance.status === "festering";
@@ -68,7 +88,7 @@ export interface ChoiceOutcome {
   state: RunState;
   /**
    * True when the pick changed something between them: trust or tension moved, a grievance opened or closed, or the
-   * protagonist told him something. The reader then shows "He'll remember that."
+   * protagonist told him something. The reader then shows "{name} will remember that." (or "They'll remember that.").
    */
   remembered: boolean;
   /** The love interests that pick changed something with, in the order of its effects (the toast names a lone one). */
@@ -95,12 +115,17 @@ function shift(want: number, value: number, chapterSoFar: number, beatSoFar: num
   return clamp(value + chapter, min, max) - value;
 }
 
-/** His delta counters for this chapter and beat: a new chapter or a new beat starts from 0. */
-function deltaFor(li: LiState, key: string, i: number): Required<ChapterDelta> {
-  const stored = li.chapterDelta as ChapterDelta;
-  const chapter = stored.key === key ? stored : { key, trust: 0, tension: 0 };
-  const beat = stored.key === key && stored.beat?.i === i ? stored.beat : { i, trust: 0, tension: 0 };
-  return { key, trust: chapter.trust, tension: chapter.tension, beat: { ...beat } };
+/** His delta counters for this chapter and beat: a chapter not moved yet, or a new beat, starts from 0. */
+function deltaFor(li: LiState, key: string, i: number): Required<ChapterShift> {
+  const stored = Object.hasOwn(li.chapterDelta, key) ? li.chapterDelta[key] : undefined;
+  const beat = stored?.beat?.i === i ? stored.beat : { i, trust: 0, tension: 0 };
+  return { trust: stored?.trust ?? 0, tension: stored?.tension ?? 0, beat: { ...beat } };
+}
+
+/** His counters with this chapter's saved last: finished chapters' are let go (no pick lands in them again). */
+function withDelta(li: LiState, state: RunState, key: string, delta: ChapterShift): LiState["chapterDelta"] {
+  const kept = Object.entries(li.chapterDelta).filter(([other]) => other !== key && !state.chapters[other]?.completed);
+  return { ...Object.fromEntries(kept.slice(-(DELTAS_MAX - 1))), [key]: delta };
 }
 
 /** Every unresolved grievance, then the newest closed ones, in their order, GRIEVANCES_MAX in all at most. */
@@ -153,7 +178,7 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
     delta.tension += tension;
     delta.beat.trust += trust;
     delta.beat.tension += tension;
-    li.chapterDelta = delta;
+    li.chapterDelta = withDelta(current, state, key, delta);
     if (trust || tension) rememberedBy.add(effect.li);
 
     if (effect.grievance && effect.grievance.text.trim()) {
@@ -172,8 +197,10 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
       rememberedBy.add(effect.li);
     }
 
-    if (effect.disclose?.trim()) {
-      li.disclosures = [...li.disclosures, { text: clip(effect.disclose), at, ref: here }].slice(-DISCLOSURES_MAX);
+    // Told once per scene: the same words again (a Confrontation's every Reveal) would crowd out what came before.
+    const told = effect.disclose?.trim() ? clip(effect.disclose) : "";
+    if (told && !li.disclosures.some((item) => item.ref === here && item.text === told)) {
+      li.disclosures = [...li.disclosures, { text: told, at, ref: here }].slice(-DISCLOSURES_MAX);
       rememberedBy.add(effect.li);
     }
 

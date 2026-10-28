@@ -1,63 +1,52 @@
 // ──────────────────────────────────────────────
 // Otome Forge: his message of the day, handwritten on a slip of paper. It is written once per local day on the first
-// Home visit (the server keeps it after that); Play reads it in a voice, Reply opens his thread with the note quoted.
+// Home visit (the server keeps it after that); Play reads it in his voice, Reply opens his thread with the note quoted.
 // The note can be folded away so his face shows.
 // ──────────────────────────────────────────────
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronUp, Feather, MessageCircleHeart, Play, RotateCcw, Square } from "lucide-react";
-import { ttsService, ttsUnavailableReason, type TTSState } from "../../../../lib/tts-service";
+import { useAudioSnapshot, useOtomeAudio } from "../../hooks/use-otome-audio";
 import { initialsOf } from "../../lib/accent";
-import type { NoteView } from "../../shared/api-types";
-
-interface SpeakOptions {
-  speaker: string;
-  /** Only for lines that may sit in the Engine's audio cache; a comfort line has none (plan §1.9). */
-  cacheKey?: string;
-}
+import type { NoteView, Segment } from "../../shared/api-types";
 
 /**
- * Plays a line through the Engine's voice service and follows whether it is the one playing. A line this screen
- * started stops when the screen leaves.
+ * Home's voice: a line voiced through the story's audio (M2b, hooks/use-otome-audio.ts), with the kit's voice picking
+ * over the Engine's voice settings (his card's own voice, else the pool for his voice). `can` is false while Settings →
+ * Audio voices nobody (or the Engine has no voice service), and then nothing is offered or played. A line this screen
+ * started stops when the screen leaves. `cache: false` keeps a line out of the Engine's audio cache (a comfort line,
+ * plan §1.9); every other line is cached under its ref.
  */
 export function useLineVoice() {
-  const [active, setActive] = useState<string | null>(null);
+  const audio = useOtomeAudio();
+  const { speaking } = useAudioSnapshot();
   const [failed, setFailed] = useState<string | null>(null);
   const started = useRef(new Set<string>());
   useEffect(() => {
-    const follow = (state: TTSState, id: string | null) =>
-      setActive(state === "loading" || state === "playing" ? id : null);
-    follow(ttsService.getState(), ttsService.getActiveId());
-    const unsubscribe = ttsService.subscribe(follow);
     const mine = started.current;
     return () => {
-      unsubscribe();
-      if (mine.has(ttsService.getActiveId() ?? "")) ttsService.stop();
+      if (audio && mine.has(audio.getSnapshot().speaking ?? "")) audio.stopVoice();
     };
-  }, []);
-  const toggle = (id: string, text: string, options: SpeakOptions) => {
-    if (active === id) {
-      ttsService.stop();
-      return;
-    }
+  }, [audio]);
+  const can = (segment: Segment) => !!audio?.wouldSpeak(segment);
+  const stop = () => audio?.stopVoice();
+  const play = (ref: string, segment: Segment, options?: { cache?: boolean }) => {
+    if (!audio) return;
     setFailed(null);
-    started.current.add(id);
-    // ponytail: the Engine's default voice reads every Home line. Ceiling: not his assigned or pooled voice. Upgrade
-    // path: route through M2b's use-otome-audio (forgeSpeakerVoice) once it lands.
-    ttsService.speak(text, id, { ...options, throwOnError: true }).catch((error: unknown) => {
-      if (error instanceof Error && error.name === "AbortError") return;
-      console.warn("Otome Forge could not play a line", error);
-      setFailed(id);
+    started.current.add(ref);
+    void audio.speak(segment, ref, options).then((outcome) => {
+      if (outcome === "failed") setFailed(ref);
     });
   };
-  return { available: ttsUnavailableReason === null, active, failed, toggle };
+  const toggle = (ref: string, segment: Segment, options?: { cache?: boolean }) =>
+    speaking === ref ? stop() : play(ref, segment, options);
+  return { can, active: speaking, failed, play, stop, toggle };
 }
 
 export type NoteStatus =
   { kind: "ready"; note: NoteView } | { kind: "writing" } | { kind: "failed"; message: string; onRetry: () => void };
 
 interface NoteCardProps {
-  runKey: string;
   liId: string;
   name: string;
   accent: string;
@@ -65,14 +54,16 @@ interface NoteCardProps {
   onReply: (quote: string) => void;
 }
 
-export function NoteCard({ runKey, liId, name, accent, status, onReply }: NoteCardProps) {
+export function NoteCard({ liId, name, accent, status, onReply }: NoteCardProps) {
   const { t } = useTranslation();
   const voice = useLineVoice();
   const [folded, setFolded] = useState(false);
   const titleId = useId();
   const bodyId = useId();
   const note = status.kind === "ready" ? status.note : null;
-  const voiceId = note ? `otome-forge:${runKey}:note:${liId}:${note.at}` : "";
+  // Cached under the note's own ref: the day's note is read again with no new voice call.
+  const voiceId = note ? `note:${liId}:${note.at}` : "";
+  const line: Segment | null = note ? { speaker: name, text: note.text } : null;
   const playing = !!note && voice.active === voiceId;
   const foldLabel = folded ? t("ui.otomeForge.home.noteUnfold", { name }) : t("ui.otomeForge.home.noteFold");
 
@@ -124,13 +115,13 @@ export function NoteCard({ runKey, liId, name, accent, status, onReply }: NoteCa
           <>
             <p className="of-note-text">{t("ui.otomeForge.home.noteText", { text: status.note.text })}</p>
             <div className="of-note-foot">
-              {voice.available ? (
+              {line && voice.can(line) ? (
                 <button
                   type="button"
                   className="of-note-button"
                   aria-pressed={playing}
                   aria-label={t("ui.otomeForge.home.notePlayLabel", { name })}
-                  onClick={() => voice.toggle(voiceId, status.note.text, { speaker: name, cacheKey: voiceId })}
+                  onClick={() => voice.toggle(voiceId, line)}
                 >
                   {playing ? (
                     <Square size={13} strokeWidth={2.4} aria-hidden="true" />

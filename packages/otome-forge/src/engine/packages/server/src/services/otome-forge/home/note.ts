@@ -11,9 +11,11 @@
 //
 // P16 sees the weekday and the time of day, his birthday or the story's anniversary (all for the instant the request
 // named its day), his stage and what stands between them, one thing he may know from his own recall (reader: him, so
-// a phone thread or a date with another love interest never reaches it; shared canon is framed as news unless he was
-// there), his latest off-screen line, and his last RECENT_NOTES notes so he does not repeat himself. Care data is
-// never part of a note.
+// a phone thread, a date, a route or a repair chapter of another love interest never reaches it; shared canon is
+// framed as news unless he was there), his latest off-screen line, and his last RECENT_NOTES notes so he does not
+// repeat himself. The ledger lines and his grievances and disclosures are the ones his own reader may know
+// (story/prompts.ts ownView, M2b's rule): none from another love interest's own chapter. Care data is never part of
+// a note.
 import { sliceTextToTokenBudget } from "@forge-kit/shared-token-estimator.mjs";
 import { forgeDayKey, forgeWallDate, forgeWeekday } from "@forge-kit/time-zone-server.mjs";
 import { z } from "zod";
@@ -22,7 +24,6 @@ import type {
   LiState,
   Note,
   NoteView,
-  RunState,
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -43,6 +44,7 @@ import type { OtomeMemory } from "../memory/memory.js";
 import { normalizeState, readRun } from "../schemas/state.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
+import { ownView } from "../story/prompts.js";
 import {
   NoteReplySchema,
   QUESTION_MARK,
@@ -187,11 +189,6 @@ async function recalledLine(
   }
 }
 
-/** His latest off-screen line from the ledgers, or "". */
-function latestOffscreen(state: RunState, li: LiId): string {
-  return [...state.ledgers.offscreen].reverse().find((row) => row.li === li)?.line ?? "";
-}
-
 export interface NoteDeps extends GenerationDeps {
   store: OtomeStore;
   memory?: Pick<OtomeMemory, "recall" | "maintain">;
@@ -223,11 +220,9 @@ export async function serveNote(
     const run = await readRun(deps.store, runId);
     if (!run) throw runNotFound();
     const unit = run.units.find((entry) => entry.id === li);
-    const liState = run.state.lis[li];
-    if (!unit || !liState) throw new OtomeForgeError(404, "No such love interest.", "not-found");
+    if (!unit || !run.state.lis[li]) throw new OtomeForgeError(404, "No such love interest.", "not-found");
     if (!unit.bible) throw new OtomeForgeError(409, `${unit.name}'s bible is not written yet.`, "conflict");
-    const offscreen = latestOffscreen(run.state, li);
-    const relationship = [...run.state.ledgers.relationship].reverse().find((row) => row.li === li)?.line ?? "";
+    const { liState, relationship, offscreen } = ownView(run.state, li);
     const [recalled, recent] = await Promise.all([
       recalledLine(deps.memory, runId, unit, [relationship, offscreen].filter(Boolean), debugMode),
       recentNotes(deps.store, runId, li, dayKey),

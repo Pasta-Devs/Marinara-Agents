@@ -2,12 +2,15 @@
 // calendar with his birthday, the story's first day and the month grid by keyboard; the tracker off by default with
 // its agreed copy; opting in and logging a first day; filled "logged" and outlined "predicted" hearts; a stubbed
 // Caring message that carries exactly one line about today (no other request, query string or body says anything
-// about the cycle), kept for the day with no second request and voiced with no cacheKey (a spy on the host's voice
-// service); "Keep it off the model" sending nothing; and Delete all. Then, with Otome Forge's storage blocked (a private
+// about the cycle), kept for the day with no second request and voiced in his voice through M2b's audio with no
+// cacheKey (a spy on the host's voice service); "Keep it off the model" sending nothing; and Delete all. Then, with Otome Forge's storage blocked (a private
 // window), Remind Me and the tracker still render and say what they could not keep. Across midnight, an open caring
 // message closes, one still on its way is not kept for yesterday, and focus stays on Home when its button goes. In two
-// tabs, a mode, a change or a Delete all made in the other one is what counts. At a phone browser's 390 × 664 the rail
-// never covers the note's Play button.
+// tabs, a mode, a change or a Delete all made in the other one is what counts, and focus waits on Remind Me when Caring
+// message goes while it holds focus. At common phone sizes, on M3's Home with a painted look and place or with neither,
+// with long names, a four-word mood and a two-sentence note: Remind Me and Caring message (round buttons in the foot,
+// which never wraps) never cover the note or his tap zones, and M3's rail never hides a button without fading at that
+// end. Over his painted look, in Midnight and Pearl, any label the foot's buttons show keeps 4.5:1 and each icon 3:1.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-remind.e2e.ts
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -67,7 +70,28 @@ const longDate = (day: string) =>
     timeZone: "UTC",
   }).format(new Date(`${day}T00:00:00Z`));
 
-function createRemindStub() {
+/** A flat image of `width` × `height` (a data: URL, which the Engine's CSP allows), for a look or a place. */
+const flat = (width: number, height: number, fill: string) =>
+  `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="${fill}"/></svg>`,
+  )}`;
+const LOOK_FILL = "#8c96c8";
+const PLACE = flat(768, 1344, "#3c466e");
+const TWO_SENTENCES =
+  "The lab light was on again past midnight. I left you the last of the plum tea on the second shelf and a warm scarf by the door.";
+
+/**
+ * `images`: his painted look (a full-body figure with tap zones over it, in `lookFill`) before a painted place, as M3's
+ * Home has it. `name`, `noteText` and `mood` change Ilvar's nameplate and note.
+ */
+function createRemindStub({
+  images = false,
+  lookFill = LOOK_FILL,
+  name = "Ilvar Thorne",
+  noteText = "The lab light was on again.",
+  mood = { word: "calm", reason: "quiet morning" },
+} = {}) {
+  const LOOK = flat(832, 1216, lookFill);
   const calls: Call[] = [];
   /** While set, the care-note answer waits for it (a slow provider). */
   let careGate: Promise<void> | null = null;
@@ -91,6 +115,8 @@ function createRemindStub() {
       images: { connectionId: null, rating: "sfw", ask: false, expressions: true },
       connections: { narration: "conn-text" },
       forge: { phase: "ready", steps: [] },
+      // Voices on (Settings → Audio), so the note and the caring message can be played (M2b's audio).
+      audio: { tts: true },
     },
     player: {
       personaId: "persona-mira",
@@ -101,7 +127,16 @@ function createRemindStub() {
       look: { identityLine: "", outfitLine: "" },
     },
     lis: [
-      { id: ILVAR, name: "Ilvar Thorne", pronouns, source: "card", accent: "#9DB8F0", level: 2, stage: 2 },
+      {
+        id: ILVAR,
+        name,
+        pronouns,
+        source: "card",
+        accent: "#9DB8F0",
+        level: 2,
+        stage: 2,
+        ...(images ? { portrait: LOOK } : {}),
+      },
       { id: CASSIAN, name: "Cassian", pronouns, source: "archetype", accent: "#E7A6B8", level: 1, stage: 1 },
     ],
     forge: { phase: "ready", steps: [] },
@@ -118,9 +153,9 @@ function createRemindStub() {
   const note = (li: string) => ({
     li,
     dayKey: today(),
-    text: li === ILVAR ? "The lab light was on again." : "The canals froze at dawn.",
+    text: li === ILVAR ? noteText : "The canals froze at dawn.",
     face: "",
-    mood: { word: "calm", reason: "quiet morning" },
+    mood,
     at: now(),
   });
 
@@ -138,11 +173,12 @@ function createRemindStub() {
           li: home.li,
           show: home.show,
           note: note(home.li),
-          look: null,
+          look: images && home.li === ILVAR ? { url: LOOK, source: "look", cutoutState: "uncut" } : null,
           faces: {},
           lines: { ready: true },
           rupture: false,
           unread: 0,
+          backdrop: images ? { url: PLACE, kind: "place" } : null,
         },
       };
     }
@@ -235,6 +271,19 @@ async function stubRoutes(page: Page, stub: Stub, spoken: string[]): Promise<See
   await page.route("**/api/connections", (route) =>
     route.fulfill({ json: [{ id: "conn-text", name: "Nocturne", provider: "openai", model: "night-1" }] }),
   );
+  // The Engine's voice routes (M2b's voice picking reads them): the pool's voice for him, and a silent clip a line.
+  await page.route("**/api/tts/config", (route) =>
+    route.fulfill({
+      json: {
+        enabled: true,
+        connectionId: "conn-tts",
+        connectionProfiles: {
+          "conn-tts": { npcDefaultMaleVoices: ["Pool Male"], npcDefaultFemaleVoices: ["Pool Female"] },
+        },
+      },
+    }),
+  );
+  await page.route("**/api/tts/voices*", (route) => route.fulfill({ json: { voices: ["Pool Male", "Pool Female"] } }));
   await page.route("**/api/tts/speak", async (route) => {
     spoken.push(String(route.request().postDataJSON()?.text ?? ""));
     await route.fulfill({ status: 200, contentType: "audio/wav", body: Buffer.alloc(44) });
@@ -244,26 +293,35 @@ async function stubRoutes(page: Page, stub: Stub, spoken: string[]): Promise<See
 
 /**
  * Records what the host's voice service is asked to say, and with which cacheKey, by wrapping the Engine's own
- * ttsService.speak (the object the package calls). Fails when there is no such service to watch, never skips.
+ * ttsService.speakSequence (what M2b's audio controller calls). Fails when there is no such service to watch, never
+ * skips.
  */
 async function spyOnVoice(page: Page) {
   const found = await page.evaluate(() => {
     const host = (globalThis as unknown as { __MARINARA_HOST__?: any }).__MARINARA_HOST__;
     const service = host?.services?.tts?.ttsService;
-    if (!service || typeof service.speak !== "function") return false;
-    const speak = service.speak.bind(service);
-    const asked: Array<{ text: string; cacheKey: string | null }> = [];
+    if (!service || typeof service.speakSequence !== "function") return false;
+    const speak = service.speakSequence.bind(service);
+    const asked: Array<{ text: string; voice: string; cacheKey: string | null }> = [];
     (window as unknown as { __voiceAsked: typeof asked }).__voiceAsked = asked;
-    service.speak = (text: string, id?: string, options?: { cacheKey?: string }) => {
-      asked.push({ text, cacheKey: options?.cacheKey ?? null });
-      return speak(text, id, options);
+    service.speakSequence = (
+      requests: Array<{ text: string; voice: string; cacheKey?: string }>,
+      id: string,
+      options: unknown,
+    ) => {
+      for (const request of requests) {
+        asked.push({ text: request.text, voice: request.voice, cacheKey: request.cacheKey ?? null });
+      }
+      return speak(requests, id, options);
     };
     return true;
   });
   expect(found, "the host's voice service to watch").toBe(true);
   return () =>
     page.evaluate(
-      () => (window as unknown as { __voiceAsked: Array<{ text: string; cacheKey: string | null }> }).__voiceAsked,
+      () =>
+        (window as unknown as { __voiceAsked: Array<{ text: string; voice: string; cacheKey: string | null }> })
+          .__voiceAsked,
     );
 }
 
@@ -449,12 +507,13 @@ test("Otome Forge Remind Me: the calendar, the tracker off by default, hearts, a
   expect(seen.filter((entry) => (entry.url + entry.body).includes(yesterday))).toEqual([]);
   await expect(dialog).not.toContainText("Reply");
 
-  // Play voices it with no cacheKey, so its audio never lands in the Engine's audio cache.
+  // Play voices it in his voice (M2b's voice picking: the pool's, for him) with no cacheKey, so its audio never lands
+  // in the Engine's audio cache.
   await dialog.getByRole("button", { name: "Hear Ilvar Thorne say it" }).click();
   await expect.poll(() => spoken).toContain(CARE_NOTE);
   const voiced = (await voiceAsked()).filter((entry) => entry.text === CARE_NOTE);
   expect(voiced.length).toBeGreaterThan(0);
-  expect(voiced.every((entry) => entry.cacheKey === null)).toBe(true);
+  expect(voiced.every((entry) => entry.cacheKey === null && entry.voice === "Pool Male")).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("05-caring-message.png") });
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(caring).toBeFocused();
@@ -764,34 +823,280 @@ test("Otome Forge in two tabs: a mode, a change or a Delete all made in the othe
   expect(pageErrors).toEqual([]);
 });
 
-for (const size of [
-  { width: 390, height: 664 },
+test("Otome Forge Caring message that goes while it holds focus, the dialog closed: focus waits on Remind Me", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createRemindStub();
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeVisible();
+  const yesterday = shift(dayIn(stub.zone(), new Date()), -1);
+  await seedTracker(page, root, tracker([yesterday]));
+  const caring = root.getByRole("button", { name: "Caring message" });
+  const remind = root.getByRole("button", { name: "Remind Me" });
+  const other = await page.context().newPage();
+  await other.goto("/");
+
+  // Read and closed: the dialog hands focus back to Caring message, which then goes with the tracker turned off in
+  // the other tab.
+  await caring.click();
+  const dialog = page.getByRole("dialog", { name: "A caring message" });
+  await expect(dialog).toContainText(CARE_NOTE);
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(caring).toBeFocused();
+  await other.evaluate(({ key, data }) => localStorage.setItem(key, JSON.stringify(data)), {
+    key: CYCLE_KEY,
+    data: tracker([yesterday], { enabled: false }),
+  });
+  await expect(caring).toHaveCount(0);
+  await expect(remind).toBeFocused();
+
+  // Back on, focused by keyboard, then Delete all over there: the same.
+  await other.evaluate(({ key, data }) => localStorage.setItem(key, JSON.stringify(data)), {
+    key: CYCLE_KEY,
+    data: tracker([yesterday]),
+  });
+  await expect(caring).toBeVisible();
+  await remind.focus();
+  await page.keyboard.press("Tab");
+  await expect(caring).toBeFocused();
+  await other.evaluate((keys) => keys.forEach((key) => localStorage.removeItem(key)), [CYCLE_KEY, CARE_KEY]);
+  await expect(caring).toHaveCount(0);
+  await expect(remind).toBeFocused();
+  await other.close();
+  expect(posts(stub, "/care-note")).toHaveLength(1);
+  expect(pageErrors).toEqual([]);
+});
+
+/** The lowest WCAG contrast of `color` against the pixels of a PNG (base64), worked out in the page. */
+function lowestContrast(page: Page, png: string, color: string) {
+  return page.evaluate(
+    async ({ png, color }) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${png}`;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      [canvas.width, canvas.height] = [image.width, image.height];
+      const context = canvas.getContext("2d")!;
+      context.drawImage(image, 0, 0);
+      const pixels = context.getImageData(0, 0, image.width, image.height).data;
+      const channel = (value: number) => {
+        const s = value / 255;
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      };
+      const luminance = (r: number, g: number, b: number) =>
+        0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+      const [r, g, b] = (color.match(/\d+(\.\d+)?/g) ?? []).map(Number);
+      const own = luminance(r!, g!, b!);
+      let lowest = Infinity;
+      for (let i = 0; i < pixels.length; i += 4) {
+        const other = luminance(pixels[i]!, pixels[i + 1]!, pixels[i + 2]!);
+        lowest = Math.min(lowest, (Math.max(own, other) + 0.05) / (Math.min(own, other) + 0.05));
+      }
+      return lowest;
+    },
+    { png, color },
+  );
+}
+
+// Over his painted look, a mid-tone outfit and a pale one, in both moods: any label the foot's buttons show keeps 4.5:1
+// against what is behind it, and each icon, which alone carries the meaning of a round button, 3:1 (WCAG 1.4.3 and
+// 1.4.11), Caring message's rose wash included.
+for (const scheme of ["dark", "light"] as const) {
+  for (const lookFill of [LOOK_FILL, "#d9d3e6"]) {
+    test(`Otome Forge Caring message and Remind Me over his painted look (${lookFill}) in ${scheme === "dark" ? "Midnight" : "Pearl"}: labels keep 4.5:1 and icons 3:1`, async ({
+      page,
+    }) => {
+      test.setTimeout(120_000);
+      await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+      await page.setViewportSize({ width: 375, height: 667 });
+      const stub = createRemindStub({ images: true, lookFill });
+      await stubRoutes(page, stub, []);
+      const root = await openHome(page);
+      await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeVisible();
+      await seedTracker(page, root, tracker([shift(dayIn(stub.zone(), new Date()), -1)]));
+      await expect(root.locator('.of-home-l0[data-backdrop="place"]')).toBeVisible();
+      /** The lowest contrast of `part`'s own colour against its box with it hidden (an icon's strokes are currentColor). */
+      const contrastOf = async (part: Locator, hide: "visibility" | "color") => {
+        const color = await part.evaluate((element) => getComputedStyle(element).color);
+        const box = (await part.boundingBox())!;
+        await part.evaluate(
+          (element, hide) => ((element as HTMLElement).style[hide] = hide === "color" ? "transparent" : "hidden"),
+          hide,
+        );
+        const png = (await page.screenshot({ clip: box })).toString("base64");
+        await part.evaluate((element, hide) => ((element as HTMLElement).style[hide] = ""), hide);
+        return lowestContrast(page, png, color);
+      };
+      for (const name of ["Caring message", "Remind Me"]) {
+        const button = root.getByRole("button", { name });
+        await expect(button).toBeVisible();
+        for (const label of await button.locator("span:not(.of-visually-hidden)").all()) {
+          expect(await contrastOf(label, "color"), `${name}'s label against what is behind it`).toBeGreaterThanOrEqual(
+            4.5,
+          );
+        }
+        expect(
+          await contrastOf(button.locator("svg"), "visibility"),
+          `${name}'s icon against what is behind it`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+    });
+  }
+}
+
+type Box = { x: number; y: number; width: number; height: number };
+const overlaps = (a: Box, b: Box) =>
+  a.x < b.x + b.width - 0.5 && b.x < a.x + a.width - 0.5 && a.y < b.y + b.height - 0.5 && b.y < a.y + a.height - 0.5;
+
+// Phone browsers' common sizes (with their bars), the smallest first, on M3's Home with and without art; then long names
+// and a four-word mood (the nameplate wraps inside itself, never the foot) and a two-sentence note (M3's rail in a
+// short row), and a desktop window.
+const PHONES = [
+  { width: 360, height: 640 },
   { width: 375, height: 667 },
-]) {
-  test(`Otome Forge Home at ${size.width} × ${size.height} with Caring message: the rail never covers the note's Play`, async ({
+  { width: 390, height: 664 },
+  { width: 390, height: 844 },
+  { width: 412, height: 915 },
+];
+const FOUR_WORDS = { word: "wistful", reason: "missing the harbour lights" };
+const LAYOUTS: Array<{
+  width: number;
+  height: number;
+  images: boolean;
+  name?: string;
+  mood?: { word: string; reason: string };
+  noteText?: string;
+}> = [
+  ...[false, true].flatMap((images) => PHONES.map((size) => ({ ...size, images }))),
+  { width: 360, height: 640, images: true, mood: FOUR_WORDS },
+  { width: 390, height: 664, images: true, mood: FOUR_WORDS },
+  { width: 360, height: 640, images: true, name: "Lucien Delacroix" },
+  { width: 375, height: 667, images: true, name: "Lucien Delacroix" },
+  { width: 390, height: 664, images: true, name: "Maximilian Ashgrove", mood: FOUR_WORDS },
+  { width: 390, height: 664, images: false, name: "Maximilian Ashgrove", mood: FOUR_WORDS },
+  { width: 375, height: 667, images: true, noteText: TWO_SENTENCES },
+  { width: 390, height: 664, images: true, noteText: TWO_SENTENCES },
+  { width: 360, height: 640, images: false, noteText: TWO_SENTENCES },
+  { width: 1280, height: 720, images: true, name: "Lucien Delacroix", mood: FOUR_WORDS },
+];
+for (const layout of LAYOUTS) {
+  const { width, height, images, name = "Ilvar Thorne", mood, noteText } = layout;
+  const what = [
+    images ? "with a painted look and place" : "without images",
+    layout.name ? `“${name}”` : "",
+    mood ? "a four-word mood" : "",
+    noteText ? "a two-sentence note" : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  test(`Otome Forge Home at ${width} × ${height} ${what}: Remind Me and Caring message leave the note and his tap zones free, and the rail never hides a button unsaid`, async ({
     page,
   }) => {
     test.setTimeout(120_000);
-    await page.setViewportSize(size);
-    const stub = createRemindStub();
+    // His figure holds still (no drift, breath or parallax), so the hit test below is exact rather than a snapshot.
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width, height });
+    const stub = createRemindStub({ images, name, noteText, mood });
     const spoken: string[] = [];
     const pageErrors: string[] = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
     await stubRoutes(page, stub, spoken);
     const root = await openHome(page);
-    await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeVisible();
+    await expect(root.getByRole("heading", { level: 1, name })).toBeVisible();
     await seedTracker(page, root, tracker([shift(dayIn(stub.zone(), new Date()), -1)]));
-    await expect(root.getByRole("button", { name: "Caring message" })).toBeVisible();
+    const caring = root.getByRole("button", { name: "Caring message" });
+    await expect(caring).toBeVisible();
+    await expect(root.locator(".of-home")).toHaveAttribute("data-figure", images ? "look" : "medallion");
+    if (images) await expect(root.locator('.of-home-l0[data-backdrop="place"]')).toBeVisible();
 
     // Clicked where it is drawn: Playwright refuses when another element would take the click.
-    await root.getByRole("button", { name: "Hear Ilvar Thorne read the note" }).click();
-    await expect.poll(() => spoken).toContain("The lab light was on again.");
-    const [rail, note] = await Promise.all([
-      root.locator(".of-home-rail").boundingBox(),
-      root.locator(".of-note").first().boundingBox(),
-    ]);
-    expect(rail!.y, "the rail stays under the note").toBeGreaterThanOrEqual(note!.y + note!.height - 1);
-    for (const button of await root.locator(".of-home-rail > *").all()) await expect(button).toBeInViewport();
+    await root.getByRole("button", { name: `Hear ${name} read the note` }).click();
+    await expect.poll(() => spoken).toContain(noteText ?? "The lab light was on again.");
+    const note = (await root.locator(".of-note").first().boundingBox())!;
+
+    // The foot keeps one row: Remind Me and Caring message sit on the nameplate's bottom line, clear of the note.
+    const remind = root.getByRole("button", { name: "Remind Me" });
+    const plate = (await root.locator(".of-home-plate").boundingBox())!;
+    for (const button of [remind, caring]) {
+      await expect(button).toBeInViewport({ ratio: 1 });
+      const box = (await button.boundingBox())!;
+      expect(overlaps(box, note), "the foot's buttons are clear of the note").toBe(false);
+      expect(Math.abs(box.y + box.height - (plate.y + plate.height)), "one row with the nameplate").toBeLessThan(1.5);
+    }
+
+    // M3's rail: one column under the note (never a second one over his figure). Every button is wholly inside the
+    // rail as it opens, or the rail fades at the end that hides one (data-hidden), and scrolls to show it whole.
+    const rail = root.locator(".of-home-rail");
+    const shown = () =>
+      rail.evaluate((element) => {
+        const clip = element.getBoundingClientRect();
+        return {
+          scrollTop: element.scrollTop,
+          hidden: element.dataset.hidden ?? null,
+          mask: getComputedStyle(element).maskImage || getComputedStyle(element).webkitMaskImage || "none",
+          chevron: getComputedStyle(element.parentElement!, "::after").content,
+          whole: [...element.children].map((child) => {
+            const box = child.getBoundingClientRect();
+            return box.top >= clip.top - 0.5 && box.bottom <= clip.bottom + 0.5;
+          }),
+        };
+      });
+    const opened = await shown();
+    expect(opened.whole).toHaveLength(4);
+    expect(opened.scrollTop).toBe(0);
+    if (opened.whole.every(Boolean)) {
+      expect(opened.hidden, "a rail that shows everything says nothing is hidden").toBeNull();
+      expect(opened.chevron, "and points nowhere").toBe("none");
+    } else {
+      expect(opened.hidden, "a rail that hides a button below says so").toBe("end");
+      expect(opened.mask, "and fades at that end").not.toBe("none");
+      expect(opened.chevron, "with a chevron there").not.toBe("none");
+      await rail.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+      await expect.poll(async () => (await shown()).whole.at(-1)).toBe(true);
+      await expect.poll(async () => (await shown()).hidden).toBe("start");
+    }
+    const railBoxes: Box[] = [];
+    for (const button of await root.locator(".of-home-rail > *").all()) railBoxes.push((await button.boundingBox())!);
+    expect(new Set(railBoxes.map((box) => Math.round(box.x))).size, "the rail keeps to one column").toBe(1);
+    const railBox = (await rail.boundingBox())!;
+    expect(railBox.y + 6, "the rail stays under the note").toBeGreaterThanOrEqual(note.y + note.height - 1);
+    await rail.evaluate((element) => element.scrollTo({ top: 0 }));
+
+    // His tap zones: no tap meant for one ever lands on Remind Me or Caring message (every point of each zone's own
+    // rounded shape, every 3 px, is checked by hit testing), and with his usual name no rail button sits on a zone's
+    // centre. (M3's rail buttons may cover a zone's edge beside his figure at narrow widths, and M3's Him / Me toggle,
+    // as wide as a long name makes it, a zone's centre too: M3's own layout.)
+    const zones = root.getByRole("group", { name: `Touch ${name}` }).getByRole("button");
+    await expect(zones).toHaveCount(3);
+    const centreTakers = layout.name ? ".of-home-foot > button" : ".of-home-rail, .of-home-foot > button";
+    const taken = await root.evaluate((element, centreTakers) => {
+      const scope = element.getRootNode() as Document | ShadowRoot;
+      const found: string[] = [];
+      for (const zone of element.querySelectorAll<HTMLElement>(".of-tap-zone, .of-tap-pill")) {
+        const box = zone.getBoundingClientRect();
+        const label = zone.getAttribute("aria-label") ?? zone.textContent?.trim() ?? "";
+        const centre = scope.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        const onCentre = centre?.closest(centreTakers);
+        if (onCentre)
+          found.push(
+            `${onCentre.getAttribute("aria-label") ?? onCentre.textContent?.trim()} on the centre of ${label}`,
+          );
+        for (let x = box.left + 1; x < box.right; x += 3) {
+          for (let y = box.top + 1; y < box.bottom; y += 3) {
+            const stack = scope.elementsFromPoint(x, y);
+            if (!stack.includes(zone)) continue;
+            const over = stack[0]?.closest(".of-home-foot > button");
+            if (over) found.push(`${over.getAttribute("aria-label")} over ${label}`);
+          }
+        }
+      }
+      return [...new Set(found)];
+    }, centreTakers);
+    expect(taken, "no tap meant for his zones lands on the foot's buttons or the rail").toEqual([]);
     expect(pageErrors).toEqual([]);
   });
 }

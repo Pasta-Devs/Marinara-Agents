@@ -42,6 +42,9 @@ import { inferSourceProvenance, sourceNoteIdForProvenance } from "./source-ident
 import { LongTermMemoryStorage } from "../persistence/storage.js";
 import { LtmServiceError } from "../service-error.js";
 
+// How much of the previous chat piece the next one sees as context.
+const CHAT_PIECE_TAIL_CHARS = 3_000;
+
 type Candidate = {
   sourceId: string;
   previewOrder?: string;
@@ -61,6 +64,8 @@ type Candidate = {
   mutationCount: number;
   summary: string;
   deterministicSourceText?: string;
+  // The chat piece before this one, so its extraction can start from where that one ended.
+  previousPiece?: { sourceNoteId: string; tail: string };
   lorebookEntryId?: string;
   lorebookEntryName?: string;
 };
@@ -667,6 +672,7 @@ async function candidates(
                 ? "Narrator"
                 : "System";
       const starts = pieceStarts?.get(chat.id);
+      let previousPiece: Candidate["previousPiece"];
       for (const piece of transcriptPieces(
         await getPackagePersistence().listMessages(chat.id),
         speaker,
@@ -697,7 +703,12 @@ async function candidates(
           extractionMode: chatMode,
           mutationCount: 1,
           summary: `Import ${title}`,
+          ...(previousPiece ? { previousPiece } : {}),
         });
+        previousPiece = {
+          sourceNoteId: sourceNoteIdForProvenance(provenance),
+          tail: piece.content.slice(-CHAT_PIECE_TAIL_CHARS),
+        };
       }
     }
   }
@@ -1225,6 +1236,7 @@ export async function importPackageInterop(
         created: !existing,
         extractionMode: row.extractionMode,
         ...(row.deterministicSourceText ? { deterministicSourceText: row.deterministicSourceText } : {}),
+        ...(row.previousPiece ? { previousPiece: row.previousPiece } : {}),
       });
     } catch (error) {
       // An unexpected failure's message can carry file paths or library internals, so it stays in the server log.

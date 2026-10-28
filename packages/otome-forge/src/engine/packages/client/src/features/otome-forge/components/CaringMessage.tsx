@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the caring message, on a day the period tracker has something to say (plan M6). Pressing Caring
 // message on Home asks for today's note once; it is kept only in this browser (`otome-forge:care-note:v1`) until the
-// day changes, voiced with no cache key, and never quoted into a Reply.
+// day changes, voiced in their voice through the story's audio (M2b) with no cache key, and never quoted into a Reply.
 // ──────────────────────────────────────────────
 // What leaves the browser: at most the one templated line about today (C/lib/cycle.ts careLine), and only from this
 // press. The tracker is read again as the request starts, so a change made in another tab since Home drew the button
@@ -27,7 +27,7 @@ import {
 import { comfortPool, FALLBACK_COMFORT_KEYS, localDay, pickLine } from "../lib/tap-mood";
 import { useOtomeProps } from "../props";
 import { useLineVoice } from "../screens/home/NoteCard";
-import type { CareNoteResult, LinesView, Player, RunLiView } from "../shared/api-types";
+import type { CareNoteResult, LinesView, Player, RunLiView, Segment } from "../shared/api-types";
 import { Avatar } from "./Avatar";
 import { Dialog } from "./Dialog";
 
@@ -130,9 +130,11 @@ export function CaringMessage({ runKey, li, player, today, dayKey, lines, onClos
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt]);
 
-  const voiceId = `otome-forge:${runKey}:care:${li.id}`;
+  // The line's ref while it plays; with no cache key it never names a clip in the Engine's audio cache.
+  const voiceId = `care:${li.id}`;
   const playing = voice.active === voiceId;
   const entry = state.kind === "ready" ? state.entry : null;
+  const said: Segment | null = entry ? { speaker: li.name, text: entry.text } : null;
   // Said as it happened: the server may answer with a comfort line too (debug logging on the server, no bible yet).
   const sourceHint = !entry
     ? null
@@ -151,13 +153,13 @@ export function CaringMessage({ runKey, li, player, today, dayKey, lines, onClos
       onClose={onClose}
       actions={
         <>
-          {entry && voice.available ? (
+          {said && voice.can(said) ? (
             <button
               type="button"
               className="of-button of-button--quiet of-button--small of-glass"
               aria-pressed={playing}
               aria-label={t("ui.otomeForge.tracker.carePlayLabel", { name: li.name })}
-              onClick={() => voice.toggle(voiceId, entry.text, careSpeakOptions(li.name))}
+              onClick={() => voice.toggle(voiceId, said, careSpeakOptions())}
             >
               {playing ? (
                 <Square size={14} strokeWidth={2.4} aria-hidden="true" />

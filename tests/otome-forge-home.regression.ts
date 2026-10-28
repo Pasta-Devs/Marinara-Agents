@@ -6,7 +6,8 @@
 // never tried again; Home set and the unread count; tap annoyance, line picking and the typing delay (pure). A
 // rupture that opens or is repaired later the same day replaces the day's note once; the note's recall is framed as
 // what he may know; the small hours are late night and the note's day is the request's own instant; P15 keeps no
-// question and its comfort lines are warmth only; a debug request folds into a line-pack job that waits.
+// question and its comfort lines are warmth only; a debug request folds into a line-pack job that waits; his face on
+// Home follows a tap, then his note, then a rupture, and a tap line is voiced under a ref of its own words.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -23,7 +24,9 @@ import {
   timeOfDayOf,
   wordCount,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/home.ts";
+import { tapLineRef } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/audio.ts";
 import {
+  homeFace,
   isAnnoyed,
   pickLine,
   recordTap,
@@ -678,14 +681,64 @@ test("Home's faces are the ready set on his worn look, read through the kit, eac
     ...world,
     images: { ...world.images, expressions: true },
   }));
-  assert.deepEqual((await t.call("GET", "/runs/:run/home")).body.faces, {
-    tender: { url: "/t.png" },
-    cold: { url: "/c.png" },
+  // Each face says its cut-out is on its way, so Home asks again until it lands (the look's alone was not enough: a
+  // look cut out on an earlier visit left Home showing his uncut faces for the whole visit).
+  const painting = (await t.call("GET", "/runs/:run/home")).body;
+  assert.equal(painting.look.cutoutState, "ready", "his look was cut out on the visit before");
+  assert.deepEqual(painting.faces, {
+    tender: { url: "/t.png", cutoutState: "pending" },
+    cold: { url: "/c.png", cutoutState: "pending" },
   });
   await cutoutsSettled();
   assert.deepEqual(cuts, [portrait, "/t.png", "/c.png"], "the look, then each ready face, once");
-  const faces = (await t.call("GET", "/runs/:run/home")).body.faces;
-  assert.equal(faces.tender.cutout, "/t.png.cut.png");
+  assert.deepEqual((await t.call("GET", "/runs/:run/home")).body.faces, {
+    tender: { url: "/t.png", cutout: "/t.png.cut.png", cutoutState: "ready" },
+    cold: { url: "/c.png", cutout: "/c.png.cut.png", cutoutState: "ready" },
+  });
+});
+
+test("L0 is his newest unlocked CG, else the newest painted place, never another love interest's CG", async () => {
+  const t = await homeWorld("r-back-aaaaaa");
+  const backdrop = async () => (await t.call("GET", "/runs/:run/home")).body.backdrop;
+  assert.equal(await backdrop(), null, "nothing painted: the gradient alone");
+
+  const place = (name: string, at: string, state = "ready") => ({
+    name,
+    tags: "harbour, night",
+    art: { state, at, ...(state === "ready" ? { url: `/api/global-gallery/file/${name}.png` } : {}) },
+  });
+  await t.store.mutateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    places: {
+      quay: place("quay", "2026-10-28T09:00:00.000Z"),
+      tower: place("tower", "2026-10-28T11:00:00.000Z"),
+      cellar: place("cellar", "2026-10-28T12:00:00.000Z", "pending"),
+    },
+  }));
+  assert.deepEqual(await backdrop(), { url: "/api/global-gallery/file/tower.png", kind: "place" });
+
+  const cg = (key: string, li: string, at: string) => ({
+    key,
+    url: `/api/global-gallery/file/${key}.png`,
+    ref: key,
+    at,
+    li,
+  });
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    album: {
+      cgs: [
+        cg("main-1-0", KAI, "2026-10-28T08:00:00.000Z"),
+        cg("main-2-1", KAI, "2026-10-28T10:00:00.000Z"),
+        cg(`route-${MIR}-2-0`, MIR, "2026-10-28T13:00:00.000Z"),
+      ],
+    },
+  }));
+  assert.deepEqual(await backdrop(), { url: "/api/global-gallery/file/main-2-1.png", kind: "cg" }, "his newest CG");
+  await t.call("POST", "/runs/:run/home/set", { body: { li: SOL } });
+  assert.deepEqual(await backdrop(), { url: "/api/global-gallery/file/tower.png", kind: "place" }, "none of his own");
+  await t.call("POST", "/runs/:run/home/set", { body: { li: MIR } });
+  assert.equal((await backdrop()).url, `/api/global-gallery/file/route-${MIR}-2-0.png`, "hers behind her");
 });
 
 // ── Home set, Him and Me, unread ──
@@ -772,4 +825,20 @@ test("tap annoyance, time of day, the word counts, line picks and the typing del
   assert.equal(typingDelay("a".repeat(200)), 4000, "capped");
   assert.equal(typingDelay("hello", 100), 100, "less the wait already spent");
   assert.equal(typingDelay("hello", 9_000), 0);
+});
+
+test("his face on Home and the ref a tap line is voiced under (pure)", () => {
+  // A tap's face while its line shows, else the note's, else cold during a rupture, else his plain look.
+  assert.equal(homeFace("hurt", "fond", false), "tender");
+  assert.equal(homeFace("hurt", "annoyed", false), "flustered");
+  assert.equal(homeFace("tender", "cold", true), "cold");
+  assert.equal(homeFace("hurt", null, true), "hurt", "the note's face outlasts the rupture's default");
+  assert.equal(homeFace("", null, true), "cold");
+  assert.equal(homeFace("", null, false), "");
+  // Each line has its own clip (the Engine never keys one by its text), stable from visit to visit.
+  const ref = tapLineRef(KAI, "Careful with the hair.");
+  assert.match(ref, new RegExp(`^tap:${KAI}:[0-9a-z]+$`));
+  assert.equal(tapLineRef(KAI, "Careful with the hair."), ref);
+  assert.notEqual(tapLineRef(KAI, "Careful with the hair!"), ref);
+  assert.notEqual(tapLineRef(MIR, "Careful with the hair."), ref);
 });

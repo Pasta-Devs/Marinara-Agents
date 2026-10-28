@@ -1,14 +1,16 @@
 // ──────────────────────────────────────────────
-// Otome Forge: the love interest on stage. His face changes line by line: with a painted face (M2b) the two image
-// layers crossfade (the next one decodes behind the shown one first); without art he is his initials on his accent
-// colour, and the face shows as an aura and a labelled chip, so the change never rests on colour or a picture alone.
+// Otome Forge: the love interest on stage. His face changes line by line: with his five faces painted (M2b, a ready
+// set only, while expressions are on) the two image layers crossfade, every face decoded ahead the moment he comes on
+// stage; a face not painted shows his portrait with the face as a labelled chip; without art he is his initials on his
+// accent colour with the face as an aura and the chip, so the change never rests on colour or a picture alone.
 // ──────────────────────────────────────────────
 import { useEffect, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
-import { Flame, Heart, HeartCrack, Snowflake, Sparkles, type LucideIcon } from "lucide-react";
+import { Flame, Heart, HeartCrack, Paintbrush, RotateCcw, Snowflake, Sparkles, type LucideIcon } from "lucide-react";
 import { forgeStoryExpressionArt } from "@forge-kit/story-expressions.mjs";
+import { CostHint } from "../../components/CostHint";
 import { accentOf, initialsOf } from "../../lib/accent";
-import type { RunLiView } from "../../shared/api-types";
+import type { PaintState, RunLiView } from "../../shared/api-types";
 import { FACES, type Face } from "../../shared/faces";
 
 export const FACE_LABEL_KEYS: Record<Face, string> = {
@@ -27,8 +29,21 @@ const FACE_ICONS: Record<Face, LucideIcon> = {
   angry: Flame,
 };
 
-/** The painted faces an LI view carries once M2b paints them (absent until then). */
-type WithExpressions = RunLiView & { expressions?: Record<string, unknown> };
+/** Face images already asked for in this page, so each one is fetched once. */
+const preloaded = new Set<string>();
+
+/** Decodes every ready face of the love interest on stage (or on Home), so a face change never waits on the network. */
+export function usePreloadedFaces(expressions: RunLiView["expressions"]) {
+  useEffect(() => {
+    for (const url of Object.values(expressions ?? {})) {
+      if (typeof url !== "string" || !url || preloaded.has(url)) continue;
+      preloaded.add(url);
+      const image = new Image();
+      image.decoding = "async";
+      image.src = url;
+    }
+  }, [expressions]);
+}
 
 interface FacePlateProps {
   li: RunLiView | null;
@@ -39,9 +54,11 @@ interface FacePlateProps {
 
 export function FacePlate({ li, face, speaking }: FacePlateProps) {
   const { t } = useTranslation();
+  const expressions = li?.expressions;
+  usePreloadedFaces(expressions);
   if (!li) return null;
   const shown = forgeStoryExpressionArt(
-    { art: li.portrait ?? "", expressions: (li as WithExpressions).expressions ?? {} },
+    { art: li.portrait ?? "", expressions: expressions ?? {} },
     { expression: face },
     FACES,
   );
@@ -113,16 +130,69 @@ function FaceLayers({ url }: { url: string }) {
   );
 }
 
-/** A key image the story stored a brief for (M2b paints it): until then, a quiet card in its place. */
-export function QuietCg({ names }: { names: string[] }) {
+const QUIET_STATUS_KEYS: Partial<Record<PaintState, string>> = {
+  pending: "ui.otomeForge.reader.cgPainting",
+  failed: "ui.otomeForge.reader.cgFailed",
+  stopped: "ui.otomeForge.reader.cgStopped",
+};
+
+interface QuietCgProps {
+  names: string[];
+  /** The image's paint state; none, a story played without images. */
+  state?: PaintState;
+  /** Paints it now (it waited for consent) or tries it again (a failed or stopped one); only on the player's tap. */
+  onPaint?: () => void;
+  busy?: boolean;
+}
+
+/**
+ * A key image in the story: until it is painted (or in a story without images), a quiet card in its place. One that
+ * waited for "Ask before painting", failed or stopped offers its paint, with its cost.
+ */
+export function QuietCg({ names, state, onPaint, busy = false }: QuietCgProps) {
   const { t } = useTranslation();
+  const statusKey = state ? QUIET_STATUS_KEYS[state] : undefined;
+  const offer = onPaint && (state === "waiting-consent" || state === "failed" || state === "stopped");
+  const retry = state === "failed" || state === "stopped";
   return (
-    <figure className="of-cg-quiet of-glass" role="img" aria-label={t("ui.otomeForge.reader.cgQuiet")}>
-      <span className="of-cg-frame" aria-hidden="true">
-        <Sparkles size={22} strokeWidth={1.5} />
-        {names.length ? <span className="of-cg-names">{names.map(initialsOf).join(" · ")}</span> : null}
+    <figure className="of-cg-quiet of-glass" data-state={state ?? "none"}>
+      <span className="of-cg-frame" role="img" aria-label={t("ui.otomeForge.reader.cgQuiet")}>
+        <Sparkles size={22} strokeWidth={1.5} aria-hidden="true" />
+        {names.length ? (
+          <span className="of-cg-names" aria-hidden="true">
+            {names.map(initialsOf).join(" · ")}
+          </span>
+        ) : null}
       </span>
-      <figcaption className="of-hand">{t("ui.otomeForge.reader.cgQuiet")}</figcaption>
+      <figcaption className="of-cg-caption">
+        <span className="of-hand">{t("ui.otomeForge.reader.cgQuiet")}</span>
+        {statusKey ? (
+          <span className="of-hint" role="status">
+            {t(statusKey)}
+          </span>
+        ) : null}
+        {offer ? (
+          <>
+            <button
+              type="button"
+              className="of-button of-button--primary of-button--small"
+              aria-disabled={busy}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (!busy) onPaint();
+              }}
+            >
+              {retry ? (
+                <RotateCcw size={15} strokeWidth={2} aria-hidden="true" />
+              ) : (
+                <Paintbrush size={15} strokeWidth={2} aria-hidden="true" />
+              )}
+              {retry ? t("ui.otomeForge.reader.cgRetry") : t("ui.otomeForge.reader.cgPaint")}
+            </button>
+            <CostHint images={1} />
+          </>
+        ) : null}
+      </figcaption>
     </figure>
   );
 }

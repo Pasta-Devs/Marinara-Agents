@@ -2,8 +2,12 @@
 // Otome Forge: Remind Me's routes (plan M6 "Server")
 // ──────────────────────────────────────────────
 // POST /runs/:run/care-note {li, careLine?} → CareNoteResult {note, source}: the Caring message (S/care/care-note.ts).
-//      Always `Cache-Control: no-store`, errors included; nothing is written; no error carries the body; nothing
-//      about the request is logged, its failures included.
+//      Always `Cache-Control: no-store`, errors included; nothing is written; no error carries the body. Otome logs
+//      nothing about it, its failures included, and the route's `logLevel: "silent"` drops the Engine's request lines
+//      (incoming request, request completed), since the button shows only on a day the tracker marks and a timestamped
+//      line would date one. One limit stays: a line the Engine's shared logger writes while the model call runs (a
+//      provider's rate-limit, retry or fallback warning) carries this route's pattern and its time, never the line or
+//      the note (README, Remind Me).
 // GET  /runs/:run/calendar                → CalendarView {birthdays, anniversaries, bannerEnds}
 // The calendar reads days in the request's time zone. Cycle data never reaches the server except as the care line, so
 // the cycle row and the protagonist's own birthday are drawn by the client from this device's storage. Labels are
@@ -36,8 +40,8 @@ function localDay(value: string): string | null {
 /**
  * The calendar of a run on the local day `today`; `banners` are the data of the run's banner documents.
  *   birthdays      each love interest's bible birthday, in cast order;
- *   anniversaries  the day the story began (labelled with the world's title) and each Love Timeline first (his
- *                  firsts, labelled with the timeline entry that records it), oldest first, with the year it happened;
+ *   anniversaries  the day the story began (labelled with the world's title) and each dated first of the Love
+ *                  Timeline (labelled with its entry's text), oldest first, with the year it happened;
  *   bannerEnds     the last day of each banner still running, soonest first.
  */
 export function calendarView(run: RunDocuments, banners: readonly unknown[], today: string): CalendarView {
@@ -57,13 +61,11 @@ export function calendarView(run: RunDocuments, banners: readonly unknown[], tod
     dated.push({ day, row: { md: day.slice(5), label: text, ...(li ? { li } : {}), year: Number(day.slice(0, 4)) } });
   };
   add(localDay(run.world.createdAt), run.world.title);
-  // ponytail: nothing writes firsts or their timeline entries before M2b; until then only the story's first day shows.
-  // A first with no timeline entry has nothing to be labelled with and is left out.
-  for (const unit of units) {
-    for (const [kind, at] of Object.entries(run.state.lis[unit.id]?.firsts ?? {})) {
-      const entry = run.state.timeline.find((row) => row.li === unit.id && row.kind === kind);
-      if (entry) add(localDay(at), entry.text, unit.id);
-    }
+  // The Love Timeline is the story's dated firsts: M2b dates each stage a love interest reaches (`stage-<n>`, labelled
+  // with the route chapter's title). Each entry shows on its own local day, for love interests still in the cast.
+  const cast = new Set(units.map((unit) => unit.id));
+  for (const entry of run.state.timeline) {
+    if (cast.has(entry.li)) add(localDay(entry.at), entry.text, entry.li);
   }
   const anniversaries = dated.sort((a, b) => a.day.localeCompare(b.day)).map(({ row }) => row);
 
@@ -106,6 +108,7 @@ export const registerCareRoutes: RegisterRoutes = (router, deps) => {
 
   router.post(
     "/runs/:run/care-note",
+    { logLevel: "silent" },
     noStore(
       handle(async (request) => {
         try {

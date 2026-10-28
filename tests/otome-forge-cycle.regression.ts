@@ -54,6 +54,7 @@ import {
   type StorageLike,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/cycle-storage.ts";
 import { localDay } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/tap-mood.ts";
+import { playsHomeCue } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/screens/screens.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -259,9 +260,8 @@ test("the care line: three templates in English with the protagonist's own prono
   ]) {
     assert.equal(isCareLine(line, mira), false, String(line));
   }
-  // The voice request names the speaker only: no cacheKey, so the Engine's audio cache never holds it.
-  assert.deepEqual(careSpeakOptions("Ilvar Thorne"), { speaker: "Ilvar Thorne" });
-  assert.equal("cacheKey" in careSpeakOptions("Ilvar Thorne"), false);
+  // Voiced through M2b's audio with caching off: no cacheKey, so the Engine's audio cache never holds it.
+  assert.deepEqual(careSpeakOptions(), { cache: false });
 });
 
 test("storage may be missing or blocked: reads fall back to the defaults and writes report they were not kept", () => {
@@ -468,4 +468,9 @@ test("the server bundle never names the tracker's or the caring messages' storag
     assert.equal(server.includes(key), false, `server.mjs names ${key}`);
     assert.ok(client.includes(key), `client.js keeps ${key}`);
   }
+});
+
+test("Remind Me is a screen of the story: M2b's home music plays on beneath it and the tracker it opens", () => {
+  assert.equal(playsHomeCue("remind", "home"), true);
+  assert.equal(playsHomeCue("settings", "remind"), true, "Settings → Tracker, opened from Remind Me");
 });
