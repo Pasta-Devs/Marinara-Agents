@@ -3,7 +3,7 @@
 // and read-only Engine metadata. No provider or user save is contacted.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { forgeCanonicalSegments, forgePendingChoice } from "../packages/gacha-forge/src/player-choices-server.mjs";
+import { forgeCanonicalSegments, forgePendingChoice } from "../sources/forge-kit/player-choices-server.mjs";
 
 const serverUrl = new URL("../packages/gacha-forge/server.mjs", import.meta.url);
 const packageId = "gacha-forge";

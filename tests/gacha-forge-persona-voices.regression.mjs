@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { ForgeAudioController } from "../packages/gacha-forge/src/audio-client.mjs";
 import { forgeVoiceCharacter } from "../packages/gacha-forge/src/audio-story.mjs";
-import { normalizeForgeAudio, forgeSoundtrackContextKey } from "../packages/gacha-forge/src/audio-settings.mjs";
+import { normalizeForgeAudio, forgeSoundtrackContextKey } from "../sources/forge-kit/audio-settings.mjs";
 
 import { createChatRuntime } from "./fixtures/gacha-forge-chat-runtime.mjs";
 

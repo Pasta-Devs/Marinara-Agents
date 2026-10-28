@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { pathToFileURL } from "node:url";
-import { forgeLocalAvatarPath, forgeMatchImageActor } from "../packages/gacha-forge/src/image-avatar-references.mjs";
+import { forgeLocalAvatarPath, forgeMatchImageActor } from "../sources/forge-kit/image-avatar-references.mjs";
 
 const directory = await mkdtemp(join(tmpdir(), "marinara-forge-avatar-references-"));
 const source = await readFile(

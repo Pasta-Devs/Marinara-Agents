@@ -5,8 +5,8 @@ import {
   forgeProactiveChatMessages,
   normalizeForgeDailyUnitMessages,
 } from "../packages/gacha-forge/src/proactive-messages-server.mjs";
-import { withForgeChatSend } from "../packages/gacha-forge/src/chat-continuity-server.mjs";
-import { forgeDayKey, forgeTimeZoneRoutes, forgeResetIn } from "../packages/gacha-forge/src/time-zone-server.mjs";
+import { withForgeChatSend } from "../sources/forge-kit/chat-continuity-server.mjs";
+import { forgeDayKey, forgeTimeZoneRoutes, forgeResetIn } from "../sources/forge-kit/time-zone-server.mjs";
 
 const runId = "proactive-proof";
 const unitId = `${runId}:unit:arden`;

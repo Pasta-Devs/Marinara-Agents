@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { forgeStoryMemoryText } from "../packages/gacha-forge/src/story-memory.mjs";
+import { forgeStoryMemoryText } from "../sources/forge-kit/story-memory.mjs";
 import {
   forgeMemoryContext,
   forgeComposeMemoryPrompt,
   fitForgeMemoryPrompt,
-} from "../packages/gacha-forge/src/story-memory-fit.mjs";
+} from "../sources/forge-kit/story-memory-fit.mjs";
 
 const estimateMessages = (messages) => messages.reduce((sum, message) => sum + [...message.content].length + 4, 0);
 const details = [
