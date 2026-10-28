@@ -103,6 +103,10 @@ const STRICT_RUNS = {
     { name: "server and shared", roots: ["packages/server/", "packages/shared/"], lib: [] },
     { name: "client", roots: ["packages/client/"], lib: ["ES2023", "DOM", "DOM.Iterable"] },
   ],
+  "otome-forge": [
+    { name: "server and shared", roots: ["packages/server/", "packages/shared/"], lib: [] },
+    { name: "client", roots: ["packages/client/"], lib: ["ES2023", "DOM", "DOM.Iterable"] },
+  ],
 };
 const engineRoot = process.env.MARINARA_ENGINE_ROOT ? resolve(process.env.MARINARA_ENGINE_ROOT) : null;
 if (engineRoot && !existsSync(join(engineRoot, "node_modules"))) {
