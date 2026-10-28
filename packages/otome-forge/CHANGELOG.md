@@ -1,5 +1,14 @@
 # Otome Hearth release notes
 
+## 0.1.0 — 2026-10-28
+
+- First Date: release 1 of Otome Hearth, an otome game made from your own characters, still for Engine staging testers.
+- Set up a story from a premise, your persona and two to five love interests of any gender, from your cards or six archetypes. Each gets a hidden bible, a route from Mask to Bond, and memories of only what they saw.
+- Main chapters build to a confrontation. Your first choice is canon, and a rift lasts until you make it right.
+- Home brings a note a day and lines written ahead, and each love interest has a private phone thread. Wish for Memories and looks with Starlight you earn (no real money; banners never expire), for the Wardrobe and the Album.
+- Dates: Read Them, Date Night and the Claw Machine. Remind Me keeps their days, with an opt-in period tracker kept only in this browser.
+- Your limits hold: Heat, Darkness, Lines & Veils and an 18+ gate. It all works without images or sound, and paid work is labelled and never retried by itself.
+
 ## 0.0.8 — 2026-10-28
 
 - Remind Me, from Home: a month of your story's days, with each love interest's birthday, the day your story began, its firsts with each love interest, and your own birthday if you add it (kept only on this device).

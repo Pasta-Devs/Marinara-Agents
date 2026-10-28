@@ -38,12 +38,15 @@ export const LOOK_TOKENS: Readonly<Record<Look, LookTokens>> = {
     "backdrop-dim": "0.85",
     text: PALETTE.pearl,
     "text-soft": "rgb(247 241 236 / 0.74)",
-    "text-faint": "rgb(247 241 236 / 0.5)",
-    "accent-text": PALETTE.rose,
+    // Text tokens keep 4.5:1 (WCAG AA) where the night is brightest, under the rose glow at the top of the stage,
+    // bare or on glass (tests/otome-forge-contrast.regression.ts): faint 0.71, not 0.5; rose, violet, danger paler.
+    "text-faint": "rgb(247 241 236 / 0.71)",
+    // Paler than the palette's rose, so it also holds on the rose tint of badges and chips.
+    "accent-text": "#F0C6D2",
     "champagne-text": PALETTE.champagne,
-    // Rarity as text and small marks (stars, pity rings): the rarity colours themselves on the night.
+    // Rarity as text and small marks (stars, pity rings): the rarity colours themselves on the night, violet paler.
     "rarity-silver-ink": RARITY.silver,
-    "rarity-violet-ink": RARITY.violet,
+    "rarity-violet-ink": "#CCB9F6",
     "rarity-gold-ink": RARITY.gold,
     "on-accent": PALETTE.ink,
     surface: "rgb(40 33 74 / 0.5)",
@@ -73,7 +76,7 @@ export const LOOK_TOKENS: Readonly<Record<Look, LookTokens>> = {
     scrim: "rgb(8 6 22 / 0.6)",
     tint: "rgb(231 166 184 / 0.14)",
     "tint-strong": "rgb(231 166 184 / 0.24)",
-    danger: "#F08AA4",
+    danger: "#F5AEC0",
   },
   pearl: {
     bg: [
@@ -89,8 +92,9 @@ export const LOOK_TOKENS: Readonly<Record<Look, LookTokens>> = {
     "text-soft": "rgb(43 34 54 / 0.74)",
     // 0.68, not 0.5: counters and placeholders stay at 4.5:1 or more on Pearl's glass.
     "text-faint": "rgb(43 34 54 / 0.68)",
-    "accent-text": "#A04D6B",
-    "champagne-text": "#86621F",
+    // A step darker, for 4.5:1 where Pearl's stage is darkest, under its glows (otome-forge-contrast.regression.ts).
+    "accent-text": "#944763",
+    "champagne-text": "#7C5A1D",
     // Darker on Pearl's glass, 4.5:1 or more like the text around them.
     "rarity-silver-ink": "#566070",
     "rarity-violet-ink": "#6447B0",
@@ -123,6 +127,6 @@ export const LOOK_TOKENS: Readonly<Record<Look, LookTokens>> = {
     scrim: "rgb(60 32 54 / 0.38)",
     tint: "rgb(231 166 184 / 0.18)",
     "tint-strong": "rgb(231 166 184 / 0.3)",
-    danger: "#B23A5E",
+    danger: "#A83759",
   },
 };

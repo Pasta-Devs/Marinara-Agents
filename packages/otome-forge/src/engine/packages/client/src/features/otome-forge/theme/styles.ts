@@ -394,8 +394,10 @@ ${R} .of-input {
 ${R} .of-input::placeholder { color: var(--of-text-faint); }
 ${R} .of-input:hover { border-color: var(--of-border-strong); }
 ${R} .of-input:focus { outline: none; }
-/* background-color, not the shorthand, which would reset the arrow .of-select draws with background-image. */
-${R} .of-input:focus-visible {
+/* background-color, not the shorthand, which would reset the arrow .of-select draws with background-image. A date
+   field's focus moves through its day, month, year and calendar button inside it, where neither :focus-visible nor
+   (on the button) :focus matches the field: :focus-within rings it there, as a text field is always ringed. */
+${R} :is(.of-input:focus-visible, .of-input[type="date"]:focus-within) {
   border-color: var(--of-focus); background-color: var(--of-input-bg-focus);
   box-shadow: 0 0 0 3px var(--of-glow-soft), inset 0 1px 2px rgb(0 0 0 / 0.08);
 }

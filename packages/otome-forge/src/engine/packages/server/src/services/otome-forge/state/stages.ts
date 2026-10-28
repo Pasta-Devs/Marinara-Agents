@@ -29,7 +29,7 @@ import {
   routeStatus,
   type RouteEntry,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
-import { STATE_LIMITS, defaultLiState, keepNewest } from "../schemas/state.js";
+import { STATE_LIMITS, defaultLiState, keepNewest, keepTimeline } from "../schemas/state.js";
 
 const isUnresolved = (grievance: Grievance) => grievance.status === "open" || grievance.status === "festering";
 
@@ -79,10 +79,10 @@ export function passGate(
     state: {
       ...state,
       lis: { ...state.lis, [li]: { ...current, stage, revealed: keepNewest(revealed, STATE_LIMITS.list) } },
-      timeline: keepNewest(
-        [...state.timeline, { at, li, kind: `stage-${stage}`, text: chapter.title, ref: chapter.key }],
-        STATE_LIMITS.timeline,
-      ),
+      timeline: keepTimeline([
+        ...state.timeline,
+        { at, li, kind: `stage-${stage}`, text: chapter.title, ref: chapter.key },
+      ]),
     },
     stageUp: { li, stage },
   };

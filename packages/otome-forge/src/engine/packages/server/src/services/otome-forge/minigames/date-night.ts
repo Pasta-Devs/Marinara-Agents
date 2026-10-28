@@ -83,14 +83,7 @@ import { otomeContentContract, otomeContractReminder } from "../content-contract
 import { generateJson, runForeground, type OtomeMessage } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { chapterId, runDocTarget, stateId } from "../ids.js";
-import {
-  STATE_LIMITS,
-  defaultLiState,
-  keepNewest,
-  normalizeState,
-  readRun,
-  type RunDocuments,
-} from "../schemas/state.js";
+import { defaultLiState, keepTimeline, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeChapter } from "../schemas/story.js";
 import { applyChoiceEffects } from "../state/relationship.js";
 import { grant } from "../state/rewards.js";
@@ -640,10 +633,10 @@ function withFirstDate(state: RunState, li: LiId, chapter: Chapter, at: string):
   return {
     ...state,
     lis: { ...state.lis, [li]: { ...current, firsts: { ...current.firsts, date: at } } },
-    timeline: keepNewest(
-      [...state.timeline, { at, li, kind: "first-date", text: chapter.title.slice(0, 600), ref: chapter.key }],
-      STATE_LIMITS.timeline,
-    ),
+    timeline: keepTimeline([
+      ...state.timeline,
+      { at, li, kind: "first-date", text: chapter.title.slice(0, 600), ref: chapter.key },
+    ]),
   };
 }
 

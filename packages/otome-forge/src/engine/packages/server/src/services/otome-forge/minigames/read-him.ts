@@ -60,7 +60,7 @@ import { OtomeForgeError } from "../http.js";
 import { runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import type { OtomeMemory } from "../memory/memory.js";
 import { otomeSceneCard } from "../scene-card.js";
-import { STATE_LIMITS, clipText, keepNewest, normalizeState, readRun } from "../schemas/state.js";
+import { STATE_LIMITS, clipText, keepNewest, keepTimeline, normalizeState, readRun } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { grant } from "../state/rewards.js";
@@ -608,19 +608,16 @@ export function applyReadHim(
         },
       },
       timeline: first
-        ? keepNewest(
-            [
-              ...next.timeline,
-              {
-                at,
-                li: set.li,
-                kind: FIRST_READ_HIM_TIMELINE,
-                text: clipText(shown?.thought ?? "", STATE_LIMITS.text),
-                ref: set.setId,
-              },
-            ],
-            STATE_LIMITS.timeline,
-          )
+        ? keepTimeline([
+            ...next.timeline,
+            {
+              at,
+              li: set.li,
+              kind: FIRST_READ_HIM_TIMELINE,
+              text: clipText(shown?.thought ?? "", STATE_LIMITS.text),
+              ref: set.setId,
+            },
+          ])
         : next.timeline,
     },
   };

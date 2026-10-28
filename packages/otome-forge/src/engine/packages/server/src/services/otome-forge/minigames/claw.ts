@@ -49,7 +49,7 @@ import {
 import { linesView } from "../home/lines.js";
 import { OtomeForgeError } from "../http.js";
 import { wornLookUrl } from "../schemas/common.js";
-import { STATE_LIMITS, clipText, keepClawRounds, keepNewest } from "../schemas/state.js";
+import { STATE_LIMITS, clipText, keepClawRounds, keepTimeline } from "../schemas/state.js";
 import { grant } from "../state/rewards.js";
 
 /** The Love Timeline's kind (and `firsts` key) for his own plush joining the shelf. */
@@ -139,19 +139,16 @@ export function finishClawRound(
     next = {
       ...next,
       lis: { ...next.lis, [li]: { ...liState, firsts: { ...liState.firsts, [FIRST_PLUSH]: at } } },
-      timeline: keepNewest(
-        [
-          ...next.timeline,
-          {
-            at,
-            li,
-            kind: FIRST_PLUSH,
-            text: clipText(`${unit.name}'s plush joined the shelf.`, STATE_LIMITS.text),
-            ref: `claw/${input.round}`,
-          },
-        ],
-        STATE_LIMITS.timeline,
-      ),
+      timeline: keepTimeline([
+        ...next.timeline,
+        {
+          at,
+          li,
+          kind: FIRST_PLUSH,
+          text: clipText(`${unit.name}'s plush joined the shelf.`, STATE_LIMITS.text),
+          ref: `claw/${input.round}`,
+        },
+      ]),
     };
   }
 

@@ -11,6 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Music, Volume2 } from "lucide-react";
 import { normalizeForgeAudio } from "@forge-kit/audio-settings.mjs";
 import { useOtomeApi } from "../../api";
+import { RetryNotice } from "../../components/RetryNotice";
 import { useConnections } from "../../hooks/use-engine-resources";
 import { useOtomeAudio } from "../../hooks/use-otome-audio";
 import { patchRun } from "../../hooks/use-run";
@@ -147,7 +148,18 @@ function StoryAudio({ run, saving }: { run: RunView; saving: ReturnType<typeof u
       <Section title={t("ui.otomeForge.audio.voicesTitle")} hint={t("ui.otomeForge.audio.voicesHint")}>
         <Switch
           label={t("ui.otomeForge.audio.tts")}
-          hint={t("ui.otomeForge.audio.ttsHint")}
+          hint={
+            <>
+              {t("ui.otomeForge.audio.ttsHint")}
+              <span className="of-cost">
+                <Volume2 size={14} strokeWidth={2} aria-hidden="true" />
+                <span>
+                  {t("ui.otomeForge.audio.ttsCost")}
+                  <span className="of-cost-note"> · {t("ui.otomeForge.audio.ttsCostNote")}</span>
+                </span>
+              </span>
+            </>
+          }
           checked={form.tts}
           onChange={(tts) => set({ tts })}
         />
@@ -185,6 +197,12 @@ function StoryAudio({ run, saving }: { run: RunView; saving: ReturnType<typeof u
             <p className="of-hint" role="status">
               {t("ui.otomeForge.setup.loadingConnections")}
             </p>
+          ) : connections.isError && connections.music.length === 0 ? (
+            // A failed list is not an empty one: the player is not told to add a connection they may already have.
+            <RetryNotice
+              message={t("ui.otomeForge.setup.connectionsFailed")}
+              onRetry={() => void connections.refetch()}
+            />
           ) : (
             <ConnectionSelect
               label={t("ui.otomeForge.audio.connection")}

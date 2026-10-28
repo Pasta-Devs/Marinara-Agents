@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgeGate } from "../../components/AgeGateDialog";
+import { RetryNotice } from "../../components/RetryNotice";
 import { useConnections } from "../../hooks/use-engine-resources";
 import { useSaveSettings, type SaveSettings } from "../../hooks/use-run";
 import type { ImageSettings, RunView } from "../../shared/api-types";
@@ -36,9 +37,10 @@ function StoryImages({ run, settings }: { run: RunView; settings: SaveSettings }
             {t("ui.otomeForge.setup.loadingConnections")}
           </p>
         ) : connections.isError && connections.image.length === 0 ? (
-          <p className="of-notice of-notice--error" role="alert">
-            {t("ui.otomeForge.setup.connectionsFailed")}
-          </p>
+          <RetryNotice
+            message={t("ui.otomeForge.setup.connectionsFailed")}
+            onRetry={() => void connections.refetch()}
+          />
         ) : (
           <ImageControls
             value={form}

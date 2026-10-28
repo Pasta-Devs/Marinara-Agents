@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
+import { RetryNotice } from "../../components/RetryNotice";
 import { useCharacterOptions, type PickerItem } from "../../hooks/use-engine-resources";
 import { nameAccent } from "../../lib/accent";
 import { ARCHETYPE_IDS, type ArchetypeId } from "../../shared/archetypes";
@@ -157,11 +158,7 @@ function CardPicker({
     );
   }
   if (characters.isError) {
-    return (
-      <p className="of-notice of-notice--error" role="alert">
-        {t("ui.otomeForge.setup.cardsFailed")}
-      </p>
-    );
+    return <RetryNotice message={t("ui.otomeForge.setup.cardsFailed")} onRetry={() => void characters.refetch()} />;
   }
   if (characters.items.length === 0) return <p className="of-hint">{t("ui.otomeForge.setup.noCards")}</p>;
   return (

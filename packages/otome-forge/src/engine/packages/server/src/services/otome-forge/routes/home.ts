@@ -40,7 +40,7 @@ import {
   type RouteDeps,
 } from "../http.js";
 import { isLiId, runDocTarget, stateId, unitId } from "../ids.js";
-import { normalizeThread, unreadCount } from "../phone/chat.js";
+import { readThread, unreadCount } from "../phone/chat.js";
 import { field } from "../schemas/common.js";
 import { normalizeState, readRun, readyFaces } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
@@ -140,10 +140,11 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
       const unit = (li && run.units.find((entry) => entry.id === li)) || null;
       const liState = li ? run.state.lis[li] : undefined;
       const { show } = run.state.home;
-      const [note, look, chats, items] = await Promise.all([
+      // Each love interest's thread by id, as the phone list reads them: listing would load every world's threads.
+      const [note, look, threads, items] = await Promise.all([
         li ? readNote(store, runId, todayKey(), li) : null,
         lookOf(deps, runId, show, unit, run.player),
-        store.listRun("chat", runId),
+        Promise.all(order.map((id) => readThread(store, runId, id))),
         readItems(store, runId),
       ]);
 
@@ -173,7 +174,7 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
         faces,
         lines: { ready: !!unit && !!liState && !needsLines(unit, liState.stage) },
         rupture: !!liState?.rupture,
-        unread: chats.reduce((sum, record) => sum + unreadCount(normalizeThread(record.data)), 0),
+        unread: threads.reduce((sum, thread) => sum + (thread ? unreadCount(thread) : 0), 0),
         backdrop: backdropOf(albumCgs(run, items), run.world, li),
         // Only a line about the look she wears now is kept (schemas/player.ts), so a changed look shows none.
         noticed: run.player.noticed,

@@ -109,7 +109,13 @@ export function useConnections() {
     staleTime: STALE_TIME,
     select: toConnectionLists,
   });
-  return { ...(query.data ?? NO_CONNECTIONS), isLoading: query.isLoading, isError: query.isError };
+  return {
+    ...(query.data ?? NO_CONNECTIONS),
+    isLoading: query.isLoading,
+    isError: query.isError,
+    /** Asks the Engine again: after a failed load, or once the player has added one in the Engine. */
+    refetch: query.refetch,
+  };
 }
 
 /** The Engine's default text connection, else the first one. */
@@ -146,6 +152,7 @@ export function useCharacterOptions() {
     isLoading: query.isLoading,
     isError: query.isError,
     isSuccess: query.isSuccess,
+    refetch: query.refetch,
   };
 }
 
@@ -163,5 +170,6 @@ export function usePersonaOptions() {
     isLoading: query.isLoading,
     isError: query.isError,
     isSuccess: query.isSuccess,
+    refetch: query.refetch,
   };
 }

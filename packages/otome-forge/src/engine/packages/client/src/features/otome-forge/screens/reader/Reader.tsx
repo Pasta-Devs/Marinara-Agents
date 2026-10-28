@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
 import { CgTakeover } from "../../components/CgTakeover";
+import { usePaintsByItself } from "../../components/CostHint";
 import { DeclinedPanel } from "../../components/DeclinedPanel";
 import { PromptReviewDialog } from "../../components/PromptReviewDialog";
 import {
@@ -201,6 +202,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
       : (scenePlace ?? worldPlace);
   const placeUrl = readyUrl(placeInfo?.art);
   const canPaint = !!view.world.images.connectionId;
+  const paintsByItself = usePaintsByItself(view.world.images);
   const placeState = placeInfo?.art?.state;
   const placePaint =
     canPaint && place && (placeState === "waiting-consent" || placeState === "failed" || placeState === "stopped")
@@ -346,6 +348,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
             setHidden(true);
           }}
           canRewrite={reader.canRewrite}
+          rewritePaints={!!reader.cg && paintsByItself}
           onRewrite={() => void reader.rewrite()}
           canEaseOff={reader.canEaseOff}
           onEaseOff={() => openDialog("ease")}

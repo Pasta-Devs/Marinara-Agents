@@ -55,7 +55,7 @@ import {
   type BannerKind,
   type PityCounter,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
-import { isChapterKey, isLiId, playerId, stateId, worldId } from "../ids.js";
+import { isChapterKey, isLiId, playerId, stateId, unitId, worldId } from "../ids.js";
 import { readChapterDelta } from "../state/relationship.js";
 import type { OtomeStore } from "../store.js";
 import { field, isRecord, readFields, validItems, wornLookUrl } from "./common.js";
@@ -68,7 +68,11 @@ export { FIRST_STAGE, LAST_STAGE };
 const TEXT_MAX = 600;
 const LIST_MAX = 200;
 const LEDGER_MAX = 300;
+/** Rolls off only Snapshot and couple lines (keepTimeline): every stage and first stays. */
 const TIMELINE_MAX = 500;
+// ponytail: the 301st favourite drops the oldest, and the 501st CG seen drops the oldest from the Album (the state is
+// rewritten on every read, so these lists stay bounded). Ceiling: 300 starred lines, 500 CGs (about 200 chapters).
+// Upgrade path: favourites and the Album's CGs in documents of their own, or a refusal with Unstar in the Album.
 const FAVORITES_MAX = 300;
 const ALBUM_MAX = 500;
 /** Pulls remembered for a retried request id (S/wish/pull.ts). */
@@ -343,7 +347,7 @@ export function normalizeState(data: unknown): RunState {
           offscreen: validItems(RelationshipLineSchema, rawLedgers.offscreen, LEDGER_MAX),
         }
       : defaultLedgers(),
-    timeline: validItems(TimelineSchema, field(data, "timeline"), TIMELINE_MAX),
+    timeline: keepTimeline(validItems(TimelineSchema, field(data, "timeline"))),
     favorites: validItems(FavoriteSchema, field(data, "favorites"), FAVORITES_MAX),
     home: normalizeHome(field(data, "home"), lis),
     album: { cgs: validItems(AlbumCgSchema, field(field(data, "album"), "cgs"), ALBUM_MAX) },
@@ -362,6 +366,30 @@ export function normalizeState(data: unknown): RunState {
 export function keepNewest<T>(items: readonly T[], max: number): T[] {
   return items.length > max ? items.slice(items.length - max) : [...items];
 }
+/**
+ * Love Timeline kinds that are never trimmed: each stage reached and each `first-<what>`, a few per love interest. They
+ * are the calendar's yearly anniversaries (S/routes/care.ts), and nothing unlocked is taken back.
+ */
+const LASTING_TIMELINE = /^(?:stage-\d+|first-[a-z0-9-]+)$/;
+
+/**
+ * The Love Timeline within its cap: once full, the oldest Snapshot and couple-set lines go first (their items stay
+ * owned in the Album, dated by `owned.at`), and every stage and first stays.
+ */
+export function keepTimeline(entries: readonly TimelineEntry[]): TimelineEntry[] {
+  let extra = entries.length - TIMELINE_MAX;
+  if (extra <= 0) return [...entries];
+  const kept: TimelineEntry[] = [];
+  for (const entry of entries) {
+    if (extra > 0 && !LASTING_TIMELINE.test(entry.kind)) {
+      extra -= 1;
+      continue;
+    }
+    kept.push(entry);
+  }
+  return kept;
+}
+
 export const STATE_LIMITS = {
   ledger: LEDGER_MAX,
   timeline: TIMELINE_MAX,
@@ -469,22 +497,24 @@ export interface RunDocuments {
   state: RunState;
 }
 
-/** Every M1 document of the run, normalized; null when the run has no world. */
-export async function readRun(
-  store: Pick<OtomeStore, "readDoc" | "listRun">,
-  runId: string,
-): Promise<RunDocuments | null> {
-  const [world, player, unitRecords, state] = await Promise.all([
+/**
+ * Every M1 document of the run, normalized; null when the run has no world. The units are read by id, in cast order
+ * (`state.lis`, written with them at setup and never changed), never listed: the Engine's list returns every world's
+ * units, and this runs on nearly every request (M7 probe: 3 worlds made it parse 3 times the units it needs).
+ */
+export async function readRun(store: Pick<OtomeStore, "readDoc">, runId: string): Promise<RunDocuments | null> {
+  const [world, player, stored] = await Promise.all([
     store.readDoc(worldId(runId), normalizeWorld),
     store.readDoc(playerId(runId), normalizePlayer),
-    store.listRun("unit", runId),
     store.readDoc(stateId(runId), normalizeState),
   ]);
   if (!world) return null;
+  const state = stored ?? normalizeState(undefined);
+  const units = await Promise.all(Object.keys(state.lis).map((li) => store.readDoc(unitId(runId, li), normalizeUnit)));
   return {
     world,
     player: player ?? normalizePlayer(undefined),
-    units: unitRecords.map((record) => normalizeUnit(record.data)),
-    state: state ?? normalizeState(undefined),
+    units: units.filter((unit): unit is Unit => !!unit),
+    state,
   };
 }
