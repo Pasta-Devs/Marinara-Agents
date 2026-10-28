@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Memory Settings → Recall → Sharing lists each Agent that has read memories with when it last did, how many times it read this week and how many memories it got, so you can tell whether an Agent such as Slurp is using them. The counts come from the Debug activity log, so clearing it or a very busy install can lower them.
+
 ## 1.5.6 — 2026-10-28
 
 - In Sources → Chat Messages, a row with a long chat name cuts the name and keeps the message range visible, so pieces of one chat can be told apart. The range label is also translated (English and Korean).
