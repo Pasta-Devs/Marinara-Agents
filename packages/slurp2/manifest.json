@@ -10,7 +10,7 @@
   },
   "id": "slurp2",
   "name": "Slurp",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
   "localizations": {
     "de": {
@@ -79,13 +79,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "2014e58ef8a3f930747904068573753d693ba65601b9811f8fc09778d747c3e8",
-      "bytes": 2047878
+      "sha256": "d9867e024aef125ac948924183870193d068475e728379afa5d69af27f615482",
+      "bytes": 2053940
     },
     {
       "path": "client.js",
-      "sha256": "816a731b67777ab8e3ab67c2c582430da4301877ac8c12ef360dbb463928b9b6",
-      "bytes": 2894107
+      "sha256": "f9a04696627f2a405f5f19ef9b6134c70a4f0a8bae7ccb11b9135918d201b769",
+      "bytes": 2894484
     },
     {
       "path": "slurp2-logo.png",

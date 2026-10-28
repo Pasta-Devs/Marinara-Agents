@@ -41,6 +41,12 @@ const ltmInteropPreviewSampleBaseSchema = z.object({
   mutationCount: z.number().int().min(0).max(10_000),
   summary: z.string().max(2_000),
   snippet: z.string().max(280),
+  // Chat Messages pieces only: lets a row keep the range visible when its chat name is cut.
+  messageRange: z
+    .object({ chatName: z.string().min(1).max(240), first: z.number().int().min(1), last: z.number().int().min(1) })
+    .strict()
+    .refine((range) => range.last >= range.first)
+    .optional(),
 });
 
 export const ltmInteropPreviewFreshnessSchema = z.enum([

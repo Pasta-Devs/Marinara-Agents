@@ -51,6 +51,8 @@ type Candidate = {
   // Chats whose history holds this chat_transcript piece, set when identical branch pieces merge.
   branchChatIds?: string[];
   title: string;
+  // Chat Messages pieces only; the title string stays the source note title.
+  messageRange?: { chatName: string; first: number; last: number };
   sourceText: string;
   sourceNoteId: string;
   legacySourceNoteIds: string[];
@@ -686,6 +688,7 @@ async function candidates(
           sourceId: boundedId(`${chat.id}:messages:${entryId}`, `${chat.id.slice(0, 60)}:messages`),
           previewOrder: `${chat.id}\0${String(piece.first).padStart(8, "0")}\0${entryId}`,
           title,
+          messageRange: { chatName: chatDisplayName.slice(0, 240), first: piece.first, last: piece.last },
           sourceText: piece.content,
           sourceNoteId: sourceNoteIdForProvenance(provenance),
           legacySourceNoteIds: [],
@@ -832,6 +835,7 @@ function previewSample(row: Candidate, note: LtmNote | undefined) {
     mutationCount: row.mutationCount,
     summary: row.summary,
     snippet: row.sourceText.length > 200 ? `${row.sourceText.slice(0, 200)}...` : row.sourceText,
+    ...(row.messageRange ? { messageRange: row.messageRange } : {}),
   };
   return note
     ? {
