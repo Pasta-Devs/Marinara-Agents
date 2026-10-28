@@ -1193,6 +1193,595 @@ ${R} .of-log-line[data-voice="narration"] .of-log-said { color: var(--of-text-so
 ${R} .of-log-star { width: 34px; height: 34px; border: 0; background: transparent; color: var(--of-text-soft); }
 ${R} .of-log-star[aria-pressed="true"] { color: var(--of-champagne-text); }`;
 
+// Home (M3). The layers fill the whole stage, behind the top bar and the dock: .of-home is not positioned, so they
+// anchor to the stage body. Its grid keeps everything that takes a tap apart: the note across the top, the rail at the
+// inline start, and beside it the figure's cell with his nameplate under it. The figure stands in its cell (its art may
+// run on behind the rail, the nameplate and the dock), and his tap zones and pills never leave it, so nothing covers
+// them at any size. The pointer sets --of-px and --of-py (−1..1); L0 moves 6 px, the figure 14 px (plus a 5 px drift),
+// the light 20 px.
+const SKIES = {
+  dawn: {
+    tint: "linear-gradient(180deg, rgb(255 170 140 / 0.24) 0%, rgb(255 210 170 / 0.1) 42%, transparent 72%)",
+    light: "rgb(255 214 170 / 0.55)",
+    top: "rgb(255 196 168 / 0.92)",
+    bottom: "rgb(255 230 196 / 0.7)",
+    glow: "rgb(255 200 160 / 0.4)",
+    stars: "0",
+  },
+  day: {
+    tint: "linear-gradient(180deg, rgb(255 248 230 / 0.16) 0%, transparent 60%)",
+    light: "rgb(255 248 228 / 0.46)",
+    top: "rgb(214 232 255 / 0.9)",
+    bottom: "rgb(255 246 230 / 0.72)",
+    glow: "rgb(255 250 230 / 0.34)",
+    stars: "0",
+  },
+  dusk: {
+    tint: "linear-gradient(180deg, rgb(236 120 150 / 0.26) 0%, rgb(140 90 200 / 0.16) 52%, transparent 86%)",
+    light: "rgb(255 170 190 / 0.42)",
+    top: "rgb(240 150 180 / 0.88)",
+    bottom: "rgb(150 110 200 / 0.72)",
+    glow: "rgb(231 166 184 / 0.38)",
+    stars: "0.4",
+  },
+  night: {
+    tint: "linear-gradient(180deg, rgb(16 18 64 / 0.44) 0%, rgb(10 8 30 / 0.22) 62%, rgb(10 8 30 / 0.12) 100%)",
+    light: "rgb(170 180 255 / 0.24)",
+    top: "rgb(40 46 116 / 0.92)",
+    bottom: "rgb(24 22 72 / 0.92)",
+    glow: "rgb(140 150 255 / 0.26)",
+    stars: "0.95",
+  },
+} as const;
+
+const skyRules = () =>
+  Object.entries(SKIES)
+    .map(
+      ([sky, value]) =>
+        `${R} .of-home[data-sky="${sky}"] { --of-home-tint: ${value.tint}; --of-home-light: ${value.light}; ` +
+        `--of-home-window-top: ${value.top}; --of-home-window-bottom: ${value.bottom}; ` +
+        `--of-home-window-glow: ${value.glow}; --of-home-stars: ${value.stars}; }`,
+    )
+    .join("\n");
+
+const HOME_RULES = `
+/* The note's row gives way first (its text scrolls), so the rail and the figure's cell always have their room: the
+   second row is at least as tall as the rail, and as the cell's minimum plus the nameplate. */
+${R} .of-home {
+  --of-px: 0; --of-py: 0;
+  flex: 1; min-height: 0; display: grid; gap: 8px; padding: 2px 12px 10px;
+  grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, auto) minmax(auto, 1fr);
+  grid-template-areas: "top top" "rail main";
+}
+${R} :is(.of-home-layers, .of-home-front) { position: absolute; inset: 0; overflow: clip; pointer-events: none; }
+${R} .of-home-layers { z-index: 0; }
+/* After the figure's cell, at its z-index: the light and the shade fall over him, under the note, rail and plate. */
+${R} .of-home-front { z-index: 1; }
+${skyRules()}
+${R} .of-home-l0 {
+  position: absolute; inset: -24px; background: ${MOODS.midnight.home};
+  transform: translate3d(calc(var(--of-px) * -6px), calc(var(--of-py) * -4px), 0);
+  transition: transform 900ms var(--of-ease);
+}
+${R}[data-look="pearl"] .of-home-l0 { background: ${MOODS.pearl.home}; }
+${R} .of-home-stars {
+  position: absolute; inset: 0 0 40%; opacity: var(--of-home-stars, 0); transition: opacity 1.2s var(--of-ease);
+  background-image:
+    radial-gradient(1.4px 1.4px at 10% 14%, var(--of-star) 50%, transparent 52%),
+    radial-gradient(1px 1px at 24% 34%, var(--of-star) 50%, transparent 52%),
+    radial-gradient(1.6px 1.6px at 41% 9%, var(--of-star) 50%, transparent 52%),
+    radial-gradient(1px 1px at 58% 27%, var(--of-star) 50%, transparent 52%),
+    radial-gradient(1.2px 1.2px at 71% 6%, var(--of-star) 50%, transparent 52%),
+    radial-gradient(1.8px 1.8px at 88% 22%, var(--of-star) 50%, transparent 52%),
+    radial-gradient(1px 1px at 16% 52%, var(--of-star) 50%, transparent 52%),
+    radial-gradient(1.2px 1.2px at 47% 44%, var(--of-star) 50%, transparent 52%);
+  animation: of-home-twinkle 7s ease-in-out infinite alternate;
+}
+/* An arched window onto the sky: the room's only light, in the colour of the hour. */
+${R} .of-home-window {
+  position: absolute; top: 12%; inset-inline-end: 9%; width: 36%; aspect-ratio: 3 / 4.6; opacity: 0.5;
+  border-radius: 999px 999px 14px 14px;
+  background:
+    linear-gradient(90deg, transparent calc(50% - 1px), rgb(255 255 255 / 0.16) calc(50% - 1px) calc(50% + 1px),
+      transparent calc(50% + 1px)),
+    linear-gradient(180deg, transparent 46%, rgb(255 255 255 / 0.14) 46% calc(46% + 2px), transparent calc(46% + 2px)),
+    linear-gradient(180deg, var(--of-home-window-top), var(--of-home-window-bottom));
+  box-shadow: 0 0 70px 10px var(--of-home-window-glow), inset 0 0 0 2px rgb(255 255 255 / 0.08);
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
+${R}[data-look="pearl"] .of-home-window { opacity: 0.62; }
+/* His CG or a painted place, dimmed a little so he stands out in front of it. */
+${R} .of-home-backdrop {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(0.78) saturate(0.92);
+}
+${R}[data-look="pearl"] .of-home-backdrop { filter: brightness(0.96) saturate(0.9); }
+${R} .of-home-l1 { position: absolute; inset: 0; background: var(--of-home-tint); }
+${R}[data-look="pearl"] .of-home[data-sky="night"] {
+  --of-home-tint: linear-gradient(180deg, rgb(110 110 190 / 0.24) 0%, rgb(140 120 200 / 0.1) 62%, transparent 100%);
+}
+${R} .of-home-l3 {
+  position: absolute; inset: -30px; mix-blend-mode: screen;
+  transform: translate3d(calc(var(--of-px) * 20px), calc(var(--of-py) * 12px), 0);
+  transition: transform 900ms var(--of-ease);
+}
+${R}[data-look="pearl"] .of-home-l3 { mix-blend-mode: normal; opacity: 0.8; }
+${R} .of-home-beam {
+  position: absolute; top: -6%; inset-inline-end: 2%; width: 66%; height: 92%; filter: blur(22px);
+  background: linear-gradient(196deg, var(--of-home-light) 0%, transparent 58%); transform: skewX(-12deg);
+  animation: of-home-beam 14s ease-in-out infinite alternate;
+}
+${R} .of-home-motes {
+  position: absolute; inset: 0; opacity: 0.6;
+  background-image:
+    radial-gradient(2px 2px at 14% 26%, rgb(255 236 200 / 0.9) 50%, transparent 52%),
+    radial-gradient(1.5px 1.5px at 32% 62%, rgb(255 214 228 / 0.8) 50%, transparent 52%),
+    radial-gradient(2.2px 2.2px at 61% 20%, rgb(255 246 230 / 0.85) 50%, transparent 52%),
+    radial-gradient(1.6px 1.6px at 78% 46%, rgb(255 214 228 / 0.8) 50%, transparent 52%),
+    radial-gradient(1.8px 1.8px at 86% 78%, rgb(255 236 200 / 0.75) 50%, transparent 52%),
+    radial-gradient(1.4px 1.4px at 24% 84%, rgb(255 246 230 / 0.7) 50%, transparent 52%);
+  animation: of-motes 30s ease-in-out infinite alternate;
+}
+/* Keeps the note and the nameplate readable, and lets his figure fade into the floor. */
+${R} .of-home-shade {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom, rgb(10 8 26 / 0.42) 0%, transparent 20%, transparent 60%, rgb(10 8 26 / 0.74) 100%);
+}
+${R}[data-look="pearl"] .of-home-shade {
+  background: linear-gradient(to bottom, rgb(247 241 236 / 0.46) 0%, transparent 20%, transparent 62%, rgb(247 236 240 / 0.8) 100%);
+}
+${R} .of-home[data-rupture="true"] .of-home-l1 { background: var(--of-home-tint), linear-gradient(rgb(90 110 160 / 0.16), rgb(90 110 160 / 0.16)); }
+
+/* L2: the figure's cell (a size container: cqw and cqh below are its own) and his nameplate under it. */
+${R} .of-home-main { grid-area: main; min-width: 0; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+/* Its basis is a length, not 0 %: on a percentage basis Chrome reads the cell's cqh as 0 while it sits at its minimum. */
+${R} .of-home-stage { position: relative; z-index: 1; flex: 1 1 128px; min-height: 128px; container-type: size; }
+/* A cut-out or a look (832 × 1216) stands in the cell: as wide as keeps his head and heart zones inside it (its end
+   may reach the stage's edge, 12 px past the cell), and no taller than 1 / 0.62 of the cell, so his hand zone (down to
+   56 % of the art) stays in it. His head sits as high as keeps his feet behind the dock (96 px under the cell) and
+   8 px under the note, but never lower than puts the art's 58 % line on the cell's floor. Initials or an avatar stand
+   in its middle, as a medallion or cameo. */
+${R} .of-figure {
+  --of-figure-w: min((100cqw + 12px) / 0.67, 100cqh * 1.1036);
+  position: absolute; width: var(--of-figure-w); aspect-ratio: 832 / 1216;
+  inset-inline-start: min((100cqw - var(--of-figure-w)) / 2, 100cqw + 12px - var(--of-figure-w));
+  top: min(100cqh - var(--of-figure-w) * 0.848, max(8px, 100cqh + 96px - var(--of-figure-w) * 1.4615));
+  pointer-events: none; animation: of-fade-in 700ms var(--of-ease) both;
+}
+${R} :is(.of-figure-parallax, .of-figure-drift, .of-figure-breathe) { position: absolute; inset: 0; }
+${R} .of-figure-parallax {
+  transform: translate3d(calc(var(--of-px) * 14px), calc(var(--of-py) * 8px), 0); transition: transform 700ms var(--of-ease);
+}
+${R} .of-figure-drift { animation: of-figure-drift 19s ease-in-out infinite alternate; }
+${R} .of-figure-breathe {
+  transform-origin: 50% 100%; animation: of-figure-breathe 4.5s ease-in-out infinite;
+  transition: filter 700ms var(--of-ease);
+}
+${R} .of-figure[data-face="tender"] { --of-face-aura: rgb(255 182 202 / 0.95); }
+${R} .of-figure[data-face="flustered"] { --of-face-aura: rgb(255 128 166 / 0.95); }
+${R} .of-figure[data-face="cold"] { --of-face-aura: rgb(150 192 244 / 0.95); }
+${R} .of-figure[data-face="hurt"] { --of-face-aura: rgb(164 142 222 / 0.95); }
+${R} .of-figure[data-face="angry"] { --of-face-aura: rgb(244 92 92 / 0.95); }
+${R} .of-figure-aura {
+  position: absolute; inset: 12% 6% 34%; border-radius: 50%; filter: blur(42px); opacity: 0.5;
+  background: radial-gradient(circle, var(--of-face-aura, var(--of-li-accent)), transparent 68%);
+}
+${R} .of-figure-img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: 50% 100%;
+  user-select: none; -webkit-user-drag: none;
+}
+${R} .of-figure[data-cut="true"] .of-figure-img {
+  filter: drop-shadow(0 0 1px rgb(255 255 255 / 0.45)) drop-shadow(0 22px 34px rgb(0 0 0 / 0.32))
+    drop-shadow(0 0 26px color-mix(in srgb, var(--of-li-accent) 40%, transparent));
+}
+/* No cut-out yet (or it failed): the look's flat grey melts away under a soft mask and a slow pan. */
+${R} .of-figure[data-art="look"][data-cut="false"] .of-figure-img {
+  object-fit: cover; animation: of-figure-pan 28s ease-in-out infinite alternate;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 8%),
+    radial-gradient(58% 70% at 50% 42%, #000 56%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to bottom, transparent, #000 8%), radial-gradient(58% 70% at 50% 42%, #000 56%, transparent 100%);
+  mask-composite: intersect;
+}
+${R} .of-figure[data-mood="cold"] .of-figure-breathe { filter: saturate(0.7) brightness(0.93); }
+${R} .of-figure[data-mood="annoyed"] .of-figure-drift { animation: of-pout 420ms ease-in-out 2; }
+/* Without a full-body look the medallion or cameo and its pills fill the cell's middle: the medallion leaves room for
+   its ring above (12 px), the 18 px gap its ring reaches into and the pills (54 px), 84 px in all. */
+${R} .of-figure:is([data-art="none"], [data-art="avatar"]) {
+  --of-medallion: min(220px, 100cqw - 32px, 100cqh - 84px);
+  inset: 0; width: auto; aspect-ratio: auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+}
+${R} .of-figure:is([data-art="none"], [data-art="avatar"]) :is(.of-figure-parallax, .of-figure-drift, .of-figure-breathe) {
+  position: relative; inset: auto; width: 100%;
+}
+${R} .of-figure[data-art="avatar"] { --of-medallion: min(220px, 100cqw - 32px, (100cqh - 84px) * 0.8); }
+${R} .of-figure:is([data-art="none"], [data-art="avatar"]) .of-figure-parallax { flex: none; width: var(--of-medallion); }
+${R} .of-figure[data-art="none"] .of-figure-breathe { aspect-ratio: 1; }
+${R} .of-figure[data-art="avatar"] .of-figure-breathe { aspect-ratio: 4 / 5; }
+${R} .of-figure:is([data-art="none"], [data-art="avatar"]) .of-figure-aura { inset: -28%; filter: blur(24px); opacity: 0.6; }
+${R} .of-figure-medallion {
+  position: absolute; inset: 0; display: grid; place-items: center; border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 24%, rgb(255 255 255 / 0.55), transparent 50%),
+    linear-gradient(150deg, color-mix(in srgb, var(--of-li-accent) 78%, white), var(--of-li-accent) 55%,
+      color-mix(in srgb, var(--of-li-accent) 70%, ${PALETTE.ink}));
+  box-shadow: 0 0 0 3px var(--of-wish-ring), 0 22px 50px rgb(0 0 0 / 0.3), 0 0 60px var(--of-glow-soft);
+}
+${R} .of-figure[data-who="me"] .of-figure-medallion {
+  background:
+    radial-gradient(circle at 32% 24%, rgb(255 255 255 / 0.6), transparent 50%),
+    linear-gradient(150deg, #f6e2b0 0%, ${PALETTE.champagne} 34%, ${PALETTE.rose} 78%, #c48ab9 100%);
+}
+${R} .of-figure-ring {
+  position: absolute; inset: -12px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--of-li-accent) 55%, white);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--of-li-accent) 14%, transparent);
+}
+${R} .of-figure-initials {
+  position: relative; font-family: var(--of-font-display); font-weight: 600;
+  font-size: min(5.4rem, var(--of-medallion) * 0.37);
+  letter-spacing: 0.02em; color: ${PALETTE.ink}; text-shadow: 0 1px 0 rgb(255 255 255 / 0.45);
+}
+${R} .of-figure[data-art="avatar"] .of-figure-img {
+  object-fit: cover; object-position: 50% 18%; border-radius: 999px 999px 40% 40% / 999px 999px 30% 30%;
+  box-shadow: 0 0 0 3px var(--of-wish-ring), 0 0 0 9px rgb(230 201 138 / 0.22), 0 24px 50px rgb(0 0 0 / 0.3);
+}
+/* His tap zones: invisible over the art (a soft glow on hover, a dashed ring on focus), labelled pills without it.
+   A zone stops at the cell's inline start (--of-cell-start, in the art's own box), so the rail never covers one. */
+${R} .of-tap-zones {
+  position: absolute; inset: 0;
+  --of-cell-start: max((100% - 100cqw) / 2, 100% - 100cqw - 12px);
+}
+${R} .of-tap-zone {
+  position: absolute; padding: 0; border: 0; border-radius: 46%; background: transparent; cursor: pointer;
+  pointer-events: auto;
+}
+${R} .of-tap-zone[data-zone="head"] { inset-inline: max(33%, var(--of-cell-start)) 33%; top: 2%; height: 16%; }
+${R} .of-tap-zone[data-zone="heart"] { inset-inline: max(34%, var(--of-cell-start)) 34%; top: 23%; height: 15%; }
+${R} .of-tap-zone[data-zone="hand"] { inset-inline: max(14%, var(--of-cell-start)) 14%; top: 42%; height: 14%; }
+${R} .of-tap-zone:hover { background: radial-gradient(closest-side, rgb(255 255 255 / 0.14), transparent); }
+${R} .of-tap-zone:focus-visible {
+  outline: 2px dashed var(--of-focus); outline-offset: 0;
+  background: radial-gradient(closest-side, var(--of-glow-soft), transparent);
+}
+${R} .of-tap-pills {
+  position: relative; display: flex; justify-content: center; gap: 6px; max-width: 100%; pointer-events: auto;
+}
+${R} .of-tap-pill {
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  width: 60px; min-width: 0; min-height: 54px; padding: 6px 4px; border-radius: 18px; overflow-wrap: anywhere;
+  font-weight: 700; font-size: 0.72rem; cursor: pointer;
+}
+${R} .of-tap-pill svg { color: var(--of-accent-text); }
+${R} .of-tap-pill:hover { background: var(--of-surface-strong); }
+/* Hidden at rest (opacity 0): the animation shows it, so with motion reduced it never stays over him. */
+${R} .of-tap-burst {
+  position: absolute; left: 50%; top: 10%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%;
+  pointer-events: none; opacity: 0; border: 2px solid rgb(255 214 228 / 0.9);
+  box-shadow: 0 0 18px rgb(255 182 202 / 0.8), inset 0 0 12px rgb(255 214 228 / 0.6);
+  animation: of-tap-burst 900ms var(--of-ease) both;
+}
+${R} .of-tap-burst[data-zone="heart"] { top: 30%; }
+${R} .of-tap-burst[data-zone="hand"] { top: 49%; }
+${R} .of-tap-pills .of-tap-burst { top: -60%; }
+
+/* The note, the rail and the nameplate sit over the art; only what they hold takes the pointer. */
+${R} :is(.of-home-top, .of-home-rail, .of-home-foot) { pointer-events: none; }
+${R} :is(.of-home-top, .of-home-rail, .of-home-foot) > * { pointer-events: auto; }
+${R} .of-home-top {
+  grid-area: top; position: relative; z-index: 2; min-height: 0; display: flex; justify-content: center;
+  padding-top: 4px;
+}
+/* The rail stands at the inline start, as wide as its widest button up to 11rem (less on a narrow stage): a longer
+   label is cut short (the Him option) or wraps. It ends 16 px over the dock, clear of the Wish orb rising out of it. */
+${R} .of-home-rail {
+  grid-area: rail; align-self: end; position: relative; z-index: 2; max-width: min(11rem, 46cqw); margin-bottom: 16px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+}
+${R} .of-home-rail > * { max-width: 100%; }
+${R} .of-home-action {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding-block: 0; padding-inline: 11px 15px;
+  border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 0.82rem; letter-spacing: 0.02em;
+}
+${R} .of-home-action:hover { background: var(--of-surface-strong); }
+${R} .of-home-action svg { flex: none; color: var(--of-accent-text); }
+${R} .of-home-badge {
+  display: inline-grid; place-items: center; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px;
+  font-size: 0.68rem; font-weight: 800; font-variant-numeric: tabular-nums; color: ${PALETTE.ink};
+  background: linear-gradient(135deg, #f3dcaa, ${PALETTE.rose}); box-shadow: 0 0 10px var(--of-glow-soft);
+}
+${R} .of-himme { display: inline-flex; gap: 3px; margin: 0; padding: 3px; border-radius: 999px; min-width: 0; }
+${R} .of-himme-option + .of-himme-option { flex: none; }
+${R} .of-himme-option {
+  position: relative; display: inline-flex; align-items: center; min-height: 34px; max-width: 8.5rem; padding: 0 13px;
+  border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 0.82rem; color: var(--of-text-soft);
+  transition: color 360ms var(--of-ease), background-color 360ms var(--of-ease);
+}
+${R} .of-himme-option span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+${R} .of-himme-option:hover { color: var(--of-text); }
+${R} .of-himme-option[data-checked="true"] {
+  color: ${PALETTE.ink};
+  background: linear-gradient(135deg, #f3dcaa 0%, ${PALETTE.champagne} 30%, ${PALETTE.rose} 100%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 3px 12px var(--of-glow-soft);
+}
+${R} .of-himme-option:has(input:focus-visible) { outline: 2px solid var(--of-focus); outline-offset: 2px; }
+/* His line, at the top of the figure's cell (aria-hidden, and it lets taps through). */
+${R} .of-home-bubble {
+  grid-area: main; align-self: start; justify-self: end; position: relative; z-index: 3; max-width: min(100%, 270px);
+  margin: 4px 0 0; padding: 11px 16px;
+  border-radius: 20px 20px 20px 6px; pointer-events: none;
+  font-family: var(--of-font-display); font-style: italic; font-weight: 600; font-size: 1.14rem; line-height: 1.3;
+  box-shadow: inset 0 1px 0 var(--of-highlight), var(--of-panel-shadow),
+    0 0 0 1px color-mix(in srgb, var(--of-li-accent) 45%, transparent);
+  animation: of-bubble 4.6s var(--of-ease) both;
+}
+${R}[dir="rtl"] .of-home-bubble { border-radius: 20px 20px 6px 20px; }
+/* Beside a medallion (no full-body look) the bubble takes the cell's inline start. */
+${R} .of-home[data-figure="medallion"] .of-home-bubble { justify-self: start; border-radius: 20px 20px 6px 20px; }
+${R}[dir="rtl"] .of-home[data-figure="medallion"] .of-home-bubble { border-radius: 20px 20px 20px 6px; }
+${R} .of-home-bubble[data-mode="cold"] { font-style: normal; color: var(--of-text-soft); }
+${R} .of-home-bubble[data-mode="annoyed"] { box-shadow: var(--of-panel-shadow), 0 0 0 1px rgb(240 138 164 / 0.7); }
+${R} .of-home-foot { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+${R} .of-home-plate {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 3px; max-width: 100%; padding: 8px 16px 9px;
+  border-radius: 20px 20px 6px 20px; text-align: end; border-inline-end: 3px solid var(--of-li-accent);
+}
+${R}[dir="rtl"] .of-home-plate { border-radius: 20px 20px 20px 6px; }
+/* Sized to keep a name of two short words on one line beside the rail on a narrow stage (a longer one wraps). */
+${R} .of-home-name {
+  font-family: var(--of-font-display); font-weight: 600; font-size: clamp(1.3rem, 6.2cqw, 2.05rem); line-height: 1.02;
+  overflow-wrap: anywhere; padding-bottom: 0.04em;
+}
+${R} .of-home-name:focus { outline: none; }
+${R} .of-home-name:focus-visible { outline: 2px solid var(--of-focus); outline-offset: 4px; border-radius: 6px; }
+${R} .of-mood-chip {
+  display: inline-flex; align-items: center; gap: 6px; font-family: var(--of-font-hand); font-weight: 500;
+  font-size: 1.22rem; line-height: 1.05; color: var(--of-accent-text);
+}
+${R} .of-mood-chip svg { flex: none; color: var(--of-champagne-text); }
+
+/* The message of the day: a slip of paper taped over the scene, in his handwriting. Paper and ink in both looks. On a
+   short stage its row gives way to the rail and his cell, and the text scrolls inside it (Play and Reply stay). */
+${R} .of-note {
+  --of-focus: #8E3F5E; --of-paper-ink: #3a2a42;
+  position: relative; display: flex; flex-direction: column; width: min(100%, 340px); max-height: 100%;
+  padding: 14px 16px 10px; border-radius: 4px 16px 6px 18px;
+  color: var(--of-paper-ink);
+  background:
+    repeating-linear-gradient(180deg, transparent 0 27px, rgb(160 77 107 / 0.1) 27px 28px) 0 40px / 100% calc(100% - 52px) no-repeat,
+    radial-gradient(120% 90% at 0% 0%, rgb(255 255 255 / 0.9), transparent 60%),
+    linear-gradient(170deg, #fffaf2 0%, #fbf1e6 60%, #f6e6dc 100%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8), 0 16px 34px rgb(8 4 24 / 0.34), 0 2px 6px rgb(8 4 24 / 0.18);
+  transform: rotate(-1.2deg); transform-origin: 50% 0; animation: of-note-in 700ms var(--of-ease) both;
+}
+${R}[data-look="pearl"] .of-note {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8), 0 14px 30px rgb(120 70 100 / 0.22), 0 2px 6px rgb(120 70 100 / 0.14);
+}
+${R} .of-note::before {
+  content: ""; position: absolute; top: -10px; left: 50%; width: 86px; height: 22px; translate: -50% 0; rotate: 2.5deg;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--of-li-accent) 62%, transparent),
+    color-mix(in srgb, var(--of-li-accent) 44%, transparent));
+  clip-path: polygon(3% 0, 97% 5%, 100% 100%, 0 95%); box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+${R} .of-note-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+${R} .of-note-from {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-family: var(--of-font-body); font-size: 0.68rem;
+  font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #8e3f5e;
+}
+${R} .of-note-fold {
+  flex: none; display: grid; place-items: center; width: 32px; height: 32px; margin-block: -6px; margin-inline-end: -8px;
+  padding: 0; border: 0; border-radius: 50%; background: transparent; color: #8e3f5e; cursor: pointer;
+}
+${R} .of-note-fold:hover { background: rgb(160 77 107 / 0.1); }
+${R} .of-note-body { display: flex; flex-direction: column; gap: 8px; min-height: 0; margin-top: 6px; }
+${R} .of-note-body[hidden] { display: none; }
+${R} .of-note-text {
+  min-height: 0; overflow-y: auto; font-family: var(--of-font-hand); font-weight: 500; font-size: 1.5rem;
+  line-height: 1.14; overflow-wrap: anywhere;
+}
+${R} .of-note-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+${R} .of-note-sign {
+  font-family: var(--of-font-hand); font-size: 1.32rem; color: color-mix(in srgb, var(--of-li-accent) 45%, #3a2a42);
+}
+${R} .of-note-button {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 0 12px; border-radius: 999px;
+  border: 1px solid rgb(160 77 107 / 0.3); background: rgb(255 255 255 / 0.62); color: #6b2f4a; cursor: pointer;
+  font-weight: 800; font-size: 0.78rem;
+}
+${R} .of-note-button:hover { background: #fff; }
+${R} .of-note-button[aria-pressed="true"] { background: #fbe3ea; }
+${R} .of-note-quiet {
+  display: flex; align-items: center; gap: 8px; font-family: var(--of-font-hand); font-size: 1.3rem; line-height: 1.15;
+  color: #5a4060;
+}
+${R} .of-note-quill { flex: none; color: #a04d6b; animation: of-write 1.8s ease-in-out infinite; }
+${R} .of-note .of-hint { color: #5a4060; }
+${R} .of-note-failed, ${R} .of-note--alert { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+${R} .of-note-voice-error { font-size: 0.76rem; font-weight: 700; color: #8e3f5e; }
+
+/* Rough day? and Who's home? */
+${R} .of-comfort { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 0; text-align: center; }
+${R} .of-comfort-line {
+  margin: 0; font-family: var(--of-font-hand); font-weight: 500; font-size: 1.62rem; line-height: 1.16;
+  color: var(--of-text); overflow-wrap: anywhere;
+}
+${R} .of-comfort-by { font-family: var(--of-font-display); font-style: italic; font-weight: 600; color: var(--of-text-soft); }
+${R} .of-home-picks { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+${R} .of-home-pick {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 12px; border-radius: 18px; cursor: pointer;
+  text-align: start; transition: border-color 360ms var(--of-ease), box-shadow 360ms var(--of-ease);
+}
+${R} .of-home-pick:hover { border-color: var(--of-border-strong); }
+${R} .of-home-pick[aria-current="true"] {
+  border-color: rgb(230 201 138 / 0.75);
+  box-shadow: inset 0 0 0 1px rgb(230 201 138 / 0.5), 0 8px 24px var(--of-glow-soft);
+}
+${R} .of-home-pick-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+${R} .of-home-pick-name { font-family: var(--of-font-display); font-weight: 600; font-size: 1.16rem; line-height: 1.1; }
+${R} .of-home-pick-mark { flex: none; color: var(--of-champagne-text); }
+@keyframes of-figure-drift { from { transform: translate3d(-3px, 1px, 0); } to { transform: translate3d(5px, -3px, 0); } }
+@keyframes of-figure-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.006); } }
+@keyframes of-figure-pan {
+  from { transform: scale(1.03) translate3d(-1.2%, 0.6%, 0); } to { transform: scale(1.07) translate3d(1.2%, -0.8%, 0); }
+}
+@keyframes of-home-beam { from { opacity: 0.62; } to { opacity: 0.92; } }
+@keyframes of-tap-burst { from { opacity: 0.95; transform: scale(0.3); } to { opacity: 0; transform: scale(1.7); } }
+@keyframes of-pout { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@keyframes of-bubble {
+  0% { opacity: 0; transform: translateY(6px) scale(0.96); } 10% { opacity: 1; transform: none; }
+  86% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-4px); }
+}
+@keyframes of-note-in {
+  from { opacity: 0; transform: translateY(-10px) rotate(-3deg); } to { opacity: 1; transform: rotate(-1.2deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  ${R} :is(.of-home-l0, .of-home-l3, .of-figure-parallax) { transform: none !important; }
+}`;
+
+// The phone: the thread list, and one thread with bubbles in his accent colour, stickers, suggestions and the composer.
+const PHONE_RULES = `
+${R} .of-threads { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+${R} .of-thread-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border-radius: 20px; cursor: pointer;
+  text-align: start; border-inline-start: 3px solid var(--of-li-accent);
+}
+${R} .of-thread-row:hover { background: var(--of-surface-strong); }
+${R} .of-thread-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+${R} .of-thread-name { font-family: var(--of-font-display); font-weight: 600; font-size: 1.2rem; line-height: 1.1; }
+${R} .of-thread-last {
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 0.86rem; color: var(--of-text-soft);
+}
+${R} .of-thread-row[data-unread="true"] .of-thread-last { color: var(--of-text); font-weight: 700; }
+${R} .of-thread-meta { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+${R} .of-thread-time { font-size: 0.72rem; color: var(--of-text-faint); font-variant-numeric: tabular-nums; }
+${R} .of-thread {
+  flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px;
+  padding: 0 10px max(10px, env(safe-area-inset-bottom));
+}
+/* At phone width Close and remember wraps under his name rather than cutting it short. */
+${R} .of-thread-head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 8px; border-radius: 22px;
+  border-bottom: 2px solid color-mix(in srgb, var(--of-li-accent) 55%, transparent);
+}
+${R} .of-thread-title {
+  flex: 1 1 8rem; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-family: var(--of-font-display); font-weight: 600; font-size: 1.3rem; line-height: 1.1;
+}
+${R} .of-thread-title:focus { outline: none; }
+${R} .of-thread-title:focus-visible { outline: 2px solid var(--of-focus); outline-offset: 3px; border-radius: 6px; }
+${R} .of-thread-close { flex: none; margin-inline-start: auto; padding: 0 12px; }
+${R} .of-thread-close[aria-disabled="true"] { opacity: 0.55; cursor: default; }
+${R} .of-thread-log {
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 4px;
+  margin: 0; padding: 6px 2px 4px; list-style: none; scrollbar-width: thin;
+  scrollbar-color: var(--of-border-strong) transparent;
+}
+${R} .of-thread-empty {
+  margin: auto; display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: 16px;
+  font-size: 0.9rem; text-align: center; color: var(--of-text-soft);
+}
+${R} .of-thread-older { align-self: center; }
+/* The end of a closed conversation: what he remembers of it. */
+${R} .of-thread-divider {
+  display: flex; flex-direction: column; align-items: center; gap: 5px; margin: 10px 6px; padding: 9px 14px 11px;
+  border-radius: 16px; text-align: center; background: rgb(230 201 138 / 0.08); border: 1px dashed rgb(230 201 138 / 0.42);
+}
+${R} .of-thread-divider-title {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--of-champagne-text);
+}
+${R} .of-thread-divider .of-badge { margin-inline-start: 0; }
+${R} .of-bubble-row { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+${R} .of-bubble-row[data-who="player"] { align-items: flex-end; }
+${R} .of-bubble-row[data-archived="true"] { opacity: 0.66; }
+${R} .of-bubble-row[data-pending="true"] .of-bubble { opacity: 0.78; }
+${R} .of-bubble {
+  position: relative; display: flex; flex-direction: column; gap: 4px; max-width: 80%; padding: 9px 14px;
+  border-radius: 20px; font-size: 0.95rem; line-height: 1.42; white-space: pre-wrap; overflow-wrap: anywhere;
+  animation: of-bubble-in 360ms var(--of-ease) both;
+}
+${R} .of-bubble-row[data-who="li"] .of-bubble {
+  border-end-start-radius: 6px; color: var(--of-text);
+  background: color-mix(in srgb, var(--of-li-accent) 30%, var(--of-surface-solid));
+  border: 1px solid color-mix(in srgb, var(--of-li-accent) 52%, transparent); box-shadow: 0 6px 16px rgb(0 0 0 / 0.14);
+}
+${R} .of-bubble-row[data-who="player"] .of-bubble {
+  border-end-end-radius: 6px; color: ${PALETTE.ink};
+  background: linear-gradient(135deg, #f6e4bd 0%, #f0cfae 40%, ${PALETTE.rose} 100%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), 0 6px 16px rgb(0 0 0 / 0.12);
+}
+${R} .of-bubble-row .of-bubble[data-sticker="true"] { padding: 4px; background: transparent; border-color: transparent; box-shadow: none; }
+${R} .of-bubble-quote {
+  display: block; padding: 3px 10px; border-inline-start: 3px solid currentColor; border-radius: 4px 10px 10px 4px;
+  background: rgb(255 255 255 / 0.22); font-family: var(--of-font-hand); font-size: 1.1rem; line-height: 1.12; opacity: 0.9;
+}
+${R} .of-bubble-time { padding: 0 6px; font-size: 0.68rem; color: var(--of-text-faint); font-variant-numeric: tabular-nums; }
+${R} .of-sticker {
+  display: block; width: 112px; height: 112px; object-fit: cover; object-position: 50% 12%; border-radius: 22px;
+  box-shadow: 0 0 0 3px var(--of-wish-ring), 0 8px 18px rgb(0 0 0 / 0.2);
+}
+${R} .of-sticker--quiet {
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 96px;
+  height: 96px; font-weight: 800; font-size: 0.74rem; color: ${PALETTE.ink};
+  background:
+    radial-gradient(circle at 32% 24%, rgb(255 255 255 / 0.55), transparent 52%),
+    linear-gradient(150deg, color-mix(in srgb, var(--of-li-accent) 78%, white), var(--of-li-accent));
+}
+${R} .of-typing { flex-direction: row; align-items: center; gap: 5px; padding: 13px 15px; }
+${R} .of-typing-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.5;
+  animation: of-typing 1.2s ease-in-out infinite;
+}
+${R} .of-typing-dot:nth-child(2) { animation-delay: 0.15s; }
+${R} .of-typing-dot:nth-child(3) { animation-delay: 0.3s; }
+${R} .of-memory-text { font-size: 0.86rem; color: var(--of-text-soft); }
+${R} .of-memory-quote { font-family: var(--of-font-hand); font-size: 1.22rem; line-height: 1.12; color: var(--of-accent-text); }
+${R} .of-suggestions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin: 0; padding: 0; list-style: none; }
+${R} .of-suggestion {
+  min-height: 34px; padding: 0 14px; border-radius: 999px; font-weight: 700; font-size: 0.84rem; cursor: pointer;
+  border-color: color-mix(in srgb, var(--of-li-accent) 55%, transparent);
+}
+${R} .of-suggestion:hover { background: var(--of-surface-strong); }
+${R} .of-suggestion[aria-disabled="true"] { opacity: 0.6; cursor: default; }
+${R} .of-composer { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 24px; }
+${R} .of-composer-row { display: flex; align-items: flex-end; gap: 6px; }
+${R} .of-composer-input {
+  flex: 1; min-width: 0; min-height: 40px; max-height: 7.6em; resize: none; padding: 9px 14px; border-radius: 18px;
+  field-sizing: content;
+}
+${R} .of-send {
+  border: 0; color: ${PALETTE.ink};
+  background: linear-gradient(135deg, #f3dcaa 0%, ${PALETTE.champagne} 30%, ${PALETTE.rose} 100%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), 0 6px 16px var(--of-glow-soft);
+}
+${R} .of-send:hover { color: ${PALETTE.ink}; background: linear-gradient(135deg, #f6e2b8 0%, ${PALETTE.champagne} 30%, ${PALETTE.rose} 100%); }
+${R} .of-send[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+${R} .of-composer-counter { position: absolute; top: -18px; inset-inline-end: 14px; font-size: 0.7rem; }
+${R} .of-quote-chip {
+  display: flex; align-items: center; gap: 8px; padding-block: 5px; padding-inline: 12px 5px; border-radius: 16px;
+  background: var(--of-tint); border-inline-start: 3px solid var(--of-li-accent);
+}
+${R} .of-quote-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+${R} .of-quote-label {
+  font-size: 0.66rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--of-accent-text);
+}
+${R} .of-quote-chip q { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: var(--of-font-hand); font-size: 1.15rem; }
+${R} .of-quote-chip .of-icon-button { width: 32px; height: 32px; }
+${R} .of-stickers { position: relative; flex: none; }
+${R} .of-stickers .of-icon-button[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+${R} .of-sticker-panel {
+  position: absolute; bottom: calc(100% + 8px); inset-inline-start: 0; z-index: 5; display: grid;
+  grid-template-columns: repeat(3, 64px); gap: 6px; padding: 8px; border-radius: 18px;
+  animation: of-rise 300ms var(--of-ease) both;
+}
+${R} .of-sticker-choice {
+  width: 64px; height: 64px; padding: 0; border: 0; border-radius: 16px; overflow: hidden; cursor: pointer;
+  background: transparent; transition: transform 300ms var(--of-ease);
+}
+${R} .of-sticker-choice img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; }
+${R} .of-sticker-choice:hover { transform: scale(1.05); }
+@keyframes of-bubble-in { from { opacity: 0; transform: translateY(6px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes of-typing { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }`;
 // M2b: painted places and story CGs, the Confrontation's stances and ending, voices in the backlog, routes and
 // ruptures on the Story screen, and Settings → Audio.
 const PRESENTATION_RULES = `
@@ -1418,6 +2007,8 @@ const MOTION_RULES = `
 @keyframes of-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes of-rise { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
 @keyframes of-twinkle { from { opacity: calc(var(--of-star-opacity) * 0.55); } to { opacity: var(--of-star-opacity); } }
+/* Home's stars twinkle within the sky's own opacity (none at dawn or by day). */
+@keyframes of-home-twinkle { from { opacity: calc(var(--of-home-stars, 0) * 0.55); } to { opacity: var(--of-home-stars, 0); } }
 @keyframes of-drift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(14%, 8%, 0) scale(1.12); } }
 @keyframes of-spin { to { transform: rotate(360deg); } }
 @keyframes of-sheen { 0%, 62% { transform: translateX(-70%); } 100% { transform: translateX(70%); } }
@@ -1457,6 +2048,8 @@ export function otomeForgeStyles(): string {
     STORY_RULES,
     READER_RULES,
     PRESENTATION_RULES,
+    HOME_RULES,
+    PHONE_RULES,
     DIALOG_RULES,
     MOTION_RULES,
   ].join("\n");
