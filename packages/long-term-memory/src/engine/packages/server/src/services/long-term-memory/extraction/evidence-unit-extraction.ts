@@ -1298,10 +1298,10 @@ export function evidenceUnitMessages(options: RunLongTermMemoryEvidenceUnitExtra
                   id: note.id,
                   subjectId: unprefixedSubjectId("thread", note.id),
                   title: note.title,
+                  // Whole text: the continuation rewrites the thread in place, so a cut view would drop the rest.
                   text: Object.values(note.sections)
                     .map((section) => section.text)
-                    .join("\n")
-                    .slice(0, 600),
+                    .join("\n"),
                 })),
               },
             }

@@ -433,7 +433,10 @@ async function main() {
                 subjectId: `${scenario}_mystery`,
                 sectionKey: "status",
                 title: `The ${scenario} mystery`,
-                text: `Nobody knows why the ${scenario} began.`,
+                text:
+                  scenario === "carry"
+                    ? `Nobody knows why the carry began. ${"The elders argue over it. ".repeat(30)}`.trim()
+                    : `Nobody knows why the ${scenario} began.`,
               }),
             ]
           : [
@@ -551,6 +554,8 @@ async function main() {
       const continued = await importPieces("chat-thread", "t1", "t2");
       assert.equal(continued.imported[1].extractionStatus, "succeeded", "a continued thread does not fail its piece");
       const listedThread = prompts.at(-1).previousPiece.threads[0].id;
+      const listedText = prompts.at(-1).previousPiece.threads[0].text;
+      assert.ok(listedText.length > 600 && listedText.endsWith("argue over it."), "a listed thread is shown whole");
       assert.deepEqual(
         continued.imported[1].draft.mutations
           .filter((mutation: any) => (mutation.noteId ?? mutation.note?.id)?.startsWith("thread_"))
