@@ -25,7 +25,20 @@ import {
   SECRETS_MAX,
   SECRETS_MIN,
 } from "../../../../../client/src/features/otome-forge/shared/bible.js";
-import { PaintSchema, PronounsSchema, defaultPronouns, isRecord, readFields, text, textList } from "./common.js";
+import {
+  OUTFITS_MAX,
+  OutfitSchema,
+  PaintSchema,
+  PronounsSchema,
+  defaultPronouns,
+  field,
+  isRecord,
+  readFields,
+  readWornOutfit,
+  text,
+  textList,
+  validItems,
+} from "./common.js";
 
 export const LI_NOTES_MAX = 500;
 export const ACCENT_PATTERN = /^#[0-9a-f]{6}$/i;
@@ -228,7 +241,8 @@ export function normalizeUnit(data: unknown): Unit {
       art: PaintSchema.optional(),
       identityLine: z.string(),
       outfitLine: z.string(),
-      outfits: z.array(z.unknown()),
+      outfits: (value) => validItems(OutfitSchema, value, OUTFITS_MAX),
+      wornOutfit: z.string().optional(),
       expressions: z.record(z.string(), z.unknown()),
       bible: normalizeBible,
       bibleEdited: z.boolean(),
@@ -241,5 +255,8 @@ export function normalizeUnit(data: unknown): Unit {
   );
   // An LI with no pack yet has no `lines` key at all, as before M3.
   if (!unit.lines) delete unit.lines;
-  return unit;
+  // A worn look that is not one of theirs (a damaged document) wears the base portrait.
+  const { wornOutfit: _worn, ...rest } = unit;
+  const worn = readWornOutfit(unit.outfits, field(data, "wornOutfit"));
+  return worn ? { ...rest, wornOutfit: worn } : rest;
 }

@@ -237,7 +237,7 @@
         },
         "id": "otome-forge",
         "name": "Otome Hearth",
-        "version": "0.0.5",
+        "version": "0.0.6",
         "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. An early test build. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
         "engine": {
           "min": "2.5.1",
@@ -271,13 +271,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "9d634f4761bc3e98d3fcd143564760256f134776db5e890bab0394cf84d4a17f",
-            "bytes": 268086
+            "sha256": "f52ec6059b386fd8d89b9d4b186a1c72e58b80434f970ff8b9161ed5c3620fbb",
+            "bytes": 330624
           },
           {
             "path": "client.js",
-            "sha256": "d483d15a9fecd4fb91d01f09dff334b3bbfd2f3ee78072285ccc922aadba1eac",
-            "bytes": 746001
+            "sha256": "0311e022b2edd1382ef49ff577181ffb783fc684c22a82ab7edeb0d7a389c858",
+            "bytes": 864858
           },
           {
             "path": "otome-hearth-icon.png",
@@ -300,9 +300,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/otome-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.0.5.zip",
-        "sha256": "37b9596c2f1063ddbfe9db314c26a3755b37ae3d19ec4fc36052d7464cdb5c92",
-        "bytes": 1163216
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/otome-forge-0.0.6.zip",
+        "sha256": "2519a41d82aa04abac4cbe1a658d3a7049a5cb2db514b297b98dd952d59307d3",
+        "bytes": 1344611
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/otome-forge/README.md"
     },

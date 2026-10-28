@@ -178,7 +178,12 @@ async function cutOne(deps: CutoutDeps, runId: string, li: LiId, url: string): P
     ...(image.id ? { ref: galleryRef(image.id) } : {}),
   };
   // A run deleted meanwhile (or a record replaced) keeps nothing: the new gallery image goes.
-  if (!(await save(deps, runId, li, url, ready, isPending)) && image.id) await client.deleteGalleryImage(image.id);
+  let kept = false;
+  try {
+    kept = await save(deps, runId, li, url, ready, isPending);
+  } finally {
+    if (!kept && image.id) await client.deleteGalleryImage(image.id);
+  }
 }
 
 const isPending = (current: Paint | undefined) => current?.state === "pending";

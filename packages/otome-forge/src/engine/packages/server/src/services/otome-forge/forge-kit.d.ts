@@ -6,12 +6,15 @@ declare module "@forge-kit/time-zone-server.mjs" {
   /** Wraps a router's get and post so each handler runs in the request's `timeZone` (body for POST, query for GET). */
   export function forgeTimeZoneRoutes<R extends object>(routes: R): R;
   export function forgeValidTimeZone(value: unknown): string;
-  /** "YYYY-MM-DD" of the instant in the current request's time zone. */
-  export function forgeDayKey(value?: number | string | Date): string;
+  /**
+   * "YYYY-MM-DD" of the instant in the current request's time zone. It reads Number(value), so an ISO string would read
+   * as now: pass Date.parse(iso). The same holds for forgeWallDate and forgeWeekday.
+   */
+  export function forgeDayKey(value?: number | Date): string;
   /** The instant's wall-clock time in the request's zone, as a Date whose UTC fields read that local time. */
-  export function forgeWallDate(value?: number | string | Date, timeZone?: string): Date;
+  export function forgeWallDate(value?: number | Date, timeZone?: string): Date;
   /** Monday 0 … Sunday 6, in the request's time zone. */
-  export function forgeWeekday(value?: number | string | Date): number;
+  export function forgeWeekday(value?: number | Date): number;
 }
 
 declare module "@forge-kit/character-card-context.mjs" {
