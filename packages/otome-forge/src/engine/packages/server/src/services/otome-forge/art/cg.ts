@@ -5,7 +5,9 @@
 // people in the frame). When the beat is written, its CG is painted in the background (beat.cg.art), unless Ask
 // before painting is on or the player reviews image prompts; then it waits for the tap, as a failed or stopped one
 // does. The prompt is the brief plus each person's identity and outfit lines, the rating and an adult tag for every
-// person, sent as the prompt override, with each person's card, persona or portrait as a reference (at most 4).
+// person, sent as the prompt override, with each person's card, persona or portrait as a reference (at most 4). A brief
+// that set `explicit` is painted explicit only while Heat and the rating are both Explicit at the paid call, and then
+// without the outfit lines (S/art/prompts.ts cgPrompt).
 // The paint belongs to the beat as it was written (`written.at`): a rewrite while it paints gets nothing, and the
 // image is deleted again. The album gains a CG only through POST .../art/cg/seen, once the CG is ready and the beat has
 // been read to the segment it opens on; a second report changes nothing. A beat eased off before the CG's segment never
@@ -90,14 +92,14 @@ async function updateCg(
 
 // ── Who is in the frame ──
 
-interface CgSubject {
+export interface CgSubject {
   person: CgPerson;
   /** Whose likeness the reference keeps; none for someone the story only names. */
   image?: ImageSubject;
 }
 
 /** The CG's people, in the brief's order: a love interest, the protagonist, or someone only named (at most 4). */
-function cgSubjects(cast: readonly string[], units: readonly Unit[], player: Player): CgSubject[] {
+export function cgSubjects(cast: readonly string[], units: readonly Unit[], player: Player): CgSubject[] {
   const subjects: CgSubject[] = [];
   const seen = new Set<string>();
   for (const name of cast) {
@@ -108,11 +110,13 @@ function cgSubjects(cast: readonly string[], units: readonly Unit[], player: Pla
     if (!name.trim() || seen.has(id)) continue;
     seen.add(id);
     if (unit) {
+      // The look worn now dresses them in the CG: its outfit line in the prompt, its image after the faces.
+      const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
       subjects.push({
         person: {
           name: unit.name,
           identityLine: unit.identityLine || unit.bible?.look.identityLine || "",
-          outfitLine: unit.outfitLine || unit.bible?.look.outfitLine || "",
+          outfitLine: worn?.outfitLine || unit.outfitLine || unit.bible?.look.outfitLine || "",
           presentation: unit.bible?.look.presentation ?? "person",
         },
         image: {
@@ -120,15 +124,24 @@ function cgSubjects(cast: readonly string[], units: readonly Unit[], player: Pla
           ...(unit.cardId ? { cardId: unit.cardId } : {}),
           ...(unit.portrait ? { portrait: unit.portrait } : {}),
           outfits: unit.outfits,
+          ...(worn ? { wornOutfit: worn.id } : {}),
         },
       });
     } else if (isPlayer) {
+      const worn = player.wornOutfit ? player.outfits.find((outfit) => outfit.id === player.wornOutfit) : undefined;
       subjects.push({
-        person: { name: player.name, ...player.look, presentation: "person" },
+        person: {
+          name: player.name,
+          ...player.look,
+          ...(worn?.outfitLine ? { outfitLine: worn.outfitLine } : {}),
+          presentation: "person",
+        },
         image: {
           kind: "character",
           personaId: player.personaId,
           ...(player.portrait ? { portrait: player.portrait } : {}),
+          outfits: player.outfits,
+          ...(worn ? { wornOutfit: worn.id } : {}),
         },
       });
     } else {
@@ -147,7 +160,14 @@ async function buildCg(deps: ArtDeps, runId: string, beat: Beat, edited: Partial
   const subjects = cgSubjects(cg.cast, run.units, run.player);
   const style = await imagesOf(deps).styleProfile(run.world.images.styleProfileId);
   const prompt = cgPrompt(
-    { brief: cg.brief, people: subjects.map((subject) => subject.person), world: run.world, style },
+    {
+      brief: cg.brief,
+      people: subjects.map((subject) => subject.person),
+      world: run.world,
+      style,
+      use: "cg",
+      explicit: cg.explicit === true,
+    },
     edited,
   );
   return { ...prompt, world: run.world, subjects };

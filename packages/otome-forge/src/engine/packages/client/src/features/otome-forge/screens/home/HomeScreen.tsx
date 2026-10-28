@@ -5,6 +5,8 @@
 // else his note's, else cold during a rupture, painted once his faces are (cut out when they can be). His lines are
 // voiced as the reader voices his story, when Settings → Audio voices him, and the home music plays beneath
 // (OtomeForgeView's audio). Everything works without images or audio.
+// M4: each side wears what the Wardrobe's Wear at home put on (a love interest's look cut out, with their faces painted
+// on it, as their portrait was), and Me shows what a love interest noticed about her look (P19) beside it.
 // ──────────────────────────────────────────────
 // Routes (S/routes/home.ts): GET /runs/:run/home → HomeView; POST .../home/set {li?, show?} → {home};
 // POST .../home/note {li} → {note} (written by the local day's first call, the same note after); GET
@@ -18,6 +20,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { HeartHandshake, RotateCcw, Smartphone, UsersRound } from "lucide-react";
 import { useOtomeApi } from "../../api";
+import { HeNoticed } from "../../components/HeNoticed";
 import { runPath, useReducedMotion } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
 import { tapLineRef } from "../../lib/audio";
@@ -46,6 +49,7 @@ import type {
   RunView,
 } from "../../shared/api-types";
 import { timeOfDayOf, type TapZone } from "../../shared/home";
+import { wornLookUrl } from "../../shared/wardrobe";
 import { PALETTE } from "../../theme/tokens";
 import type { PhoneOpen } from "../phone/PhoneScreen";
 import { faceArt } from "../phone/StickerPicker";
@@ -66,6 +70,8 @@ const fetchHome = (otome: ReturnType<typeof useOtomeApi>, runKey: string) =>
 
 /** While a cut-out is on its way, Home asks again this often (the server never waits for one). */
 const CUTOUT_POLL_MS = 10_000;
+/** While a love interest is noticing her new look (P19, written in the background), Home asks again this often. */
+const NOTICING_POLL_MS = 3_000;
 
 /** A cut-out Home shows is on its way: the look's, or (on him) one of his faces'. */
 const cutoutComing = (view: HomeView | undefined) =>
@@ -82,7 +88,8 @@ export function useHome(runKey: string) {
     queryKey: homeQueryKey(runKey),
     queryFn: () => fetchHome(otome, runKey),
     refetchOnMount: "always",
-    refetchInterval: (query) => (cutoutComing(query.state.data) ? CUTOUT_POLL_MS : false),
+    refetchInterval: (query) =>
+      query.state.data?.noticing ? NOTICING_POLL_MS : cutoutComing(query.state.data) ? CUTOUT_POLL_MS : false,
   });
 }
 
@@ -345,12 +352,15 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
   const face = homeFace(note?.face ?? "", said?.mode ?? null, rupture);
   const painted = face ? faceArt(li, face) : null;
   const faceImage = face ? (about?.faces[face] ?? (painted ? { url: painted } : null)) : null;
-  const himLook = li.portrait ? (pictures(li.portrait) ? cached : uncut(li.portrait)) : null;
+  // The look each side wears (the Wardrobe's Wear at home, else the base portrait), as the server names it.
+  const himUrl = li.worn?.url ?? li.portrait;
+  const herUrl = wornLookUrl(view.player) || undefined;
+  const himLook = himUrl ? (pictures(himUrl) ? cached : uncut(himUrl)) : null;
   const herLook =
-    cached && !pictures(li.portrait) && (cached.source === "avatar" || pictures(view.player.portrait))
+    cached && !pictures(himUrl) && (cached.source === "avatar" || pictures(herUrl))
       ? cached
-      : view.player.portrait
-        ? uncut(view.player.portrait)
+      : herUrl
+        ? uncut(herUrl)
         : null;
   const playerName = view.player.name || t("ui.otomeForge.home.me");
   const figureLabel = face
@@ -388,7 +398,6 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
                 onTap={onTap}
               />
             ) : (
-              // "He noticed: …" under her look arrives with the Wardrobe's Show him (M4).
               <CutoutFigure
                 key="me"
                 who="me"
@@ -399,6 +408,14 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
               />
             )}
           </div>
+          {/* What a love interest noticed about the look she wears (P19), announced when it lands while Me shows. It
+              stands in her cell, above her name, and the cell grows to hold it, so it covers neither her name, the
+              rail nor the note. */}
+          {show === "me" ? (
+            <div className="of-home-noticed" aria-live="polite">
+              <HeNoticed view={view} noticed={data?.noticed} />
+            </div>
+          ) : null}
           <div className="of-home-foot">
             {saveError ? (
               <p className="of-notice of-notice--error" role="alert">

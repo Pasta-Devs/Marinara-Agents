@@ -8,6 +8,14 @@
 - The Claw Machine makes no model or image call: take turns at a swinging claw, cheer until they cheat in their own way, and line a shelf with six plushies and one of each love interest. It plays by keyboard, with reduced motion and without images.
 - With voices on, their lines are read aloud. Each love interest alone remembers the games you played together.
 
+## 0.0.6 — 2026-10-28
+
+- Wish opens: three banners every 14 days (Memories, a love interest's wardrobe, and yours), paid only with Starlight you earn (100 a wish; there is no real money). The pity count is exact ("5★ in 23"): a 5★ comes by the 60th wish and is always the featured one, and past banners wait in Echoes on the same pity. Wishing never calls a model, and duplicates refund Starlight.
+- Memories hold a Character Story to read; looks go to the Wardrobe, where your look and theirs make a couple set; Snapshots join that love interest's Love Timeline, and only they remember them.
+- Wear at home puts a look on Home, and the love interest on Home notices a new look of yours. A Memory's CG can stand behind them.
+- At affection 10, each love interest gives a Memory Selector. Banner and item art follows your image settings and is painted once.
+- NSFW mode (18+ only): Explicit Heat and Dark romance are written in full, your Lines and Veils still win, and only CGs of explicit scenes show nudity.
+
 ## 0.0.5 — 2026-10-28
 
 - Otome Forge is now Otome Hearth.

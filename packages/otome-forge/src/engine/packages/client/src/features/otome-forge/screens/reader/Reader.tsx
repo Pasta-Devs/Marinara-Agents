@@ -60,6 +60,8 @@ interface ReaderProps {
   /** Opens at this node instead of the first one not read to its end. */
   startNode?: number | null;
   onExit: () => void;
+  /** The way out's label when it leads somewhere other than the Story screen (M4: Wish, the Wardrobe, the Album). */
+  exitLabel?: string;
   onHome: () => void;
   /** Called once the last node is read, in place of the chapter's end card (a date shows its own ending, M5). */
   onFinished?: () => void;
@@ -82,7 +84,7 @@ const AUDIO_NOTICE_KEYS = {
   voiceFailed: "ui.otomeForge.audio.voiceFailed",
 } as const;
 
-function ReaderScene({ runKey, chapterKey, view, startNode, onExit, onHome, onFinished }: ReaderProps) {
+function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, onHome, onFinished }: ReaderProps) {
   const { t } = useTranslation();
   const reducedMotion = useReducedMotion();
   const audio = useOtomeAudio();
@@ -416,6 +418,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, onHome, onFi
             facing={facing}
             onAdvance={advance}
             onExit={onExit}
+            exitLabel={exitLabel}
             onHome={onHome}
             ownEnding={!!onFinished}
             onEaseOff={() => openDialog("ease")}
@@ -481,6 +484,7 @@ interface BottomPanelProps {
   /** Goes on (ends a CG's pan first). */
   onAdvance: () => void;
   onExit: () => void;
+  exitLabel?: string;
   onHome: () => void;
   /** The screen that opened the reader shows the ending itself. */
   ownEnding: boolean;
@@ -502,7 +506,7 @@ function BottomPanel(props: BottomPanelProps) {
         <p className="of-body">{reader.chapterQuery.error ? t("ui.otomeForge.reader.chapterFailed") : ""}</p>
         <div className="of-inline-actions">
           <button type="button" className="of-button of-button--quiet of-glass of-button--small" onClick={props.onExit}>
-            {t("ui.otomeForge.reader.toStory")}
+            {props.exitLabel ?? t("ui.otomeForge.reader.toStory")}
           </button>
           <button
             type="button"
@@ -526,6 +530,7 @@ function BottomPanel(props: BottomPanelProps) {
         view={view}
         levelsBefore={props.levelsBefore}
         onStory={props.onExit}
+        storyLabel={props.exitLabel}
         onHome={props.onHome}
       />
     );
@@ -676,11 +681,12 @@ interface ChapterEndProps {
   view: RunView;
   levelsBefore: ReadonlyMap<string, number>;
   onStory: () => void;
+  storyLabel?: string;
   onHome: () => void;
 }
 
 /** The chapter's end: what it earned (Starlight, each love interest's affection, a level that rose). */
-function ChapterEnd({ title, grants, arcNews, view, levelsBefore, onStory, onHome }: ChapterEndProps) {
+function ChapterEnd({ title, grants, arcNews, view, levelsBefore, onStory, storyLabel, onHome }: ChapterEndProps) {
   const { t } = useTranslation();
   const { locale } = useOtomeProps().localization;
   const { starlight, affection } = sumGrants(grants);
@@ -754,7 +760,7 @@ function ChapterEnd({ title, grants, arcNews, view, levelsBefore, onStory, onHom
         </button>
         <button type="button" className="of-button of-button--primary of-button--small" onClick={onStory}>
           <BookHeart size={15} strokeWidth={2} aria-hidden="true" />
-          {t("ui.otomeForge.reader.toStory")}
+          {storyLabel ?? t("ui.otomeForge.reader.toStory")}
         </button>
       </div>
     </section>

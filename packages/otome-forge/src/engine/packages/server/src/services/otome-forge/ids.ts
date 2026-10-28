@@ -125,6 +125,15 @@ export const noteId = (runId: string, dayKey: string, li: string) => `${runId}:n
 /** `${R}:chat:${li}`: a love interest's private phone thread (the shape the kit's forgeChatHistoryPage reads). */
 export const chatId = (runId: string, li: string) => `${runId}:chat:${li}`;
 
+// ── Wish (M4). Kinds: "banner", "item". Keys and item ids come from SH/wish.ts (bannerKey, itemIdOf). ──
+
+/** `${R}:banner:${kind}-${rotation}`: a banner and the ids of its items. */
+export const bannerId = (runId: string, key: string) => `${runId}:banner:${key}`;
+/** `${R}:item:${itemId}`: a Memory, a look or a Snapshot. */
+export const itemId = (runId: string, item: string) => `${runId}:item:${item}`;
+/** `story-<itemId>`: the chapter key of an item's Character Story, Moment or first-wear beat. */
+export const itemStoryKey = (item: string) => `story-${item}`;
+
 /** Every kind a run's documents have. Deleting a run removes each; a milestone that adds a kind adds it here. */
 export const RUN_DOC_KINDS = [
   "world",
@@ -136,6 +145,8 @@ export const RUN_DOC_KINDS = [
   "memory",
   "note",
   "chat",
+  "banner",
+  "item",
   "readhim",
 ] as const;
 export type RunDocKind = (typeof RUN_DOC_KINDS)[number];

@@ -104,7 +104,12 @@ const lastPlace = (segments: readonly Segment[], fallback: string) =>
 /** The reply as a confrontation, or the first rule it breaks (the repair turn names it). */
 export function normalizeConfrontationReply(
   reply: ConfrontationReply,
-  { li, node, cgOpen }: { li: LiId; node: Pick<ChapterNode, "place">; cgOpen: boolean },
+  {
+    li,
+    node,
+    cgOpen,
+    cgExplicit = false,
+  }: { li: LiId; node: Pick<ChapterNode, "place">; cgOpen: boolean; cgExplicit?: boolean },
   lists: SegmentLists,
 ): ConfrontationBody | string {
   const lengths = (name: string, items: unknown, max: number) =>
@@ -231,6 +236,7 @@ export function normalizeConfrontationReply(
         .map((name) => str(name, NAME_MAX))
         .filter(Boolean)
         .slice(0, 3),
+      ...(cgExplicit && cg.explicit === true ? { explicit: true as const } : {}),
     };
   }
   return body;

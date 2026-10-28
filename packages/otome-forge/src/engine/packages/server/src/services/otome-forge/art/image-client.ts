@@ -5,11 +5,11 @@
 // Engine has no server image API that takes a connection id, so the server calls its own HTTP routes on 127.0.0.1:
 // POST /api/characters/avatar-generation paints (with debugMode, so the Engine logs the prompt in debug mode), and
 // /api/global-gallery keeps the result. A loopback call is ordinary trusted server code and needs no permission.
-// The methods are named generatePortrait and generateBannerArt so the kit's forgeWrapImageReferenceClient adds each
-// subject's card or persona avatar (or saved portrait) as a reference; that wrapper also needs characterCard,
-// personaAvatar and cardAvatarImage. generateImage is one paid image with exactly the references it is given (a place
-// has none; an expression edit has its base) and saves nothing: uploadToGallery keeps it, in the shape the kit's
-// expressions module calls. Later milestones add generateOutfit (M4) and cutOut (M3) here.
+// The methods are named generatePortrait, generateOutfit (M4: a look won on Wish) and generateBannerArt so the kit's
+// forgeWrapImageReferenceClient adds each subject's card or persona avatar (or saved portrait) as a reference; that
+// wrapper also needs characterCard, personaAvatar and cardAvatarImage. generateImage is one paid image with exactly the
+// references it is given (a place has none; an expression edit has its base) and saves nothing: uploadToGallery keeps
+// it, in the shape the kit's expressions module calls.
 import { forgeWrapImageReferenceClient } from "@forge-kit/image-avatar-references.mjs";
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 
@@ -20,6 +20,8 @@ export interface ImageSubject {
   personaId?: string;
   portrait?: string;
   outfits?: unknown[];
+  /** The look worn now: the kit sends its image after the faces for scene and banner art. */
+  wornOutfit?: string;
 }
 
 export interface PortraitRequest {
@@ -87,6 +89,8 @@ export interface StyleProfile {
 export interface ImageClient {
   /** Paints one image and uploads it to the Global Gallery. Throws on any failure; it never retries. */
   generatePortrait(request: PortraitRequest): Promise<PaintedImage>;
+  /** A new look for the same person (M4, S/art/outfits.ts): as generatePortrait, with the subject's likeness kept. */
+  generateOutfit(request: PortraitRequest): Promise<PaintedImage>;
   /** Paints a scene with its people (each one's reference added by the wrapper) and uploads it. Never retries. */
   generateBannerArt(request: SceneRequest): Promise<PaintedImage>;
   /** One paid image, not saved. Throws on any failure; it never retries. */
@@ -266,6 +270,12 @@ export function createImageClient({
         referenceImages,
       });
       return client.uploadToGallery({ image, name, prompt });
+    },
+
+    async generateOutfit({ unit: _unit, ...request }) {
+      // `unit` only tells the wrapper whose likeness to keep; its reference is in `referenceImages` by now.
+      const image = await client.generateImage(request);
+      return client.uploadToGallery({ image, name: request.name, prompt: request.prompt });
     },
 
     async generateBannerArt({ units: _units, ...request }) {

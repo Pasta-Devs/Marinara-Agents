@@ -62,6 +62,7 @@ interface HostPlayer {
   unlock(): void;
   playMusic(tag: string, assets?: AssetMap | null): void;
   stopMusic(immediate?: boolean): void;
+  playSfx(tag: string, assets?: AssetMap | null): void;
   setVolumes(volumes: { music: number; sfx: number }): void;
   setMuted(muted: boolean): void;
   dispose(): void;
@@ -274,6 +275,14 @@ export class OtomeAudioController {
       if (held !== undefined) return held;
     }
     return this.baseCue;
+  }
+
+  /** A stock sound from the Engine's library (`sfx:ui:<name>`) at the effects volume; silent while muted (M4). */
+  playSfx(tag: string) {
+    if (!this.player || this.disposed || this.settings.muted || this.settings.sfxVolume <= 0) return;
+    void this.manifest.then((manifest) => {
+      if (!this.disposed) this.player?.playSfx(tag, manifest?.assets ?? null);
+    });
   }
 
   /** Lets the player start music: the Engine waits for an interaction before it plays anything. */
