@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.5.5 — 2026-10-28
+
+- A long chat imported from Chat Messages is read in order, one piece after another. From the second piece on, the model sees the end of the piece before it, that piece's events and its open threads, so a memory can say what caused an event or continue a thread across the cut. Different chats still import side by side.
+
 ## 1.5.4 — 2026-10-28
 
 - Re-extract says why it is waiting while settings load, and Run maintenance keeps your place after it finishes.
