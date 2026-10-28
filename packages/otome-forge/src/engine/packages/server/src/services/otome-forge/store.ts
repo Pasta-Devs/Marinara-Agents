@@ -26,6 +26,16 @@ function checkedId(id: string): string {
 export function createOtomeStore(documents: CapabilityDocumentStore) {
   const get = (id: string) => documents.getById(OTOME_FORGE_PACKAGE_ID, checkedId(id));
 
+  /** The removed revision, or null when the document was already gone; a newer revision is re-read and removed. */
+  async function remove(id: string, attempts: number) {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const document = await get(id);
+      if (!document) return null;
+      if (await documents.remove(OTOME_FORGE_PACKAGE_ID, document.id, document.revision)) return document;
+    }
+    throw new OtomeForgeError(409, `Otome Forge data changed while removing ${id}. Try again.`, "conflict");
+  }
+
   async function write<T>(
     target: DocTarget,
     normalize: Normalize<T>,
@@ -109,12 +119,20 @@ export function createOtomeStore(documents: CapabilityDocumentStore) {
 
     /** Removes the document; false when it was already gone. A newer revision is re-read and removed. */
     async removeDoc(id: string, { attempts = DEFAULT_ATTEMPTS }: { attempts?: number } = {}): Promise<boolean> {
-      for (let attempt = 0; attempt < attempts; attempt += 1) {
-        const document = await get(id);
-        if (!document) return false;
-        if (await documents.remove(OTOME_FORGE_PACKAGE_ID, document.id, document.revision)) return true;
-      }
-      throw new OtomeForgeError(409, `Otome Forge data changed while removing ${id}. Try again.`, "conflict");
+      return !!(await remove(id, attempts));
+    },
+
+    /**
+     * Removes the document and returns it as removed (normalized), or null when it was already gone: what it held is
+     * exactly the revision that went, even when another writer saved a newer one in between (M2b: a dropped beat's CG).
+     */
+    async takeDoc<T>(
+      id: string,
+      normalize: Normalize<T>,
+      { attempts = DEFAULT_ATTEMPTS }: { attempts?: number } = {},
+    ): Promise<T | null> {
+      const removed = await remove(id, attempts);
+      return removed ? normalize(removed.data) : null;
     },
 
     /**

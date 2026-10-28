@@ -2,15 +2,20 @@
 // Otome Forge: the `${R}:world` document (premise, mystery, web, content, images, connections, forge steps)
 // ──────────────────────────────────────────────
 // The mystery's truth and pieces and the web's secrets are the hidden story: toWorldView strips them before anything
-// reaches the client.
+// reaches the client. `audio` and `places` (M2b) are read here so every normalized write keeps them; S/art and
+// S/audio write them.
+import { normalizeForgeAudio } from "@forge-kit/audio-settings.mjs";
 import { z, type ZodType } from "zod";
 import type {
   Connections,
   ForgeStatus,
   ForgeStep,
   ImageSettings,
+  PlaceArt,
+  SoundtrackTrack,
   WebRow,
   World,
+  WorldAudio,
   WorldView,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import {
@@ -27,7 +32,7 @@ import {
   type ContentSettings,
   type LimitId,
 } from "../../../../../client/src/features/otome-forge/shared/content.js";
-import { field, isRecord, readFields, text, validItems } from "./common.js";
+import { PaintSchema, field, isRecord, readFields, text, validItems } from "./common.js";
 
 export const DEFAULT_LANGUAGE = "English";
 export const LANGUAGE_MAX = 60;
@@ -110,6 +115,48 @@ export function normalizeConnections(data: unknown): Connections {
   return connections;
 }
 
+const BRIEFS_MAX = 40;
+/** The world keeps at most this many generated tracks (the newest) and places (art/places.ts paints no more). */
+export const TRACKS_MAX = 120;
+export const PLACES_MAX = 400;
+
+const BriefSchema = z.object({ fingerprint: z.string().max(200), prompt: z.string().min(1).max(1000) });
+const TrackSchema: ZodType<SoundtrackTrack> = z.object({
+  cue: z.string().max(80),
+  connectionId: z.string().max(200),
+  tag: z.string().max(1000),
+  path: z.string().max(1000),
+});
+const PlaceSchema: ZodType<PlaceArt> = z.object({
+  name: z.string().min(1).max(120),
+  tags: z.string().max(600),
+  art: PaintSchema.optional(),
+});
+
+/** The kit's audio settings, each cue's brief and the generated tracks; a bad entry is dropped, the rest kept. */
+export function normalizeWorldAudio(data: unknown): WorldAudio {
+  const briefs: WorldAudio["briefs"] = {};
+  const rawBriefs = field(data, "briefs");
+  for (const [cue, raw] of Object.entries(isRecord(rawBriefs) ? rawBriefs : {}).slice(0, BRIEFS_MAX)) {
+    const parsed = BriefSchema.safeParse(raw);
+    if (parsed.success) briefs[cue] = parsed.data;
+  }
+  return {
+    ...normalizeForgeAudio(data),
+    briefs,
+    tracks: validItems(TrackSchema, field(data, "tracks"), TRACKS_MAX),
+  };
+}
+
+function normalizePlaces(data: unknown): World["places"] {
+  const places: World["places"] = {};
+  for (const [slug, raw] of Object.entries(isRecord(data) ? data : {}).slice(0, PLACES_MAX)) {
+    const parsed = PlaceSchema.safeParse(raw);
+    if (parsed.success) places[slug] = parsed.data;
+  }
+  return places;
+}
+
 const defaultWorld = (): World => ({
   version: 1,
   title: "",
@@ -124,6 +171,8 @@ const defaultWorld = (): World => ({
   images: normalizeImages(undefined),
   connections: { narration: "" },
   forge: { phase: "forging", steps: [] },
+  audio: normalizeWorldAudio(undefined),
+  places: {},
 });
 
 /** The world in its full shape; `undefined` gives the defaults (mutateDoc creates from it). */
@@ -143,18 +192,22 @@ export function normalizeWorld(data: unknown): World {
       images: normalizeImages,
       connections: normalizeConnections,
       forge: normalizeForge,
+      audio: normalizeWorldAudio,
+      places: normalizePlaces,
     },
     defaultWorld,
     isRecord(data) ? data : undefined,
   );
 }
 
-/** The world without its hidden story: no mystery truth or pieces, no web secrets. */
+/** The world without its hidden story (no mystery truth or pieces, no web secrets), and without the music briefs. */
 export function toWorldView(world: World): WorldView {
-  const { mystery, web, ...rest } = world;
+  const { mystery, web, audio, ...rest } = world;
+  const { briefs: _briefs, ...shownAudio } = audio;
   return {
     ...rest,
     mystery: { question: mystery.question },
     web: web.map(({ secret: _secret, ...row }) => row),
+    audio: shownAudio,
   };
 }

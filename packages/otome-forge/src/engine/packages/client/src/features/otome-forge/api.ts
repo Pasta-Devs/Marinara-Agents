@@ -2,8 +2,10 @@
 // Otome Forge: requests to the package's routes, through the Engine's own API client
 // ──────────────────────────────────────────────
 // Every request carries `timeZone` and `debugMode` (in the query for GET, in the body for POST), so the server can work
-// out the player's local day and log prompts in debug mode. A failed route answers `{error, code?}`: the client shows
-// the localized message for `code`; `error` is English text for logs, shown here only in debug mode.
+// out the player's local day and log prompts in debug mode. A POST also says when the player reviews image prompts
+// before they are sent, so the paints a story write starts wait for the tap instead. A failed route answers
+// `{error, code?}`: the client shows the localized message for `code`; `error` is English text for logs, shown here
+// only in debug mode.
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ApiError } from "../../lib/api-client";
@@ -15,6 +17,8 @@ const ROUTE_PREFIX = "/otome-forge";
 export interface RequestContext {
   timeZone: string;
   debugMode: boolean;
+  /** The Engine's reviewImagePromptsBeforeSend (M2b): sent only when on. */
+  reviewImagePrompts?: boolean;
 }
 
 export type QueryValues = Record<string, string | number | boolean | null | undefined>;
@@ -33,7 +37,12 @@ export function otomeGet<T>(context: RequestContext, path: string, query: QueryV
 export function otomePost<T>(context: RequestContext, path: string, body: RequestBody = {}, init?: RequestInit) {
   return api.post<T>(
     `${ROUTE_PREFIX}${path}`,
-    { ...body, timeZone: context.timeZone, debugMode: context.debugMode },
+    {
+      ...body,
+      timeZone: context.timeZone,
+      debugMode: context.debugMode,
+      ...(context.reviewImagePrompts ? { reviewImagePrompts: true } : {}),
+    },
     init,
   );
 }
@@ -91,15 +100,15 @@ export function otomeErrorMessage(
 
 /** `get`, `post` and `errorMessage`, bound to the current host props. */
 export function useOtomeApi() {
-  const { timeZone, debugMode } = useOtomeProps();
+  const { timeZone, debugMode, reviewImagePromptsBeforeSend } = useOtomeProps();
   const { t } = useTranslation();
   return useMemo(() => {
-    const context: RequestContext = { timeZone, debugMode };
+    const context: RequestContext = { timeZone, debugMode, reviewImagePrompts: reviewImagePromptsBeforeSend };
     return {
       get: <T>(path: string, query?: QueryValues, init?: RequestInit) => otomeGet<T>(context, path, query, init),
       post: <T>(path: string, body?: RequestBody, init?: RequestInit) => otomePost<T>(context, path, body, init),
       errorMessage: (error: unknown, fallbackKey?: string) =>
         otomeErrorMessage((key) => t(key), error, { debugMode, fallbackKey }),
     };
-  }, [debugMode, t, timeZone]);
+  }, [debugMode, reviewImagePromptsBeforeSend, t, timeZone]);
 }

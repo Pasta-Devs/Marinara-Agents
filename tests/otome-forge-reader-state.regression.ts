@@ -1,12 +1,23 @@
 // Otome Forge's reader (M2a, C/lib/reader-state.ts): a beat's lines with the picked option spliced in, the choice
 // waiting at its line, first play kept on a resumed read and offered again on a replay, skip-read stopping at the first
-// line not read before (or a choice), Ease off cutting the beat at its aftermath, and who is on stage with which face.
+// line not read before (or a choice), Ease off cutting the beat at its aftermath (keeping a pick at the cut, as the
+// server's canon does), and who is on stage with which face.
+// M2b: a Confrontation played as a beat of stances (its mainline indexes what the server counts), each line's ref (the
+// favourite and the voice cache key, new for every rewrite), a place's picture found by its name, and a route chapter
+// held by a rupture.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { voiceCacheKey } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/audio.ts";
 import {
   buildTimeline,
+  confrontationBeat,
   initialPicks,
+  lineRef,
+  placeEntry,
+  readerBeat,
+  readyUrl,
   onStageAt,
+  ruptureHold,
   openingLine,
   openingNode,
   skipTarget,
@@ -15,8 +26,10 @@ import {
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/reader-state.ts";
 import type {
   BeatView,
+  ConfrontationView,
   RunLiView,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
+import { canonicalSegments } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/canon.ts";
 
 const HE = { subject: "he", object: "him", possessive: "his" };
 const ILVAR: RunLiView = {
@@ -24,6 +37,7 @@ const ILVAR: RunLiView = {
   name: "Ilvar Thorne",
   pronouns: HE,
   source: "card",
+  voiceGender: "male",
   accent: "#9DB8F0",
   level: 1,
   stage: 1,
@@ -156,6 +170,51 @@ test("Ease off cuts the beat at its segment, drops the server's marker, and ends
   );
 });
 
+test("an Ease off on a branch line keeps that pick's selection and branch, as the server's canon does", () => {
+  const marker = "[The scene was cut short by the player. Continue from its aftermath without depicting it.]";
+  // Eased off while reading the branch of choice-1 (at 1): the cut is segment 1, and the pick was made before it.
+  const cut = beat({
+    segments: [...beat().segments, { speaker: "", text: marker }],
+    choiceCanon: { "choice-1": "option-1" },
+    easedOff: { at: 1 },
+  });
+  const canon = canonicalSegments({ ...cut, effects: {}, applied: {} }, "Mira")!
+    .map((segment) => segment.text)
+    .filter((text) => !text.startsWith("["));
+  assert.deepEqual(canon, ["Rain on the dome.", "You came back.", "You were alone.", "Unscientific."]);
+  // The resumed first read, and a replay (where a small choice before the cut is offered again).
+  for (const replay of [false, true]) {
+    const timeline = buildTimeline(cut, initialPicks(cut, replay), "Mira");
+    assert.deepEqual(
+      timeline.lines.filter((line) => line.kind !== "aftermath").map((line) => line.segment.text),
+      canon,
+      `the backlog and the replay show the canon (replay: ${replay})`,
+    );
+    assert.deepEqual(
+      timeline.lines.map((line) => [line.kind, line.main]),
+      [
+        ["segment", 0],
+        ["segment", 1],
+        ["selection", 1],
+        ["branch", 1],
+        ["aftermath", 1],
+      ],
+    );
+    assert.equal(timeline.lines[2]!.segment.speaker, "Mira");
+    assert.equal(timeline.pending.size, 0, "nothing is offered at the cut");
+  }
+  // This read's own pick on a replay is the one it shows.
+  assert.equal(buildTimeline(cut, { "choice-1": "option-2" }, "Mira").lines[2]!.segment.text, "You shrug.");
+});
+
+test("a `locked` refusal of a route chapter's scene is its love interest's rupture; nothing else is", () => {
+  assert.equal(ruptureHold("locked", { kind: "route", li: CASSIAN.id }), CASSIAN.id);
+  assert.equal(ruptureHold("locked", { kind: "repair", li: CASSIAN.id }), null);
+  assert.equal(ruptureHold("locked", { kind: "main" }), null);
+  assert.equal(ruptureHold("conflict", { kind: "route", li: CASSIAN.id }), null);
+  assert.equal(ruptureHold(null, null), null);
+});
+
 test("the face on stage is his latest line's; narration keeps it; a first name finds him", () => {
   const timeline = buildTimeline(beat({ choices: [] }), {}, "Mira");
   // Before anyone speaks, the first love interest who speaks in this beat stands there, never one who is not in it.
@@ -227,4 +286,118 @@ test("a chapter opens at its first node not read to the end; grants sum by love 
       ],
     },
   );
+});
+
+const option = (label: string, text: string, answer?: string) => ({
+  label,
+  selection: { kind: "dialogue" as const, text },
+  ...(answer ? { segments: [{ speaker: "Ilvar", text: answer, expression: "angry" as const }] } : {}),
+});
+const stances = (answered?: "press") => ({
+  press: option("Make him answer.", "Why?", answered === "press" ? "Fine." : undefined),
+  hold: option("Wait.", "I'm here."),
+  yield: option("Let go.", "Not tonight."),
+  reveal: option("Tell him.", "I was scared."),
+});
+
+function confrontation(changes: Partial<ConfrontationView> = {}): ConfrontationView {
+  const {
+    segments: _segments,
+    choices: _choices,
+    choiceCanon: _canon,
+    ...rest
+  } = beat({ i: 2, kind: "confrontation" });
+  return {
+    ...rest,
+    li: ILVAR.id,
+    opening: [{ speaker: "", text: "The dome again." }],
+    rounds: [{ round: 1, his: [{ speaker: "Ilvar", text: "Say it.", expression: "cold" }], options: stances() }],
+    ...changes,
+  };
+}
+
+test("a Confrontation is a beat of stances: its mainline is the opening, each round's lines, then the ending", () => {
+  const first = readerBeat({ beat: beat(), confrontation: confrontation() });
+  assert.equal(first.confrontation?.li, ILVAR.id);
+  const open = buildTimeline(first.beat, initialPicks(first.beat, false), "Mira");
+  assert.deepEqual(texts(open), ["The dome again.", "Say it."]);
+  // Round 1's four stances wait at its last line, in a fixed order, under their own labels.
+  const waiting = open.pending.get(1)!;
+  assert.equal(waiting.id, "round-1");
+  assert.deepEqual(
+    waiting.options.map((item) => `${item.id}:${item.text}`),
+    ["press:Make him answer.", "hold:Wait.", "yield:Let go.", "reveal:Tell him."],
+  );
+
+  // After the stance: the pick is canon (kept on a replay too), its answer follows, then round 2 and the ending.
+  const played = confrontation({
+    rounds: [
+      { round: 1, his: [{ speaker: "Ilvar", text: "Say it." }], options: stances("press"), picked: "press" },
+      { round: 2, his: [{ speaker: "Ilvar", text: "It was never the data.", expression: "hurt" }], options: stances() },
+    ],
+    ending: { kind: "truth", segments: [{ speaker: "Ilvar", text: "I left first." }] },
+  });
+  const read = confrontationBeat(played);
+  for (const replay of [false, true]) {
+    const lines = buildTimeline(read, initialPicks(read, replay), "Mira");
+    assert.deepEqual(texts(lines), [
+      "The dome again.",
+      "Say it.",
+      "Why?",
+      "Fine.",
+      "It was never the data.",
+      "I left first.",
+    ]);
+    // The mainline the server counts read: opening 0, round 1 at 1 (its stance and answer share it), round 2 at 2.
+    assert.deepEqual(
+      lines.lines.map((line) => line.main),
+      [0, 1, 1, 1, 2, 3],
+    );
+    assert.equal(lines.pending.get(4)?.id, "round-2");
+  }
+  // A plain beat stays itself.
+  assert.equal(readerBeat({ beat: beat() }).confrontation, undefined);
+  assert.throws(() => readerBeat({}));
+});
+
+test("a round with no lines of its own still gets a line for its stances, so no two rounds share one", () => {
+  const read = confrontationBeat(
+    confrontation({
+      opening: [],
+      rounds: [
+        { round: 1, his: [], options: stances("press"), picked: "press" },
+        { round: 2, his: [], options: stances() },
+      ],
+    }),
+  );
+  assert.deepEqual(
+    read.choices.map((choice) => choice.at),
+    [0, 1],
+  );
+});
+
+test("each line's ref names its version of the beat, so a rewrite never replays the old voice", () => {
+  const picked = beat({ choiceCanon: { "choice-1": "option-1" } });
+  const timeline = buildTimeline(picked, initialPicks(picked, false), "Mira");
+  const refs = timeline.lines.map((_, index) => lineRef(timeline, index, "main-1/0r0"));
+  assert.deepEqual(refs, [
+    "main-1/0r0/0",
+    "main-1/0r0/1",
+    "main-1/0r0/1:option-1+0",
+    "main-1/0r0/1:option-1+1",
+    "main-1/0r0/2",
+    "main-1/0r0/3",
+  ]);
+  assert.equal(voiceCacheKey("r-key", lineRef(timeline, 1, "main-1/0r1")), "otome-forge:r-key:main-1/0r1/1");
+});
+
+test("a place's picture is found by its name, and only a ready paint has one", () => {
+  const places = [
+    { name: "The Observation Room", tags: "dome", art: { state: "ready" as const, at: "", url: "/gallery/1.png" } },
+    { name: "The Lab", tags: "glass", art: { state: "waiting-consent" as const, at: "" } },
+  ];
+  assert.equal(readyUrl(placeEntry(places, "the observation  room")?.art), "/gallery/1.png");
+  assert.equal(readyUrl(placeEntry(places, "The Lab")?.art), null);
+  assert.equal(placeEntry(places, "Elsewhere"), null);
+  assert.equal(placeEntry(null, "The Lab"), null);
 });

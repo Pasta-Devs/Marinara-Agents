@@ -2,8 +2,10 @@
 // Otome Forge: the `${R}:state` document (Starlight and each love interest's points and stage), and the RunView
 // ──────────────────────────────────────────────
 // Later milestones add their own fields here, each with a default, so older states keep reading.
+import { forgeStoryExpressionCast } from "@forge-kit/story-expressions-server.mjs";
 import { z, type ZodType } from "zod";
 import type {
+  AlbumCg,
   ChapterProgress,
   Favorite,
   Grievance,
@@ -16,6 +18,7 @@ import type {
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { FIRST_STAGE, LAST_STAGE } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import {
   STARTING_STARLIGHT,
   TENSION_MAX,
@@ -24,23 +27,23 @@ import {
   TRUST_MIN,
   levelOf,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import { FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { isChapterKey, isLiId, playerId, stateId, worldId } from "../ids.js";
-import { ChapterDeltaSchema } from "../state/relationship.js";
+import { readChapterDelta } from "../state/relationship.js";
 import type { OtomeStore } from "../store.js";
 import { field, isRecord, readFields, validItems } from "./common.js";
 import { normalizePlayer } from "./player.js";
 import { normalizeUnit } from "./unit.js";
 import { normalizeWorld, toWorldView } from "./world.js";
 
-// ponytail: the stage range lives here until M2b's SH/arcs.ts owns the stage table; then import it from there.
-export const FIRST_STAGE = 1;
-export const LAST_STAGE = 6;
+export { FIRST_STAGE, LAST_STAGE };
 
 const TEXT_MAX = 600;
 const LIST_MAX = 200;
 const LEDGER_MAX = 300;
 const TIMELINE_MAX = 500;
 const FAVORITES_MAX = 300;
+const ALBUM_MAX = 500;
 
 const wholeNumber = (value: unknown, fallback: number, min: number, max = Number.MAX_SAFE_INTEGER) =>
   typeof value === "number" && Number.isInteger(value) && value >= min && value <= max ? value : fallback;
@@ -66,6 +69,7 @@ const ConflictSchema: ZodType<Ledgers["conflicts"][number]> = z.object({
   type: short(80),
   status: z.enum(["open", "resolved"]),
   chapter: z.number().int().min(0),
+  key: short(120).optional(),
 });
 const TimelineSchema: ZodType<TimelineEntry> = z.object({
   at: z.string(),
@@ -81,13 +85,21 @@ const FavoriteSchema: ZodType<Favorite> = z.object({
   ref: short(200),
 });
 
+const AlbumCgSchema: ZodType<AlbumCg> = z.object({
+  key: short(200),
+  url: z.string().max(2000),
+  ref: short(200),
+  at: z.string(),
+  li: z.string().optional(),
+});
+
 /** A love interest's state with every M2a field defaulted (trust and tension 0, no grievances, never led). */
 export const defaultLiState = (): LiState => ({
   points: 0,
   stage: FIRST_STAGE,
   trust: 0,
   tension: 0,
-  chapterDelta: { key: "", trust: 0, tension: 0 },
+  chapterDelta: {},
   grievances: [],
   rupture: null,
   disclosures: [],
@@ -104,7 +116,7 @@ function normalizeLiState(raw: unknown): LiState {
       stage: (value) => wholeNumber(value, FIRST_STAGE, FIRST_STAGE, LAST_STAGE),
       trust: (value) => wholeNumber(value, 0, TRUST_MIN, TRUST_MAX),
       tension: (value) => wholeNumber(value, 0, TENSION_MIN, TENSION_MAX),
-      chapterDelta: ChapterDeltaSchema,
+      chapterDelta: readChapterDelta,
       grievances: (value) => validItems(GrievanceSchema, value, LIST_MAX),
       rupture: z.object({ grievanceId: short(80), since: z.string() }).nullable(),
       disclosures: (value) => validItems(DisclosureSchema, value, LIST_MAX),
@@ -172,6 +184,7 @@ export function normalizeState(data: unknown): RunState {
       : defaultLedgers(),
     timeline: validItems(TimelineSchema, field(data, "timeline"), TIMELINE_MAX),
     favorites: validItems(FavoriteSchema, field(data, "favorites"), FAVORITES_MAX),
+    album: { cgs: validItems(AlbumCgSchema, field(field(data, "album"), "cgs"), ALBUM_MAX) },
   };
 }
 
@@ -179,7 +192,23 @@ export function normalizeState(data: unknown): RunState {
 export function keepNewest<T>(items: readonly T[], max: number): T[] {
   return items.length > max ? items.slice(items.length - max) : [...items];
 }
-export const STATE_LIMITS = { ledger: LEDGER_MAX, timeline: TIMELINE_MAX, favorites: FAVORITES_MAX, list: LIST_MAX };
+export const STATE_LIMITS = {
+  ledger: LEDGER_MAX,
+  timeline: TIMELINE_MAX,
+  favorites: FAVORITES_MAX,
+  list: LIST_MAX,
+  album: ALBUM_MAX,
+};
+
+/**
+ * His painted faces for the look he wears now (the kit's forgeStoryExpressionCast: a ready set only, and only while
+ * expressions are on). The worn look is his portrait until outfits arrive (M4).
+ */
+export function readyFaces(world: Pick<World, "images">, unit: Unit): Partial<Record<Face, string>> | undefined {
+  // ponytail: his portrait is the look until M4 adds a worn one (art/expressions.ts paints on the same base).
+  const { expressions } = forgeStoryExpressionCast(world.images, unit, unit.portrait ?? "", FACES);
+  return expressions as Partial<Record<Face, string>> | undefined;
+}
 
 /**
  * What GET /runs/:run returns. LIs follow the order of `state.lis` (setup order); a unit missing from it goes last.
@@ -198,15 +227,19 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
       .sort((a, b) => rank(a) - rank(b))
       .map((unit) => {
         const progress = state.lis[unit.id] ?? defaultLiState();
+        const expressions = readyFaces(world, unit);
         return {
           id: unit.id,
           name: unit.name,
           pronouns: unit.pronouns,
           source: unit.source,
+          ...(unit.cardId ? { cardId: unit.cardId } : {}),
+          voiceGender: unit.voiceGender,
           accent: unit.accent,
           ...(unit.portrait ? { portrait: unit.portrait } : {}),
           level: levelOf(progress.points),
           stage: progress.stage,
+          ...(expressions ? { expressions } : {}),
         };
       }),
     forge: world.forge,
