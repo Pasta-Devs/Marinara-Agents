@@ -8,7 +8,8 @@
 // during a rupture, with Rough day? voiced with no cache key; and his faces' cut-outs arriving while Home is open.
 // M4: what the Wardrobe's Wear at home put on stands on Home (his look's cut-out, her look on Me), with the line he
 // noticed about hers arriving while Home is open; on a small phone the longest line stands beside the rail without
-// pushing it up, clear of the note.
+// pushing it up, clear of the note, and at every phone size and on desktop it covers no rail button, the note (its Play
+// and Reply), her name, the top bar or the dock.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-home.e2e.ts
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -980,6 +981,8 @@ function homeLayout(root: Locator) {
         ...named(".of-topbar", () => "top bar"),
         ...named(".of-dock, .of-dock-item", (node) => `dock: ${label(node)}`),
       ],
+      /** M4: the line he noticed about her look, on Me. */
+      noticed: named(".of-home-noticed .of-noticed", () => "noticed line"),
       body: box(element.querySelector(".of-stage-body")!),
     };
   });
@@ -1140,3 +1143,54 @@ test("Otome Forge Home on a small phone: the longest line he noticed stands besi
   expect(overlap(lineBox, railBox)).toBe(false);
   expect(overlap(lineBox, plateBox)).toBe(false);
 });
+
+/** Desktop sizes beside the phone ones: the project's own, and a short laptop screen. */
+const DESKTOP_SIZES = [
+  { width: 1440, height: 900 },
+  { width: 1280, height: 720 },
+];
+
+for (const images of [true, false]) {
+  test(`Otome Forge Home on Me at phone and desktop sizes (${images ? "painted" : "no images"}): the longest line he noticed covers nothing`, async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    const stub = createHomeStub({ images, worn: true, firstNote: LONG_NOTE, noticedLine: LONG_NOTICED });
+    await stubRoutes(page, stub, []);
+    const root = await openHome(page);
+    await expect(root.getByRole("article", { name: "A note from Ilvar Thorne" })).toContainText(LONG_NOTE);
+    await root.getByRole("radio", { name: "Ilvar" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(root.locator(".of-home-noticed .of-noticed")).toContainText(LONG_NOTICED, { timeout: 15_000 });
+
+    for (const later of [false, true]) {
+      if (later) await addRailButtons(root);
+      for (const size of [...PHONE_SIZES, ...DESKTOP_SIZES]) {
+        await page.setViewportSize(size);
+        await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+        const layout = await homeLayout(root);
+        const at = `${size.width}x${size.height}${later ? " with Remind Me and Caring message" : ""}`;
+        expect(layout.noticed, at).toHaveLength(1);
+        expect(layout.rail.length, at).toBe(later ? 6 : 4);
+        if (!later) expect(layout.noteText, `the note's words at ${at}`).toBeGreaterThanOrEqual(24);
+        const [line] = layout.noticed;
+        const inside =
+          line.box.x >= layout.body.x - 0.5 &&
+          line.box.y >= layout.body.y - 0.5 &&
+          line.box.x + line.box.width <= layout.body.x + layout.body.width + 0.5 &&
+          line.box.y + line.box.height <= layout.body.y + layout.body.height + 0.5;
+        expect(inside, `the noticed line on the stage at ${at}`).toBe(true);
+        // The note holds its Play and Reply, so clear of the note is clear of them.
+        for (const cover of [...layout.covers, ...layout.rail]) {
+          expect(overlaps(line.box, cover.box), `${cover.name} and the noticed line at ${at}`).toBe(false);
+        }
+        // The rail stays clear of the note, the top bar and the dock with the line beside it.
+        for (const button of layout.rail) {
+          for (const cover of layout.covers.filter((item) => item.name !== "nameplate")) {
+            expect(overlaps(button.box, cover.box), `${cover.name} and ${button.name} at ${at}`).toBe(false);
+          }
+        }
+      }
+    }
+  });
+}
