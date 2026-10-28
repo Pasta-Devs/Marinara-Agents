@@ -3,11 +3,13 @@ forgeChoicesEnabled, forgeSeasonalChapter, forgeAddCalendarDays, forgeWallDate,
 a, n, r, be, Ae, pe, Gn, Le, _t, It, Vt, uh, gS, yS, Uo, _r, fu, Ei, tr, wy, Ur, Cr,
 nt, nn, vn, ch, P0, Ph, vS, ES, U0, rt, Vr, gc, H0, zo, yu, I, ze, forgeEnemyCombatMetadata,
 forgeEncounterPresentation, dh, W, Gs, ro, Bo, Wf, at, ie, forgeChoices, forgeStoryMemory, forgeStoryCancellation,
-forgeStoryPost, B, k, q, bgSlug, l, Xt, vf, jg, Qn, forgeBannerAnimations, xn */
-/* global forgeFormationClassicFields, forgeFormationEncounterMessages, forgeFormationMode, forgeFormationNormalizeGuide, forgeCanonicalSegments, forgeSeasonalEnabled */
+forgeStoryPost, B, k, q, bgSlug, l, Xt, vf, jg, Qn, forgeBannerAnimations, xn, Bf, cc, ty, Mi, vr, Bn, qn, Xe */
+/* global forgeFormationClassicFields, forgeFormationEncounterMessages, forgeFormationMode, forgeFormationNormalizeGuide, forgeCanonicalSegments, forgeSeasonalEnabled, forgeSeasonalProgress */
 
 // ponytail: this is the narrow adapter for the contributed bundle; move its aliases to imports when that source lands.
 function createForgeSeasonalLegacyAdapter() {
+  // An event's fights scale like the main chapter after the one it followed.
+  const eventScale = (event) => Math.max(1, (Number(event?.after) || 0) + 1);
   const readRun = async (runId) => Ae((await be()).data, runId);
   const readSession = async (runId) => (await pe(runId)).data;
   const cast = async (runId) => {
@@ -242,7 +244,7 @@ function createForgeSeasonalLegacyAdapter() {
         nodes = tr(plan),
         node = nodes.filter((entry) => entry.type === "combat")[combatIndex];
       if (!run || !node) return { ok: false, error: "bad-request" };
-      const scale = Math.max(1, target.event.after + 1),
+      const scale = eventScale(target.event),
         storyIndex = nodes.slice(0, nodes.indexOf(node)).filter((entry) => entry.type === "story").length,
         history = await _r(runId, chapter, storyIndex, {
           query: { plan: [node.title, node.setup, target.event.theme].filter(Boolean).join(" ") },
@@ -310,9 +312,17 @@ function createForgeSeasonalLegacyAdapter() {
     const run = await readRun(target.runId),
       chapter = target.chapter,
       combatIndex = Number(body.combatIndex),
-      scale = Math.max(1, target.event.after + 1),
+      difficulty = target.difficulty,
+      scale = eventScale(target.event),
       combatId = I(target.runId, chapter, combatIndex);
-    const designed = await designFight(target.runId, chapter, combatIndex);
+    let designed;
+    if (difficulty === "normal") designed = await designFight(target.runId, chapter, combatIndex);
+    else {
+      // Hard and Very Hard fight what Normal designed (a fight's guide is saved before its first start), so they
+      // never ask a model for one.
+      const guide = (await a.getById(n.id, combatId))?.data;
+      designed = guide ? { ok: true, guide } : { ok: false, error: "event-fight-missing" };
+    }
     if (!designed.ok) return designed;
     const guide = designed.guide,
       party = await Vr(target.runId, run, body.presetIndex);
@@ -333,7 +343,8 @@ function createForgeSeasonalLegacyAdapter() {
           ...(enemy.formationKit ? { formationKit: enemy.formationKit } : {}),
           ...forgeEnemyCombatMetadata(enemy, known),
         })),
-        yu(scale, "normal"),
+        // The same fight, calibrated to the difficulty's power, as main us() does; its seed and key stay Normal's.
+        yu(scale, difficulty),
       );
     if (!start) {
       const presentation = await rt(run, target.runId, enemies, {
@@ -352,8 +363,8 @@ function createForgeSeasonalLegacyAdapter() {
         presets: party.presets,
         activePreset: party.usedIdx,
         cost: Bo,
-        cp: yu(scale, "normal"),
-        difficulty: "normal",
+        cp: yu(scale, difficulty),
+        difficulty,
         enemyPower: enemies[0]?.power || 1,
       };
     }
@@ -364,14 +375,16 @@ function createForgeSeasonalLegacyAdapter() {
       const data = structuredClone(doc.data),
         current = await events.selected(body, { live: true, store: documents });
       if (!current.ok) return current;
-      if (!target.replay && current.played !== target.nodeIndex) return { ok: false, error: "event-node-locked" };
+      // Still the fight this difficulty reached (progress only grows, so a match is enough).
+      if (forgeSeasonalProgress(current.data, chapter, difficulty) !== target.nodeIndex)
+        return { ok: false, error: "event-node-locked" };
       const charged = ro(data, target.runId, Bo, Date.now());
       if (!charged.ok) return charged;
       data.combatPending = {
         chapter,
         combatIndex,
         nodeIndex: target.nodeIndex,
-        difficulty: "normal",
+        difficulty,
         fight,
         at: Date.now(),
       };
@@ -389,6 +402,34 @@ function createForgeSeasonalLegacyAdapter() {
         throw new Error("story-event-write-conflict");
       return { ok: true, spent: Bo, loss: { spent: Bo, again: Bo }, wallet: at(charged.wallet, data) };
     });
+  };
+  // ponytail: a copy of main /complete's first-clear fight pay (rank XP with its level-up Vigor, the node-clear and
+  // hard-clear counts, and the tier's Funds and Aether; ty pays no Insight). A change to main pay does not reach it:
+  // share one helper once the bundle's source lands.
+  const payFight = ({ data, runId, difficulty, event }) => {
+    const from = { ...Bn(data.account), vigorMax: qn(data) },
+      level = Mi(data, vr.combat),
+      reward = ty(eventScale(event), difficulty),
+      time = Date.now();
+    Xt(data, runId, "node-clear", 1, time);
+    Xt(data, runId, "hard-clear", 1, time);
+    const wallet = data.wallet || { ...Xe };
+    wallet.funds = (Number(wallet.funds) || 0) + reward.funds;
+    wallet.aether = (Number(wallet.aether) || 0) + reward.aether;
+    data.wallet = wallet;
+    return {
+      reward,
+      rank: {
+        gain: vr.combat,
+        levels: level.levels,
+        vigor: level.vigor || 0,
+        ...Bn(data.account),
+        vigorMax: qn(data),
+        from,
+      },
+      account: Bn(data.account),
+      wallet: at(data.wallet, data),
+    };
   };
   const events = createForgeSeasonalEvents({
     packageId: n.id,
@@ -455,11 +496,17 @@ function createForgeSeasonalLegacyAdapter() {
       return charge.ok ? { ok: true, spent: Wf, wallet: at(charge.wallet, data) } : charge;
     },
     onComplete: (runId) => forgeStoryMemory.schedule(runId),
+    clampDifficulty: cc,
+    payFight,
     log: (error, message) => r.logger.warn(error, `[gacha-forge] ${message}`),
   });
   const post = (path, handler) => forgeStoryPost(path, (request) => handler(request?.body || {}));
   post("/story-events", (body) => events.list(body));
-  post("/story-event/plan", (body) => forgeChoices.generate(body.runId, () => events.plan(body)));
+  post("/story-event/plan", async (body) => {
+    const result = await forgeChoices.readOrGenerate(body.runId, (cachedOnly) => events.plan(body, { cachedOnly }));
+    // The map's Recommended BP per difficulty, as main /chapter-plan answers it.
+    return result?.ok && result.event ? { ...result, cp: Bf(eventScale(result.event)) } : result;
+  });
   post("/story-event/start", (body) => events.startStory(body));
   post("/story-event/complete", (body) => events.complete(body));
   post("/story-event/beat", async (body) => {

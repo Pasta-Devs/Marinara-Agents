@@ -53,6 +53,7 @@ async function check({ enabled = true, disableAfterBanner = false } = {}) {
     tr: noop,
     forgeChoices: {},
     ie: noop,
+    cc: noop,
     createForgeSeasonalEvents: (value) => ((config = value), {}),
     forgeStoryPost: noop,
   };

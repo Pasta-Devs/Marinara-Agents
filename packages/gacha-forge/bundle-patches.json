@@ -2207,6 +2207,28 @@
               "replace": "forgeCurrent=this._combatNode?.farm||this._combatNode?.tower?()=>this._run?.runId===forgeOrigin:forgeChapterCurrent(this);"
             }
           ]
+        },
+        {
+          "version": "1.27.0",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.26.3\"",
+              "replace": "ds=\"1.27.0\""
+            },
+            {
+              "find": "var oy=[{version:null,fixed:[",
+              "replace": "var oy=[{version:null,new:[\"A finished story event's fights now open on Hard, then Very Hard, while the event runs: the same fights, stronger, each paying once per difficulty as a main chapter's do.\"],fixed:[\"A story event's map no longer lists a chapter's Funds, Aether and rank on Normal, which an event never paid, and a played event's map opens without waiting for a scene being written elsewhere.\"]},{version:\"1.26.3\",fixed:["
+            },
+            {
+              "find": "${x?ab(x):l?\"\":forgeEventTitle?/* A story event is Normal-only: its progress, fights and rewards have no Hard. Its map keeps the row the grid counts, without pills. */'<div class=\"cap-diff\"></div>':`<div class=\"cap-diff\">",
+              "replace": "${x?ab(x):l?\"\":`<div class=\"cap-diff\">"
+            },
+            {
+              "find": "pay:this._nodePay&&this._nodePay[this._difficulty]",
+              "replace": "pay:forgeSeasonalNodePay(this,this._nodePay&&this._nodePay[this._difficulty])"
+            }
+          ]
         }
       ]
     },
