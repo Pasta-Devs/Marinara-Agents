@@ -5,7 +5,7 @@
 - Remind Me, from Home: a month of your story's days, with each love interest's birthday, the day your story began, its dated firsts, and your own birthday if you add it (kept only on this device).
 - A period tracker for anyone who has periods, off by default and stored only in this browser. Logged days show as filled hearts, predicted ones as outlined hearts, and it never calls a period late. Export moves it; one click deletes all of it.
 - On a tracked day, Caring message asks the love interest on Home for a note. Only one line about today reaches your model provider, never the history; with Keep it off the model, or while debug logging is on, a comfort line written in advance answers instead. The note stays in this browser for the day only.
-- Home: a long name on Him / Me is now cut short inside the rail rather than reach over the love interest's tap zones.
+- Home: on the shortest phones the rail tightens so the note keeps a line of its words, and a long name on Him / Me is cut short inside the rail rather than reach over the love interest's tap zones.
 
 ## 0.0.6 — 2026-10-28
 

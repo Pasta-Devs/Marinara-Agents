@@ -2106,6 +2106,14 @@ ${R} .of-home-rail > * { max-width: 100%; }
 /* M6's Remind Me and Caring message: round, side by side at the rail's foot; only the buttons take the pointer. */
 ${R} .of-home-rail-row { display: flex; gap: 8px; pointer-events: none; }
 ${R} .of-home-rail-row > * { pointer-events: auto; }
+/* A short stage (a 360 × 600 phone under the Engine's own bars leaves about 500 px): the rail tightens by 30 px, every
+   button still at least 30 px tall, so the note keeps a line of its words above M6's row. */
+@container of-frame (max-height: 540px) {
+  ${R} .of-home-rail { gap: 5px; }
+  ${R} .of-home-rail .of-home-action { min-height: 36px; }
+  ${R} .of-home-rail .of-himme-option { min-height: 30px; }
+  ${R} .of-home-rail-row .of-icon-button { width: 36px; height: 36px; }
+}
 ${R} .of-home-action {
   display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding-block: 0; padding-inline: 11px 15px;
   border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 0.82rem; letter-spacing: 0.02em;
