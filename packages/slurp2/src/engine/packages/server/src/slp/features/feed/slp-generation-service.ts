@@ -1,4 +1,5 @@
 import { buildSlurpDeepDetailsRecord } from "./slp-deep-details-record.js";
+import { readSlurpWorldLens } from "../../data/creators/slp-canon-anchor-storage.js";
 import { saveSlurpNewPostDeepDetails } from "../../data/feed/slp-post-deep-details-storage.js";
 import type { SlpDeepDetailsFlavour } from "../../../../../shared/src/slp/slp-deep-details.js";
 import { prepareSlurpCreatorPost } from "./slp-prepared-post.js";
@@ -74,7 +75,11 @@ export {
   type PublicIdentity,
 } from "../../base/identity/slp-identity-protection.js";
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
-import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
+import {
+  slurpCameraSourceInstruction,
+  slurpPostCameraSource,
+  slurpScreenFreeCamera,
+} from "../../modules/feed/slp-camera-source.js";
 import { slurpPostPictureBriefs } from "./slp-post-picture-briefs.js";
 import { slurpShootContinuity } from "../../modules/feed/slp-image-brief.js";
 import { slurpContentAxesInstruction, slurpIntentFormat } from "../../modules/feed/slp-content-axes.js";
@@ -265,15 +270,17 @@ export async function generateCreatorPost(
   const postImages = imagesEnabled && !textOnly && !reusedMedia;
   // Drawn after the plan: a planned shoot is not photographed at arm's length. A reused shoot
   // keeps its own camera. See `slp-camera-source.ts`.
+  const screens = !(await readSlurpWorldLens(db, account.id));
   const cameraSource = variation
     ? slurpPostCameraSource(account.id, sequence, {
         companyCanHoldCamera: variation.companyCanHoldCamera,
+        screens,
         prefers: production.prefers,
         intent: axes?.intent,
         effort,
       })
     : null;
-  const camera = shoot?.cameraSource ?? cameraSource;
+  const camera = slurpScreenFreeCamera(shoot?.cameraSource, screens) ?? cameraSource;
   const cameraInstruction = camera ? slurpCameraSourceInstruction(camera) : undefined;
   // The shoot rides in the content-type block rather than a block of its own: it is part of what
   // this post is for, and a second block would be dead for every post that is not a callback.

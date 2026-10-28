@@ -29,6 +29,7 @@ import type { SlurpCanonAnchors } from "../feed/slp-post-beat.js";
 import { slurpWeightedPick } from "../feed/slp-weighted.js";
 import { SLURP_NEVER_PATTERN } from "../feed/slp-life-moments.js";
 import { SLP_BODY_WORDS } from "./slp-appearance-profile.js";
+import { slurpWorldLine } from "./slp-world-lens.js";
 
 export type SlurpFlavourUse = "post" | "story" | "dm" | "comment" | "delivery";
 
@@ -393,6 +394,7 @@ export function compileSlurpFlavourBrief(
   const paragraphs = [
     core,
     always,
+    slurpWorldLine(source.anchors?.world),
     bits.length ? `A few true things about you to draw on this time. ${bits.map((bit) => bit.text).join(" ")}` : "",
     sample ? `How you sound, in a line of yours from before (match the voice, never reuse the words): “${sample}”` : "",
     [...life, source.relationship ?? "", texture, signatureLine].filter(Boolean).join(" "),

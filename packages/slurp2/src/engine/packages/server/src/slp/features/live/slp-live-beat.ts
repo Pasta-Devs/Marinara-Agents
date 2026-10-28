@@ -19,6 +19,8 @@ import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
 import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import { resolveSlurpCreatorSpice } from "../../data/creators/slp-spice-storage.js";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
+import { readSlurpWorldLens } from "../../data/creators/slp-canon-anchor-storage.js";
+import { slurpWorldLine } from "../../modules/creators/slp-world-lens.js";
 import { createSlurpLiveStorage } from "../../data/live/slp-live-storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { slurpSpiceBriefLines } from "../../modules/creators/slp-spice.js";
@@ -88,7 +90,13 @@ export async function beatSlurpLiveShow(
       ? { name: input.viewer.displayName, ...(input.message ? { message: input.message } : {}), joined: !!input.joined }
       : null;
     const prompt = slpLivePrompt({
-      host: { name: host.displayName, pronouns: slpPronouns(slpAccountGender(host)), bio: host.bio ?? "", canon },
+      host: {
+        name: host.displayName,
+        pronouns: slpPronouns(slpAccountGender(host)),
+        bio: host.bio ?? "",
+        canon,
+        world: slurpWorldLine(await readSlurpWorldLens(db, host.id)),
+      },
       spiceLines: slurpSpiceBriefLines({
         use: "dm",
         level: spice.level,

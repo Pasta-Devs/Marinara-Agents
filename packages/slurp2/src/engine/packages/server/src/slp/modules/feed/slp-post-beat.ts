@@ -27,6 +27,7 @@ import { SLURP_REFERENCE_KINDS, type SlurpBeatReference } from "./slp-post-refer
 import type { SlpCreatorSteering } from "../../../../../shared/src/slp/slp-creator-steering.js";
 import { readSlurpTieStamp, type SlurpTieStamp } from "../projects/slp-tie-stamp.js";
 import { slurpPostJob, type SlurpJobHistory, type SlurpNiches } from "./slp-post-jobs.js";
+import type { SlurpWorldLens } from "../creators/slp-world-lens.js";
 
 /** Shared ideas weigh more than a deck line of the same kind, so level 1 is actually used. */
 const SHARED_IDEA_BOOST = 1.5;
@@ -64,6 +65,8 @@ export type SlurpCanonAnchors = {
   heat: { min: number; max: number };
   /** The page's niche, which weighs the post jobs. Absent on caches from before v4. */
   niches?: SlurpNiches;
+  /** The Creator's world when it is not the modern one. Absent on caches from before v5. */
+  world?: SlurpWorldLens;
   /** A typical day from the card, for Creators without a Conversation Schedule. Absent on old caches. */
   routine?: { time: string; activity: string }[];
   /**
