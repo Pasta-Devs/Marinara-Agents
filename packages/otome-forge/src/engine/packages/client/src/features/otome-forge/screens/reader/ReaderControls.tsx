@@ -128,7 +128,9 @@ export function ReaderControls(props: ReaderControlsProps) {
               </span>
             ) : null}
           </span>
-          <span className="of-reader-name">{chapter?.title || t("ui.otomeForge.common.loading")}</span>
+          <span className="of-reader-name">
+            {chapter ? chapter.title || t("ui.otomeForge.story.untitled") : t("ui.otomeForge.common.loading")}
+          </span>
         </h1>
         <div className="of-reader-tools">
           <Tool

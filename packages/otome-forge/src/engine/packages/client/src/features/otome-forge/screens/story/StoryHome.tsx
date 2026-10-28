@@ -160,7 +160,7 @@ function ContinueCard({
         <div className="of-chapter-heading">
           <p className="of-chapter-eyebrow">{eyebrow(t, entry, lead)}</p>
           <h2 id="of-story-continue" className="of-chapter-title">
-            {entry.title}
+            {entry.title || t("ui.otomeForge.story.untitled")}
           </h2>
         </div>
       </div>
@@ -291,6 +291,7 @@ function ChapterList({
       <ol className="of-chapters">
         {chapters.map((entry) => {
           const lead = view.lis.find((li) => li.id === (entry.li ?? entry.lead)) ?? null;
+          const title = entry.title || t("ui.otomeForge.story.untitled");
           const action =
             entry.state === "done"
               ? { key: "ui.otomeForge.story.replay", Icon: Repeat, primary: false }
@@ -308,7 +309,7 @@ function ChapterList({
                 {lead ? <Avatar name={lead.name} url={lead.portrait} accent={accentOf(lead)} size={34} /> : null}
                 <div className="of-chapter-heading">
                   <p className="of-chapter-eyebrow">{eyebrow(t, entry, lead)}</p>
-                  <h3 className="of-chapter-title">{entry.title || t("ui.otomeForge.story.untitled")}</h3>
+                  <h3 className="of-chapter-title">{title}</h3>
                 </div>
                 <span className="of-badge of-badge--soft">{t(STATE_KEYS[entry.state])}</span>
               </div>
@@ -321,7 +322,7 @@ function ChapterList({
                       ? "of-button of-button--primary of-button--small"
                       : "of-button of-button--quiet of-glass of-button--small"
                   }
-                  aria-label={`${t(action.key)}: ${entry.title}`}
+                  aria-label={`${t(action.key)}: ${title}`}
                   onClick={() => onOpen(entry.key)}
                 >
                   <action.Icon size={14} strokeWidth={2} aria-hidden="true" />

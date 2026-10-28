@@ -109,8 +109,7 @@ export function createOtomeMemory({
   const queue = background ?? createBackgroundQueue(runtime);
   /** The summary job of each run whose maintenance is running, so its summaries resolve the connection once. */
   const running = new Map<string, SummaryJob>();
-  /** Runs with a maintenance job queued or running. */
-  const queued = new Set<string>();
+  const maintainKey = (runId: string) => `${memoryId(runId)}#maintain`;
   /** Runs whose maintenance was asked for again while their job waited or ran, with whether one asked in debug mode. */
   const again = new Map<string, boolean>();
   let disposed = false;
@@ -244,9 +243,8 @@ export function createOtomeMemory({
       if (disposed) return false;
       const job = await summaryJob(runId);
       if (!job || disposed) return false;
-      queued.add(runId);
       const fresh = queue.ensure({
-        key: `${memoryId(runId)}#maintain`,
+        key: maintainKey(runId),
         connectionId: job.connectionId,
         run: async () => {
           running.set(runId, job);
@@ -254,7 +252,9 @@ export function createOtomeMemory({
             // New canon that arrives while the job runs makes it go round again, so none waits for the next request;
             // a round logs its prompts in debug mode when any request folded into it asked for that.
             // ponytail: a call in the moment between the last round and the queue releasing the key is folded into
-            // nothing; the next recall that finds memory lagging queues it again (S/story/canon.ts recallText does).
+            // nothing (its `again` entry only sets debug mode for the next job). Status then shows the kit's real
+            // phase, so a failed summary offers Retry and memory that lags is queued again by the next recall
+            // (S/story/canon.ts recallText). The upgrade path is a queue callback fired when it releases the key.
             let debug: boolean | undefined = debugMode;
             while (debug !== undefined && !disposed) {
               const wanted = debug || again.get(runId) === true;
@@ -264,7 +264,6 @@ export function createOtomeMemory({
             }
           } finally {
             running.delete(runId);
-            queued.delete(runId);
           }
         },
       });
@@ -274,7 +273,8 @@ export function createOtomeMemory({
 
     async status(runId) {
       const status = await memory.status(runId);
-      return queued.has(runId) ? { ...status, phase: "pending", retryable: false } : status;
+      // The queue's own key, so a job it refused before starting or a call in its release gap never reads as pending.
+      return queue.has(maintainKey(runId)) ? { ...status, phase: "pending", retryable: false } : status;
     },
 
     invalidate(runId) {
@@ -285,7 +285,6 @@ export function createOtomeMemory({
     dispose() {
       disposed = true;
       if (!background) queue.dispose();
-      queued.clear();
       again.clear();
     },
   };

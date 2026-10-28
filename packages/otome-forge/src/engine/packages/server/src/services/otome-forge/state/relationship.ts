@@ -68,7 +68,7 @@ export interface ChoiceOutcome {
   state: RunState;
   /**
    * True when the pick changed something between them: trust or tension moved, a grievance opened or closed, or the
-   * protagonist told him something. The reader then shows "He'll remember that."
+   * protagonist told him something. The reader then shows "{name} will remember that." (or "They'll remember that.").
    */
   remembered: boolean;
   /** The love interests that pick changed something with, in the order of its effects (the toast names a lone one). */

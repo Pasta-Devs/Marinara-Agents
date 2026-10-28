@@ -592,16 +592,21 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion }
     !ready.beat.choices.some((choice) => canonOption(ready.beat, choice)) &&
     !(detail?.beats ?? []).some((item) => item.i > ready.node && item.state === "read");
 
-  // Ease off is there for every node not yet finished: while its scene is read, opened or written, and after a Cancel
-  // or a failure (the server cuts a node with no beat before its first line). A node read before eases off only once
-  // its beat is open, as a replay that changes no canon.
+  // Ease off is there for every node not yet finished, until its end is saved: while its scene is read, opened or
+  // written, and after a Cancel or a failure (the server cuts a node with no beat before its first line). A node read
+  // before eases off only once its beat is open, as a replay that changes no canon.
   const nodeRead = (detail?.beats ?? []).some((item) => item.i === node && item.state === "read");
   const canEaseOff =
     node !== null &&
     !finished &&
     !askTags &&
     load?.node === node &&
-    (ready ? current?.kind !== "aftermath" : !nodeRead);
+    (ready
+      ? current?.kind !== "aftermath" &&
+        // Read to its end, the server counts the beat as read and refuses a cut; a choice still waiting at the last
+        // line keeps it open, and a failed end report brings it back.
+        !(position?.ended && !position.replay && !pendingChoice)
+      : !nodeRead);
 
   return {
     detail,

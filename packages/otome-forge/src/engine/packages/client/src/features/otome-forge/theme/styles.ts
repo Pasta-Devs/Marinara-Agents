@@ -897,7 +897,7 @@ ${R} .of-reader-row { display: flex; align-items: center; gap: 8px; min-width: 0
 ${R} .of-reader-row--sub { align-items: flex-start; }
 ${R} .of-reader-title { flex: 1; min-width: 0; display: flex; flex-direction: column; text-shadow: 0 1px 12px rgb(0 0 0 / 0.3); }
 ${R}[data-look="pearl"] .of-reader-title { text-shadow: 0 1px 10px rgb(255 255 255 / 0.7); }
-${R} .of-reader-title:focus { outline: none; }
+${R} .of-reader:focus, ${R} .of-reader-title:focus { outline: none; }
 ${R} .of-reader-title:focus-visible { outline: 2px solid var(--of-focus); outline-offset: 3px; border-radius: 6px; }
 ${R} .of-reader-eyebrow {
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 0.68rem; font-weight: 800;

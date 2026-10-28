@@ -41,13 +41,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "acbf2fd93789b38e15dc49d40aa4fe8bcdf09b69371dcf0a18d37bd0eece97ba",
-      "bytes": 155163
+      "sha256": "c08faa535611db05597cd3c014e18fd4045dac95a2a09220a0b3d8ebb99b1bfe",
+      "bytes": 155570
     },
     {
       "path": "client.js",
-      "sha256": "6c1cdecb3ae420bd299a6f55a353cfaa2857acc23ec6e75384a399f8a4328d9c",
-      "bytes": 598436
+      "sha256": "4721d2c02f640475c49d9f5a1971852ecb893abe89d5d15402a8899e5e2a6963",
+      "bytes": 598619
     },
     {
       "path": "fonts/OFL.txt",

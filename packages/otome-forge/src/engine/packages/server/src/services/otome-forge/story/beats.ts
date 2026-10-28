@@ -106,9 +106,11 @@ function speakerLi(context: BeatContext, speaker: string) {
   return context.units.find((unit) => sameName(speaker, unit.name));
 }
 
-/** Why the reply's thoughts break the rules (a love interest's thought before stage 2, or two in one scene), or "". */
-function thoughtProblem(context: BeatContext, segments: unknown[]): string {
-  const counts = new Map<string, number>();
+/**
+ * Why the reply's thoughts break the rules (a love interest's thought before stage 2, or two in one scene), or "".
+ * `counts` holds each love interest's thoughts read on the way to these segments, and gets theirs added.
+ */
+function thoughtProblem(context: BeatContext, segments: unknown[], counts = new Map<string, number>()): string {
   for (const raw of segments) {
     if (!raw || typeof raw !== "object") continue;
     const segment = raw as Record<string, unknown>;
@@ -196,16 +198,23 @@ type NormalizedBeat = BeatBody & { choices: ForgeChoice[] };
 
 /** The reply as a beat body with its choices, or the reason it is refused (the repair turn names it). */
 export function normalizeBeatReply(reply: BeatReply, context: BeatContext): NormalizedBeat | string {
-  const thoughts = thoughtProblem(context, reply.segments);
+  // One thought per love interest on the path with the most of them: the mainline, then in each choice (every one
+  // is played) the option that holds the most.
+  let counts = new Map<string, number>();
+  const thoughts = thoughtProblem(context, reply.segments, counts);
   if (thoughts) return thoughts;
   for (const choice of Array.isArray(reply.choices) ? reply.choices : []) {
+    const most = new Map(counts);
     for (const option of Array.isArray((choice as { options?: unknown })?.options)
       ? (choice as { options: unknown[] }).options
       : []) {
       const segments = (option as { segments?: unknown })?.segments;
-      const problem = Array.isArray(segments) ? thoughtProblem(context, segments) : "";
+      const own = new Map(counts);
+      const problem = Array.isArray(segments) ? thoughtProblem(context, segments, own) : "";
       if (problem) return problem;
+      for (const [li, count] of own) most.set(li, Math.max(most.get(li) ?? 0, count));
     }
+    counts = most;
   }
   const beat = forgeNormalizeChoiceBeat(
     reply,
@@ -339,13 +348,14 @@ async function generateBeat(
   const { run, chapter } = await load(deps, runId, key);
   const node = chapter.nodes[i];
   if (!node) throw beatNotFound();
-  const storySoFar = await chapterSoFar(deps.store, runId, key, i, run.player.name);
-  if (storySoFar === null) throw conflict("An earlier beat of this chapter is not settled yet.");
   // The beat this one follows, as it was written from: a rewrite or an Ease off of it while this one is written
-  // makes this one stale, and it is not saved.
+  // makes this one stale, and it is not saved. Read before the story so far, so a cut that lands between the two
+  // reads shows as a change.
   const basis = i > 0 ? await readBeat(deps.store, runId, key, i - 1) : null;
   const sameBasis = (current: Beat | null) =>
     !basis || (!!current && current.written.at === basis.written.at && !!current.easedOff === !!basis.easedOff);
+  const storySoFar = await chapterSoFar(deps.store, runId, key, i, run.player.name);
+  if (storySoFar === null) throw conflict("An earlier beat of this chapter is not settled yet.");
   const units = castUnits(run);
   const present = units.filter((unit) => node.cast.includes(unit.id));
   const memory = await recallText(deps, runId, {
@@ -592,7 +602,9 @@ export async function chooseOption(
     const outcome = pending ? await applyPick(deps, runId, chapter, beat, choiceId, canon) : NOTHING_REMEMBERED;
     return { beat: (await readBeat(deps.store, runId, key, i)) ?? beat, ...outcome };
   }
-  const closed = !!progress?.completed || (progress?.beatsRead ?? 0) > i;
+  // A choice past an Ease off cut is never canon, even while the cut beat is not counted as read yet.
+  const pastCut = (stored: Beat) => !!stored.easedOff && choice.at > stored.easedOff.at;
+  const closed = !!progress?.completed || (progress?.beatsRead ?? 0) > i || pastCut(beat);
   if (closed) {
     if (choice.kind === "big") throw new OtomeForgeError(409, "That choice is made.", "locked");
     return { beat, ...NOTHING_REMEMBERED };
@@ -605,12 +617,16 @@ export async function chooseOption(
       if (!current) throw beatNotFound();
       // A rewrite saved since this beat was read has other choices: the pick was made on a scene that is gone.
       if (current.written.at !== checked.written.at) throw conflict("This scene changed. Open it again.");
-      return current.choiceCanon[choiceId]
+      return current.choiceCanon[choiceId] || pastCut(current)
         ? current
         : { ...current, choiceCanon: { ...current.choiceCanon, [choiceId]: optionId } };
     })) ?? beat;
-  const picked = beat.choiceCanon[choiceId]!;
-  if (picked !== optionId && choice.kind === "big") throw new OtomeForgeError(409, "That choice is made.", "locked");
+  const picked = beat.choiceCanon[choiceId];
+  // No pick saved: an Ease off cut the scene before this choice meanwhile, and the choice is closed as above.
+  if (!picked || (picked !== optionId && choice.kind === "big")) {
+    if (choice.kind === "big") throw new OtomeForgeError(409, "That choice is made.", "locked");
+    return { beat, ...NOTHING_REMEMBERED };
+  }
   const outcome = await applyPick(deps, runId, chapter, beat, choiceId, picked);
   return { beat: (await readBeat(deps.store, runId, key, i)) ?? beat, ...outcome };
 }
@@ -720,10 +736,10 @@ function unwrittenBeat(key: string, node: ChapterNode): Beat {
 }
 
 /**
- * POST .../beats/:i/ease-off {segment}: ends the scene at that segment with no model call. Its canon is cut there and
- * closed with the marker, the beat counts as read, and the lookahead written from the uncut scene is removed. The
- * declined panel eases off a node that was never written the same way. The suggestions are the chapter's content tags
- * that are still allowed, to offer "Veil this from now on".
+ * POST .../beats/:i/ease-off {segment}: ends the scene at that segment, or at the last choice already picked, with no
+ * model call. Its canon is cut there and closed with the marker, the beat counts as read, and the lookahead written
+ * from the uncut scene is removed. The declined panel eases off a node that was never written the same way. The
+ * suggestions are the chapter's content tags that are still allowed, to offer "Veil this from now on".
  */
 export async function easeOff(
   deps: BeatDeps,
@@ -746,13 +762,15 @@ export async function easeOff(
   // checks the beat it follows before saving), and one already saved is removed here. A node the model declined has
   // no beat: it is saved as cut before its first line, so the story goes on from its aftermath without it (a write of
   // it still running keeps this one, since a first write never replaces a stored beat).
-  const beat = await deps.store.mutateDoc(runDocTarget("beat", beatId(runId, key, i)), normalizeBeat, (stored) =>
-    !stored
-      ? unwrittenBeat(key, node)
-      : stored.easedOff
-        ? stored
-        : { ...stored, easedOff: { at }, readThrough: Math.max(stored.readThrough, at) },
-  );
+  const beat = await deps.store.mutateDoc(runDocTarget("beat", beatId(runId, key, i)), normalizeBeat, (stored) => {
+    if (!stored) return unwrittenBeat(key, node);
+    if (stored.easedOff) return stored;
+    // Never before a pick already saved (a stale tab can ask for that): its effects are in the state, so its choice
+    // stays in the canon. chooseOption saves no pick past a cut, so every pick is canon either way.
+    const picked = stored.choices.filter((choice) => stored.choiceCanon[choice.id]).map((choice) => choice.at);
+    const cut = Math.max(at, ...picked);
+    return { ...stored, easedOff: { at: cut }, readThrough: Math.max(stored.readThrough, cut) };
+  });
   if (!beat) throw beatNotFound();
   // By where the reading stands, not by whether the beat was cut before: a retry of an Ease off that stopped after
   // saving its cut still removes the lookahead written from the uncut scene. Until the beat counts as read, no beat

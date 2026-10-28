@@ -62,19 +62,27 @@ const liStateOf = (state: RunState, li: LiId): LiState => state.lis[li] ?? defau
 const stageOf = (state: RunState, li: LiId) => liStateOf(state, li).stage;
 
 /**
- * What stands between him and the protagonist: trust and tension in words, open grievances (with their ids, so a
- * node can resolve them), a rupture, and what she has told him.
+ * What stands between them and the protagonist: trust and tension in words, open grievances (with their ids, so a
+ * node can resolve them), a rupture, and what the protagonist has told them. The grievances shown are the newest
+ * three, the rupture's and those `also` names (the ones a node may resolve), or every one with "all" (the planner).
  * ponytail: written beside the scene card rather than on it, so the card keeps M1's 250-token budget; fold it into
  * otomeSceneCard once its budget is re-measured with these lines.
  */
-export function betweenYou(unit: Pick<Unit, "name">, liState: LiState): string {
+export function betweenYou(unit: Pick<Unit, "name">, liState: LiState, also: readonly string[] | "all" = []): string {
   const trust = TRUST_WORDS[Math.max(0, Math.min(6, liState.trust + 3))];
   const tension = TENSION_WORDS[Math.max(0, Math.min(3, liState.tension))];
   const open = liState.grievances.filter(
     (grievance) => grievance.status === "open" || grievance.status === "festering",
   );
+  const ruptureId = liState.rupture?.grievanceId;
+  const shown =
+    also === "all"
+      ? open
+      : open.filter(
+          (grievance, index) => index >= open.length - 3 || grievance.id === ruptureId || also.includes(grievance.id),
+        );
   const lines = [`Between ${unit.name} and the protagonist: trust ${trust}, tension ${tension}.`];
-  for (const grievance of open.slice(-3)) {
+  for (const grievance of shown) {
     const holder = grievance.by === "li" ? unit.name : "the protagonist";
     lines.push(`Open grievance ${grievance.id} (${grievance.severity}, held by ${holder}): ${grievance.text}`);
   }
@@ -130,7 +138,9 @@ function bibleBlock(unit: Unit, liState: LiState): string {
   return [
     `id ${unit.id}: ${unit.name} (${pronounText(unit.pronouns)}), stage ${liState.stage}.`,
     `BIBLE: ${JSON.stringify(bible)}`,
-    betweenYou(unit, liState),
+    // Every unresolved grievance, so a node may resolve any of them. ponytail: the ceiling is GRIEVANCES_MAX (60) at
+    // up to 300 characters each; the upgrade path is clipping those older than the newest three to an id and excerpt.
+    betweenYou(unit, liState, "all"),
   ].join("\n");
 }
 
@@ -145,8 +155,8 @@ function webBlock(world: World, units: readonly Unit[]): string {
     .join("\n");
 }
 
-function sceneCardBlock(unit: Unit, liState: LiState): string {
-  return [`id ${unit.id}:`, otomeSceneCard(unit, liState), betweenYou(unit, liState)].join("\n");
+function sceneCardBlock(unit: Unit, liState: LiState, resolves: readonly string[]): string {
+  return [`id ${unit.id}:`, otomeSceneCard(unit, liState), betweenYou(unit, liState, resolves)].join("\n");
 }
 
 // ── P5: chapter plan (structured, 0.8, planner contract) ──
@@ -421,7 +431,7 @@ export function beatMessages({
     protagonistBlock(player),
     "",
     present.length ? "LOVE INTERESTS IN THIS NODE" : "No love interest is in this node.",
-    present.map((unit) => sceneCardBlock(unit, liStateOf(state, unit.id))).join("\n\n"),
+    present.map((unit) => sceneCardBlock(unit, liStateOf(state, unit.id), node.resolves ?? [])).join("\n\n"),
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
     "",

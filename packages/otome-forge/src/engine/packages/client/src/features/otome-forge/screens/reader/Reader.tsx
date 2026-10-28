@@ -134,6 +134,8 @@ export function Reader({ runKey, chapterKey, view, startNode, onExit, onHome }: 
     <div
       ref={rootRef}
       className="of-reader"
+      // A click on the stage or the dialogue box focuses the reader itself, so the keys go on working after it.
+      tabIndex={-1}
       data-hidden={!showUi}
       onKeyDown={onKeyDown}
       onFocus={() => {

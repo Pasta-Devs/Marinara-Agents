@@ -21,8 +21,13 @@
 //   oldest left out first. Stale or pending memory catches up in the background; a failed one waits for Retry;
 // - always: the irrevocable decisions, every big choice of a completed chapter (GF's continuity block), so a summary
 //   that drops one never undoes it.
-// Both paths keep the knowledge boundary: a chapter with an audience reaches only its own love interest's reader, or
-// a scene he is in.
+// The knowledge boundary: on both paths a `chat` source (a date) reaches only its own love interest's reader, or a
+// scene they are in. A route, repair or story chapter (M2a writes none) is held to its own love interest only by the
+// canonical history and the decisions block (mayKnow). Once memory is ready, a recall that names only `cast` (P5 and
+// P6 do) gets it in the kit's overview, in its recent canon and in its recalled details, whoever is in the scene: the
+// kit holds a Character Story back from another `reader` alone, and then only outside the overview. The plan accepts
+// the shared overview until R3 ("Shared overview"); M2b, which writes these chapters, must apply mayKnow to all
+// three, or use the canonical history for them.
 import { forgeCanonicalSegments } from "@forge-kit/player-choices-server.mjs";
 import { estimateTextTokens, sliceTextToTokenBudget } from "@forge-kit/shared-token-estimator.mjs";
 import type { ForgeMemorySource, ForgeRecallOptions } from "@forge-kit/story-memory.mjs";

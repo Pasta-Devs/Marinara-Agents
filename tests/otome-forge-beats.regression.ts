@@ -3,10 +3,12 @@
 // replay changes nothing; Rewrite only before a choice; Ease off cuts the canon with its marker and makes no model
 // call; a refusal is a 422 that writes nothing; the lookahead and the player's own request write a beat once; moment
 // and confrontation nodes are written as beats; a LI's thought before stage 2 gets the repair turn, under his first
-// name too; Cancel stops a write; a chapter's grants land once; every prompt keeps the earlier chapters and their big
-// choices when memory cannot answer, never another man's private canon; a rewrite never replaces a beat played
-// meanwhile; a pick whose effects were lost lands when its beat is read; Ease off removes the lookahead on a retry and
-// when the lookahead is saved just after the cut; and a kept line is kept once.
+// name too, and one thought per scene counts every branch a player can read; Cancel stops a write; a chapter's grants
+// land once; every prompt keeps the earlier chapters and their big choices when memory cannot answer, never another
+// man's private canon; a rewrite never replaces a beat played meanwhile; a pick whose effects were lost lands when its
+// beat is read; Ease off removes the lookahead on a retry, when the lookahead is saved just after the cut, and when
+// the cut lands between the lookahead's reads of the beat it follows; a pick past the cut changes nothing, also when
+// the cut lands while the pick is saved; an Ease off before a saved pick keeps the pick; and a kept line is kept once.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -357,6 +359,30 @@ test("a love interest's thought under his first name alone keeps the stage and o
     typeof normalizeBeatReply(reply(thought("Kai")), { node: at, units, state: open, last: false }),
     "object",
   );
+  // Every choice is played, one option each: a thought on the mainline and one in a branch, or one in a branch of
+  // each of two choices, makes two in the scene; one in each option of the same choice is still one.
+  const option = (label: string, lines: object[]) => ({
+    text: label,
+    selection: { kind: "action", text: `You ${label.toLowerCase()}.` },
+    segments: lines.length ? lines : [{ speaker: "", text: "The rain eases." }],
+  });
+  const choice = (index: number, first: object[], second: object[] = []) => ({
+    kind: "small",
+    at: index,
+    options: [option(`Stay ${index}`, first), option(`Leave ${index}`, second)],
+  });
+  const scene = (lines: object[], choices: object[]) => ({
+    segments: [{ speaker: "", text: "Rain on the glass." }, { speaker: "", text: "The lamp hums." }, ...lines],
+    choices,
+  });
+  const check = (value: ReturnType<typeof scene>) =>
+    String(normalizeBeatReply(value, { node: at, units, state: open, last: false }));
+  assert.match(check(scene([thought("Kai")], [choice(0, [thought("Kai")])])), /at most one thought line/);
+  assert.match(
+    check(scene([], [choice(0, [thought("Kai")]), choice(1, [thought("Kai")])])),
+    /at most one thought line/,
+  );
+  assert.equal(check(scene([], [choice(0, [thought("Kai")], [thought("Kai Arden")])])), "[object Object]");
 });
 
 test("a declined scene can be eased off from the declined panel: no call, read, and the story goes on without it", async () => {
@@ -678,6 +704,147 @@ test("Ease off removes the lookahead on a retry, and a lookahead saved just afte
   assert.equal(await u.store.readDoc(beatId(u.runId, "main-1", 1), normalizeBeat), null, "the stale lookahead is gone");
   await u.call("POST", beatPath, {}, node(1));
   assert.ok(u.calls.at(-1)!.messages.at(-1)!.content.includes(EASE_OFF_MARKER), "beat 1 follows the cut scene");
+});
+
+test("a pick past an Ease off cut changes nothing, even while the cut beat is not counted as read", async () => {
+  const told = beatReply({
+    choices: [
+      {
+        kind: "small",
+        at: 2,
+        options: [
+          {
+            text: "Tell him about your brother",
+            selection: { kind: "dialogue", text: "My brother drowned here." },
+            segments: [{ speaker: "Kai", text: "I know." }],
+            effects: [{ li: KAI, trust: 1, disclose: "She told him her brother drowned." }],
+          },
+          {
+            text: "Say nothing",
+            selection: { kind: "action", text: "You watch the lamp turn." },
+            segments: [{ speaker: "", text: "The silence stretches." }],
+          },
+        ],
+      },
+    ],
+  });
+  const t = await plannedWorld("r-cutp-aaaaaa", (i) => (i === 0 ? told : beatReply()));
+  await t.call("POST", beatPath, {}, node(0));
+  await t.settle();
+  // The state write of the cut's finish fails on every attempt: the cut is saved, the beat is not counted as read.
+  for (let attempt = 0; attempt < 4; attempt += 1) t.fake.interfere(stateId(t.runId));
+  assert.equal((await t.call("POST", `${beatPath}/ease-off`, { segment: 0 }, node(0))).status, 409);
+  assert.deepEqual((await t.store.readDoc(beatId(t.runId, "main-1", 0), normalizeBeat))!.easedOff, { at: 0 });
+  const before = await t.state();
+  assert.equal(before.chapters["main-1"]!.beatsRead, 0);
+  const picked = await t.call("POST", `${beatPath}/choose`, { choice: "choice-1", option: "option-1" }, node(0));
+  assert.equal(picked.status, 200);
+  assert.equal(picked.body.remembered, false);
+  assert.deepEqual((await t.store.readDoc(beatId(t.runId, "main-1", 0), normalizeBeat))!.choiceCanon, {});
+  assert.deepEqual(await t.state(), before, "no effect of a choice the story never holds");
+  const retried = await t.call("POST", `${beatPath}/ease-off`, { segment: 0 }, node(0));
+  assert.equal(retried.status, 200);
+  assert.deepEqual(retried.body.grants, [{ source: "beat", starlight: 30 }]);
+  assert.equal((await t.state()).lis[KAI]!.trust, 0);
+
+  // The cut lands while the pick is being saved: the pick read the beat before the cut, and its write finds the cut.
+  const u = await plannedWorld("r-cutq-aaaaaa", (i) => (i === 0 ? told : beatReply()));
+  await u.call("POST", beatPath, {}, node(0));
+  await u.settle();
+  const first = beatId(u.runId, "main-1", 0);
+  const update = u.fake.documents.update;
+  let eased: ReturnType<typeof u.call> | null = null;
+  u.fake.documents.update = async (input) => {
+    if (input.id === first && !eased && (input.data as Beat).choiceCanon?.["choice-1"]) {
+      eased = u.call("POST", `${beatPath}/ease-off`, { segment: 0 }, node(0));
+      await eased;
+    }
+    return update(input);
+  };
+  const raced = await u.call("POST", `${beatPath}/choose`, { choice: "choice-1", option: "option-1" }, node(0));
+  assert.equal((await eased!)?.status, 200);
+  assert.equal(raced.status, 200);
+  assert.equal(raced.body.remembered, false);
+  const cut = (await u.store.readDoc(first, normalizeBeat))!;
+  assert.deepEqual([cut.easedOff, cut.choiceCanon], [{ at: 0 }, {}]);
+  assert.equal((await u.state()).lis[KAI]!.trust, 0, "no effect of a pick the cut came before");
+});
+
+test("an Ease off before a pick already saved keeps that pick in the canon", async () => {
+  const t = await plannedWorld("r-cutb-aaaaaa", (i) => (i === 0 ? twoChoices() : beatReply()));
+  await t.call("POST", beatPath, {}, node(0));
+  await t.settle();
+  const choose = (choice: string, option: string) => t.call("POST", `${beatPath}/choose`, { choice, option }, node(0));
+  assert.equal((await choose("choice-2", "option-1")).status, 200);
+  assert.equal((await choose("choice-1", "option-1")).body.remembered, true);
+  // A stale tab still at the first line eases off there: the cut moves to the last pick, whose effects are applied.
+  const eased = await t.call("POST", `${beatPath}/ease-off`, { segment: 0 }, node(0));
+  assert.equal(eased.status, 200);
+  assert.deepEqual(eased.body.beat.easedOff, { at: 2 });
+  assert.deepEqual(eased.body.grants, [{ source: "beat", starlight: 30 }]);
+  const stored = (await t.store.readDoc(beatId(t.runId, "main-1", 0), normalizeBeat))!;
+  assert.deepEqual(
+    canonicalSegments(stored, "Ines")!.map((segment) => segment.text),
+    [
+      "The lamp hisses.",
+      "[Canonical player choice by Ines: Greet him.]",
+      "Evening, keeper.",
+      "Hm.",
+      "You came back. How inefficient of you.",
+      "Someone had to.",
+      "[Canonical player choice by Ines: Tell him about your brother.]",
+      "My brother drowned here.",
+      "I know.",
+      EASE_OFF_MARKER,
+    ],
+  );
+  const state = await t.state();
+  assert.equal(state.lis[KAI]!.trust, 1);
+  assert.deepEqual(
+    state.lis[KAI]!.disclosures.map((item) => item.text),
+    ["She told him her brother drowned."],
+    "what the state holds is what the story says",
+  );
+});
+
+test("an Ease off between the lookahead's two reads of the beat it follows stops that lookahead", async () => {
+  const t = await plannedWorld("r-eas4-aaaaaa");
+  const getById = t.fake.documents.getById;
+  const first = beatId(t.runId, "main-1", 0);
+  let reads = 0;
+  let eased: ReturnType<typeof t.call> | null = null;
+  // The lookahead's generateBeat reads beat 0 twice (the beat it follows, and the story so far); the cut lands just
+  // before the second read, whichever of the two it is.
+  t.fake.documents.getById = async (packageId, id) => {
+    if (id === first && !eased && t.fake.rows.has(id) && new Error().stack?.includes("generateBeat")) {
+      reads += 1;
+      if (reads === 2) {
+        eased = t.call("POST", `${beatPath}/ease-off`, { segment: 1 }, node(0));
+        await eased;
+      }
+    }
+    return getById(packageId, id);
+  };
+  await t.call("POST", beatPath, {}, node(0));
+  await t.settle();
+  assert.equal((await eased!)?.status, 200);
+  assert.equal(
+    await t.store.readDoc(beatId(t.runId, "main-1", 1), normalizeBeat),
+    null,
+    "the stale lookahead is not kept",
+  );
+  assert.ok(
+    t.logs.some(
+      (entry) =>
+        entry.level === "warn" &&
+        entry.message.includes("Lookahead for") &&
+        String(entry.args[2]).includes("The scene before this one changed"),
+    ),
+  );
+  assert.equal((await t.call("POST", beatPath, {}, node(1))).status, 200);
+  const next = t.calls.at(-1)!.messages.at(-1)!.content;
+  assert.ok(next.includes(EASE_OFF_MARKER), "beat 1 follows the cut scene");
+  assert.ok(!next.includes("Someone had to."));
 });
 
 test("keeping a line twice keeps it once; letting it go removes it", async () => {
