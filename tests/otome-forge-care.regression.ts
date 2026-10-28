@@ -9,8 +9,8 @@
 // and the route silences the Engine's request lines (a timestamped line would date a cycle day); every response is
 // no-store;
 // the server's templates are exactly the client's careLines, and its speak request has no cacheKey; the calendar
-// reads birthdays, anniversaries in the request's zone (the Love Timeline's dated firsts, M2b's stages among them) and
-// (defensively) banner end dates, labelled with story text.
+// reads birthdays, anniversaries in the request's zone (the Love Timeline's firsts, M2b's stages among them, never
+// M4's Snapshots or couple sets) and (defensively) banner end dates, labelled with story text.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
@@ -694,12 +694,29 @@ test("the calendar lists birthdays in cast order and the story's first day on th
 test("the calendar labels Love Timeline firsts and M4's banners from story text, and skips a bad row rather than fail", async () => {
   const t = await careWorld("r-care12-aaaaaa");
   const run = (await readRun(t.store, t.runId))!;
-  // The Love Timeline's dated firsts, each on its own day; an entry with no real time, or for someone no longer in the
-  // cast, is left out.
+  // The Love Timeline's firsts, each on its own day; an entry with no real time, or for someone no longer in the
+  // cast, is left out. So are the things won (M4's Snapshots and couple sets, written as wish/pull.ts and
+  // items/open.ts write them): a ten-pull's vignettes would otherwise fill Coming up on that day every year.
+  const vignette = (n: number) =>
+    `Snapshot ${n}: he leaves the umbrella by your door without a word. It is still warm from his hand.`;
   run.state.timeline = [
     { at: "2026-11-02T23:30:00.000Z", li: KAI, kind: "first-kiss", text: "  The first kiss,\n at the lamp.  " },
     { at: "not a time", li: KAI, kind: "first-date", text: "A date with no day." },
     { at: "2026-11-05T10:00:00.000Z", li: "li-gone-zz99", kind: "first-call", text: "Someone long gone." },
+    ...[1, 2, 3, 4, 5].map((n) => ({
+      at: "2026-11-02T12:00:00.000Z",
+      li: KAI,
+      kind: "snapshot",
+      text: vignette(n),
+      ref: `memories-0-s${n}`,
+    })),
+    {
+      at: "2026-11-02T12:00:00.000Z",
+      li: KAI,
+      kind: "couple",
+      text: "Night Court Coat · Lantern Dress",
+      ref: "couple:his-wardrobe-0-f+my-wardrobe-0-f",
+    },
   ];
   run.units.find((unit) => unit.id === SOL)!.bible!.birthday = "13-40";
   const banners = [

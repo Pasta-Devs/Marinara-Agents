@@ -508,8 +508,9 @@ export interface PhoneCloseResult {
 
 /**
  * GET /runs/:run/calendar: the story's days. `md` is "MM-DD", every year; `day` is a local date ("YYYY-MM-DD").
- * Anniversaries are the world's first day and the Love Timeline's dated firsts; `label` is shown as written (story
- * text) and `year`, when given, is the year it happened (none is drawn before it).
+ * Anniversaries are the world's first day and the Love Timeline's firsts (each stage reached, each `first-<what>`; its
+ * Snapshots and couple sets stay in the Album); `label` is shown as written (story text) and `year`, when given, is
+ * the year it happened (none is drawn before it).
  */
 export interface CalendarView {
   birthdays: Array<{ li: LiId; md: string }>;

@@ -38,10 +38,19 @@ function localDay(value: string): string | null {
 }
 
 /**
+ * The Love Timeline kinds that come back every year: a stage a love interest reaches (`stage-<n>`, M2b, labelled with
+ * the route chapter's title) and a `first-<what>` (a first date, the first Read Him, …). M4's Snapshots (`snapshot`,
+ * one per new Snapshot won, labelled with its whole vignette) and couple sets (`couple`, two looks' names) are things
+ * won, several a day on a ten-pull: on the calendar they would fill Coming up every year, so they stay on the Album's
+ * Love Timeline only.
+ */
+const ANNIVERSARY_KIND = /^(?:stage-\d+|first-[a-z0-9-]+)$/;
+
+/**
  * The calendar of a run on the local day `today`; `banners` are the data of the run's banner documents.
  *   birthdays      each love interest's bible birthday, in cast order;
- *   anniversaries  the day the story began (labelled with the world's title) and each dated first of the Love
- *                  Timeline (labelled with its entry's text), oldest first, with the year it happened;
+ *   anniversaries  the day the story began (labelled with the world's title) and each first of the Love Timeline
+ *                  (ANNIVERSARY_KIND, labelled with its entry's text), oldest first, with the year it happened;
  *   bannerEnds     the last day of each banner still running, soonest first.
  */
 export function calendarView(run: RunDocuments, banners: readonly unknown[], today: string): CalendarView {
@@ -61,11 +70,10 @@ export function calendarView(run: RunDocuments, banners: readonly unknown[], tod
     dated.push({ day, row: { md: day.slice(5), label: text, ...(li ? { li } : {}), year: Number(day.slice(0, 4)) } });
   };
   add(localDay(run.world.createdAt), run.world.title);
-  // The Love Timeline is the story's dated firsts: M2b dates each stage a love interest reaches (`stage-<n>`, labelled
-  // with the route chapter's title). Each entry shows on its own local day, for love interests still in the cast.
+  // Each first shows on its own local day, for love interests still in the cast.
   const cast = new Set(units.map((unit) => unit.id));
   for (const entry of run.state.timeline) {
-    if (cast.has(entry.li)) add(localDay(entry.at), entry.text, entry.li);
+    if (cast.has(entry.li) && ANNIVERSARY_KIND.test(entry.kind)) add(localDay(entry.at), entry.text, entry.li);
   }
   const anniversaries = dated.sort((a, b) => a.day.localeCompare(b.day)).map(({ row }) => row);
 

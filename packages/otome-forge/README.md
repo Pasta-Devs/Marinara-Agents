@@ -69,7 +69,7 @@ Wishes cost Starlight you earn by playing (100 each, 1,000 for ten; there is no 
 
 ## Remind Me and the period tracker
 
-**Remind Me** (the calendar button under **Who’s home** on Home) shows a month at a time: each love interest's birthday, the day your story began, the dated firsts of your Love Timeline, and your own birthday if you add it, which stays on this device and is never sent with a prompt. The last day of each running Wish banner joins it. Arrow keys move through the days, Home and End to the ends of a week, Page Up and Page Down by month; **Coming up** lists the next two months.
+**Remind Me** (the calendar button under **Who’s home** on Home) shows a month at a time: each love interest's birthday, the day your story began, the firsts of your Love Timeline, such as each stage you reach with a love interest (Snapshots and couple sets stay in the Album), and your own birthday if you add it, which stays on this device and is never sent with a prompt. The last day of each running Wish banner joins it. Arrow keys move through the days, Home and End to the ends of a week, Page Up and Page Down by month; **Coming up** lists the next two months.
 
 **Settings → Tracker** holds an optional period tracker, for anyone who has periods, off by default:
 
