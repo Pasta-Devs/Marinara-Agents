@@ -2036,6 +2036,8 @@ async function main() {
       assert.doesNotMatch(destinationText, /this memory/u);
       await page.locator("[data-ltm-destination-stay]").click();
       await destinationDescription.waitFor({ state: "detached" });
+      // Stay hands focus back to the Review button on the next frame; moving on earlier lets it steal the picker's.
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]:focus').waitFor();
       const focusedPlaceButton = memoryScope.locator("[data-ltm-scope-picker-trigger]:focus");
       await choosePlaceByKeyboard("vault", "character", "character:character-a");
       await page.locator("[data-ltm-unsaved-stay]:focus").waitFor();
