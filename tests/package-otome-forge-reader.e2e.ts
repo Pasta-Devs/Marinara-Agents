@@ -4,7 +4,8 @@
 // saved (Next sends it again, nothing loops, Ease off comes back), → from the Next button, the declined panel and
 // Retry, Ease off with "Veil this from now on" (neither closes while its request runs), a big choice, Ease off gone
 // once the scene's end is saved, the chapter's Starlight and affection with focus on its heading; then a replay at
-// reduced motion that changes nothing, and a chapter with no title in the reader and on the Story screen.
+// reduced motion that changes nothing, whose Ease off on a branch puts no line it skips in the backlog, and a chapter
+// with no title in the reader and on the Story screen.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-reader.e2e.ts
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -421,20 +422,24 @@ async function hold(page: Page, url: string) {
   return release;
 }
 
-/** Shows the line whole if it is still typing, then goes on. */
+/**
+ * Goes on once the line has typed itself out. It waits rather than reading data-done once and pressing to show the
+ * line whole: a line that finished between that read and the press made the press go on, and the second one a step
+ * too far (CI's real-Engine runner).
+ */
 async function next(root: Locator) {
   const button = root.locator(".of-next");
-  if ((await button.getAttribute("data-done")) !== "true") await button.click();
+  await expect(button).toHaveAttribute("data-done", "true");
   await button.click();
 }
 
 const line = (root: Locator) => root.locator(".of-dialogue .of-line");
 
-/** The same with the keyboard, from the focused Next button (or wherever focus is): → finishes the line, then goes on. */
+/** The same with the keyboard (→), from the focused Next button (or wherever focus is). */
 async function nextByKey(page: Page, root: Locator, fromNext = true) {
   const button = root.locator(".of-next");
   if (fromNext) await button.focus();
-  if ((await button.getAttribute("data-done")) !== "true") await page.keyboard.press("ArrowRight");
+  await expect(button).toHaveAttribute("data-done", "true");
   await page.keyboard.press("ArrowRight");
 }
 
@@ -467,6 +472,18 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   // Faces line by line (initials and a labelled face without art); her thought in pale italics; his rare thought.
   await expect(line(root)).toContainText("Rain needles the glass dome.");
   await expect(root.getByRole("heading", { level: 1 })).toContainText("The Observation Room");
+  // A press while the line types shows it whole and goes no further. Pressed and read back in one task (React applies a
+  // press in microtasks, before any timer can type on), so it never races the typing; a runner too slow to catch the
+  // line typing skips it.
+  const pressed = await root.locator(".of-next").evaluate(async (button: HTMLElement) => {
+    if (button.dataset.done === "true") return null;
+    button.click();
+    for (let turn = 0; turn < 5; turn += 1) await Promise.resolve();
+    const rest = button.closest(".of-dialogue")?.querySelector(".of-line-rest");
+    return { done: button.dataset.done, typing: !!rest };
+  });
+  if (pressed) expect(pressed).toEqual({ done: "true", typing: false });
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
   // A click on the dialogue box goes on, and the keys still work after it: focus stays in the reader.
   await expect(root.locator(".of-next")).toHaveAttribute("data-done", "true");
   await line(root).click();
@@ -581,7 +598,7 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   expect(pageErrors).toEqual([]);
 });
 
-test("Otome Forge reader: a replay at reduced motion offers the first choice again and changes nothing", async ({
+test("Otome Forge reader: a replay at reduced motion offers the first choice again, changes nothing, and logs no line an Ease off skips", async ({
   page,
 }, testInfo) => {
   test.setTimeout(120_000);
@@ -609,6 +626,19 @@ test("Otome Forge reader: a replay at reduced motion offers the first choice aga
   expect(posts(stub, "/choose")).toHaveLength(0);
   expect(posts(stub, "/read")).toHaveLength(0);
   await page.screenshot({ path: testInfo.outputPath("06-replay.png") });
+
+  // Eased off on the pick's line, the scene jumps to its aftermath: the backlog has the lines read, never the rest of
+  // the branch the jump skipped.
+  await root.getByRole("button", { name: "Ease off" }).click();
+  await page.getByRole("dialog", { name: "Ease off?" }).getByRole("button", { name: "Ease off" }).click();
+  await page.getByRole("dialog", { name: "Veil this from now on?" }).getByRole("button", { name: "Not now" }).click();
+  await expect(line(root)).toContainText("The moment passes.");
+  await root.getByRole("button", { name: "Backlog" }).click();
+  const backlog = page.getByRole("dialog", { name: "Backlog" });
+  await expect(backlog).toContainText("You lift one shoulder");
+  await expect(backlog).toContainText("The moment passes.");
+  await expect(backlog).not.toContainText("Of course. Curiosity.");
+  expect(posts(stub, "/ease-off"), "a replay's Ease off changes no canon").toHaveLength(0);
 });
 
 test("Otome Forge reader: a chapter with no title is named as untitled, never as loading or blank", async ({

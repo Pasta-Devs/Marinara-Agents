@@ -4,10 +4,11 @@
 // The kit's createForgeStoryMemory, wired to Otome's documents and generation core:
 // - `${R}:memory` holds the kit's store (records, overview, checkpoints, status), revision-checked. A write for a run
 //   that no longer exists is refused, and one that lands just after the run's delete is removed again.
-// - Sources come from S/memory/sources.ts. A `chat` source (a date, later a phone thread) never reaches the shared
-//   overview and is recalled only by its love interest's own reader or by a scene whose cast includes him. Recall
-//   always says who is present: a call that names neither `cast` nor `reader` recalls as a scene with nobody in it,
-//   so no private source can reach it by omission. Care data is never a source.
+// - Sources come from S/memory/sources.ts. A `chat` source (a love interest's route, repair or date chapter, later a
+//   phone thread) never reaches the shared overview and is recalled only by that love interest's own reader or by a
+//   scene whose cast includes them. Recall always says who is present: a call that names neither `cast` nor
+//   `reader` recalls as a scene with nobody in it, so no private source can reach it by omission. Care data is never
+//   a source.
 // - Summaries run on job `compress` on the background lane. `maintain` queues one job per run on the background
 //   queue, which holds the compress connection's background admission slot for the whole job (generateJson with lane
 //   "background"); a second call while it waits or runs makes the job go round once more. Every summary prompt ends its

@@ -99,6 +99,10 @@ export function mainChapterNumber(key: string): number | null {
   const match = /^main-(\d+)$/.exec(key);
   return match ? Number(match[1]) : null;
 }
+/** The love interest whose own chapter `key` is (`route-<li>-<stage>`, `repair-<li>-<n>`), or null for any other key. */
+export function chapterOwner(key: string): string | null {
+  return /^(?:route|repair)-(li-[a-z0-9-]+)-\d+$/.exec(key)?.[1] ?? null;
+}
 
 /** `${R}:chapter:${key}`: a chapter's plan. */
 export const chapterId = (runId: string, key: string) => `${runId}:chapter:${key}`;
