@@ -9,7 +9,8 @@ Seasonal story events are optional, self-contained story and combat adventures i
 - At a main chapter boundary, the player can choose the event instead of the next chapter: Chapters → What happens next offers it beside the next chapter and any Character Story while the next chapter is not forged yet and no Character Story is open (otherwise Events → Story events starts it), and starts it the way a Character Story starts. Detailed chapters are written then, grounded in current story continuity and authored character canon.
 - With Pre-forge story on, a started event is pre-forged like a main chapter on the same chain: scenes ahead at no Vigor cost, fights designed after the scene before them, art in Story and images, and the same pre-forge bar, Cancel and Resume. Pre-forge stops once the event ends or events are turned off. A main chapter the open event holds pre-forges nothing until the event is finished, ends or events are turned off, and a pending choice in that chapter does not pause the event or refuse its scenes; afterwards it holds the main story again.
 - The event runs for 21 local-calendar days using the existing timezone contract. Persist its window and expiry; do not recreate it on refresh, clock changes or restart. Skip missed windows instead of generating a paid backlog.
-- Expiry closes new progress and rewards. Played scenes remain in Chapters for rereading. Disabling events must preserve earned rewards and played history.
+- An event is played on Normal only: its progress, fights and rewards have no Hard or Very Hard, and its map offers none. A cleared event fight neither loads nor starts again.
+- Expiry closes new progress and rewards. Played scenes remain in Chapters for rereading, in the timeline after the chapter the event followed, among the Character Stories after that chapter in the order they were opened. Disabling events must preserve earned rewards and played history.
 
 ## Reuse and guarantees
 
