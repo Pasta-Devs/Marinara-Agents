@@ -232,6 +232,19 @@ const storyWriterOwnedSourcePaths = [
 ];
 // The reader's artwork and textures, fetched by URL from the package asset route.
 const storyWriterServedAssetPaths = ["story-writer-mari.webp", "wood-desk.webp", "paper-light.webp", "paper-dark.webp"];
+// Otome Forge is written here in Story Writer's layout and keeps its saves through api.runtime.persistence, so it
+// needs no host runtime overlay. Listed in no catalog while it is being built (scripts/catalog-incomplete.mjs).
+const otomeForgeSourceRoot = join(packagesDir, "otome-forge/src/engine");
+const otomeForgeOwnedSourcePaths = [
+  "packages/client/src/features/otome-forge",
+  "packages/server/src/services/otome-forge",
+];
+// The forge kit: plain .mjs modules Gacha Forge pastes into its bundles and Otome Forge imports as
+// `@forge-kit/<module>.mjs`. Package sources are copied into a temporary build root, so a relative import out of it
+// cannot resolve; both bundles alias the name instead. The gates and source capture skip files outside the build root.
+// ponytail: points at Gacha Forge's src/ until the kit moves to sources/forge-kit (Otome Forge plan M0a); then
+// repoint this and the "@forge-kit/*" path in tests/tsconfig.regressions.json there and drop this note.
+const forgeKitRoot = join(packagesDir, "gacha-forge/src");
 // Package clients use the Engine's stores, services and components through `__MARINARA_HOST__` (capability API 1.341):
 // every feature build stacks these adapters over the vendored modules, so no client bundles a copy that keeps its own
 // state (#1478: the UI store copy reset Engine settings; #1487). scripts/client-host-gates.mjs holds each bundle to it.
@@ -850,6 +863,37 @@ const features = [
       assets: { paths: storyWriterServedAssetPaths },
     },
   },
+  {
+    id: "otome-forge",
+    version: "0.0.1",
+    minEngineVersion: "2.5.1",
+    // The browser tab's openConnection prop and the debugMode field of /generate/raw arrived in capability API 1.386.
+    capabilityApi: Object.freeze({ major: 1, minor: 386 }),
+    builtAgainst: { engineVersion: "2.5.1", engineCommit: "a3ceb0162b1629c6b99885759b11794aa6274869" },
+    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
+    name: "Otome Forge",
+    description:
+      "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. An early test build.",
+    category: "misc",
+    kind: ["agent"],
+    modes: ["conversation", "roleplay", "game"],
+    permissions: ["routes", "storage", "ui"],
+    serverImport: "packages/server/src/services/otome-forge/server-entry.ts",
+    serverEntry: true,
+    clientImport: "packages/client/src/features/otome-forge/client-entry.tsx",
+    packageSourceRoot: otomeForgeSourceRoot,
+    ownedSourcePaths: otomeForgeOwnedSourcePaths,
+    // The fonts are embedded in client.js as data: URIs; their licence ships beside them.
+    assetPaths: ["fonts/OFL.txt"],
+    libraryHidden: true,
+    contributions: {
+      slots: ["home-browser-tab"],
+      homeBrowserTab: {
+        label: "Otome Forge",
+        ariaLabel: "Open Otome Forge",
+      },
+    },
+  },
 ];
 
 const requestedFeatureIds = new Set(process.argv.slice(2));
@@ -1074,7 +1118,7 @@ export async function selfCheck() {
         js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
       },
       external: HOST_SERVER_EXTERNALS,
-      alias: { "@marinara-engine/shared": sharedBundleEntry },
+      alias: { "@marinara-engine/shared": sharedBundleEntry, "@forge-kit": forgeKitRoot },
       nodePaths: engineNodePath.split(delimiter),
       metafile: true,
       outfile: output,
@@ -1159,7 +1203,7 @@ async function bundleClientEntry(feature, entry, output, metafilePath, buildRoot
       "import.meta.env.PROD": "true",
       "import.meta.env.MODE": '"production"',
     },
-    alias: { "@marinara-engine/shared": sharedBundleEntry },
+    alias: { "@marinara-engine/shared": sharedBundleEntry, "@forge-kit": forgeKitRoot },
     nodePaths: engineNodePath.split(delimiter),
     metafile: true,
     outfile: output,
@@ -2210,7 +2254,7 @@ for (const feature of selectedFeatures) {
           ? "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
           : feature.id === "noodle"
             ? "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
-            : feature.id === "slurp2" || feature.id === "story-writer"
+            : feature.id === "slurp2" || feature.id === "story-writer" || feature.id === "otome-forge"
               ? `https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/${feature.id}/README.md`
               : `https://github.com/Pasta-Devs/Marinara-Agents#${feature.id}`,
     });

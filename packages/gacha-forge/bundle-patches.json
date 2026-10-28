@@ -2070,6 +2070,72 @@
               "replace": "forgeFormationErrorLabel(o)||\"Couldn't set up the battle.\"+(o?\" (\"+u(String(o))+\")\":\"\"))+\"</span>\""
             }
           ]
+        },
+        {
+          "version": "1.26.0",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.25.2\"",
+              "replace": "ds=\"1.26.0\""
+            },
+            {
+              "find": "var oy=[{version:null,fixed:[",
+              "replace": "var oy=[{version:null,new:[\"What happens next in Chapters can offer the season's story event beside the next chapter and any Character Story. It starts the way a Character Story does: the next chapter waits until you finish it, and while it is open its card takes the chapter's place.\",\"Pre-forge now writes story events too: scenes are written ahead at no Vigor cost, each fight is designed after the scene before it, Story and images paints their art, and the event's map has the pre-forge bar with Cancel.\"],fixed:[\"An event's loader and map show its title instead of \\\"Chapter event-1\\\", and a chapter held by an open event opens the event instead of an error.\",\"Chapters reads the season's event again when your progress changes, so What happens next offers the event as soon as you finish a chapter, without a reload.\"]},{version:\"1.25.2\",fixed:["
+            },
+            {
+              "find": "e.innerHTML=bp(a.chapters,a.nextChapter,a.nextUnlocked,{offers:r,beats:a.bondBeats,heldBy:s})",
+              "replace": "e.innerHTML=bp(a.chapters,a.nextChapter,a.nextUnlocked,{offers:r,beats:a.bondBeats,heldBy:s,event:forgeSeasonalNextStory(this)})"
+            },
+            {
+              "find": "(h.length&&!i&&a?Ly(d,h,n):My(d,!!a,i))",
+              "replace": "(!i&&r&&r.event&&r.event.opened?forgeSeasonalOpenCard(r.event,Zs):(h.length||r&&r.event)&&!i&&a?Ly(d,h,n,r&&r.event):My(d,!!a,i))"
+            },
+            {
+              "find": "function Ly(t,e,a){",
+              "replace": "function Ly(t,e,a,forgeEvent){"
+            },
+            {
+              "find": "\"Begin\")).join(\"\")+\"</div></div></article>\"}",
+              "replace": "\"Begin\")).join(\"\")+(forgeEvent?forgeSeasonalChoiceRow(forgeEvent,tt(t),Zs):\"\")+\"</div></div></article>\"}"
+            },
+            {
+              "find": "else i&&i.error===\"bond-chapter-open\"&&i.heldById&&!this._bondUnit?(this._enterBond(",
+              "replace": "else i&&i.error===\"story-event-open\"&&forgeSeasonalHeld(this,i)?void 0:i&&i.error===\"bond-chapter-open\"&&i.heldById&&!this._bondUnit?(this._enterBond("
+            },
+            {
+              "find": "bondLabel:l=\"\",reading:c=!1,skip:h=!1}){let d=a===\"banner\"?ky(r):a===\"art\"?_y(r):l?c?np(l):Ey(l)",
+              "replace": "bondLabel:l=\"\",reading:c=!1,skip:h=!1,forgeEvent:forgeEventTitle=\"\"}){let d=a===\"banner\"?ky(r):a===\"art\"?_y(r):forgeEventTitle?c?np(forgeEventTitle):forgeSeasonalForging(forgeEventTitle,Ai[0]):l?c?np(l):Ey(l)"
+            },
+            {
+              "find": "bondLabel:this._bondForgeLabel(),reading:this._chapterWritten()",
+              "replace": "bondLabel:this._bondForgeLabel(),reading:this._chapterWritten(),forgeEvent:forgeSeasonalLabel(this)"
+            },
+            {
+              "find": "bondName:l=\"\",bondPart:c=1}){let h=l?u(zt(l,c)):\"Chapter \"+tt(r)",
+              "replace": "bondName:l=\"\",bondPart:c=1,forgeEvent:forgeEventTitle=\"\"}){let h=forgeEventTitle?u(forgeEventTitle):l?u(zt(l,c)):\"Chapter \"+tt(r)"
+            },
+            {
+              "find": "bondName:this._bondName(),bondPart:this._bondPart,",
+              "replace": "bondName:this._bondName(),bondPart:this._bondPart,forgeEvent:forgeSeasonalLabel(this),"
+            },
+            {
+              "find": "{match:/:beat:bond-/,cost:\"tokens\",label:()=>\"Writing the next scene\"},",
+              "replace": "{match:/:beat:bond-/,cost:\"tokens\",label:()=>\"Writing the next scene\"},{match:/:beat:event-/,cost:\"tokens\",label:()=>\"Writing the next scene\"},{match:/:combat:event-/,cost:\"tokens\",label:()=>\"Designing a fight\"},"
+            },
+            {
+              "find": "hint:\"Writes a chapter's beats as soon as it is forged, so they open instantly.",
+              "replace": "hint:\"Writes the beats of a chapter or a story event as soon as it is forged, so they open instantly."
+            },
+            {
+              "find": "a:\"Off until you turn it on, per world, in Settings under Continuity. A forged chapter then writes all of its beats at once,",
+              "replace": "a:\"Off until you turn it on, per world, in Settings under Continuity. A forged chapter or a started story event then writes all of its beats at once,"
+            },
+            {
+              "find": "{k:\"What happens next\",a:\"Sometimes the story lets you choose: carry on with the main story, or follow one of your units for a while.\"}",
+              "replace": "{k:\"What happens next\",a:\"Sometimes the story lets you choose: carry on with the main story, follow one of your units for a while, or play the season's story event.\"}"
+            }
+          ]
         }
       ]
     },
@@ -3708,6 +3774,32 @@
             {
               "find": "fallback:()=>_r(runId,chapter,storyIndex,null,options.reader)",
               "replace": "fallback:()=>_r(runId,chapter,storyIndex,null,options.reader,true)"
+            }
+          ]
+        },
+        {
+          "version": "1.26.0",
+          "commits": [],
+          "edits": [
+            {
+              "find": "m=Number.isInteger(i)&&i>=1?i:Ta(g)?g:null",
+              "replace": "m=Number.isInteger(i)&&i>=1?i:Ta(g)||forgeSeasonalChapter(g)?g:null"
+            },
+            {
+              "find": "async function Yt(p,u,o){let i=pd(u),",
+              "replace": "async function Yt(p,u,o){let i=forgeSeasonalChapter(o)&&!await forgeSeasonalEvents.choiceActive(p,o)?\"off\":pd(u),"
+            },
+            {
+              "find": "if(!i||pd(i)!==\"art\"||nt(i).off)return null;",
+              "replace": "if(!i||pd(i)!==\"art\"||nt(i).off||!await forgeSeasonalEvents.choiceActive(p,u))return null;"
+            },
+            {
+              "find": "forgePlan=Number.isInteger(u)?await a.getById(n.id,f(p,u)):null",
+              "replace": "forgePlan=Number.isInteger(u)||forgeSeasonalChapter(u)?await a.getById(n.id,f(p,u)):null"
+            },
+            {
+              "find": "function forgeDesignFight(p,m,u,x){return Ph(p,m,u,x).then(g=>(g&&g.ok&&g.guide&&!g.cached&&rt(",
+              "replace": "function forgeDesignFight(p,m,u,x){return(forgeSeasonalChapter(u)?forgeSeasonalEvents.designFight(p,u,x):Ph(p,m,u,x)).then(async g=>(g&&g.ok&&g.guide&&!g.cached&&(!forgeSeasonalChapter(u)||await forgeSeasonalEvents.choiceActive(p,u))&&rt("
             }
           ]
         }

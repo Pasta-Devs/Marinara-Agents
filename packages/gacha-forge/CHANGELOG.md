@@ -1,3 +1,8 @@
+## 1.26.0 — 2026-10-28
+
+- **Chapters → What happens next** can offer the season's story event beside the next chapter and any Character Story, when the next chapter is not forged yet; otherwise **Events → Story events** starts it as before. It starts like a Character Story: its map opens and the next chapter waits. While it is open, its card takes the chapter's place.
+- Pre-forge now writes story events too: scenes ahead at no Vigor cost, each fight designed after the scene before it, art in **Story and images**, and the pre-forge bar with Cancel on the event's map. Written scenes can be played while the rest is written. It stops once the event ends.
+
 ## 1.25.2 — 2026-10-28
 
 - Backing out of a fight while it loads and entering another now loads the new fight, not the one you left. A fight request that never answers no longer blocks later fights.

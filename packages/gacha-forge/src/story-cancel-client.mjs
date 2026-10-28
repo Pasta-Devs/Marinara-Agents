@@ -11,7 +11,6 @@ const forgeStoryRequestPaths = new Set([
   "/story-event/choice",
   "/story-event/cg-art",
   "/story-event/beat/mark",
-  "/story-event/preforge",
   "/chapter-plan",
   "/bond-chapter/plan",
   "/beat",

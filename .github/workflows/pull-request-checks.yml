@@ -128,6 +128,8 @@ jobs:
           node tests/gacha-forge-background-work.regression.mjs
           node tests/gacha-forge-play-while-forging.regression.mjs
           node tests/gacha-forge-battle-load.regression.mjs
+          node tests/gacha-forge-event-preforge.regression.mjs
+          node tests/gacha-forge-event-choice.regression.mjs
 
           # Prints how much of the reference extension's interface the Beholder package actually
           # renders. It is here so the number is read from a run rather than asserted from
@@ -162,6 +164,9 @@ jobs:
 
           # Saucelings simulation and routes.
           npm run test:saucelings
+
+          # Otome Forge ids, store and the committed server bundle.
+          npm run test:otome-forge
 
           # Package localization catalogs.
           node scripts/tests/ui-translation-retention.regression.mjs
