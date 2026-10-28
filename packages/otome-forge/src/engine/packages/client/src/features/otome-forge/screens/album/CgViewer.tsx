@@ -50,7 +50,11 @@ export function CgViewer({ view, images, index, onIndex, onClose }: CgViewerProp
   const title = image?.title || (li ? t("ui.otomeForge.album.cgWith", { name: li.name }) : t("ui.otomeForge.album.cg"));
   const download = useImageDownload(image?.url ?? null, imageFilename(image?.url ?? "", `otome-forge-${title}`));
 
-  const step = (delta: number) => onIndex((index + delta + images.length) % images.length);
+  // Not while a save is in flight: its result would settle under the next image.
+  const step = (delta: number) => {
+    if (download.state === "saving") return;
+    onIndex((index + delta + images.length) % images.length);
+  };
   const stepRef = useRef(step);
   stepRef.current = step;
 

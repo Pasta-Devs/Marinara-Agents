@@ -63,27 +63,27 @@ export function useWearLook(runKey: string) {
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
   const [wearing, setWearing] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ owner: WardrobeOwner; message: string } | null>(null);
   const lock = useRef(false);
   const wear = async (owner: WardrobeOwner, look: string): Promise<boolean> => {
     if (lock.current) return false;
     lock.current = true;
     setWearing(`${owner}/${look}`);
-    setError(null);
+    setFailure(null);
     try {
       const { wardrobe } = await otome.post<WearResult>(`${runPath(runKey)}/wardrobe/wear`, { owner, look });
       queryClient.setQueryData(wardrobeQueryKey(runKey), wardrobe);
       await invalidateCollection(queryClient, runKey);
       return true;
-    } catch (failure) {
-      setError(otome.errorMessage(failure));
+    } catch (cause) {
+      setFailure({ owner, message: otome.errorMessage(cause) });
       return false;
     } finally {
       lock.current = false;
       setWearing(null);
     }
   };
-  return { wear, wearing, error };
+  return { wear, wearing, error: failure?.message ?? null, errorOwner: failure?.owner ?? null };
 }
 
 const ownerName = (t: ReturnType<typeof useTranslation>["t"], owner: WardrobeOwner, lis: RunLiView[]) =>
@@ -228,7 +228,7 @@ export function Wardrobe({ runKey, view, onOpenStory, initialOwner }: WardrobePr
         ) : (
           <p className="of-empty">{t("ui.otomeForge.wardrobe.none")}</p>
         )}
-        {wearing.error ? (
+        {wearing.error && wearing.errorOwner === owner ? (
           <p className="of-notice of-notice--error" role="alert">
             {wearing.error}
           </p>

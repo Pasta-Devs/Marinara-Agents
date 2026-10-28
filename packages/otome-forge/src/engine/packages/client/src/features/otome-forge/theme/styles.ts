@@ -2316,7 +2316,7 @@ ${R} .of-thread-divider .of-badge { margin-inline-start: 0; }
 ${R} .of-bubble-row { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 ${R} .of-bubble-row[data-who="player"] { align-items: flex-end; }
 ${R} .of-bubble-row[data-archived="true"] { opacity: 0.66; }
-${R} .of-bubble-row[data-pending="true"] .of-bubble { opacity: 0.78; }
+${R} .of-bubble-row[data-pending="true"] { opacity: 0.78; }
 ${R} .of-bubble {
   position: relative; display: flex; flex-direction: column; gap: 4px; max-width: 80%; padding: 9px 14px;
   border-radius: 20px; font-size: 0.95rem; line-height: 1.42; white-space: pre-wrap; overflow-wrap: anywhere;

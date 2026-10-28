@@ -59,14 +59,15 @@ export function localHour(timeZone: string, now: Date): number {
   return now.getHours();
 }
 
-/** The player's local date in `timeZone` (YYYY-MM-DD), so Home notices when a new day starts. */
+/** The player's local date in `timeZone` (YYYY-MM-DD), so Home notices when a new day starts; the device's own date when the zone can't be read. */
 export function localDay(timeZone: string, now: Date): string {
   try {
     return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(
       now,
     );
   } catch {
-    return now.toISOString().slice(0, 10);
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   }
 }
 

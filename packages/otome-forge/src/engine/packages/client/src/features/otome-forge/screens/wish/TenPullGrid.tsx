@@ -132,6 +132,14 @@ export function ItemDetail({
     if (autoFocus) titleRef.current?.focus({ preventScroll: true });
   }, [autoFocus, item.id]);
 
+  // A page that closes takes its own line with it, not one another screen started.
+  useEffect(
+    () => () => {
+      if (audio?.getSnapshot().speaking === voiceRef) audio.stopVoice();
+    },
+    [audio, voiceRef],
+  );
+
   const lineSegment = item.voicedLine && li ? { speaker: li.name, text: item.voicedLine } : null;
   const canVoice = !!lineSegment && !!audio?.wouldSpeak(lineSegment);
   const story = item.story?.key ?? null;
