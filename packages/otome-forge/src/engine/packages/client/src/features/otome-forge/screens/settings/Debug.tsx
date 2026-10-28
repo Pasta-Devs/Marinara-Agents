@@ -77,8 +77,10 @@ function MemorySection({ runKey }: { runKey: string }) {
           <button
             type="button"
             className="of-button of-button--quiet of-glass of-button--small"
-            disabled={busy}
-            onClick={() => void retry()}
+            aria-disabled={busy}
+            onClick={() => {
+              if (!busy) void retry();
+            }}
           >
             <RotateCcw size={15} strokeWidth={2} aria-hidden="true" />
             {t("ui.otomeForge.settings.debugMemoryRetry")}
