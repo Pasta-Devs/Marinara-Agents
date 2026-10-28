@@ -9,7 +9,10 @@ import {
   runDocTarget,
   unitId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
-import { readyFaces } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import {
+  facesComing,
+  readyFaces,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import { artWorld, beat, setImages, until, type PaidCall } from "./fixtures/otome-forge-art.ts";
@@ -105,6 +108,26 @@ test("a failed set is never repainted by itself; turning expressions on again pa
   await until(async () => (await t.set())?.state === "ready", "the resumed set");
   assert.equal(t.paid.length, 6, "only the four missing faces are painted");
   t.art.dispose();
+});
+
+test("the reader waits only for faces still being painted, never for a failed, stopped or missing set", async () => {
+  const t = await facesWorld("r-m2bexpr9-ffffff");
+  const world = (await t.store.readDoc(`${t.runId}:world`, normalizeWorld))!;
+  const on = { images: { ...world.images, expressions: true } };
+  const kai = await t.unit();
+  const withSet = (state?: string): Unit => ({
+    ...kai,
+    expressions: state ? { [PORTRAIT]: { state, at: "2026-10-28T00:00:00.000Z" } } : {},
+  });
+  assert.equal(facesComing(on, withSet()), true, "a set not started yet may still come");
+  assert.equal(facesComing(on, withSet("pending")), true);
+  for (const state of ["ready", "failed", "stopped"]) assert.equal(facesComing(on, withSet(state)), false, state);
+  assert.equal(facesComing(on, { ...withSet(), portrait: undefined }), false, "no look, no faces");
+  assert.equal(
+    facesComing({ images: { ...world.images, expressions: false } }, withSet("pending")),
+    false,
+    "faces off",
+  );
 });
 
 test("turning expressions off parks the set before its next paid call, and it resumes without repainting", async () => {

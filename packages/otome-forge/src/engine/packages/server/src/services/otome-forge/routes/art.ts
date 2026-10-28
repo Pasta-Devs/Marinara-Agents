@@ -20,7 +20,7 @@ import { cgPromptFor, cgView, markCgSeen, paintCgNow } from "../art/cg.js";
 import { paintPlaceNow, placePromptFor, readPlace, withPlaceViews } from "../art/places.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRequest, type RegisterRoutes } from "../http.js";
 import { isChapterKey } from "../ids.js";
-import { readRun, readyFaces } from "../schemas/state.js";
+import { facesComing, readRun, readyFaces } from "../schemas/state.js";
 import { toWorldView } from "../schemas/world.js";
 import { readBeat } from "../story/canon.js";
 
@@ -73,6 +73,7 @@ export const registerArtRoutes: RegisterRoutes = (router, deps) => {
         places: beat.places.map((place) => readPlace(run.world, runId, place.name) ?? place),
         cg: cgView(runId, beat),
         faces,
+        facesComing: run.units.filter((unit) => facesComing(run.world, unit)).map((unit) => unit.id),
       };
       return scene;
     }),

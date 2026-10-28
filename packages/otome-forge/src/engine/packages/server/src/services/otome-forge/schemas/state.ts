@@ -2,7 +2,7 @@
 // Otome Forge: the `${R}:state` document (Starlight and each love interest's points and stage), and the RunView
 // ──────────────────────────────────────────────
 // Later milestones add their own fields here, each with a default, so older states keep reading.
-import { forgeStoryExpressionCast } from "@forge-kit/story-expressions-server.mjs";
+import { forgeStoryExpressionCast, forgeStoryExpressionsOn } from "@forge-kit/story-expressions-server.mjs";
 import { z, type ZodType } from "zod";
 import type {
   AlbumCg,
@@ -208,6 +208,17 @@ export function readyFaces(world: Pick<World, "images">, unit: Unit): Partial<Re
   // ponytail: his portrait is the look until M4 adds a worn one (art/expressions.ts paints on the same base).
   const { expressions } = forgeStoryExpressionCast(world.images, unit, unit.portrait ?? "", FACES);
   return expressions as Partial<Record<Face, string>> | undefined;
+}
+
+/**
+ * True while the faces for the look worn now may still arrive: expressions are on, there is a look, and its set is
+ * neither ready nor given up. The kit never repaints a failed or stopped set by itself, so its faces never come.
+ */
+export function facesComing(world: Pick<World, "images">, unit: Unit): boolean {
+  const base = unit.portrait ?? "";
+  if (!base || !forgeStoryExpressionsOn(world.images)) return false;
+  const state = (unit.expressions[base] as { state?: unknown } | undefined)?.state;
+  return state !== "ready" && state !== "failed" && state !== "stopped";
 }
 
 /**

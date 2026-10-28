@@ -616,6 +616,8 @@ export interface SceneArt {
   cg: NonNullable<BeatView["cg"]> | null;
   /** Each love interest's faces for the look worn now, once the set is ready and expressions are on. */
   faces: Record<LiId, Partial<Record<Face, string>>>;
+  /** The love interests whose faces are still being painted (a failed or stopped set never arrives on its own). */
+  facesComing: LiId[];
 }
 
 export interface StoryChapterEntry {

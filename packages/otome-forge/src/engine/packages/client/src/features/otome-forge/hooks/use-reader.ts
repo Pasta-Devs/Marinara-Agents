@@ -502,7 +502,8 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     const waiting = (art: SceneArt) =>
       art.cg?.art?.state === "pending" ||
       (Array.isArray(art.places) && art.places.some((place) => place.art?.state === "pending")) ||
-      (wantsFaces && speakers.some((li) => !Object.keys(art.faces?.[li] ?? {}).length));
+      // Only faces still being painted: a speaker with no look, or a failed or stopped set, is never waited for.
+      (wantsFaces && speakers.some((li) => art.facesComing?.includes(li)));
     const look = async () => {
       tries += 1;
       try {

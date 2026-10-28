@@ -806,6 +806,7 @@ function createSceneStub({
           places: i === 0 ? [{ ...stub.view.world.places["the-observation-room"] }] : [],
           cg: i === 0 ? beat0.cg : null,
           faces: { [ILVAR]: { cold: FACE_COLD, tender: FACE_TENDER, angry: FACE_ANGRY, hurt: FACE_HURT } },
+          facesComing: [],
         },
       };
     }
