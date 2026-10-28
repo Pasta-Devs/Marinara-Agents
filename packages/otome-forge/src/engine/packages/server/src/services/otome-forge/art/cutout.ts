@@ -80,7 +80,7 @@ export function createCutoutClient({
       // ponytail: repeats image-client's gallery upload (its uploadToGallery is internal); the upgrade path is the
       // image client exposing uploadToGallery, as the plan's §1.8 lists it.
       const form = new FormData();
-      form.append("prompt", "Otome Forge Home cut-out");
+      form.append("prompt", "Otome Hearth Home cut-out");
       form.append("provider", "sprite-cleanup");
       form.append("model", "auto");
       if (width && height) {

@@ -11,6 +11,7 @@ export const forgeSeasonalEnglish = {
   "events.play": "Play event",
   "events.continue": "Continue event",
   "events.revisit": "Revisit played scenes",
+  "events.enter": "Enter event",
   "events.boundary": "Finish the current main chapter or Character Story before starting this event.",
   "events.boundary.chapter": "Finish Chapter {chapter} before starting this event.",
   "events.boundary.story": "Finish {name}'s Character Story before starting this event.",
@@ -20,6 +21,11 @@ export const forgeSeasonalEnglish = {
   "events.ends": "Available until",
   "events.rewards": "Event rewards",
   "events.progress": "Played",
+  "events.progress.hard": "Hard",
+  "events.progress.veryhard": "Very Hard",
+  "events.diff.normal": "N",
+  "events.diff.hard": "H",
+  "events.diff.veryhard": "V",
   "events.reward.aether": "Aether",
   "events.reward.funds": "Funds",
   "events.reward.xp": "Insight Core",
@@ -37,6 +43,8 @@ export const forgeSeasonalEnglish = {
   "events.timeline.ended": "Story event \u00b7 Ended",
   "events.timeline.paused": "Story event \u00b7 Paused",
   "events.timeline.body": "Played. Enter to read it again; reading changes nothing.",
+  "events.timeline.hard":
+    "Played. Enter to read it again, or fight its battles on Hard and Very Hard until the event ends.",
   "events.forge.eyebrow": "Forging a story event",
   "events.forge.note": "story event",
   "events.forge.foot":

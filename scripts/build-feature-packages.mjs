@@ -492,7 +492,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.4.6",
+    version: "0.4.7",
     minEngineVersion: "2.4.6",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
@@ -869,7 +869,7 @@ const features = [
     capabilityApi: Object.freeze({ major: 1, minor: 386 }),
     builtAgainst: { engineVersion: "2.5.1", engineCommit: "a3ceb0162b1629c6b99885759b11794aa6274869" },
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
-    name: "Otome Forge",
+    name: "Otome Hearth",
     description:
       "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. An early test build.",
     category: "misc",
@@ -882,13 +882,14 @@ const features = [
     packageSourceRoot: otomeForgeSourceRoot,
     ownedSourcePaths: otomeForgeOwnedSourcePaths,
     // The fonts are embedded in client.js as data: URIs; their licence ships beside them.
-    assetPaths: ["fonts/OFL.txt"],
+    assetPaths: ["otome-hearth-icon.png", "fonts/OFL.txt"],
     libraryHidden: true,
     contributions: {
       slots: ["home-browser-tab"],
       homeBrowserTab: {
-        label: "Otome Forge",
-        ariaLabel: "Open Otome Forge",
+        label: "Otome Hearth",
+        ariaLabel: "Open Otome Hearth",
+        iconPaths: ["otome-hearth-icon.png"],
       },
     },
   },

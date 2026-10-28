@@ -165,7 +165,7 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
   },
   "otome-forge": {
     modes: ["conversation", "roleplay", "game"],
-    activation: "Install it, restart Marinara Engine when prompted, then open Home → Otome Forge.",
+    activation: "Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth.",
   },
   pixelforge: {
     modes: ["game"],
