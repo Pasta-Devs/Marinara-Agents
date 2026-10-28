@@ -271,15 +271,12 @@ export function forgeCreateChoiceRuntime({
     return nodeIndex >= 0 && Number(session?.progress?.[String(chapter)]?.normal || 0) === nodeIndex;
   }
 
-  async function pending(runId, { beforeChapter, chapter, throughStoryIndex, includeSmall = false } = {}) {
+  async function pending(runId, { beforeChapter, heldAfter, chapter, throughStoryIndex, includeSmall = false } = {}) {
     const prefix = `${runId}:beat:`;
     const rows = await documents.list(packageId, "beat");
     for (const row of rows) {
       if (!row?.id?.startsWith(prefix) || !row.data) continue;
       const data = row.data;
-      // Expired/disabled event choices cannot hold unrelated main-story generation.
-      // A chapter-scoped operation still checks its own unresolved choices normally.
-      if (chapter == null && !(await choiceChapterActive(runId, data.chapter))) continue;
       if (beforeChapter != null) {
         const numeric = Number(data.chapter);
         if (Number.isInteger(numeric)) {
@@ -289,10 +286,16 @@ export function forgeCreateChoiceRuntime({
           if (!plan?.data || Number(plan.data.after) >= beforeChapter) continue;
         }
       }
+      // A main chapter after an event's boundary is held with it once the event opens; nothing else is.
+      if (heldAfter != null && Number.isInteger(Number(data.chapter)) && Number(data.chapter) > heldAfter) continue;
       if (chapter != null && String(data.chapter) !== String(chapter)) continue;
       if (throughStoryIndex != null && Number(data.storyIndex) > throughStoryIndex) continue;
       const choice = forgePendingChoice(data, includeSmall ? undefined : "big");
-      if (choice) return { chapter: data.chapter, storyIndex: data.storyIndex, choiceId: choice.id };
+      // Expired/disabled event choices, and those in a main chapter an open event holds, cannot hold unrelated
+      // generation. A chapter-scoped operation still checks its own unresolved choices normally. Asked last, so
+      // only an unresolved choice pays for the lookup.
+      if (!choice || (chapter == null && !(await choiceChapterActive(runId, data.chapter)))) continue;
+      return { chapter: data.chapter, storyIndex: data.storyIndex, choiceId: choice.id };
     }
     return null;
   }

@@ -2136,6 +2136,20 @@
               "replace": "{k:\"What happens next\",a:\"Sometimes the story lets you choose: carry on with the main story, follow one of your units for a while, or play the season's story event.\"}"
             }
           ]
+        },
+        {
+          "version": "1.26.1",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.26.0\"",
+              "replace": "ds=\"1.26.1\""
+            },
+            {
+              "find": "var oy=[{version:null,new:[",
+              "replace": "var oy=[{version:null,fixed:[\"A chapter you forged before starting a story event no longer keeps writing ahead while the event holds it, and a big choice it already wrote no longer stops the event from starting or its scenes. Once the event is done, its choice waits for you, and Continue on its map picks it up again.\",\"While story memory catches up, a companion chat, a character message or a Character Story knows only the scenes you have played, not the ones pre-forge wrote ahead or a Compress summary of them.\"]},{version:\"1.26.0\",new:["
+            }
+          ]
         }
       ]
     },
@@ -3800,6 +3814,44 @@
             {
               "find": "function forgeDesignFight(p,m,u,x){return Ph(p,m,u,x).then(g=>(g&&g.ok&&g.guide&&!g.cached&&rt(",
               "replace": "function forgeDesignFight(p,m,u,x){return(forgeSeasonalChapter(u)?forgeSeasonalEvents.designFight(p,u,x):Ph(p,m,u,x)).then(async g=>(g&&g.ok&&g.guide&&!g.cached&&(!forgeSeasonalChapter(u)||await forgeSeasonalEvents.choiceActive(p,u))&&rt("
+            }
+          ]
+        },
+        {
+          "version": "1.26.1",
+          "commits": [],
+          "edits": [
+            {
+              "find": "async function Yt(p,u,o){let i=forgeSeasonalChapter(o)&&!await forgeSeasonalEvents.choiceActive(p,o)?\"off\":pd(u),",
+              "replace": "async function Yt(p,u,o){let i=!await forgeSeasonalEvents.choiceActive(p,o)?\"off\":pd(u),"
+            },
+            {
+              "find": "async function _r(s,c,d,forgeMemoryOptions,forgeReader,forgeBlocks){",
+              "replace": "async function _r(s,c,d,forgeMemoryOptions,forgeReader,forgeBlocks,forgePlayed){"
+            },
+            {
+              "find": "let ae=await rr(s,H);if(ae&&ae.to<B){",
+              "replace": "let ae=await rr(s,H);if(ae&&ae.to<B&&(!forgePlayed||ae.to<forgePlayed.chapter)){"
+            },
+            {
+              "find": "let re=[];for(let oe=0;oe<mn;oe+=1){let ye=await nr(s,H,oe);ye&&re.push(jo(ye))}",
+              "replace": "let re=[];for(let oe=0;oe<(!forgePlayed||H<forgePlayed.chapter?mn:H===forgePlayed.chapter?forgePlayed.count:0);oe+=1){let ye=await nr(s,H,oe);ye&&re.push(jo(ye))}"
+            },
+            {
+              "find": ",H=await rr(s,P);if(H){",
+              "replace": ",H=d>=zt&&await rr(s,P);if(H){"
+            },
+            {
+              "find": "async function forgeMemoryHistory(runId,chapter,storyIndex,options){\n let prefix=[];\n if(options.current){\n  let position=await forgeStoryMemory.frontier(runId),plan=(await a.getById(n.id,f(runId,position.chapter)))?.data;\n  let count=tr(plan).slice(0,position.nodeIndex).filter(node=>node.type===\"story\").length;\n  for(let index=0;index<count;index++){let segments=await nr(runId,position.chapter,index);if(segments)prefix.push(jo(segments))}\n",
+              "replace": "// The played frontier: the chapter the player is in and how many of its scenes they finished. Pre-forged scenes past it\n// are not canon yet, so neither the current scene so far nor the legacy history may include them.\nasync function forgePlayedFrontier(runId){\n let position=await forgeStoryMemory.frontier(runId),plan=(await a.getById(n.id,f(runId,position.chapter)))?.data;\n return {chapter:position.chapter,count:tr(plan).slice(0,position.nodeIndex).filter(node=>node.type===\"story\").length};\n}\nasync function forgeMemoryHistory(runId,chapter,storyIndex,options){\n let prefix=[];\n if(options.current){\n  let position=await forgePlayedFrontier(runId);\n  for(let index=0;index<position.count;index++){let segments=await nr(runId,position.chapter,index);if(segments)prefix.push(jo(segments))}\n"
+            },
+            {
+              "find": "fallback:()=>_r(runId,chapter,storyIndex,null,options.reader,true)});",
+              "replace": "fallback:async()=>_r(runId,chapter,storyIndex,null,options.reader,true,await forgePlayedFrontier(runId))});"
+            },
+            {
+              "find": "let L=_.find(Ne=>!Ne.bond&&y(b,Number(Ne.to)||Number(Ne.chapter))<Ic);",
+              "replace": "let L=_.find(Ne=>Ne.bond?yo(b?.bondChapters?.[Ne.unitId],Ne.part)<zt:y(b,Number(Ne.to)||Number(Ne.chapter))<Ic);"
             }
           ]
         }
