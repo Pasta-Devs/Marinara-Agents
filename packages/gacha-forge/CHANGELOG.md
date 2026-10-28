@@ -1,6 +1,7 @@
 ## 1.27.3 — 2026-10-28
 
 - Characters can equip their designated weapons even when a saved weapon has a different type from their role. The intended owner sees it in Gear and can equip it without regenerating the weapon. Signature skills still activate only for their owner; other characters keep the normal weapon-type rules.
+- On short landscape screens, Gear details keep their full height and the panel scrolls, so Choose and Change remain clickable instead of being clipped inside the card.
 
 ## 1.27.2 — 2026-10-28
 

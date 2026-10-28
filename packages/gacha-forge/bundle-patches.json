@@ -2268,7 +2268,12 @@
             },
             {
               "find": "var oy=[{version:null,new:[",
-              "replace": "var oy=[{version:null,fixed:[\"Characters can equip their designated weapons even when an older weapon has a different type from their role. The signature skill still belongs only to its designated character.\"]},{version:\"1.27.2\",new:["
+              "replace": "var oy=[{version:null,fixed:[\"Characters can equip their designated weapons even when an older weapon has a different type from their role. The signature skill still belongs only to its designated character. Gear controls also remain reachable by scrolling on short landscape screens.\"]},{version:\"1.27.2\",new:["
+            },
+            {
+              "find": ".gr-root.gear > .detail.wide { flex: 1 1 auto; min-height: 0; }",
+              "replace": ".gr-root.gear > .detail.wide { flex: 1 0 auto; min-height: min-content; }",
+              "reason": "Keep the Gear detail and its Choose/Change actions inside their clipped card; short landscape views scroll the containing panel instead of shrinking the card below its contents."
             }
           ]
         }
