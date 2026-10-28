@@ -155,10 +155,49 @@ const forgeSeasonalFace = (event, fallback) =>
 export function forgeSeasonalChoiceRow(event, chapter, arrow) {
   return `<div class="ch-opt" data-story-event-open="${forgeEventEscape(event.chapter)}"><span class="ch-opt-m">${forgeSeasonalFace(event, "&#9733;")}</span><span class="ch-opt-b"><b>${forgeEventEscape(event.title || forgeEventT("events.title"))}</b><span>${forgeEventEscape(forgeEventT("events.choice.body").replace("{chapter}", chapter))}</span></span><button class="btn btn-go" type="button">${forgeEventT("events.play")}${arrow}</button></div>`;
 }
+const forgeSeasonalStoryCard = (event, arrow, state, eyebrow, premise, action) => {
+  const played = Math.max(0, Math.min(10, Number(event.played) || 0));
+  return `<article class="ch-card bond ${state}" data-story-event-open="${forgeEventEscape(event.chapter)}"><div class="ch-index ch-face">${forgeSeasonalFace(event, "&#9733;")}</div><div class="ch-body"><div class="ch-eyebrow">${forgeEventEscape(forgeEventT(eyebrow))}</div><h3 class="ch-title">${forgeEventEscape(event.title || forgeEventT("events.title"))}</h3><p class="ch-premise">${forgeEventEscape(forgeEventT(premise))}</p><div class="ch-foot"><div class="ch-bar"><div class="fig">${forgeEventEscape(forgeEventT("events.progress"))} ${played} / 10</div><div class="track"><i style="width:${played * 10}%"></i></div></div></div></div><div class="ch-action"><button class="btn btn-go" type="button">${forgeEventT(action(played))}${arrow}</button></div></article>`;
+};
 // A started event takes the next chapter's place, like an open Character Story, until it is finished.
 export function forgeSeasonalOpenCard(event, arrow) {
-  const played = Math.max(0, Math.min(10, Number(event.played) || 0));
-  return `<article class="ch-card bond open" data-story-event-open="${forgeEventEscape(event.chapter)}"><div class="ch-index ch-face">${forgeSeasonalFace(event, "&#9733;")}</div><div class="ch-body"><div class="ch-eyebrow">${forgeEventEscape(forgeEventT("events.choice.open"))}</div><h3 class="ch-title">${forgeEventEscape(event.title || forgeEventT("events.title"))}</h3><p class="ch-premise">${forgeEventEscape(forgeEventT("events.choice.waits"))}</p><div class="ch-foot"><div class="ch-bar"><div class="fig">${forgeEventEscape(forgeEventT("events.progress"))} ${played} / 10</div><div class="track"><i style="width:${played * 10}%"></i></div></div></div></div><div class="ch-action"><button class="btn btn-go" type="button">${forgeEventT(played ? "events.continue" : "events.play")}${arrow}</button></div></article>`;
+  return forgeSeasonalStoryCard(event, arrow, "open", "events.choice.open", "events.choice.waits", (played) =>
+    played ? "events.continue" : "events.play",
+  );
+}
+// The side stories that follow the chapters placed(after) picks: each finished Character Story (stories, drawn by
+// drawStory) and each played event, right after the chapter it followed. Several after one chapter are drawn by when
+// each was opened, then by seq; a Character Story from before 1.8.12 has no opening time (0) and comes first. The
+// event the next-story choice draws (options.event) keeps its own card.
+export function forgeSeasonalTimelineCards(options, placed, arrow, stories = [], drawStory = () => "") {
+  const after = (entry) => Math.max(0, Number(entry.after) || 0),
+    opened = (entry) => Math.max(0, Number(entry.opened) || 0),
+    seq = (entry) => Number(entry.seq) || 0;
+  const eventCard = (event) =>
+    forgeSeasonalStoryCard(
+      event,
+      arrow,
+      "cleared",
+      // Unfinished and not offered: its run ended, or (still live) Seasonal events is off.
+      event.played >= 10 ? "events.timeline.done" : event.live ? "events.timeline.paused" : "events.timeline.ended",
+      "events.timeline.body",
+      () => "events.revisit",
+    );
+  const events = (options?.played || []).filter(
+    (event) => event.played > 0 && event.chapter !== options.event?.chapter && placed(after(event)),
+  );
+  return [
+    ...stories.filter((story) => placed(after(story))).map((story) => ({ entry: story, draw: drawStory })),
+    ...events.map((event) => ({ entry: event, draw: eventCard })),
+  ]
+    .sort(
+      (left, right) =>
+        after(left.entry) - after(right.entry) ||
+        opened(left.entry) - opened(right.entry) ||
+        seq(left.entry) - seq(right.entry),
+    )
+    .map(({ entry, draw }) => draw(entry))
+    .join("");
 }
 // The started event's title for the forge loader and the chapter map, which otherwise say "Chapter event-1".
 export function forgeSeasonalLabel(host) {
@@ -209,7 +248,8 @@ function forgeSeasonalCards(events, { archive = false } = {}) {
     .map((event) => {
       const expired = !event.live,
         failed = event.state === "error" || event.state === "preparing";
-      const action = expired ? "events.revisit" : event.played ? "events.continue" : "events.play";
+      const action =
+        expired || event.played >= 10 ? "events.revisit" : event.played ? "events.continue" : "events.play";
       const date = new Date(event.endsAt).toLocaleString();
       const rewards = (event.rewards || [])
         .map(
@@ -316,7 +356,6 @@ export function wireForgeSeasonalEvents(host) {
     });
   }
   if (host._forgeEvent && forgeEventChapter(host._planChapter)) {
-    for (const button of root.querySelectorAll("[data-diff]")) button.hidden = true;
     if (forgeSeasonalNow(host) >= host._forgeEvent.endsAt || host._run.story?.seasonalEvents !== true) {
       for (const button of root.querySelectorAll("[data-play], [data-start]")) button.disabled = true;
       const notice = root.querySelector(".cap-scroll .notice");
