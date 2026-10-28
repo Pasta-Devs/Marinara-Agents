@@ -296,7 +296,9 @@ async function writeStoreSidecar(repoRoot, directory, packages) {
     await rm(path, { force: true });
     return;
   }
-  const store = await buildStoreDocument(repoRoot, relative(repoRoot, directory), packages);
+  const store = await buildStoreDocument(repoRoot, relative(repoRoot, directory), packages, {
+    lenient: process.env.MARINARA_CATALOG_INCLUDE_INCOMPLETE === "1",
+  });
   await writeFile(path, `${JSON.stringify(store, null, 2)}\n`);
 }
 

@@ -43,22 +43,34 @@ const exists = (path) =>
 /** Store data for exactly the packages in one lane. Paths are relative to the sidecar's
  * directory, so the Engine resolves them against the store.json URL it fetched and any
  * mirror or branch of this repository serves its own images. */
-export async function buildStoreDocument(repoRoot, directory, entries) {
+export async function buildStoreDocument(repoRoot, directory, entries, { lenient = false } = {}) {
+  // Dev builds that include held-back packages skip a package with no store data yet.
+  const missing = (message) => {
+    if (!lenient) throw new Error(message);
+  };
   const source = await readStoreSource(repoRoot);
   const packages = {};
   const link = (path) => relative(join(repoRoot, directory), join(repoRoot, path)).split("\\").join("/");
-  for (const entry of [...entries].sort((left, right) => left.manifest.id.localeCompare(right.manifest.id))) {
+  packageLoop: for (const entry of [...entries].sort((left, right) =>
+    left.manifest.id.localeCompare(right.manifest.id),
+  )) {
     const id = entry.manifest.id;
     const record = source.packages[id];
-    if (!record)
-      throw new Error(`store/store.json has no entry for ${id} — every published package needs a section and tagline`);
+    if (!record) {
+      missing(`store/store.json has no entry for ${id} — every published package needs a section and tagline`);
+      continue;
+    }
     for (const width of STORE_BANNER_WIDTHS)
-      if (!(await exists(join(repoRoot, storeBanner(id, width)))))
-        throw new Error(`${storeBanner(id, width)} is missing — run node scripts/build-store.mjs`);
+      if (!(await exists(join(repoRoot, storeBanner(id, width))))) {
+        missing(`${storeBanner(id, width)} is missing — run node scripts/build-store.mjs`);
+        continue packageLoop;
+      }
     // Apps show the Home tab icon from their own manifest instead.
     const hasIcon = await exists(join(repoRoot, storeIcon(id)));
-    if (!hasIcon && record.section !== "apps")
-      throw new Error(`${storeIcon(id)} is missing — add ${storeIconSource(id)} and run node scripts/build-store.mjs`);
+    if (!hasIcon && record.section !== "apps") {
+      missing(`${storeIcon(id)} is missing — add ${storeIconSource(id)} and run node scripts/build-store.mjs`);
+      continue;
+    }
     const previews = [];
     for (let index = 1; index <= MAX_STORE_PREVIEWS; index += 1) {
       if (!(await exists(join(repoRoot, storePreview(id, index))))) break;

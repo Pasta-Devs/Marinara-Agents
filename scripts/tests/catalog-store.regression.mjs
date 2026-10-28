@@ -50,6 +50,10 @@ try {
   );
 
   await assert.rejects(buildStoreDocument(root, "catalog", entries("poker")), /no entry for poker/);
+  assert.deepEqual(
+    Object.keys((await buildStoreDocument(root, "catalog", entries("poker", "chess"), { lenient: true })).packages),
+    ["chess"],
+  );
   await rm(join(root, "store/icons/chess.webp"));
   await assert.rejects(buildStoreDocument(root, "catalog", entries("chess")), /store\/icons\/chess\.webp is missing/);
   await rm(join(root, "store/banners/noodle-1200.webp"));

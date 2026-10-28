@@ -171,7 +171,7 @@ async function assertNotesSidecar(path, entries) {
 // The store sidecar gets the same treatment, and building it is also the store check:
 // it fails when a published package has no section, tagline, banner or (non-app) icon.
 async function assertStoreSidecar(path, entries) {
-  const expected = await buildStoreDocument(repoRoot, dirname(path), entries);
+  const expected = entries.length > 0 ? await buildStoreDocument(repoRoot, dirname(path), entries) : null;
   if (JSON.stringify(await readCommittedNotes(path)) !== JSON.stringify(expected)) {
     throw new Error(`${path} does not match store/store.json and the store images — run node scripts/build-store.mjs`);
   }
@@ -191,10 +191,13 @@ if (previewCatalog.packages.length > 0) {
   }
   await assertNotesSidecar("catalog/preview/notes.json", expectedPreviewLanes.get(LEGACY_CATALOG_MAJOR).packages);
   await assertStoreSidecar("catalog/preview/store.json", expectedPreviewLanes.get(LEGACY_CATALOG_MAJOR).packages);
-} else if ((await readCommittedNotes("catalog/preview/notes.json")) !== null) {
+} else if (
+  (await readCommittedNotes("catalog/preview/notes.json")) !== null ||
+  (await readCommittedNotes("catalog/preview/store.json")) !== null
+) {
   // The overlay directory is removed when nothing is staging-only, so a surviving
   // sidecar means a stale generated payload that no rebuild would produce.
-  throw new Error("catalog/preview/notes.json exists with no staging-only packages — rebuild the catalog to remove it");
+  throw new Error("catalog/preview sidecars exist with no staging-only packages — rebuild the catalog to remove them");
 }
 const packagesWithChangelogs = await listPackagesWithChangelogs(repoRoot);
 console.log(
