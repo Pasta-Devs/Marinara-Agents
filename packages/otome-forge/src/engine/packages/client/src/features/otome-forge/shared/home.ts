@@ -43,10 +43,11 @@ export function timeOfDayOf(hour: number): TimeOfDay {
   return h >= 5 && h < 12 ? "morning" : h >= 12 && h < 18 ? "day" : "night";
 }
 
-// Han, kana and Hangul are written without spaces, so each two of their characters count as one word.
-const UNSPACED = /[぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]/gu;
+// Han and kana are written without spaces, so each two of their characters count as one word. Korean puts spaces
+// between its words, so Hangul is counted by them like any spaced script.
+const UNSPACED = /[぀-ヿ㐀-䶿一-鿿豈-﫿]/gu;
 
-/** Words in `text`: space-separated words, plus one per two CJK characters. */
+/** Words in `text`: space-separated words, plus one per two Han or kana characters. */
 export function wordCount(text: string): number {
   const unspaced = text.match(UNSPACED)?.length ?? 0;
   const words = text

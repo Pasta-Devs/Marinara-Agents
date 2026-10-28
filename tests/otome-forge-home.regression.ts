@@ -47,6 +47,7 @@ import {
   normalizeLinePack,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/lines.ts";
 import {
+  checkNote,
   noteDay,
   serveNote,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/home/note.ts";
@@ -346,15 +347,23 @@ test("a rupture makes the note curt and the lines cold", async () => {
   const long = noteReply("I left the lamp lit, and the kettle, and a note on the stair, because I still cannot stop.");
   const t = await homeWorld("r-rupt-aaaaaa", {
     lis: { [KAI]: { grievances: [grievance], rupture: { grievanceId: "g-north", since: "2026-10-28T09:00:00.000Z" } } },
-    replies: [json(long), json(noteReply("The lamp is lit. Nothing else."))],
+    replies: [json(long), json(noteReply("The lamp is lit."))],
   });
   const written = await t.call("POST", "/runs/:run/home/note", note(KAI, "UTC"));
   assert.equal(written.status, 200, JSON.stringify(written.body));
-  assert.equal(written.body.note.text, "The lamp is lit. Nothing else.");
+  assert.equal(written.body.note.text, "The lamp is lit.");
   const [firstTry, repair] = t.notes();
   assert.match(system(firstTry!.messages), /curt: one short, distant sentence of at most 14 words/);
   assert.match(firstTry!.messages.at(-1)!.content, /A rupture stands between them \(g-north\)/);
   assert.match(repair!.messages.at(-1)!.content, /14 words or fewer/, "a warm, long note is sent back");
+  // A curt note is one sentence; a warm one may be two.
+  const curt = checkNote(true, []);
+  assert.equal(curt(noteReply("I am busy. Do not wait.")), "text must be one sentence");
+  assert.equal((curt(noteReply("I am busy today.")) as { text: string }).text, "I am busy today.");
+  assert.equal(
+    (checkNote(false, [])(noteReply("I am busy. Do not wait.")) as { text: string }).text,
+    "I am busy. Do not wait.",
+  );
 
   const pack: StageLines = {
     stage: 1,
@@ -827,6 +836,11 @@ test("tap annoyance, time of day, the word counts, line picks and the typing del
   ]);
   assert.equal(wordCount("You left the lab light on again."), 7);
   assert.equal(wordCount("灯りを消しておいた。"), 5, "CJK: one word per two characters");
+  assert.equal(
+    wordCount("그는 아침에도 연구실의 불을 끄고 아무런 말도 없이 조용히 돌아왔습니다."),
+    10,
+    "Korean puts spaces between its words: 10 words of 30 syllables are 10, within a line's 14",
+  );
   assert.equal(sentenceCount("You left it on. I turned it off. Don't thank me."), 3);
   assert.equal(sentenceCount("灯りを消した。礼はいらない。"), 2);
   assert.equal(sentenceCount("No full stop at the end"), 1);

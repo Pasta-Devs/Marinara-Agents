@@ -38,7 +38,7 @@ const ILVAR = "li-ilvar-0001";
 const CASSIAN = "li-cassian-0002";
 const NOTE = "You left the lab light on again. I turned it off. Don’t thank me.";
 /** His notes later the same day: during a rupture, then after its repair. */
-const CURT_NOTE = "Busy. The audit will not wait.";
+const CURT_NOTE = "The audit will not wait.";
 const WARM_AGAIN = "The lab is quiet again. Come by when you can.";
 const HIS_LINES = {
   head: ["Careful with the hair.", "Again. Fine.", "You are bold today."],
@@ -101,11 +101,20 @@ const anyOf = (lines: string[]) => new RegExp("^(?:" + lines.map(escapeRegExp).j
 /**
  * The M3 routes, answered in memory by the server's rules (S/routes/home.ts, S/routes/phone.ts). `state.rupture` is
  * the story's (the reader opens and repairs one), and a note written on the other side of it is stale, as noteFits
- * says; `faceCutouts` has his tender face's cut-out land on the second read of Home.
+ * says; `faceCutouts` has his tender face's cut-out land on the second read of Home. On the phone, `state.hold` keeps
+ * his reply back until it resolves (the thread and the list say `busy` meanwhile), and `sendFailures` and
+ * `closeFailures` fail that many sends (with nothing saved) or closes (409 busy).
  */
 function createHomeStub({ images = true, rupture = false, noteFailures = 0, faceCutouts = false } = {}) {
   const calls: Call[] = [];
-  const state = { rupture, speakDelayMs: 0 };
+  const state = {
+    rupture,
+    speakDelayMs: 0,
+    hold: null as Promise<void> | null,
+    replying: false,
+    sendFailures: 0,
+    closeFailures: 0,
+  };
   let homeReads = 0;
   const now = () => new Date().toISOString();
   const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
@@ -201,7 +210,7 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0, face
     from: 0,
     past: sessions.length,
     activeCount: messages.length - archived(),
-    busy: false,
+    busy: state.replying,
     retry: messages.at(-1)?.who === "player",
     sessions,
     suggestions,
@@ -313,7 +322,7 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0, face
         status: 200,
         json: {
           threads: [
-            { li: ILVAR, last: messages.at(-1), unread: unread(), busy: false },
+            { li: ILVAR, last: messages.at(-1), unread: unread(), busy: state.replying },
             { li: CASSIAN, last: null, unread: 0, busy: false },
           ],
         },
@@ -332,6 +341,10 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0, face
       return { status: 200, json: {} };
     }
     if (path === `${base}/phone/${ILVAR}/send`) {
+      if (state.sendFailures > 0) {
+        state.sendFailures -= 1;
+        return { status: 500, json: { error: "The line went quiet.", code: "failed" } };
+      }
       const { text = "", sticker, quote, id } = call.body!;
       const mine: Json = {
         id,
@@ -343,7 +356,10 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0, face
       };
       messages.push(mine);
       // The model takes a moment; his reply is two messages, the second a sticker.
+      state.replying = true;
       await new Promise((done) => setTimeout(done, 500));
+      await state.hold;
+      state.replying = false;
       replies += 1;
       const reply: Json[] = [
         {
@@ -359,6 +375,10 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0, face
       return { status: 200, json: { messages: [mine, ...reply], suggestions } };
     }
     if (path === `${base}/phone/${ILVAR}/close`) {
+      if (state.closeFailures > 0) {
+        state.closeFailures -= 1;
+        return { status: 409, json: { error: "Ilvar Thorne is still writing.", code: "busy" } };
+      }
       const count = messages.length - archived();
       sessions.push({
         start: archived(),
@@ -500,19 +520,40 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   // Home opens on him: the layers fill the stage behind the top bar and the dock, his face from the note's mood, a
   // painted place behind him.
   await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeVisible();
+  const home = root.locator(".of-home");
   const note = root.getByRole("article", { name: "A note from Ilvar Thorne" });
   await expect(note).toContainText(NOTE);
   await expect(root.getByRole("img", { name: "Ilvar Thorne, tender" })).toBeVisible();
   await expect(root.locator(".of-mood-chip")).toContainText("irritable: audit");
   for (const layer of ["place", "tint", "light"]) {
-    await expect(root.locator(`.of-home-layers [data-layer="${layer}"]`)).toHaveCount(1);
+    await expect(root.locator(`.of-home [data-layer="${layer}"]`)).toHaveCount(1);
   }
   await expect(root.locator('.of-home-l0[data-backdrop="place"] img.of-home-backdrop')).toHaveAttribute("src", PLACE);
-  const [layers, body] = await Promise.all([
+  const [layers, front, body] = await Promise.all([
     root.locator(".of-home-layers").boundingBox(),
+    root.locator(".of-home-front").boundingBox(),
     root.locator(".of-stage-body").boundingBox(),
   ]);
   expect(layers).toEqual(body);
+  expect(front).toEqual(body);
+  // His stars twinkle (motion is on) within the sky's own opacity: none at dawn or by day, bright at night.
+  const sky = await home.getAttribute("data-sky");
+  const starsUnder = async (value: string) => {
+    await home.evaluate((element, phase) => {
+      (element as HTMLElement).dataset.sky = phase;
+    }, value);
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+    return root.locator(".of-home-stars").evaluate((element) => Number(getComputedStyle(element).opacity));
+  };
+  expect(await root.locator(".of-home-stars").evaluate((element) => getComputedStyle(element).animationName)).not.toBe(
+    "none",
+  );
+  expect(await starsUnder("day")).toBe(0);
+  expect(await starsUnder("dawn")).toBe(0);
+  expect(await starsUnder("night")).toBeGreaterThan(0.4);
+  await home.evaluate((element, phase) => {
+    (element as HTMLElement).dataset.sky = phase;
+  }, sky ?? "night");
   await expect(root.getByRole("button", { name: /Phone/ })).toContainText("1");
   await page.screenshot({ path: testInfo.outputPath("01-home.png") });
   expect(posts(stub, "/home/note")).toHaveLength(1);
@@ -609,6 +650,12 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   await expect(root.getByText("Barely. The data kept me company.")).toBeVisible();
   expect(posts(stub, "/send")[0]!.body).toMatchObject({ text: "I left it on for you.", quote: WARM_AGAIN });
   await expect(root.locator(".of-quote-chip")).toHaveCount(0);
+  // Settings and back: the phone opens on his thread again, and the quote that went with her message stays spent.
+  await root.getByRole("button", { name: "Settings", exact: true }).click();
+  await root.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
+  await expect(root.getByText("Barely. The data kept me company.")).toBeVisible();
+  await expect(root.locator(".of-quote-chip")).toHaveCount(0);
   const scrolled = await root.evaluate((element) =>
     [element, ...element.querySelectorAll(".of-frame, .of-stage, .of-stage-body")]
       .filter((box) => box.scrollTop || box.scrollLeft)
@@ -646,9 +693,12 @@ test("Otome Forge phone: a thread with typing, his sticker, suggestions, her sti
   await expect(log).toContainText("She asked where he was; he pretended not to be pleased.");
   await expect.poll(() => posts(stub, "/seen").at(-1)?.body?.last).toBe("m-a3");
 
-  // He types, then his messages arrive one at a time: words, then his face as a sticker; suggestions follow.
-  await root.getByRole("textbox", { name: "Message Ilvar Thorne" }).fill("Did you sleep at all?");
+  // He types, then his messages arrive one at a time: words, then his face as a sticker; suggestions follow. Her own
+  // words leave the box with the message.
+  const box = root.getByRole("textbox", { name: "Message Ilvar Thorne" });
+  await box.fill("Did you sleep at all?");
   await root.getByRole("button", { name: "Send" }).click();
+  await expect(box).toHaveValue("");
   await expect(root.locator(".of-typing")).toBeVisible();
   await expect(root.locator('.of-bubble-row[data-who="player"]').last()).toContainText("Did you sleep at all?");
   await expect(log.getByText("Barely. The data kept me company.")).toBeVisible();
@@ -659,11 +709,13 @@ test("Otome Forge phone: a thread with typing, his sticker, suggestions, her sti
   expect(sent.id).toMatch(/^[a-z0-9][a-z0-9-]{7,59}$/u);
   await page.screenshot({ path: testInfo.outputPath("04-thread.png") });
 
-  // A suggestion sends as it is.
+  // A suggestion sends as it is, and leaves what she was typing in the box.
   const suggestions = root.getByRole("list", { name: "Suggested replies" });
+  await box.fill("Half a thought");
   await suggestions.getByRole("button", { name: "Go to sleep, Ilvar." }).click();
   await expect(log.getByText("Noted.")).toBeVisible();
   expect(posts(stub, "/send")[1]!.body).toMatchObject({ text: "Go to sleep, Ilvar." });
+  await expect(box).toHaveValue("Half a thought");
 
   // Her sticker: one of his painted faces.
   await expect(root.locator(".of-typing")).toHaveCount(0);
@@ -672,22 +724,87 @@ test("Otome Forge phone: a thread with typing, his sticker, suggestions, her sti
   await expect.poll(() => posts(stub, "/send").length).toBe(3);
   expect(posts(stub, "/send")[2]!.body).toMatchObject({ text: "", sticker: "flustered" });
   await expect(log.getByRole("img", { name: "Sticker: Flustered" })).toBeVisible();
+  await expect(box).toHaveValue("Half a thought");
 
-  // Close and remember: the conversation becomes his memory, and affection is earned once.
+  // Her words fail to send and the server never saved them: they come back to the box, unsent.
   await expect(root.locator(".of-typing")).toHaveCount(0);
+  stub.state.sendFailures = 1;
+  await box.press("Enter");
+  await expect(root.getByRole("alert")).toContainText(catalog["ui.otomeForge.errors.unknown"]!);
+  await expect(box).toHaveValue("Half a thought");
+  expect(posts(stub, "/send")).toHaveLength(4);
+
+  // Close and remember: the conversation becomes his memory, and affection is earned once. A close that failed says
+  // so, and the dialog opened again starts clean.
+  await expect(root.locator(".of-typing")).toHaveCount(0);
+  stub.state.closeFailures = 1;
   await root.getByRole("button", { name: "Close and remember" }).click();
   const dialog = page.getByRole("dialog", { name: "Close and remember?" });
   await expect(dialog).toContainText("Ilvar Thorne");
   await dialog.getByRole("button", { name: "Close and remember" }).click();
+  await expect(dialog.getByRole("alert")).toContainText(catalog["ui.otomeForge.errors.busy"]!);
+  await dialog.getByRole("button", { name: "Not yet" }).click();
+  await expect(dialog).toHaveCount(0);
+  await root.getByRole("button", { name: "Close and remember" }).click();
+  await expect(dialog).toContainText("Ilvar Thorne");
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Close and remember" }).click();
   await expect(log).toContainText("She wrote late; he admitted he had not slept.");
   await expect(log).toContainText("+20 affection");
-  expect(posts(stub, "/close")).toHaveLength(1);
+  expect(posts(stub, "/close")).toHaveLength(2); // The one that failed, then the one that landed.
   await page.screenshot({ path: testInfo.outputPath("05-remembered.png") });
 
   // Back to the threads, focus on his row.
   await root.getByRole("button", { name: "All messages" }).click();
   await expect(root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ })).toBeFocused();
+
+  // A thread opened from the list is still open after Settings and back, and its Back still leads to his row.
+  await root
+    .locator(".of-threads")
+    .getByRole("button", { name: /Ilvar Thorne/ })
+    .click();
+  await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
+  await root.getByRole("button", { name: "Settings", exact: true }).click();
+  await root.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
+  await expect(log).toContainText("She wrote late; he admitted he had not slept.");
+  await root.getByRole("button", { name: "All messages" }).click();
+  await expect(root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ })).toBeFocused();
   expect(pageErrors).toEqual([]);
+});
+
+test("Otome Forge phone: a reply that lands after the player left his thread is there when it opens again", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub();
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  await engineStaleTime(page);
+  await root.getByRole("button", { name: /Phone/ }).click();
+  const row = root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ });
+  await expect(row).toContainText("The light was on again.");
+  await row.click();
+  const log = root.getByRole("list", { name: "Messages with Ilvar Thorne" });
+  await expect(log).toContainText("The light was on again.");
+
+  // She sends, then goes back to the thread list while his reply is still being written.
+  let release = () => {};
+  stub.state.hold = new Promise<void>((done) => (release = done));
+  await root.getByRole("textbox", { name: "Message Ilvar Thorne" }).fill("Still up?");
+  await root.getByRole("button", { name: "Send" }).click();
+  await expect.poll(() => stub.state.replying).toBe(true);
+  await root.getByRole("button", { name: "All messages" }).click();
+  await expect(row).toContainText("Ilvar Thorne is typing…");
+  const replied = page.waitForResponse((response) => response.url().endsWith(`/phone/${ILVAR}/send`));
+  release();
+  await replied;
+  // The list reads itself again until he is done, and its preview moves to his last message (his sticker).
+  await expect(row).toContainText(/Sticker: tender/iu);
+  // Opened again inside the Engine's 30 s cache: the server's page, with her message and his reply.
+  await row.click();
+  await expect(log).toContainText("Still up?");
+  await expect(log).toContainText("Barely. The data kept me company.");
 });
 
 test("Otome Forge Home without images, at reduced motion, during a rupture: initials, cold lines, Rough day?", async ({
@@ -768,6 +885,128 @@ test("Otome Forge Home without images, at reduced motion, during a rupture: init
   await page.screenshot({ path: testInfo.outputPath("07-no-images.png") });
   expect(pageErrors).toEqual([]);
 });
+
+/**
+ * Phone sizes from 360 to 430 px wide and 600 to 900 px tall. At 390 × 664 without images the nameplate once covered
+ * two of his three tap pills, and the rail covered the edge of a tap zone beside it at common heights.
+ */
+const PHONE_SIZES = [
+  { width: 390, height: 664 },
+  { width: 360, height: 600 },
+  { width: 375, height: 667 },
+  { width: 390, height: 844 },
+  { width: 412, height: 900 },
+  { width: 430, height: 740 },
+];
+
+interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+const overlaps = (a: Box, b: Box) =>
+  Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x) > 0.5 &&
+  Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y) > 0.5;
+
+/**
+ * Every tap zone or pill on Home, and what could cover one: the note, each rail button, the nameplate, the top bar and
+ * the dock (its raised Wish too). A target must also take a tap at its centre.
+ */
+function homeLayout(root: Locator) {
+  return root.evaluate((element) => {
+    const scope = element.getRootNode() as Document | ShadowRoot;
+    const box = (node: Element) => {
+      const rect = node.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    };
+    const named = (selector: string, name: (node: Element) => string) =>
+      [...element.querySelectorAll(selector)].map((node) => ({ name: name(node), box: box(node) }));
+    const label = (node: Element) => (node.getAttribute("aria-label") ?? node.textContent ?? "").trim().slice(0, 24);
+    const targets = [...element.querySelectorAll(".of-tap-zone, .of-tap-pill")].map((node) => {
+      const rect = node.getBoundingClientRect();
+      const hit = scope.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      return { name: label(node), box: box(node), hit: !!hit && node.contains(hit) };
+    });
+    return {
+      targets,
+      /** How much of the note's own words shows (it scrolls when the stage is short). */
+      noteText: element.querySelector(".of-note-text")?.clientHeight ?? 0,
+      rail: named(".of-home-rail > *", (node) => `rail: ${label(node)}`),
+      covers: [
+        ...named(".of-note", () => "note"),
+        ...named(".of-home-plate", () => "nameplate"),
+        ...named(".of-topbar", () => "top bar"),
+        ...named(".of-dock, .of-dock-item", (node) => `dock: ${label(node)}`),
+      ],
+      body: box(element.querySelector(".of-stage-body")!),
+    };
+  });
+}
+
+/** M6 adds Remind Me and Caring message to the rail: two more buttons there, as a later milestone renders them. */
+const addRailButtons = (root: Locator) =>
+  root.evaluate((element) => {
+    const rail = element.querySelector(".of-home-rail")!;
+    const model = rail.querySelector(".of-home-action")!;
+    for (const text of ["Remind Me", "Caring message"]) {
+      const added = model.cloneNode(true) as HTMLElement;
+      added.dataset.later = "true";
+      added.querySelector("span")!.textContent = text;
+      added.querySelector(".of-home-badge")?.remove();
+      rail.append(added);
+    }
+  });
+
+for (const images of [true, false]) {
+  for (const look of ["dark", "light"] as const) {
+    test(`Otome Forge Home at phone sizes (${images ? "painted" : "no images"}, ${look === "dark" ? "Midnight" : "Pearl"}): nothing covers a tap zone or pill`, async ({
+      page,
+    }) => {
+      test.setTimeout(120_000);
+      await page.emulateMedia({ colorScheme: look });
+      const stub = createHomeStub({ images });
+      await stubRoutes(page, stub, []);
+      const root = await openHome(page);
+      await expect(root.getByRole("article", { name: "A note from Ilvar Thorne" })).toContainText(NOTE);
+      await expect(root.locator(images ? ".of-tap-zone" : ".of-tap-pill")).toHaveCount(3);
+
+      for (const later of [false, true]) {
+        if (later) await addRailButtons(root);
+        for (const size of PHONE_SIZES) {
+          await page.setViewportSize(size);
+          await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+          const layout = await homeLayout(root);
+          const at = `${size.width}x${size.height}${later ? " with Remind Me and Caring message" : ""}`;
+          expect(layout.targets, at).toHaveLength(3);
+          expect(layout.rail.length, at).toBe(later ? 6 : 4);
+          // Rail as M3 has it: the note keeps at least a line of its words in view.
+          if (!later) expect(layout.noteText, `the note's words at ${at}`).toBeGreaterThanOrEqual(24);
+          for (const target of layout.targets) {
+            const big = target.box.width >= 24 && target.box.height >= 24;
+            expect(big, `${target.name} is at least 24 px square at ${at}`).toBe(true);
+            expect(target.hit, `${target.name} takes a tap at ${at}`).toBe(true);
+            const inside =
+              target.box.x >= layout.body.x - 0.5 &&
+              target.box.y >= layout.body.y - 0.5 &&
+              target.box.x + target.box.width <= layout.body.x + layout.body.width + 0.5 &&
+              target.box.y + target.box.height <= layout.body.y + layout.body.height + 0.5;
+            expect(inside, `${target.name} on the stage at ${at}`).toBe(true);
+            for (const cover of [...layout.covers, ...layout.rail]) {
+              expect(overlaps(target.box, cover.box), `${cover.name} over ${target.name} at ${at}`).toBe(false);
+            }
+          }
+          // The rail, with room for the later buttons: clear of the note, the top bar and the dock.
+          for (const button of layout.rail) {
+            for (const cover of layout.covers.filter((item) => item.name !== "nameplate")) {
+              expect(overlaps(button.box, cover.box), `${cover.name} and ${button.name} at ${at}`).toBe(false);
+            }
+          }
+        }
+      }
+    });
+  }
+}
 
 test("Otome Forge Home asks again while his faces' cut-outs are on their way, and shows the cut-out once it lands", async ({
   page,
