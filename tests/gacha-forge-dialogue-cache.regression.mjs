@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ForgeAudioController, forgeVoiceCacheKey } from "../packages/gacha-forge/src/audio-client.mjs";
-import * as settings from "../packages/gacha-forge/src/audio-settings.mjs";
+import * as settings from "../sources/forge-kit/audio-settings.mjs";
 
 test("dialogue replays and reopened worlds use a stable cache key while synthesis changes invalidate it", async () => {
   const saved = Object.fromEntries(

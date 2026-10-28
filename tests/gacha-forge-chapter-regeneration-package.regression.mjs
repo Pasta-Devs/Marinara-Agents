@@ -10,7 +10,7 @@ import {
   freshBondPlan,
   currentCardCanon,
 } from "./fixtures/gacha-forge-chapter-runtime.mjs";
-import { createForgeStoryCancellation, forgeStoryWork } from "../packages/gacha-forge/src/story-cancel-server.mjs";
+import { createForgeStoryCancellation, forgeStoryWork } from "../sources/forge-kit/story-cancel-server.mjs";
 import {
   adoptForgeChapterVersion,
   forgeChapterRequest,

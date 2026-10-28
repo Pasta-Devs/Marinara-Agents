@@ -3,9 +3,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { after, test } from "node:test";
-import { forgeStoryExpressionNames } from "../packages/gacha-forge/src/story-expressions.mjs";
-import { forgeLocalAvatarPath } from "../packages/gacha-forge/src/image-avatar-references.mjs";
-import { createForgeStoryExpressions } from "../packages/gacha-forge/src/story-expressions-server.mjs";
+import { forgeStoryExpressionNames } from "../sources/forge-kit/story-expressions.mjs";
+import { forgeLocalAvatarPath } from "../sources/forge-kit/image-avatar-references.mjs";
+import { createForgeStoryExpressions } from "../sources/forge-kit/story-expressions-server.mjs";
 
 globalThis.forgeStoryExpressionNames = forgeStoryExpressionNames;
 globalThis.forgeLocalAvatarPath = forgeLocalAvatarPath;

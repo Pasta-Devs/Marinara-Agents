@@ -5,7 +5,7 @@ import {
   forgeStoryGenerationSignal,
   forgeStoryAssertActive,
   forgeStoryDocuments,
-} from "../packages/gacha-forge/src/story-cancel-server.mjs";
+} from "../sources/forge-kit/story-cancel-server.mjs";
 
 const deferred = () => {
   let resolve;

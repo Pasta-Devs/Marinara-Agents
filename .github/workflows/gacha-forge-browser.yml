@@ -7,6 +7,7 @@ on:
       - ".github/workflows/gacha-forge-browser.yml"
       - "artifacts/gacha-forge-*.zip"
       - "packages/gacha-forge/**"
+      - "sources/forge-kit/**"
       - "scripts/install-package-browser-fixture.mjs"
       - "scripts/run-package-browser-tests.mjs"
       - "scripts/start-package-browser-servers.mjs"

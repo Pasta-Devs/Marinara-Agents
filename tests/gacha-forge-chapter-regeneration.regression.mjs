@@ -4,7 +4,7 @@ import {
   createForgeChapterRegeneration,
   forgeStoryPaidThrough,
 } from "../packages/gacha-forge/src/chapter-regeneration-server.mjs";
-import { createForgeStoryCancellation, forgeStoryDocuments } from "../packages/gacha-forge/src/story-cancel-server.mjs";
+import { createForgeStoryCancellation, forgeStoryDocuments } from "../sources/forge-kit/story-cancel-server.mjs";
 
 const runId = "reset-world",
   packageId = "gacha-forge",

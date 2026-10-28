@@ -4,7 +4,7 @@ import {
   createForgeFormationMigration,
   forgeFormationUnitFingerprint,
 } from "../packages/gacha-forge/src/formation-migration-server.mjs";
-import { createForgeStoryCancellation } from "../packages/gacha-forge/src/story-cancel-server.mjs";
+import { createForgeStoryCancellation } from "../sources/forge-kit/story-cancel-server.mjs";
 
 const runId = "formation-world",
   packageId = "gacha-forge";

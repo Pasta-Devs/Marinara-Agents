@@ -10,7 +10,7 @@ import {
   createForgeMusicPromptService,
   forgeMusicBriefMessages,
   normalizeForgeMusicPrompt,
-} from "../packages/gacha-forge/src/audio-prompts.mjs";
+} from "../sources/forge-kit/audio-prompts.mjs";
 import { loadGachaBundlePatches, swapGachaBundleText } from "../scripts/gacha-forge-bundle-patches.mjs";
 
 const brief = "Original instrumental fantasy music: warm woodwinds, harp and celesta over soft orchestral strings.";

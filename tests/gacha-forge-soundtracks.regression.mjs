@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import * as settings from "../packages/gacha-forge/src/audio-settings.mjs";
+import * as settings from "../sources/forge-kit/audio-settings.mjs";
 import { forgeAudioEnglish, forgeAudioFields } from "../packages/gacha-forge/src/audio-en.mjs";
 import { ForgeAudioController, forgeAudioCue } from "../packages/gacha-forge/src/audio-client.mjs";
 

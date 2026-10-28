@@ -11,7 +11,7 @@ import {
   forgeWallDate,
   forgeWeekday,
   forgeWeekKey,
-} from "../packages/gacha-forge/src/time-zone-server.mjs";
+} from "../sources/forge-kit/time-zone-server.mjs";
 
 const routes = new Map();
 const api = forgeTimeZoneRoutes({
