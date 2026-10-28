@@ -9,8 +9,10 @@ import { createBackgroundQueue } from "./background-queue.js";
 import { createHandle, type OtomeRouter, type RouteDeps } from "./http.js";
 import { INDEX_ID } from "./ids.js";
 import { createOtomeMemory } from "./memory/memory.js";
+import { registerHomeRoutes } from "./routes/home.js";
 import { registerIndexRoutes } from "./routes/index.js";
 import { registerMemoryRoutes } from "./routes/memory.js";
+import { registerPhoneRoutes } from "./routes/phone.js";
 import { registerRunRoutes } from "./routes/runs.js";
 import { registerSetupRoutes } from "./routes/setup.js";
 import { registerStoryRoutes } from "./routes/story.js";
@@ -33,11 +35,11 @@ export async function activate({ api }: ActivationContext) {
   const { runtime } = api;
   const store = createOtomeStore(runtime.persistence.documents);
   const handle = createHandle(runtime.logger);
-  // One background lane (memory summaries; line packs from M3), one story memory and one Cancel per activation.
+  // One background lane (memory summaries and line packs), one story memory and one Cancel per activation.
   const background = createBackgroundQueue(runtime);
   const memory = createOtomeMemory({ runtime, store, background });
   const cancellation = createForgeStoryCancellation();
-  const deps: RouteDeps = { runtime, store, handle, memory, cancellation };
+  const deps: RouteDeps = { runtime, store, handle, memory, cancellation, background };
   // The Engine accepts only a prefix under /api/<package id> (capability-route-registration.service.ts). Every handler
   // runs in the request's time zone (forgeTimeZoneRoutes wraps get and post, the only methods Otome uses).
   const releaseRoutes = await api.registerPrivilegedRoutes(
@@ -48,6 +50,8 @@ export async function activate({ api }: ActivationContext) {
       registerSetupRoutes(router, deps);
       registerStoryRoutes(router, deps);
       registerMemoryRoutes(router, { store, handle, memory });
+      registerHomeRoutes(router, deps);
+      registerPhoneRoutes(router, deps);
     },
     { prefix: "/api/otome-forge" },
   );

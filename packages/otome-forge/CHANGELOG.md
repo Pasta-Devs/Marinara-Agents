@@ -1,5 +1,12 @@
 # Otome Forge release notes
 
+## 0.0.5 — 2026-10-28
+
+- Home now shows the love interest you pick, or you in your own look, in a layered scene tinted by your time of day. A painted look is cut out of its background when the Engine can, and pans slowly when it cannot; with no images, initials on a gradient. Reduced motion stills it.
+- Each love interest leaves one handwritten note a day, with a mood; Reply opens their thread. During a rupture the note is curt and taps get only cold lines.
+- Tap head, hand or heart for lines written ahead in their voice, so a tap never waits; too many pokes annoy them. Rough day? offers comfort with no model call.
+- The phone: one private thread per love interest, with suggested replies and stickers. Close and remember saves the talk as a memory only that love interest recalls (+20 affection, capped daily).
+
 ## 0.0.3 — 2026-10-28
 
 - Now offered to Engine `staging` testers. The story begins: pick who leads each main chapter from two love interests, the one you have seen least and the one with the most unresolved between you, and play six to nine scenes that build to a confrontation.

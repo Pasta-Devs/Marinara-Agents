@@ -264,12 +264,24 @@ const LATEST_CHAPTER_TOKENS = 12000;
 /** The canon before the latest chapter that the canonical history sends, newest first: the oldest is left out first. */
 const EARLIER_CANON_TOKENS = 12000;
 
-const latestBlock = (title: string, content: string) =>
-  `# Latest chapter: ${title}\n${sliceTextToTokenBudget(content, LATEST_CHAPTER_TOKENS, true)}`;
+/**
+ * How much canon a prompt reads in full: the latest chapter's end, and the canon before it when memory cannot answer.
+ * The story prompts read the defaults; a smaller prompt (P17's chat reply) passes less. Recalled memory and the
+ * decisions are never cut by it: the kit sizes recall to the connection's context.
+ */
+export interface CanonBudget {
+  latest: number;
+  earlier: number;
+}
+
+const STORY_BUDGET: CanonBudget = { latest: LATEST_CHAPTER_TOKENS, earlier: EARLIER_CANON_TOKENS };
+
+const latestBlock = (title: string, content: string, tokens: number) =>
+  `# Latest chapter: ${title}\n${sliceTextToTokenBudget(content, tokens, true)}`;
 
 /**
  * The canonical history, for a memory that cannot answer: the canon the prompt may know in story order, the latest
- * completed chapter in full and the canon before it within EARLIER_CANON_TOKENS, newest first (GF's legacy history).
+ * completed chapter in full and the canon before it within `budget.earlier`, newest first (GF's legacy history).
  * ponytail: fixed budgets, then model.fitContext; the upgrade path is fitForgeMemoryPrompt with the connection's
  * context, which drops the oldest chapters only while the reply would otherwise get less than its floor.
  */
@@ -279,6 +291,7 @@ async function canonicalHistory(
   chapters: readonly Completed[],
   protagonist: string,
   knowing: Knowing,
+  budget: CanonBudget,
 ): Promise<string> {
   const known = chapters.filter(({ chapter }) => mayKnow(knowing, audienceOf(chapter)));
   const sources = await sourcesOf(store, runId, known, protagonist);
@@ -288,14 +301,14 @@ async function canonicalHistory(
   for (const source of [...sources].reverse()) {
     if (source === latest) continue;
     used += estimateTextTokens(source.content);
-    if (used > EARLIER_CANON_TOKENS) break;
+    if (used > budget.earlier) break;
     kept.add(source);
   }
   return sources
     .filter((source) => kept.has(source))
     .map((source) =>
       source === latest
-        ? latestBlock(source.title, source.content)
+        ? latestBlock(source.title, source.content, budget.latest)
         : `# Canon in full: ${source.title}\n${source.content}`,
     )
     .join("\n\n");
@@ -314,9 +327,9 @@ export async function recallText(
     runtime?: Pick<CapabilityRuntimeHost, "logger">;
   },
   runId: string,
-  options: Omit<ForgeRecallOptions, "runId"> & { debugMode?: boolean },
+  options: Omit<ForgeRecallOptions, "runId"> & { debugMode?: boolean; budget?: CanonBudget },
 ): Promise<string> {
-  const { debugMode, ...recall } = options;
+  const { debugMode, budget = STORY_BUDGET, ...recall } = options;
   const warn = (what: string, error: unknown) =>
     deps.runtime?.logger.warn("[otome-forge] %s: %s", what, error instanceof Error ? error.message : String(error));
   let story: Promise<{ chapters: Completed[]; protagonist: string }> | undefined;
@@ -345,7 +358,7 @@ export async function recallText(
       if (entry.latest) {
         const chapter = await readChapter(deps.store, runId, entry.id);
         const content = chapter && (await chapterCanon(deps.store, runId, chapter, protagonist));
-        if (content) parts.push(latestBlock(entry.title, content));
+        if (content) parts.push(latestBlock(entry.title, content, budget.latest));
       } else if (entry.content) {
         parts.push(`# Recent canon: ${entry.title}\n${entry.content}`);
       }
@@ -361,7 +374,7 @@ export async function recallText(
     });
   }
   memory ??= await readStory()
-    .then(({ chapters, protagonist }) => canonicalHistory(deps.store, runId, chapters, protagonist, recall))
+    .then(({ chapters, protagonist }) => canonicalHistory(deps.store, runId, chapters, protagonist, recall, budget))
     .catch((error: unknown) => {
       warn("The canonical history could not be read", error);
       return "";

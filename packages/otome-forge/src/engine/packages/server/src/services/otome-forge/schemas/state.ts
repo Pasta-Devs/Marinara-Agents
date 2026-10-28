@@ -1,12 +1,13 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the `${R}:state` document (Starlight and each love interest's points and stage), and the RunView
 // ──────────────────────────────────────────────
-// Later milestones add their own fields here, each with a default, so older states keep reading.
+// Later milestones add their own fields here, each with a default, so older states keep reading. M3: `home`.
 import { z, type ZodType } from "zod";
 import type {
   ChapterProgress,
   Favorite,
   Grievance,
+  HomeState,
   Ledgers,
   LiState,
   Player,
@@ -120,6 +121,15 @@ function normalizeLiState(raw: unknown): LiState {
 
 const defaultLedgers = (): Ledgers => ({ relationship: [], conflicts: [], offscreen: [] });
 
+/** Who Home shows (M3): a love interest of the run, else the first in cast order; him unless the player picked Me. */
+function normalizeHome(raw: unknown, lis: RunState["lis"]): HomeState {
+  const li = field(raw, "li");
+  return {
+    li: typeof li === "string" && lis[li] ? li : null,
+    show: field(raw, "show") === "me" ? "me" : "him",
+  };
+}
+
 export function normalizeState(data: unknown): RunState {
   const lis: RunState["lis"] = {};
   const rawLis = field(data, "lis");
@@ -172,6 +182,7 @@ export function normalizeState(data: unknown): RunState {
       : defaultLedgers(),
     timeline: validItems(TimelineSchema, field(data, "timeline"), TIMELINE_MAX),
     favorites: validItems(FavoriteSchema, field(data, "favorites"), FAVORITES_MAX),
+    home: normalizeHome(field(data, "home"), lis),
   };
 }
 

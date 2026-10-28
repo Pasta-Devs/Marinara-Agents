@@ -25,7 +25,7 @@ import {
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import { z } from "zod";
 import { createBackgroundQueue, type BackgroundQueue } from "../background-queue.js";
-import { otomeContentContract } from "../content-contract.js";
+import { SUMMARY_WORDING, otomeContentContract } from "../content-contract.js";
 import { generateJson, outputBudget, resolveConnectionId, type OtomeMessage } from "../generation.js";
 import { OTOME_FORGE_PACKAGE_ID, memoryId, runDocTarget, worldId } from "../ids.js";
 import { normalizeUnit } from "../schemas/unit.js";
@@ -33,8 +33,8 @@ import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
 import { readMemorySources } from "./sources.js";
 
-/** The `summary` wording every summary prompt carries, besides the content contract (plan M2a "Memory"). */
-export const SUMMARY_WORDING = "Neutral SFW wording; no sexual detail; nothing about anyone's health or body.";
+// Kept in content-contract.ts so the phone's prompts reach it without importing this file (sources.ts imports them).
+export { SUMMARY_WORDING };
 
 /** What a detail summary may write; an overview gets the kit's token budget instead. */
 const DETAIL_SUMMARY_TOKENS = 2048;
