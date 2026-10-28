@@ -475,7 +475,30 @@ async function readReferenceCandidates(db: DB, accountId: string, at: Date) {
       listSlurpContinuityFor(db, accountId, "public_post", { at }),
       listSlurpOpportunities(db, accountId, 40),
     ]);
+    const titles = new Map(posts.map((post) => [post.id, post.title]));
+    const comments = await createSlurpStorage(db)
+      .listNoodlerInteractions(posts.map((post) => post.id))
+      .catch(() => []);
+    // A fan's own top-level question; the newest ten are plenty to draw one from.
+    const questions = comments
+      .filter(
+        (entry) =>
+          entry.type === "reply" &&
+          !entry.parentInteractionId &&
+          entry.actorAccountId !== accountId &&
+          entry.actorSnapshot?.handle &&
+          entry.content?.trim().endsWith("?"),
+      )
+      .reverse()
+      .map((entry) => ({
+        id: entry.id,
+        handle: entry.actorSnapshot!.handle,
+        question: entry.content!.trim().slice(0, 200),
+        postTitle: titles.get(entry.postId) ?? null,
+        createdAt: entry.createdAt,
+      }));
     return slurpReferenceCandidates({
+      questions,
       posts,
       chatMoments: continuity.facts.filter((fact) => fact.source === "chat"),
       keptPromises: plans
