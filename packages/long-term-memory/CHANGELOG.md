@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.5.7 — 2026-10-28
 
 - Memory Settings → Recall → Sharing lists each Agent that has read memories with when it last did, how many times it read this week and how many memories it got, so you can tell whether an Agent such as Slurp is using them. The counts come from the Debug activity log, so clearing it or a very busy install can lower them.
 
