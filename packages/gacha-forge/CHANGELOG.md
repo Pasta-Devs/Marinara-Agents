@@ -1,3 +1,7 @@
+## 1.26.2 — 2026-10-28
+
+- Nothing changes in play. Expression portraits, choice labels, dialogue voice picking, music briefs, soundtracks and a few log lines now take optional settings, so another package can reuse them. Gacha Forge keeps its own values for all of them.
+
 ## 1.26.1 — 2026-10-28
 
 - A chapter you forged before starting a story event no longer keeps pre-forging while the event holds it, and a big choice it already wrote no longer stops the event from starting, its scenes or its pre-forge. Once the event is finished, ends or Seasonal events is turned off, **Continue** on the chapter's map picks its pre-forge up again, and its choice waits for you as before. A Character Story's pending choice still stops the event from starting.

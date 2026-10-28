@@ -22,8 +22,11 @@ import { AsyncResource as ForgeStoryExpressionScope } from "node:async_hooks";
 // the set is still the pending record this attempt wrote, so a set another instance took over is not paid.
 // ponytail: a unit document removed by a roster merge takes its refs with it, so those gallery images
 // are orphaned like history entries past the sixth; collect them before the remove if merges grow.
+// Another game passes its own face names, their looks, avatar-path reader, log prefix and scope name;
+// Gacha Forge passes none, so every default below is its own.
 
-const forgeExpressionLooks = {
+// Each face's edit look: [the sentence for natural-language prompts, the tags for tag prompts].
+export const forgeExpressionLooks = {
   anger: ["an angry expression: furrowed brows, narrowed glaring eyes, a tense jaw", "angry, furrowed brows, glaring"],
   fear: ["a frightened expression: wide eyes, raised brows, tense parted lips", "scared, wide-eyed, raised eyebrows"],
   sadness: ["a sad expression: lowered brows, glistening teary eyes, a downturned mouth", "sad, teary eyes, frown"],
@@ -43,11 +46,11 @@ export function forgeStoryExpressionBases(unit, extra = []) {
 }
 
 // The cast entry's expression map for its current base: only a ready set, only while the setting is on.
-export function forgeStoryExpressionCast(images, unit, base) {
+export function forgeStoryExpressionCast(images, unit, base, names = forgeStoryExpressionNames) {
   const record = forgeStoryExpressionsOn(images) && base ? unit?.expressions?.[base] : null;
   if (record?.state !== "ready") return {};
   const expressions = {};
-  for (const name of forgeStoryExpressionNames) {
+  for (const name of names) {
     const url = record.images?.[name]?.url;
     if (typeof url === "string" && url) expressions[name] = url;
   }
@@ -111,9 +114,9 @@ export function forgeStoryExpressionPrompt(
   base,
   expression,
   profile = {},
-  { tagged = false, negative = "" } = {},
+  { tagged = false, negative = "", looks = forgeExpressionLooks } = {},
 ) {
-  const [look, lookTags] = forgeExpressionLooks[expression];
+  const [look, lookTags] = looks[expression];
   const outfit = (Array.isArray(unit?.outfits) ? unit.outfits : []).find((item) => item?.url && item.url === base);
   const wearing = outfit
     ? forgeExpressionText(outfit.outfitLine) || forgeExpressionTags(outfit.outfitTags)
@@ -152,17 +155,22 @@ export function createForgeStoryExpressions({
   base: currentBase,
   galleryRef,
   debug = () => false,
+  names = forgeStoryExpressionNames,
+  looks = forgeExpressionLooks,
+  localAvatarPath = forgeLocalAvatarPath,
+  logPrefix = "[gacha-forge]",
+  scopeName = "gacha-forge-expressions",
 }) {
   // Created at activation, outside every request: a job never inherits a scene's Cancel scope, so a
   // story reset never waits on (or aborts the bookkeeping of) a paint that was already paid for.
-  const detached = new ForgeStoryExpressionScope("gacha-forge-expressions");
+  const detached = new ForgeStoryExpressionScope(scopeName);
   const live = new Set();
   let disposed = false;
   const galleryId = (ref) => (typeof ref === "string" && ref.startsWith("global-gallery:") ? ref.slice(15) : "");
   const remove = async (refs) => {
     for (const id of refs.map(galleryId).filter(Boolean)) {
       if (!(await client().deleteGalleryImage(id)))
-        logger.warn("[gacha-forge] could not delete expression image %s", id);
+        logger.warn(`${logPrefix} could not delete expression image %s`, id);
     }
   };
   const refsOf = (record) =>
@@ -209,7 +217,7 @@ export function createForgeStoryExpressions({
     }
     if (!paint) return;
     const base = persona ? personaBase : currentBase(unit);
-    const reference = forgeLocalAvatarPath(base);
+    const reference = localAvatarPath(base);
     if (!reference) return;
     const record = unit.expressions?.[base];
     if (record?.state === "ready") return;
@@ -228,12 +236,12 @@ export function createForgeStoryExpressions({
     try {
       target = await connection(run);
     } catch (error) {
-      return void logger.warn("[gacha-forge] expression portraits for %s: %s", unitId, error?.message || String(error));
+      return void logger.warn(`${logPrefix} expression portraits for %s: %s`, unitId, error?.message || String(error));
     }
     if (!target) return;
     const source = await client().cardAvatarImage(reference);
     if (!source?.base64 || !/^image\//u.test(source.mime))
-      return void logger.warn("[gacha-forge] expression portraits for %s: the base image could not be read", unitId);
+      return void logger.warn(`${logPrefix} expression portraits for %s: the base image could not be read`, unitId);
     const at = new Date().toISOString();
     const owned = (current) => current?.state === "pending" && current.at === at;
     if (disposed) return;
@@ -246,7 +254,7 @@ export function createForgeStoryExpressions({
     const width = size.portraitWidth;
     const height = persona ? size.portraitWidth : size.portraitHeight; // a persona avatar is usually square
     let error = "";
-    for (const expression of forgeStoryExpressionNames) {
+    for (const expression of names) {
       if (started.expressions[base].images[expression]?.url) continue;
       let result;
       try {
@@ -269,6 +277,8 @@ export function createForgeStoryExpressions({
             unit: fresh,
             base,
             expression,
+            // The client builds the edit prompt from these looks (forgeStoryExpressionPrompt's looks option).
+            looks,
             referenceImage: `data:${source.mime};base64,${source.base64}`,
             styleProfileId: images(latest).styleProfileId,
             width,
@@ -277,13 +287,13 @@ export function createForgeStoryExpressions({
           });
           if (!image.overrideTook)
             logger.warn(
-              "[gacha-forge] expression prompt override did NOT take for %s (%s); Engine compiled its own. Sent: %s",
+              `${logPrefix} expression prompt override did NOT take for %s (%s); Engine compiled its own. Sent: %s`,
               unit.name,
               expression,
               image.sentPrompt,
             );
           logger[debug() ? "info" : "debug"](
-            "[gacha-forge] expression %s for %s prompt: %s",
+            `${logPrefix} expression %s for %s prompt: %s`,
             expression,
             unitId,
             image.sentPrompt,
@@ -323,7 +333,7 @@ export function createForgeStoryExpressions({
       }
     }
     const stopped = error === "stopped" || error === "stale";
-    if (error && !stopped) logger.warn("[gacha-forge] expression portraits failed for %s: %s", unitId, error);
+    if (error && !stopped) logger.warn(`${logPrefix} expression portraits failed for %s: %s`, unitId, error);
     await update(unitId, (next) => {
       const current = next.expressions?.[base];
       if (!owned(current)) return;
@@ -343,7 +353,7 @@ export function createForgeStoryExpressions({
     detached.runInAsyncScope(() =>
       background(() => dedupe(key, () => paintSet(runId, unitId, options)))
         .catch((error) =>
-          logger.warn("[gacha-forge] expression portraits for %s stopped: %s", unitId, error?.message || String(error)),
+          logger.warn(`${logPrefix} expression portraits for %s stopped: %s`, unitId, error?.message || String(error)),
         )
         .finally(() => live.delete(key)),
     );
@@ -379,11 +389,11 @@ export function createForgeStoryExpressions({
         };
         detached.runInAsyncScope(() =>
           pass().catch((error) =>
-            logger.warn("[gacha-forge] expression portraits not queued: %s", error?.message || String(error)),
+            logger.warn(`${logPrefix} expression portraits not queued: %s`, error?.message || String(error)),
           ),
         );
       } catch (error) {
-        logger.warn("[gacha-forge] expression portraits not queued: %s", error?.message || String(error));
+        logger.warn(`${logPrefix} expression portraits not queued: %s`, error?.message || String(error));
       }
       return cast;
     },

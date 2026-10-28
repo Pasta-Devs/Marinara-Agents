@@ -70,6 +70,7 @@ try {
     ["audio-settings", ["client.js", "server.mjs"]],
     ["audio-prompts", ["server.mjs"]],
     ["audio-en", ["client.js"]],
+    ["voice-picking", ["client.js"]],
     ["audio-client", ["client.js"]],
     ["audio-story", ["client.js"]],
     ["formation-combat-shared", ["client.js", "server.mjs"]],

@@ -27,8 +27,9 @@ export function normalizeForgeAudio(value) {
   };
 }
 
-export function normalizeForgeMusicMood(value) {
-  return ["happy", "tense", "sad"].includes(value) ? value : "happy";
+// The first mood is the fallback.
+export function normalizeForgeMusicMood(value, moods = ["happy", "tense", "sad"]) {
+  return moods.includes(value) ? value : moods[0];
 }
 
 export const forgeSoundtrackCues = ["home", "combat", "boss", "happy", "tense", "sad", "bond"];
@@ -59,18 +60,24 @@ export function rememberForgeBannerSoundtrack(session, descriptor, unlock = fals
   };
 }
 
-export function recordForgeSoundtrack(session, runId, track) {
+// `scope` is the package id the host stores generated music under.
+export function recordForgeSoundtrack(
+  session,
+  runId,
+  track,
+  { scope = "gacha-forge", cues = forgeSoundtrackCues } = {},
+) {
   if (!track || typeof track.connectionId !== "string" || track.connectionId.length > 200) return false;
-  if (!forgeSoundtrackCues.includes(track.cue) && !Object.hasOwn(session.audioBanners || {}, track.cue)) return false;
+  if (!cues.includes(track.cue) && !Object.hasOwn(session.audioBanners || {}, track.cue)) return false;
   const key = forgeSoundtrackContextKey(runId, track.connectionId, track.cue);
-  if (typeof track.tag !== "string" || !track.tag.startsWith(`music:contexts:gacha-forge:${key}:`)) return false;
-  if (typeof track.path !== "string" || !track.path.startsWith(`music/contexts/gacha-forge/${key}/`)) return false;
-  const file = track.path.slice(`music/contexts/gacha-forge/${key}/`.length);
+  if (typeof track.tag !== "string" || !track.tag.startsWith(`music:contexts:${scope}:${key}:`)) return false;
+  if (typeof track.path !== "string" || !track.path.startsWith(`music/contexts/${scope}/${key}/`)) return false;
+  const file = track.path.slice(`music/contexts/${scope}/${key}/`.length);
   if (
     file.startsWith(".") ||
     /[/\\\p{Cc}]/u.test(file) ||
     !/\.(?:mp3|wav|ogg|m4a|flac|aac|webm)$/iu.test(file) ||
-    track.tag !== `music:contexts:gacha-forge:${key}:${file.replace(/\.[^.]+$/u, "")}`
+    track.tag !== `music:contexts:${scope}:${key}:${file.replace(/\.[^.]+$/u, "")}`
   )
     return false;
   const tracks = Array.isArray(session.audioTracks) ? session.audioTracks : [];
@@ -86,8 +93,8 @@ export function recordForgeSoundtrack(session, runId, track) {
   return true;
 }
 
-export function availableForgeSoundtracks(session) {
+export function availableForgeSoundtracks(session, { cues = forgeSoundtrackCues } = {}) {
   return (Array.isArray(session?.audioTracks) ? session.audioTracks : [])
-    .filter((track) => forgeSoundtrackCues.includes(track.cue) || session.audioBanners?.[track.cue]?.unlocked === true)
+    .filter((track) => cues.includes(track.cue) || session.audioBanners?.[track.cue]?.unlocked === true)
     .map((track) => ({ ...track, title: session.audioBanners?.[track.cue]?.title || "" }));
 }
