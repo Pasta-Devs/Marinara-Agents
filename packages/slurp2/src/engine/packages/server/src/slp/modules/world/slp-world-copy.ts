@@ -14,6 +14,7 @@
  * before reaching for the model — the combinations here already run into the hundreds.
  */
 
+import type { SlurpWorldLens } from "../creators/slp-world-lens.js";
 import type { SlurpAudienceTone } from "../../../../../shared/src/slp/slp-tone.js";
 import {
   SLURP_COMMISSION_ASKS,
@@ -104,6 +105,44 @@ function freshLine(
 function pickFresh(seed: string, salt: string, bank: readonly string[], taken: readonly string[] = []): string {
   return freshLine(seed, salt, bank, taken) ?? bank[pickIndex(seed, salt, bank.length)]!;
 }
+
+/** Fans meeting a Creator from another era or world (world lens): free, one per era, about the world, never the body. */
+const WORLD_SHOCK: Record<SlurpWorldLens["era"], readonly string[]> = {
+  historical: [
+    "sorry what year is it where you are",
+    "posting from the past and still the best page I follow",
+    "the drama in your town is better than any show",
+    "no filter, just a century of good lighting",
+    "how do you even get these to us",
+    "history class was never this good",
+  ],
+  fantasy: [
+    "is any of this place real??",
+    "what app is your world even on",
+    "ok but is magic doing the lighting",
+    "excuse me, wizard, this is a creator page",
+    "how do you get these out of a fantasy world",
+    "I want a holiday wherever you are",
+  ],
+  scifi: [
+    "what planet is this even",
+    "you're posting from the future and still look this good",
+    "send help, my century feels so behind",
+    "is that the future? it looks expensive",
+    "how is the signal out there",
+    "the future is cooler than they told us",
+  ],
+  other: [
+    "I don't know where you are but I want to go",
+    "every post from your world is a whole new map",
+    "explain your world to me slowly",
+    "where even is this place",
+    "the sky behind you is not a colour I know",
+  ],
+};
+
+export const slurpWorldShockBodies = (lens: SlurpWorldLens | undefined): readonly string[] =>
+  lens ? WORLD_SHOCK[lens.era] : [];
 
 /** What a fan's comment can see of the post: its title, and the comments already under it. */
 export type SlurpCommentContext = { title?: string | null; taken?: readonly string[] };

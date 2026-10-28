@@ -828,6 +828,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.8",
+          "date": "2026-10-28",
+          "notes": "- World lens: the canon-anchor reading also returns `world` (era, device, money, festivals). Cache version v4 → v5, so each card is read once more in the background. A modern card has no lens and nothing changes.\n- The Creator brief (posts, DMs, comment replies, scenes, Stir suggestions, rewritten fan lines) and both live show prompts get one \"Your world\" line for a non-modern lens. Drama and Support desk prompts do not use the brief and are unchanged.\n- Pictures: a non-modern Creator never gets the mirror, desk or screenshot camera source, so no phone or screen appears. The image model gets no world words.\n- Holidays: when events run, a non-modern Creator is told to play them as their world's nearest festival.\n- Culture-shock fans: about 1 in 4 regular fan comments under a non-modern Creator's post comes from a free bank per era.\n- Backstage: the canon-anchor editor shows and edits the world (era, device, money, festivals); a player's fix survives a new reading.",
+          "highlight": false
+        },
+        {
           "version": "0.4.7",
           "date": "2026-10-28",
           "notes": "- Fan comments see the post: a short title (40 characters or fewer) gets quoted in some questions and reactions, the question bank has 16 more lines, and a fan line is skipped when the same text is already under the post.\n- Fan questions as callbacks: a top-level fan question under the Creator's recent posts (1–30 days old) is a new callback kind, `question`, so a later post may answer it.\n- Five business arcs join the built-in arc library: sale week, burnout and comeback, new gear, leak scare and page anniversary. Saved libraries get them through the existing normalize step.",
@@ -939,12 +945,6 @@
           "version": "0.3.43",
           "date": "2026-10-15",
           "notes": "- Fixed: long DMs end at a sentence or word (up to 2400 characters), and commission quotes use the Creator's own prices.\n- Fixed: Cancel ends a subscription to a removed Creator at once.\n- Fixed: fans react to what a picture shows, not its art style.\n- Fixed: post drift. Tips no longer teach a guessed taste, and a spicy kind or taste that other Creators posted that day steps aside, so the whole feed is not in the shower at once. Spice level is unchanged.\n- Changed: family is never paired up on its own. Cards that say they are lovers, or the player in Stir, still can.\n- Fixed: clearer \"monogamous\" message in Stir, with the Relationships switch on the Creator sheet.\n- Fixed: work mode no longer blurs the coin and G's face; Couples pages are not a missing source; the sign-up scene names an unreachable connection.\n- Fixed: a scheduled post goes up once, and a shared-page post waits its turn.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.42",
-          "date": "2026-10-15",
-          "notes": "- Added: chats with \"Carryover to chats\" on also learn the character's Slurp storyline, love life, how well they know you, and the Slurp memories a chat with you may read.\n- Added: Carryover settings show in how many chats with your Creators \"Include Slurp activity\" is on.\n- Fixed: a scene started from a DM runs on the connection Slurp planned it with, not the Engine's plain default.\n- Fixed: an unreadable scene plan is asked for once more before \"The scene plan got lost\" shows.\n- Fixed: \"Start the scene\" shows an error when the Engine's scene host is missing.\n- Fixed: lorebook entries set to \"At Depth\" reach Slurp DMs and posts.\n- Added: Deep details has a \"Lore\" section with the entries a reply used or had no room for.",
           "highlight": false
         }
       ]
