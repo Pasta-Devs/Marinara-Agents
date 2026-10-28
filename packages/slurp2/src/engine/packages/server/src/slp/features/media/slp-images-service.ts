@@ -605,11 +605,11 @@ async function generateCreatorPostImageRun(
     : viewpoint && !withoutDevice.includes(viewpoint.phrase)
       ? `${withoutDevice}\n${viewpoint.phrase}`
       : withoutDevice;
-  // The Creator's medium: an anime, furry or dragon Creator is drawn, so the brief's photo words go
-  // and their style leads. A photo-style Creator, and a prompt a human approved, stay as they are.
-  // The player's style profile counts too; in the story it is still a photo (prod: painted mixes).
-  const styleSource = `${characterDescription}\n${characterImageInstructions}\n${styleGuidance}`;
-  const artStyle = skipInterpretation ? null : slurpArtStyle(styleSource);
+  // A drawn Creator or a painted style profile drops the photo words; in the story it is still a photo.
+  const styleSource = `${characterDescription}\n${characterImageInstructions}`;
+  const artStyle = skipInterpretation
+    ? null
+    : slurpArtStyle(styleSource, `${characterImageInstructions}\n${styleGuidance}`);
   // The viewpoint in the image model's words: tags for a tag model, e621 tags for a drawn furry.
   const promptFamily = slurpPromptFamily({
     promptMode: compiledPrompt.profile.promptMode,

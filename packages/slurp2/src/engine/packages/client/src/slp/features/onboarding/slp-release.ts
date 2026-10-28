@@ -15,6 +15,15 @@ export interface Slurp2ReleaseEntry {
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
   {
+    version: "0.4.5",
+    date: "2026-10-28",
+    notes: [
+      "Creators change their outfits: each Creator now gets a wardrobe from their card, so posts stop looking the same.",
+      "Halloween costume contest in October: three Creators show their costumes and you pick the winner, who posts a reward set. Switch Drama on in Backstage › Stir to start it.",
+      "Shorter captions under pictures, live recaps that tell what happened in the show, and a world that moves on to new themes each day.",
+    ],
+  },
+  {
     version: "0.4.4",
     date: "2026-10-26",
     notes: [

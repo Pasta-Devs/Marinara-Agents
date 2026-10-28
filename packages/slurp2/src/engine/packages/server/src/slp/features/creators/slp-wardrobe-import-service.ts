@@ -77,6 +77,7 @@ export async function ensureSlurpCreatorWardrobe(
   const noodle = createSlurpStorage(db);
   const looks = await noodle.listWardrobeLooks(input.accountId).catch(() => []);
   if (looks.length || !input.sourceText || wardrobeFillTried.has(input.accountId)) return looks;
+  if (await noodle.hasWardrobeRecord(input.accountId).catch(() => true)) return looks;
   wardrobeFillTried.add(input.accountId);
   try {
     const drafts = await previewSlpWardrobeImport(db, {

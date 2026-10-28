@@ -115,11 +115,16 @@ const read = (path: string) => readFileSync(new URL(path, root), "utf8");
   assert.equal(slurpArtStyle(`${fox} Photorealistic.`), null, "a card that asks for photo realism keeps it");
   assert.match(slurpArtStyle(fox)?.negative ?? "", /fursuit/u);
   // A painted image style profile is a drawn medium too; painted nails are not.
-  assert.match(slurpArtStyle("digital painting, concept art, refined brushwork")?.tag ?? "", /digital illustration/u);
+  assert.match(
+    slurpArtStyle("Short hair.", "digital painting, concept art, refined brushwork")?.tag ?? "",
+    /digital illustration/u,
+  );
   assert.equal(slurpArtStyle("Short hair, painted nails, freckles."), null);
+  // On a card a painted medium is a hobby: a watercolor painter is still photographed.
+  assert.equal(slurpArtStyle("A watercolor painter with short hair."), null);
   assert.match(
     read("server/src/slp/features/media/slp-images-service.ts"),
-    /styleSource = `[^`]*\$\{styleGuidance\}`/u,
+    /slurpArtStyle\(styleSource, `[^`]*\$\{styleGuidance\}`\)/u,
     "the style profile decides the medium words",
   );
   for (const look of [anime, fox, dragon]) {
@@ -518,6 +523,20 @@ async function g8() {
   assert.match(
     read("server/src/slp/features/feed/slp-generation-service.ts"),
     /const looks = await ensureSlurpCreatorWardrobe\(db,/u,
+  );
+  // A closet the player emptied keeps its key, and the fill skips it.
+  assert.match(
+    read("server/src/slp/features/creators/slp-wardrobe-import-service.ts"),
+    /if \(await noodle\.hasWardrobeRecord\(input\.accountId\)/u,
+  );
+  assert.doesNotMatch(
+    read("server/src/slp/data/creators/slp-wardrobe-storage.ts"),
+    /if \(looks\.length === 0\) await settingsStore\.remove/u,
+  );
+  // The costume contest is October only, so a Halloween drama never starts in March.
+  assert.match(
+    read("server/src/slp/modules/world/events/slp-drama-runtime.ts"),
+    /id !== "costume-contest" \|\| new Date\(now\)\.getUTCMonth\(\) === 9/u,
   );
 }
 

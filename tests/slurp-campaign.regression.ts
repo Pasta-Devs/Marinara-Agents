@@ -109,7 +109,7 @@ assert.match(storage, /eq\(slurpContentCampaignStages\.opportunityId, input\.opp
 // The reserve stops at the same count the reconcile caps at, so it no longer adds a slot that is discarded a minute later.
 assert.match(
   slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/feed/reserve/slp-reserve-operation.ts"),
-  /\.length >= settings\.postsPerDay\) return "covered";/u,
+  /\.length >= settings\.postsPerDay\)\s*return "covered";/u,
 );
 
 console.log("slurp campaign regression checks passed");

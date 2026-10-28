@@ -159,13 +159,17 @@ const ART_STYLES: readonly { tag: string; negative: string; pattern: RegExp }[] 
     tag: "digital illustration",
     negative: "photograph, photorealistic",
     pattern:
-      /\b(?:illustrat(?:ed|ion)|drawn (?:in|as|like)|cartoon(?:ish|y)?|comic(?:[- ]book)? style|painterly|digital painting|oil painting|concept art|watercolou?r|pixel art|3d render(?:ed)?|cgi)\b/iu,
+      /\b(?:illustrat(?:ed|ion)|drawn (?:in|as|like)|cartoon(?:ish|y)?|comic(?:[- ]book)? style|3d render(?:ed)?|cgi)\b/iu,
   },
 ];
 const PHOTO_STYLE =
   /\b(?:photo[- ]?real(?:istic)?|photograph(?:ic|ed)?|realistic (?:style|render|photo)|real[- ]life|live[- ]action)\b/iu;
 
-export function slurpArtStyle(look: string): { tag: string; negative: string } | null {
+// A painted medium counts only in the image instructions or style profile: on a card it is often a hobby.
+const PAINTED_MEDIUM = /\b(?:painterly|digital painting|oil painting|concept art|watercolou?r|pixel art)\b/iu;
+
+export function slurpArtStyle(look: string, medium = ""): { tag: string; negative: string } | null {
+  if (PAINTED_MEDIUM.test(medium)) look = `${look}\nillustration`;
   if (!look.trim() || PHOTO_STYLE.test(look)) return null;
   const found = ART_STYLES.filter((style) => style.pattern.test(look));
   if (found.length === 0) return null;

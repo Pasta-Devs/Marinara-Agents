@@ -469,7 +469,9 @@ export async function generateCreatorPost(
     disclosureMode,
     publicIdentity,
     // Models overshoot the caption target (prod median 309 for a 40-220 aim): cut at a sentence end.
-    Math.min(settings.postMaxLength, SLURP_FORMAT_CEILING[format] ?? settings.postMaxLength),
+    directed
+      ? settings.postMaxLength
+      : Math.min(settings.postMaxLength, SLURP_FORMAT_CEILING[format] ?? settings.postMaxLength),
   );
   if (!protectedContent) throw new Error("Slurp generation returned no usable post content.");
 
