@@ -1,13 +1,98 @@
 // ──────────────────────────────────────────────
-// Otome Forge Settings → Debug: whether prompts are being logged, the story's ids and connections, and the raw error
-// of every step that failed (English, for logs and bug reports), with a copy button.
+// Otome Forge Settings → Debug: whether prompts are being logged, the story's ids and connections, the raw error of
+// every step that failed (English, for logs and bug reports), with a copy button, and the story memory's status with
+// its Retry (a failed summary is never retried by itself). Polls every 2 s while memory upkeep runs.
 // ──────────────────────────────────────────────
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ClipboardCopy } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ClipboardCopy, RotateCcw } from "lucide-react";
+import { useOtomeApi } from "../../api";
 import { useOtomeProps } from "../../props";
-import type { RunView } from "../../shared/api-types";
+import type { MemoryStatus, RunView } from "../../shared/api-types";
 import { Section } from "../setup/parts";
+
+const MEMORY_PHASE_KEYS: Record<MemoryStatus["phase"], string> = {
+  ready: "ui.otomeForge.settings.debugMemoryReady",
+  pending: "ui.otomeForge.settings.debugMemoryPending",
+  stale: "ui.otomeForge.settings.debugMemoryStale",
+  error: "ui.otomeForge.settings.debugMemoryError",
+  "context-unknown": "ui.otomeForge.settings.debugMemoryContextUnknown",
+};
+
+function MemorySection({ runKey }: { runKey: string }) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const path = `/runs/${encodeURIComponent(runKey)}/memory`;
+  const queryKey = ["otome-forge", "memory", runKey] as const;
+  const memory = useQuery({
+    queryKey,
+    queryFn: async () => (await otome.get<{ status: MemoryStatus }>(`${path}/status`)).status,
+    refetchInterval: (query) => (query.state.data?.phase === "pending" ? 2_000 : false),
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const status = memory.data;
+
+  const retry = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      queryClient.setQueryData(queryKey, (await otome.post<{ status: MemoryStatus }>(`${path}/retry`)).status);
+    } catch (failure) {
+      setError(otome.errorMessage(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Section title={t("ui.otomeForge.settings.debugMemory")}>
+      <p className="of-body" role="status">
+        {status
+          ? t(MEMORY_PHASE_KEYS[status.phase] ?? "ui.otomeForge.settings.debugMemoryStale")
+          : memory.isError
+            ? otome.errorMessage(memory.error)
+            : t("ui.otomeForge.settings.debugMemoryLoading")}
+      </p>
+      {status ? (
+        <dl className="of-review-list">
+          <dt>{t("ui.otomeForge.settings.debugMemoryRecords")}</dt>
+          <dd>
+            <code>{status.recordCount ?? 0}</code>
+          </dd>
+          {status.reason ? (
+            <>
+              <dt>{t("ui.otomeForge.settings.debugMemoryReason")}</dt>
+              <dd>
+                <code>{status.reason}</code>
+              </dd>
+            </>
+          ) : null}
+        </dl>
+      ) : null}
+      {status && status.phase !== "pending" && status.phase !== "ready" ? (
+        <div className="of-actions of-actions--start">
+          <button
+            type="button"
+            className="of-button of-button--quiet of-glass of-button--small"
+            disabled={busy}
+            onClick={() => void retry()}
+          >
+            <RotateCcw size={15} strokeWidth={2} aria-hidden="true" />
+            {t("ui.otomeForge.settings.debugMemoryRetry")}
+          </button>
+        </div>
+      ) : null}
+      {error ? (
+        <p className="of-hint" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </Section>
+  );
+}
 
 export function DebugSettings({ run }: { run: RunView | null }) {
   const { t } = useTranslation();
@@ -73,6 +158,7 @@ export function DebugSettings({ run }: { run: RunView | null }) {
           )}
         </Section>
       ) : null}
+      {run ? <MemorySection runKey={run.runKey} /> : null}
       <div className="of-actions of-actions--start">
         <button
           type="button"

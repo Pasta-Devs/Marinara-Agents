@@ -1,0 +1,30 @@
+// ──────────────────────────────────────────────
+// Otome Forge: every canonical memory source of a run, for the kit's createForgeStoryMemory (S/memory/memory.ts)
+// ──────────────────────────────────────────────
+// Each area exports one reader and this file concatenates them; a milestone that adds a kind of canon adds one line:
+//   M2a  story chapters (S/story/canon.ts readStorySources)
+//   M3   phone sessions · M4 Snapshots · M5 Read Him sets
+// Audience entries are plain LI ids: a `chat` source is recalled only by that LI's own readers and by scenes whose cast
+// includes him, never into the shared overview (plan §1.9, design: Private memory). Care data is never a source.
+import { orderForgeStorySources } from "@forge-kit/story-memory-integration.mjs";
+import type { ForgeMemorySource } from "@forge-kit/story-memory.mjs";
+import { playerId, stateId } from "../ids.js";
+import { normalizePlayer } from "../schemas/player.js";
+import { normalizeState } from "../schemas/state.js";
+import type { OtomeStore } from "../store.js";
+import { readStorySources } from "../story/canon.js";
+
+/** The run's sources in story order (the kit's `readSources(runId)`); [] for a run that has no state. */
+export async function readMemorySources(
+  store: Pick<OtomeStore, "readDoc">,
+  runId: string,
+): Promise<ForgeMemorySource[]> {
+  const [state, player] = await Promise.all([
+    store.readDoc(stateId(runId), normalizeState),
+    store.readDoc(playerId(runId), normalizePlayer),
+  ]);
+  if (!state) return [];
+  const protagonist = player?.name ?? "";
+  const sources = [...(await readStorySources(store, runId, state, protagonist))];
+  return orderForgeStorySources(sources.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)));
+}
