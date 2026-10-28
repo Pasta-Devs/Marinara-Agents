@@ -83,8 +83,32 @@ export const unitId = (runId: string, li: string) => `${runId}:unit:${li}`;
 /** `${R}:state`: Starlight and each LI's points and stage. */
 export const stateId = (runId: string) => `${runId}:state`;
 
+// ── The story (M2a). Kinds: "chapter", "beat", "memory". ──
+
+/** `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`, `story-<itemId>` or `date-<n>`. */
+const CHAPTER_KEY =
+  /^(?:main-[1-9]\d{0,5}|route-li-[a-z0-9-]{3,40}-[1-6]|repair-li-[a-z0-9-]{3,40}-[1-9]\d{0,5}|story-[a-z0-9-]{1,60}|date-[1-9]\d{0,5})$/;
+
+export function isChapterKey(value: unknown): value is string {
+  return typeof value === "string" && CHAPTER_KEY.test(value);
+}
+
+export const mainChapterKey = (number: number) => `main-${number}`;
+/** The main chapter's number, or null for any other key. */
+export function mainChapterNumber(key: string): number | null {
+  const match = /^main-(\d+)$/.exec(key);
+  return match ? Number(match[1]) : null;
+}
+
+/** `${R}:chapter:${key}`: a chapter's plan. */
+export const chapterId = (runId: string, key: string) => `${runId}:chapter:${key}`;
+/** `${R}:beat:${key}:${i}`: one written node of that chapter. */
+export const beatId = (runId: string, key: string, i: number) => `${runId}:beat:${key}:${i}`;
+/** `${R}:memory`: the kit's story memory (summaries, overview, recall records). */
+export const memoryId = (runId: string) => `${runId}:memory`;
+
 /** Every kind a run's documents have. Deleting a run removes each; a milestone that adds a kind adds it here. */
-export const RUN_DOC_KINDS = ["world", "player", "unit", "state"] as const;
+export const RUN_DOC_KINDS = ["world", "player", "unit", "state", "chapter", "beat", "memory"] as const;
 export type RunDocKind = (typeof RUN_DOC_KINDS)[number];
 /** The `{id, kind, name}` mutateDoc creates a run document with. */
 export const runDocTarget = (kind: RunDocKind, id: string) => ({ id, kind, name: `Otome Forge ${kind}` });

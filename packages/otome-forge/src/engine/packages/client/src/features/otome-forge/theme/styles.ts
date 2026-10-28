@@ -28,7 +28,7 @@ ${R} {
   --of-ease: cubic-bezier(0.22, 0.8, 0.26, 1);
   --of-fade: 560ms;
   --of-glass-blur: blur(18px) saturate(1.45);
-  position: relative; display: block; width: 100%; height: 100%; min-height: 0; overflow: hidden; isolation: isolate;
+  position: relative; display: block; width: 100%; height: 100%; min-height: 0; overflow: clip; isolation: isolate;
   background: var(--of-backdrop-base); color: var(--of-text);
   font-family: var(--of-font-body); font-size: 1rem; font-weight: 400; line-height: 1.45; text-align: start;
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; -webkit-tap-highlight-color: transparent;
@@ -45,9 +45,12 @@ ${R} .of-visually-hidden {
 
 // The frame: a blurred, dimmed copy of the scene fills the panel, and the 9:16 stage sits centred on it. At phone width
 // the stage fills the panel instead. Screens with a place or CG set --of-bg on .of-frame.
+// The frame, the stage and the scenes clip (overflow: clip), never hide: a hidden box is still a scroll container, and
+// the backdrop's blur overhang let a scrollIntoView (a native control's focus, a screen reader, a test's click) shift
+// the whole stage out of place.
 const FRAME_RULES = `
 ${R} .of-frame {
-  position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden;
+  position: absolute; inset: 0; display: grid; place-items: center; overflow: clip;
   container: of-frame / size;
 }
 ${R} .of-frame-blur {
@@ -56,7 +59,7 @@ ${R} .of-frame-blur {
 }
 ${R} .of-frame-blur::after { content: ""; position: absolute; inset: 0; background: var(--of-backdrop-veil); }
 ${R} .of-stage {
-  position: relative; z-index: 1; display: flex; flex-direction: column; overflow: hidden; isolation: isolate;
+  position: relative; z-index: 1; display: flex; flex-direction: column; overflow: clip; isolation: isolate;
   height: 100%; max-width: 100%; aspect-ratio: 9 / 16; border-radius: 26px;
   box-shadow: var(--of-stage-shadow); container: of-stage / inline-size;
 }
@@ -75,7 +78,7 @@ ${R} .of-stage::after {
   ${R} .of-stage { width: 100cqw; height: 100cqh; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
   ${R} .of-stage::after { display: none; }
 }
-${R} .of-scene { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+${R} .of-scene { position: absolute; inset: 0; z-index: 0; overflow: clip; pointer-events: none; }
 ${R} .of-scene-bg {
   position: absolute; inset: 0; background: var(--of-bg); background-size: cover; background-position: center;
 }
@@ -732,6 +735,457 @@ ${R} .of-statements svg { margin-top: 2px; color: var(--of-champagne-text); }
 ${R} .of-debug-errors { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
 ${R} .of-debug-errors li { display: flex; flex-direction: column; gap: 2px; font-size: 0.8rem; }`;
 
+// The Story screen: the next chapter, each love interest's affection, and every chapter as a path of its scenes.
+const STORY_RULES = `
+${R} .of-eyebrow {
+  font-size: 0.7rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--of-champagne-text);
+}
+${R} .of-story-next {
+  border-color: rgb(230 201 138 / 0.55);
+  background: linear-gradient(150deg, var(--of-tint-strong), transparent 62%), var(--of-surface);
+}
+${R} .of-story-next .of-section-title { font-size: 1.45rem; }
+${R} .of-story-continue { border-inline-start: 3px solid var(--of-li-accent, var(--of-rose)); }
+${R} :is(.of-story-next, .of-story-continue) > .of-button { align-self: flex-start; }
+${R} .of-chapter-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+${R} .of-chapter-heading { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+${R} .of-chapter-eyebrow { font-size: 0.75rem; font-weight: 700; color: var(--of-text-soft); }
+${R} .of-chapter-title {
+  font-family: var(--of-font-display); font-weight: 600; font-size: 1.32rem; line-height: 1.08; overflow-wrap: anywhere;
+}
+${R} h3.of-chapter-title { font-size: 1.14rem; }
+${R} .of-chapters { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+${R} .of-chapter {
+  display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 18px;
+  background: var(--of-surface-hover); border: 1px solid var(--of-border);
+}
+${R} .of-chapter[data-state="in-progress"] {
+  border-color: rgb(230 201 138 / 0.55); box-shadow: inset 0 0 0 1px rgb(230 201 138 / 0.22);
+}
+${R} .of-chapter > .of-button { align-self: flex-start; }
+/* A chapter's scenes: stars on a thread. Read ones glow champagne; the one being read breathes in rose. */
+${R} .of-path { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 6px 2px; }
+${R} .of-path::before {
+  content: ""; position: absolute; inset-inline: 10px; top: 50%; height: 1px; opacity: 0.7;
+  background: linear-gradient(to right, var(--of-champagne), var(--of-border-strong));
+}
+${R}[dir="rtl"] .of-path::before { background: linear-gradient(to left, var(--of-champagne), var(--of-border-strong)); }
+${R} .of-path-node {
+  position: relative; z-index: 1; flex: none; display: grid; place-items: center; width: 14px; height: 14px;
+  border-radius: 50%; border: 1.5px solid var(--of-border-strong); background: var(--of-surface-solid);
+  color: var(--of-text-soft);
+}
+${R} .of-path-node:has(svg) { width: 24px; height: 24px; }
+${R} .of-path-node[data-state="read"] {
+  border-color: transparent; color: ${PALETTE.ink};
+  background: linear-gradient(135deg, #f6e2b0, ${PALETTE.champagne}); box-shadow: 0 0 9px var(--of-wish-glow);
+}
+${R} .of-path-node[data-state="current"] {
+  border-color: var(--of-accent-text); color: var(--of-accent-text);
+  box-shadow: 0 0 0 3px var(--of-glow-soft), 0 0 14px var(--of-glow); animation: of-breathe 2.4s ease-in-out infinite;
+}
+${R} .of-path-node[data-kind="confrontation"]:not([data-state="read"]) { border-color: var(--of-danger); color: var(--of-danger); }
+/* Affection: ten hearts in his colour. */
+${R} .of-affection-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+${R} .of-affection {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "avatar name level" "avatar hearts hearts";
+  align-items: center; column-gap: 10px; row-gap: 3px;
+}
+${R} .of-affection > .of-avatar { grid-area: avatar; }
+${R} .of-affection-name {
+  grid-area: name; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-family: var(--of-font-display); font-weight: 600; font-size: 1.12rem; line-height: 1.1;
+}
+${R} .of-affection-level { grid-area: level; font-size: 0.74rem; font-weight: 800; color: var(--of-accent-text); }
+${R} .of-hearts { grid-area: hearts; display: flex; flex-wrap: wrap; gap: 3px; color: var(--of-li-accent, var(--of-rose)); }
+${R} .of-hearts svg[data-on="false"] { color: var(--of-border-strong); }
+${R}[data-look="pearl"] .of-hearts { filter: brightness(0.8) saturate(1.35); }
+/* "Who walks with you this chapter?" */
+${R} .of-candidates {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; margin: 0; padding: 0;
+  list-style: none;
+}
+${R} .of-candidate {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; height: 100%;
+  padding: 18px 10px 14px; border-radius: 20px; cursor: pointer; text-align: center; color: var(--of-text);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--of-li-accent) 26%, transparent), transparent 72%), var(--of-surface);
+  border-top: 3px solid var(--of-li-accent, var(--of-rose));
+  transition: transform 420ms var(--of-ease), box-shadow 420ms var(--of-ease);
+}
+${R} .of-candidate:hover { transform: translateY(-2px); box-shadow: 0 12px 28px var(--of-glow-soft); }
+${R} .of-candidate .of-avatar { margin-bottom: 6px; }
+${R} .of-candidate-name { font-family: var(--of-font-display); font-weight: 600; font-size: 1.28rem; line-height: 1.05; }
+${R} .of-candidate-level {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 0.74rem; font-weight: 800; color: var(--of-accent-text);
+}
+${R} .of-candidate-reason { font-size: 0.82rem; line-height: 1.35; font-style: italic; color: var(--of-text-soft); }
+${R} .of-planning { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 0; text-align: center; }`;
+
+// Moods: each music cue's scene, until M2b paints places. Midnight's are deep; Pearl's are light.
+const MOODS: Record<Look, Record<string, string>> = {
+  midnight: {
+    home: "radial-gradient(90% 60% at 18% 8%, rgb(230 201 138 / 0.42), transparent 62%), radial-gradient(80% 60% at 92% 72%, rgb(231 166 184 / 0.3), transparent 66%), linear-gradient(180deg, #3a2a4f 0%, #1d1633 58%, #120d24 100%)",
+    date: "radial-gradient(85% 55% at 74% 12%, rgb(255 188 210 / 0.5), transparent 62%), radial-gradient(80% 60% at 8% 82%, rgb(183 156 242 / 0.36), transparent 66%), linear-gradient(180deg, #4a2a55 0%, #26183d 56%, #140e26 100%)",
+    tender:
+      "radial-gradient(90% 58% at 50% 16%, rgb(231 166 184 / 0.5), transparent 64%), radial-gradient(70% 50% at 16% 92%, rgb(230 201 138 / 0.24), transparent 66%), linear-gradient(180deg, #3d2850 0%, #221a3d 56%, #15102a 100%)",
+    tense:
+      "radial-gradient(80% 52% at 84% 8%, rgb(140 170 230 / 0.34), transparent 62%), radial-gradient(80% 60% at 8% 70%, rgb(90 80 160 / 0.36), transparent 66%), linear-gradient(180deg, #1d2340 0%, #141832 56%, #0b0d1f 100%)",
+    angst:
+      "radial-gradient(80% 52% at 14% 12%, rgb(170 60 92 / 0.42), transparent 62%), radial-gradient(80% 60% at 88% 88%, rgb(80 40 122 / 0.46), transparent 66%), linear-gradient(180deg, #1f1430 0%, #150d24 56%, #0a0716 100%)",
+    confession:
+      "radial-gradient(70% 46% at 50% 26%, rgb(255 214 170 / 0.55), transparent 64%), radial-gradient(100% 70% at 50% 30%, rgb(231 166 184 / 0.3), transparent 72%), linear-gradient(180deg, #4b2f4a 0%, #2a1c3c 56%, #171026 100%)",
+  },
+  pearl: {
+    home: "radial-gradient(90% 60% at 18% 8%, rgb(230 201 138 / 0.5), transparent 62%), radial-gradient(80% 60% at 92% 72%, rgb(231 166 184 / 0.4), transparent 66%), linear-gradient(180deg, #fbefe6 0%, #f3e3ea 56%, #ead8e6 100%)",
+    date: "radial-gradient(85% 55% at 74% 12%, rgb(255 178 204 / 0.55), transparent 62%), radial-gradient(80% 60% at 8% 82%, rgb(183 156 242 / 0.4), transparent 66%), linear-gradient(180deg, #fde8ef 0%, #f3dff0 56%, #e9d9f2 100%)",
+    tender:
+      "radial-gradient(90% 58% at 50% 16%, rgb(231 166 184 / 0.5), transparent 64%), radial-gradient(70% 50% at 16% 92%, rgb(230 201 138 / 0.34), transparent 66%), linear-gradient(180deg, #fbeaf0 0%, #f2e3ef 56%, #eadcef 100%)",
+    tense:
+      "radial-gradient(80% 52% at 84% 8%, rgb(140 170 230 / 0.42), transparent 62%), radial-gradient(80% 60% at 8% 70%, rgb(120 110 190 / 0.3), transparent 66%), linear-gradient(180deg, #e8ecf6 0%, #dfe2f0 56%, #d6d8ea 100%)",
+    angst:
+      "radial-gradient(80% 52% at 14% 12%, rgb(176 70 100 / 0.3), transparent 62%), radial-gradient(80% 60% at 88% 88%, rgb(110 70 150 / 0.32), transparent 66%), linear-gradient(180deg, #ece0ea 0%, #e0d2e2 56%, #d4c5da 100%)",
+    confession:
+      "radial-gradient(70% 46% at 50% 26%, rgb(255 206 150 / 0.6), transparent 64%), radial-gradient(100% 70% at 50% 30%, rgb(231 166 184 / 0.36), transparent 72%), linear-gradient(180deg, #fff1e2 0%, #fbe6ea 56%, #f1dcea 100%)",
+  },
+};
+
+const moodRules = (look: Look) =>
+  Object.entries(MOODS[look])
+    .map(
+      ([mood, background]) => `${R}[data-look="${look}"] .of-mood[data-mood="${mood}"] { background: ${background}; }`,
+    )
+    .join("\n");
+
+// The reader: the scene, the face on stage, the dialogue box in the bottom third, choices, panels and the backlog.
+const READER_RULES = `
+${R} .of-reader {
+  position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: clip; isolation: isolate;
+}
+${R} .of-reader-scene { position: absolute; inset: 0; z-index: 0; overflow: clip; pointer-events: none; }
+${R} .of-mood { position: absolute; inset: 0; opacity: 0; transition: opacity 900ms var(--of-ease); }
+${R} .of-mood[data-on="true"] { opacity: 1; }
+${moodRules("midnight")}
+${moodRules("pearl")}
+${R} .of-reader-motes {
+  position: absolute; inset: -12%; opacity: 0.55;
+  background-image:
+    radial-gradient(2px 2px at 12% 22%, rgb(255 236 200 / 0.9) 50%, transparent 52%),
+    radial-gradient(1.5px 1.5px at 34% 64%, rgb(255 214 228 / 0.8) 50%, transparent 52%),
+    radial-gradient(2.4px 2.4px at 58% 18%, rgb(255 246 230 / 0.85) 50%, transparent 52%),
+    radial-gradient(1.6px 1.6px at 76% 48%, rgb(255 214 228 / 0.8) 50%, transparent 52%),
+    radial-gradient(2px 2px at 88% 82%, rgb(255 236 200 / 0.8) 50%, transparent 52%),
+    radial-gradient(1.4px 1.4px at 22% 88%, rgb(255 246 230 / 0.75) 50%, transparent 52%),
+    radial-gradient(1.8px 1.8px at 48% 40%, rgb(255 236 200 / 0.7) 50%, transparent 52%);
+  animation: of-motes 28s ease-in-out infinite alternate;
+}
+${R}[data-look="pearl"] .of-reader-motes { opacity: 0.9; filter: drop-shadow(0 0 2px rgb(231 166 184 / 0.6)); }
+${R} .of-reader-vignette {
+  position: absolute; inset: 0;
+  background: radial-gradient(125% 85% at 50% 38%, transparent 56%, rgb(6 4 18 / 0.48) 100%),
+    linear-gradient(to top, rgb(6 4 18 / 0.5) 0%, transparent 40%);
+}
+${R}[data-look="pearl"] .of-reader-vignette {
+  background: radial-gradient(125% 85% at 50% 38%, transparent 58%, rgb(120 70 100 / 0.16) 100%),
+    linear-gradient(to top, rgb(120 70 100 / 0.12) 0%, transparent 40%);
+}
+/* The header: the way out, the chapter's title, and the tools. */
+${R} .of-reader-head {
+  position: relative; z-index: 3; display: flex; flex-direction: column; gap: 6px;
+  padding: max(12px, env(safe-area-inset-top)) 12px 4px;
+}
+${R} .of-reader-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+${R} .of-reader-row--sub { align-items: flex-start; }
+${R} .of-reader-title { flex: 1; min-width: 0; display: flex; flex-direction: column; text-shadow: 0 1px 12px rgb(0 0 0 / 0.3); }
+${R}[data-look="pearl"] .of-reader-title { text-shadow: 0 1px 10px rgb(255 255 255 / 0.7); }
+${R} .of-reader:focus, ${R} .of-reader-title:focus { outline: none; }
+${R} .of-reader-title:focus-visible { outline: 2px solid var(--of-focus); outline-offset: 3px; border-radius: 6px; }
+${R} .of-reader-eyebrow {
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 0.68rem; font-weight: 800;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--of-champagne-text);
+}
+${R} .of-reader-scene-count { letter-spacing: 0.06em; color: var(--of-text-soft); }
+${R} .of-reader-name {
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-family: var(--of-font-display); font-weight: 600; font-size: 1.24rem; line-height: 1.12;
+}
+${R} .of-reader-tools { flex: none; display: flex; align-items: center; gap: 6px; }
+${R} .of-reader-tool { width: 36px; height: 36px; }
+${R} .of-reader-tool[aria-pressed="true"] {
+  color: ${PALETTE.ink}; border-color: transparent;
+  background: linear-gradient(135deg, #f3dcaa 0%, ${PALETTE.champagne} 30%, ${PALETTE.rose} 100%);
+}
+${R} .of-reader-tool[aria-disabled="true"] { opacity: 0.45; cursor: default; }
+${R} .of-reader-tool[aria-disabled="true"]:hover { background: var(--of-surface); color: inherit; }
+/* The scene's chips stay on one line and scroll sideways, fading at the end. */
+${R} .of-reader-chips {
+  flex: 1; min-width: 0; display: flex; gap: 5px; margin: 0; padding: 4px 0; overflow-x: auto; list-style: none;
+  scrollbar-width: none; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+}
+${R}[dir="rtl"] .of-reader-chips {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 20px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 20px), transparent);
+}
+${R} .of-reader-chips::-webkit-scrollbar { display: none; }
+${R} .of-reader-chip {
+  flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+  font-size: 0.68rem; font-weight: 800; letter-spacing: 0.04em; color: var(--of-text);
+  background: var(--of-surface); border: 1px solid var(--of-border);
+  -webkit-backdrop-filter: var(--of-glass-blur); backdrop-filter: var(--of-glass-blur);
+}
+${R} .of-reader-chip--tag { color: var(--of-accent-text); background: var(--of-tint-strong); border-color: var(--of-border-strong); }
+${R} .of-reader-chip--frame { color: var(--of-champagne-text); border-color: rgb(230 201 138 / 0.5); }
+${R} .of-reader-chip--replay { color: var(--of-text-soft); }
+${R} .of-reader-chip--place { animation: of-place-in 900ms var(--of-ease) both; }
+${R} .of-reader-chip--place svg { color: var(--of-champagne-text); }
+${R} .of-reader-pill {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 999px;
+  font-size: 0.78rem; font-weight: 800; white-space: nowrap; cursor: pointer;
+}
+${R} .of-reader-pill:hover { background: var(--of-surface-strong); }
+${R} .of-reader-pill--ease { color: var(--of-accent-text); }
+/* The middle: the place, the face on stage (or a quiet card for a key image), and toasts. */
+/* A size container: the face and the quiet card fit whatever height the choices or a panel leave them. */
+${R} .of-reader-stage {
+  position: relative; z-index: 1; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: flex-end; overflow: clip; cursor: pointer; container-type: size;
+}
+${R} .of-face {
+  position: relative; flex: 1; min-height: 0; width: 100%; margin: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-end; gap: 10px; padding-bottom: 8px;
+  transition: filter 560ms var(--of-ease), transform 560ms var(--of-ease);
+}
+${R} .of-face[data-speaking="false"] { filter: saturate(0.82) brightness(0.86); transform: scale(0.985); }
+${R}[data-look="pearl"] .of-face[data-speaking="false"] { filter: saturate(0.8) brightness(0.97); }
+${R} .of-face[data-face="tender"] { --of-face-aura: rgb(255 182 202 / 0.95); }
+${R} .of-face[data-face="flustered"] { --of-face-aura: rgb(255 128 166 / 0.95); }
+${R} .of-face[data-face="cold"] { --of-face-aura: rgb(150 192 244 / 0.95); }
+${R} .of-face[data-face="hurt"] { --of-face-aura: rgb(164 142 222 / 0.95); }
+${R} .of-face[data-face="angry"] { --of-face-aura: rgb(244 92 92 / 0.95); }
+${R} .of-face-art { position: relative; flex: 1; min-height: 0; width: min(82%, 380px); }
+${R} .of-face-art::before {
+  content: ""; position: absolute; inset: 10% 6% 0; border-radius: 50%; filter: blur(30px); opacity: 0.55;
+  background: radial-gradient(circle, var(--of-face-aura, var(--of-li-accent)), transparent 68%);
+}
+${R} .of-face-img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 6%; opacity: 0;
+  transition: opacity 520ms var(--of-ease);
+  -webkit-mask-image: radial-gradient(70% 82% at 50% 40%, #000 62%, transparent 100%);
+  mask-image: radial-gradient(70% 82% at 50% 40%, #000 62%, transparent 100%);
+}
+${R} .of-face-img[data-front="true"] { opacity: 1; }
+${R} .of-face-medallion {
+  --of-medallion: clamp(48px, min(210px, 54cqw, calc(100cqh - 66px)), 210px);
+  position: relative; flex: none; display: grid; place-items: center; width: var(--of-medallion); aspect-ratio: 1;
+  margin: 0 0 4px;
+}
+${R} .of-face-medallion::before {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 24%, rgb(255 255 255 / 0.55), transparent 50%),
+    linear-gradient(150deg, color-mix(in srgb, var(--of-li-accent) 80%, white), var(--of-li-accent) 55%,
+      color-mix(in srgb, var(--of-li-accent) 72%, ${PALETTE.ink}));
+  box-shadow: 0 0 0 3px var(--of-wish-ring), 0 18px 40px rgb(0 0 0 / 0.3), 0 0 46px var(--of-glow-soft);
+}
+${R} .of-face-aura {
+  position: absolute; inset: -26%; border-radius: 50%; opacity: 0.6; filter: blur(10px);
+  background: radial-gradient(circle, var(--of-face-aura, var(--of-li-accent)) 0%, transparent 66%);
+  animation: of-breathe 5s ease-in-out infinite;
+}
+${R} .of-face-ring {
+  position: absolute; inset: -9px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--of-li-accent) 55%, white);
+  box-shadow: 0 0 0 7px color-mix(in srgb, var(--of-li-accent) 16%, transparent);
+}
+${R} .of-face-initials {
+  position: relative; font-family: var(--of-font-display); font-weight: 600; font-size: calc(var(--of-medallion) * 0.34);
+  letter-spacing: 0.02em; color: ${PALETTE.ink}; text-shadow: 0 1px 0 rgb(255 255 255 / 0.45);
+}
+${R} .of-face-chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 999px;
+  font-size: 0.74rem; font-weight: 800; letter-spacing: 0.04em; color: var(--of-text);
+  background: var(--of-surface-strong); border: 1px solid var(--of-border);
+  -webkit-backdrop-filter: var(--of-glass-blur); backdrop-filter: var(--of-glass-blur);
+  animation: of-fade-in 420ms var(--of-ease) both;
+}
+${R} .of-face-chip svg { color: var(--of-accent-text); }
+${R} .of-cg-quiet {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  width: clamp(120px, min(78cqw, 330px, calc((100cqh - 28px) * 0.8)), 330px); aspect-ratio: 4 / 5; margin: 0 0 14px;
+  padding: 18px; border-radius: 28px; text-align: center;
+  border-color: rgb(230 201 138 / 0.5); animation: of-rise 700ms var(--of-ease) both;
+}
+${R} .of-cg-frame {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 68%;
+  aspect-ratio: 1; border-radius: 50%; color: var(--of-champagne-text);
+  background: radial-gradient(circle, var(--of-tint-strong), transparent 70%);
+  border: 1px solid rgb(230 201 138 / 0.5); box-shadow: inset 0 0 34px rgb(230 201 138 / 0.18);
+}
+${R} .of-cg-names { font-family: var(--of-font-display); font-weight: 600; font-size: 1.45rem; color: var(--of-text); }
+${R} .of-toasts {
+  position: absolute; top: 10px; inset-inline: 12px; z-index: 3; display: flex; flex-direction: column;
+  align-items: center; gap: 8px; pointer-events: none;
+}
+${R} .of-toast {
+  display: inline-flex; align-items: center; gap: 8px; margin: 0; padding: 8px 16px; border-radius: 999px;
+  background: var(--of-surface-strong); border: 1px solid var(--of-border-strong); box-shadow: var(--of-panel-shadow);
+  -webkit-backdrop-filter: var(--of-glass-blur); backdrop-filter: var(--of-glass-blur);
+  animation: of-toast 3.2s var(--of-ease) both;
+}
+${R} .of-toast--remember {
+  padding: 8px 20px; font-family: var(--of-font-hand); font-weight: 500; font-size: 1.45rem; line-height: 1.1;
+  color: var(--of-text);
+}
+${R} .of-toast--remember svg { color: var(--of-accent-text); }
+${R} .of-toast--starlight { font-weight: 800; font-size: 0.86rem; color: var(--of-champagne-text); }
+/* The bottom third: the dialogue box and its choices, or the panel that stands in for them. */
+${R} .of-reader-bottom {
+  position: relative; z-index: 2; min-height: 30%; display: flex; flex-direction: column; justify-content: flex-end;
+  gap: 10px; padding: 18px 10px max(10px, env(safe-area-inset-bottom));
+}
+${R} .of-dialogue-wrap { cursor: pointer; }
+${R} .of-dialogue {
+  position: relative; display: flex; flex-direction: column; gap: 6px; min-height: 128px; padding: 22px 18px 16px;
+  border-radius: 22px;
+}
+${R} .of-dialogue::before {
+  content: ""; position: absolute; inset: 5px; border-radius: 17px; pointer-events: none;
+  border: 1px solid rgb(230 201 138 / 0.26);
+}
+${R} .of-nameplate {
+  position: absolute; top: -15px; inset-inline-start: 16px; display: inline-flex; align-items: center; gap: 8px;
+  max-width: calc(100% - 32px); margin: 0; padding: 6px 16px; border-radius: 999px 999px 999px 6px; overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis; font-family: var(--of-font-display); font-weight: 600; font-size: 1.14rem;
+  line-height: 1; color: ${PALETTE.ink};
+  background: linear-gradient(135deg, color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 62%, white), var(--of-li-accent, ${PALETTE.rose}));
+  box-shadow: 0 6px 16px rgb(0 0 0 / 0.2), inset 0 1px 0 rgb(255 255 255 / 0.6);
+}
+${R}[dir="rtl"] .of-nameplate { border-radius: 999px 999px 6px 999px; }
+${R} .of-nameplate[data-voice="protagonist"] { background: linear-gradient(135deg, #f3dcaa, ${PALETTE.rose}); }
+${R} .of-nameplate[data-voice="other"] { background: linear-gradient(135deg, #f6ecd6, ${PALETTE.champagne}); }
+${R} .of-nameplate-tag {
+  display: inline-flex; align-items: center; gap: 3px; font-family: var(--of-font-body); font-size: 0.6rem; font-weight: 800;
+  letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.78;
+}
+${R} .of-line {
+  max-height: 9.8em; margin: 0; padding-inline-end: 34px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+  font-size: 1.02rem; line-height: 1.62; color: var(--of-text);
+}
+${R} .of-line-rest { visibility: hidden; }
+${R} .of-line--thought { font-style: italic; color: var(--of-text-soft); }
+${R} .of-line--thought > [aria-hidden="true"]::before { content: "("; }
+${R} .of-line--thought > [aria-hidden="true"]::after { content: ")"; }
+${R} .of-line--his-thought {
+  font-family: var(--of-font-display); font-style: italic; font-weight: 600; font-size: 1.2rem; line-height: 1.45;
+  color: color-mix(in srgb, var(--of-li-accent) 45%, var(--of-text));
+  text-shadow: 0 0 16px color-mix(in srgb, var(--of-li-accent) 40%, transparent);
+}
+${R} .of-line--aftermath { padding-inline: 18px; font-style: italic; text-align: center; color: var(--of-text-soft); }
+${R} .of-next {
+  position: absolute; bottom: 6px; inset-inline-end: 6px; display: grid; place-items: center; width: 44px; height: 44px;
+  padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--of-accent-text); cursor: pointer;
+}
+${R} .of-next:hover { background: var(--of-surface-hover); }
+${R} .of-next[data-done="true"] svg { animation: of-nudge 1.6s ease-in-out infinite; }
+${R} .of-next[data-done="false"] { color: var(--of-text-faint); }
+${R} .of-choices-panel { display: flex; flex-direction: column; gap: 8px; padding: 0 4px; animation: of-rise 480ms var(--of-ease) both; }
+${R} .of-choices-heading {
+  font-family: var(--of-font-display); font-style: italic; font-weight: 600; font-size: 1.2rem; text-align: center;
+  text-shadow: 0 1px 10px rgb(0 0 0 / 0.3);
+}
+${R}[data-look="pearl"] .of-choices-heading { text-shadow: 0 1px 10px rgb(255 255 255 / 0.8); }
+${R} .of-choices-note {
+  display: flex; align-items: center; justify-content: center; gap: 6px; margin: -4px 0 0; font-size: 0.78rem;
+  font-weight: 700; text-align: center; color: var(--of-champagne-text);
+}
+${R} .of-choice-pills { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+${R} .of-choice-pill {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 10px 18px; border-radius: 999px;
+  border: 1px solid var(--of-border-strong); background: var(--of-surface-strong); color: var(--of-text);
+  -webkit-backdrop-filter: var(--of-glass-blur); backdrop-filter: var(--of-glass-blur);
+  box-shadow: inset 0 1px 0 var(--of-highlight), var(--of-panel-shadow);
+  font-weight: 700; font-size: 0.95rem; line-height: 1.3; text-align: start; cursor: pointer;
+  transition: transform 360ms var(--of-ease), border-color 360ms var(--of-ease), background-color 360ms var(--of-ease);
+}
+${R} .of-choice-pill:hover {
+  transform: translateY(-1px); border-color: rgb(230 201 138 / 0.85);
+  background: linear-gradient(135deg, var(--of-tint-strong), rgb(230 201 138 / 0.16)), var(--of-surface-strong);
+}
+${R} .of-choice-pill[aria-disabled="true"] { opacity: 0.65; cursor: progress; transform: none; }
+${R} .of-choice-pill-mark { flex: none; color: var(--of-accent-text); }
+${R} .of-choice-pill-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+${R} .of-choice-pill[data-first="true"] { border-color: rgb(230 201 138 / 0.7); }
+${R} .of-choice-first {
+  flex: none; padding: 2px 8px; border-radius: 999px; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--of-accent-text); background: var(--of-tint-strong);
+}
+${R} .of-choices-panel[data-kind="big"] .of-choice-pill {
+  border-color: rgb(230 201 138 / 0.85); box-shadow: inset 0 0 0 1px rgb(230 201 138 / 0.35), 0 0 20px rgb(230 201 138 / 0.22);
+}
+${R} .of-choices-status { min-height: 1.2em; margin: 0; font-size: 0.8rem; text-align: center; color: var(--of-text-soft); }
+${R} .of-choices-status:empty { min-height: 0; }
+${R} .of-reader-panel {
+  display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 16px; border-radius: 22px;
+  text-align: center;
+}
+${R} .of-reader-panel .of-body { max-width: 36ch; }
+${R} .of-quill {
+  display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; color: var(--of-accent-text);
+  background: var(--of-tint); animation: of-write 1.8s ease-in-out infinite;
+}
+${R} .of-declined { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 22px; border-color: rgb(240 138 164 / 0.55); }
+${R} .of-declined-head { display: flex; align-items: center; gap: 8px; color: var(--of-accent-text); }
+${R} .of-declined-head .of-section-title { color: var(--of-text); }
+${R} .of-declined .of-select-row { flex-wrap: wrap; }
+${R} .of-declined .of-select-row > .of-input { min-width: 160px; }
+${R} .of-tags-card {
+  display: flex; flex-direction: column; gap: 10px; padding: 18px 16px; border-radius: 22px;
+  border-color: rgb(230 201 138 / 0.55);
+}
+${R} .of-tags-card .of-hint { display: flex; align-items: center; gap: 6px; }
+${R} .of-tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+${R} .of-tag {
+  padding: 4px 11px; border-radius: 999px; font-size: 0.8rem; font-weight: 800; color: var(--of-accent-text);
+  background: var(--of-tint-strong); border: 1px solid var(--of-border-strong);
+}
+${R} .of-chapter-end { gap: 8px; }
+${R} .of-chapter-end-mark {
+  display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; color: var(--of-champagne-text);
+  background: radial-gradient(circle, rgb(230 201 138 / 0.3), transparent 70%); box-shadow: 0 0 30px var(--of-wish-glow);
+}
+${R} .of-chapter-end-title {
+  font-family: var(--of-font-display); font-weight: 600; font-size: 1.85rem; line-height: 1.05; padding-bottom: 0.06em;
+  background: var(--of-title-ink); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+${R} .of-chapter-end-title:focus { outline: none; }
+${R} .of-chapter-end-title:focus-visible { outline: 2px solid var(--of-focus); outline-offset: 4px; border-radius: 6px; }
+${R} .of-grants { display: flex; flex-direction: column; gap: 6px; width: 100%; margin: 4px 0; padding: 0; list-style: none; }
+${R} .of-grant {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 14px; text-align: start;
+  background: var(--of-surface-hover); font-weight: 700; font-size: 0.9rem;
+}
+${R} .of-grant > span:not(.of-avatar):not(.of-badge) { flex: 1; min-width: 0; }
+${R} .of-grant--starlight { color: var(--of-champagne-text); }
+${R} .of-grant[data-rose="true"] .of-badge { color: ${PALETTE.ink}; background: linear-gradient(135deg, #f3dcaa, ${PALETTE.champagne}); }
+${R} .of-reader-notice { align-items: center; justify-content: space-between; }
+${R} .of-reader-show { position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); inset-inline-end: 14px; }
+/* The backlog. */
+${R} .of-log {
+  display: flex; flex-direction: column; gap: 10px; max-height: 52vh; margin: 0; padding: 0 4px 0 0; overflow-y: auto;
+  list-style: none; scrollbar-width: thin; border-radius: 8px;
+}
+${R} .of-log-line { display: flex; align-items: flex-start; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--of-border); }
+${R} .of-log-line:last-child { border-bottom: 0; }
+${R} .of-log-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+${R} .of-log-who {
+  font-family: var(--of-font-display); font-weight: 600; font-size: 1.02rem;
+  color: color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 45%, var(--of-text));
+}
+${R} .of-log-said { font-size: 0.92rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+${R} .of-log-line[data-thought="true"] .of-log-said { font-style: italic; color: var(--of-text-soft); }
+${R} .of-log-line[data-voice="narration"] .of-log-said { color: var(--of-text-soft); }
+${R} .of-log-star { width: 34px; height: 34px; border: 0; background: transparent; color: var(--of-text-soft); }
+${R} .of-log-star[aria-pressed="true"] { color: var(--of-champagne-text); }`;
+
 // Dialogs render into the stage's own layer (Stage.tsx), over the top bar and the dock.
 const DIALOG_RULES = `
 ${R} .of-stage-layer { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
@@ -765,6 +1219,14 @@ const MOTION_RULES = `
 @keyframes of-spin { to { transform: rotate(360deg); } }
 @keyframes of-sheen { 0%, 62% { transform: translateX(-70%); } 100% { transform: translateX(70%); } }
 @keyframes of-breathe { 0%, 100% { transform: scale(1); opacity: 0.75; } 50% { transform: scale(1.1); opacity: 1; } }
+@keyframes of-motes { from { transform: translate3d(0, 3%, 0); } to { transform: translate3d(-3%, -5%, 0); } }
+@keyframes of-place-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes of-nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+@keyframes of-write { 0%, 100% { transform: rotate(-8deg) translateX(-3px); } 50% { transform: rotate(6deg) translateX(3px); } }
+@keyframes of-toast {
+  0% { opacity: 0; transform: translateY(8px) scale(0.97); } 12% { opacity: 1; transform: none; }
+  82% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-6px); }
+}
 @media (prefers-reduced-motion: reduce) {
   ${R}, ${R} *, ${R} *::before, ${R} *::after {
     animation: none !important; transition: none !important; scroll-behavior: auto !important;
@@ -786,6 +1248,8 @@ export function otomeForgeStyles(): string {
     PAGE_RULES,
     FORM_RULES,
     SETUP_RULES,
+    STORY_RULES,
+    READER_RULES,
     DIALOG_RULES,
     MOTION_RULES,
   ].join("\n");

@@ -55,7 +55,10 @@ test("the bundle registers its routes under /api/otome-forge, keeps the id prefi
   assert.deepEqual([...host.routes.keys()].sort(), [
     "GET /api/otome-forge/index",
     "GET /api/otome-forge/runs/:run",
+    "GET /api/otome-forge/runs/:run/chapters/:key",
     "GET /api/otome-forge/runs/:run/lis/:li/bible",
+    "GET /api/otome-forge/runs/:run/memory/status",
+    "GET /api/otome-forge/runs/:run/story",
     "POST /api/otome-forge/age-gate",
     "POST /api/otome-forge/age-gate/revoke",
     "POST /api/otome-forge/index/opened",
@@ -64,12 +67,21 @@ test("the bundle registers its routes under /api/otome-forge, keeps the id prefi
     "POST /api/otome-forge/runs/:run/activate",
     "POST /api/otome-forge/runs/:run/art/paint",
     "POST /api/otome-forge/runs/:run/art/prompt",
+    "POST /api/otome-forge/runs/:run/cancel",
+    "POST /api/otome-forge/runs/:run/chapters/:key/beats/:i",
+    "POST /api/otome-forge/runs/:run/chapters/:key/beats/:i/choose",
+    "POST /api/otome-forge/runs/:run/chapters/:key/beats/:i/ease-off",
+    "POST /api/otome-forge/runs/:run/chapters/:key/beats/:i/read",
+    "POST /api/otome-forge/runs/:run/chapters/next",
     "POST /api/otome-forge/runs/:run/delete",
+    "POST /api/otome-forge/runs/:run/favorites",
     "POST /api/otome-forge/runs/:run/forge/consent",
     "POST /api/otome-forge/runs/:run/forge/retry",
     "POST /api/otome-forge/runs/:run/lis/:li/accent",
     "POST /api/otome-forge/runs/:run/lis/:li/bible",
+    "POST /api/otome-forge/runs/:run/memory/retry",
     "POST /api/otome-forge/runs/:run/settings",
+    "POST /api/otome-forge/runs/:run/veil",
   ]);
 
   await selfCheck();

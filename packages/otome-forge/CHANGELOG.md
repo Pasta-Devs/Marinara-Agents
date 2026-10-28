@@ -1,5 +1,13 @@
 # Otome Forge release notes
 
+## 0.0.3 — 2026-10-28
+
+- Now offered to Engine `staging` testers. The story begins: pick who leads each main chapter from two love interests, the one you have seen least and the one with the most unresolved between you, and play six to nine scenes that build to a confrontation.
+- Scenes mark each love interest's face line by line (a later build paints the faces), set thoughts apart, and offer choices. Your first choice is canon; replays show the other branches and change nothing, and a choice that matters names who will remember it.
+- Trust, tension and grievances move only through your choices and are never shown. Each love interest remembers only what they saw or were told.
+- Rewrite a scene before choosing (one model call), or Ease off to end it at once with no model call, also when your model declines a scene. Settings → Debug shows the story memory.
+- Reading earns Starlight and affection. Every prompt that writes the story keeps your content settings and the 18+ gate.
+
 ## 0.0.2 — 2026-10-28
 
 - Still a development build, in no catalog. A story now starts from a setup: a premise, your protagonist from a persona, and two to five love interests from your cards or six original archetypes, each with the pronouns you pick.
