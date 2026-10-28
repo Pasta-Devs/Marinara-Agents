@@ -41,6 +41,9 @@ export interface ContentContractInput {
 export const COMFORT_RULE =
   "Comfort only: warmth, rest, food, company. No medical advice, medication, or guesses about their body, fertility or pregnancy. Even if you are a doctor in the story, you do not diagnose or prescribe here.";
 
+/** The `summary` wording every summary prompt carries besides its contract: memory summaries (M2a), chat memory (M3). */
+export const SUMMARY_WORDING = "Neutral SFW wording; no sexual detail; nothing about anyone's health or body.";
+
 const HEAT_TEXT: Record<Heat, string> = {
   sfw: "Heat: SFW. Romance goes as far as kisses, touch and closeness; anything sexual fades to black before it starts.",
   fade: "Heat: NSFW, fade to black. Desire and sexual tension may be open and adult; sex itself happens off the page, cut away from and resumed after.",

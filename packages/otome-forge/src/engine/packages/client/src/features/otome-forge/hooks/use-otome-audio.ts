@@ -12,7 +12,8 @@
 // - Voices: the kit's voice picking over the Engine's TTS settings (explicit assignments win; the protagonist uses her
 //   persona's voice or stays silent; love interests and, with "voice everyone else", anyone else get the Engine's pool
 //   voice for their gender). Narration and thoughts are never voiced. Each line has a cache key, so a replay from the
-//   backlog plays the saved clip.
+//   backlog plays the saved clip; a comfort line (M3's Rough day?) is voiced with none, so it never lands in the
+//   Engine's audio cache (plan §1.9).
 // - One controller per story. <OtomeAudioProvider> makes it; a provider inside another one adds nothing, so OtomeForgeView
 //   can hold one for every screen and the reader still works on its own. A screen claims its music cue with
 //   useMusicCue; the newest claim wins, and the provider's own cue plays when none is held.
@@ -502,8 +503,11 @@ export class OtomeAudioController {
     return request;
   };
 
-  /** Voices one line (stopping any other); resolves when it has played, or at once when nobody would voice it. */
-  async speak(segment: Segment, ref: string): Promise<SpeakOutcome> {
+  /**
+   * Voices one line (stopping any other); resolves when it has played, or at once when nobody would voice it. `cache`
+   * false voices it with no cache key.
+   */
+  async speak(segment: Segment, ref: string, { cache = true }: { cache?: boolean } = {}): Promise<SpeakOutcome> {
     const deps = this.deps;
     const settings = this.settings;
     const speaker = deps ? lineSpeaker(segment, deps.lis, deps.player) : null;
@@ -525,7 +529,7 @@ export class OtomeAudioController {
             speaker: segment.speaker,
             voice,
             ...(speaker.characterId ? { characterId: speaker.characterId } : {}),
-            cacheKey: voiceCacheKey(this.runKey, ref),
+            ...(cache ? { cacheKey: voiceCacheKey(this.runKey, ref) } : {}),
           },
         ],
         `${this.voicePrefix}${(this.voiceIndex += 1)}`,

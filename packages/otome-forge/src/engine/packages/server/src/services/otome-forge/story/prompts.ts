@@ -106,6 +106,21 @@ function seenBy(liState: LiState, li: LiId, knows: readonly LiId[]): LiState {
 }
 
 /**
+ * What a love interest's own reader (M3's note P16 and chat reply P17) may know of the state, as a planner for them
+ * sees it: their state without another love interest's own chapter (seenBy), and their latest relationship and
+ * off-screen lines among the rows they may see (knownRows), "" for none.
+ */
+export function ownView(state: RunState, li: LiId): { liState: LiState; relationship: string; offscreen: string } {
+  const latest = (rows: RunState["ledgers"]["offscreen"]) =>
+    [...knownRows(rows, [li])].reverse().find((row) => row.li === li)?.line ?? "";
+  return {
+    liState: seenBy(liStateOf(state, li), li, [li]),
+    relationship: latest(state.ledgers.relationship),
+    offscreen: latest(state.ledgers.offscreen),
+  };
+}
+
+/**
  * What stands between them and the protagonist: trust and tension in words, open grievances (with their ids, so a
  * node can resolve them), a rupture, and what the protagonist has told them. The grievances shown are the newest
  * three, the rupture's and those `also` names (the ones a node may resolve), or every one with "all" (the planner).

@@ -4,7 +4,8 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Heart } from "lucide-react";
-import { SCREEN_ICONS, SCREEN_NAME_KEYS, type ScreenId } from "./screens";
+import { SCREEN_ICONS } from "./screen-icons";
+import { SCREEN_NAME_KEYS, type ScreenId } from "./screens";
 
 interface PlaceholderProps {
   screen: ScreenId;

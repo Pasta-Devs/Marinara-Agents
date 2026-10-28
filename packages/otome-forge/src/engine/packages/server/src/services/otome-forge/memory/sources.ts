@@ -4,7 +4,8 @@
 // Each area exports one reader and this file concatenates them; a milestone that adds a kind of canon adds one line:
 //   M2a  story chapters (S/story/canon.ts readStorySources); M2b's route and repair chapters arrive through it as
 //        `chat` with audience [li], like a date, and a Confrontation as the rounds played and its ending
-//   M3   phone sessions · M4 Snapshots · M5 Read Him sets
+//   M3   phone sessions (S/phone/memory.ts phoneMemorySources: `chat`, audience [their id])
+//   M4   Snapshots · M5 Read Him sets
 // Audience entries are plain LI ids: a `chat` source is recalled only by that LI's own readers and by scenes whose cast
 // includes them, never into the shared overview (plan §1.9, design: Private memory). Care data is never a source.
 import { orderForgeStorySources } from "@forge-kit/story-memory-integration.mjs";
@@ -12,6 +13,7 @@ import type { ForgeMemorySource } from "@forge-kit/story-memory.mjs";
 import { playerId, stateId } from "../ids.js";
 import { normalizePlayer } from "../schemas/player.js";
 import { normalizeState } from "../schemas/state.js";
+import { phoneMemorySources } from "../phone/memory.js";
 import type { OtomeStore } from "../store.js";
 import { readStorySources } from "../story/canon.js";
 
@@ -26,6 +28,10 @@ export async function readMemorySources(
   ]);
   if (!state) return [];
   const protagonist = player?.name ?? "";
-  const sources = [...(await readStorySources(store, runId, state, protagonist))];
+  const [story, phone] = await Promise.all([
+    readStorySources(store, runId, state, protagonist),
+    phoneMemorySources(store, runId, state),
+  ]);
+  const sources = [...story, ...phone];
   return orderForgeStorySources(sources.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)));
 }
