@@ -4,11 +4,13 @@
 // call; a refusal is a 422 that writes nothing; the lookahead and the player's own request write a beat once; moment
 // and confrontation nodes are written as beats; a LI's thought before stage 2 gets the repair turn, under his first
 // name too, and one thought per scene counts every branch a player can read; Cancel stops a write; a chapter's grants
-// land once; every prompt keeps the earlier chapters and their big choices when memory cannot answer, never another
-// man's private canon; a rewrite never replaces a beat played meanwhile; a pick whose effects were lost lands when its
-// beat is read; Ease off removes the lookahead on a retry, when the lookahead is saved just after the cut, and when
-// the cut lands between the lookahead's reads of the beat it follows; a pick past the cut changes nothing, also when
-// the cut lands while the pick is saved; an Ease off before a saved pick keeps the pick; and a kept line is kept once.
+// land once; every prompt keeps the earlier chapters and their big choices when memory cannot answer, and never gets
+// another love interest's private canon, with memory ready too, while the one it gets says whose it is and that it is
+// private; a rewrite never replaces a beat played meanwhile; a
+// pick whose effects were lost lands when its beat is read; Ease off removes the lookahead on a retry, when the
+// lookahead is saved just after the cut, and when the cut lands between the lookahead's reads of the beat it follows;
+// a pick past the cut changes nothing, also when the cut lands while the pick is saved; an Ease off before a saved
+// pick keeps the pick; and a kept line is kept once.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -23,6 +25,7 @@ import {
   SUMMARY_WORDING,
   createOtomeMemory,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/memory.ts";
+import { readMemorySources } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/memory/sources.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import {
@@ -50,21 +53,38 @@ import {
   stateId,
   worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
-import { KAI, MIR, SOL, beatReply, json, planReply, storyWorld } from "./fixtures/otome-forge-story.ts";
+import {
+  KAI,
+  MIR,
+  SOL,
+  beatReply,
+  confrontationReply,
+  isConfrontationPrompt,
+  json,
+  planReply,
+  storyWorld,
+} from "./fixtures/otome-forge-story.ts";
 
 const system = (messages: CapabilityLanguageModelMessage[]) => messages[0]!.content;
 const isPlanner = (messages: CapabilityLanguageModelMessage[]) => system(messages).includes("chapter planner");
 
-/** Answers every call: the plan for the planner, `beat(index)` for the narrator (the node index from the prompt). */
+/**
+ * Answers every call: the plan for the planner, a stance game for the Confrontation (M2b), `beat(index)` for the
+ * narrator (the node index from the prompt).
+ */
 function router(beat: (node: number) => Record<string, unknown> = () => beatReply()) {
   return Array.from({ length: 60 }, () => (messages: CapabilityLanguageModelMessage[]) => {
     if (isPlanner(messages)) return json(planReply());
+    if (isConfrontationPrompt(messages)) return json(confrontationReply());
     const node = Number(/Narrate node (\d+) of/.exec(messages.at(-1)!.content)?.[1] ?? 1) - 1;
     return json(beat(node));
   });
 }
 
 const beatPath = "/runs/:run/chapters/:key/beats/:i";
+/** How the story names Mireille's route chapter "Mireille's Ledger" (S/story/canon.ts titleOf). */
+const MIREILLE_LEDGER =
+  "Mireille's own route chapter \"Mireille's Ledger\" (private: only the people in its scenes know what happened in it)";
 const node = (i: number) => ({ key: "main-1", i: String(i) });
 const labels = (t: Awaited<ReturnType<typeof storyWorld>>, label: string) =>
   t.logs.filter((entry) => entry.level === "debugOverride" && entry.args[0] === label).length;
@@ -76,13 +96,20 @@ async function plannedWorld(runKey: string, beat?: (node: number) => Record<stri
   return t;
 }
 
-/** Reads beats `from`..`to` to their ends, in order, making no choices. */
-async function readThrough(t: Awaited<ReturnType<typeof storyWorld>>, from: number, to: number) {
+/** Reads beats `from`..`to` to their ends, in order, making no choices (a Confrontation is held all three rounds). */
+async function readThrough(t: Awaited<ReturnType<typeof storyWorld>>, from: number, to: number, key = "main-1") {
   const results = [];
   for (let i = from; i <= to; i += 1) {
-    const served = await t.call("POST", beatPath, {}, node(i));
+    const at = { key, i: String(i) };
+    const served = await t.call("POST", beatPath, {}, at);
     assert.equal(served.status, 200, JSON.stringify(served.body));
-    results.push(await t.call("POST", `${beatPath}/read`, { segment: 99 }, node(i)));
+    if (served.body.confrontation) {
+      for (let round = 1; round <= 3; round += 1) {
+        const taken = await t.call("POST", `${beatPath}/stance`, { round, stance: "hold" }, at);
+        assert.equal(taken.status, 200, JSON.stringify(taken.body));
+      }
+    }
+    results.push(await t.call("POST", `${beatPath}/read`, { segment: 99 }, at));
   }
   return results;
 }
@@ -155,7 +182,7 @@ test("the narrator's sentence is the one the kit replaces; P6 carries the bounda
   assert.match(sent.at(-1)!.content, /The story opens here: The lanterns/);
 });
 
-test("moment and confrontation nodes are written as beats with their framing", async () => {
+test("moment nodes are written as beats with their framing; a confrontation node is a stance game", async () => {
   const t = await plannedWorld("r-kind-aaaaaa");
   const chapter = (await readChapter(t.store, t.runId, "main-1"))!;
   const [world, player, state] = await Promise.all([
@@ -185,7 +212,11 @@ test("moment and confrontation nodes are written as beats with their framing", a
   const moment = await t.call("POST", beatPath, {}, node(2));
   assert.equal(moment.body.beat.kind, "moment");
   await readThrough(t, 2, 4);
-  assert.equal((await t.call("POST", beatPath, {}, node(5))).body.beat.kind, "confrontation");
+  const confrontation = await t.call("POST", beatPath, {}, node(5));
+  assert.equal(confrontation.body.beat.kind, "confrontation");
+  assert.equal(confrontation.body.confrontation.rounds.length, 1, "only the round being played is shown");
+  assert.equal(labels(t, "confrontation/main-1/5"), 1, "P12 wrote it in one call");
+  assert.equal(labels(t, "beat/main-1/5"), 0);
 });
 
 test("the lookahead and the player's own request write a beat once", async () => {
@@ -490,6 +521,7 @@ test("every story prompt keeps the earlier chapters and their big choices when m
   // A compress model that refuses every summary: memory never gets past `error`.
   const replies = Array.from({ length: 200 }, () => (messages: CapabilityLanguageModelMessage[]) => {
     if (system(messages).includes(SUMMARY_WORDING)) return "I can't help with summarizing this.";
+    if (isConfrontationPrompt(messages)) return json(confrontationReply());
     const number = Number(/main chapter (\d+)/.exec(messages.at(-1)!.content)?.[1] ?? 1);
     if (isPlanner(messages)) {
       return json(planReply({ title: `Night ${number}`, ledger: { relationship: [], conflict: [], offscreen: [] } }));
@@ -510,7 +542,11 @@ test("every story prompt keeps the earlier chapters and their big choices when m
     assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
     const at = (i: number) => ({ key: `main-${number}`, i: String(i) });
     for (let i = 0; i <= 6; i += 1) {
-      assert.equal((await t.call("POST", beatPath, {}, at(i))).status, 200);
+      const served = await t.call("POST", beatPath, {}, at(i));
+      assert.equal(served.status, 200);
+      for (let round = 1; served.body.confrontation && round <= 3; round += 1) {
+        assert.equal((await t.call("POST", `${beatPath}/stance`, { round, stance: "hold" }, at(i))).status, 200);
+      }
       if (i === 6) {
         const big = { choice: "choice-1", option: "option-1" };
         assert.equal((await t.call("POST", `${beatPath}/choose`, big, at(i))).status, 200);
@@ -605,6 +641,111 @@ test("every story prompt keeps the earlier chapters and their big choices when m
     assert.equal(text.includes("PRIVATE-LEDGER"), sees, `the private canon, for ${JSON.stringify(who)}`);
     assert.equal(text.includes("Burn the ledger"), sees, `the private decision, for ${JSON.stringify(who)}`);
     assert.ok(text.includes("Keep Kai's secret 1"), "a main chapter's decision is everyone's");
+    // Whose it is and that it is private, so a scene with others in it keeps to the knowledge boundary.
+    assert.equal(text.includes(`# Canon in full: ${MIREILLE_LEDGER}\nPRIVATE-LEDGER`), sees, "its heading");
+    assert.equal(text.includes(`- ${MIREILLE_LEDGER}, node 1: Burn the ledger`), sees, "its decision's");
+  }
+});
+
+test("with memory ready, a love interest's route chapter reaches only the scenes and plans they are in", async () => {
+  // The fake summarizer: a detail echoes its source, an overview joins the previous one with its records.
+  const summarizer = (messages: CapabilityLanguageModelMessage[]) => {
+    const input = JSON.parse(messages.at(-1)!.content);
+    if (input.source) return json({ summary: `${input.source.title}: ${input.source.content}` });
+    const records = input.records.map((record: { content: string }) => record.content).join(" ");
+    return json({ summary: [input.previousOverview, records].filter(Boolean).join(" ") });
+  };
+  const t = await storyWorld({ runKey: "r-ready-aaaaaa", replies: Array.from({ length: 40 }, () => summarizer) });
+  const chapterOf = (changes: Partial<Chapter> & Pick<Chapter, "key" | "kind" | "lead" | "title">): Chapter => ({
+    tags: [],
+    summary: "",
+    nodes: [{ i: 0, kind: "beat", guide: "The scene.", cast: [changes.lead] }],
+    ledger: { relationship: [], conflict: [], offscreen: [] },
+    plannedAt: "2026-10-28T10:00:00.000Z",
+    connectionId: "conn-text",
+    ...changes,
+  });
+  const complete = async (chapter: Chapter, text: string, completed: string) => {
+    await t.store.mutateDoc(runDocTarget("chapter", chapterId(t.runId, chapter.key)), normalizeChapter, () => chapter);
+    const beat: Beat = {
+      key: chapter.key,
+      i: 0,
+      kind: "beat",
+      places: [],
+      segments: [{ speaker: "", text }],
+      choices: [],
+      choiceCanon: {},
+      effects: {},
+      applied: {},
+      musicMood: "tense",
+      readThrough: 0,
+      written: { at: completed, connectionId: "conn-text", model: "fake" },
+      rewrites: 0,
+    };
+    await t.store.mutateDoc(runDocTarget("beat", beatId(t.runId, chapter.key, 0)), normalizeBeat, () => beat);
+    await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+      ...state,
+      chapters: { ...state.chapters, [chapter.key]: { beatsRead: 1, completed, applied: [] } },
+    }));
+  };
+  await complete(
+    chapterOf({ key: "main-1", kind: "main", number: 1, lead: KAI, title: "Night 1" }),
+    "SHARED-QUAY: the lanterns along the quay go dark.",
+    "2026-10-28T10:00:00.000Z",
+  );
+  // Mireille's route chapter, completed after it.
+  await complete(
+    chapterOf({ key: `route-${MIR}-2`, kind: "route", li: MIR, lead: MIR, stage: 2, title: "Mireille's Ledger" }),
+    "PRIVATE-LEDGER: Mireille shows Ines the forged pages of the harbour ledger.",
+    "2026-10-28T11:00:00.000Z",
+  );
+  const memory = createOtomeMemory({ runtime: t.runtime, store: t.store });
+  try {
+    assert.equal(await memory.maintain({ runId: t.runId }), true);
+    for (let turn = 0; turn < 2000 && (await memory.status(t.runId)).phase === "pending"; turn += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.equal((await memory.status(t.runId)).phase, "ready");
+    // The kit's source carries the same name, so a detail it recalls (older, by relevance) says whose it is too.
+    const sources = await readMemorySources(t.store, t.runId);
+    assert.deepEqual(
+      sources.map((source) => [source.kind, source.title]),
+      [
+        ["chapter", "Night 1"],
+        ["chat", MIREILLE_LEDGER],
+      ],
+    );
+    // A plan's recall (P10, P11 and P5 recall with `cast` and a plan), and a scene's (P6, P12).
+    const plan = (li: string, name: string) => ({
+      job: "structured" as const,
+      cast: [li],
+      query: { plan: `${name} and the forged harbour ledger`, speakers: [name] },
+    });
+    for (const [who, sees] of [
+      [{ job: "narration", cast: [KAI] }, false],
+      [plan(KAI, "Kai"), false],
+      [{ job: "narration", cast: [] }, false],
+      [{ job: "narration", reader: KAI }, false],
+      [{ job: "narration", cast: [MIR] }, true],
+      [{ job: "narration", cast: [KAI, MIR] }, true],
+      [plan(MIR, "Mireille"), true],
+      [{ job: "narration", reader: MIR }, true],
+    ] as const) {
+      const text = await recallText({ store: t.store, memory, runtime: t.runtime }, t.runId, who);
+      const label = JSON.stringify(who);
+      assert.match(text, /# Canon to date\n/, `the ready memory answers, for ${label}`);
+      assert.ok(text.includes("SHARED-QUAY"), `a main chapter is everyone's, for ${label}`);
+      // The fake summarizer echoes a source, so its text stands for its summary too (in the overview or a detail).
+      assert.equal(text.includes("PRIVATE-LEDGER"), sees, `the route chapter or its summary, for ${label}`);
+      assert.equal(text.includes("Mireille's Ledger"), sees, `the route chapter's title, for ${label}`);
+      if (sees) {
+        assert.equal(text.split("PRIVATE-LEDGER").length, 2, `in full once, never ranked again, for ${label}`);
+        assert.ok(text.indexOf("# Latest chapter: Night 1") < text.indexOf("PRIVATE-LEDGER"), "in story order");
+        assert.ok(text.includes(`# Canon in full: ${MIREILLE_LEDGER}\nPRIVATE-LEDGER`), `whose it is, for ${label}`);
+      }
+    }
+  } finally {
+    memory.dispose();
   }
 });
 
@@ -855,4 +996,52 @@ test("keeping a line twice keeps it once; letting it go removes it", async () =>
   assert.equal((await keep({ keep: true })).body.favorites.length, 1, "sent again, it is kept once");
   assert.deepEqual((await keep({ keep: false })).body.favorites, []);
   assert.deepEqual((await keep({ keep: false })).body.favorites, [], "letting it go twice changes nothing");
+});
+
+test("the art hears of every beat: faces when served, places and its CG once when written, a rewrite's release", async () => {
+  const t = await plannedWorld("r-arts-aaaaaa");
+  const at = new Date().toISOString();
+  const seen: Array<[string, string, number, boolean?]> = [];
+  t.deps.art = {
+    queueExpressions: (_runId, beat, { debugMode }) => {
+      seen.push(["faces", (beat.segments[0] as { text: string }).text, beat.segments.length, debugMode]);
+    },
+    queueScenePaints: async (_runId, beat, { review }) => {
+      seen.push(["scene", beat.key, beat.i, review]);
+      throw new Error("the art broke");
+    },
+    releaseBeatArt: async (_runId, beat) => {
+      seen.push(["release", "", beat.cg?.at ?? -1]);
+    },
+    dispose: () => undefined,
+  };
+  const served = await t.call("POST", beatPath, { reviewImagePrompts: true }, node(0));
+  assert.equal(served.status, 200, "an art call that throws never breaks the story");
+  await t.settle();
+  assert.deepEqual(
+    seen.filter(([kind]) => kind === "scene"),
+    [
+      ["scene", "main-1", 0, true],
+      ["scene", "main-1", 1, true],
+    ],
+    "each written beat once, the lookahead's included, with the request's review mode",
+  );
+  assert.equal(seen.filter(([kind]) => kind === "faces").length, 1, "faces for the beat served");
+  const warned = t.logs.find((entry) => entry.level === "warn" && entry.message.includes("Art for"));
+  assert.deepEqual(warned?.args, ["main-1", 0, "scene", "the art broke"], "and is logged once per failure");
+  // Served again from the store: faces again (a set may resume), no second scene paint.
+  await t.call("POST", beatPath, {}, node(0));
+  assert.equal(seen.filter(([kind]) => kind === "faces").length, 2);
+  assert.equal(seen.filter(([kind]) => kind === "scene").length, 2);
+  // A rewrite paints its own scene and lets the replaced beat's CG go, and the lookahead it drops.
+  for (const i of [0, 1]) {
+    const art = { state: "ready" as const, at, url: `/cg${i}.png`, ref: `global-gallery:g${i}` };
+    await t.store.updateDoc(runDocTarget("beat", beatId(t.runId, "main-1", i)), normalizeBeat, (beat) =>
+      beat ? { ...beat, cg: { at: 1, brief: "Kai at the lens.", cast: ["Kai"], art } } : beat,
+    );
+  }
+  const rewritten = await t.call("POST", beatPath, { rewrite: true }, node(0));
+  assert.equal(rewritten.status, 200);
+  await t.settle();
+  assert.equal(seen.filter(([kind]) => kind === "release").length, 2, "the replaced beat and the dropped lookahead");
 });

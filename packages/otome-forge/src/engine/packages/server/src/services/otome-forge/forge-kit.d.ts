@@ -62,6 +62,7 @@ declare module "@forge-kit/image-avatar-references.mjs" {
   export function forgeWrapImageReferenceClient<C extends object>(
     client: C,
     logger?: { debug?(message: string, ...args: unknown[]): void; warn?(message: string, ...args: unknown[]): void },
+    options?: { logPrefix?: string },
   ): C;
 }
 
@@ -249,4 +250,190 @@ declare module "@forge-kit/story-memory.mjs" {
     plan: string;
     speakers: string[];
   };
+}
+
+// ── M2b: expressions, music briefs and soundtrack settings ──
+
+declare module "@forge-kit/story-expressions-server.mjs" {
+  /** Each face's edit look: [the sentence for natural-language prompts, the tags for tag prompts]. */
+  export type ForgeExpressionLooks = Record<string, [sentence: string, tags: string]>;
+  /** Gacha Forge's four looks (anger, fear, sadness, joy); Otome passes its own five (SH/faces.ts FACE_LOOKS). */
+  export const forgeExpressionLooks: ForgeExpressionLooks;
+  /** True while the world's expressions setting is on (`images.expressions === true` and images not off). */
+  export function forgeStoryExpressionsOn(images: unknown): boolean;
+  /** Every base image a unit's art uses: its portrait, each outfit's url, and `extra`. */
+  export function forgeStoryExpressionBases(unit: unknown, extra?: readonly string[]): Set<string>;
+  /** `{expressions: {face: url}}` for a ready set on `base` while expressions are on, else `{}`. */
+  export function forgeStoryExpressionCast(
+    images: unknown,
+    unit: unknown,
+    base: string,
+    names?: readonly string[],
+  ): { expressions?: Record<string, string> };
+  /** The cast entry a line's speaker names (exact name, a protagonist pronoun, then a unique first name), or null. */
+  export function forgeStorySpeaker<C extends { name?: string; prota?: boolean }>(
+    cast: C[],
+    speaker: unknown,
+  ): C | null;
+  /** The cast entries that speak or think in the beat, its branches, or (the protagonist) a spoken choice. */
+  export function forgeStoryExpressionSpeakers<C extends { name?: string; prota?: boolean }>(
+    cast: C[],
+    beat: unknown,
+  ): C[];
+  /** The edit prompt that changes only the face of `base` to `expression`. */
+  export function forgeStoryExpressionPrompt(
+    unit: unknown,
+    base: string,
+    expression: string,
+    profile?: { styleText?: string; positiveTags?: string },
+    options?: { tagged?: boolean; negative?: string; looks?: ForgeExpressionLooks },
+  ): { prompt: string; negativePrompt: string };
+  /** A paid image connection as `connection(run)` resolves it. */
+  export interface ForgeExpressionTarget {
+    id: string;
+    provider?: string;
+    model?: string;
+  }
+  export interface ForgeStoryExpressions {
+    /** Called with the cast a scene is served or written with; queues the faces in the background, returns the cast. */
+    queue<C extends { name?: string; prota?: boolean }>(runId: string, run: unknown, cast: C[], beat: unknown): C[];
+    /** Package teardown: queued faces of this instance stop before their paid call. */
+    dispose(): void;
+  }
+  export function createForgeStoryExpressions(options: {
+    documents: {
+      getById(packageId: string, id: string): Promise<{ id: string; data: unknown } | null>;
+      list(packageId: string, kind: string): Promise<Array<{ id: string; data: unknown }>>;
+    };
+    packageId: string;
+    logger: {
+      warn(message: string, ...args: unknown[]): void;
+      info(message: string, ...args: unknown[]): void;
+      debug(message: string, ...args: unknown[]): void;
+    };
+    readRun(runId: string): Promise<unknown>;
+    /** The world's image settings, with `portraitWidth` and `portraitHeight` added (the kit reads both). */
+    images(run: unknown): {
+      expressions?: boolean;
+      expressionsSince?: string;
+      styleProfileId?: string;
+      portraitWidth: number;
+      portraitHeight: number;
+      [key: string]: unknown;
+    };
+    connection(run: unknown): Promise<ForgeExpressionTarget | null>;
+    /** The image client: generateExpression, uploadToGallery, deleteGalleryImage, cardAvatarImage, personaAvatar. */
+    client(): {
+      generateExpression(request: Record<string, unknown>): Promise<{
+        overrideTook?: boolean;
+        sentPrompt?: string;
+        prompt?: string;
+        [key: string]: unknown;
+      }>;
+      uploadToGallery(request: Record<string, unknown>): Promise<{ id: string; url: string }>;
+      deleteGalleryImage(id: string): Promise<boolean>;
+      cardAvatarImage(path: string): Promise<{ mime: string; base64: string } | null>;
+      personaAvatar(personaId: string): Promise<string>;
+    };
+    /** One paid image at a time per image connection. */
+    slot<T>(target: ForgeExpressionTarget, task: () => Promise<T>): Promise<T>;
+    dedupe<T>(key: string, task: () => Promise<T>): Promise<T>;
+    background<T>(task: () => Promise<T>): Promise<T>;
+    /** Applies `change` to the unit document (mutating the copy it is given); resolves the saved unit, or null. */
+    update(unitId: string, change: (unit: any) => void): Promise<any>;
+    /** The base image a unit's faces are painted from (his worn look, or his portrait). */
+    base(unit: any): string;
+    galleryRef(id: string): string;
+    debug?: () => boolean;
+    names?: readonly string[];
+    looks?: ForgeExpressionLooks;
+    localAvatarPath?: (value: unknown) => string;
+    logPrefix?: string;
+    scopeName?: string;
+  }): ForgeStoryExpressions;
+}
+
+declare module "@forge-kit/audio-settings.mjs" {
+  export interface ForgeAudioSettings {
+    tts: boolean;
+    otherVoices: boolean;
+    combatVoices: boolean;
+    generate: boolean;
+    homeMusic: string;
+    audioConnectionId: string;
+    muted: boolean;
+    musicVolume: number;
+    dialogueVolume: number;
+    sfxVolume: number;
+    autoplayPauseSeconds: number;
+  }
+  export interface ForgeSoundtrackTrack {
+    cue: string;
+    connectionId: string;
+    tag: string;
+    path: string;
+  }
+  /** Every audio setting bounded and defaulted; no provider credentials are ever kept. */
+  export function normalizeForgeAudio(value: unknown): ForgeAudioSettings;
+  /** The value when it is one of `moods`, else the first. */
+  export function normalizeForgeMusicMood<M extends string>(value: unknown, moods?: readonly M[]): M;
+  /** Gacha Forge's cues; Otome passes its own (SH/cues.ts). */
+  export const forgeSoundtrackCues: string[];
+  /** The `context.key` a generated track is stored under: `world-<hash of run and connection>-<cue>`. */
+  export function forgeSoundtrackContextKey(runId: string, connectionId: string, cue: string): string;
+  /**
+   * Validates a generated track's tag and path against `scope` and `cues`, then keeps it in `session.audioTracks`
+   * (replacing the same tag). False, with nothing kept, for anything else.
+   */
+  export function recordForgeSoundtrack(
+    session: { audioTracks?: ForgeSoundtrackTrack[]; audioBanners?: Record<string, unknown> },
+    runId: string,
+    track: unknown,
+    options?: { scope?: string; cues?: readonly string[] },
+  ): boolean;
+  /** The kept tracks whose cue is one of `cues`. */
+  export function availableForgeSoundtracks(
+    session: { audioTracks?: ForgeSoundtrackTrack[]; audioBanners?: Record<string, unknown> } | null | undefined,
+    options?: { cues?: readonly string[] },
+  ): Array<ForgeSoundtrackTrack & { title: string }>;
+}
+
+declare module "@forge-kit/audio-prompts.mjs" {
+  export interface ForgeMusicMessage {
+    role: "system" | "user";
+    content: string;
+  }
+  /** `{prompt}` when the reply holds a prompt of at most 1000 characters, else null. */
+  export function normalizeForgeMusicPrompt(value: unknown): { prompt: string } | null;
+  /** P14: the music brief messages for one cue, in English; `run.scenario` is the world description. */
+  export function forgeMusicBriefMessages(
+    run: { scenario: string },
+    cue: string,
+    banner: unknown,
+    options?: { scenes?: Record<string, string>; medium?: string },
+  ): ForgeMusicMessage[];
+  export type ForgeMusicBriefResult =
+    | { ok: true; prompt: string; cached: boolean }
+    | { ok: false; error: "bad-request" | "not-found" | "generation-failed" | "stale-world" | "write-conflict" };
+  /** A brief per cue, cached by its messages' fingerprint in `session.audioPrompts`, one billable call per key. */
+  export function createForgeMusicPromptService(options: {
+    readWorld(runId: string): Promise<{ scenario: string } | null>;
+    readSession(runId: string): Promise<{
+      audioPrompts?: Record<string, { fingerprint?: string; prompt?: string; event?: boolean }>;
+      audioBanners?: Record<string, unknown>;
+    } | null>;
+    updateSession(
+      runId: string,
+      change: (data: { audioPrompts?: Record<string, { fingerprint: string; prompt: string }> }) => void,
+    ): Promise<unknown>;
+    generate(request: {
+      runId: string;
+      run: unknown;
+      messages: ForgeMusicMessage[];
+      debugMode: boolean;
+    }): Promise<{ ok: boolean; value?: unknown }>;
+    log?: (messages: ForgeMusicMessage[], debugMode: boolean) => void;
+    scenes?: Record<string, string>;
+    medium?: string;
+  }): (request: { runId: string; cue: string; debugMode?: boolean }) => Promise<ForgeMusicBriefResult>;
 }

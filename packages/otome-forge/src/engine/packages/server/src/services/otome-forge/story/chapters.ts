@@ -31,6 +31,7 @@ import { OtomeForgeError } from "../http.js";
 import { beatId, chapterId, mainChapterKey, mainChapterNumber, runDocTarget, stateId } from "../ids.js";
 import { defaultLiState, normalizeState, readRun } from "../schemas/state.js";
 import { normalizeBeat, normalizeChapter, toChapterView } from "../schemas/story.js";
+import { repairOffers, routeEntries } from "../state/stages.js";
 import type { OtomeStore } from "../store.js";
 import { recallText, type StoryMemory } from "./canon.js";
 import {
@@ -40,6 +41,7 @@ import {
   NODES_MAX,
   NODES_MIN,
   chapterPlanMessages,
+  knownRows,
   type ChapterPlanReply,
 } from "./prompts.js";
 
@@ -96,7 +98,7 @@ export interface PlanContext {
 }
 
 /** A love interest named by id or, failing that, by exact name (case-insensitive). */
-function resolveLi(units: PlanContext["units"], value: unknown): LiId | null {
+export function resolveLi(units: PlanContext["units"], value: unknown): LiId | null {
   const key = typeof value === "string" ? value.trim() : "";
   if (!key) return null;
   const byId = units.find((unit) => unit.id === key);
@@ -105,23 +107,17 @@ function resolveLi(units: PlanContext["units"], value: unknown): LiId | null {
   return byName.length === 1 ? byName[0]!.id : null;
 }
 
-const clean = (value: unknown, max = 4000) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+export const clean = (value: unknown, max = 4000) => (typeof value === "string" ? value.trim().slice(0, max) : "");
 
 export type PlannedChapter = Pick<Chapter, "title" | "tags" | "foil" | "summary" | "nodes" | "ledger">;
 
-/** The plan in the chapter's shape, or the first rule it breaks (the repair turn names it). */
-export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanContext): PlannedChapter | string {
-  const { units, state, number, lead } = context;
-  const ids = units.map((unit) => unit.id);
-  const foil = resolveLi(units, reply.foil);
-  if (!foil || foil === lead) return "foil must be the id of a love interest other than the Lead";
-  if (reply.nodes.length < NODES_MIN || reply.nodes.length > NODES_MAX) {
-    return `the chapter needs ${NODES_MIN} to ${NODES_MAX} nodes, not ${reply.nodes.length}`;
-  }
+/** The reply's nodes in the chapter's shape: casts resolved to ids, and `resolves` kept only for grievances still owed. */
+export function planNodes(reply: ChapterPlanReply, context: Pick<PlanContext, "units" | "state">): ChapterNode[] {
+  const { units, state } = context;
   const grievanceIds = new Set(
-    ids.flatMap((li) => unresolved(state.lis[li] ?? defaultLiState()).map((item) => item.id)),
+    units.flatMap((unit) => unresolved(state.lis[unit.id] ?? defaultLiState()).map((item) => item.id)),
   );
-  const nodes: ChapterNode[] = reply.nodes.map((raw, i) => {
+  return reply.nodes.map((raw, i) => {
     const cast = [...new Set(raw.cast.map((value) => resolveLi(units, value)).filter((li): li is LiId => !!li))];
     const place = clean(raw.place, 120);
     const resolves = (raw.resolves ?? []).map((id) => clean(id, 80)).filter((id) => grievanceIds.has(id));
@@ -136,37 +132,41 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
       ...(resolves.length ? { resolves } : {}),
     };
   });
-  const moments = nodes.filter((node) => node.kind === "moment").length;
-  if (moments < 1 || moments > 2) return `the chapter needs 1 or 2 moment nodes, not ${moments}`;
-  const confrontations = nodes.flatMap((node) => (node.kind === "confrontation" ? [node.i] : []));
-  if (confrontations.length !== 1)
-    return `the chapter needs exactly one confrontation node, not ${confrontations.length}`;
-  if (confrontations[0]! < nodes.length - 2) return "the confrontation must be the second-to-last or last node";
-  if (nodes.filter((node) => node.cg).length > 2) return "at most 2 nodes may have cg";
-  if (!nodes.some((node) => node.cast.includes(lead))) return "the Lead must appear in the chapter";
-  if (!nodes.some((node) => node.cast.includes(foil))) return "the Foil must appear in at least one node";
-  const present = new Set(nodes.flatMap((node) => node.cast));
-  if (number === 1) {
-    const missing = ids.filter((li) => !present.has(li));
-    if (missing.length) return `chapter 1 must bring in every love interest; missing: ${missing.join(", ")}`;
-  }
+}
 
+/** The reply's content tags that exist, or the problem when one reaches for a Line. */
+export function planTags(reply: ChapterPlanReply, world: PlanContext["world"]): string[] | string {
   const tags = [
     ...new Set(reply.tags.map((tag) => tag.trim().toLowerCase()).filter((tag) => CHAPTER_TAGS.includes(tag))),
   ];
   const lines = tags.filter(
     (tag): tag is LimitId =>
-      (LIMIT_IDS as readonly string[]).includes(tag) && context.world.content.limits[tag as LimitId] === "line",
+      (LIMIT_IDS as readonly string[]).includes(tag) && world.content.limits[tag as LimitId] === "line",
   );
-  if (lines.length) return `the chapter reaches for a Line (${lines.join(", ")}); plan around it instead`;
+  return lines.length ? `the chapter reaches for a Line (${lines.join(", ")}); plan around it instead` : tags;
+}
 
+/**
+ * The reply's ledger, or the first rule it breaks: conflict seeds never repeat a love interest's last two kinds of
+ * angst (counting seeds planted earlier in this plan), at most one open misunderstanding each, one two chapters old is
+ * resolved now (`main`, which counts main chapters), and (`main`) an off-screen line for every love interest absent.
+ */
+export function planLedger(
+  reply: ChapterPlanReply,
+  context: Pick<PlanContext, "units" | "state" | "number">,
+  present: ReadonlySet<LiId>,
+  { main, idPrefix, knows }: { main: boolean; idPrefix: string; knows: readonly LiId[] },
+): ChapterLedger | string {
+  const { units, state, number } = context;
   const ledger: ChapterLedger = { relationship: [], conflict: [], offscreen: [] };
   for (const row of reply.ledger.relationship) {
     const li = resolveLi(units, row.li);
     const line = clean(row.line, 600);
     if (li && line) ledger.relationship.push({ li, line });
   }
-  const openConflicts = state.ledgers.conflicts.filter((row) => row.status === "open");
+  // Only the conflicts the planner was shown (prompts.ts knownRows): one from another love interest's own chapter is
+  // neither escalated, resolved nor owed here.
+  const openConflicts = knownRows(state.ledgers.conflicts, knows).filter((row) => row.status === "open");
   const resolved = new Set<string>();
   // The kinds planted earlier in this plan, per love interest: they count as his newest angst and open conflicts.
   const plantedNow = new Map<LiId, string[]>();
@@ -192,7 +192,7 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
       }
       plantedNow.set(li, [...sofar, type]);
       planted += 1;
-      ledger.conflict.push({ id: `c${number}-${planted}`, li, type, action: "plant" });
+      ledger.conflict.push({ id: `${idPrefix}-${planted}`, li, type, action: "plant" });
       continue;
     }
     const open = openConflicts.find((item) => item.id === clean(row.id, 80));
@@ -200,10 +200,12 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
     if (row.action === "resolve") resolved.add(open.id);
     ledger.conflict.push({ id: open.id, li: open.li, type: open.type, action: row.action });
   }
-  const overdue = openConflicts.find(
-    (open) => open.type === "misunderstanding" && number - open.chapter >= 2 && !resolved.has(open.id),
-  );
-  if (overdue) return `the misunderstanding ${overdue.id} must be resolved in this chapter`;
+  if (main) {
+    const overdue = openConflicts.find(
+      (open) => open.type === "misunderstanding" && number - open.chapter >= 2 && !resolved.has(open.id),
+    );
+    if (overdue) return `the misunderstanding ${overdue.id} must be resolved in this chapter`;
+  }
   for (const row of reply.ledger.offscreen) {
     const li = resolveLi(units, row.li);
     const line = clean(row.line, 600);
@@ -211,10 +213,44 @@ export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanConte
       ledger.offscreen.push({ li, line });
     }
   }
-  const absent = ids.filter((li) => !present.has(li) && !ledger.offscreen.some((entry) => entry.li === li));
-  if (absent.length)
-    return `ledger.offscreen needs a line for every love interest not in the chapter: ${absent.join(", ")}`;
+  if (main) {
+    const absent = units
+      .map((unit) => unit.id)
+      .filter((li) => !present.has(li) && !ledger.offscreen.some((entry) => entry.li === li));
+    if (absent.length)
+      return `ledger.offscreen needs a line for every love interest not in the chapter: ${absent.join(", ")}`;
+  }
+  return ledger;
+}
 
+/** The plan in the chapter's shape, or the first rule it breaks (the repair turn names it). */
+export function normalizeChapterPlan(reply: ChapterPlanReply, context: PlanContext): PlannedChapter | string {
+  const { units, number, lead } = context;
+  const ids = units.map((unit) => unit.id);
+  const foil = resolveLi(units, reply.foil);
+  if (!foil || foil === lead) return "foil must be the id of a love interest other than the Lead";
+  if (reply.nodes.length < NODES_MIN || reply.nodes.length > NODES_MAX) {
+    return `the chapter needs ${NODES_MIN} to ${NODES_MAX} nodes, not ${reply.nodes.length}`;
+  }
+  const nodes = planNodes(reply, context);
+  const moments = nodes.filter((node) => node.kind === "moment").length;
+  if (moments < 1 || moments > 2) return `the chapter needs 1 or 2 moment nodes, not ${moments}`;
+  const confrontations = nodes.flatMap((node) => (node.kind === "confrontation" ? [node.i] : []));
+  if (confrontations.length !== 1)
+    return `the chapter needs exactly one confrontation node, not ${confrontations.length}`;
+  if (confrontations[0]! < nodes.length - 2) return "the confrontation must be the second-to-last or last node";
+  if (nodes.filter((node) => node.cg).length > 2) return "at most 2 nodes may have cg";
+  if (!nodes.some((node) => node.cast.includes(lead))) return "the Lead must appear in the chapter";
+  if (!nodes.some((node) => node.cast.includes(foil))) return "the Foil must appear in at least one node";
+  const present = new Set(nodes.flatMap((node) => node.cast));
+  if (number === 1) {
+    const missing = ids.filter((li) => !present.has(li));
+    if (missing.length) return `chapter 1 must bring in every love interest; missing: ${missing.join(", ")}`;
+  }
+  const tags = planTags(reply, context.world);
+  if (typeof tags === "string") return tags;
+  const ledger = planLedger(reply, context, present, { main: true, idPrefix: `c${number}`, knows: [context.lead] });
+  if (typeof ledger === "string") return ledger;
   return { title: clean(reply.title, 200), tags, foil, summary: clean(reply.summary, 1200), nodes, ledger };
 }
 
@@ -260,9 +296,9 @@ export async function planNextChapter(
     signal?.throwIfAborted();
     const units = cast.map((li) => run.units.find((unit) => unit.id === li)!);
     // ponytail: recalls for the Lead only, since the planner picks the Foil (plan M2a "Recall": cast [lead, foil]).
-    // M2a's canon is all shared main chapters, so this changes nothing yet. Upgrade path, once dates are sources: a
-    // second recall for the Foil after the plan names him, or keep [lead] so another man's private date never reaches
-    // the node guides.
+    // The Lead's own route and repair chapters reach the plan; the Foil's and everyone else's never do, in recall
+    // (S/story/canon.ts mayKnow) or in the ledgers (prompts.ts knownTo). Upgrade path: a second recall for the Foil
+    // after the plan names them, or keep [lead] so another love interest's private canon never reaches the node guides.
     const memory = await recallText(deps, runId, {
       job: "structured",
       cast: [lead],
@@ -322,7 +358,10 @@ export async function planNextChapter(
 
 // ── The story view ──
 
-/** GET /runs/:run/story: every chapter planned so far, and the next main chapter's candidates when it may start. */
+/**
+ * GET /runs/:run/story: every chapter planned so far, the next main chapter's candidates when it may start, each love
+ * interest's stage and next route chapter, and a repair for each rupture.
+ */
 export async function storyView(deps: { store: OtomeStore }, runId: string): Promise<StoryView> {
   const run = await readRun(deps.store, runId);
   if (!run) throw notFound("Otome Forge run");
@@ -341,6 +380,7 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
       kind: chapter.kind,
       title: chapter.title,
       ...(chapter.li ? { li: chapter.li } : {}),
+      ...(chapter.kind === "route" && chapter.stage ? { stage: chapter.stage } : {}),
       lead: chapter.lead,
       state: progress?.completed ? "done" : "in-progress",
       beatsRead: progress?.beatsRead ?? 0,
@@ -356,6 +396,8 @@ export async function storyView(deps: { store: OtomeStore }, runId: string): Pro
   return {
     chapters: entries,
     next: ready && open && cast.length ? { kind: "main", number, candidates: leadCandidates(run.state, cast) } : null,
+    routes: ready ? routeEntries(run.state, cast) : [],
+    repairs: ready ? repairOffers(chapters, run.state, cast) : [],
   };
 }
 

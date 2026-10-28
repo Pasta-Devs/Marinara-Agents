@@ -1,20 +1,30 @@
 // ──────────────────────────────────────────────
-// Otome Forge: Settings. Tabs for the look, the current story's content, connections and images, Privacy & data, and
-// Debug. Story settings edit the active run; the look and the 18+ confirmation are the player's own.
+// Otome Forge: Settings. Tabs for the look, the current story's content, connections, images and audio, Privacy &
+// data, and Debug. Story settings edit the active run; the look and the 18+ confirmation are the player's own.
 // ──────────────────────────────────────────────
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Bug, Images, Palette, PlugZap, ShieldCheck, SlidersHorizontal, type LucideIcon } from "lucide-react";
+import {
+  AudioLines,
+  Bug,
+  Images,
+  Palette,
+  PlugZap,
+  ShieldCheck,
+  SlidersHorizontal,
+  type LucideIcon,
+} from "lucide-react";
 import { LookSwitch } from "../../components/LookSwitch";
 import type { LookPreference } from "../../hooks/use-look";
 import type { RunView } from "../../shared/api-types";
+import { AudioSettings } from "./Audio";
 import { ConnectionsSettings } from "./Connections";
 import { ContentSettings } from "./ContentSettings";
 import { DebugSettings } from "./Debug";
 import { ImagesSettings } from "./Images";
 import { PrivacyData } from "./PrivacyData";
 
-const TABS = ["look", "content", "connections", "images", "privacy", "debug"] as const;
+const TABS = ["look", "content", "connections", "images", "audio", "privacy", "debug"] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_META: Record<Tab, { labelKey: string; Icon: LucideIcon }> = {
@@ -22,6 +32,7 @@ const TAB_META: Record<Tab, { labelKey: string; Icon: LucideIcon }> = {
   content: { labelKey: "ui.otomeForge.settings.tabContent", Icon: SlidersHorizontal },
   connections: { labelKey: "ui.otomeForge.settings.tabConnections", Icon: PlugZap },
   images: { labelKey: "ui.otomeForge.settings.tabImages", Icon: Images },
+  audio: { labelKey: "ui.otomeForge.audio.tab", Icon: AudioLines },
   privacy: { labelKey: "ui.otomeForge.settings.tabPrivacy", Icon: ShieldCheck },
   debug: { labelKey: "ui.otomeForge.settings.tabDebug", Icon: Bug },
 };
@@ -70,6 +81,8 @@ export function Settings({ run, lookPreference, onLookPreference }: SettingsProp
       <ConnectionsSettings run={run} />
     ) : tab === "images" ? (
       <ImagesSettings run={run} />
+    ) : tab === "audio" ? (
+      <AudioSettings run={run} />
     ) : tab === "privacy" ? (
       <PrivacyData />
     ) : (

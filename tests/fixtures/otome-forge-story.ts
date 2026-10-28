@@ -1,5 +1,6 @@
-// A forged Otome Forge world for the story regressions (M2a): three love interests with bibles, a ready world, the
-// story routes on a fake router, scripted model replies, and builders for a chapter plan and a beat reply.
+// A forged Otome Forge world for the story regressions (M2a, M2b): three love interests with bibles, a ready world, the
+// story and arc routes on a fake router, scripted model replies, and builders for a chapter plan, a beat reply and a
+// Confrontation reply.
 import assert from "node:assert/strict";
 import { createForgeStoryCancellation } from "@forge-kit/story-cancel-server.mjs";
 import type {
@@ -24,6 +25,7 @@ import {
   unitId,
   worldId,
 } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
+import { registerArcRoutes } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/arcs.ts";
 import { registerStoryRoutes } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/story.ts";
 import { normalizeIndex } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/index.ts";
 import { normalizePlayer } from "../../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
@@ -146,16 +148,15 @@ export async function storyWorld({
   return { fake, store, runtime, logs, calls, deps, runId, call, state, settle };
 }
 
-/** The story routes on a fake router; `call` answers like Fastify ({status, body}). */
+/** The story and arc routes on a fake router; `call` answers like Fastify ({status, body}). */
 export function storyRoutes(deps: RouteDeps, runKey: string) {
   const routes = new Map<string, RouteHandler>();
-  registerStoryRoutes(
-    {
-      get: (path: string, handler: RouteHandler) => routes.set(`GET ${path}`, handler),
-      post: (path: string, handler: RouteHandler) => routes.set(`POST ${path}`, handler),
-    },
-    deps,
-  );
+  const router = {
+    get: (path: string, handler: RouteHandler) => routes.set(`GET ${path}`, handler),
+    post: (path: string, handler: RouteHandler) => routes.set(`POST ${path}`, handler),
+  };
+  registerStoryRoutes(router, deps);
+  registerArcRoutes(router, deps);
   return async (method: "GET" | "POST", path: string, body: object = {}, params: Record<string, string> = {}) => {
     const handler = routes.get(`${method} ${path}`);
     assert.ok(handler, `${method} ${path} is registered`);
@@ -229,3 +230,51 @@ export function beatReply(changes: Record<string, unknown> = {}): Record<string,
 }
 
 export const json = (value: unknown) => JSON.stringify(value);
+
+/** True for a P12 call (the Confrontation narrator). */
+export const isConfrontationPrompt = (messages: Array<{ content: string }>) =>
+  messages[0]!.content.includes("stance game");
+
+type Move = -1 | 0 | 1;
+
+/**
+ * A P12 reply: an opening, three rounds of four stances and the three endings. `moves` sets each stance's composure
+ * move in every round (by default Press closes him off, Hold does nothing, Yield and Reveal get through).
+ */
+export function confrontationReply(
+  changes: Record<string, unknown> = {},
+  moves: Record<"press" | "hold" | "yield" | "reveal", Move> = { press: 1, hold: 0, yield: -1, reveal: -1 },
+): Record<string, any> {
+  const option = (stance: string, round: number) => ({
+    label: `${stance} ${round}`,
+    selection: { kind: "dialogue", text: `${stance.toUpperCase()}-${round}: Tell me the truth.` },
+    segments: [{ speaker: "Kai", text: `ANSWER-${stance}-${round}`, expression: "hurt" }],
+    composure: moves[stance as keyof typeof moves],
+  });
+  const round = (k: number) => ({
+    lines: [{ speaker: "Kai", text: `HIS-${k}: You don't know what you're asking.`, expression: "cold" }],
+    options: {
+      press: option("press", k),
+      hold: option("hold", k),
+      yield: option("yield", k),
+      reveal: option("reveal", k),
+    },
+  });
+  return {
+    musicMood: "angst",
+    places: [{ name: "The Lamp Room", tags: "lighthouse interior, great lens, no humans" }],
+    opening: [
+      { speaker: "", text: "OPENING: the lamp turns.", place: "The Lamp Room" },
+      { speaker: "Kai", text: "Say it, then.", expression: "angry" },
+    ],
+    rounds: [round(1), round(2), round(3)],
+    endings: {
+      truth: [{ speaker: "Kai", text: "ENDING-TRUTH: I let it go dark.", expression: "hurt" }],
+      walkout: [{ speaker: "", text: "ENDING-WALKOUT: the door slams." }],
+      standoff: [{ speaker: "", text: "ENDING-STANDOFF: neither of you moves." }],
+    },
+    grievance: { text: "She called him a liar in his own lighthouse.", severity: "major" },
+    disclosure: "Ines said she was the one who rang the bell that night.",
+    ...changes,
+  };
+}

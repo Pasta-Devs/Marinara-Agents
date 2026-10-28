@@ -28,6 +28,7 @@ import {
 } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { galleryRefIds } from "../art/image-client.js";
 import { imagesOf, paintView } from "../art/paint.js";
+import { withPlaceViews } from "../art/places.js";
 import { OtomeForgeError, debugModeOf, liParam, parseBody, runParam, type RegisterRoutes } from "../http.js";
 import {
   INDEX_ID,
@@ -124,10 +125,10 @@ const ageGateNeeded = () => new OtomeForgeError(403, "Confirm the 18+ gate befor
 const readIndex = async (store: Pick<OtomeStore, "readDoc">) =>
   (await store.readDoc(INDEX_ID, normalizeIndex)) ?? normalizeIndex(undefined);
 
-/** The run as the client sees it: the protagonist's paint left pending by a restart reads as `stopped`. */
+/** The run as the client sees it: the protagonist's or a place's paint left pending by a restart reads as `stopped`. */
 function runView(runKey: string, runId: string, { world, player, units, state }: RunDocuments) {
   const shown = player.art ? { ...player, art: paintView(runId, "player", player.art) } : player;
-  return toRunView(runKey, world, shown, units, state);
+  return toRunView(runKey, withPlaceViews(runId, world), shown, units, state);
 }
 
 export const registerRunRoutes: RegisterRoutes = (router, deps) => {
@@ -330,9 +331,12 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const body = parseBody(SettingsBody, request.body);
       const { runId } = runParam(request);
       const ageGate = (await readIndex(store)).ageGate !== null;
+      const at = new Date().toISOString();
       const world = await store.updateDoc(runDocTarget("world", worldId(runId)), normalizeWorld, (current) => {
         const content = body.content ?? current.content;
         const images = { ...current.images, ...body.images };
+        // Turning faces on again allows one more attempt at a set that failed or stopped before (the kit's rule).
+        if (images.expressions && !current.images.expressions) images.expressionsSince = at;
         const from = { ...current.content, imageRating: current.images.rating };
         if (!ageGate && raisesGatedSetting(from, { ...content, imageRating: images.rating })) throw ageGateNeeded();
         return {
@@ -346,7 +350,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         };
       });
       if (!world) throw runNotFound();
-      return { world: toWorldView(world) };
+      return { world: toWorldView(withPlaceViews(runId, world)) };
     }),
   );
 
