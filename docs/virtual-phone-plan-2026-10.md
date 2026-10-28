@@ -2,6 +2,51 @@
 
 Status: proposal, nothing below is implemented. Written 2026-10-28 after work on the phone had stopped since 2026-08-16.
 
+## 0. What the phone must do in a chat
+
+The phone has never shipped: it is on neither `main` nor `staging`, and its 123 manifest commits (2.0.64 → 2.10.1) were all made on this branch between 2026-08-06 and 2026-08-16. There is no evidence that it ever ran end to end in a real chat. So the first job is not new features, it is proving the existing phone in a chat.
+
+A phone earns its place in a roleplay chat in four ways:
+
+1. **Contact when apart** — the user texts a character who is not in the scene; the reply is in character, knows the story, and the next scene knows what was said.
+2. **The character reaches out** — a character texts, posts or sends a selfie without being asked (P4).
+3. **A prop in the scene** — the phone buzzes mid-scene and the narrator can mention it; the user shows a screen; the user picks up another character's phone, with consequences.
+4. **Story state at a glance** — time, date, place, who is online, battery; no generation.
+
+Decisions (2026-10-28):
+- **Keep all 23 apps.** Make every app work in a live chat before adding features.
+- **Texts live on the phone.** Phone threads stay on the phone; the next roleplay turn gets a short summary line (today's `turn-context.ts` model). Nothing is copied into the transcript unless the user uses Show.
+
+### Acceptance per app (P0)
+
+Each app passes when the "in a chat" column works live in a Conversation chat and a Roleplay chat, on desktop and at 390 px, on a persona phone and a character phone.
+
+| App | In a chat it must | What reaches the story |
+|---|---|---|
+| Messages | Send a text to a contact; get an in-character reply that knows the chat; show unread on the toolbar | Unread / new-text line on the next turn |
+| Contacts | List the chat's characters and manual contacts; open Messages, Calls, Noodle from a person | Nothing |
+| Calls | Show recents; start a call (hand-off once P1 lands; until then a clear "not available") | Call event when it connects |
+| Camera | Take a described shot of the current scene | Nothing until shared |
+| Gallery | Show shots and chat images; share to Messages or Noodle; set wallpaper | Only the shared item |
+| Notes | Write, search and edit private notes | Nothing (character `note_to_self` stays private) |
+| Mail | Refresh inbox, read, reply, compose, folders | Only sent mail with an audience |
+| Noodle | Feed for this chat; post, like, boost, reply | Public posts as world facts |
+| NoodleR | Creator pages, subscribe, locked posts, charges via Banking | Public interactions |
+| Tindler | Deck, swipe, matches that become contacts | A match becomes a known person |
+| Goodle | Search and pages that fit the story world; bookmarks, history | Nothing unless shared or acted on |
+| Maps | Search a place and inspect a route | Nothing unless shared |
+| Find | Locate a contact from story evidence or say it cannot | Nothing unless shared |
+| Banking | Balance, ledger, approve or reject proposals | Transactions with a counterparty |
+| Bazaar | Browse, list, message a seller, haggle, buy, sell | Confirmed sales and purchases |
+| Shop | Search, order, track delivery; delivery can arrive in the scene | Orders and arrivals |
+| Game | Play match-three | Only "is playing" |
+| App Store | Install and remove apps; contract details | Nothing |
+| Settings | Device state, appearance, generation settings, About | Power / ringer / connectivity changes |
+| Lock / home / notifications | Lock screen, notification banners, home search | Buzz in the scene when a text arrives |
+| Character `[phone]` command | In a reply, the character texts, calls, posts, writes a note or changes the device; each runs once per swipe | The matching event |
+| Show | Show the current screen to the scene; only the audience learns it | The shown content |
+| Another character's phone | Pick it up when the story allows; put it down ends access | Snooping as an event, if seen |
+
 ## 1. Branch state
 
 - `just-duck` now holds the August WIP as one commit (`e620844f9`) plus a merge of `origin/staging` (`6b605c291`), pushed to `origin/just-duck`. No PR, no issue.
@@ -83,7 +128,7 @@ Size: S ≈ a day, M ≈ a few days, L ≈ a week or more. Each line is one PR u
 
 | Rank | Item | Size | Engine dependency | Reuse |
 |---|---|---|---|---|
-| P0 | **Make the phone work in chats again — before anything else.** Install 2.10.1 on a throwaway native staging Engine and walk the core loop in a Conversation and a Roleplay chat: enable the agent, open the phone from the toolbar, persona phone and character phone, send and receive a text, Noodle post, Camera shot, the character `[phone]` command in a reply, the prompt-context line on the next turn, settings and app install/remove, mobile width. Fix every break. Static check only so far: the three slots (`conversation-toolbar`, `conversation-surface`, `chat-settings`) and the persistence / roleplay-event APIs still exist on staging; nothing has run live since August. | M | none | — |
+| P0 | **Make the phone work in chats — before anything else.** Install 2.10.1 on a throwaway native staging Engine, enable the agent, and walk the acceptance table in section 0 app by app, Messages first. Fix every break as 2.10.x patches. Static check only so far: the three slots (`conversation-toolbar`, `conversation-surface`, `chat-settings`) and the persistence / roleplay-event APIs exist on staging. | L | none | — |
 | P1 | **Fix Calls**: drop `runtime.calls`; Calls app and the `place_call` command hand off to the Conversation Calls package when it is installed (its `/start` route + surface), else show "install Conversation Calls". Keep the phone call log. | M | Conversation Calls package; no new Engine API | `packages/conversation-calls` routes, TTS voice resolution |
 | P2 | **Real photos**: Camera shot, DM selfie, Goodle Images and Tindler profile pictures through `images.generate`, saved with `addToChatGallery`; text card stays as fallback when no image connection exists. Gallery reads them back. | M | cap API 1.341, `network` (optional permission) | Slurp2 `slp-generation-integrations.ts` (null-safe host pattern), `slp-camera-source.ts` (selfie / mirror / tripod framing, pure), `slurpViewerPhotoPrompt`, `sources/forge-kit/image-avatar-references.mjs` |
 | P3 | **Phone memory in the roleplay prompt**: each phone action that a character does (post, sent text, mail, purchase, note) writes a short `promptSummary`; the prompt context lists the owner's last few actions for the target character within a fixed budget. | S | none (`prompt-context` already granted) | Slurp2 `buildSlurpChatContextBlock` (pure, budgeted block) |
