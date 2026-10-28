@@ -55,10 +55,6 @@ const forgeSeasonalRouteMap = {
   "/choice": "/story-event/choice",
   "/cg-art": "/story-event/cg-art",
   "/beat/mark": "/story-event/beat/mark",
-  "/preforge": "/story-event/preforge",
-  "/preforge/start": "/story-event/preforge",
-  "/preforge/retry": "/story-event/preforge",
-  "/preforge/cancel": "/story-event/preforge",
 };
 export function forgeSeasonalRequest(path, body) {
   return forgeEventChapter(body?.chapter) ? forgeSeasonalRouteMap[path] || path : path;
@@ -133,10 +129,67 @@ export function openForgeSeasonalEvent(host, event) {
   host._hudView = "chapter";
   host._renderBrowser();
 }
+// The event the next-story choice offers beside the next chapter: one that can start now (the 1.24.10 rule), or
+// one already started and unfinished, which holds the main story as an open Character Story does.
+export function forgeSeasonalNextStory(host) {
+  if (host._run?.story?.seasonalEvents !== true) return null;
+  const now = forgeSeasonalNow(host);
+  return (
+    (host._forgeSeasonalState?.events || []).find(
+      (event) =>
+        event.live &&
+        now < event.endsAt &&
+        event.state === "ready" &&
+        (event.opened ? (event.played || 0) < 10 : event.canStart),
+    ) || null
+  );
+}
+const forgeSeasonalFace = (event, fallback) =>
+  `<span class="ch-opt-face">${event.art ? `<img src="${forgeEventEscape(event.art)}" alt="" loading="lazy" />` : fallback}</span>`;
+// One more row in the "What happens next" card, after the Character Story rows.
+export function forgeSeasonalChoiceRow(event, chapter, arrow) {
+  return `<div class="ch-opt" data-story-event-open="${forgeEventEscape(event.chapter)}"><span class="ch-opt-m">${forgeSeasonalFace(event, "&#9733;")}</span><span class="ch-opt-b"><b>${forgeEventEscape(event.title || forgeEventT("events.title"))}</b><span>${forgeEventEscape(forgeEventT("events.choice.body").replace("{chapter}", chapter))}</span></span><button class="btn btn-go" type="button">${forgeEventT("events.play")}${arrow}</button></div>`;
+}
+// A started event takes the next chapter's place, like an open Character Story, until it is finished.
+export function forgeSeasonalOpenCard(event, arrow) {
+  const played = Math.max(0, Math.min(10, Number(event.played) || 0));
+  return `<article class="ch-card bond open" data-story-event-open="${forgeEventEscape(event.chapter)}"><div class="ch-index ch-face">${forgeSeasonalFace(event, "&#9733;")}</div><div class="ch-body"><div class="ch-eyebrow">${forgeEventEscape(forgeEventT("events.choice.open"))}</div><h3 class="ch-title">${forgeEventEscape(event.title || forgeEventT("events.title"))}</h3><p class="ch-premise">${forgeEventEscape(forgeEventT("events.choice.waits"))}</p><div class="ch-foot"><div class="ch-bar"><div class="fig">${forgeEventEscape(forgeEventT("events.progress"))} ${played} / 10</div><div class="track"><i style="width:${played * 10}%"></i></div></div></div></div><div class="ch-action"><button class="btn btn-go" type="button">${forgeEventT(played ? "events.continue" : "events.play")}${arrow}</button></div></article>`;
+}
+// The started event's title for the forge loader and the chapter map, which otherwise say "Chapter event-1".
+export function forgeSeasonalLabel(host) {
+  return forgeEventChapter(host._planChapter) && host._forgeEvent?.chapter === host._planChapter
+    ? host._forgeEvent.title || forgeEventT("events.title")
+    : "";
+}
+export function forgeSeasonalForging(title, status) {
+  return {
+    label: title,
+    status,
+    eyebrow: forgeEventT("events.forge.eyebrow"),
+    brandNote: `&middot; ${forgeEventEscape(forgeEventT("events.forge.note"))}`,
+    foot: forgeEventEscape(forgeEventT("events.forge.foot").replace("{title}", title)),
+    errorStatus: forgeEventT("events.forge.error"),
+    errorBody: forgeEventT("events.forge.errorBody"),
+  };
+}
+// A chapter or Character Story that the open event holds opens the event instead, as a held Character Story does.
+export function forgeSeasonalHeld(host, reply) {
+  if (!forgeEventChapter(reply?.eventChapter) || !host._run) return false;
+  const event = host._forgeSeasonalState?.events?.find((entry) => entry.chapter === reply.eventChapter);
+  openForgeSeasonalEvent(host, event || { chapter: reply.eventChapter, title: reply.title || "", played: 0 });
+  return true;
+}
 export function adoptForgeSeasonalResponse(host, path, body, result) {
   if (!result?.ok || host._run?.runId !== body?.runId) return;
-  if (path === "/story-event/plan" && result.event && host._planChapter === body.chapter)
-    host._forgeEvent = { ...host._forgeEvent, ...result.event, runId: body.runId };
+  if (path === "/story-event/plan" && result.event) {
+    if (host._planChapter === body.chapter)
+      host._forgeEvent = { ...host._forgeEvent, ...result.event, runId: body.runId };
+    // Chapters shows a started event as its open card; the list read before the start does not know it opened.
+    if (host._forgeSeasonalState?.events)
+      host._forgeSeasonalState.events = host._forgeSeasonalState.events.map((event) =>
+        event.chapter === body.chapter ? { ...event, opened: result.event.opened, after: result.event.after } : event,
+      );
+  }
   const played = result.progress?.[body.chapter]?.normal;
   if (typeof played !== "number" || !forgeEventChapter(body.chapter)) return;
   if (host._forgeEvent?.chapter === body.chapter) host._forgeEvent.played = played;
@@ -186,12 +239,18 @@ export function wireForgeSeasonalEvents(host) {
     group.append(choiceField, seasonalField);
   }
   if (!host._run?.runId) return;
+  // The chapter list redraws whenever background work changes; only new progress in it reads the events again.
+  const chapterList = host._hudView === "chapters" && host._chaptersData ? JSON.stringify(host._chaptersData) : null;
   if (
-    !host._forgeSeasonalState &&
     !host._forgeSeasonalLoading &&
-    (host._run.story?.seasonalEvents === true || ["chapters", "events"].includes(host._hudView))
-  )
+    (!host._forgeSeasonalState
+      ? host._run.story?.seasonalEvents === true || ["chapters", "events"].includes(host._hudView)
+      : // So finishing a chapter or Character Story opens the event without a reload.
+        chapterList && host._forgeSeasonalChapters !== chapterList && host._run.story?.seasonalEvents === true)
+  ) {
+    host._forgeSeasonalChapters = chapterList;
     void loadForgeSeasonalEvents(host);
+  }
   const state = host._forgeSeasonalState,
     events = state?.events || [];
   const expired = (host._forgeSeasonalExpired ||= new Set());
@@ -222,7 +281,12 @@ export function wireForgeSeasonalEvents(host) {
   }
   const chapters = root.querySelector("[data-chapters-list]");
   if (host._hudView === "chapters" && chapters && !chapters.querySelector("[data-story-event-archive]")) {
-    const archive = events.filter((event) => event.played || (event.live && event.canStart));
+    // The next-story choice already offers the event it shows; the archive keeps the rest.
+    const archive = events.filter(
+      (event) =>
+        !chapters.querySelector(`[data-story-event-open="${forgeEventEscape(event.chapter)}"]`) &&
+        (event.played || (event.live && event.canStart)),
+    );
     if (archive.length) {
       const section = document.createElement("section");
       section.className = "gf-event-archive";
