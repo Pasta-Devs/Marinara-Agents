@@ -166,6 +166,16 @@ Rules:
 
 `validate-catalog.mjs` re-derives every sidecar from the committed changelogs and rejects a mismatch, so a hand-edited `notes.json` cannot drift from the repository.
 
+### Store data
+
+The Engine's Agent Organizer reads a second sidecar, `store.json`, beside every `catalog.json`. Its source is `store/store.json`: for each package a `section` (`apps`, `games`, `writing`, `memory`, `trackers`, `adventure`, `media` or `alive`), a `tagline` of at most 60 characters and an optional `featured` position on the Home page. Images follow a fixed layout:
+
+- `store/banners/<id>.webp` — the banner, 2400 × 900 WebP. Every package needs one.
+- `store/icons/src/<id>.svg` — the icon source. Apps leave it out: the Organizer uses their Home tab icon.
+- `store/previews/<id>-1.webp` to `-4.webp` — optional real screenshots, numbered without gaps.
+
+Run `node scripts/build-store.mjs` after a change. It renders the 1200 px banners and 256 px WebP icons (the Engine accepts no SVG) and rewrites the sidecars, with paths relative to each sidecar. `validate-catalog.mjs` fails when a published package has no store entry, banner or icon, or when a committed `store.json` does not match a rebuild. A new package therefore needs its store entry and banner before it can publish.
+
 ### Packages that are not ready for everyone
 
 `scripts/catalog-incomplete.mjs` holds two sets, because "not finished" and "not promoted" are different states. Both keep the package building normally — payload, manifest, artifact, and locales stay committed so development and testing continue — and both are enforced at the single catalog chokepoint (`writeCatalogFamily`), so every builder inherits them and whichever builder runs next relocates or drops a stale committed entry for a newly-marked id.
