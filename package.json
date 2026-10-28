@@ -33,8 +33,9 @@
     "test:noodle:regressions": "sh -c 'for test in tests/noodle*.regression.ts tests/noodler-*.regression.ts tests/slurp-*.regression.ts tests/slurp2-*.regression.ts; do if [ \"$test\" = tests/slurp-phase1-durability.regression.ts ] || [ \"$test\" = tests/slurp2-reset-activity.regression.ts ] || [ \"$test\" = tests/slurp2-anchor-edits.regression.ts ] || [ \"$test\" = tests/slurp2-message-deep-details.regression.ts ] || [ \"$test\" = tests/slurp2-dm-write-again.regression.ts ] || [ \"$test\" = tests/slurp2-engine-avatar-variant.regression.ts ] || [ \"$test\" = tests/slurp2-restore-media.regression.ts ]; then tsx \"$test\"; else tsx --tsconfig tests/tsconfig.regressions.json \"$test\"; fi || exit 1; done'",
     "test:slurp:regressions": "node scripts/run-slurp-regressions.mjs",
     "test:noodle:quality": "node scripts/evaluate-noodle-generation.mjs tests/fixtures/noodle-generation-quality.samples.json",
+    "test:otome-forge": "tsx --tsconfig tests/tsconfig.regressions.json --test \"tests/otome-forge-*.regression.ts\" && node --test \"tests/otome-forge-*.regression.mjs\"",
     "test:saucelings": "tsx --tsconfig tests/tsconfig.regressions.json tests/saucelings-simulation.regression.ts && tsx --tsconfig tests/tsconfig.regressions.json tests/saucelings-friendly-error.regression.ts",
     "test:security": "node scripts/tests/catalog-path-safety.regression.mjs && tsx tests/long-term-memory-index-keys.regression.ts",
-    "typecheck:packages": "node scripts/typecheck-packages.mjs noodle slurp2 long-term-memory memory-nag conversation-calls hierarchical-maps blackjack story-writer games saucelings"
+    "typecheck:packages": "node scripts/typecheck-packages.mjs noodle slurp2 long-term-memory memory-nag conversation-calls hierarchical-maps blackjack story-writer games saucelings otome-forge"
   }
 }

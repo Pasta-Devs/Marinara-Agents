@@ -166,6 +166,9 @@ jobs:
           # Saucelings simulation and routes.
           npm run test:saucelings
 
+          # Otome Forge ids, store and the committed server bundle.
+          npm run test:otome-forge
+
           # Package localization catalogs.
           node scripts/tests/ui-translation-retention.regression.mjs
           node scripts/validate-package-locales.mjs
