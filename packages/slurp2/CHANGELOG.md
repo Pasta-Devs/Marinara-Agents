@@ -1,5 +1,11 @@
 # Slurp release notes
 
+## 0.4.7 — 2026-10-28
+
+- Fan comments see the post: a short title (40 characters or fewer) gets quoted in some questions and reactions, the question bank has 16 more lines, and a fan line is skipped when the same text is already under the post.
+- Fan questions as callbacks: a top-level fan question under the Creator's recent posts (1–30 days old) is a new callback kind, `question`, so a later post may answer it.
+- Five business arcs join the built-in arc library: sale week, burnout and comeback, new gear, leak scare and page anniversary. Saved libraries get them through the existing normalize step.
+
 ## 0.4.6 — 2026-10-28
 
 - Niches: the card reading now names each Creator's page niche (main + up to two side niches, from a fixed list). The reading refreshes once for every Creator.
