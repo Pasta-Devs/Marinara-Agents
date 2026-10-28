@@ -2165,6 +2165,48 @@
               "replace": "var oy=[{version:null,changed:[\"Nothing changes in play. Some story, art and audio helpers can now be reused by other Marinara packages.\"]},{version:\"1.26.1\",fixed:["
             }
           ]
+        },
+        {
+          "version": "1.26.3",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.26.2\"",
+              "replace": "ds=\"1.26.3\""
+            },
+            {
+              "find": "var oy=[{version:null,changed:[",
+              "replace": "var oy=[{version:null,fixed:[\"A story event you played now sits in Chapters right after the chapter it followed, as a finished Character Story does. Enter it to read its scenes again. Stories after the same chapter appear in the order you opened them.\",\"A finished story event's map no longer offers Hard and Very Hard, whose fights could never start. A fight that can't start now says why, with Retry, instead of a Start battle button that does nothing.\",\"Start battle no longer stays disabled on a cheaper fight after another was refused for Vigor, and works at once in a world you switched to while a fight was starting.\"]},{version:\"1.26.2\",changed:["
+            },
+            {
+              "find": "heldBy:s,event:forgeSeasonalNextStory(this)})",
+              "replace": "heldBy:s,event:forgeSeasonalNextStory(this),played:this._forgeSeasonalState?.events})"
+            },
+            {
+              "find": "f=b=>c.filter(k=>m(k)===b).map(up).join(\"\"),g=c.filter(b=>m(b)>v).map(up).join(\"\");",
+              "replace": "f=b=>forgeSeasonalTimelineCards(r,k=>k===b,Zs,c,up),g=forgeSeasonalTimelineCards(r,k=>k>v,Zs,c,up);"
+            },
+            {
+              "find": "${x?ab(x):l?\"\":`<div class=\"cap-diff\">",
+              "replace": "${x?ab(x):l?\"\":forgeEventTitle?/* A story event is Normal-only: its progress, fights and rewards have no Hard. Its map keeps the row the grid counts, without pills. */'<div class=\"cap-diff\"></div>':`<div class=\"cap-diff\">"
+            },
+            {
+              "find": ":r&&r.error===\"changed\"?this._combatPhase=\"loading\":this._combatVigorError=r&&r.error===\"no-vigor\"?r:{error:r&&r.error||\"failed\"},this._renderBrowser()",
+              "replace": ":r&&r.error===\"changed\"?this._combatPhase=\"loading\":r&&r.error===\"no-vigor\"?this._combatVigorError=r:/* The briefing draws only no-vigor. Any other refusal shows on the error screen, whose Retry loads the fight again. */(this._combatError=r&&r.error||\"failed\",this._combatPhase=\"error\"),this._renderBrowser()"
+            },
+            {
+              "find": "if(this._combatError=\"\",this._combatPhase=\"loading\",this._renderBrowser(),!this._run||!e){this._battleLoading=!1",
+              "replace": "if(this._combatError=\"\",/* A no-vigor answer belongs to the fight it refused; the next briefing reads its own cost. */this._combatVigorError=null,this._combatPhase=\"loading\",this._renderBrowser(),!this._run||!e){this._battleLoading=!1"
+            },
+            {
+              "find": ",this._storyNotice=\"\",this._storyStarting=!1,this._rosterCount=0,",
+              "replace": ",this._storyNotice=\"\",this._storyStarting=!1,/* A start still in flight belongs to the world it was sent from. */this._combatStarting=!1,this._autoStarting=!1,this._rosterCount=0,"
+            },
+            {
+              "find": "forgeCurrent=this._combatNode?.farm||this._combatNode?.tower?()=>true:forgeChapterCurrent(this);",
+              "replace": "forgeCurrent=this._combatNode?.farm||this._combatNode?.tower?()=>this._run?.runId===forgeOrigin:forgeChapterCurrent(this);"
+            }
+          ]
         }
       ]
     },
@@ -3867,6 +3909,16 @@
             {
               "find": "let L=_.find(Ne=>!Ne.bond&&y(b,Number(Ne.to)||Number(Ne.chapter))<Ic);",
               "replace": "let L=_.find(Ne=>Ne.bond?yo(b?.bondChapters?.[Ne.unitId],Ne.part)<zt:y(b,Number(Ne.to)||Number(Ne.chapter))<Ic);"
+            }
+          ]
+        },
+        {
+          "version": "1.26.3",
+          "commits": [],
+          "edits": [
+            {
+              "find": "beats:yo(x,M),after:Math.max(0,Math.round(Number(x[M<=1?\"after\":\"after\"+M])||0))})",
+              "replace": "beats:yo(x,M),after:Math.max(0,Math.round(Number(x[M<=1?\"after\":\"after\"+M])||0)),opened:Math.max(0,Number(x[M<=1?\"opened\":\"opened\"+M])||0)})"
             }
           ]
         }

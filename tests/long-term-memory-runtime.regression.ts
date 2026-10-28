@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { appendFile, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { mock } from "node:test";
@@ -28,10 +29,12 @@ async function main() {
   );
   const { withLtmVaultLock } = await import(`${source}/persistence/vault-lock.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
-  const { createLtmStorageReadService, listLtmPackageReaders } = await import(`${source}/services/storage-read.ts`);
+  const { createLtmStorageReadService, listLtmPackageReaders, recordLtmPackageRead } = await import(
+    `${source}/services/storage-read.ts`
+  );
   const { createLtmRecallService } = await import(`${source}/services/recall.ts`);
   const { updateLtmGlobalSettings } = await import(`${source}/settings.ts`);
-  const { notePathForId } = await import(`${source}/persistence/paths.ts`);
+  const { getLongTermMemoryDirectories, notePathForId } = await import(`${source}/persistence/paths.ts`);
   const { invalidateLtmVaultSnapshot } = await import(`${source}/persistence/vault-snapshot.ts`);
   const { ltmIndexStatePath, readLtmIndexState } = await import(`${source}/persistence/index-state.ts`);
   const { repairLongTermMemory } = await import(`${source}/maintenance/maintenance.ts`);
@@ -443,6 +446,61 @@ async function main() {
             .sort(),
           ["noodle", "null", "slurp"],
           "Memory Settings must list the packages that read memories, and one that gave no name",
+        );
+        await recordLtmPackageRead(recallRoot, "package_recall", "tally", 3);
+        await recordLtmPackageRead(recallRoot, "package_list", "tally", 2);
+        const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+        for (const [source, memories] of [
+          ["tally", 7],
+          ["stale", 4],
+        ] as const)
+          await appendFile(
+            getLongTermMemoryDirectories(recallRoot).debugLog,
+            `${JSON.stringify({
+              id: randomUUID(),
+              ts: eightDaysAgo,
+              operationId: randomUUID(),
+              phase: "retrieval",
+              action: "package_list",
+              status: "ok",
+              source,
+              counts: { memories },
+            })}\n`,
+          );
+        const readers = (await listLtmPackageReaders(recallRoot)) as Array<{
+          caller: string | null;
+          lastReadAt: string;
+          reads: number;
+          memories: number;
+        }>;
+        assert.deepEqual(
+          readers.find((reader) => reader.caller === "tally"),
+          { caller: "tally", lastReadAt: readers[0].lastReadAt, reads: 2, memories: 5 },
+          "a reader's week must count the reads and returned memories from the last 7 days, not an older read",
+        );
+        assert.equal(readers[0].caller, "tally", "the reader that read last must come first");
+        assert.deepEqual(
+          readers.find((reader) => reader.caller === "stale"),
+          { caller: "stale", lastReadAt: eightDaysAgo, reads: 0, memories: 0 },
+          "a reader whose only read is older than 7 days must still be listed, with no reads this week",
+        );
+        assert.deepEqual(
+          readers.map((reader) => reader.lastReadAt),
+          readers
+            .map((reader) => reader.lastReadAt)
+            .sort()
+            .reverse(),
+          "readers must be ordered by their last read, newest first",
+        );
+        const noodleNotes = await createLtmStorageReadService(recallStorage).storage.listNotes({
+          caller: "noodle",
+          characterIds: ["char-a"],
+        });
+        assert.ok(noodleNotes.length > 0, "the noodle read must return memories for the sum to mean anything");
+        assert.equal(
+          readers.find((reader) => reader.caller === "noodle")?.memories,
+          noodleNotes.length,
+          "a reader's memories must add up what its reads returned",
         );
         await updateLtmGlobalSettings({ longTermMemoryShareWithPackages: false }, recallRoot);
         assert.equal(

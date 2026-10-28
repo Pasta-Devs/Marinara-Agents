@@ -273,3 +273,36 @@ test("a closed event card names the chapter or Character Story to finish first",
   );
   assert.match(card(undefined), /Finish the current main chapter or Character Story before starting this event\./u);
 });
+
+test("Events → Story events offers Revisit played scenes for a finished live event, not Continue event (1.26.3)", () => {
+  const action = (played) => {
+    const pane = { dataset: {}, classList: { add() {} }, innerHTML: "", querySelectorAll: () => [] };
+    wireForgeSeasonalEvents({
+      _root: {
+        querySelector: (selector) =>
+          selector === '[data-screen="events"] .ev-pane'
+            ? pane
+            : selector === "[data-forge-seasonal-layout]"
+              ? {}
+              : null,
+        querySelectorAll: () => [],
+      },
+      _run: { runId: "label-world", story: { seasonalEvents: true } },
+      _forgeSeasonalRunId: "label-world",
+      _forgeSeasonalEnabled: true,
+      _forgeSeasonalState: {
+        events: [{ seq: 1, chapter: "event-1", endsAt: Date.now() + 86400000, live: true, opened: 1, played }],
+      },
+      _forgeSeasonalLoadedAt: Date.now(),
+      _hudView: "events",
+      _eventId: "story-events",
+      _eventSlots: [],
+      async _postJson() {
+        return { ok: true, events: [] };
+      },
+      _renderBrowser() {},
+    });
+    return /data-story-event-open="event-1">([^<]*)<\/button>/u.exec(pane.innerHTML)?.[1];
+  };
+  assert.deepEqual([action(0), action(3), action(10)], ["Play event", "Continue event", "Revisit played scenes"]);
+});

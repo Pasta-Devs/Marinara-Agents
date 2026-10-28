@@ -26,6 +26,7 @@ import type { SlurpSharedIdea } from "./slp-shared-preseed.js";
 import { SLURP_REFERENCE_KINDS, type SlurpBeatReference } from "./slp-post-reference.js";
 import type { SlpCreatorSteering } from "../../../../../shared/src/slp/slp-creator-steering.js";
 import { readSlurpTieStamp, type SlurpTieStamp } from "../projects/slp-tie-stamp.js";
+import { slurpPostJob, type SlurpJobHistory, type SlurpNiches } from "./slp-post-jobs.js";
 
 /** Shared ideas weigh more than a deck line of the same kind, so level 1 is actually used. */
 const SHARED_IDEA_BOOST = 1.5;
@@ -61,6 +62,8 @@ export type SlurpCanonAnchors = {
   palette: Partial<Record<SlurpBeatType, number>>;
   /** 0 wholesome, 1 flirty, 2 suggestive, 3 explicit, as the card supports. */
   heat: { min: number; max: number };
+  /** The page's niche, which weighs the post jobs. Absent on caches from before v4. */
+  niches?: SlurpNiches;
   /** A typical day from the card, for Creators without a Conversation Schedule. Absent on old caches. */
   routine?: { time: string; activity: string }[];
   /**
@@ -159,6 +162,8 @@ export type SlurpBeat = {
   tie?: SlurpTieStamp;
   /** The trend this post joins (docs/TRENDS.md), stamped on the post as `slurpTrend`; its origin post is quoted. */
   trend?: { id: string; label: string; originPostId: string | null; starterId?: string };
+  /** The post job (`slp-post-jobs.ts`): what kind of post this is. */
+  job?: string;
 };
 
 const TIE_KINDS: readonly string[] = ["collab", "sponsor", "rival", "couple"];
@@ -343,7 +348,7 @@ export function slurpBeatThemeCap(globalCounts: Partial<Record<SlurpBeatType, nu
   return Math.max(3, Math.ceil((total / SLURP_BEAT_TYPES.length) * 2));
 }
 
-export type SlurpBeatHistory = {
+export type SlurpBeatHistory = SlurpJobHistory & {
   /** This Creator's last beat types, newest first. */
   recentOwn: readonly SlurpBeatType[];
   /** This Creator's last anchors, so the same person or place does not carry every post. */
@@ -515,6 +520,7 @@ export function parseSlurpBeat(raw: unknown): SlurpBeat | null {
       ...(beat.elsewhere === true ? { elsewhere: true } : {}),
       ...(typeof beat.heatFloor === "number" ? { heatFloor: beat.heatFloor } : {}),
       ...(parseReference(beat.reference) ?? {}),
+      ...(typeof beat.job === "string" && slurpPostJob(beat.job) ? { job: beat.job } : {}),
       ...(typeof beat.nudgeId === "string" ? { nudgeId: beat.nudgeId } : {}),
       ...(() => {
         const tie = readSlurpTieStamp({ slurpTie: beat.tie });

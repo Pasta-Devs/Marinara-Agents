@@ -7,7 +7,9 @@
 // through the Engine's voice service with the Engine's assignment (and replayed from the backlog with the line's
 // cache key), stock music plays and each cue is generated once; the Confrontation plays three rounds of stances (each
 // sent once) to its ending's card; then, at reduced motion with "Ask before painting", a CG and a place paint only on
-// a tap, and Settings → Audio saves.
+// a tap, and Settings → Audio saves; a reviewed key-image prompt stops Auto and paints the scene it was opened for;
+// only saved audio settings generate music (an unsaved Mute or music level never does), an unsaved Mute stays silent
+// when a cue's track lands, and a recorded track the Engine no longer lists is made again while stock music plays.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-presentation.e2e.ts
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -232,17 +234,27 @@ async function stubRoutes(page: Page, answer: (call: Call) => Answer | undefined
   }
 }
 
-async function openOtome(page: Page): Promise<Locator> {
-  await page.addInitScript((version) => {
-    localStorage.setItem("marinara:whats-new:seen-version", version);
-    localStorage.setItem(
-      "marinara-engine-ui",
-      JSON.stringify({
-        state: { hasCompletedOnboarding: true, sidebarOpen: false, rightPanelOpen: false, appAccentPulseMode: false },
-        version: 65,
-      }),
-    );
-  }, appVersion);
+/** `reviewPrompts`: the Engine's "Review image prompts before sending" is on. */
+async function openOtome(page: Page, { reviewPrompts = false }: { reviewPrompts?: boolean } = {}): Promise<Locator> {
+  await page.addInitScript(
+    ({ version, review }) => {
+      localStorage.setItem("marinara:whats-new:seen-version", version);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            sidebarOpen: false,
+            rightPanelOpen: false,
+            appAccentPulseMode: false,
+            ...(review ? { reviewImagePromptsBeforeSend: true } : {}),
+          },
+          version: 65,
+        }),
+      );
+    },
+    { version: appVersion, review: reviewPrompts },
+  );
   await page.goto("/");
   await page.getByRole("tab", { name: "Open Otome Forge" }).click();
   const root = page.locator("marinara-capability-otome-forge .of-root");
@@ -250,8 +262,8 @@ async function openOtome(page: Page): Promise<Locator> {
   return root;
 }
 
-async function openStory(page: Page): Promise<Locator> {
-  const root = await openOtome(page);
+async function openStory(page: Page, options?: Parameters<typeof openOtome>[1]): Promise<Locator> {
+  const root = await openOtome(page, options);
   await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Story" }).click();
   await expect(root.getByRole("heading", { name: "Story", exact: true })).toBeVisible();
   return root;
@@ -260,10 +272,10 @@ async function openStory(page: Page): Promise<Locator> {
 const posts = (calls: Call[], suffix: string) =>
   calls.filter((call) => call.method === "POST" && call.path.endsWith(suffix));
 
-/** Shows the line whole if it is still typing, then goes on. */
+/** Goes on once the line has typed itself out (waiting, never racing the typing: see the reader spec's next). */
 async function next(root: Locator) {
   const button = root.locator(".of-next");
-  if ((await button.getAttribute("data-done")) !== "true") await button.click();
+  await expect(button).toHaveAttribute("data-done", "true");
   await button.click();
 }
 
@@ -592,12 +604,14 @@ function createSceneStub({
   ask = false,
   images = true,
   audio = true,
-}: { ask?: boolean; images?: boolean; audio?: boolean } = {}) {
+}: { ask?: boolean; images?: boolean; audio?: boolean | Json } = {}) {
   const placeArt = ask ? { state: "waiting-consent", at: now() } : { state: "ready", at: now(), url: PLACE_ART };
   const stub = {
     view: runView({
       images: images ? { connectionId: "conn-image", ask } : {},
-      audio: audio ? { tts: true, generate: true, audioConnectionId: "conn-audio" } : {},
+      audio: audio
+        ? { tts: true, generate: true, audioConnectionId: "conn-audio", ...(audio === true ? {} : audio) }
+        : {},
       places: images
         ? { "the-observation-room": { name: "The Observation Room", tags: "glass dome, night", art: placeArt } }
         : {},
@@ -710,7 +724,7 @@ function createSceneStub({
   };
   let beatsRead = 0;
   let unlocked = false;
-  let tracks: Json[] = [];
+  let tracks: Json[] = [...stub.view.world.audio.tracks];
   const answer = (call: Call): Answer | undefined => {
     if (call.path.startsWith("/api/tts/")) {
       if (call.path === "/api/tts/config") {
@@ -809,6 +823,9 @@ function createSceneStub({
           facesComing: [],
         },
       };
+    }
+    if (path === `${base}/art/cg/prompt`) {
+      return { status: 200, json: { prompt: "Two figures under a glass dome, rain.", negativePrompt: "text" } };
     }
     if (path === `${base}/art/cg`) {
       beat0.cg.art = { state: "ready", at: now(), url: CG_ART };
@@ -970,6 +987,8 @@ test("Otome Forge reader: a CG unlocks once seen, faces swap, lines are voiced, 
   await root.getByRole("button", { name: "Backlog" }).click();
   const backlog = page.getByRole("dialog", { name: "Backlog" });
   await expect(backlog.getByRole("button", { name: /Play .*line/u })).toHaveCount(1);
+  // An action, not a toggle: its name says what a press does (Play, then Stop), so it carries no pressed state.
+  await expect(backlog.getByRole("button", { name: "Play Ilvar Thorne’s line" })).not.toHaveAttribute("aria-pressed");
   await backlog.getByRole("button", { name: "Play Ilvar Thorne’s line" }).click();
   await expect.poll(async () => (await spoken(page)).length).toBe(2);
   expect((await spoken(page))[1]!.requests[0]!.cacheKey).toBe(`otome-forge:${RUN}:main-1/0r0/1`);
@@ -1105,5 +1124,188 @@ test("Otome Forge reader: at reduced motion with Ask before painting, a CG and a
     audioConnectionId: "conn-audio",
     musicVolume: 0.3,
   });
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Forge reader: a reviewed key-image prompt stops Auto and paints the scene it was opened for", async ({
+  page,
+}) => {
+  test.setTimeout(150_000);
+  const calls: Call[] = [];
+  const { answer } = createSceneStub({ ask: true, audio: false });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page, { reviewPrompts: true });
+  await root.getByRole("button", { name: "Continue" }).first().click();
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+  await next(root);
+  await next(root);
+  await next(root);
+  await expect(line(root)).toContainText("Stay, then.");
+
+  // The review is a dialog, so it stops Auto as the Backlog does: the line waits while the prompt is read.
+  const auto = root.getByRole("button", { name: "Auto", exact: true });
+  await auto.click();
+  await expect(auto).toHaveAttribute("aria-pressed", "true");
+  await root.getByRole("button", { name: "Paint this moment" }).click();
+  const review = page.getByRole("dialog", { name: "Paint: A moment to keep" });
+  await expect(review).toBeVisible();
+  await expect(auto).toHaveAttribute("aria-pressed", "false");
+  // Longer than Auto's pause on this line (lib/reader-state.ts autoDelay: 1.6 s and 48 ms a character).
+  await page.waitForTimeout(3_600);
+  await expect(line(root)).toContainText("Stay, then.");
+  await review.getByRole("button", { name: "Skip", exact: true }).click();
+  await expect(review).toBeHidden();
+
+  // The reader goes on while the prompt is on its way: the prompt it opens with still paints the scene it was for.
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/art/cg/prompt", async (route) => {
+    await gate;
+    await route.fallback();
+  });
+  await root.getByRole("button", { name: "Paint this moment" }).click();
+  await next(root);
+  await expect(line(root)).toContainText("The dome again.");
+  release();
+  await expect(review).toBeVisible();
+  await review.getByRole("button", { name: "Paint", exact: true }).click();
+  await expect(review).toBeHidden();
+  const prompts = posts(calls, "/art/cg/prompt");
+  expect(prompts).toHaveLength(2);
+  for (const call of prompts) expect(call.body).toMatchObject({ key: "main-1", i: 0 });
+  expect(posts(calls, "/art/cg")).toHaveLength(1);
+  expect(posts(calls, "/art/cg")[0]!.body).toMatchObject({
+    key: "main-1",
+    i: 0,
+    prompt: "Two figures under a glass dome, rain.",
+  });
+  expect(pageErrors).toEqual([]);
+});
+
+// Settings → Audio plays an unsaved Mute or music level while it moves; only the saved settings generate (and pay for)
+// music.
+for (const variant of [
+  { saved: "muted", audio: { muted: true }, unmute: true, steps: 4, level: "70" },
+  { saved: "with its music at 0", audio: { musicVolume: 0 }, unmute: false, steps: 4, level: "20" },
+]) {
+  test(`Otome Forge audio: a story saved ${variant.saved} makes no music on the unsaved form, and its cue once saved`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const calls: Call[] = [];
+    const { answer } = createSceneStub({ images: false, audio: variant.audio });
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await stubRoutes(page, answer, calls);
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Settings" }).click();
+    await root.getByRole("tab", { name: "Audio" }).click();
+    if (variant.unmute) await root.getByRole("switch", { name: "Mute everything" }).uncheck();
+    const music = root.getByRole("slider", { name: "Music" });
+    await music.focus();
+    for (let step = 0; step < variant.steps; step += 1) await page.keyboard.press("ArrowRight");
+    await expect(music).toHaveValue(variant.level);
+    // The Story screen's cue (home) is held, and Generate music is saved on: still nothing is asked for or paid.
+    await page.waitForTimeout(1_500);
+    expect(calls.filter((call) => call.path.endsWith("/audio/brief") || call.path === "/api/audio/generate")).toEqual(
+      [],
+    );
+    await root.getByRole("button", { name: "Save changes" }).click();
+    await expect(root.getByRole("status").filter({ hasText: "Saved." })).toBeVisible();
+    await expect.poll(() => generatedCues(calls)).toEqual(["home"]);
+    await expect.poll(() => posts(calls, "/audio/track").length).toBe(1);
+    expect(generatedCues(calls)).toEqual(["home"]);
+    expect(pageErrors).toEqual([]);
+  });
+}
+
+test("Otome Forge audio: an unsaved Mute stays silent when the cue's track being made lands", async ({ page }) => {
+  test.setTimeout(120_000);
+  const calls: Call[] = [];
+  const { answer } = createSceneStub({ images: false });
+  const slow = (call: Call): Answer | undefined => {
+    const reply = answer(call);
+    return call.path === "/api/audio/generate" && reply ? { ...reply, delay: 4_000 } : reply;
+  };
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  // Each gain's last value: the Engine's player silences a music layer by setting its gain to 0.
+  await page.addInitScript(() => {
+    const gains: number[] = [];
+    (window as any).__otomeGains = gains;
+    const create = AudioContext.prototype.createGain;
+    AudioContext.prototype.createGain = function (this: AudioContext) {
+      const node = create.call(this);
+      const index = gains.push(node.gain.value) - 1;
+      const set = node.gain.setValueAtTime.bind(node.gain);
+      node.gain.setValueAtTime = (value: number, time: number) => {
+        gains[index] = value;
+        return set(value, time);
+      };
+      return node;
+    };
+  });
+  const gains = () => page.evaluate(() => [...(window as any).__otomeGains] as number[]);
+  await stubRoutes(page, slow, calls);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Settings" }).click();
+  await root.getByRole("tab", { name: "Audio" }).click();
+  // Saved unmuted with Generate music on: the Story screen's cue (home) is being made.
+  await expect.poll(() => generatedCues(calls)).toEqual(["home"]);
+  const mute = root.getByRole("switch", { name: "Mute everything" });
+  await mute.check();
+  // The track lands on the story while Mute is previewed: it is recorded, and nothing plays.
+  await expect.poll(() => posts(calls, "/audio/track").length, { timeout: 20_000 }).toBe(1);
+  await expect
+    .poll(() =>
+      calls.some((call) =>
+        /^\/api\/game-assets\/file\/music\/contexts\/otome-forge\/.+\/made-1\.mp3$/u.test(call.path),
+      ),
+    )
+    .toBe(true);
+  await page.waitForTimeout(1_000);
+  await expect(mute).toBeChecked();
+  const muted = await gains();
+  expect(muted.length).toBeGreaterThan(0);
+  expect(muted.filter((value) => value !== 0)).toEqual([]);
+  // The preview is still live: unmuting plays music again.
+  await mute.uncheck();
+  await expect.poll(async () => (await gains()).some((value) => value > 0)).toBe(true);
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Forge audio: a recorded track the Engine no longer lists is made again, with stock music meanwhile", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const calls: Call[] = [];
+  // Recorded on the story, but its file is gone: the Engine's manifest (the stub's) does not list it.
+  const gone = {
+    cue: "home",
+    connectionId: "conn-audio",
+    tag: "music:contexts:otome-forge:world-0-home:gone",
+    path: "music/contexts/otome-forge/world-0-home/gone.mp3",
+  };
+  const { answer } = createSceneStub({ images: false, audio: { tracks: [gone] } });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, answer, calls);
+  await openStory(page);
+  await expect
+    .poll(() => calls.some((call) => /^\/api\/game-assets\/file\/music\/(dialogue|exploration)\//u.test(call.path)))
+    .toBe(true);
+  await expect.poll(() => generatedCues(calls)).toEqual(["home"]);
+  await expect.poll(() => posts(calls, "/audio/track").length).toBe(1);
+  await expect
+    .poll(() =>
+      calls.some((call) =>
+        /^\/api\/game-assets\/file\/music\/contexts\/otome-forge\/.+\/made-1\.mp3$/u.test(call.path),
+      ),
+    )
+    .toBe(true);
+  expect(calls.filter((call) => call.path.endsWith("/gone.mp3"))).toEqual([]);
   expect(pageErrors).toEqual([]);
 });

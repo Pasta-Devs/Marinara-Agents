@@ -138,6 +138,53 @@ test("P12's reply is normalized list by list with P6's rules", () => {
     ["The Lamp Room", "The Gallery Stair"],
   );
   assert.equal(moved.confrontation.endings.walkout[0]!.place, "The Gallery Stair");
+  // At most four places in the whole game, as in an ordinary beat: a fifth gets the repair turn, so no line is set in
+  // a place the beat does not record (and paint).
+  const placed = (name: string) => ({ speaker: "", text: `In ${name}.`, place: name });
+  const five = ["A", "B", "C", "D", "E"].map((letter) => `Place ${letter}`);
+  const spread = (names: string[]) => {
+    const reply = confrontationReply({
+      places: names.map((name) => ({ name, tags: `${name.toLowerCase()}, no humans` })),
+    });
+    reply.opening = names.slice(0, 4).map(placed);
+    reply.rounds[0].lines = [placed(names[names.length - 1]!), ...reply.rounds[0].lines];
+    reply.endings.truth = [placed(names[1]!)];
+    return reply;
+  };
+  assert.match(String(normalize(spread(five))), /^rounds\[0\]\.lines: the confrontation uses more than 4 places$/);
+  const four = normalize(spread(five.slice(0, 4)));
+  assert.ok(typeof four === "object", String(four));
+  const recorded = new Set(four.places.map((place) => place.name));
+  const every = [
+    four.segments,
+    ...four.confrontation.rounds.flatMap((round) => [
+      round.his,
+      ...Object.values(round.options).map((option) => option.segments),
+    ]),
+    ...Object.values(four.confrontation.endings),
+  ];
+  assert.deepEqual([...recorded], five.slice(0, 4));
+  assert.ok(every.flat().every((segment) => !segment.place || recorded.has(segment.place)));
+  // The reply's voices reach every list: a minor speaker in the opening, a round, an answer and an ending is voiced
+  // with the gender the writer gave.
+  const keeper = { speaker: "Old Keeper", text: "The lamp is mine to tend." };
+  const voiced = confrontationReply({ voices: { "Old Keeper": "male" } });
+  voiced.opening = [...voiced.opening, keeper];
+  voiced.rounds[0].lines = [...voiced.rounds[0].lines, keeper];
+  voiced.rounds[0].options.press.segments = [keeper];
+  voiced.endings.truth = [...voiced.endings.truth, keeper];
+  const genders = normalize(voiced);
+  assert.ok(typeof genders === "object", String(genders));
+  const keeperLines = [
+    genders.segments,
+    genders.confrontation.rounds[0]!.his,
+    genders.confrontation.rounds[0]!.options.press.segments,
+    genders.confrontation.endings.truth,
+  ].map((segments) => segments.find((segment) => segment.speaker === "Old Keeper"));
+  assert.deepEqual(
+    keeperLines.map((segment) => segment?.gender),
+    ["male", "male", "male", "male"],
+  );
 
   const base = confrontationReply();
   const rounds = base.rounds as Array<Record<string, any>>;
