@@ -1,0 +1,98 @@
+import type { SlurpMessageKind, SlurpThreadState } from "../../modules/messages/slp-messaging.js";
+import type { SlurpRapport } from "../../modules/messages/slp-rapport.js";
+import type { SlurpSexting } from "../../modules/messages/slp-sexting.js";
+import type { SlurpThreadNote } from "../../modules/messages/slp-thread-notes.js";
+import type { SlurpThreadState as SlurpConversationState } from "../../modules/creators/slp-creator-state.js";
+
+export type SlurpMessage = {
+  id: string;
+  threadId: string;
+  senderAccountId: string;
+  role: "viewer" | "creator";
+  kind: SlurpMessageKind;
+  content: string;
+  imageUrl: string | null;
+  price: number;
+  unlockedAt: string | null;
+  readAt: string | null;
+  metadata: Record<string, unknown>;
+  senderSnapshot: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type SlurpThread = {
+  id: string;
+  viewerAccountId: string;
+  creatorAccountId: string;
+  state: SlurpThreadState;
+  openedBy: "viewer" | "creator";
+  requestFeePaid: number;
+  lastMessageAt: string;
+  lastMessagePreview: string;
+  viewerUnread: number;
+  creatorUnread: number;
+  needsReply: boolean;
+  generationEpoch: number;
+  replyNotBeforeAt: string | null;
+  rapport: SlurpRapport;
+  mood: number;
+  moodUpdatedAt: string | null;
+  coolUntil: string | null;
+  extendedOnlineUntil: string | null;
+  scheduledFollowUps: Array<{
+    id: string;
+    scheduledAt: string;
+    type: string;
+    reason: string;
+    context: string;
+    relatedNoteId?: string;
+    sequenceNumber?: number;
+    totalInSequence?: number;
+    recurringPattern?: string;
+  }>;
+  clearedAt: string | null;
+  threadState: SlurpConversationState;
+  strikes: number;
+  lastStrikeAt: string | null;
+  notes: SlurpThreadNote[];
+  /** The Engine scene this thread is in, while it runs. */
+  sceneChatId: string | null;
+  sceneStartedAt: string | null;
+  /** The latest paid sexting session, running or over. */
+  sexting: SlurpSexting | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SlurpThreadView = SlurpThread & {
+  creatorHandle: string;
+  creatorDisplayName: string;
+  creatorAvatarUrl: string | null;
+  subscribed: boolean;
+};
+
+export type SlurpCommission = {
+  id: string;
+  threadId: string;
+  viewerAccountId: string;
+  creatorAccountId: string;
+  state: "brief" | "quoted" | "accepted" | "cancellation_pending" | "declined" | "delivered";
+  brief: string;
+  price: number;
+  deliveryMessageId: string | null;
+  deliverAt: string | null;
+  cancellationId: string | null;
+  deliveryId: string | null;
+  deliveryClaimToken: string | null;
+  deliveryClaimedAt: string | null;
+  counterPrice: number | null;
+  haggleRounds: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SlurpSendResult =
+  | { status: "sent"; thread: SlurpThread; message: SlurpMessage; /** A resend of a stored line. */ replayed?: true }
+  | { status: "closed"; reason?: "couple_page" }
+  | { status: "insufficient_funds"; required: number }
+  | { status: "not_found" };

@@ -4,10 +4,7 @@ import { DATA_DIR } from "../../utils/data-dir.js";
 import { assertInsideDir, isAllowedImageBuffer } from "../../utils/security.js";
 import { getSharp } from "../../utils/sharp.js";
 import { logger } from "../../lib/logger.js";
-import {
-  decodeSafePathSegment,
-  resolveOwnedGalleryPath,
-} from "../image/gallery-file-lifecycle.js";
+import { decodeSafePathSegment, resolveOwnedGalleryPath } from "../image/gallery-file-lifecycle.js";
 import type { NoodlePromptImageCandidate } from "./noodle-prompt.js";
 
 export const NOODLE_VISION_MAX_IMAGES = 8;
@@ -43,23 +40,14 @@ export function resolveNoodleImagePath(imageUrl: string): string | null {
     const root = join(galleryRoot, chatId);
     return resolveOwnedGalleryPath(galleryRoot, root, filename);
   }
-  if (
-    parts[1] === "characters" &&
-    parts[2] === "personas" &&
-    parts[4] === "gallery" &&
-    parts[5] === "file"
-  ) {
+  if (parts[1] === "characters" && parts[2] === "personas" && parts[4] === "gallery" && parts[5] === "file") {
     const personaId = decodeSafePathSegment(parts[3]);
     const filename = decodeSafePathSegment(parts[6]);
     if (!personaId || !filename) return null;
     const root = join(galleryRoot, "personas", personaId);
     return resolveOwnedGalleryPath(galleryRoot, root, filename);
   }
-  if (
-    parts[1] === "characters" &&
-    parts[3] === "gallery" &&
-    parts[4] === "file"
-  ) {
+  if (parts[1] === "characters" && parts[3] === "gallery" && parts[4] === "file") {
     const characterId = decodeSafePathSegment(parts[2]);
     const filename = decodeSafePathSegment(parts[5]);
     if (!characterId || !filename) return null;
@@ -69,12 +57,8 @@ export function resolveNoodleImagePath(imageUrl: string): string | null {
   return null;
 }
 
-function decodeImageDataUrl(
-  imageUrl: string,
-): { buffer: Buffer; expectedExt: string } | null {
-  const match = imageUrl.match(
-    /^data:image\/(png|jpe?g|webp|gif|avif);base64,([\s\S]+)$/i,
-  );
+function decodeImageDataUrl(imageUrl: string): { buffer: Buffer; expectedExt: string } | null {
+  const match = imageUrl.match(/^data:image\/(png|jpe?g|webp|gif|avif);base64,([\s\S]+)$/i);
   if (!match?.[1] || !match[2]) return null;
   const buffer = Buffer.from(match[2].replace(/\s+/g, ""), "base64");
   if (buffer.length > NOODLE_VISION_MAX_SOURCE_BYTES) return null;
@@ -82,10 +66,7 @@ function decodeImageDataUrl(
   return { buffer, expectedExt: `.${subtype === "jpeg" ? "jpg" : subtype}` };
 }
 
-async function optimizeNoodleVisionImage(
-  buffer: Buffer,
-  expectedExt?: string,
-): Promise<string | null> {
+async function optimizeNoodleVisionImage(buffer: Buffer, expectedExt?: string): Promise<string | null> {
   if (!isAllowedImageBuffer(buffer, expectedExt)) return null;
   const sharp = await getSharp();
   if (!sharp) return null;
@@ -112,28 +93,19 @@ async function optimizeNoodleVisionImage(
 
 async function readNoodleVisionImage(imageUrl: string): Promise<string | null> {
   const dataUrlImage = decodeImageDataUrl(imageUrl);
-  if (dataUrlImage)
-    return optimizeNoodleVisionImage(
-      dataUrlImage.buffer,
-      dataUrlImage.expectedExt,
-    );
+  if (dataUrlImage) return optimizeNoodleVisionImage(dataUrlImage.buffer, dataUrlImage.expectedExt);
 
   const filePath = resolveNoodleImagePath(imageUrl);
   if (!filePath) return null;
   const fileStat = await stat(filePath);
-  if (!fileStat.isFile() || fileStat.size > NOODLE_VISION_MAX_SOURCE_BYTES)
-    return null;
+  if (!fileStat.isFile() || fileStat.size > NOODLE_VISION_MAX_SOURCE_BYTES) return null;
   return optimizeNoodleVisionImage(await readFile(filePath), extname(filePath));
 }
 
 export async function prepareNoodleVisionAttachments(
   candidates: NoodlePromptImageCandidate[],
 ): Promise<NoodleVisionAttachment[]> {
-  const ordered = candidates
-    .slice()
-    .sort(
-      (left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt),
-    );
+  const ordered = candidates.slice().sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
   const attachments: NoodleVisionAttachment[] = [];
   const seenKeys = new Set<string>();
 
@@ -145,19 +117,13 @@ export async function prepareNoodleVisionAttachments(
       const dataUrl = await readNoodleVisionImage(candidate.imageUrl);
       if (dataUrl) attachments.push({ ...candidate, dataUrl });
     } catch (error) {
-      logger.warn(
-        error,
-        "[noodle/vision] Could not attach timeline image %s",
-        candidate.key,
-      );
+      logger.warn(error, "[noodle/vision] Could not attach timeline image %s", candidate.key);
     }
   }
   return attachments;
 }
 
-export function formatNoodleVisionManifest(
-  attachments: NoodleVisionAttachment[],
-): string {
+export function formatNoodleVisionManifest(attachments: NoodleVisionAttachment[]): string {
   if (attachments.length === 0) return "";
   return [
     "# Attached Noodle Images",
@@ -179,9 +145,7 @@ export function isUnsupportedNoodleVisionInputError(error: unknown): boolean {
     /(?:not supported|unsupported|does not support|invalid content type).{0,100}(?:image|vision|multimodal|image_url)/i.test(
       message,
     ) ||
-    /no (?:available )?endpoints? found.{0,80}(?:image|vision|multimodal|image_url)/i.test(
-      message,
-    ) ||
+    /no (?:available )?endpoints? found.{0,80}(?:image|vision|multimodal|image_url)/i.test(message) ||
     /(?:expected|must be).{0,60}(?:content|message).{0,60}(?:string|text)|(?:expected|must be).{0,60}(?:string|text).{0,60}(?:content|message)|(?:content|message).{0,60}(?:expected|must be).{0,60}(?:string|text)/i.test(
       message,
     )

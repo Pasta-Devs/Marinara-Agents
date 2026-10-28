@@ -59,19 +59,26 @@ export function buildEnglishPackageLocale(manifest, agentDefinitions) {
       name: manifest.name,
       ...(manifest.description === undefined ? {} : { description: manifest.description }),
     },
-    agents: Object.fromEntries(
-      agentDefinitions.map((definition) => {
-        const promptTemplates = localizedPromptTemplates(definition);
-        return [
-          definition.id,
-          {
-            name: definition.name,
-            ...(definition.description === undefined ? {} : { description: definition.description }),
-            ...(promptTemplates ? { promptTemplates } : {}),
-          },
-        ];
-      }),
-    ),
+    // A package with no Agents at all (a `ruleset` package is pure data) gets no
+    // agents block rather than an empty one, so its catalog does not advertise a
+    // section it can never fill.
+    ...(agentDefinitions.length === 0
+      ? {}
+      : {
+          agents: Object.fromEntries(
+            agentDefinitions.map((definition) => {
+              const promptTemplates = localizedPromptTemplates(definition);
+              return [
+                definition.id,
+                {
+                  name: definition.name,
+                  ...(definition.description === undefined ? {} : { description: definition.description }),
+                  ...(promptTemplates ? { promptTemplates } : {}),
+                },
+              ];
+            }),
+          ),
+        }),
   };
 }
 
@@ -86,4 +93,18 @@ export async function writeEnglishPackageLocale(packageRoot, manifest, agentDefi
     join(localesRoot, "en.json"),
     serializePackageLocale(buildEnglishPackageLocale(manifest, agentDefinitions)),
   );
+}
+
+/** Partial catalogs may grow independently, but shipped translations must not disappear silently. */
+export async function validateShippedUiTranslations(repoRoot) {
+  const baseline = JSON.parse(await readFile(join(repoRoot, "scripts/package-ui-translation-baseline.json"), "utf8"));
+  for (const [path, shippedKeys] of Object.entries(baseline)) {
+    const catalog = JSON.parse(await readFile(join(repoRoot, path), "utf8"));
+    const missing = shippedKeys.filter((key) => !Object.hasOwn(catalog, key));
+    if (missing.length) {
+      throw new Error(
+        `${path} lost shipped translation keys: ${missing.join(", ")}. Restore them or document an intentional baseline change.`,
+      );
+    }
+  }
 }

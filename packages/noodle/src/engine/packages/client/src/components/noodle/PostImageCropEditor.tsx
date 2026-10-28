@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Crop, Move, RotateCcw } from "lucide-react";
 import type { NoodlePostImageCrop } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
@@ -62,10 +56,7 @@ export function PostImageCropEditor({
     centerX: number;
     centerY: number;
   } | null>(null);
-  const sourceUrl = useMemo(
-    () => (typeof source === "string" ? source : URL.createObjectURL(source)),
-    [source],
-  );
+  const sourceUrl = useMemo(() => (typeof source === "string" ? source : URL.createObjectURL(source)), [source]);
   const [sourceSize, setSourceSize] = useState<ImageSize | null>(null);
   const [displaySize, setDisplaySize] = useState<ImageSize | null>(null);
   const [aspect, setAspect] = useState<CropAspect>("original");
@@ -92,25 +83,13 @@ export function PostImageCropEditor({
 
   useEffect(() => {
     if (!sourceSize || !initialCrop) return;
-    if (
-      initialCrop.sourceWidth !== sourceSize.width ||
-      initialCrop.sourceHeight !== sourceSize.height
-    ) {
+    if (initialCrop.sourceWidth !== sourceSize.width || initialCrop.sourceHeight !== sourceSize.height) {
       return;
     }
     const initialAspect = closestAspect(sourceSize, initialCrop);
     const base = resolveCrop(sourceSize, initialAspect, 1, { x: 0.5, y: 0.5 });
     setAspect(initialAspect);
-    setZoom(
-      clamp(
-        Math.min(
-          base.width / initialCrop.width,
-          base.height / initialCrop.height,
-        ),
-        1,
-        3,
-      ),
-    );
+    setZoom(clamp(Math.min(base.width / initialCrop.width, base.height / initialCrop.height), 1, 3));
     setCenter({
       x: initialCrop.x + initialCrop.width / 2,
       y: initialCrop.y + initialCrop.height / 2,
@@ -122,8 +101,7 @@ export function PostImageCropEditor({
     if (!image) return;
     const updateDisplaySize = () => {
       const rect = image.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0)
-        setDisplaySize({ width: rect.width, height: rect.height });
+      if (rect.width > 0 && rect.height > 0) setDisplaySize({ width: rect.width, height: rect.height });
     };
     updateDisplaySize();
     const observer = new ResizeObserver(updateDisplaySize);
@@ -131,9 +109,7 @@ export function PostImageCropEditor({
     return () => observer.disconnect();
   }, [sourceSize]);
 
-  const crop = sourceSize
-    ? resolveCrop(sourceSize, aspect, zoom, center)
-    : null;
+  const crop = sourceSize ? resolveCrop(sourceSize, aspect, zoom, center) : null;
   const busy = disabled || applying;
 
   const reset = () => {
@@ -157,14 +133,9 @@ export function PostImageCropEditor({
 
   const moveDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId || !displaySize || !crop)
-      return;
+    if (!drag || drag.pointerId !== event.pointerId || !displaySize || !crop) return;
     setCenter({
-      x: clamp(
-        drag.centerX + (event.clientX - drag.clientX) / displaySize.width,
-        crop.width / 2,
-        1 - crop.width / 2,
-      ),
+      x: clamp(drag.centerX + (event.clientX - drag.clientX) / displaySize.width, crop.width / 2, 1 - crop.width / 2),
       y: clamp(
         drag.centerY + (event.clientY - drag.clientY) / displaySize.height,
         crop.height / 2,
@@ -189,9 +160,7 @@ export function PostImageCropEditor({
       });
     } catch (caught) {
       setError(
-        caught instanceof Error
-          ? caught.message
-          : localizeUi("ui.noodle.postimagecropeditor.couldNotCropImage"),
+        caught instanceof Error ? caught.message : localizeUi("ui.noodle.postimagecropeditor.couldNotCropImage"),
       );
     } finally {
       setApplying(false);
@@ -207,9 +176,7 @@ export function PostImageCropEditor({
             {localizeUi("ui.noodle.postimagecropeditor.frameImage")}
           </h3>
           <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-            {localizeUi(
-              "ui.noodle.postimagecropeditor.dragTheFrameToPositionTheImage",
-            )}
+            {localizeUi("ui.noodle.postimagecropeditor.dragTheFrameToPositionTheImage")}
           </p>
         </div>
         <button
@@ -239,19 +206,13 @@ export function PostImageCropEditor({
               const rect = image.getBoundingClientRect();
               setDisplaySize({ width: rect.width, height: rect.height });
             }}
-            onError={() =>
-              setError(
-                localizeUi("ui.noodle.postimagecropeditor.couldNotLoadImage"),
-              )
-            }
+            onError={() => setError(localizeUi("ui.noodle.postimagecropeditor.couldNotLoadImage"))}
             className="block max-h-80 max-w-full select-none object-contain"
           />
           {crop && displaySize && (
             <div
               role="application"
-              aria-label={localizeUi(
-                "ui.noodle.postimagecropeditor.imageCropFrameDragToReposition",
-              )}
+              aria-label={localizeUi("ui.noodle.postimagecropeditor.imageCropFrameDragToReposition")}
               className="absolute touch-none cursor-move overflow-hidden rounded-xl outline outline-2 outline-white"
               style={{
                 left: crop.x * displaySize.width,
@@ -281,16 +242,8 @@ export function PostImageCropEditor({
                 if (!movement) return;
                 event.preventDefault();
                 setCenter({
-                  x: clamp(
-                    crop.x + crop.width / 2 + movement.x,
-                    crop.width / 2,
-                    1 - crop.width / 2,
-                  ),
-                  y: clamp(
-                    crop.y + crop.height / 2 + movement.y,
-                    crop.height / 2,
-                    1 - crop.height / 2,
-                  ),
+                  x: clamp(crop.x + crop.width / 2 + movement.x, crop.width / 2, 1 - crop.width / 2),
+                  y: clamp(crop.y + crop.height / 2 + movement.y, crop.height / 2, 1 - crop.height / 2),
                 });
               }}
             >
@@ -390,23 +343,12 @@ export function PostImageFrame({
   const validCrop = crop && isValidCrop(crop) ? crop : null;
   if (!validCrop) {
     return (
-      <div
-        className="flex justify-center overflow-hidden rounded-xl bg-black/30"
-        style={{ maxHeight }}
-      >
-        <img
-          src={src}
-          alt={alt}
-          onError={onError}
-          className="max-w-full object-contain"
-          style={{ maxHeight }}
-        />
+      <div className="flex justify-center overflow-hidden rounded-xl bg-black/30" style={{ maxHeight }}>
+        <img src={src} alt={alt} onError={onError} className="max-w-full object-contain" style={{ maxHeight }} />
       </div>
     );
   }
-  const aspectRatio =
-    (validCrop.width * validCrop.sourceWidth) /
-    (validCrop.height * validCrop.sourceHeight);
+  const aspectRatio = (validCrop.width * validCrop.sourceWidth) / (validCrop.height * validCrop.sourceHeight);
   const imageStyle: CSSProperties = {
     left: `${(-validCrop.x / validCrop.width) * 100}%`,
     top: `${(-validCrop.y / validCrop.height) * 100}%`,
@@ -418,13 +360,7 @@ export function PostImageFrame({
       className="relative mx-auto w-full overflow-hidden rounded-xl bg-black/30"
       style={{ aspectRatio, maxWidth: maxHeight * aspectRatio }}
     >
-      <img
-        src={src}
-        alt={alt}
-        onError={onError}
-        className="absolute max-w-none"
-        style={imageStyle}
-      />
+      <img src={src} alt={alt} onError={onError} className="absolute max-w-none" style={imageStyle} />
     </div>
   );
 }
@@ -460,13 +396,7 @@ function resolveCrop(
 ): NormalizedCrop {
   const sourceRatio = size.width / size.height;
   const targetRatio =
-    aspect === "square"
-      ? 1
-      : aspect === "portrait"
-        ? 4 / 5
-        : aspect === "landscape"
-          ? 16 / 9
-          : sourceRatio;
+    aspect === "square" ? 1 : aspect === "portrait" ? 4 / 5 : aspect === "landscape" ? 16 / 9 : sourceRatio;
   const baseWidth = sourceRatio > targetRatio ? targetRatio / sourceRatio : 1;
   const baseHeight = sourceRatio > targetRatio ? 1 : sourceRatio / targetRatio;
   const width = baseWidth / zoom;
@@ -477,8 +407,7 @@ function resolveCrop(
 }
 
 function closestAspect(size: ImageSize, crop: NoodlePostImageCrop): CropAspect {
-  const ratio =
-    (crop.width * crop.sourceWidth) / (crop.height * crop.sourceHeight);
+  const ratio = (crop.width * crop.sourceWidth) / (crop.height * crop.sourceHeight);
   const sourceRatio = size.width / size.height;
   const candidates: Array<{ aspect: CropAspect; ratio: number }> = [
     { aspect: "original", ratio: sourceRatio },
@@ -487,9 +416,7 @@ function closestAspect(size: ImageSize, crop: NoodlePostImageCrop): CropAspect {
     { aspect: "landscape", ratio: 16 / 9 },
   ];
   return candidates.reduce((closest, candidate) =>
-    Math.abs(candidate.ratio - ratio) < Math.abs(closest.ratio - ratio)
-      ? candidate
-      : closest,
+    Math.abs(candidate.ratio - ratio) < Math.abs(closest.ratio - ratio) ? candidate : closest,
   ).aspect;
 }
 

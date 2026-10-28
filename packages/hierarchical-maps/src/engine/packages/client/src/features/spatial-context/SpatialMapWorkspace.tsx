@@ -30,7 +30,6 @@ import {
   getSpatialDescendantIds,
   resolveSpatialLocationDepth,
   resolveSpatialBreadcrumb,
-  spatialContextDefinitionSchema,
   validateSpatialArchive,
   type GameMap,
   type GenerateSpatialMapDraftResponse,
@@ -135,6 +134,7 @@ import {
   type SpatialHierarchyProfile,
   type SpatialMapTemplateRecord,
   type SpatialSharedWorldRecord,
+  spatialMapDefinitionSchema,
 } from "../../../../maps-shared/src/maps-model";
 
 type MobilePane = "hierarchy" | "local" | "details";
@@ -887,10 +887,7 @@ export function SpatialMapWorkspace({
     !!draft?.startingLocationId &&
     draft.locations.some((location) => location.id === draft.startingLocationId && location.status === "active");
   const isFirstMapDraft = baseDefinition === null && (draft?.locations.length ?? 0) > 0;
-  const startOverBuilderDefinition = useMemo(
-    () => createEmptySpatialDefinition(ownerMode),
-    [ownerMode],
-  );
+  const startOverBuilderDefinition = useMemo(() => createEmptySpatialDefinition(ownerMode), [ownerMode]);
   const startOverBuilderProfile = useMemo(
     () => defaultHierarchyProfile(startOverBuilderDefinition),
     [startOverBuilderDefinition],
@@ -939,15 +936,18 @@ export function SpatialMapWorkspace({
     setLayoutEditingMode(null);
   }, [galleryImagesInitiallyLoading, layoutEditingMode, localMapBackgroundImageUrl, localPresentation]);
 
-  const applyDraft = useCallback((next: SpatialContextDefinition) => {
-    invalidateArtworkGeneration();
-    setDraft(next);
-    setServerIssues([]);
-    setSavedFlash(false);
-    setFirstSaveResult(null);
-    setArtworkPreview(null);
-    setArtworkPreviewSourceSignature(null);
-  }, [invalidateArtworkGeneration]);
+  const applyDraft = useCallback(
+    (next: SpatialContextDefinition) => {
+      invalidateArtworkGeneration();
+      setDraft(next);
+      setServerIssues([]);
+      setSavedFlash(false);
+      setFirstSaveResult(null);
+      setArtworkPreview(null);
+      setArtworkPreviewSourceSignature(null);
+    },
+    [invalidateArtworkGeneration],
+  );
 
   const fillMissingArtwork = useCallback(async () => {
     if (
@@ -1358,8 +1358,7 @@ export function SpatialMapWorkspace({
     if (dirty || spatial.data?.hasCommittedSpatialHistory) {
       const confirmed = await confirmAction({
         title: "Break breadcrumb continuity and start a new map?",
-        message:
-          `Old messages will remain, but historical map links may no longer resolve after the replacement is saved. ${dirty ? "Any unsaved map edits will also be discarded. " : ""}This cannot be undone unless you exported a backup.`,
+        message: `Old messages will remain, but historical map links may no longer resolve after the replacement is saved. ${dirty ? "Any unsaved map edits will also be discarded. " : ""}This cannot be undone unless you exported a backup.`,
         confirmLabel: "Start new map",
         cancelLabel: "Keep current map",
         tone: "destructive",
@@ -1645,7 +1644,7 @@ export function SpatialMapWorkspace({
         const rawRecord =
           raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
         const candidate = rawRecord && "definition" in rawRecord ? rawRecord.definition : raw;
-        const parsed = spatialContextDefinitionSchema.safeParse(candidate);
+        const parsed = spatialMapDefinitionSchema.safeParse(candidate);
         if (!parsed.success) {
           throw new Error(parsed.error.issues[0]?.message ?? "This file is not a valid world map.");
         }
@@ -2126,8 +2125,8 @@ export function SpatialMapWorkspace({
             : startOverPending
               ? "New map saved. Historical map links may no longer resolve."
               : response.sharedWorld.pendingChanges
-              ? "Map saved for this chat. Review it, then publish or fork it."
-              : "World map saved.",
+                ? "Map saved for this chat. Review it, then publish or fork it."
+                : "World map saved.",
         );
       } catch (error) {
         const problem = getSpatialContextProblem(error);
@@ -2191,7 +2190,7 @@ export function SpatialMapWorkspace({
     (session: SpatialMapAiBuilderSession) => {
       if (!draft) return;
       const generated = session.result.definition;
-      const parsedGenerated = spatialContextDefinitionSchema.safeParse(generated);
+      const parsedGenerated = spatialMapDefinitionSchema.safeParse(generated);
       if (!parsedGenerated.success) {
         toast.error(parsedGenerated.error.issues[0]?.message ?? "The AI draft was not a valid world map.");
         return;
@@ -3523,7 +3522,7 @@ export function SpatialMapWorkspace({
         hierarchyProfile={aiBuilderStartOver ? startOverBuilderProfile : draftHierarchyProfile}
         generationPreferences={spatial.data?.generationPreferences ?? defaultGenerationPreferences(ownerMode)}
         currentLocationId={aiBuilderStartOver ? null : currentLocationId}
-        preferredTargetLocationId={aiBuilderStartOver ? null : selected?.id ?? null}
+        preferredTargetLocationId={aiBuilderStartOver ? null : (selected?.id ?? null)}
         hasCommittedSpatialHistory={spatial.data?.hasCommittedSpatialHistory ?? false}
         dirty={dirty}
         initialResult={pendingSetupReview?.result}
@@ -3569,8 +3568,8 @@ export function SpatialMapWorkspace({
                     </p>
                     {artworkPreviewStale && (
                       <p className="mt-2 text-[0.6875rem] font-semibold text-amber-200" role="status">
-                        The map or image settings changed. Your prompt edits are preserved as stale data; refresh prompts
-                        before generating artwork.
+                        The map or image settings changed. Your prompt edits are preserved as stale data; refresh
+                        prompts before generating artwork.
                       </p>
                     )}
                   </div>

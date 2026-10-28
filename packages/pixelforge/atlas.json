@@ -22,6 +22,18 @@
     "well": 17,
     "trunk": 18,
     "canopy": 19,
-    "table": 20
+    "table": 20,
+    "altar": 21,
+    "bed": 22,
+    "shelf": 23,
+    "bunk": 24,
+    "stairsUp": 25,
+    "stairsDown": 26,
+    "bell": 27,
+    "bridge": 28,
+    "grassSnow": 29,
+    "grassSnow2": 30,
+    "cropSnow": 31,
+    "canopySnow": 32
   }
 }

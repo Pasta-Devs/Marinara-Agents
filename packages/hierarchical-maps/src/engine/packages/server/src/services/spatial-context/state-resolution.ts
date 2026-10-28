@@ -1,9 +1,9 @@
 import {
   resolveSpatialBreadcrumb,
   resolveSpatialDestinations,
+  resolveSpatialRoute,
   SPATIAL_CONTEXT_LIMITS,
   type CapabilityPersistenceSession,
-  spatialContextDefinitionSchema,
   type SpatialContextDefinition,
   type SpatialContextSnapshot,
   type ResolvedSpatialTravel,
@@ -11,6 +11,7 @@ import {
 } from "@marinara-engine/shared";
 import { getPackagePersistence, logger, newId, newTimeSortableId, now } from "./package-runtime.js";
 import { parseSpatialMetadata } from "./metadata.js";
+import { SPATIAL_MAP_LOCATION_LIMIT, spatialMapDefinitionSchema } from "../../../../maps-shared/src/maps-model.js";
 import {
   readSpatialSharedWorldLink,
   resolveSpatialWorldSource,
@@ -168,7 +169,7 @@ function discoverLocation(
     return { definition, destinationId: reachableMatching[0]!.id };
   }
   if (matching.length === 1) return null;
-  if (matching.length > 1 || definition.locations.length >= SPATIAL_CONTEXT_LIMITS.maxLocations) return null;
+  if (matching.length > 1 || definition.locations.length >= SPATIAL_MAP_LOCATION_LIMIT) return null;
 
   const current = definition.locations.find((location) => location.id === currentLocationId);
   if (!current) return null;
@@ -215,13 +216,13 @@ function discoverLocation(
     if (!linked) return null;
     nextDefinition = linked;
   }
-  const parsed = spatialContextDefinitionSchema.safeParse(nextDefinition);
+  const parsed = spatialMapDefinitionSchema.safeParse(nextDefinition);
   return parsed.success ? { definition: parsed.data as SpatialContextDefinition, destinationId } : null;
 }
 
 export function parseStoredSpatialDefinition(rawMetadata: unknown): SpatialContextDefinition | null {
   const candidate = parseSpatialMetadata(rawMetadata).spatialContext;
-  const parsed = spatialContextDefinitionSchema.safeParse(candidate);
+  const parsed = spatialMapDefinitionSchema.safeParse(candidate);
   return parsed.success ? (parsed.data as SpatialContextDefinition) : null;
 }
 
@@ -349,7 +350,13 @@ export async function materializeAssistantSpatialState(input: {
         const destination = definition.locations.find(
           (location) => location.id === requestedDestinationId && location.status === "active",
         );
-        if (destination && (destination.id === state.currentLocationId || reachable.has(destination.id))) {
+        // A destination further than one step moves the party when resolveSpatialRoute, which routes the
+        // player's own travel, finds a path of at least one step to it (a boat to the next town).
+        const routed =
+          destination &&
+          !reachable.has(destination.id) &&
+          (resolveSpatialRoute(definition, state.currentLocationId, destination.id)?.length ?? 0) > 0;
+        if (destination && (destination.id === state.currentLocationId || reachable.has(destination.id) || routed)) {
           destinationId = destination.id;
           transitionApplied = destinationId !== state.currentLocationId;
         }

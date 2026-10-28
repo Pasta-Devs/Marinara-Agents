@@ -1,9 +1,10 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, InjectOptions } from "fastify";
 import { logger } from "../../lib/logger.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { AUTOMATIC_GENERATION_HEADER } from "../generation/connection-admission.js";
 import {
   dueNoodleRefreshTimes,
+  exponentialNoodleRefreshRetryDelayMs,
   markNoodleRefreshAttempt,
   markNoodleRefreshFailure,
   markNoodleRefreshSuccess,
@@ -18,12 +19,7 @@ const NOODLE_SCHEDULER_MAX_POLL_MS = 60_000;
 const NOODLE_SCHEDULER_DISABLED_POLL_MS = 15 * 60_000;
 const NOODLE_SCHEDULER_CONFIGURATION_RETRY_MS = 15 * 60_000;
 const NOODLE_SCHEDULER_BUSY_RETRY_MS = 60_000;
-const NOODLE_SCHEDULER_RATE_LIMIT_RETRY_MS = 5 * 60_000;
-const NOODLE_SCHEDULER_FAILURE_BASE_RETRY_MS = 5 * 60_000;
-const NOODLE_SCHEDULER_FAILURE_MAX_RETRY_MS = 60 * 60_000;
-const NOODLE_SCHEDULER_CONFIGURATION_STATUS_CODES = new Set([
-  400, 401, 403, 404, 405, 410, 422,
-]);
+const NOODLE_SCHEDULER_CONFIGURATION_STATUS_CODES = new Set([400, 401, 403, 404, 405, 410, 422]);
 
 function responseError(payload: string): string {
   try {
@@ -35,45 +31,30 @@ function responseError(payload: string): string {
   return payload.trim().slice(0, 500) || "Automatic Noodle refresh failed";
 }
 
-export function noodleRefreshRetryDelayMs(
-  statusCode: number,
-  failureAttempts: number,
-): number {
+export function noodleRefreshRetryDelayMs(statusCode: number, failureAttempts: number): number {
   if (statusCode === 409) return NOODLE_SCHEDULER_BUSY_RETRY_MS;
-  if (statusCode === 429) return NOODLE_SCHEDULER_RATE_LIMIT_RETRY_MS;
   if (NOODLE_SCHEDULER_CONFIGURATION_STATUS_CODES.has(statusCode)) {
     return NOODLE_SCHEDULER_CONFIGURATION_RETRY_MS;
   }
-  return Math.min(
-    NOODLE_SCHEDULER_FAILURE_MAX_RETRY_MS,
-    NOODLE_SCHEDULER_FAILURE_BASE_RETRY_MS * 2 ** Math.max(0, failureAttempts),
-  );
+  return exponentialNoodleRefreshRetryDelayMs(failureAttempts);
 }
 
-export function nextNoodleSchedulerPollDelayMs(
-  schedule: PersistedNoodleRefreshSchedule,
-  at: Date,
-): number {
+export function nextNoodleSchedulerPollDelayMs(schedule: PersistedNoodleRefreshSchedule, at: Date): number {
   if (schedule.refreshesPerDay === 0) return NOODLE_SCHEDULER_DISABLED_POLL_MS;
   const now = at.getTime();
-  const retryAt = schedule.nextAttemptAt
-    ? Date.parse(schedule.nextAttemptAt)
-    : Number.NaN;
+  const retryAt = schedule.nextAttemptAt ? Date.parse(schedule.nextAttemptAt) : Number.NaN;
   if (Number.isFinite(retryAt) && retryAt > now) {
-    return Math.max(
-      1_000,
-      Math.min(NOODLE_SCHEDULER_MAX_POLL_MS, retryAt - now),
-    );
+    return Math.max(1_000, Math.min(NOODLE_SCHEDULER_MAX_POLL_MS, retryAt - now));
   }
   const nextRefreshAt = nextNoodleRefreshTime(schedule);
   if (!nextRefreshAt) return NOODLE_SCHEDULER_MAX_POLL_MS;
-  return Math.max(
-    1_000,
-    Math.min(NOODLE_SCHEDULER_MAX_POLL_MS, Date.parse(nextRefreshAt) - now),
-  );
+  return Math.max(1_000, Math.min(NOODLE_SCHEDULER_MAX_POLL_MS, Date.parse(nextRefreshAt) - now));
 }
 
-export function startNoodleRefreshScheduler(app: FastifyInstance) {
+export function startNoodleRefreshScheduler(
+  app: FastifyInstance,
+  runInternalRoute?: (options: InjectOptions | string) => ReturnType<FastifyInstance["inject"]>,
+) {
   const noodle = createNoodleStorage(app.db);
   let stopped = false;
   let polling = false;
@@ -108,10 +89,7 @@ export function startNoodleRefreshScheduler(app: FastifyInstance) {
     );
     await noodle.saveRefreshSchedule(failed);
     if (NOODLE_SCHEDULER_CONFIGURATION_STATUS_CODES.has(statusCode)) {
-      logger.debug(
-        "[noodle-scheduler] Automatic refresh is waiting for valid configuration: %s",
-        error,
-      );
+      logger.debug("[noodle-scheduler] Automatic refresh is waiting for valid configuration: %s", error);
     } else {
       logger.warn(
         "[noodle-scheduler] Automatic refresh failed with status %d; retrying at %s: %s",
@@ -131,9 +109,7 @@ export function startNoodleRefreshScheduler(app: FastifyInstance) {
       const now = new Date();
       const settings = await noodle.getSettings();
       let schedule = await noodle.ensureRefreshSchedule(now, settings);
-      const retryAt = schedule.nextAttemptAt
-        ? Date.parse(schedule.nextAttemptAt)
-        : Number.NaN;
+      const retryAt = schedule.nextAttemptAt ? Date.parse(schedule.nextAttemptAt) : Number.NaN;
       if (Number.isFinite(retryAt) && retryAt > now.getTime()) {
         nextDelay = nextNoodleSchedulerPollDelayMs(schedule, now);
         return;
@@ -149,29 +125,23 @@ export function startNoodleRefreshScheduler(app: FastifyInstance) {
       await noodle.saveRefreshSchedule(schedule);
 
       if (!settings.generationConnectionId) {
-        schedule = await persistFailure(
-          schedule,
-          "Select a Noodle generation connection first.",
-          400,
-          new Date(),
-        );
+        schedule = await persistFailure(schedule, "Select a Noodle generation connection first.", 400, new Date());
         nextDelay = nextNoodleSchedulerPollDelayMs(schedule, new Date());
         return;
       }
 
-      const response = await app.inject({
+      const request = {
         method: "POST",
         url: "/api/noodle/refresh",
         headers: { [AUTOMATIC_GENERATION_HEADER]: "1" },
         payload: { mode: "public" },
-      });
+      } satisfies InjectOptions;
+      const response = await (runInternalRoute ? runInternalRoute(request) : app.inject(request));
       const completedAt = new Date();
       const latest = await noodle.ensureRefreshSchedule(completedAt);
       if (response.statusCode >= 200 && response.statusCode < 300) {
         const latestDueTimes = dueNoodleRefreshTimes(latest, completedAt);
-        const consumedTimes = dueTimes.filter((time) =>
-          latest.scheduledTimes.includes(time),
-        );
+        const consumedTimes = dueTimes.filter((time) => latest.scheduledTimes.includes(time));
         const completed = markNoodleRefreshSuccess(
           latest,
           consumedTimes.length > 0 ? consumedTimes : latestDueTimes,
@@ -181,20 +151,13 @@ export function startNoodleRefreshScheduler(app: FastifyInstance) {
         logger.info(
           "[noodle-scheduler] Automatic timeline refresh completed; consumed %d due slot%s",
           Math.max(consumedTimes.length, latestDueTimes.length),
-          Math.max(consumedTimes.length, latestDueTimes.length) === 1
-            ? ""
-            : "s",
+          Math.max(consumedTimes.length, latestDueTimes.length) === 1 ? "" : "s",
         );
         nextDelay = nextNoodleSchedulerPollDelayMs(completed, completedAt);
         return;
       }
 
-      const failed = await persistFailure(
-        latest,
-        responseError(response.payload),
-        response.statusCode,
-        completedAt,
-      );
+      const failed = await persistFailure(latest, responseError(response.payload), response.statusCode, completedAt);
       nextDelay = nextNoodleSchedulerPollDelayMs(failed, completedAt);
     } catch (error) {
       const at = new Date();
@@ -204,10 +167,7 @@ export function startNoodleRefreshScheduler(app: FastifyInstance) {
         const failed = await persistFailure(schedule, message, 500, at);
         nextDelay = nextNoodleSchedulerPollDelayMs(failed, at);
       } catch (persistError) {
-        logger.error(
-          persistError,
-          "[noodle-scheduler] Failed to persist scheduler failure state",
-        );
+        logger.error(persistError, "[noodle-scheduler] Failed to persist scheduler failure state");
       }
     } finally {
       polling = false;
@@ -223,9 +183,7 @@ export function startNoodleRefreshScheduler(app: FastifyInstance) {
     await active?.catch(() => {});
   });
 
-  logger.info(
-    "[noodle-scheduler] Automatic timeline refresh scheduler started",
-  );
+  logger.info("[noodle-scheduler] Automatic timeline refresh scheduler started");
   return {
     async stop() {
       stopped = true;

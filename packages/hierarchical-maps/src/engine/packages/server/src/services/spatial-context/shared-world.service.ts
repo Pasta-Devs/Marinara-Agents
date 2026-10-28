@@ -1,6 +1,5 @@
 import { z } from "zod";
 import {
-  spatialContextDefinitionSchema,
   type CapabilityChatRecord,
   type CapabilityDocumentRecord,
   type CapabilityPersistenceSession,
@@ -18,6 +17,7 @@ import {
   type SpatialSharedWorldLink,
   type SpatialSharedWorldRecord,
   type SpatialSharedWorldStatus,
+  spatialMapDefinitionSchema,
 } from "../../../../maps-shared/src/maps-model.js";
 import { parseSpatialMetadata } from "./metadata.js";
 
@@ -53,7 +53,7 @@ export async function spatialSharedWorldNameExists(
 const spatialSharedWorldDataSchema = z
   .object({
     version: z.literal(SPATIAL_SHARED_WORLD_VERSION),
-    definition: spatialContextDefinitionSchema,
+    definition: spatialMapDefinitionSchema,
     hierarchyProfile: spatialHierarchyProfileSchema,
   })
   .strict();
@@ -61,7 +61,7 @@ const spatialSharedWorldDataSchema = z
 const spatialSharedWorldDraftSchema = z
   .object({
     baseWorldRevision: z.number().int().positive().safe(),
-    definition: spatialContextDefinitionSchema,
+    definition: spatialMapDefinitionSchema,
     hierarchyProfile: spatialHierarchyProfileSchema,
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
@@ -193,7 +193,7 @@ function readIndependentDefinition(metadata: Record<string, unknown>): {
 } {
   const candidate = metadata[SPATIAL_DEFINITION_METADATA_KEY];
   if (candidate === undefined || candidate === null) return { definition: null, corrupt: false };
-  const parsed = spatialContextDefinitionSchema.safeParse(candidate);
+  const parsed = spatialMapDefinitionSchema.safeParse(candidate);
   return parsed.success
     ? { definition: parsed.data as SpatialContextDefinition, corrupt: false }
     : { definition: null, corrupt: true };

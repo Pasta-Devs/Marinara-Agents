@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Relationship Tracker",
+    "description": "Tracks how the characters and your persona feel about each other. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode."
+  },
+  "agents": {
+    "relationship-tracker": {
+      "name": "Relationship Tracker",
+      "description": "Tracks how the characters and your persona feel about each other."
+    }
+  }
+}

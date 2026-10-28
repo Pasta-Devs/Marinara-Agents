@@ -1,0 +1,143 @@
+import type { SlpAccountSettingsPatchInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import type {
+  SlpAccount,
+  SlpCreatorManagedStageProfile,
+  SlpPageStyleSuggestion,
+} from "../../../../../shared/src/slp/slp-social.types.js";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "../../../lib/api-client.js";
+import { useActivePersona, usePersonas } from "../../../hooks/use-creator-personas";
+import { useSlurpUIStore } from "../../base/state/slp-package-store";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
+import type { SlurpManagedStageProfile } from "../../base/state/slp-state-types.js";
+import type { SlurpCreatorBulkPatch, SlurpCreatorMetrics, SlurpScheduleStatus } from "./slp-creators-contract.js";
+
+/** One edit applied to many Creators at once; a single Creator's quick edit uses it too. */
+export function useBulkUpdateSlurpCreators() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { ids: string[]; patch: SlurpCreatorBulkPatch }) =>
+      api.post<{ updated: number; skipped: number; tagLimitReached: number }>(
+        "/slurp2/slurp/accounts/bulk-update",
+        input,
+      ),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
+        queryClient.invalidateQueries({ queryKey: slpKeys.noodlerReserveStatus() }),
+        queryClient.invalidateQueries({ queryKey: [...slpKeys.settings(), "discovery-tag-usage"] }),
+        queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() }),
+      ]),
+  });
+}
+export function useCreatorAccounts(enabled = true) {
+  return useQuery({
+    queryKey: slpKeys.noodlerAccounts(),
+    // The server sends `scheduleStatus` alongside the shared type, which has no such field — the
+    // same arrangement `subscriptionPrice` and the tip goal already use.
+    queryFn: () =>
+      api.get<Array<SlurpManagedStageProfile & { scheduleStatus?: SlurpScheduleStatus }>>("/slurp2/slurp/accounts"),
+    enabled,
+    staleTime: 10_000,
+    // Autonomous reserve work changes operator state without a client mutation. The route builds every
+    // stage profile, so it polls slowly; new posts refresh it sooner (`useCreatorUnseenCount`).
+    refetchInterval: enabled ? 120_000 : false,
+    refetchIntervalInBackground: false,
+  });
+}
+/** Read-only metrics for every Creator. Unlike the studio, reading this changes nothing. */
+export function useSlurpCreatorMetrics(enabled = true) {
+  return useQuery({
+    queryKey: [...slpKeys.noodlerRoot(), "creator-metrics"],
+    queryFn: () => api.get<{ creators: SlurpCreatorMetrics[] }>("/slurp2/slurp/creator-metrics"),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+export function useCreatorEligibleAccounts(
+  search: string,
+  kind: "all" | "character" | "persona",
+  enabled = true,
+  includeAccountId?: string | null,
+) {
+  const normalizedSearch = search.trim();
+  return useInfiniteQuery({
+    queryKey: [...slpKeys.noodlerEligibleAccounts(normalizedSearch, kind), includeAccountId ?? "none"],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      api.get<{
+        items: SlpAccount[];
+        limit: number;
+        offset: number;
+        hasMore: boolean;
+      }>(
+        `/slurp2/slurp/eligible-accounts?limit=100&offset=${pageParam}&search=${encodeURIComponent(normalizedSearch)}${kind === "all" ? "" : `&kind=${kind}`}${includeAccountId ? `&includeAccountId=${encodeURIComponent(includeAccountId)}` : ""}`,
+      ),
+    getNextPageParam: (page) => (page.hasMore ? page.offset + page.items.length : undefined),
+    enabled,
+    staleTime: 10_000,
+  });
+}
+
+/**
+ * Save part of a Creator's strategy. `null` returns a value to its derived default; absent keys are
+ * left alone, so one control never resets another.
+ */
+export function useUpdateCreatorStrategy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      accountId,
+      expect,
+      ...strategy
+    }: {
+      accountId: string;
+      style?: "homemade" | "polished" | "documentary" | "theatrical" | null;
+      skipRate?: number | null;
+      textOnlyRate?: number | null;
+      intentWeights?: Record<string, number> | null;
+      strategyText?: string | null;
+      /** See `slpAccountSettingsPatchSchema`: refuse the save if these keys changed meanwhile. */
+      expect?: Extract<SlpAccountSettingsPatchInput, { subtree: "strategy" }>["expect"];
+    }) =>
+      api.patch<SlpAccount>(`/slurp2/accounts/${encodeURIComponent(accountId)}/settings`, {
+        subtree: "strategy",
+        patch: strategy,
+        ...(expect && { expect }),
+      } satisfies SlpAccountSettingsPatchInput),
+    // Settled, not success: a refused save also means the list is stale.
+    onSettled: () => qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
+  });
+}
+
+/** "Suggest page style": one model call, nothing saved. Apply with `useUpdateCreatorStrategy`. */
+export function useSuggestCreatorPageStyle() {
+  return useMutation({
+    mutationFn: (accountId: string) =>
+      api.post<SlpPageStyleSuggestion>(`/slurp2/slurp/accounts/${encodeURIComponent(accountId)}/strategy/suggest`),
+  });
+}
+
+/**
+ * Whether this Creator is backed by an Engine persona — the viewer's own character rather than one
+ * Slurp runs. A persona-backed Creator posts only when its owner does, so automation controls are
+ * hidden for it rather than shown and ignored.
+ */
+/** The persona browsing Slurp: the stored pick while it still exists, else the Engine's active persona. */
+export function useSlpViewerPersonaId() {
+  const personas = usePersonas().data ?? [];
+  const activePersonaId = useActivePersona().data?.id;
+  const storedPersonaId = useSlurpUIStore((state) => state.viewerPersonaId);
+  return (
+    (storedPersonaId && personas.some((persona) => persona.id === storedPersonaId) ? storedPersonaId : null) ??
+    activePersonaId ??
+    personas[0]?.id ??
+    null
+  );
+}
+
+export function useSlpPersonaBackedCreator(creator: Pick<SlpCreatorManagedStageProfile, "sourceAccountId"> | null) {
+  const personas = usePersonas();
+  if (!creator?.sourceAccountId) return false;
+  return (personas.data ?? []).some((persona) => persona.id === creator.sourceAccountId);
+}

@@ -1,0 +1,59 @@
+import type { FastifyInstance } from "fastify";
+import { logger } from "../../../lib/logger.js";
+import { runCreatorFanActivity, type SlpCreatorFanRunResult } from "./slp-fan-activity-operation.js";
+import { slurpPollBackoffMs } from "../../base/model/slp-poll-backoff.js";
+import { slurpPausedNow } from "../../data/settings/slp-pause-storage.js";
+
+const INITIAL_DELAY_MS = 45_000;
+const POLL_MS = 60_000;
+
+export function startCreatorFanActivityScheduler(
+  app: FastifyInstance,
+  registerStop?: (stop: () => Promise<void>) => void,
+) {
+  let stopped = false;
+  let active: Promise<SlpCreatorFanRunResult> | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let consecutiveFailures = 0;
+  const schedule = (delay: number) => {
+    if (stopped) return;
+    timer = setTimeout(() => void poll(), delay);
+    timer.unref?.();
+  };
+  const poll = async () => {
+    if (stopped || active) return;
+    // "Pause all": no audience at all while Slurp is paused.
+    if (await slurpPausedNow(app.db)) return schedule(POLL_MS);
+    if (stopped || active) return;
+    active = runCreatorFanActivity({
+      db: app.db,
+      mode: "automatic",
+    });
+    try {
+      const result = await active;
+      if (result.status === "generated" || result.status === "resumed") {
+        logger.info("[slurp-fan] Audience run %s created %d interactions", result.status, result.created);
+      }
+      consecutiveFailures = 0;
+    } catch (error) {
+      consecutiveFailures += 1;
+      logger.warn(error, "[slurp-fan] Automatic audience activity failed");
+    } finally {
+      active = null;
+      schedule(slurpPollBackoffMs(POLL_MS, consecutiveFailures));
+    }
+  };
+  const stop = async () => {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+    await active?.catch(() => {});
+  };
+  registerStop?.(stop);
+  schedule(INITIAL_DELAY_MS);
+  app.addHook("onClose", async () => {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+    await active?.catch(() => {});
+  });
+  return { stop };
+}

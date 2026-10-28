@@ -13,8 +13,7 @@ export type NoodlePublicNavigationState =
       returnToSettings?: NoodleSettingsNavigationState;
     };
 
-export type NoodleSettingsReturnState =
-  NoodlePublicNavigationState;
+export type NoodleSettingsReturnState = NoodlePublicNavigationState;
 
 export type NoodleSettingsNavigationState = {
   mode: "settings";
@@ -23,6 +22,4 @@ export type NoodleSettingsNavigationState = {
   returnTo?: NoodleSettingsReturnState;
 };
 
-export type NoodleNavigationState =
-  | NoodlePublicNavigationState
-  | NoodleSettingsNavigationState;
+export type NoodleNavigationState = NoodlePublicNavigationState | NoodleSettingsNavigationState;

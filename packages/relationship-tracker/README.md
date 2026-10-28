@@ -1,0 +1,35 @@
+# Relationship Tracker
+
+Relationship Tracker is a standalone Roleplay tracker by Crimson Orc. It tracks brief relationships between the character cards assigned to a group chat, plus each character's one-way perception of the active persona, and draws them as an editable relationship web inside the Tracker Panel. It does not modify Marinara Engine or another agent.
+
+Requires Marinara Engine **2.4.4+**.
+
+## Install and enable
+
+Use **Agents → Download Agents** and restart when prompted. Installing the package does not enable it globally: for each Roleplay chat, open **Chat Settings → Agents**, enable agents, add Relationship Tracker under Tracker Agents, and choose a model connection for it. The tracker works with the **Local Sidecar** or any configured API provider. In the Tracker Panel, select **All relationships** or **Scene-only relationships** once to initialize this chat before editing or updating relationships.
+
+The Tracker Panel's routes are privileged. When Marinara is opened from another device (LAN, phone, or reverse proxy), save the server's `ADMIN_SECRET` on that device under **Settings → Advanced → Admin Access**; the panel sends it exactly as Marinara's own UI does. Without it, the engine refuses the panel's requests.
+
+## Use
+
+- In the Tracker Panel, Relationship Tracker is a collapsible section with the same header as the built-in trackers, and it remembers whether you collapsed it. In the desktop Trackers window, the window's own drawer collapses it instead.
+- Every assigned character card appears in the web, whether or not that character is currently in the scene. Defined lines use the four fixed color categories: positive, neutral, negative, complicated.
+- On desktop, hover or keyboard-focus a line to reveal its label. On touch and pen devices, press a line to reveal its label; press elsewhere in the web to dismiss it. This works for character-to-character lines and character-to-persona spokes.
+- The editor uses separate Character A and Character B selectors. Setting a relationship to **Undefined** and saving removes its line. Manual locks stay protected until **Resume automatic updates** is used.
+- The active persona renders as a distinct central node with directed spokes for each character's subjective view. Persona headings and accessible labels always use the current active persona name. **Show/Hide Persona** changes only the graphic.
+- **Update from History** re-checks a bounded recent window (1-100 messages) through the tracker's selected connection (or, when none is chosen, the default agent connection and then the chat's connection) and updates every line that is not locked.
+- If Update from History can't use the model's answer, nothing is saved and the panel lists the suggested changes in plain words, with anything that needs fixing marked. Fix or remove them, then save; relationship changes and persona perceptions are saved separately. The model's original answer is under **Details for bug reports**. If the characters or relationships change after that run, or 30 minutes pass, run Update from History again.
+- Prompt injection has two modes. **All relationships** injects every eligible defined line; **Scene-only relationships** injects only lines whose participants qualify as present in the bounded recent-message window (lookback defaults to 15 messages). Undefined relationships are never injected.
+- Model-written relationships and perceptions must name the characters, and the persona, by their card names. Korean, Japanese and Chinese need no extra spaces: `김민수는 박지은을 믿는다`, `アリスはボブを信頼している` and `张三很信任李四` all count. A longer card name doesn't count as a shorter one (`김민수` isn't `김민`). A one-character Chinese or Japanese name such as `明` counts only when a space or punctuation mark separates it from the text around it. A one-syllable Korean name such as `준` counts when a particle follows it (`준은`, `준을`) but not inside a word (`준비`). The same matching decides Scene-only presence.
+
+The automatic tracker's **Context Size** (recent chat history supplied to the tracker model, default 5 messages), the **Presence lookback** (Scene-only eligibility, default 15 messages), and the **Update from History** message count are three separate controls with separate jobs.
+
+## External read API
+
+Other packages can read the currently defined character-card relationships through the stable, card-only contract:
+
+```text
+GET /api/relationship-tracker/v1/chats/:chatId/relationships
+```
+
+Persona perceptions remain private package state. An absent or unavailable route must be treated by consumers as no relationship context.

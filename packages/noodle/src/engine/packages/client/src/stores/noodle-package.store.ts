@@ -6,48 +6,44 @@ const LEGACY_UI_STATE_KEY = "marinara-engine-ui";
 
 type PersistedNoodleState = {
   noodleNavigation?: NoodleNavigationState;
+  noodleSelectedPersonaId?: string | null;
 };
 
 type NoodlePackageState = {
   conversationTimeZone: string;
   debugMode: boolean;
   reviewImagePromptsBeforeSend: boolean;
+  /** Host prop since capability API 1.67; null on an older Engine. */
+  openCharacter: ((characterId: string, options?: { tab?: string }) => void) | null;
   noodleNavigation: NoodleNavigationState;
+  noodleSelectedPersonaId: string | null;
   setNoodleNavigation: (navigation: NoodleNavigationState) => void;
+  setNoodleSelectedPersonaId: (id: string | null) => void;
 };
 
-function isPublicNoodleNavigation(
-  navigation: NoodleNavigationState | undefined,
-): navigation is NoodleNavigationState {
+function isPublicNoodleNavigation(navigation: NoodleNavigationState | undefined): navigation is NoodleNavigationState {
   return navigation?.mode === "public" || navigation?.mode === "settings";
 }
 
 function readRecord(key: string): Record<string, unknown> | null {
   try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(key) ?? "null",
-    ) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
+    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "null") as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
   } catch {
     return null;
   }
 }
 
-function validatedPersistedState(
-  state: Record<string, unknown>,
-): PersistedNoodleState {
+function validatedPersistedState(state: Record<string, unknown>): PersistedNoodleState {
   const validated: PersistedNoodleState = {};
-  if (
-    state.noodleNavigation &&
-    typeof state.noodleNavigation === "object" &&
-    !Array.isArray(state.noodleNavigation)
-  ) {
+  if (state.noodleNavigation && typeof state.noodleNavigation === "object" && !Array.isArray(state.noodleNavigation)) {
     const navigation = state.noodleNavigation as NoodleNavigationState;
     if (isPublicNoodleNavigation(navigation)) {
       validated.noodleNavigation = navigation;
     }
+  }
+  if (typeof state.noodleSelectedPersonaId === "string" || state.noodleSelectedPersonaId === null) {
+    validated.noodleSelectedPersonaId = state.noodleSelectedPersonaId;
   }
   return validated;
 }
@@ -57,21 +53,11 @@ function readInitialState(): PersistedNoodleState {
   if (packageState) return validatedPersistedState(packageState);
   const legacyEnvelope = readRecord(LEGACY_UI_STATE_KEY);
   const legacyState = legacyEnvelope?.state;
-  if (
-    !legacyState ||
-    typeof legacyState !== "object" ||
-    Array.isArray(legacyState)
-  )
-    return {};
+  if (!legacyState || typeof legacyState !== "object" || Array.isArray(legacyState)) return {};
   return validatedPersistedState(legacyState as Record<string, unknown>);
 }
 
-function persistNoodleState(
-  state: Pick<
-    NoodlePackageState,
-    "noodleNavigation"
-  >,
-) {
+function persistNoodleState(state: Pick<NoodlePackageState, "noodleNavigation" | "noodleSelectedPersonaId">) {
   try {
     window.localStorage.setItem(PACKAGE_STATE_KEY, JSON.stringify(state));
   } catch {
@@ -85,25 +71,36 @@ export const useUIStore = create<NoodlePackageState>((set, get) => ({
   conversationTimeZone: "",
   debugMode: false,
   reviewImagePromptsBeforeSend: false,
+  openCharacter: null,
   noodleNavigation: initialState.noodleNavigation ?? {
     mode: "public",
     view: "home",
   },
+  noodleSelectedPersonaId: initialState.noodleSelectedPersonaId ?? null,
   setNoodleNavigation: (noodleNavigation) => {
     set({ noodleNavigation });
     persistNoodleState({
       noodleNavigation,
+      noodleSelectedPersonaId: get().noodleSelectedPersonaId,
+    });
+  },
+  setNoodleSelectedPersonaId: (noodleSelectedPersonaId) => {
+    set({ noodleSelectedPersonaId });
+    persistNoodleState({
+      noodleNavigation: get().noodleNavigation,
+      noodleSelectedPersonaId,
     });
   },
 }));
 
 export function configureNoodlePackageState(props: Record<string, unknown>) {
   useUIStore.setState({
-    conversationTimeZone:
-      typeof props.conversationTimeZone === "string"
-        ? props.conversationTimeZone
-        : "",
+    conversationTimeZone: typeof props.conversationTimeZone === "string" ? props.conversationTimeZone : "",
     debugMode: props.debugMode === true,
     reviewImagePromptsBeforeSend: props.reviewImagePromptsBeforeSend === true,
+    openCharacter:
+      typeof props.openCharacter === "function"
+        ? (props.openCharacter as (characterId: string, options?: { tab?: string }) => void)
+        : null,
   });
 }

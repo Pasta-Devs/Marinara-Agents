@@ -1,0 +1,694 @@
+/**
+ * What happens in an ordinary post: a beat, chosen before the post is written.
+ *
+ * Pure and deterministic, like the other Slurp rule modules. See `docs/WORLD-SIMULATION.md`.
+ *
+ * ## The problem
+ *
+ * The planner decided why a post is made and how it goes out, never what happened. The model
+ * filled the gap with the same few subjects (laundry, moving, coffee, mirror selfies), every
+ * Creator converged on them, and Creators stopped using their own canon. A probe showed that a
+ * concrete beat grounded in the card gives far more specific posts, and that a single complication
+ * deck makes a new shared formula ("small flaw, keep it or fix it").
+ *
+ * ## The approach
+ *
+ * A beat type from a taxonomy (a mishap is one type among twelve), weighted by the Creator's own
+ * palette and by what this Creator and the whole feed used lately, is combined with one canon
+ * anchor from the card and one written situation template. The intent is derived from the beat,
+ * so a post labelled `set` no longer opens as a coffee update.
+ */
+
+import type { SlurpContentIntent } from "../../../../../shared/src/slp/slp-content-axes.js";
+import { slurpWeightedPick } from "./slp-weighted.js";
+import { SLURP_VISUAL_SEXUAL_LEVELS, type SlurpVisualSexualLevel } from "../../base/media/slp-visual-brief.js";
+import type { SlurpSharedIdea } from "./slp-shared-preseed.js";
+import { SLURP_REFERENCE_KINDS, type SlurpBeatReference } from "./slp-post-reference.js";
+import type { SlpCreatorSteering } from "../../../../../shared/src/slp/slp-creator-steering.js";
+import { readSlurpTieStamp, type SlurpTieStamp } from "../projects/slp-tie-stamp.js";
+import { slurpPostJob, type SlurpJobHistory, type SlurpNiches } from "./slp-post-jobs.js";
+
+/** Shared ideas weigh more than a deck line of the same kind, so level 1 is actually used. */
+const SHARED_IDEA_BOOST = 1.5;
+
+export const SLURP_BEAT_TYPES = [
+  "achievement",
+  "showcase",
+  "social_moment",
+  "relationship_moment",
+  "tease_flirt",
+  "opinion",
+  "anticipation",
+  "sensory_mood",
+  "audience_game",
+  "routine_twist",
+  "mishap",
+  "callback",
+] as const;
+export type SlurpBeatType = (typeof SLURP_BEAT_TYPES)[number];
+
+export const SLURP_ANCHOR_KINDS = ["people", "places", "work", "objects", "habits", "runningJokes"] as const;
+export type SlurpAnchorKind = (typeof SLURP_ANCHOR_KINDS)[number];
+
+/** The fixed layer: what the card says this person's life is made of. One cached extraction. */
+export type SlurpCanonAnchors = {
+  people: { name: string; relation: string }[];
+  places: string[];
+  work: string[];
+  objects: string[];
+  habits: string[];
+  runningJokes: string[];
+  /** Weight 0-5 per beat type. A missing type keeps a small base weight, so variety survives. */
+  palette: Partial<Record<SlurpBeatType, number>>;
+  /** 0 wholesome, 1 flirty, 2 suggestive, 3 explicit, as the card supports. */
+  heat: { min: number; max: number };
+  /** The page's niche, which weighs the post jobs. Absent on caches from before v4. */
+  niches?: SlurpNiches;
+  /** A typical day from the card, for Creators without a Conversation Schedule. Absent on old caches. */
+  routine?: { time: string; activity: string }[];
+  /**
+   * What must hold in everything they write or show: how they communicate, senses and body, the
+   * languages they use, firm limits, who runs the page. Never rotated (`slp-creator-flavour.ts`).
+   * Absent until the card was read for them (caches from before v3).
+   */
+  essentials?: string[];
+};
+
+/** Where the Creator's day stands when the post goes out. `queued`: written just before sleep or a drive. */
+export type SlurpDayMoment = { current: string; previous: string | null; queued?: boolean };
+
+// German small words too: cards and schedules are often German, and "der" alone made "der Elbstrand"
+// read as the schedule's "in der Backstube".
+const STOP_WORDS = new Set([
+  ...["the", "and", "her", "his", "their", "with", "for", "you", "your", "from", "into", "at"],
+  ...[
+    "der",
+    "die",
+    "das",
+    "den",
+    "dem",
+    "des",
+    "und",
+    "mit",
+    "von",
+    "vom",
+    "zum",
+    "zur",
+    "ein",
+    "eine",
+    "einen",
+    "auf",
+    "aus",
+    "bei",
+    "ihr",
+    "ihre",
+    "sein",
+    "seine",
+  ],
+]);
+const activityWords = (value: string) =>
+  value
+    .toLocaleLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word.length >= 3 && !STOP_WORDS.has(word));
+
+/** Whether a card place or piece of work is what the schedule block is about ("the bar" in "working the bar"). */
+export function slurpAnchorFitsActivity(anchor: string, activity: string): boolean {
+  const words = new Set(activityWords(activity));
+  return activityWords(anchor).some((word) => words.has(word));
+}
+
+/** One chosen beat. Stored on the content opportunity, so a retry repeats it. */
+export type SlurpBeat = {
+  type: SlurpBeatType;
+  /**
+   * `arc`: the beat is the Creator's active arc chapter, not a card anchor. `steer`: the player's
+   * idea, focus, or pushed topic. Both may change the Creator's life, as their text says. `life`:
+   * a day-to-day life moment (see `slp-life-moments.ts`); like a card beat, it changes nothing lasting.
+   * `collab`, `sponsor`, `rival`, `couple`: a collab, a brand deal, a rivalry or a couple's story
+   * (see `slp-tie-beats.ts`, `slp-couple-beats.ts`). `condition`: a small moment of a standing
+   * condition (`world/events/slp-story-state.ts`); like a life moment, it changes nothing lasting.
+   */
+  anchorKind:
+    | SlurpAnchorKind
+    | "arc"
+    | "steer"
+    | "life"
+    | "collab"
+    | "sponsor"
+    | "rival"
+    | "couple"
+    | "drama"
+    | "trend"
+    | "condition";
+  anchor: string;
+  line: string;
+  /** Named people in the beat. Empty means alone. */
+  cast: string[];
+  /** The Creator accounts among them (a partner, a collab), so their look can reach the picture. */
+  castIds?: string[];
+  place: string | null;
+  /** The shared idea this beat came from, for the per-day cap. Absent for a deck beat. */
+  sharedId?: string;
+  /** The beat's place is not where the schedule has them now: posted as a plan or a memory. */
+  elsewhere?: boolean;
+  /** The card's lowest heat (0-3), so a planned post never goes softer than the character is. */
+  heatFloor?: number;
+  /** Something real this post may refer back to. See `slp-post-reference.ts`. */
+  reference?: SlurpBeatReference;
+  /** The player's one-off idea this beat carries out; used once, then removed. */
+  nudgeId?: string;
+  /** The collab, deal, rivalry or couple moment this beat carries out, stamped on the post as `slurpTie`. */
+  tie?: SlurpTieStamp;
+  /** The trend this post joins (docs/TRENDS.md), stamped on the post as `slurpTrend`; its origin post is quoted. */
+  trend?: { id: string; label: string; originPostId: string | null; starterId?: string };
+  /** The post job (`slp-post-jobs.ts`): what kind of post this is. */
+  job?: string;
+};
+
+const TIE_KINDS: readonly string[] = ["collab", "sponsor", "rival", "couple"];
+
+type SlurpBeatDeck = {
+  /** Intents this beat can serve. `request` and `callback` stay intent-first: they need a source. */
+  intents: readonly SlurpContentIntent[];
+  /** Situation templates, written, never generated. `{a}` is the anchor. */
+  lines: readonly (readonly [SlurpAnchorKind, string])[];
+};
+
+// Every non-teaser deck includes `casual`, so an ordinary slot always has a compatible intent.
+const DECKS: Record<SlurpBeatType, SlurpBeatDeck> = {
+  achievement: {
+    intents: ["set", "behind_the_scenes", "casual", "teaser"],
+    lines: [
+      ["work", "You finally get {a} right after several tries."],
+      ["work", "You finish a piece of {a} you are proud of."],
+      ["objects", "You finish making or fixing {a}, and it came out well."],
+      ["habits", "You keep up {a} longer than ever before."],
+      ["work", "Someone notices your {a} and says something nice about it."],
+      ["habits", "You finally stop putting off {a}, and it feels good."],
+      ["places", "You get {a} exactly the way you wanted it."],
+    ],
+  },
+  showcase: {
+    intents: ["set", "casual", "teaser"],
+    lines: [
+      ["work", "You show off one detail of {a} that most people never notice."],
+      ["objects", "You show {a} up close and say why it matters to you."],
+      ["places", "You show a corner of {a} the way you like it best."],
+      ["objects", "You show {a} and the little story behind it."],
+      ["work", "You show a before-and-after of {a}."],
+      ["habits", "You show how you do {a}, step by step."],
+    ],
+  },
+  social_moment: {
+    intents: ["casual", "appreciation"],
+    lines: [
+      ["people", "You and {a} share a small, funny moment in the middle of an ordinary task."],
+      ["people", "{a} says something that makes you laugh out loud."],
+      ["people", "{a} drags you into a plan you did not ask for, and it turns out fun."],
+      ["people", "You run into {a} somewhere you did not expect."],
+      ["people", "You and {a} try something new together."],
+    ],
+  },
+  relationship_moment: {
+    intents: ["casual"],
+    lines: [
+      ["people", "{a} does something small that shows how well they know you."],
+      ["people", "You do something kind for {a} without making a big deal of it."],
+      ["people", "You and {a} disagree about something trivial, and neither of you gives in."],
+      ["people", "{a} remembers something you said weeks ago."],
+      ["people", "You miss {a} today and say so."],
+      ["people", "{a} gives you advice, and you are not sure you will take it."],
+    ],
+  },
+  tease_flirt: {
+    intents: ["casual", "teaser"],
+    lines: [
+      ["objects", "You tease your followers with {a} and do not explain everything."],
+      ["places", "You are at {a}, dressed or posed to be noticed, and you know it."],
+      ["habits", "You turn {a} into a little show for whoever is watching."],
+      ["objects", "You wear or hold {a} and let your followers guess the rest."],
+      ["people", "You hint that {a} would like this picture, and you do not say more."],
+      ["work", "You make {a} look a lot more flirty than it is."],
+    ],
+  },
+  opinion: {
+    intents: ["casual", "behind_the_scenes"],
+    lines: [
+      ["work", "You have a strong opinion about how {a} should be done, and you share it."],
+      ["objects", "You judge {a}, and you are not neutral about it."],
+      ["places", "You say what you really think about {a}."],
+      ["habits", "You defend {a} against everyone who thinks it is strange."],
+      ["people", "You and {a} have opposite opinions, and you give yours."],
+      ["work", "You list the one thing everybody gets wrong about {a}."],
+    ],
+  },
+  anticipation: {
+    intents: ["casual", "business", "teaser"],
+    lines: [
+      ["work", "Something new with {a} is coming soon, and you can barely wait."],
+      ["places", "You are about to go to {a}, and you look forward to it."],
+      ["people", "You are waiting for {a} to arrive."],
+      ["objects", "{a} is on its way to you, and you check for it every hour."],
+      ["habits", "You are counting down to {a} this week."],
+      ["places", "You plan a small trip to {a} and share the first idea."],
+    ],
+  },
+  sensory_mood: {
+    intents: ["casual", "teaser"],
+    lines: [
+      ["places", "{a} has a mood right now that you want to keep."],
+      ["objects", "The feel, smell, or sound of {a} puts you in a certain mood."],
+      ["habits", "{a} gives you a quiet, good moment."],
+      ["places", "The light at {a} is exactly right for a few minutes."],
+      ["objects", "{a} brings back a memory you did not expect."],
+      ["work", "After {a}, you feel tired in a good way."],
+    ],
+  },
+  audience_game: {
+    intents: ["appreciation", "casual"],
+    lines: [
+      ["work", "You let your followers pick or guess something about {a}."],
+      ["objects", "You ask your followers a playful question about {a}."],
+      ["habits", "You dare your followers to try {a} with you."],
+      ["places", "You ask your followers where they would go instead of {a}."],
+      ["people", "You let your followers vote on something for you and {a}."],
+      ["objects", "You hide {a} in the picture and ask who finds it."],
+    ],
+  },
+  routine_twist: {
+    intents: ["casual", "behind_the_scenes"],
+    lines: [
+      ["habits", "Your usual {a} goes a little differently today, and you like the change."],
+      ["places", "Something at {a} is different from usual today."],
+      ["work", "You try a new way of doing {a}."],
+      ["people", "{a} changes your plan for the day, and you go with it."],
+      ["objects", "You use {a} for something it was not made for."],
+      ["habits", "You skip {a} today and do something else instead."],
+    ],
+  },
+  mishap: {
+    intents: ["behind_the_scenes", "casual"],
+    lines: [
+      ["objects", "{a} does not cooperate today."],
+      ["work", "A small thing goes wrong during {a}, and you laugh it off."],
+      ["places", "Something small goes wrong at {a}."],
+      ["habits", "You forget one step of {a} and only notice later."],
+      ["people", "{a} catches you at a bad moment and will not let it go."],
+    ],
+  },
+  callback: {
+    intents: ["casual"],
+    lines: [
+      ["runningJokes", "The running joke about {a} comes up again."],
+      ["runningJokes", "Something reminds you of {a}."],
+      ["habits", "You are back at {a}, as your regulars knew you would be."],
+      ["runningJokes", "Your followers bring up {a} before you can."],
+      ["objects", "{a} is back, and your regulars know what that means."],
+    ],
+  },
+};
+
+const BASE_PALETTE_WEIGHT = 1;
+const MAX_PALETTE_WEIGHT = 5;
+// A mishap is one kind of day, never the default one: the probe's complication deck made every
+// beat a complication.
+const MAX_MISHAP_WEIGHT = 2;
+// Card canon (named people, places, work) is what Creators stopped posting about.
+const CANON_KIND_WEIGHT: Record<SlurpAnchorKind, number> = {
+  people: 2,
+  places: 2,
+  work: 2,
+  objects: 1,
+  habits: 1,
+  runningJokes: 1,
+};
+
+export function slurpBeatIntents(type: SlurpBeatType): readonly SlurpContentIntent[] {
+  return DECKS[type].intents;
+}
+
+function anchorValues(anchors: SlurpCanonAnchors, kind: SlurpAnchorKind): string[] {
+  return kind === "people" ? anchors.people.map((person) => person.name) : anchors[kind];
+}
+
+/** Freshness against this Creator's own last beats, newest first. */
+function ownFreshness(type: SlurpBeatType, recentOwn: readonly SlurpBeatType[]): number {
+  const index = recentOwn.slice(0, 6).indexOf(type);
+  return index < 0 ? 1 : index === 0 ? 0.1 : index < 3 ? 0.35 : 0.7;
+}
+
+/**
+ * A semantic theme cap across all Creators: a beat type may hold about twice its fair share of the
+ * last day, and never fewer than three. Counts beat types, not props, so "everybody at the
+ * laundry" cannot come back as "everybody fixing a small flaw".
+ */
+export function slurpBeatThemeCap(globalCounts: Partial<Record<SlurpBeatType, number>>): number {
+  const total = Object.values(globalCounts).reduce((sum, count) => sum + (count ?? 0), 0);
+  return Math.max(3, Math.ceil((total / SLURP_BEAT_TYPES.length) * 2));
+}
+
+export type SlurpBeatHistory = SlurpJobHistory & {
+  /** This Creator's last beat types, newest first. */
+  recentOwn: readonly SlurpBeatType[];
+  /** This Creator's last anchors, so the same person or place does not carry every post. */
+  recentAnchors: readonly string[];
+  /** Beat types across all Creators in the last day, this one included. */
+  globalCounts: Partial<Record<SlurpBeatType, number>>;
+  /** Shared ideas used across all Creators in the last day. Absent on callers that predate them. */
+  sharedToday?: Readonly<Record<string, number>>;
+  /** References this Creator's last beats used, so one callback is not repeated. */
+  recentReferences?: readonly string[];
+};
+
+/**
+ * The beat for one ordinary slot, or null when the anchors support none (the caller then plans
+ * the post the classic way). Deterministic on the Creator, the post count, and the history.
+ *
+ * `intents` are the intents this slot may take (only `teaser` on a teaser slot). A beat type is
+ * eligible when its deck serves one of them and the anchors fill one of its templates.
+ */
+export function selectSlurpBeat(
+  creatorAccountId: string,
+  sequence: number,
+  anchors: SlurpCanonAnchors,
+  history: SlurpBeatHistory,
+  intents: readonly SlurpContentIntent[],
+  /** Level 1 ideas this Creator may use today, already under their daily cap. */
+  shared: readonly SlurpSharedIdea[] = [],
+  /**
+   * What the schedule has them doing now. The schedule decides where they are: places and work
+   * that match it weigh more, a place that does not is drawn rarely and posted as a plan or memory.
+   */
+  activity: string | null = null,
+): SlurpBeat | null {
+  const fits = (value: string) => Boolean(activity) && slurpAnchorFitsActivity(value, activity!);
+  const anyFits = (kind: SlurpAnchorKind) => anchorValues(anchors, kind).some(fits);
+  // ponytail: word overlap decides "fits"; a card place worded unlike the schedule reads as elsewhere.
+  const kindFit = (kind: SlurpAnchorKind) =>
+    !activity ? 1 : kind === "places" ? (anyFits("places") ? 2 : 0.25) : kind === "work" && anyFits("work") ? 2 : 1;
+  // Deck lines and shared ideas share one shape: [anchor kind, template, weight, shared id].
+  const linesFor = (type: SlurpBeatType) =>
+    [
+      ...DECKS[type].lines.map(
+        ([kind, template]) => [kind, template, CANON_KIND_WEIGHT[kind] * kindFit(kind), undefined] as const,
+      ),
+      ...shared
+        .filter((idea) => idea.type === type)
+        .map(
+          (idea) =>
+            [
+              idea.anchorKind,
+              idea.template,
+              CANON_KIND_WEIGHT[idea.anchorKind] * SHARED_IDEA_BOOST * kindFit(idea.anchorKind),
+              idea.id,
+            ] as const,
+        ),
+    ].filter(([kind]) => anchorValues(anchors, kind).length > 0);
+  const eligible = SLURP_BEAT_TYPES.filter(
+    (type) => DECKS[type].intents.some((intent) => intents.includes(intent)) && linesFor(type).length > 0,
+  );
+  const cap = slurpBeatThemeCap(history.globalCounts);
+  const weigh = (capped: boolean) =>
+    eligible.map((type) => {
+      const palette = Math.min(
+        type === "mishap" ? MAX_MISHAP_WEIGHT : MAX_PALETTE_WEIGHT,
+        Math.max(0, anchors.palette[type] ?? BASE_PALETTE_WEIGHT),
+      );
+      const count = history.globalCounts[type] ?? 0;
+      const global = capped && count >= cap ? 0 : 1 / (1 + count / 2);
+      return { value: type, weight: palette * ownFreshness(type, history.recentOwn) * global };
+    });
+  // A feed that used every type up still posts: the cap yields before the slot is lost.
+  const weighted = weigh(true).some((option) => option.weight > 0) ? weigh(true) : weigh(false);
+  if (!weighted.some((option) => option.weight > 0)) return null;
+  const type = slurpWeightedPick("beatType", creatorAccountId, sequence, weighted);
+  const [anchorKind, template, , sharedId] = slurpWeightedPick(
+    "beatLine",
+    creatorAccountId,
+    sequence,
+    linesFor(type).map((line) => ({ value: line, weight: line[2] })),
+  );
+  const values = anchorValues(anchors, anchorKind);
+  const anchor = slurpWeightedPick(
+    "beatAnchor",
+    creatorAccountId,
+    sequence,
+    values.map((value, index) => ({
+      value,
+      // Earlier entries are the card's most central canon; a recently used one steps back, and one the
+      // schedule block is about steps forward.
+      weight:
+        (values.length - index) *
+        (history.recentAnchors.slice(0, 6).includes(value) ? 0.25 : 1) *
+        ((anchorKind === "places" || anchorKind === "work") && fits(value) ? 4 : 1),
+    })),
+  );
+  const person = anchorKind === "people" ? anchors.people.find((entry) => entry.name === anchor) : undefined;
+  // With a schedule, the ambient place is one the block is about, or none: the schedule says where.
+  const places = activity ? anchors.places.filter(fits) : anchors.places;
+  const place =
+    anchorKind === "places"
+      ? anchor
+      : places.length
+        ? slurpWeightedPick(
+            "beatPlace",
+            creatorAccountId,
+            sequence,
+            places.map((value, index) => ({ value, weight: places.length - index })),
+          )
+        : null;
+  return {
+    type,
+    anchorKind,
+    anchor,
+    line: template.replace("{a}", anchor),
+    cast: person ? [person.relation ? `${person.name} (${person.relation})` : person.name] : [],
+    place,
+    ...(sharedId ? { sharedId } : {}),
+    ...(anchorKind === "places" && activity && !fits(anchor) ? { elsewhere: true } : {}),
+    heatFloor: anchors.heat.min,
+  };
+}
+
+/** Parse a stored beat. Anything malformed reads as no beat, never as a broken plan. */
+function parseReference(raw: unknown): { reference: SlurpBeatReference } | null {
+  const value = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+  if (
+    !value ||
+    !SLURP_REFERENCE_KINDS.includes(value.kind as SlurpBeatReference["kind"]) ||
+    typeof value.id !== "string" ||
+    typeof value.text !== "string"
+  )
+    return null;
+  return { reference: { kind: value.kind as SlurpBeatReference["kind"], id: value.id, text: value.text } };
+}
+
+export function parseSlurpBeat(raw: unknown): SlurpBeat | null {
+  try {
+    const value = typeof raw === "string" ? (JSON.parse(raw) as unknown) : raw;
+    if (!value || typeof value !== "object") return null;
+    const beat = value as Record<string, unknown>;
+    if (
+      !SLURP_BEAT_TYPES.includes(beat.type as SlurpBeatType) ||
+      !(
+        beat.anchorKind === "arc" ||
+        beat.anchorKind === "steer" ||
+        beat.anchorKind === "life" ||
+        beat.anchorKind === "drama" ||
+        beat.anchorKind === "trend" ||
+        beat.anchorKind === "condition" ||
+        TIE_KINDS.includes(beat.anchorKind as string) ||
+        SLURP_ANCHOR_KINDS.includes(beat.anchorKind as SlurpAnchorKind)
+      ) ||
+      typeof beat.anchor !== "string" ||
+      typeof beat.line !== "string"
+    ) {
+      return null;
+    }
+    return {
+      type: beat.type as SlurpBeatType,
+      anchorKind: beat.anchorKind as SlurpBeat["anchorKind"],
+      anchor: beat.anchor,
+      line: beat.line,
+      cast: Array.isArray(beat.cast) ? beat.cast.filter((entry): entry is string => typeof entry === "string") : [],
+      ...(Array.isArray(beat.castIds)
+        ? { castIds: beat.castIds.filter((entry): entry is string => typeof entry === "string") }
+        : {}),
+      place: typeof beat.place === "string" ? beat.place : null,
+      ...(typeof beat.sharedId === "string" ? { sharedId: beat.sharedId } : {}),
+      ...(beat.elsewhere === true ? { elsewhere: true } : {}),
+      ...(typeof beat.heatFloor === "number" ? { heatFloor: beat.heatFloor } : {}),
+      ...(parseReference(beat.reference) ?? {}),
+      ...(typeof beat.job === "string" && slurpPostJob(beat.job) ? { job: beat.job } : {}),
+      ...(typeof beat.nudgeId === "string" ? { nudgeId: beat.nudgeId } : {}),
+      ...(() => {
+        const tie = readSlurpTieStamp({ slurpTie: beat.tie });
+        return tie ? { tie } : {};
+      })(),
+      ...(() => {
+        const trend = (beat.trend ?? null) as Record<string, unknown> | null;
+        return trend && typeof trend.id === "string" && typeof trend.label === "string"
+          ? {
+              trend: {
+                id: trend.id,
+                label: trend.label,
+                originPostId: typeof trend.originPostId === "string" ? trend.originPostId : null,
+                ...(typeof trend.starterId === "string" ? { starterId: trend.starterId } : {}),
+              },
+            }
+          : {};
+      })(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * An arc post's beat: its current chapter. An arc post used to get an unrelated card beat and the
+ * chapter beside it, so the brief and the project block pulled in two directions. The chapter
+ * before it is named, so the writer may refer to it without the claim check calling it invented.
+ */
+export function slurpArcBeat(project: {
+  title: string;
+  direction: string;
+  chapters: readonly string[];
+  chapter: number;
+}): SlurpBeat {
+  const current = project.chapters[project.chapter]?.trim() ?? "";
+  const previous = project.chapter > 0 ? (project.chapters[project.chapter - 1]?.trim() ?? "") : "";
+  const last = project.chapters.length > 0 && project.chapter >= project.chapters.length - 1;
+  return {
+    type: project.chapter === 0 ? "anticipation" : last ? "achievement" : "routine_twist",
+    anchorKind: "arc",
+    anchor: project.title,
+    line: current
+      ? `${project.title}, now: ${current}.${previous ? ` It follows: ${previous}.` : ""}`
+      : `${project.title} goes on: ${project.direction.trim().slice(0, 160)}`,
+    cast: [],
+    place: null,
+  };
+}
+
+/**
+ * How far this post goes, drawn per post up to the Creator's dial. Every post used to sit at the
+ * dial, and a model that plays it safe then made every post equally tame; now most posts sit at
+ * the top of the range and some are softer, never above the dial and never below the card's own
+ * floor. Access and intent still apply afterwards, exactly as they do to the dial.
+ */
+const CARD_HEAT_LEVEL = [0, 1, 1, 3] as const;
+
+export function slurpPlannedExplicitLevel(
+  dial: SlurpVisualSexualLevel,
+  floor: number,
+  seed: string,
+  sequence: number,
+): SlurpVisualSexualLevel {
+  const top = SLURP_VISUAL_SEXUAL_LEVELS.indexOf(dial);
+  // The card scale (wholesome, flirty, suggestive, explicit) onto the level scale (none,
+  // suggestive, nudity, explicit): flirty and suggestive both sit at "suggestive".
+  const bottom = Math.min(top, CARD_HEAT_LEVEL[Math.min(3, Math.max(0, Math.round(floor)))]!);
+  return slurpWeightedPick(
+    "heat",
+    seed,
+    sequence,
+    SLURP_VISUAL_SEXUAL_LEVELS.slice(bottom, top + 1).map((value, index) => ({ value, weight: (index + 1) ** 2 })),
+  );
+}
+
+const mentions = (text: string, value: string) => text.toLocaleLowerCase().includes(value.toLocaleLowerCase());
+
+/** The anchors without anything the player wants left alone for now. */
+export function slurpAnchorsWithout(anchors: SlurpCanonAnchors, avoid: readonly string[]): SlurpCanonAnchors {
+  if (!avoid.length) return anchors;
+  const keep = (value: string) => !avoid.some((topic) => mentions(value, topic));
+  return {
+    ...anchors,
+    people: anchors.people.filter((person) => keep(`${person.name} ${person.relation}`)),
+    places: anchors.places.filter(keep),
+    work: anchors.work.filter(keep),
+    objects: anchors.objects.filter(keep),
+    habits: anchors.habits.filter(keep),
+    runningJokes: anchors.runningJokes.filter(keep),
+  };
+}
+
+/** Card people the text names, so the claim check does not call them invented. */
+function castIn(text: string, anchors: SlurpCanonAnchors | null | undefined): string[] {
+  return (anchors?.people ?? [])
+    .filter((person) => mentions(text, person.name))
+    .map((person) => (person.relation ? `${person.name} (${person.relation})` : person.name));
+}
+
+/**
+ * The player's one-off idea as this post's beat ("gym post tonight"). The idea says what happens;
+ * the Creator's card, voice, and day still say how. A teaser slot keeps a teaser-capable type.
+ */
+export function slurpNudgeBeat(
+  nudge: { id: string; text: string },
+  anchors: SlurpCanonAnchors | null | undefined,
+  intents: readonly SlurpContentIntent[],
+): SlurpBeat {
+  const text = nudge.text.trim().replace(/[.!?]+$/u, "");
+  return {
+    type: intents.includes("casual") ? "routine_twist" : "anticipation",
+    anchorKind: "steer",
+    anchor: text,
+    line: `The idea for this one: ${text}. Make it yours.`,
+    cast: castIn(text, anchors),
+    place: null,
+    nudgeId: nudge.id,
+    ...(anchors ? { heatFloor: anchors.heat.min } : {}),
+  };
+}
+
+const STEERED_LINES: readonly (readonly [SlurpBeatType, string])[] = [
+  ["achievement", "You make real progress with {a}."],
+  ["routine_twist", "{a} takes up part of your day today."],
+  ["mishap", "{a} does not quite go to plan today."],
+  ["anticipation", "Something about {a} is coming up soon."],
+  ["opinion", "You have a strong feeling about {a} and say it."],
+  ["sensory_mood", "A quiet moment with {a} puts you in a certain mood."],
+];
+
+/**
+ * Whether this ordinary slot is about what the player steered: the current focus or one pushed
+ * topic takes about two posts in five, never every post, so the rest of the life keeps going.
+ */
+export function slurpSteeredBeat(
+  creatorAccountId: string,
+  sequence: number,
+  steering: SlpCreatorSteering | null | undefined,
+  anchors: SlurpCanonAnchors | null | undefined,
+  intents: readonly SlurpContentIntent[],
+): SlurpBeat | null {
+  const topics = [...(steering?.focus ? [steering.focus] : []), ...(steering?.push ?? [])];
+  if (!topics.length || !intents.includes("casual")) return null;
+  const steered = slurpWeightedPick("steer", creatorAccountId, sequence, [
+    { value: true, weight: 2 },
+    { value: false, weight: 3 },
+  ]);
+  if (!steered) return null;
+  const topic = slurpWeightedPick(
+    "steerTopic",
+    creatorAccountId,
+    sequence,
+    topics.map((value, index) => ({ value, weight: index === 0 && steering?.focus ? 2 : 1 })),
+  );
+  const [type, template] = slurpWeightedPick(
+    "steerLine",
+    creatorAccountId,
+    sequence,
+    STEERED_LINES.map((line) => ({ value: line, weight: line[0] === "mishap" ? 0.5 : 1 })),
+  );
+  return {
+    type,
+    anchorKind: "steer",
+    anchor: topic,
+    line: template.replace("{a}", topic).replace(/^\p{Ll}/u, (first) => first.toLocaleUpperCase()),
+    cast: castIn(topic, anchors),
+    place: null,
+    ...(anchors ? { heatFloor: anchors.heat.min } : {}),
+  };
+}

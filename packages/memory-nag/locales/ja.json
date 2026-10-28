@@ -1,0 +1,14 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": { "locale": "ja", "direction": "ltr" },
+  "package": {
+    "name": "Memory Nag",
+    "description": "チャットごとにロールプレイの短い記憶庫を保持し、現在のターンに関係する未解決の内容だけを呼び起こします。ロールプレイモードの「チャット設定 → エージェント → トラッカーエージェント」から追加してください。"
+  },
+  "agents": {
+    "memory-nag": {
+      "name": "Memory Nag",
+      "description": "チャットごとにロールプレイの短い記憶庫を保持し、現在のターンに関係する未解決の内容だけを呼び起こします。"
+    }
+  }
+}

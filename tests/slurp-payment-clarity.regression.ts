@@ -1,0 +1,64 @@
+import assert from "node:assert/strict";
+import {
+  readSlurpWallet,
+  renewSubscriptions,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/economy/slp-wallet.js";
+import { slurp2Source } from "./slurp2-source";
+
+const read = (path: string) => slurp2Source(path);
+
+// 5.4 — cancelling stops the renewal and keeps the paid week.
+const paid = readSlurpWallet(
+  JSON.stringify({
+    coins: 100,
+    subscriptions: {
+      c1: { paidThroughAt: new Date(Date.now() + 86_400_000).toISOString(), price: 5, cancelled: true },
+    },
+  }),
+);
+assert.equal(paid.subscriptions.c1.cancelled, true);
+const early = renewSubscriptions(paid, new Date());
+assert.equal(early.wallet, paid, "a cancelled subscription inside its paid period is untouched");
+const due = readSlurpWallet(
+  JSON.stringify({
+    coins: 100,
+    subscriptions: { c1: { paidThroughAt: new Date(Date.now() - 1_000).toISOString(), price: 5, cancelled: true } },
+  }),
+);
+const ended = renewSubscriptions(due, new Date());
+assert.deepEqual(ended.lapsed, ["c1"]);
+assert.deepEqual(ended.renewed, []);
+assert.equal(ended.wallet.coins, 100, "an ended cancellation must not charge another period");
+assert.equal(ended.wallet.subscriptions.c1, undefined);
+
+const storage = read("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
+assert.match(storage, /!expire && !gone && current && Date\.parse\(current\.paidThroughAt\) > Date\.now\(\)/u);
+assert.match(storage, /unsubscribe\(viewerAccountId, creatorAccountId, true, true\)/u);
+
+// 5.1 / 5.3 / 5.4 copy and the cancel confirmation.
+const home = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
+assert.match(home, /ui\.slurp\.profile\.subscribeBenefits/u, "The inline subscription offer must explain its benefits");
+assert.match(
+  home,
+  // Step 0c: the price is a number (so it gets separators) and "/ week" is the coin amount's suffix.
+  /amount=\{slurpSubscriptionPriceOf\(viewerCreator\)\}\s+suffix=\{localizeUi\("ui\.slurp\.unlocksheet\.perWeek"/u,
+  "The subscription action must show its weekly price, read from the viewer scope (the Creator record has none)",
+);
+// Step 6.5: cancelling is one tap + an Undo toast (no confirm dialog), like the Wallet.
+assert.match(home, /showSlpSubscriptionCancelledToast\(/u);
+const messages = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx");
+assert.match(messages, /ui\.slurp\.messages\.requestFeeHint/u);
+assert.match(messages, /ui\.slurp\.messages\.commissionRefundHint/u);
+const locales = JSON.parse(read("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json"));
+for (const key of [
+  "ui.slurp.profile.subscribeBenefits",
+  "ui.slurp.profile.tip",
+  "ui.slurp.profile.cancelSubscriptionDetail",
+  "ui.slurp.messages.commissionRefundHint",
+  "ui.slurp.messages.requestFeeHint",
+  "ui.slurp.messages.commissionCancel",
+]) {
+  assert.ok(locales[key], `missing locale key ${key}`);
+}
+
+console.log("slurp payment clarity regression: ok");

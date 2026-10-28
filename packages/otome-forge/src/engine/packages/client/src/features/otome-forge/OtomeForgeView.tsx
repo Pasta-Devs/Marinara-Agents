@@ -1,0 +1,288 @@
+// ──────────────────────────────────────────────
+// Otome Forge: the Home tab. Reads the host props, applies the look, and routes between the screens on the stage.
+// ──────────────────────────────────────────────
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
+import { BookHeart, Heart, RotateCcw, UsersRound } from "lucide-react";
+import { useOtomeApi } from "./api";
+import { Dock } from "./components/Dock";
+import { Stage } from "./components/Stage";
+import { TopBar } from "./components/TopBar";
+import { INDEX_QUERY_KEY, useOtomeIndex } from "./hooks/use-index";
+import { useLook, type LookPreference } from "./hooks/use-look";
+import { fetchRunView, runQueryKey, useRun } from "./hooks/use-run";
+import { accentOf } from "./lib/accent";
+import { OtomePropsContext, readOtomeProps } from "./props";
+import { BibleView } from "./screens/BibleView";
+import { ForgeProgress } from "./screens/ForgeProgress";
+import { Placeholder } from "./screens/Placeholder";
+import { Reader } from "./screens/reader/Reader";
+import { DOCK_SCREENS, RUN_SCREENS, type DockScreen, type ScreenId } from "./screens/screens";
+import { Settings } from "./screens/settings/Settings";
+import { SetupWizard } from "./screens/setup/SetupWizard";
+import { StoryHome } from "./screens/story/StoryHome";
+import { WorldPicker } from "./screens/WorldPicker";
+import type { OtomeIndex, RunView } from "./shared/api-types";
+
+const DOCKED: ReadonlySet<ScreenId> = new Set<ScreenId>(["home", ...DOCK_SCREENS]);
+
+interface ScreensProps {
+  lookPreference: LookPreference;
+  onLookPreference: (preference: LookPreference) => void;
+}
+
+function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const index = useOtomeIndex();
+  const activeRun = index.data?.activeRun ?? null;
+  const run = useRun(activeRun);
+  const [chosen, setChosen] = useState<ScreenId | null>(null);
+  const [settingsReturn, setSettingsReturn] = useState<ScreenId>("picker");
+  const [bibleLi, setBibleLi] = useState<string | null>(null);
+  const [chapterKey, setChapterKey] = useState<string | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const screenRef = useRef<HTMLDivElement>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
+  // Set by the player's own navigation or retry, so focus moves only then (never on the first mount, which would take
+  // it from the Engine). The button they pressed often leaves with the old screen, so focus lands on the new screen's
+  // heading (every screen starts with an <h1 tabIndex={-1}>), which also announces it; after a failed retry, on Try again.
+  const navigated = useRef(false);
+  const view: RunView | null = run.data ?? null;
+  // With no choice made, the active story opens where it is: forging, or Home once it is ready.
+  const screen: ScreenId =
+    chosen ?? (!activeRun || run.isError ? "picker" : view?.forge.phase === "ready" ? "home" : "forge");
+  const waiting = index.isPending || (chosen === null && !!activeRun && run.isPending);
+  // A failed background refetch keeps the screen it already loaded; only a first load that failed shows the error.
+  const failed = index.isError && index.data === undefined;
+  const shown = waiting ? "loading" : failed ? "error" : screen;
+
+  // Once the active story has loaded, its opening screen stays put: a world that finishes forging while the player
+  // watches keeps showing the forge (its cast and paint offer) until they choose to go Home.
+  const phase = view?.forge.phase ?? null;
+  useEffect(() => {
+    if (chosen === null && activeRun && phase) setChosen(phase === "ready" ? "home" : "forge");
+  }, [activeRun, chosen, phase]);
+
+  useEffect(() => {
+    if (!navigated.current || shown === "loading") return;
+    navigated.current = false;
+    const target = shown === "error" ? retryRef.current : screenRef.current?.querySelector<HTMLElement>("h1");
+    target?.focus({ preventScroll: true });
+  }, [shown, bibleLi]);
+
+  const go = (next: ScreenId) => {
+    if (next !== screen) navigated.current = true;
+    setChosen(next);
+  };
+
+  if (waiting) {
+    return (
+      <>
+        <TopBar />
+        <div className="of-center" role="status">
+          <Heart className="of-pulse" size={30} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
+          <p className="of-body">{t("ui.otomeForge.common.loading")}</p>
+        </div>
+      </>
+    );
+  }
+  if (failed) {
+    return (
+      <>
+        <TopBar />
+        <div className="of-center">
+          <div className="of-panel of-panel--center of-card of-glass" role="alert">
+            <p className="of-error">{otome.errorMessage(index.error, "ui.otomeForge.common.loadFailed")}</p>
+            <div className="of-actions">
+              {/* aria-disabled, not disabled: a disabled button would drop the focus the player just gave it. */}
+              <button
+                ref={retryRef}
+                type="button"
+                className="of-button of-button--quiet of-glass"
+                aria-disabled={index.isFetching}
+                onClick={() => {
+                  if (index.isFetching) return;
+                  navigated.current = true;
+                  void index.refetch();
+                }}
+              >
+                <RotateCcw size={16} strokeWidth={2} aria-hidden="true" />
+                {t("ui.otomeForge.common.retry")}
+              </button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  /** Makes a story the active one, then opens it where it is (forging, or Home). */
+  const activate = async (runKey: string) => {
+    const { index: next } = await otome.post<{ index: OtomeIndex }>(`/runs/${encodeURIComponent(runKey)}/activate`);
+    queryClient.setQueryData(INDEX_QUERY_KEY, next);
+  };
+
+  const openRun = async (runKey: string) => {
+    setOpening(runKey);
+    setOpenError(null);
+    try {
+      await activate(runKey);
+      // Loaded again here, so a story whose last load failed opens, or says why it cannot, instead of leaving the
+      // picker as it was (the active story's query would not run again by itself).
+      await queryClient.fetchQuery({
+        queryKey: runQueryKey(runKey),
+        queryFn: () => fetchRunView(otome, runKey),
+        staleTime: 0,
+      });
+      navigated.current = true;
+      setChosen(null);
+    } catch (failure) {
+      setOpenError(otome.errorMessage(failure));
+    } finally {
+      setOpening(null);
+    }
+  };
+
+  const created = async (made: RunView) => {
+    queryClient.setQueryData(runQueryKey(made.runKey), made);
+    try {
+      await activate(made.runKey);
+    } catch (failure) {
+      console.warn("Otome Forge could not open the new story", failure);
+      void queryClient.invalidateQueries({ queryKey: INDEX_QUERY_KEY });
+    }
+    go("forge");
+  };
+
+  const openSettings = () => {
+    setSettingsReturn(screen);
+    go("settings");
+  };
+  const selectDockScreen = (next: DockScreen) => go(next === screen ? "home" : next);
+  const bibleOf = view?.lis.find((li) => li.id === bibleLi) ?? null;
+
+  // Where Back leads. The opening screen and the dock's screens have none.
+  const back: Partial<Record<ScreenId, ScreenId>> = {
+    settings: settingsReturn,
+    setup: "picker",
+    forge: view?.forge.phase === "ready" ? "home" : "picker",
+    bible: "forge",
+    reader: "story",
+    phone: "home",
+    home: activeRun ? undefined : "picker",
+  };
+  const backTo = back[screen];
+
+  const content =
+    screen === "picker" && index.data ? (
+      <WorldPicker
+        index={index.data}
+        opening={opening}
+        error={openError}
+        onNew={() => go("setup")}
+        onOpen={(runKey) => void openRun(runKey)}
+      />
+    ) : screen === "setup" ? (
+      <SetupWizard onCreated={(made) => void created(made)} />
+    ) : screen === "forge" && activeRun ? (
+      <ForgeProgress
+        runKey={activeRun}
+        onBegin={() => go("home")}
+        onOpenBible={(li) => {
+          navigated.current = true;
+          setBibleLi(li);
+          setChosen("bible");
+        }}
+      />
+    ) : screen === "bible" && activeRun && bibleOf && view ? (
+      <BibleView runKey={activeRun} li={bibleOf} lis={view.lis} />
+    ) : screen === "settings" ? (
+      <Settings run={view} lookPreference={lookPreference} onLookPreference={onLookPreference} />
+    ) : screen === "story" && activeRun && view ? (
+      <StoryHome
+        runKey={activeRun}
+        view={view}
+        onOpenChapter={(key) => {
+          navigated.current = true;
+          setChapterKey(key);
+          setChosen("reader");
+        }}
+      />
+    ) : screen === "reader" && activeRun && view && chapterKey ? (
+      <Reader
+        runKey={activeRun}
+        chapterKey={chapterKey}
+        view={view}
+        onExit={() => go("story")}
+        onHome={() => go("home")}
+      />
+    ) : screen === "home" && view ? (
+      <Placeholder screen="home">
+        <div className="of-actions">
+          <button type="button" className="of-button of-button--quiet of-glass" onClick={() => go("forge")}>
+            <UsersRound size={16} strokeWidth={2} aria-hidden="true" />
+            {t("ui.otomeForge.setup.yourCast")}
+          </button>
+          <button type="button" className="of-button of-button--quiet of-glass" onClick={() => go("picker")}>
+            <BookHeart size={16} strokeWidth={2} aria-hidden="true" />
+            {t("ui.otomeForge.common.screenPicker")}
+          </button>
+        </div>
+      </Placeholder>
+    ) : (
+      <Placeholder screen={screen} />
+    );
+
+  const firstLi = view?.lis[0] ?? null;
+  return (
+    <>
+      {/* The reader is full-stage: its own header carries the way out. */}
+      {screen === "reader" ? null : (
+        <TopBar
+          run={
+            RUN_SCREENS.has(screen)
+              ? {
+                  li: firstLi ? { name: firstLi.name, accent: accentOf(firstLi), portraitUrl: firstLi.portrait } : null,
+                  starlight: view?.starlight ?? null,
+                }
+              : null
+          }
+          onBack={backTo ? () => go(backTo) : undefined}
+          onHome={() => go("home")}
+          onSettings={screen === "settings" ? undefined : openSettings}
+        />
+      )}
+      <div
+        key={screen === "bible" ? `bible-${bibleLi}` : screen === "reader" ? `reader-${chapterKey}` : screen}
+        ref={screenRef}
+        className="of-screen"
+      >
+        {content}
+      </div>
+      {DOCKED.has(screen) ? <Dock active={screen} onSelect={selectDockScreen} /> : null}
+    </>
+  );
+}
+
+export function OtomeForgeView({ capabilityProps }: { capabilityProps: Record<string, unknown> }) {
+  const props = readOtomeProps(capabilityProps);
+  const { look, preference, setPreference } = useLook();
+  // The language the text is actually in (English until a locale ships), not the Engine's: the host tags its element
+  // with the Engine locale, and a screen reader would read English with that language's voice. Its direction follows
+  // that language too, so English under a right-to-left Engine locale keeps its punctuation where it belongs.
+  const { i18n } = useTranslation();
+  const language = i18n.resolvedLanguage ?? "en";
+  return (
+    <div className="of-root" data-look={look} dir={i18n.dir(language)} lang={language} data-otome-forge-root="">
+      <OtomePropsContext.Provider value={props}>
+        <Stage>
+          <OtomeForgeScreens lookPreference={preference} onLookPreference={setPreference} />
+        </Stage>
+      </OtomePropsContext.Provider>
+    </div>
+  );
+}

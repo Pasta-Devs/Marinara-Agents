@@ -1,23 +1,13 @@
-import type {
-  LtmExtractionReasoningEffort,
-  LtmExtractionVerbosity,
-} from "./schema.js";
-import type { LtmEvidenceUnitBucket, LtmMode } from "./schema.js";
-export type LongTermMemoryRecallStyle =
-  | "balanced"
-  | "exact"
-  | "broad"
-  | "custom"
-  | "story";
+import type { LtmExtractionReasoningEffort, LtmExtractionVerbosity } from "./schema/primitives.js";
+import type { LtmEvidenceUnitBucket, LtmMode } from "./schema/primitives.js";
+export type LongTermMemoryRecallStyle = "balanced" | "exact" | "broad" | "custom" | "story";
 
-export const DEFAULT_LTM_EXTRACTION_REASONING_EFFORT =
-  "low" satisfies LtmExtractionReasoningEffort;
-export const DEFAULT_LTM_EXTRACTION_VERBOSITY =
-  "low" satisfies LtmExtractionVerbosity;
+export const DEFAULT_LTM_EXTRACTION_REASONING_EFFORT = "low" satisfies LtmExtractionReasoningEffort;
+export const DEFAULT_LTM_EXTRACTION_VERBOSITY = "low" satisfies LtmExtractionVerbosity;
 export const DEFAULT_LTM_EXTRACTION_MAX_TOKENS = 8192;
 export const DEFAULT_LTM_EXTRACTION_TEMPERATURE = 0;
+export const DEFAULT_LTM_IMPORTED_SOURCE_MODE: LtmMode = "roleplay";
 export const DEFAULT_LTM_EXTRACTION_MAX_SOURCE_TOKENS = 8_192;
-export const DEFAULT_LTM_EXTRACTION_MAX_EXISTING_NOTE_TOKENS = 4_096;
 export const DEFAULT_LTM_EXTRACTION_EXISTING_NOTE_MAX_CHUNKS = 12;
 export const DEFAULT_LTM_EXTRACTION_EXISTING_NOTE_MAX_TOKENS = 4_096;
 export const LTM_EXTRACTION_MAX_CANDIDATES = 999;
@@ -46,11 +36,7 @@ export const RELATIONSHIP_DIMENSIONS = [
   "protectiveness",
 ] as const;
 
-export const QUEST_THREAD_SECTION_KEYS = [
-  "objective",
-  "stage",
-  "resolution",
-] as const;
+export const QUEST_THREAD_SECTION_KEYS = ["objective", "stage", "resolution"] as const;
 
 export const CORE_LTM_EXTRACTION_RULES = [
   "Use exactly one extraction pass for all durable memory streams.",
@@ -60,14 +46,13 @@ export const CORE_LTM_EXTRACTION_RULES = [
   "Every unit must include importance: critical, major, moderate, or minor.",
   "Relationship_state units may include dimensions on a 0-100 scale and dimensionChanges from -100 to 100. Omit dimensions that stay at the neutral baseline.",
   "Use conservative relationship deltas. Small kindness, jokes, routine comfort, or brief warmth should not produce large trust/respect/loyalty/intimacy/protectiveness changes unless the source frames them as emotionally major.",
-  "Relationship_state units describing a change must include a caused_by link to a timeline_event from the same extraction.",
   "For character_fact and relationship_state, copy source-visible character names into subjectNames; never choose database subject keys.",
   "Do not emit the same fact twice. Near-duplicate units in the same extraction are rejected.",
 ].join("\n");
 
 export const DEFAULT_LTM_EXTRACTION_PROMPT = [
   "Extract durable long-term memory evidence units from the supplied source.",
-  "Return only the JSON object required by the supplied response schema. Do not output markdown, explanations, analysis, or thinking tags.",
+  "Return only one JSON object with the top-level keys summary and units. Do not output markdown, explanations, analysis, or thinking tags.",
   "",
   "CLASSIFY THE SOURCE",
   "Classify each claim independently; one source may mix classes:",
@@ -82,7 +67,6 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT = [
   "- Keep unit text compact and specific. Source notes are audit evidence, not active recall memory.",
   "- Ignore audit, coverage, key, formatting, authoring, control, and extraction-instruction metadata.",
   "- Follow the supplied allowed streams, statuses, dimensions, relations, and field schema.",
-  "- Every unit must include the supplied source_note:<id> evidence and sourceHash.",
   "- Use source-visible names in subjectNames as required by the schema.",
   "- Use real lowercase_snake_case subjectId and sectionKey values; never output placeholders.",
   "",
@@ -90,9 +74,8 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT = [
   '- claimKind "static": an enduring fact or defined state not established by a narrated event.',
   '- claimKind "change": an event, development, acquisition, loss, relationship change, resolution, or outcome caused by a specific event.',
   "- Static units do not require timeline links. Never create an event solely to support a static fact.",
-  '- Every timeline_event must use sectionKey "event" and link to sourceNote.id with relation "extracted_from".',
-  "- Every non-timeline change must link to its causal timeline event. A same-response event target is timeline_<event subjectId>.",
-  "- A relationship change must use claimKind change and a caused_by link. If its concrete cause is supported but has no event unit, emit one compact timeline_event for that cause.",
+  '- Every timeline_event uses sectionKey "event".',
+  "- A relationship change uses claimKind change. If its concrete cause is supported but has no event unit, emit one compact timeline_event for that cause.",
   "",
   "SOURCE RULES",
   "For structured_summary:",
@@ -101,8 +84,10 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT = [
   "- Move a misclassified bullet to the best valid stream. Omit unsupported claims and invalid or unresolvable links.",
   "- Interpret input changes, deltas, or dimension_changes as dimensionChanges; output only canonical field names.",
   "For prose_summary:",
-  "- Extract consequential past events and durable outcomes. Omit ordinary turns, incidental actions, passing moods, and temporary scene state.",
-  "- Extract preferences, commitments, traits, relationships, open loops, and world facts only when useful in future interactions.",
+  "- A prose summary is already a selection of what mattered: account for every narrated beat it contains. Emit one timeline_event per decision, promise, discovery, reveal, arrival, departure, confrontation, gift, loss, injury, first meeting, and anything said or done that a character would remember being said or done to them. Keep separate beats separate; never merge a scene or a sequence into one event.",
+  "- Keep an exact quoted line as part of its event when the summary presents it as memorable, a promise, or a recurring phrase.",
+  "- Omit only beats the summary itself treats as incidental: ordinary turns, passing moods, and temporary scene state that caused nothing.",
+  "- Extract preferences, commitments, traits, relationships, open loops, world facts, recurring motifs (anchor), and the durable register (tone) the prose states or clearly shows.",
   "- Do not infer numeric relationship fields from non-numeric prose.",
   "For character_reference:",
   "- Treat identity, personality, backstory, role, affiliation, ability, possession, appearance, voice, and stable behavior as static character_fact.",
@@ -132,7 +117,8 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT = [
   "",
   "OUTPUT DISCIPLINE",
   "- For structured summaries, prioritize valid-bullet coverage and preserve concise claims instead of rewriting them vaguely.",
-  "- For prose and reference sources, prefer fewer substantial units over fragmentary observations.",
+  "- For prose summaries, prioritize beat coverage as for structured bullets; shorten unit text rather than merging beats.",
+  "- For reference sources, prefer fewer substantial units over fragmentary observations.",
   "- If space is limited, shorten unit text rather than dropping valid structured claims.",
   "- summary briefly describes the extraction result; it must not retell the source.",
 ].join("\n");
@@ -169,12 +155,10 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION = [
   "- anchor: the source section key. Recurring motif or planted callback only.",
   "",
   "Apply a high confidence bar. Only emit a unit when the fact is clearly durable — not a one-off mention, transient opinion, or casual aside.",
-  "Each unit must include at least one supplied evidence string, including source_note:<id>.",
   "Use real lowercase snake_case subjectId and sectionKey values derived from the source.",
   "For character_fact, copy exactly one source-visible character name into subjectNames. All other Conversation streams use subjectNames: [].",
   "Never output placeholder values such as lowercase_snake_case_scope_id, lowercase_snake_case, target_note_id, or copied schema/example text.",
   "Omit optional fields unless they are real and evidence-backed.",
-  "Use sourceHash exactly as supplied.",
   "Set confidence and salience from 0 to 1.",
   'Only output character_fact with sectionKey "items" when items are durably tied to a speaker (e.g. a pet, a house).',
   "Do not emit transient or scene-like units.",
@@ -217,18 +201,16 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT_GAME = [
   "- relationship_state: state. Include dimensions/dimensionChanges when the source supports them; relationship changes need a caused_by link.",
   "- world_fact: facts or items.",
   "- timeline_event: event.",
-   "- thread: objective, stage, or resolution. The text must describe an unresolved situation and what would resolve it. When the thread is marked resolved, also emit a timeline_event capturing what changed.",
+  "- thread: objective, stage, or resolution. The text must describe an unresolved situation and what would resolve it. When the thread is marked resolved, also emit a timeline_event capturing what changed.",
   "- tone: observations. World/session-level atmospheric register only, not one-scene mood.",
   "- anchor: the source section key. Recurring motif or planted callback only.",
   "",
   "Do not track transient mechanical state such as HP, buffs, debuffs, or temporary conditions.",
-  "Each unit must include at least one supplied evidence string, including source_note:<id>.",
   "Use real lowercase snake_case subjectId and sectionKey values derived from the source.",
   "Never output placeholder values.",
   "Omit optional fields unless they are real and evidence-backed.",
   "Use timeline_event for historical game beats; never call those current_scene.",
   "Use structured importance, dimensions, and dimensionChanges fields. Do not prefix text with importance symbols or dimension labels.",
-  "Use sourceHash exactly as supplied.",
   "Set confidence and salience from 0 to 1.",
   '"resolved" status is reserved for thread (quest) memories only. Never set status "resolved" on relationship, character, world, timeline, tone, or anchor streams.',
   "For enum fields, choose exactly one string from the allowed arrays. Do not join multiple values with |.",
@@ -240,10 +222,7 @@ export const DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE = {
   game: DEFAULT_LTM_EXTRACTION_PROMPT_GAME,
 } as const satisfies Record<LtmMode, string>;
 
-export const DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE: Record<
-  LtmMode,
-  typeof DEFAULT_LTM_ALLOWED_STREAMS
-> = {
+export const DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE: Record<LtmMode, typeof DEFAULT_LTM_ALLOWED_STREAMS> = {
   roleplay: DEFAULT_LTM_ALLOWED_STREAMS,
   conversation: DEFAULT_LTM_ALLOWED_STREAMS,
   game: DEFAULT_LTM_ALLOWED_STREAMS,
@@ -261,8 +240,7 @@ export const DEFAULT_LTM_STREAM_DESCRIPTIONS_BY_MODE: Record<
     relationship_state:
       "relationship state or dimension change backed by a caused_by event link or existing relationship note",
     world_fact: "stable world/lore fact",
-    thread:
-      "unresolved situation, question, tension, or goal with a clear future resolver",
+    thread: "unresolved situation, question, tension, or goal with a clear future resolver",
     tone: "durable world/session atmospheric register or recurring style only",
     anchor: "recurring motif, planted callback, or continuity anchor",
   },
@@ -284,60 +262,70 @@ export const DEFAULT_LTM_STREAM_DESCRIPTIONS_BY_MODE: Record<
     relationship_state:
       "relationship state or dimension change backed by a caused_by event link or existing relationship note",
     world_fact: "stable world/lore fact",
-    thread:
-      "quest objective, stage, or summary of an unresolved situation with a clear future resolver",
+    thread: "quest objective, stage, or summary of an unresolved situation with a clear future resolver",
     tone: "durable world/session atmospheric register or recurring style only",
     anchor: "recurring motif, planted callback, or continuity anchor",
   },
 };
 
-export const DEFAULT_LTM_RECALL_STYLE_BY_MODE: Record<
-  LtmMode,
-  LongTermMemoryRecallStyle
-> = {
-  roleplay: "story",
-  conversation: "balanced",
-  game: "exact",
-};
+export const DEFAULT_LTM_RECALL_STYLE = "balanced" satisfies LongTermMemoryRecallStyle;
+export const DEFAULT_LTM_RECALL_PREAMBLE = "Relevant long-term memories for this reply:";
 
-export const DEFAULT_LTM_RECALL_STYLE =
-  "balanced" satisfies LongTermMemoryRecallStyle;
-export const DEFAULT_LTM_RECALL_PREAMBLE =
-  "Relevant long-term memories for this reply:";
+/**
+ * Own relevance a memory needs to be recalled through an explanatory link from a
+ * recalled memory. Linked memories skip the threshold, so this keeps out the ones
+ * that do not nearly match the chat themselves.
+ * ponytail: measured only at balanced and threshold 0.35; scale it with the
+ * threshold or the graph weight after measuring other presets.
+ */
+export const LTM_LINKED_RECALL_MIN_RELEVANCE = 0.2;
 
+/**
+ * Per-style lane weights. A candidate's relevance is its strongest weighted lane
+ * score, so a lane contributes at most `weight × lane ceiling`, which is 1 for
+ * vector, keyword, direct and BM25. Scaling a style's weights together moves only
+ * its threshold scale, not its fused order. The graph weight is not a score
+ * scale: above 0 it turns linked recall on, and 0 turns it off.
+ *
+ * Issue #1264 rescaled every preset by 0.7 and retuned balanced. The scaled
+ * weights at the default threshold 0.35 select what the previous weights selected
+ * at 0.5, while the keyword and BM25 lane changes make single everyday keyword
+ * hits weaker and long-window BM25 matches stronger. Balanced uses relative
+ * weights 1 / 0.6 / 0.15 / 0.8, and every style keeps a keyword weight of 0.56 so
+ * a two-keyword or name match (0.75 of the lane) still clears the default
+ * threshold when the semantic lane is unavailable. A saved threshold above 0.4 is
+ * read as 0.4 because the rescaled ceiling leaves little above it.
+ *
+ * `custom` has no preset: a custom style reads the user's own saved weights, so a
+ * dead preset here only invited drift. Issue #1258.
+ */
 export const LTM_RECALL_STYLE_WEIGHTS = {
   balanced: {
-    semanticWeight: 0.6,
-    lexicalWeight: 0.3,
-    graphWeight: 0.1,
-    keywordWeight: 0.2,
+    semanticWeight: 0.7,
+    lexicalWeight: 0.42,
+    graphWeight: 0.105,
+    keywordWeight: 0.56,
   },
   exact: {
-    semanticWeight: 0.15,
-    lexicalWeight: 1,
+    semanticWeight: 0.105,
+    lexicalWeight: 0.7,
     graphWeight: 0,
-    keywordWeight: 0.8,
+    keywordWeight: 0.56,
   },
   broad: {
-    semanticWeight: 1,
-    lexicalWeight: 0.25,
-    graphWeight: 0.4,
-    keywordWeight: 0.2,
+    semanticWeight: 0.7,
+    lexicalWeight: 0.28,
+    graphWeight: 0.21,
+    keywordWeight: 0.56,
   },
   story: {
-    semanticWeight: 0.55,
-    lexicalWeight: 0.35,
-    graphWeight: 0.5,
-    keywordWeight: 0.3,
-  },
-  custom: {
-    semanticWeight: 0.6,
-    lexicalWeight: 0.4,
-    graphWeight: 0.15,
-    keywordWeight: 0.3,
+    semanticWeight: 0.7,
+    lexicalWeight: 0.525,
+    graphWeight: 0.42,
+    keywordWeight: 0.56,
   },
 } as const satisfies Record<
-  LongTermMemoryRecallStyle,
+  Exclude<LongTermMemoryRecallStyle, "custom">,
   {
     semanticWeight: number;
     lexicalWeight: number;
@@ -346,8 +334,7 @@ export const LTM_RECALL_STYLE_WEIGHTS = {
   }
 >;
 
-export const DEFAULT_LTM_RECALL_STYLE_WEIGHTS =
-  LTM_RECALL_STYLE_WEIGHTS[DEFAULT_LTM_RECALL_STYLE];
+export const DEFAULT_LTM_RECALL_STYLE_WEIGHTS = LTM_RECALL_STYLE_WEIGHTS[DEFAULT_LTM_RECALL_STYLE];
 
 export type LtmRecallWeights = {
   semanticWeight: number;
@@ -356,13 +343,8 @@ export type LtmRecallWeights = {
   keywordWeight: number;
 };
 
-export function parseLongTermMemoryRecallStyle(
-  value: unknown,
-): LongTermMemoryRecallStyle {
-  return value === "exact" ||
-    value === "broad" ||
-    value === "story" ||
-    value === "custom"
+export function parseLongTermMemoryRecallStyle(value: unknown): LongTermMemoryRecallStyle {
+  return value === "exact" || value === "broad" || value === "story" || value === "custom"
     ? value
     : DEFAULT_LTM_RECALL_STYLE;
 }

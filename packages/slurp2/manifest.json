@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 341
+  },
+  "builtAgainst": {
+    "engineVersion": "2.5.0",
+    "engineCommit": "25f8df7b0a388fe36f657d69c6fcaa9f27e066ed"
+  },
+  "id": "slurp2",
+  "name": "Slurp",
+  "version": "0.4.6",
+  "description": "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
+  "localizations": {
+    "de": {
+      "name": "Slurp",
+      "description": "Eine private Social-App für deine Charaktere. Mache Charaktere und Personas zu Creators, poste öffentliche oder gesperrte Fotos und sieh zu, wie ein simuliertes Publikum ihnen folgt, sie abonniert, Inhalte freischaltet, kommentiert und ihnen schreibt. Standardmäßig ist sie auf ein Erlebnis für Erwachsene abgestimmt.",
+      "homeBrowserTab": {
+        "label": "Slurp",
+        "ariaLabel": "Slurp öffnen"
+      }
+    },
+    "ko": {
+      "name": "Slurp",
+      "description": "캐릭터를 위한 비공개 소셜 앱입니다. 캐릭터와 페르소나를 크리에이터로 만들고, 공개 또는 잠긴 사진을 게시하고, 시뮬레이션된 청중이 팔로우하고 구독하고 잠금을 해제하고 댓글과 메시지를 남기는 모습을 지켜보세요. 기본적으로 성인용 경험에 맞춰져 있습니다.",
+      "homeBrowserTab": {
+        "label": "Slurp",
+        "ariaLabel": "Slurp 열기"
+      }
+    },
+    "pl": {
+      "name": "Slurp",
+      "description": "Prywatna aplikacja społecznościowa dla Twoich postaci. Zamieniaj postacie i persony w twórców, publikuj publiczne lub zablokowane zdjęcia i patrz, jak symulowana publiczność je obserwuje, subskrybuje, odblokowuje posty, komentuje i pisze do nich wiadomości. Domyślnie jest dostrojona do treści dla dorosłych.",
+      "homeBrowserTab": {
+        "label": "Slurp",
+        "ariaLabel": "Otwórz Slurp"
+      }
+    }
+  },
+  "engine": {
+    "min": "2.4.6",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "home-browser-tab"
+    ],
+    "homeBrowserTab": {
+      "label": "Slurp",
+      "ariaLabel": "Open Slurp",
+      "iconPaths": [
+        "slurp2-logo.png"
+      ]
+    },
+    "assets": {
+      "paths": [
+        "assets/mari/Mari_noodler_teaser_locked.webp",
+        "assets/mari/Mari_noodler_teaser_unlocked.webp",
+        "src/engine/packages/client/src/slp/locales/de.json",
+        "src/engine/packages/client/src/slp/locales/ko.json",
+        "src/engine/packages/client/src/slp/locales/pl.json"
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "a08668dbfcf82409d4fe9bae474c9f54b8fd81091bfae337cd994e686a7e631e",
+      "bytes": 689
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "d9867e024aef125ac948924183870193d068475e728379afa5d69af27f615482",
+      "bytes": 2053940
+    },
+    {
+      "path": "client.js",
+      "sha256": "f9a04696627f2a405f5f19ef9b6134c70a4f0a8bae7ccb11b9135918d201b769",
+      "bytes": 2894484
+    },
+    {
+      "path": "slurp2-logo.png",
+      "sha256": "722def3c01846167c9979b0408f380f923c520e7515aed1584de0d879131a75b",
+      "bytes": 31677
+    },
+    {
+      "path": "slurp2agent.png",
+      "sha256": "47805313b5ec8dbc608fec82c4d51f1f82020afe4f286a04919b59cc8ef06f37",
+      "bytes": 120424
+    },
+    {
+      "path": "assets/mari/Mari_noodler_teaser_locked.webp",
+      "sha256": "e587f1fd0e9a8ba842af1f2ce8d1a1f84c0960a7737313d6081819a4a89a69da",
+      "bytes": 13598
+    },
+    {
+      "path": "assets/mari/Mari_noodler_teaser_unlocked.webp",
+      "sha256": "6349a29529b7597f16bba9ac3c83480c9b0e6c1b286c8dcdcdc7653e05e29eaf",
+      "bytes": 59402
+    },
+    {
+      "path": "src/engine/packages/client/src/slp/locales/de.json",
+      "sha256": "f2e7f03c58a5d2896634732bcd42c3739fb2e14c36a396508d6e8f8425c5cf43",
+      "bytes": 239281
+    },
+    {
+      "path": "src/engine/packages/client/src/slp/locales/ko.json",
+      "sha256": "74f80e54ee7784d247e8f0fef9d64a74dd4070e1cefa5fba08ad6f1e2021fb5a",
+      "bytes": 336839
+    },
+    {
+      "path": "src/engine/packages/client/src/slp/locales/pl.json",
+      "sha256": "c2f20a1f1295f96336529421af2d9098e730f76d51011fb104929dc4797c7c26",
+      "bytes": 241032
+    }
+  ],
+  "permissions": [
+    "chat-read",
+    "mari-actions",
+    "network",
+    "prompt-context",
+    "routes",
+    "scenes",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

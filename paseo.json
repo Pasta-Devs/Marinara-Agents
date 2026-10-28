@@ -1,0 +1,10 @@
+{
+  "metadataGeneration": {
+    "branchName": {
+      "instructions": "When you create a git branch locally or remote for this task, do not use a `type/description` name. Instead, name it with a pun, reference, or joke that connects to what the code actually does. The humor should require someone to know the feature to get it — it is a wink, not a random phrase. Lowercase, hyphens between words, 3 to 6 words, no ticket numbers, no `feat/`/`fix/` prefixes.\n\nHow to build one: take the core concept of the change (the entity, the action, the UI shape) and find a pop-culture line, idiom, or wordplay that maps onto it.\n\nExamples of the mapping, not the wording — invent your own each time:\n\n- Agent/spy capability work → `at-the-service-of-your-majesty` (007 reference, because “agent”)\n- Merging all characters into one panel → `all-my-little-piggies` (all in one place)\n- Drag-and-drop feature → `drag-me-baby-one-more-time` (song pun on “drag”)\n\nBefore naming, identify: what is the one-word or one-image core of this change? Then find the pun or reference that hangs off that word."
+    },
+    "pullRequest": {
+      "instructions": "Always use PR template and always add a TL;DR at the top."
+    }
+  }
+}

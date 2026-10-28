@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Pasta-Devs/Marinara-Agents/relationship-tracker/contracts/relationship-state-v1.schema.json",
+  "title": "Relationship Tracker chat state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "chatId",
+    "injectionMode",
+    "presenceLookbackMessages",
+    "presentCharacterIds",
+    "relationships"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "chatId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "injectionMode": {
+      "enum": [
+        "all",
+        "sceneOnly"
+      ]
+    },
+    "presenceLookbackMessages": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 15
+    },
+    "presentCharacterIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "relationships": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/relationship"
+      }
+    }
+  },
+  "$defs": {
+    "relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "characterAId",
+        "characterBId",
+        "state",
+        "label",
+        "description",
+        "colorCategory",
+        "manuallyLocked"
+      ],
+      "properties": {
+        "characterAId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "characterBId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "enum": [
+            "defined",
+            "undefined"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "colorCategory": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "manuallyLocked": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "defined"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "colorCategory": {
+                "enum": [
+                  "positive",
+                  "neutral",
+                  "negative",
+                  "complicated"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "label": {
+                "const": ""
+              },
+              "description": {
+                "const": ""
+              },
+              "colorCategory": {
+                "const": null
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

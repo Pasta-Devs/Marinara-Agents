@@ -4,7 +4,7 @@ Official downloadable agents and capability packages for [Marinara Engine](https
 
 Marinara Engine starts lightweight: a fresh installation contains no optional agents. Open **Agents → Download Agents** on desktop or mobile to browse this catalog, read what each package does, and install only the features you want. Installed packages appear in the normal Agents panel and the chat modes they support. You can update or uninstall them from the same catalog. Restart Marinara Engine when the installer asks you to do so.
 
-Across its Engine compatibility lanes, the catalog currently contains **35 first-party packages**: 6 Writer Agents, 9 Tracker Agents, and 20 Misc Agents. Most packages support **Marinara Engine v2.3.0+**; Long-Term Memory requires **v2.4.1**; World Maps, Storyboard, and Noodle require **v2.4.2**; and Inventory Tracker, Haptic Feedback, Slurp, and Pixelforge require **v2.4.3**. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
+Across its Engine compatibility lanes, the stable catalog currently contains **43 first-party packages**: 6 Writer Agents, 13 Tracker Agents, and 24 Misc Agents. Staging-only previews below are additional and are not included in these stable counts. Most packages support **Marinara Engine v2.3.0+**; Storyboard requires **v2.4.2**; Inventory Tracker and Haptic Feedback require **v2.4.3**; Beholder and Relationship Tracker require **v2.4.4**; Gacha Forge requires **v2.5.1** and Capability API **1.376**; Story Writer requires **v2.5.1** and Capability API **1.386**; Quartermaster requires **v2.4.6**; and 2D Avatars and 3D Avatars need Capability API 1.73, so they install on the first Engine release after **v2.5.0**. Noodle, Slurp, Calls, World Maps, Long-Term Memory, Memory Nag and the six Conversation games use the Engine's own code instead of carrying copies of it, so most current versions need Capability API 1.341 and also install on the first Engine release after **v2.5.0**; an older Engine keeps the version it already has. World Maps needs **v2.5.1** with Capability API **1.379** for its per-chat reference lorebook. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
 
 ## Official catalog
 
@@ -12,54 +12,82 @@ Across its Engine compatibility lanes, the catalog currently contains **35 first
 
 | Agent | Package | What it does |
 | --- | --- | --- |
-| Card Evolution Auditor | [`card-evolution-auditor`](packages/card-evolution-auditor/manifest.json) | Audits durable roleplay changes and proposes precise character-card edits for approval. |
-| Continuity Checker | [`continuity`](packages/continuity/manifest.json) | Fixes concrete spatial, timeline, and physical logic errors without changing the story. |
-| Knowledge Retrieval | [`knowledge-retrieval`](packages/knowledge-retrieval/manifest.json) | Finds relevant lorebook information, summarizes it, and injects it into the prompt. |
-| Knowledge Router | [`knowledge-router`](packages/knowledge-router/manifest.json) | Selects relevant lorebook entries from a lightweight catalog and injects them verbatim. |
-| Narrative Director | [`director`](packages/director/manifest.json) | Creates one-shot story directions when the user chooses to push the next response forward. |
-| Prose Guardian | [`prose-guardian`](packages/prose-guardian/manifest.json) | Removes banned words, repetition, and unwanted prose habits without changing meaning. |
+| Card Evolution Auditor | [`card-evolution-auditor`](packages/card-evolution-auditor/manifest.json) | Suggests character card updates when the story changes a character, for you to approve. |
+| Continuity Checker | [`continuity`](packages/continuity/manifest.json) | Fixes mistakes about places, time, and physical details in AI messages without changing the story. |
+| Knowledge Retrieval | [`knowledge-retrieval`](packages/knowledge-retrieval/manifest.json) | Finds what matters for the current scene in your lorebooks and gives the AI a short summary of it. |
+| Knowledge Router | [`knowledge-router`](packages/knowledge-router/manifest.json) | A cheaper Knowledge Retrieval: picks the lorebook entries that fit the scene and gives them to the AI as they are. Works best with big lorebooks whose entries have short descriptions. |
+| Narrative Director | [`director`](packages/director/manifest.json) | Gives the story a push in a new direction when you ask for it. |
+| Prose Guardian | [`prose-guardian`](packages/prose-guardian/manifest.json) | Removes banned words, repetition, and unwanted writing habits from AI messages without changing what they say. |
 
 ### Tracker Agents
 
 | Agent | Package | What it does |
 | --- | --- | --- |
 | Background | [`background`](packages/background/manifest.json) | Selects the best existing scene background from your library. |
-| Character Tracker | [`character-tracker`](packages/character-tracker/manifest.json) | Tracks present characters, moods, actions, appearance, thoughts, and character stats. |
-| Custom Tracker | [`custom-tracker`](packages/custom-tracker/manifest.json) | Tracks user-defined currencies, counters, flags, and other custom fields. |
-| Expression Engine | [`expression`](packages/expression/manifest.json) | Detects character emotions and selects matching Visual Novel sprites or expressions. |
-| Inventory Tracker | [`inventory-tracker`](packages/inventory-tracker/manifest.json) | Tracks currencies, equipped gear, and carried items as separate structured lists. |
-| World Maps | [`hierarchical-maps`](packages/hierarchical-maps/manifest.json) | Adds persistent nested locations, durable shared worlds, reusable artwork, customizable Direct Link lines, map authoring, and movement. |
-| Persona Stats | [`persona-stats`](packages/persona-stats/manifest.json) | Tracks the player persona's status bars and custom stats from narrative events. |
-| Quest Tracker | [`quest`](packages/quest/manifest.json) | Manages quest objectives, completion states, and rewards. |
+| Beholder | [`beholder`](packages/beholder/manifest.json) | Keeps track of what each character is wearing and holding, plus any injuries, so the story stays consistent. You can check it on a paper doll from the roleplay toolbar. Works with big online models, or with the free Beholder model that runs privately on your computer. |
+| Character Tracker | [`character-tracker`](packages/character-tracker/manifest.json) | Tracks who is in the scene and how each character looks, feels, and acts, plus stats like HP. |
+| Custom Tracker | [`custom-tracker`](packages/custom-tracker/manifest.json) | Tracks anything you want during the roleplay, like money, counters, or flags. |
+| Expression Engine | [`expression`](packages/expression/manifest.json) | Changes character sprites to match how they feel. |
+| Inventory Tracker | [`inventory-tracker`](packages/inventory-tracker/manifest.json) | Keeps track of your money, gear, and what you're carrying. |
+| Memory Nag | [`memory-nag`](packages/memory-nag/manifest.json) | Remembers loose ends from your roleplay, like promises and open questions, and reminds the AI when they matter. |
+| World Maps | [`hierarchical-maps`](packages/hierarchical-maps/manifest.json) | Adds world maps to Roleplay and Game, from whole regions down to single rooms, with art and travel between places. |
+| Persona Stats | [`persona-stats`](packages/persona-stats/manifest.json) | Tracks your persona's needs, like hunger, energy, and hygiene, as the story goes on. |
+| Quest Tracker | [`quest`](packages/quest/manifest.json) | Keeps track of your quests, their goals, and their rewards. |
+| Quartermaster | [`quartermaster`](packages/quartermaster/manifest.json) | An RPG character sheet and inventory for Roleplay: equip gear around your persona's portrait, save outfits, get AI art for items, and let it keep everything in step with the story. |
+| Relationship Tracker | [`relationship-tracker`](packages/relationship-tracker/manifest.json) | Tracks how the characters and your persona feel about each other. |
 | World State | [`world-state`](packages/world-state/manifest.json) | Tracks date, time, weather, location, temperature, and custom world details. |
 
 ### Misc Agents
 
 | Agent | Package | What it does |
 | --- | --- | --- |
+| 2D Avatars | [`2d-avatars`](packages/2d-avatars/manifest.json) | Shows your characters and personas as animated 2D avatars that blink, talk, and change faces with each reply, from your sprites or a mesh avatar file. |
+| 3D Avatars | [`3d-avatars`](packages/3d-avatars/manifest.json) | Shows your characters and personas as animated 3D models that blink, talk, and change faces with each reply, from VRM model files, such as ones made in VRoid Studio. |
 | 8-Ball Pool | [`eightball`](packages/eightball/manifest.json) | Adds a complete Conversation-mode 8-Ball Pool table and `/8ball` command. |
 | Chess | [`chess`](packages/chess/manifest.json) | Adds a Conversation-mode chess board and `/chess` command. |
 | Combat | [`combat`](packages/combat/manifest.json) | Manages combat encounters, initiative, HP tracking, and turn-based actions. |
 | Calls | [`conversation-calls`](packages/conversation-calls/manifest.json) | Adds live audio/video calls, microphone transcription, and character video presence. |
-| CYOA Choices | [`cyoa`](packages/cyoa/manifest.json) | Generates clickable Choose Your Own Adventure choices after Roleplay responses. |
+| CYOA Choices | [`cyoa`](packages/cyoa/manifest.json) | Offers a few choices after each AI message, like a Choose Your Own Adventure book. Click one to send it as your reply. |
 | Echo Chamber | [`echo-chamber`](packages/echo-chamber/manifest.json) | Simulates a streaming-style audience chat reacting to Roleplay in real time. |
-| Haptic Feedback | [`haptic`](packages/haptic/manifest.json) | Controls every supported action and pattern on connected Intiface devices. |
+| Gacha Forge | [`gacha-forge`](packages/gacha-forge/manifest.json) | A complete gacha game mode: describe a world and it builds the rest — banners to pull on, a generated cast, story chapters told by a visual-novel narrator, and the battles, gear, bonds and events that grow around them, all from **Home → Gacha Forge**. |
+| Haptic Feedback | [`haptic`](packages/haptic/manifest.json) | Controls connected intimate toys to match what happens in the story. Needs Intiface Central running on your computer, with your toy connected there first. |
 | Illustrator | [`illustrator`](packages/illustrator/manifest.json) | Creates images and videos, with optional automatic Roleplay backgrounds for new scene locations. |
-| Immersive HTML | [`html`](packages/html/manifest.json) | Adds diegetic HTML/CSS/JS visual artifacts without changing story meaning. |
-| Lorebook Keeper | [`lorebook-keeper`](packages/lorebook-keeper/manifest.json) | Creates and updates durable lorebook entries from important story facts. |
-| Long-Term Memory | [`long-term-memory`](packages/long-term-memory/manifest.json) | Extracts durable memories from chat summaries, character records, and lorebooks, with scoped vault browsing, review, source management, recall controls, and preset-marker placement for Roleplay. |
-| Music DJ | [`spotify`](packages/spotify/manifest.json) | Plays scene-matched music through Spotify, YouTube, or local Game Assets. |
-| Noodle | [`noodle`](packages/noodle/manifest.json) | Explore the public Noodle social timeline as an optional local social world, available after installation from **Home → Noodle**. |
-| Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | A walkable pixel-art village RPG Experience for Game Mode: pick it in the Experience chooser, explore a Canvas-rendered closed world, and talk to NPCs to drive the story. Requires Engine 2.4.3+. |
-| Slurp | [`slurp`](packages/slurp/manifest.json) | The standalone successor to NoodleR: create local Creator profiles, publish public or locked posts, and simulate audience activity from **Home → Slurp**. |
+| Immersive HTML | [`html`](packages/html/manifest.json) | Adds HTML/CSS/JS visual effects to AI messages. |
+| Lorebook Keeper | [`lorebook-keeper`](packages/lorebook-keeper/manifest.json) | Saves important story facts, characters, places, and world changes to the chat's lorebook as you play. |
+| Long-Term Memory | [`long-term-memory`](packages/long-term-memory/manifest.json) | Remembers important things from your chats, characters, and lorebooks, and brings them back when they matter. |
+| Music DJ | [`spotify`](packages/spotify/manifest.json) | Plays music that fits the mood of the story, from Spotify, YouTube, or your own Game Assets music. |
+| Noodle | [`noodle`](packages/noodle/manifest.json) | A pretend social network where your characters post, share photos, and talk about your chats, available after installation from **Home → Noodle**. |
+| Slurp | [`slurp2`](packages/slurp2/manifest.json) | A private social app for your characters: turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them, from **Home → Slurp**. Tuned for an adult experience by default. |
 | Poker | [`poker`](packages/poker/manifest.json) | Adds No-Limit Texas Hold'em for Conversation chats and the `/poker` command. |
 | Rock-Paper-Scissors | [`rock-paper-scissors`](packages/rock-paper-scissors/manifest.json) | Adds best-of-three, five, or seven Conversation matches and the `/rps` command. |
-| Storyboard | [`storyboard`](packages/storyboard/manifest.json) | Plans and generates still or animated Game and Roleplay storyboards with provider-tuned prompt chains. |
+| Story Writer | [`story-writer`](packages/story-writer/manifest.json) | A co-writing book in its own Home tab: pick a connection, your characters, personas and lorebooks, describe the story, and the model writes it chapter by chapter while you guide it with an author's note and edit anything on the page. Book or e-book look, light or dark; every story is saved so you can start new ones and come back to old ones, from **Home → Story Writer**. Needs an Engine with Capability API 1.386. |
+| Storyboard | [`storyboard`](packages/storyboard/manifest.json) | Turns Game and Roleplay scenes into storyboards of still images or short animations. |
 | Tic-Tac-Toe | [`tic-tac-toe`](packages/tic-tac-toe/manifest.json) | Adds one-on-one Conversation matches and the `/tictactoe` command. |
 | UNO | [`uno`](packages/uno/manifest.json) | Adds a complete Conversation-mode UNO table and `/uno` command. |
 | Virtual Phone | [`virtual-phone`](packages/virtual-phone/manifest.json) | Adds persistent in-story phones with Engine-backed calls, apps, notifications, and character actions. |
 
 For complete mode, lifecycle, and settings documentation for every package, see the Engine's [Downloadable Agents Reference](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md).
+
+To give World Maps a reference lorebook for one chat, update both the Engine and World Maps, then open **Chat Settings → Agents → World Maps** and turn on **Attach lorebook for the specific agent**. Matching entries are supplied only to that chat's map creation, replacement, expansion and prompt previews. The map builder's explicit lore sources still apply; global map templates have no chat attachment.
+
+For manual-only Illustrator on the updated Engine staging build, set **Run Interval** to **0** in its setup or when adding it to a chat. This stops automatic Illustrator runs, including automatic scene backgrounds, while keeping the **Gallery → Illustrate** and **Background** actions available. The default remains **5**; choose a positive interval to resume automatic runs. This is an Engine scheduling option, so no Illustrator package update is required.
+
+Slurp offers **Image context for reactions** in settings for fan reactions and creator replies: **Auto** prefers the stored image prompt and falls back to vision, **Stored image prompt only** uses that prompt only, and **Vision** describes the image. Public fans do not receive locked images. Manual creator refresh shows how many requests remain.
+
+When breaking a Slurp couple up, choose whether they keep the usual breakup history, **Move on** without dwelling on it, or **Forget the relationship** in future posts and chats. For existing exes, **Stir → Nudge a couple** can move them on or forget the relationship. Published posts and messages stay. Where Undo is offered, use **Recent plays → Undo** to restore the previous choice.
+
+### In development
+
+These packages are being built in this repository but are not ready for the stable catalog yet. A package is either **in development** (hidden from every Engine channel) or **staging only** (offered to Engine `staging` testers, hidden from stable `main` users). See [Contributing § Packages that are not ready for everyone](CONTRIBUTING.md#packages-that-are-not-ready-for-everyone).
+
+| Package | ID | Availability | Status |
+| --- | --- | --- | --- |
+| Blackjack | [`blackjack`](packages/blackjack/manifest.json) | Staging only | Adds a Conversation-mode blackjack table and the `/blackjack` command: you and up to six characters play against the house, with an optional character dealer who calls the rounds. Characters cannot start a game on their own until the Engine adds its command toggle. Needs Capability API 1.341, like the other Conversation games. |
+| Modern Life Sim | [`modern-life-sim`](packages/modern-life-sim/manifest.json) | Staging only | A modern life sim in its own Home tab: a town on a clock, a job, rent and needs, and a cast drawn from your character cards whose relationships grow scene by scene, with a visual-novel narrator for the scenes that matter. Alpha; offered to Engine `staging` testers from **Home → Life Sim**. |
+| Otome Forge | [`otome-forge`](packages/otome-forge/manifest.json) | Staging only | An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. Early test build, offered to Engine `staging` testers from **Home → Otome Forge**: set up a story from a premise, a persona and two to five love interests, with content settings and an 18+ gate, then play its main chapters. You pick who leads each one, your first choices are canon, each love interest remembers only what they saw or were told, and reading earns Starlight and affection. Home, the phone, dates and wishes arrive in later builds. Needs Capability API 1.386. |
+| Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | In development | A pixel-art RPG world for Game Mode that you walk around in. Pick a setting, like a cozy village or a sci-fi colony, then explore, talk to NPCs, and let the Game Master narrate. Under active development; not yet listed for users. |
+| Saucelings | [`saucelings`](packages/saucelings/manifest.json) | Staging only | A Tamagotchi-style pet in **Home → Saucelings** and on the Home widget grid: pick a character to look after an egg, let their personality drive their care schedule, cover the gaps they miss, and watch its temperament shift. Keep paintings in an Album, retire elders to a Menagerie, and find eggs while you chat. Beta; offered to Engine `staging` testers. |
+| 5e (SRD 5.1) | [`ruleset-5e-2014`](packages/ruleset-5e-2014/manifest.json) | Staging only | Play Game Mode by the 5e rules (SRD 5.1): ability checks, saving throws, a full character sheet with spells and class features, and 5e combat against 319 monsters, on a battle board or without positions. Ships only data, no Agent and no code. Needs an Engine with Capability API 1.46, which today means the Engine `staging` branch. |
 
 ### Localization sources
 
@@ -79,7 +107,7 @@ Conversation mode's About Me profile and `update_about_me` tool are built into M
 
 ## Contributing
 
-Agent ideas, bugs, documentation corrections, and package improvements are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before starting: contributions begin with an issue and target the `staging` branch. Engine staging users automatically consume Agents staging for package testing. Every ready PR must pass validation and CodeRabbit; outside and first-time contributors also need an approving review from `SpicyMarinara`. Only `SpicyMarinara` promotes tested staging work to `main`.
+Agent ideas, bugs, documentation corrections, and package improvements are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before starting: contributions begin with an issue and target the `staging` branch. Engine staging users automatically consume Agents staging for package testing. Every ready PR must pass validation and Dottore Review; outside and first-time contributors also need an approving review from `SpicyMarinara`. Only `SpicyMarinara` promotes tested staging work to `main`.
 
 ## Maintainer build
 
@@ -88,12 +116,13 @@ Build the shared package snapshot and all feature bundles from a neighboring Mar
 ```bash
 node scripts/build-agent-catalog.mjs
 node scripts/build-feature-packages.mjs
+node scripts/build-ruleset-packages.mjs
 node scripts/test-catalog-lanes.mjs
 node scripts/validate-package-locales.mjs
 node scripts/validate-catalog.mjs
 ```
 
-The build records generic Engine source dependencies needed by feature packages under `sources/engine`. Package-owned implementations stay with their package; for example, World Maps, Long-Term Memory, and Noodle source live under their respective `packages/<id>/src/engine/` trees and are overlaid on those generic dependencies during each build. Noodle also compiles and embeds the same Engine design utilities used by its former built-in interface, preventing visual drift when it runs as a downloaded Home tab.
+The build records generic Engine source dependencies needed by feature packages under `sources/engine`. Package-owned implementations stay with their package; for example, World Maps, Long-Term Memory, and Noodle source live under their respective `packages/<id>/src/engine/` trees and are overlaid on those generic dependencies during each build. Package clients and servers take the Engine's stores, libraries and services from the running Engine instead of bundling copies (see [Using the Engine's host](CONTRIBUTING.md#using-the-engines-host)). Noodle and Slurp compile only the utility classes their own interfaces use, against the Engine's live theme, so they follow it when it changes.
 
 ---
 

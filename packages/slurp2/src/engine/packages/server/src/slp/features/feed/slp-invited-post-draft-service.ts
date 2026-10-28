@@ -1,0 +1,175 @@
+import type { APIProvider } from "@marinara-engine/shared";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
+import type { DB } from "../../../db/connection.js";
+import { logger, logDebugOverride } from "../../../lib/logger.js";
+import { parseGameJsonish } from "../../../services/game/jsonish.js";
+import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
+import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
+import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
+import { resolveStoredChatOptions } from "../../../services/generation/generation-parameters.js";
+import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
+import { withConnectionFallbackProvider } from "../../../services/llm/connection-fallback-provider.js";
+import type { ChatMessage } from "../../../services/llm/base-provider.js";
+import { createLLMProvider } from "../../../services/llm/provider-registry.js";
+import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
+import { slpGeneratedCreatorPostSchema } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
+import { slpCreatorSourceText } from "../../base/prompting/slp-prompt-safety.js";
+import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./slp-public-identity.js";
+import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
+import { SLURP_PERFORMED_INTIMACY } from "../../modules/creators/slp-performance.js";
+import { slpWithProviderRetry } from "../../base/model/slp-provider-retry.js";
+
+export type InvitedSlpPostDraftRequest = {
+  guidance?: string;
+  connectionId?: string;
+  debugMode?: boolean;
+  promptBlocks?: SlurpPromptBlockOverrides;
+};
+
+export type InvitedSlpPostDraft = {
+  title: string | null;
+  content: string;
+  imagePrompt: string | null;
+  access: "public";
+  authorAccountId: string;
+};
+
+function parseDraft(content: string) {
+  const parsed = parseGameJsonish(requireModelAnswer(content, "an invited post draft"));
+  return slpGeneratedCreatorPostSchema.parse(Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed);
+}
+
+export async function generateInvitedSlpPostDraft(
+  db: DB,
+  account: SlpAccount,
+  connection: NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>,
+  request: InvitedSlpPostDraftRequest,
+): Promise<InvitedSlpPostDraft> {
+  const characters = createCharactersStorage(db);
+  const character = await characters.getById(account.entityId);
+  if (!character) throw new Error("Noodle character not found.");
+  const connections = createConnectionsStorage(db);
+  const fallback = await connections.getFallbackForMain();
+  const provider = slpWithProviderRetry(
+    withConnectionFallbackProvider({
+      primary: createLLMProvider(
+        connection.provider,
+        resolveBaseUrl(connection),
+        connection.apiKey,
+        connection.maxContext,
+        connection.openrouterProvider,
+        connection.maxTokensOverride,
+        connection.claudeFastMode === "true",
+        connection.treatAsLocalEndpoint === "true",
+        connection.defaultParameters,
+      ),
+      primaryConnectionId: connection.id,
+      fallbackConnection: fallback,
+      fallbackBaseUrl: fallback ? resolveBaseUrl(fallback) : "",
+      category: "main",
+    }),
+  );
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: composeSlurpPromptBlocks(
+        "invitedPost",
+        [
+          { id: "task", kind: "editable", text: "Write exactly one public Slurp post as the supplied character." },
+          {
+            id: "safety",
+            kind: "required",
+            text: [
+              NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
+              "Return one JSON object with title, content, and imagePrompt set to null.",
+              "Return JSON only. Do not create interactions or other accounts.",
+            ].join("\n"),
+          },
+          {
+            id: "performance",
+            kind: "context",
+            optional: true,
+            text: SLURP_PERFORMED_INTIMACY,
+          },
+          {
+            id: "style",
+            kind: "editable",
+            text: "Keep it like a real social post: usually 40-280 characters. Use longer text only when the direction explicitly asks for long-form writing.",
+          },
+          {
+            id: "output",
+            kind: "required",
+            text: "Return one JSON object with title, content, and imagePrompt set to null.",
+          },
+        ],
+        request.promptBlocks,
+      ),
+    },
+    {
+      role: "user",
+      content: [
+        `Character name: ${account.displayName}`,
+        `Character handle: @${account.handle}`,
+        // Only the profile fields the draft needs, never the whole stored record
+        // (which carries greetings, example dialogue, and unrelated extensions).
+        `Character profile:\n${slpCreatorSourceText(character.data)}`,
+        ...(request.guidance?.trim() ? [`Post direction: ${JSON.stringify(request.guidance.trim())}`] : []),
+      ].join("\n"),
+    },
+  ];
+  const debugMode = request.debugMode === true;
+  logDebugOverride(
+    debugMode,
+    "[debug/slurp] Invited post draft prompt prepared with %d messages; private prompt content is redacted.",
+    messages.length,
+  );
+  const completionOptions = {
+    model: connection.model,
+    ...slpSamplingOptions(
+      resolveStoredChatOptions(connection.defaultParameters, connection.provider, connection.model),
+      { temperature: 0.9, topP: 0.95 },
+    ),
+    maxTokens: clampGenerationMaxOutputTokens({
+      provider: connection.provider as APIProvider,
+      model: connection.model,
+      maxTokens: 2048,
+      maxTokensOverride: connection.maxTokensOverride,
+    }),
+    stream: false,
+    debugMode,
+    // The prompt always asks for imagePrompt (set to null); the strict schema
+    // must require the field too, or GPT-5.6 gets conflicting instructions.
+    responseFormat: slpResponseFormat(connection.model, "noodler_post", { allowImagePrompt: true }),
+  } as const;
+  let response = await provider.chatComplete(messages, completionOptions);
+  const raw = response.content ?? "";
+  let generated;
+  try {
+    generated = parseDraft(raw);
+  } catch (error) {
+    logger.warn(error, "[slurp] Correcting invalid invited post draft response");
+    const correctionMessages: ChatMessage[] = [
+      ...messages,
+      // Some providers reject an empty assistant turn; only echo the prior
+      // response back when it actually had content.
+      ...(raw.trim() ? [{ role: "assistant" as const, content: raw }] : []),
+      {
+        role: "user",
+        content:
+          "Return exactly one valid JSON object with title, content, and imagePrompt set to null. Return JSON only.",
+      },
+    ];
+    response = await provider.chatComplete(correctionMessages, completionOptions);
+    generated = parseDraft(response.content ?? "");
+  }
+  if (!generated.content.trim()) throw new Error("Noodle draft generation returned no content.");
+  return {
+    title: generated.title?.trim() || null,
+    content: generated.content.trim(),
+    imagePrompt: null,
+    access: "public",
+    authorAccountId: account.id,
+  };
+}

@@ -7,9 +7,7 @@ function promptRecord(value: unknown): Record<string, unknown> {
       return {};
     }
   }
-  return typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 export function escapePromptAttribute(value: string) {
@@ -17,23 +15,13 @@ export function escapePromptAttribute(value: string) {
 }
 
 export function escapePromptText(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export function characterContextFromRow(row: {
-  id: string;
-  data: unknown;
-  avatarPath?: string | null;
-}) {
+export function characterContextFromRow(row: { id: string; data: unknown; avatarPath?: string | null }) {
   const data = promptRecord(row.data);
   const extensions = promptRecord(data.extensions);
-  const name =
-    typeof data.name === "string" && data.name.trim()
-      ? data.name.trim()
-      : "Character";
+  const name = typeof data.name === "string" && data.name.trim() ? data.name.trim() : "Character";
   const lines = [`<character name="${escapePromptAttribute(name)}">`];
   for (const [label, value] of [
     ["Description", data.description],

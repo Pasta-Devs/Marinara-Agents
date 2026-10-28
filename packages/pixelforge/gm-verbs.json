@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "verbs": [
+    {
+      "name": "weather",
+      "description": "Set the sky over the whole world until it is set again: fair, overcast, rain, storm or snow. rain and snow also take an intensity of light or heavy; the other three words ignore it.",
+      "effect": "state",
+      "metadataKey": "pixelforgeWeather",
+      "args": [
+        {
+          "name": "word",
+          "type": "string",
+          "enum": ["fair", "overcast", "rain", "storm", "snow"]
+        },
+        {
+          "name": "intensity",
+          "type": "string",
+          "enum": ["light", "heavy"],
+          "optional": true
+        }
+      ]
+    },
+    {
+      "name": "standing",
+      "description": "Say where the player now stands with one person in this world: stranger, acquainted, friendly, close friend or hostile. The optional line is what that person remembers them by.",
+      "effect": "event",
+      "args": [
+        {
+          "name": "npc",
+          "type": "string",
+          "maxLength": 40
+        },
+        {
+          "name": "stance",
+          "type": "string",
+          "enum": ["stranger", "acquainted", "friendly", "close friend", "hostile"]
+        },
+        {
+          "name": "line",
+          "type": "string",
+          "maxLength": 80,
+          "optional": true
+        }
+      ]
+    }
+  ]
+}

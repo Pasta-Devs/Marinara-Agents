@@ -1,0 +1,373 @@
+import { slpCreatorGenerationRequestObjectSchema } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
+import { loadImageGenerationUserSettings } from "../../../services/image/image-generation-settings.js";
+import { slpCreatorTargetedRefreshSchema } from "../../../../../shared/src/slp/slp-social.schema.js";
+import { z } from "zod";
+import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
+import {
+  SLURP_BUILT_IN_EXPLICIT_LEVEL,
+  SLURP_BUILT_IN_POST_GUIDANCE,
+  SLURP_POST_GUIDANCE_MAX_LENGTH,
+} from "../../modules/feed/slp-post-guidance.js";
+import { SLURP_VISUAL_SEXUAL_LEVELS } from "../../base/media/slp-visual-brief.js";
+import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
+import { generateSlurpPostGuidanceDraft } from "./slp-post-guidance-draft-service.js";
+import type { SlurpPostGuidanceEntry } from "../../modules/feed/slp-post-guidance.js";
+import { logger } from "../../../lib/logger.js";
+import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
+import { getCreatorImageConnections, updateCreatorImageConnections } from "../../base/media/slp-image-connections.js";
+import {
+  generateAndApplyCreatorPost,
+  refreshAllCreatorsNow,
+  refreshTargetedCreatorsNow,
+} from "./slp-post-operation.js";
+import { resolveSlurpAutomaticPostAccess } from "./slp-automatic-post-access.js";
+import { admissionModeForRequest } from "../../../services/generation/connection-admission.js";
+import type { FastifyInstance } from "fastify";
+import { slurpPostTypeSchema } from "../../modules/requests/slp-request-schemas.js";
+import {
+  type DecodedCreatorMediaRequest,
+  decodeCreatorMediaRequest,
+  sendCreatorMediaError,
+} from "../../base/host/slp-multipart.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
+import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
+
+const slurpTargetedRefreshSchema = slpCreatorTargetedRefreshSchema.extend({
+  access: z.enum(["public", "locked"]).optional(),
+});
+// The packaged shared bundle wraps this schema in a refinement, so `.extend` is not always
+// available. Extend the underlying object and re-run the full base schema in a refinement.
+// The generation schema is refined, so extend its plain object (zod 4 has no ZodEffects).
+const slurpCreatorGenerationRequestSchema = slpCreatorGenerationRequestObjectSchema.extend({
+  postType: slurpPostTypeSchema.default("post"),
+  generateImage: z.boolean().optional(),
+});
+
+const slpImagePromptConfirmationSchema = z.object({
+  prompts: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        prompt: z.string().trim().min(1).max(20_000),
+        negativePrompt: z.string().trim().max(20_000).optional(),
+      }),
+    )
+    .max(20),
+  debugMode: z.boolean().optional(),
+});
+export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
+  const { connections, noodle, slpCreatorImages } = deps;
+  app.get("/slurp/auto-post/status", async (_req, reply) => {
+    return noodle.getNoodlerReserveStatus();
+  });
+
+  app.patch("/slurp/auto-post/schedule/:slotId", async (req, reply) => {
+    const body = z.object({ publishAt: z.string().datetime() }).safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const { slotId } = req.params as { slotId: string };
+    const result = await noodle.rescheduleNoodlerPost(slotId, body.data.publishAt);
+    if (result === "not_found") return reply.code(404).send({ error: "Scheduled Slurp post not found." });
+    if (result === "not_future") return reply.code(400).send({ error: "Publication time must be in the future." });
+    if (result === "not_editable") return reply.code(409).send({ error: "This Slurp post is no longer editable." });
+    if (result === "conflict") {
+      return reply.code(409).send({ error: "This publication time is too close to another Creator post." });
+    }
+    return noodle.getNoodlerReserveStatus();
+  });
+
+  // `builtIn` travels with the value so the client can show what applies while a field is empty
+  // without keeping its own copy of the wording.
+  app.get("/slurp/post-guidance", async () => ({
+    ...(await getSlurpPostGuidance(app.db)),
+    builtIn: SLURP_BUILT_IN_POST_GUIDANCE,
+    builtInLevel: SLURP_BUILT_IN_EXPLICIT_LEVEL,
+  }));
+
+  /**
+   * Set the global direction for public or locked posts, or one Creator's override of it.
+   *
+   * Sent the same way as the image-connection map: `creatorId` selects the override, its absence
+   * means the global field. An empty string clears the level being written and lets the level
+   * below it apply again.
+   */
+  app.patch("/slurp/post-guidance", async (req, reply) => {
+    const body = z
+      .object({
+        creatorId: z.string().min(1).nullable().optional(),
+        public: z.string().max(SLURP_POST_GUIDANCE_MAX_LENGTH).optional(),
+        locked: z.string().max(SLURP_POST_GUIDANCE_MAX_LENGTH).optional(),
+        /** A Creator's private content menu. Only valid with `creatorId`: it has no global level. */
+        menu: z.string().max(SLURP_POST_GUIDANCE_MAX_LENGTH).optional(),
+        /** How far this Creator's pictures go. An empty string clears the override. */
+        level: z.enum(["", ...SLURP_VISUAL_SEXUAL_LEVELS]).optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const { creatorId } = body.data;
+    if (
+      body.data.public === undefined &&
+      body.data.locked === undefined &&
+      body.data.menu === undefined &&
+      body.data.level === undefined
+    ) {
+      return reply.code(400).send({ error: "Send public, locked, menu, or level." });
+    }
+    if (body.data.menu !== undefined && !creatorId) {
+      return reply.code(400).send({ error: "A content menu belongs to one Creator; send creatorId." });
+    }
+    if (creatorId && !(await noodle.getNoodlerAccountById(creatorId))) {
+      return reply.code(404).send({ error: "Slurp stage profile not found" });
+    }
+    const next = await updateSlurpPostGuidance(app.db, (current) => {
+      const patch = (entry: SlurpPostGuidanceEntry): SlurpPostGuidanceEntry => ({
+        public: body.data.public ?? entry.public,
+        locked: body.data.locked ?? entry.locked,
+        menu: body.data.menu ?? entry.menu,
+        level: body.data.level ?? entry.level,
+      });
+      if (!creatorId) return { ...current, defaults: patch(current.defaults) };
+      return {
+        ...current,
+        creators: {
+          ...current.creators,
+          [creatorId]: patch(current.creators[creatorId] ?? { public: "", locked: "", menu: "", level: "" }),
+        },
+      };
+    });
+    return { ...next, builtIn: SLURP_BUILT_IN_POST_GUIDANCE, builtInLevel: SLURP_BUILT_IN_EXPLICIT_LEVEL };
+  });
+
+  /** Draft one access direction with the model. Returns the text; saving it stays the client's call. */
+  app.post("/slurp/post-guidance-draft", async (req, reply) => {
+    const body = z
+      .object({
+        access: z.enum(["public", "locked"]),
+        creatorId: z.string().min(1).nullable().optional(),
+        currentDraft: z.string().max(SLURP_POST_GUIDANCE_MAX_LENGTH).optional(),
+        guidance: z.string().max(2000).optional(),
+        connectionId: z.string().min(1).nullable().optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const settings = await noodle.getSettings();
+    const connection = await resolveSlurpTextConnection(
+      connections,
+      body.data.connectionId ?? settings.generationConnectionId,
+    );
+    if (!connection) return reply.code(404).send({ error: "Slurp generation connection not found" });
+    try {
+      return await generateSlurpPostGuidanceDraft(app.db, {
+        access: body.data.access,
+        creatorId: body.data.creatorId ?? null,
+        currentDraft: body.data.currentDraft ?? "",
+        guidance: body.data.guidance ?? "",
+        connection,
+        promptBlocks: slurpPromptContext(settings).blocks,
+        promptInstructions: slurpPromptContext(settings).instructions,
+      });
+    } catch (error) {
+      logger.error(error, "[slurp] Post guidance draft failed using %s", connection.model || connection.provider);
+      // Written for the user (no answer, empty answer, leaked identity), so show the reason.
+      return reply.code(500).send({ error: `Post guidance draft failed: ${getErrorMessage(error)}` });
+    }
+  });
+
+  app.get("/slurp/image-connections", async () => getCreatorImageConnections(app.db));
+
+  // The Engine's image style profiles, so Slurp can pick one instead of always using the default.
+  app.get("/slurp/image-style-profiles", async () =>
+    (await loadImageGenerationUserSettings(app.db)).styleProfiles.profiles.map((profile) => ({
+      id: profile.id,
+      name: profile.name,
+    })),
+  );
+
+  app.patch("/slurp/image-connections", async (req, reply) => {
+    const body = z
+      .object({
+        defaultConnectionId: z.string().min(1).nullable().optional(),
+        creatorId: z.string().min(1).optional(),
+        connectionId: z.string().min(1).nullable().optional(),
+        styleProfileId: z.string().min(1).nullable().optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const { creatorId, connectionId, defaultConnectionId, styleProfileId } = body.data;
+    if (styleProfileId !== undefined && !creatorId) {
+      return reply.code(400).send({ error: "Set creatorId with a Creator image style override." });
+    }
+    // A creatorId without a connectionId (or the reverse) silently did nothing.
+    if ((creatorId === undefined) !== (connectionId === undefined) && styleProfileId === undefined) {
+      return reply.code(400).send({
+        error: "Set creatorId and connectionId together to map a Creator to an image connection.",
+      });
+    }
+    if (creatorId && !(await noodle.getNoodlerAccountById(creatorId))) {
+      return reply.code(404).send({ error: "Slurp stage profile not found" });
+    }
+    if (styleProfileId) {
+      const profiles = (await loadImageGenerationUserSettings(app.db)).styleProfiles.profiles;
+      if (!profiles.some((profile) => profile.id === styleProfileId)) {
+        return reply.code(404).send({ error: "Slurp image style profile not found" });
+      }
+    }
+    for (const candidateConnectionId of [defaultConnectionId, connectionId]) {
+      if (candidateConnectionId === undefined || candidateConnectionId === null) continue;
+      const connection = await connections.getWithKey(candidateConnectionId);
+      if (!connection || connection.provider !== "image_generation") {
+        return reply.code(404).send({ error: "Slurp image connection not found" });
+      }
+    }
+    return updateCreatorImageConnections(app.db, (current) => {
+      const creatorConnectionIds = { ...current.creatorConnectionIds };
+      const creatorStyleProfileIds = { ...current.creatorStyleProfileIds };
+      if (creatorId) {
+        if (connectionId !== undefined) {
+          if (connectionId) creatorConnectionIds[creatorId] = connectionId;
+          else delete creatorConnectionIds[creatorId];
+        }
+        if (styleProfileId !== undefined) {
+          if (styleProfileId) creatorStyleProfileIds[creatorId] = styleProfileId;
+          else delete creatorStyleProfileIds[creatorId];
+        }
+      }
+      return {
+        defaultConnectionId: defaultConnectionId !== undefined ? defaultConnectionId : current.defaultConnectionId,
+        creatorConnectionIds,
+        creatorStyleProfileIds,
+      };
+    });
+  });
+
+  // Manual test trigger: runs one automatic-style post immediately, the same way the
+  // scheduler does (locked access, no guide), without waiting for the next cadence
+  // schedule or requiring auto-posting to be enabled.
+  app.post("/slurp/accounts/:id/auto-post/run-now", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    try {
+      // The player's tap: its picture's prompt rewrite is off the AI budget. Not foreground, which would
+      // also let run-now write for the player's own persona page.
+      const result = await generateAndApplyCreatorPost(
+        app.db,
+        { mode: "noodler", targetAccountId: id, access: await resolveSlurpAutomaticPostAccess(noodle, id) },
+        undefined,
+        undefined,
+        { playerAsked: true },
+      );
+      // Run-now never sets reviewImagePromptsBeforeSend, so the generator can only return a
+      // plain post here — no image-prompt review is ever produced on this path.
+      if (result.status === "generated") return result.post;
+      if (result.status === "busy") {
+        return reply.code(409).send({
+          error: "A generation for this Slurp account is already running.",
+        });
+      }
+      if (result.status === "connection_required") {
+        return reply.code(400).send({ error: "Select a Slurp generation connection first." });
+      }
+      if (result.status === "connection_not_found") {
+        return reply.code(404).send({ error: "Slurp generation connection not found" });
+      }
+      if (result.status === "disabled") {
+        return reply.code(400).send({ error: "Persona-owned Slurp profiles cannot post automatically" });
+      }
+      // The Creator exists; the Engine character or persona it was made from is gone (R1-078).
+      return reply
+        .code(409)
+        .send({ error: "This Creator's Engine character is gone. Link a new one in its settings to post again." });
+    } catch (error) {
+      logger.error(error, "[slurp] Manual run-now failed");
+      return reply.code(500).send({ error: "Manual post generation failed." });
+    }
+  });
+
+  // Global manual trigger: runs every automation-enabled creator (prioritizing those
+  // scheduled soonest), consuming each selected creator's near-future slot the same way
+  // an automatic run would. One creator's failure does not affect the others.
+  app.post("/slurp/auto-post/refresh-now", async (_req, reply) => {
+    const result = await refreshAllCreatorsNow(app.db);
+    if (result.status === "disabled") return reply.code(404).send({ error: "Not Found" });
+    return { outcomes: result.outcomes };
+  });
+
+  app.post("/slurp/auto-post/refresh-targeted", async (req, reply) => {
+    const parsed = slurpTargetedRefreshSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const result = await refreshTargetedCreatorsNow(
+      app.db,
+      parsed.data.accountIds,
+      parsed.data.executionId,
+      parsed.data.access ?? "locked",
+    );
+    if (result.status === "disabled") return reply.code(404).send({ error: "Not Found" });
+    return { outcomes: result.outcomes };
+  });
+
+  app.post("/slurp/refresh/images", async (req, reply) => {
+    const parsed = slpImagePromptConfirmationSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const result = await slpCreatorImages.generateReviewedImages({
+      prompts: parsed.data.prompts,
+      debugMode: parsed.data.debugMode === true,
+    });
+    if (!result.ok) return reply.code(400).send({ error: result.message });
+    return { finalized: result.finalized };
+  });
+
+  app.post("/slurp/refresh/images/cancel", async (req, reply) => {
+    const parsed = z
+      .object({ ids: z.array(z.string().min(1)).min(1).max(20) })
+      .strict()
+      .safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    return { cancelled: await slpCreatorImages.cancelReviewedImages(parsed.data.ids) };
+  });
+
+  app.post("/refresh", async (req, reply) => {
+    let decoded: DecodedCreatorMediaRequest<z.output<typeof slurpCreatorGenerationRequestSchema>>;
+    try {
+      decoded = await decodeCreatorMediaRequest(req, {
+        withMedia: slurpCreatorGenerationRequestSchema,
+        withoutMedia: slurpCreatorGenerationRequestSchema,
+      });
+    } catch (error) {
+      return sendCreatorMediaError(reply, error);
+    }
+    if (!decoded.success) return reply.code(400).send({ error: decoded.error.flatten() });
+    if (decoded.data.mode !== "noodler") return reply.code(404).send({ error: "Not Found" });
+    try {
+      const result = await generateAndApplyCreatorPost(
+        app.db,
+        decoded.data,
+        decoded.media,
+        admissionModeForRequest(req.headers),
+      );
+      if (result.status === "generated") {
+        return result.imagePromptReview ? { ...result.post, imagePromptReview: result.imagePromptReview } : result.post;
+      }
+      if (result.status === "busy") {
+        return reply.code(409).send({
+          error: "A generation for this Slurp account is already running.",
+        });
+      }
+      if (result.status === "connection_required") {
+        return reply.code(400).send({ error: "Select a Slurp generation connection first." });
+      }
+      if (result.status === "connection_not_found") {
+        return reply.code(404).send({ error: "Slurp generation connection not found" });
+      }
+      if (result.status === "disabled") {
+        return reply.code(400).send({ error: "Persona-owned Slurp profiles cannot post automatically" });
+      }
+      // The Creator exists; the Engine character or persona it was made from is gone (R1-078).
+      return reply
+        .code(409)
+        .send({ error: "This Creator's Engine character is gone. Link a new one in its settings to post again." });
+    } catch (error) {
+      if (slpIsAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
+      logger.error(error, "[slurp] Slurp post generation failed");
+      return reply.code(500).send({ error: "Slurp post generation failed." });
+    }
+  });
+}

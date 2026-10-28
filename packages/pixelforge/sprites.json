@@ -12,6 +12,7 @@
     "player": "sprites/player.png",
     "mira": "sprites/mira.png",
     "tam": "sprites/tam.png",
-    "rook": "sprites/rook.png"
+    "rook": "sprites/rook.png",
+    "fen": "sprites/fen.png"
   }
 }

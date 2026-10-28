@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Archive, ChevronDown, ChevronRight, Copy, CornerDownRight, MapPin, Plus, Split } from "lucide-react";
 import { compareSpatialLocations, type SpatialContextDefinition, type SpatialLocation } from "@marinara-engine/shared";
-import {
-  hierarchyTypeForLocation,
-  type SpatialHierarchyProfile,
-} from "../../../../../maps-shared/src/maps-model";
+import { hierarchyTypeForLocation, type SpatialHierarchyProfile } from "../../../../../maps-shared/src/maps-model";
 import { cn } from "../package-utils";
 import { SpatialLocationIcon } from "./SpatialLocationIcon";
 

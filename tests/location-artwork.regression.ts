@@ -41,11 +41,7 @@ assert.deepEqual(
   "Unresolved Gallery queries must not classify saved IDs as dangling",
 );
 
-const resolved = locationArtworkGaps(
-  locations,
-  new Set(["gallery-complete", "gallery-background"]),
-  true,
-);
+const resolved = locationArtworkGaps(locations, new Set(["gallery-complete", "gallery-background"]), true);
 assert.deepEqual(
   resolved.map(({ location, referenceMissing, mapBackgroundMissing }) => ({
     id: location.id,
@@ -62,11 +58,7 @@ assert.deepEqual(
   ],
   "Rejected and dangling roles must each remain eligible for a provider replacement request",
 );
-assert.equal(
-  resolved.length,
-  2,
-  "Every incomplete active location must map to one explicit provider request",
-);
+assert.equal(resolved.length, 2, "Every incomplete active location must map to one explicit provider request");
 assert.deepEqual(
   replacementArtworkPatch(resolved[0]!, "gallery-new-reference"),
   {
@@ -138,6 +130,4 @@ assert.deepStrictEqual(
   "Generation must fill only the unchanged missing role and preserve the latest background position",
 );
 
-console.info(
-  "World Maps artwork rejection and dangling-link regression passed.",
-);
+console.info("World Maps artwork rejection and dangling-link regression passed.");

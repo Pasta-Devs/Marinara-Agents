@@ -62,10 +62,7 @@ import {
   type SpatialGenerationPromptOption,
   type SpatialTurnPromptTemplates,
 } from "../../../../maps-shared/src/maps-model";
-import {
-  buildOwnerSpatialProjection,
-  formatOwnerSpatialPrompt,
-} from "../../../../maps-shared/src/runtime-prompt";
+import { buildOwnerSpatialProjection, formatOwnerSpatialPrompt } from "../../../../maps-shared/src/runtime-prompt";
 import {
   SpatialHierarchyProfileFields,
   type SpatialHierarchyProfileDraft,
@@ -261,9 +258,7 @@ export function SpatialMapsHome({
   const updateAgentConfiguration = useUpdateSpatialAgentConfiguration();
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState<string | null>(null);
-  const [agentDescription, setAgentDescription] = useState(
-    agentInfo?.description?.trim() || DEFAULT_MAPS_DESCRIPTION,
-  );
+  const [agentDescription, setAgentDescription] = useState(agentInfo?.description?.trim() || DEFAULT_MAPS_DESCRIPTION);
   const [agentAuthor, setAgentAuthor] = useState(agentInfo?.author?.trim() || "Pasta Devs");
   const [agentConnectionId, setAgentConnectionId] = useState("");
   const [agentFieldsDirty, setAgentFieldsDirty] = useState(false);
@@ -321,10 +316,7 @@ export function SpatialMapsHome({
     } catch (error) {
       return {
         text: "",
-        error:
-          error instanceof Error
-            ? error.message
-            : "The resolved turn prompt could not be previewed.",
+        error: error instanceof Error ? error.message : "The resolved turn prompt could not be previewed.",
       };
     }
   }, [liveTurnPromptProjection, turnPromptDraft, turnPromptMode]);
@@ -354,9 +346,7 @@ export function SpatialMapsHome({
         configuration?.description?.trim() || agentInfo?.description?.trim() || DEFAULT_MAPS_DESCRIPTION,
       );
       setAgentAuthor(
-        (typeof settings.author === "string" && settings.author.trim()) ||
-          agentInfo?.author?.trim() ||
-          "Pasta Devs",
+        (typeof settings.author === "string" && settings.author.trim()) || agentInfo?.author?.trim() || "Pasta Devs",
       );
     }
     if (!agentConnectionDirty) setAgentConnectionId(configuration?.connectionId ?? "");
@@ -395,15 +385,21 @@ export function SpatialMapsHome({
     resetTurnPromptTemplatesUpdate();
     resetPromptPreviewRequest();
     resetSpatialUpdate();
-  }, [chatId, chatOwnerMode, resetGenerationPreferences, resetPromptLibraryUpdate, resetPromptPreviewRequest, resetSpatialUpdate, resetTurnPromptTemplatesUpdate]);
+  }, [
+    chatId,
+    chatOwnerMode,
+    resetGenerationPreferences,
+    resetPromptLibraryUpdate,
+    resetPromptPreviewRequest,
+    resetSpatialUpdate,
+    resetTurnPromptTemplatesUpdate,
+  ]);
   const promptAppliesToCurrentChat = Boolean(chatId && supportedChat && chatOwnerMode === promptMode);
   const resolvedPromptPreferences = useMemo(
     () =>
       generationPreferencesWithPromptLibrary(
         promptLibraries.data?.[promptMode],
-        promptAppliesToCurrentChat
-          ? spatial.data?.generationPreferences
-          : defaultGenerationPreferences(promptMode),
+        promptAppliesToCurrentChat ? spatial.data?.generationPreferences : defaultGenerationPreferences(promptMode),
         promptMode,
       ),
     [promptAppliesToCurrentChat, promptLibraries.data, promptMode, spatial.data?.generationPreferences],
@@ -442,11 +438,11 @@ export function SpatialMapsHome({
   const promptValidation = spatialGenerationPreferencesSchema.safeParse(promptDraft);
   const promptValidationMessage = promptValidation.success
     ? null
-    : promptValidation.error.issues[0]?.message ?? "The prompt templates are incomplete.";
+    : (promptValidation.error.issues[0]?.message ?? "The prompt templates are incomplete.");
   const turnPromptValidation = spatialTurnPromptTemplatesSchema.safeParse(turnPromptDraft);
   const turnPromptValidationMessage = turnPromptValidation.success
     ? null
-    : turnPromptValidation.error.issues[0]?.message ?? "The turn prompt templates are incomplete.";
+    : (turnPromptValidation.error.issues[0]?.message ?? "The turn prompt templates are incomplete.");
   const activeLocations = definition?.locations.filter((location) => location.status === "active") ?? [];
   const expansionPreviewTarget =
     activeLocations.find((location) => location.id === spatial.data?.currentLocationId) ??
@@ -455,15 +451,13 @@ export function SpatialMapsHome({
     null;
   const promptPreviewUnavailable = !promptAppliesToCurrentChat;
   const expansionPreviewUnavailable = promptOperation === "expansion" && !expansionPreviewTarget;
-  const hierarchySaveError = updateSpatial.isError
-    ? getSpatialContextProblem(updateSpatial.error).message
-    : null;
+  const hierarchySaveError = updateSpatial.isError ? getSpatialContextProblem(updateSpatial.error).message : null;
   const hierarchyDraftValidation = hierarchyDraft
     ? spatialHierarchyProfileSchema.safeParse(hierarchyDraft.profile)
     : null;
   const hierarchyDraftValidationMessage =
     hierarchyDraftValidation && !hierarchyDraftValidation.success
-      ? hierarchyDraftValidation.error.issues[0]?.message ?? "Review the location types before saving."
+      ? (hierarchyDraftValidation.error.issues[0]?.message ?? "Review the location types before saving.")
       : null;
   const turnPromptSaveError = updateTurnPromptTemplates.isError
     ? getSpatialContextProblem(updateTurnPromptTemplates.error).message
@@ -624,7 +618,7 @@ export function SpatialMapsHome({
           : {}),
         groundingMode: "setup",
         sourceLorebookIds: [],
-        hierarchyMode: promptOperation === "draft" ? "auto" : spatial.data?.hierarchyProfile.mode ?? "auto",
+        hierarchyMode: promptOperation === "draft" ? "auto" : (spatial.data?.hierarchyProfile.mode ?? "auto"),
         generationPreferencesOverride: promptValidation.data,
         debugMode: false,
       });
@@ -710,9 +704,7 @@ export function SpatialMapsHome({
       setAgentConnectionDirty(false);
       setAgentFieldsSaved(true);
     } catch (error) {
-      setAgentFieldsError(
-        error instanceof Error ? error.message : "World Maps settings could not be saved.",
-      );
+      setAgentFieldsError(error instanceof Error ? error.message : "World Maps settings could not be saved.");
     }
   };
   const closeHome = async () => {
@@ -726,9 +718,7 @@ export function SpatialMapsHome({
             cancelLabel: "Keep editing",
             tone: "destructive",
           })
-        : window.confirm(
-            "You have unsaved World Maps agent changes. Leave the editor and discard them?",
-          );
+        : window.confirm("You have unsaved World Maps agent changes. Leave the editor and discard them?");
       if (!discard) return;
     }
     onClose();
@@ -777,9 +767,7 @@ export function SpatialMapsHome({
               <Check size="0.6875rem" /> Saved
             </span>
           )}
-          {agentFieldsDirty && !agentFieldsError && (
-            <span className="mari-editor-status mr-2">Unsaved</span>
-          )}
+          {agentFieldsDirty && !agentFieldsError && <span className="mari-editor-status mr-2">Unsaved</span>}
           <button
             type="button"
             onClick={() => void saveAgentFields()}
@@ -835,9 +823,7 @@ export function SpatialMapsHome({
           <MapsFieldGroup label="Description" icon={<Info size="0.875rem" />}>
             <div className="grid gap-3 sm:grid-cols-[1fr_14rem]">
               <label className="flex min-w-0 flex-col gap-1.5">
-                <span className="text-[0.6875rem] font-medium text-[var(--marinara-editor-muted)]">
-                  Description
-                </span>
+                <span className="text-[0.6875rem] font-medium text-[var(--marinara-editor-muted)]">Description</span>
                 <input
                   value={agentDescription}
                   onChange={(event) => {
@@ -850,9 +836,7 @@ export function SpatialMapsHome({
                 />
               </label>
               <label className="flex min-w-0 flex-col gap-1.5">
-                <span className="text-[0.6875rem] font-medium text-[var(--marinara-editor-muted)]">
-                  Author
-                </span>
+                <span className="text-[0.6875rem] font-medium text-[var(--marinara-editor-muted)]">Author</span>
                 <input
                   value={agentAuthor}
                   onChange={(event) => {
@@ -891,8 +875,8 @@ export function SpatialMapsHome({
               })}
             </div>
             <p className="mt-1.5 text-[0.625rem] text-[var(--marinara-editor-muted)]">
-              World Maps runs before generation so its saved location can ground the main AI response.
-              This feature-owned phase is fixed.
+              World Maps runs before generation so its saved location can ground the main AI response. This
+              feature-owned phase is fixed.
             </p>
           </MapsFieldGroup>
 
@@ -914,171 +898,177 @@ export function SpatialMapsHome({
             </p>
           </MapsFieldGroup>
 
-        <article className="mari-editor-panel p-4">
-          <div className="flex flex-wrap items-start gap-3">
-            <span className={`mt-0.5 ${packageReady ? "text-emerald-400" : "text-amber-400"}`}>
-              {packageReady ? <CheckCircle2 size="1rem" /> : <CircleAlert size="1rem" />}
+          <article className="mari-editor-panel p-4">
+            <div className="flex flex-wrap items-start gap-3">
+              <span className={`mt-0.5 ${packageReady ? "text-emerald-400" : "text-amber-400"}`}>
+                {packageReady ? <CheckCircle2 size="1rem" /> : <CircleAlert size="1rem" />}
+              </span>
+              <div className="min-w-52 flex-1">
+                <h2 className="text-xs font-semibold">Installed package</h2>
+                <p className="mt-1 text-[0.6875rem] text-[var(--marinara-editor-muted)]">
+                  {packageReady ? "Ready to use" : "Restart or package attention may be required"}
+                  {packageInfo?.version ? ` · Version ${packageInfo.version}` : ""}
+                </p>
+              </div>
+            </div>
+          </article>
+
+          <article className="mari-editor-panel flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-accent)]">
+              <Map size="1rem" />
             </span>
-            <div className="min-w-52 flex-1">
-              <h2 className="text-xs font-semibold">Installed package</h2>
-              <p className="mt-1 text-[0.6875rem] text-[var(--marinara-editor-muted)]">
-                {packageReady ? "Ready to use" : "Restart or package attention may be required"}
-                {packageInfo?.version ? ` · Version ${packageInfo.version}` : ""}
-              </p>
-            </div>
-          </div>
-        </article>
-
-        <article className="mari-editor-panel flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-accent)]">
-            <Map size="1rem" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-xs font-semibold">Shared worlds and templates</h2>
-            <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-              Link one canonical world across chats, or add independent template copies when stories should diverge.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onOpenLibrary}
-            className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 shrink-0 justify-center px-4 text-xs"
-          >
-            Open world library
-          </button>
-        </article>
-
-        <article className="mari-editor-panel overflow-hidden">
-          <div className="flex items-start gap-3 border-b border-[var(--border)] px-4 py-3">
-            <MessageSquare size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
             <div className="min-w-0 flex-1">
-              <h2 className="text-xs font-semibold">Current chat</h2>
-              <p className="mt-1 truncate text-[0.6875rem] text-[var(--marinara-editor-muted)]">
-                {chatId ? `${chatName || "Untitled chat"} · ${modeLabel(chatMode)}` : "No chat is open"}
+              <h2 className="text-xs font-semibold">Shared worlds and templates</h2>
+              <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                Link one canonical world across chats, or add independent template copies when stories should diverge.
               </p>
             </div>
-          </div>
+            <button
+              type="button"
+              onClick={onOpenLibrary}
+              className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 shrink-0 justify-center px-4 text-xs"
+            >
+              Open world library
+            </button>
+          </article>
 
-          {!chatId ? (
-            <div className="px-4 py-5 text-sm text-[var(--marinara-editor-muted)]">
-              Open a Roleplay or Game chat to activate Maps and create its world hierarchy.
+          <article className="mari-editor-panel overflow-hidden">
+            <div className="flex items-start gap-3 border-b border-[var(--border)] px-4 py-3">
+              <MessageSquare size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
+              <div className="min-w-0 flex-1">
+                <h2 className="text-xs font-semibold">Current chat</h2>
+                <p className="mt-1 truncate text-[0.6875rem] text-[var(--marinara-editor-muted)]">
+                  {chatId ? `${chatName || "Untitled chat"} · ${modeLabel(chatMode)}` : "No chat is open"}
+                </p>
+              </div>
             </div>
-          ) : !supportedChat ? (
-            <div className="px-4 py-5 text-sm text-[var(--marinara-editor-muted)]">
-              World Maps supports Roleplay and Game. The current {modeLabel(chatMode)} chat is unchanged.
-            </div>
-          ) : (
-            <div className="space-y-4 p-4">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={enabledForChat}
-                disabled={!onEnabledForChatChange || activationPending}
-                onClick={() => void toggleForChat()}
-                className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60 ${
-                  enabledForChat
-                    ? "bg-[var(--primary)]/10 ring-[var(--primary)]/30"
-                    : "bg-[var(--secondary)] ring-[var(--border)] hover:bg-[var(--accent)]"
-                }`}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-medium">Enable World Maps</span>
-                  <span className="mt-0.5 block text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                    {enabledForChat
-                      ? "Active in this chat. Saved map context can participate in turns."
-                      : "Installed in Marinara, but not active in this chat yet."}
-                  </span>
-                </span>
-                <span
-                  aria-hidden="true"
-                  className={`h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors ${
-                    enabledForChat ? "bg-[var(--primary)]" : "bg-[var(--muted-foreground)]/50"
+
+            {!chatId ? (
+              <div className="px-4 py-5 text-sm text-[var(--marinara-editor-muted)]">
+                Open a Roleplay or Game chat to activate Maps and create its world hierarchy.
+              </div>
+            ) : !supportedChat ? (
+              <div className="px-4 py-5 text-sm text-[var(--marinara-editor-muted)]">
+                World Maps supports Roleplay and Game. The current {modeLabel(chatMode)} chat is unchanged.
+              </div>
+            ) : (
+              <div className="space-y-4 p-4">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={enabledForChat}
+                  disabled={!onEnabledForChatChange || activationPending}
+                  onClick={() => void toggleForChat()}
+                  className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60 ${
+                    enabledForChat
+                      ? "bg-[var(--primary)]/10 ring-[var(--primary)]/30"
+                      : "bg-[var(--secondary)] ring-[var(--border)] hover:bg-[var(--accent)]"
                   }`}
                 >
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-medium">Enable World Maps</span>
+                    <span className="mt-0.5 block text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                      {enabledForChat
+                        ? "Active in this chat. Saved map context can participate in turns."
+                        : "Installed in Marinara, but not active in this chat yet."}
+                    </span>
+                  </span>
                   <span
-                    className={`block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-                      enabledForChat ? "translate-x-3.5" : ""
+                    aria-hidden="true"
+                    className={`h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors ${
+                      enabledForChat ? "bg-[var(--primary)]" : "bg-[var(--muted-foreground)]/50"
                     }`}
-                  />
-                </span>
-              </button>
+                  >
+                    <span
+                      className={`block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                        enabledForChat ? "translate-x-3.5" : ""
+                      }`}
+                    />
+                  </span>
+                </button>
 
-              {activationPending && (
-                <p role="status" aria-live="polite" className="text-[0.6875rem] text-[var(--marinara-editor-muted)]">
-                  Updating World Maps…
-                </p>
-              )}
-              {activationError && (
-                <p role="alert" className="rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]">
-                  {activationError}
-                </p>
-              )}
-
-              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/35 p-3">
-                <MapPin size="0.9375rem" className="shrink-0 text-[var(--marinara-editor-muted)]" />
-                <div className="min-w-52 flex-1">
-                  <p className="text-xs font-semibold">{spatial.isError ? "Map status unavailable" : mapState}</p>
-                  <p className="mt-1 text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                    {spatial.isLoading
-                      ? "Loading this chat’s map status…"
-                      : spatial.isError
-                        ? "Retry the status check or open the map workspace to recover."
-                        : definition
-                          ? `${activeLocationCount} active ${activeLocationCount === 1 ? "location" : "locations"}${currentPath ? ` · ${currentPath}` : ""}`
-                          : "Create manually, import a map, or draft the hierarchy with AI."}
+                {activationPending && (
+                  <p role="status" aria-live="polite" className="text-[0.6875rem] text-[var(--marinara-editor-muted)]">
+                    Updating World Maps…
                   </p>
-                </div>
-                {spatial.isError && (
-                  <button
-                    type="button"
-                    onClick={() => void spatial.refetch()}
-                    className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-xs font-medium text-[var(--marinara-editor-muted)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-                  >
-                    <RefreshCw size="0.8125rem" /> Retry status
-                  </button>
                 )}
-              </div>
-
-              {definition ? (
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <button
-                    type="button"
-                    onClick={onOpenMap}
-                    disabled={!enabledForChat || activationPending || !definition.enabled}
-                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 text-xs font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
+                {activationError && (
+                  <p
+                    role="alert"
+                    className="rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
                   >
-                    <Map size="0.875rem" /> Open map
-                  </button>
+                    {activationError}
+                  </p>
+                )}
+
+                <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/35 p-3">
+                  <MapPin size="0.9375rem" className="shrink-0 text-[var(--marinara-editor-muted)]" />
+                  <div className="min-w-52 flex-1">
+                    <p className="text-xs font-semibold">{spatial.isError ? "Map status unavailable" : mapState}</p>
+                    <p className="mt-1 text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                      {spatial.isLoading
+                        ? "Loading this chat’s map status…"
+                        : spatial.isError
+                          ? "Retry the status check or open the map workspace to recover."
+                          : definition
+                            ? `${activeLocationCount} active ${activeLocationCount === 1 ? "location" : "locations"}${currentPath ? ` · ${currentPath}` : ""}`
+                            : "Create manually, import a map, or draft the hierarchy with AI."}
+                    </p>
+                  </div>
+                  {spatial.isError && (
+                    <button
+                      type="button"
+                      onClick={() => void spatial.refetch()}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-xs font-medium text-[var(--marinara-editor-muted)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                    >
+                      <RefreshCw size="0.8125rem" /> Retry status
+                    </button>
+                  )}
+                </div>
+
+                {definition ? (
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={onOpenMap}
+                      disabled={!enabledForChat || activationPending || !definition.enabled}
+                      className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 text-xs font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
+                    >
+                      <Map size="0.875rem" /> Open map
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onOpenEditor}
+                      disabled={!enabledForChat || activationPending}
+                      className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-4 text-xs font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
+                    >
+                      <PencilLine size="0.875rem" /> Edit map
+                    </button>
+                  </div>
+                ) : (
                   <button
                     type="button"
                     onClick={onOpenEditor}
                     disabled={!enabledForChat || activationPending}
-                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-4 text-xs font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 text-xs font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
                   >
-                    <PencilLine size="0.875rem" /> Edit map
+                    <Map size="0.875rem" /> Create map
                   </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onOpenEditor}
-                  disabled={!enabledForChat || activationPending}
-                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 text-xs font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
-                >
-                  <Map size="0.875rem" /> Create map
-                </button>
-              )}
-            </div>
-          )}
-        </article>
+                )}
+              </div>
+            )}
+          </article>
 
-        <article className="mari-editor-panel p-4" aria-labelledby="maps-generation-prompt-title">
+          <article className="mari-editor-panel p-4" aria-labelledby="maps-generation-prompt-title">
             <div className="flex flex-wrap items-start gap-3">
               <FileText size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
               <div className="min-w-52 flex-1">
-                <h2 id="maps-generation-prompt-title" className="text-xs font-semibold">Generation prompt</h2>
+                <h2 id="maps-generation-prompt-title" className="text-xs font-semibold">
+                  Generation prompt
+                </h2>
                 <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                  These named templates are global. Edit them once, then select an option independently in each matching chat.
+                  These named templates are global. Edit them once, then select an option independently in each matching
+                  chat.
                 </p>
               </div>
               <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
@@ -1086,7 +1076,11 @@ export function SpatialMapsHome({
               </span>
             </div>
 
-            <div className="mt-3 flex rounded-lg bg-[var(--secondary)] p-1 ring-1 ring-[var(--border)]" role="group" aria-label="Prompt library mode">
+            <div
+              className="mt-3 flex rounded-lg bg-[var(--secondary)] p-1 ring-1 ring-[var(--border)]"
+              role="group"
+              aria-label="Prompt library mode"
+            >
               {(["roleplay", "game"] as const).map((mode) => (
                 <button
                   key={mode}
@@ -1110,19 +1104,29 @@ export function SpatialMapsHome({
             </div>
 
             {promptLibraries.isLoading && (
-              <p className="mt-3 flex min-h-11 items-center gap-2 text-[0.6875rem] text-[var(--marinara-editor-muted)]" role="status">
+              <p
+                className="mt-3 flex min-h-11 items-center gap-2 text-[0.6875rem] text-[var(--marinara-editor-muted)]"
+                role="status"
+              >
                 <LoaderCircle size="0.8125rem" className="animate-spin" /> Loading global prompt library…
               </p>
             )}
             {promptLibraries.isError && (
-              <p className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]" role="alert">
-                The global prompt library could not be loaded. Existing chat templates remain available until this is retried.
+              <p
+                className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+                role="alert"
+              >
+                The global prompt library could not be loaded. Existing chat templates remain available until this is
+                retried.
               </p>
             )}
 
             <div className="mt-3 border-y border-[var(--border)] py-3">
               <div className="flex flex-wrap items-end gap-2">
-                <label className="min-w-52 flex-1 text-[0.6875rem] font-semibold" htmlFor="maps-generation-prompt-option">
+                <label
+                  className="min-w-52 flex-1 text-[0.6875rem] font-semibold"
+                  htmlFor="maps-generation-prompt-option"
+                >
                   Prompt option
                   <select
                     id="maps-generation-prompt-option"
@@ -1136,7 +1140,9 @@ export function SpatialMapsHome({
                     className="mt-2 min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-xs font-medium outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-50"
                   >
                     {promptDraft.options.map((option) => (
-                      <option key={option.id} value={option.id}>{option.name}</option>
+                      <option key={option.id} value={option.id}>
+                        {option.name}
+                      </option>
                     ))}
                   </select>
                 </label>
@@ -1155,7 +1161,8 @@ export function SpatialMapsHome({
                 </button>
               </div>
               <p className="mt-2 text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                Options are shared globally. {promptAppliesToCurrentChat
+                Options are shared globally.{" "}
+                {promptAppliesToCurrentChat
                   ? `Selecting one activates it for ${chatName ?? "the current chat"}.`
                   : `Open a ${modeLabel(promptMode)} chat to select its active option or preview resolved context.`}
               </p>
@@ -1192,7 +1199,11 @@ export function SpatialMapsHome({
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2" aria-label="Prompt template selection">
-              <div className="flex rounded-lg bg-[var(--secondary)] p-1 ring-1 ring-[var(--border)]" role="group" aria-label="Map operation">
+              <div
+                className="flex rounded-lg bg-[var(--secondary)] p-1 ring-1 ring-[var(--border)]"
+                role="group"
+                aria-label="Map operation"
+              >
                 {(["draft", "expansion"] as const).map((value) => (
                   <button
                     key={value}
@@ -1200,7 +1211,9 @@ export function SpatialMapsHome({
                     aria-pressed={promptOperation === value}
                     onClick={() => setPromptOperation(value)}
                     className={`min-h-9 rounded-md px-3 text-[0.6875rem] font-medium ${
-                      promptOperation === value ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm" : "text-[var(--marinara-editor-muted)]"
+                      promptOperation === value
+                        ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
+                        : "text-[var(--marinara-editor-muted)]"
                     }`}
                   >
                     {value === "draft" ? "New map" : "Expansion"}
@@ -1265,10 +1278,12 @@ export function SpatialMapsHome({
                 Available template variables ({SPATIAL_GENERATION_PROMPT_VARIABLES.length} built-in
                 {activePromptOption.customVariables.length > 0
                   ? ` + ${activePromptOption.customVariables.length} custom`
-                  : ""})
+                  : ""}
+                )
               </summary>
               <p className="mt-2 max-w-3xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                Built-in values come from the current request and chat. Their position in a template is editable, but generated context and response contracts cannot be replaced with stored text.
+                Built-in values come from the current request and chat. Their position in a template is editable, but
+                generated context and response contracts cannot be replaced with stored text.
               </p>
 
               <div className="mt-3 divide-y divide-[var(--border)] border-y border-[var(--border)]">
@@ -1278,7 +1293,9 @@ export function SpatialMapsHome({
                     <div key={variable} className="py-3 first:pt-2 last:pb-2">
                       <div className="flex flex-wrap items-start gap-2">
                         <code className="inline-flex items-center gap-1 rounded-md bg-[var(--secondary)] px-2 py-1 font-mono text-[0.625rem] text-[var(--foreground)]">
-                          <Code2 size="0.625rem" /> ${"{"}{variable}{"}"}
+                          <Code2 size="0.625rem" /> ${"{"}
+                          {variable}
+                          {"}"}
                         </code>
                         <span className="rounded-full border border-[var(--border)] px-2 py-1 text-[0.5625rem] font-medium text-[var(--marinara-editor-muted)]">
                           {detail.source}
@@ -1313,7 +1330,8 @@ export function SpatialMapsHome({
                   <div>
                     <h3 className="text-[0.6875rem] font-semibold">Custom variables</h3>
                     <p className="mt-1 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                      Store reusable text with this prompt option, then insert it in any System or User template using its token.
+                      Store reusable text with this prompt option, then insert it in any System or User template using
+                      its token.
                     </p>
                   </div>
                   {promptEditing && (
@@ -1338,7 +1356,9 @@ export function SpatialMapsHome({
                       <div key={index} className="py-3">
                         <div className="mb-2 flex items-center justify-between gap-2">
                           <code className="rounded-md bg-[var(--secondary)] px-2 py-1 font-mono text-[0.625rem]">
-                            ${"{"}{variable.name || "variableName"}{"}"}
+                            ${"{"}
+                            {variable.name || "variableName"}
+                            {"}"}
                           </code>
                           {promptEditing && (
                             <button
@@ -1390,9 +1410,17 @@ export function SpatialMapsHome({
               <div className="flex flex-wrap items-start gap-3">
                 <Eye size="0.875rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
                 <div className="min-w-52 flex-1">
-                  <h3 id="maps-resolved-prompt-title" className="text-xs font-semibold">Resolved prompt preview</h3>
+                  <h3 id="maps-resolved-prompt-title" className="text-xs font-semibold">
+                    Resolved prompt preview
+                  </h3>
                   <p className="mt-1 text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                    Uses Medium size, setup context, and {promptOperation === "draft" ? "Auto hierarchy" : expansionPreviewTarget ? `the existing hierarchy at ${expansionPreviewTarget.name}` : "the existing hierarchy"}. No model request is made.
+                    Uses Medium size, setup context, and{" "}
+                    {promptOperation === "draft"
+                      ? "Auto hierarchy"
+                      : expansionPreviewTarget
+                        ? `the existing hierarchy at ${expansionPreviewTarget.name}`
+                        : "the existing hierarchy"}
+                    . No model request is made.
                   </p>
                 </div>
                 <button
@@ -1407,15 +1435,22 @@ export function SpatialMapsHome({
                   className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-3 text-xs font-medium transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   {previewGenerationPrompt.isPending ? (
-                    <><LoaderCircle size="0.8125rem" className="animate-spin" /> Resolving</>
+                    <>
+                      <LoaderCircle size="0.8125rem" className="animate-spin" /> Resolving
+                    </>
                   ) : (
-                    <><Eye size="0.8125rem" /> {promptPreview ? "Refresh preview" : "Preview resolved prompt"}</>
+                    <>
+                      <Eye size="0.8125rem" /> {promptPreview ? "Refresh preview" : "Preview resolved prompt"}
+                    </>
                   )}
                 </button>
               </div>
 
               {promptValidationMessage && promptEditing && (
-                <p className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]" role="alert">
+                <p
+                  className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+                  role="alert"
+                >
                   {promptValidationMessage}
                 </p>
               )}
@@ -1430,7 +1465,10 @@ export function SpatialMapsHome({
                 </p>
               )}
               {previewGenerationPrompt.isError && (
-                <p className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]" role="alert">
+                <p
+                  className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+                  role="alert"
+                >
                   {previewGenerationPrompt.error instanceof Error
                     ? previewGenerationPrompt.error.message
                     : "The resolved prompt could not be previewed."}
@@ -1455,7 +1493,10 @@ export function SpatialMapsHome({
                       {promptPreview.system.length} chars
                     </span>
                   </div>
-                  <pre aria-label="Resolved System message" className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--foreground)]">
+                  <pre
+                    aria-label="Resolved System message"
+                    className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--foreground)]"
+                  >
                     {promptPreview.system}
                   </pre>
                   <div className="mt-4 flex items-center justify-between gap-3">
@@ -1464,7 +1505,10 @@ export function SpatialMapsHome({
                       {promptPreview.user.length} chars
                     </span>
                   </div>
-                  <pre aria-label="Resolved User message" className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--foreground)]">
+                  <pre
+                    aria-label="Resolved User message"
+                    className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--foreground)]"
+                  >
                     {promptPreview.user}
                   </pre>
                   <div className="mt-3 flex justify-end">
@@ -1473,7 +1517,12 @@ export function SpatialMapsHome({
                       onClick={() => void copyPromptPreview()}
                       className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
                     >
-                      <ClipboardCopy size="0.75rem" /> {promptCopyStatus === "copied" ? "Copied" : promptCopyStatus === "failed" ? "Copy failed" : "Copy System + User"}
+                      <ClipboardCopy size="0.75rem" />{" "}
+                      {promptCopyStatus === "copied"
+                        ? "Copied"
+                        : promptCopyStatus === "failed"
+                          ? "Copy failed"
+                          : "Copy System + User"}
                     </button>
                   </div>
                 </div>
@@ -1481,14 +1530,20 @@ export function SpatialMapsHome({
             </section>
 
             {updateGenerationPreferences.isError && (
-              <p className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]" role="alert">
+              <p
+                className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+                role="alert"
+              >
                 {updateGenerationPreferences.error instanceof Error
                   ? updateGenerationPreferences.error.message
                   : "The generation prompt could not be saved."}
               </p>
             )}
             {updatePromptLibrary.isError && (
-              <p className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]" role="alert">
+              <p
+                className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+                role="alert"
+              >
                 {updatePromptLibrary.error instanceof Error
                   ? updatePromptLibrary.error.message
                   : "The global prompt library could not be saved."}
@@ -1536,9 +1591,7 @@ export function SpatialMapsHome({
                         updateGenerationPreferences.isPending ||
                         !promptValidation.success
                       }
-                      onClick={() =>
-                        promptValidation.success && void saveGlobalPromptLibrary(promptValidation.data)
-                      }
+                      onClick={() => promptValidation.success && void saveGlobalPromptLibrary(promptValidation.data)}
                       className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
                     >
                       {updatePromptLibrary.isPending || updateGenerationPreferences.isPending ? (
@@ -1563,386 +1616,404 @@ export function SpatialMapsHome({
             </div>
           </article>
 
-        <article
-          className="mari-editor-panel p-4"
-          aria-labelledby="maps-turn-prompt-title"
-        >
-          <div className="flex flex-wrap items-start gap-3">
-            <Code2 size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
-            <div className="min-w-52 flex-1">
-              <h2 id="maps-turn-prompt-title" className="text-xs font-semibold">Turn prompt insert</h2>
-              <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                Edit the global system message injected once per model request before visible history. Roleplay and Game templates apply to every matching chat and are not copied into chat messages.
-              </p>
+          <article className="mari-editor-panel p-4" aria-labelledby="maps-turn-prompt-title">
+            <div className="flex flex-wrap items-start gap-3">
+              <Code2 size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
+              <div className="min-w-52 flex-1">
+                <h2 id="maps-turn-prompt-title" className="text-xs font-semibold">
+                  Turn prompt insert
+                </h2>
+                <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                  Edit the global system message injected once per model request before visible history. Roleplay and
+                  Game templates apply to every matching chat and are not copied into chat messages.
+                </p>
+              </div>
+              <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
+                {globalTurnPromptTemplates.isError
+                  ? "Templates unavailable"
+                  : !globalTurnPromptTemplates.isSuccess
+                    ? "Loading templates"
+                    : turnPromptEditing
+                      ? "Unsaved preview"
+                      : liveTurnPromptProjection
+                        ? turnPromptIsActive
+                          ? "Live current chat"
+                          : "Current map, inactive"
+                        : "Format example"}
+              </span>
             </div>
-            <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
-              {globalTurnPromptTemplates.isError
-                ? "Templates unavailable"
-                : !globalTurnPromptTemplates.isSuccess
-                  ? "Loading templates"
-                  : turnPromptEditing
-                ? "Unsaved preview"
-                : liveTurnPromptProjection
-                  ? turnPromptIsActive
-                    ? "Live current chat"
-                    : "Current map, inactive"
-                  : "Format example"}
-            </span>
-          </div>
 
-          <div
-            className="mt-3 flex rounded-lg bg-[var(--secondary)] p-1 ring-1 ring-[var(--border)]"
-            role="group"
-            aria-label="Turn prompt mode"
-          >
-            {(["roleplay", "game"] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                aria-pressed={turnPromptMode === mode}
-                disabled={updateTurnPromptTemplates.isPending || !globalTurnPromptTemplates.isSuccess}
-                onClick={() => {
-                  setTurnPromptMode(mode);
-                  setTurnPromptCopyStatus("idle");
-                }}
-                className={`min-h-11 flex-1 rounded-md px-3 text-[0.6875rem] font-medium disabled:opacity-45 ${
-                  turnPromptMode === mode
-                    ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
-                    : "text-[var(--marinara-editor-muted)]"
-                }`}
-              >
-                {modeLabel(mode)}
-              </button>
-            ))}
-          </div>
-
-          {turnPromptLoadError && (
             <div
-              className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
-              role="alert"
+              className="mt-3 flex rounded-lg bg-[var(--secondary)] p-1 ring-1 ring-[var(--border)]"
+              role="group"
+              aria-label="Turn prompt mode"
             >
-              <p>
-                Global turn prompt templates could not load. Editing and copying are disabled to protect saved templates. {turnPromptLoadError}
-              </p>
-              <button
-                type="button"
-                onClick={() => void globalTurnPromptTemplates.refetch()}
-                disabled={globalTurnPromptTemplates.isFetching}
-                className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg border border-current px-3 text-xs font-semibold disabled:opacity-45"
-              >
-                {globalTurnPromptTemplates.isFetching ? (
-                  <LoaderCircle size="0.75rem" className="animate-spin" />
-                ) : (
-                  <RotateCcw size="0.75rem" />
-                )}
-                {globalTurnPromptTemplates.isFetching ? "Retrying" : "Retry"}
-              </button>
-            </div>
-          )}
-
-          {turnPromptEditing && (
-            <div className="mt-4 border-t border-[var(--border)] pt-4">
-              <label
-                htmlFor={`maps-turn-prompt-template-${turnPromptMode}`}
-                className="text-[0.6875rem] font-semibold"
-              >
-                {modeLabel(turnPromptMode)} turn prompt template
-              </label>
-              <p className="mt-1 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                Marinara keeps the application-owned <code className="font-mono">&lt;spatial_context&gt;</code> wrapper around this text. Required variables preserve current location data and the mode's authority rule.
-              </p>
-              <textarea
-                id={`maps-turn-prompt-template-${turnPromptMode}`}
-                aria-label={`${modeLabel(turnPromptMode)} turn prompt template`}
-                value={turnPromptDraft[turnPromptMode]}
-                onChange={(event) => {
-                  setTurnPromptDraft((current) => ({
-                    ...current,
-                    [turnPromptMode]: event.target.value,
-                  }));
-                  updateTurnPromptTemplates.reset();
-                }}
-                disabled={updateTurnPromptTemplates.isPending || !globalTurnPromptTemplates.isSuccess}
-                spellCheck={false}
-                style={{ minHeight: "32rem" }}
-                className="mt-3 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 font-mono text-xs leading-relaxed text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-45"
-              />
-              <div className="mt-3" aria-label="Turn prompt variables">
-                <p className="text-[0.625rem] font-semibold text-[var(--marinara-editor-muted)]">
-                  Available variables
-                </p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {SPATIAL_TURN_PROMPT_VARIABLES.map((variable) => (
-                    <code
-                      key={variable}
-                      className="rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-[0.625rem] text-[var(--foreground)]"
-                    >
-                      {`\${${variable}}`}
-                    </code>
-                  ))}
-                </div>
-              </div>
-              {(turnPromptValidationMessage || turnPromptSaveError) && (
-                <p
-                  className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
-                  role="alert"
+              {(["roleplay", "game"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={turnPromptMode === mode}
+                  disabled={updateTurnPromptTemplates.isPending || !globalTurnPromptTemplates.isSuccess}
+                  onClick={() => {
+                    setTurnPromptMode(mode);
+                    setTurnPromptCopyStatus("idle");
+                  }}
+                  className={`min-h-11 flex-1 rounded-md px-3 text-[0.6875rem] font-medium disabled:opacity-45 ${
+                    turnPromptMode === mode
+                      ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
+                      : "text-[var(--marinara-editor-muted)]"
+                  }`}
                 >
-                  {turnPromptValidationMessage ?? turnPromptSaveError}
-                </p>
-              )}
+                  {modeLabel(mode)}
+                </button>
+              ))}
             </div>
-          )}
 
-          <div className="mt-4 border-t border-[var(--border)] pt-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="text-[0.6875rem] font-semibold">
-                  {turnPromptEditing
-                    ? "Resolved preview"
-                    : liveTurnPromptProjection
-                      ? "Resolved system message"
-                      : `${modeLabel(turnPromptMode)} format`}
-                </h3>
-                <p className="mt-1 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                  {liveTurnPromptProjection
-                    ? `Resolved from ${chatName ?? "the current chat"}'s saved current location.`
-                    : `Open a ${modeLabel(turnPromptMode)} chat with an enabled saved map to replace the example values with its live insert.`}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {turnPromptEditing ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={restoreBuiltInTurnPrompt}
-                      disabled={updateTurnPromptTemplates.isPending || !globalTurnPromptTemplates.isSuccess}
-                      className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--accent)] disabled:opacity-45"
-                    >
-                      <RotateCcw size="0.75rem" /> Restore built-in
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        resetTurnPromptDraft();
-                        setTurnPromptEditing(false);
-                      }}
-                      disabled={updateTurnPromptTemplates.isPending || !globalTurnPromptTemplates.isSuccess}
-                      className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-medium hover:bg-[var(--accent)] disabled:opacity-45"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void saveTurnPromptTemplates()}
-                      disabled={
-                        !turnPromptValidation.success ||
-                        updateTurnPromptTemplates.isPending ||
-                        !globalTurnPromptTemplates.isSuccess
-                      }
-                      className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
-                    >
-                      {updateTurnPromptTemplates.isPending ? (
-                        <LoaderCircle size="0.75rem" className="animate-spin" />
-                      ) : (
-                        <Save size="0.75rem" />
-                      )}
-                      Save templates
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => void copyTurnPrompt()}
-                      disabled={!globalTurnPromptTemplates.isSuccess || Boolean(turnPromptPreview.error)}
-                      className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-45"
-                    >
-                      <ClipboardCopy size="0.75rem" />
-                      {turnPromptCopyStatus === "copied"
-                        ? "Copied"
-                        : turnPromptCopyStatus === "failed"
-                          ? "Copy failed"
-                          : "Copy insert"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        resetTurnPromptDraft();
-                        setTurnPromptEditing(true);
-                      }}
-                      disabled={!globalTurnPromptTemplates.isSuccess}
-                      className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
-                    >
-                      <PencilLine size="0.75rem" /> Edit templates
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-            {!chatId && (
-              <p className="mt-3 text-[0.625rem] leading-relaxed text-amber-500">
-                Open a Roleplay or Game chat to resolve the global template with a live saved location. You can still edit and save the global templates here.
-              </p>
-            )}
-            {liveTurnPromptProjection && (
-              <p className="mt-3 text-[0.625rem] leading-relaxed text-amber-500">
-                Contains the current map's private model context when one is saved.
-              </p>
-            )}
-            {turnPromptPreview.error && globalTurnPromptTemplates.isSuccess && (
-              <p
-                className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+            {turnPromptLoadError && (
+              <div
+                className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
                 role="alert"
               >
-                Resolved preview unavailable. {turnPromptPreview.error}
-              </p>
-            )}
-            {globalTurnPromptTemplates.isSuccess && !turnPromptPreview.error && (
-              <pre
-                aria-label={`${modeLabel(turnPromptMode)} turn prompt insert`}
-                className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--foreground)]"
-              >
-                {turnPromptText}
-              </pre>
-            )}
-            <p className="mt-3 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-              Lore linked to the exact current location is activated separately through the lorebook pipeline at each entry's configured prompt position. It is not duplicated inside this block.
-            </p>
-            {turnPromptMode === "game" && (
-              <p className="mt-2 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                Game requests also relabel legacy <code className="font-mono">&lt;map_state&gt;</code> context as local tactical state and restrict <code className="font-mono">[map_update]</code> to movement inside this hierarchical location.
-              </p>
-            )}
-          </div>
-        </article>
-
-        {chatId && supportedChat && (
-          <article
-            className="mari-editor-panel p-4"
-            aria-labelledby="maps-location-types-title"
-          >
-            <div className="flex flex-wrap items-start gap-3">
-              <Settings2 size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
-              <div className="min-w-52 flex-1">
-                <h2 id="maps-location-types-title" className="text-xs font-semibold">Location types</h2>
-                <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                  View and edit the vocabulary saved with this chat’s map. These hierarchy names and semantic base kinds are used throughout the map and reused by AI expansions.
+                <p>
+                  Global turn prompt templates could not load. Editing and copying are disabled to protect saved
+                  templates. {turnPromptLoadError}
                 </p>
+                <button
+                  type="button"
+                  onClick={() => void globalTurnPromptTemplates.refetch()}
+                  disabled={globalTurnPromptTemplates.isFetching}
+                  className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg border border-current px-3 text-xs font-semibold disabled:opacity-45"
+                >
+                  {globalTurnPromptTemplates.isFetching ? (
+                    <LoaderCircle size="0.75rem" className="animate-spin" />
+                  ) : (
+                    <RotateCcw size="0.75rem" />
+                  )}
+                  {globalTurnPromptTemplates.isFetching ? "Retrying" : "Retry"}
+                </button>
               </div>
-              {hierarchyDraft && (
-                <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
-                  {hierarchyDraft.profile.mode === "custom" ? "Custom" : hierarchyDraft.profile.mode === "auto" ? "Chosen by AI" : "Template"}
-                </span>
-              )}
-            </div>
+            )}
 
-            {spatial.isLoading ? (
-              <div className="mt-4 flex min-h-20 items-center gap-2 text-xs text-[var(--marinara-editor-muted)]" role="status">
-                <LoaderCircle size="0.875rem" className="animate-spin" /> Loading location types…
-              </div>
-            ) : hierarchyDraft && definition ? (
+            {turnPromptEditing && (
               <div className="mt-4 border-t border-[var(--border)] pt-4">
-                <SpatialHierarchyProfileFields
-                  definition={hierarchyDraft.definition}
-                  profile={hierarchyDraft.profile}
-                  editable={hierarchyEditing}
-                  disabled={updateSpatial.isPending}
-                  onChange={setHierarchyDraft}
+                <label
+                  htmlFor={`maps-turn-prompt-template-${turnPromptMode}`}
+                  className="text-[0.6875rem] font-semibold"
+                >
+                  {modeLabel(turnPromptMode)} turn prompt template
+                </label>
+                <p className="mt-1 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                  Marinara keeps the application-owned <code className="font-mono">&lt;spatial_context&gt;</code>{" "}
+                  wrapper around this text. Required variables preserve current location data and the mode's authority
+                  rule.
+                </p>
+                <textarea
+                  id={`maps-turn-prompt-template-${turnPromptMode}`}
+                  aria-label={`${modeLabel(turnPromptMode)} turn prompt template`}
+                  value={turnPromptDraft[turnPromptMode]}
+                  onChange={(event) => {
+                    setTurnPromptDraft((current) => ({
+                      ...current,
+                      [turnPromptMode]: event.target.value,
+                    }));
+                    updateTurnPromptTemplates.reset();
+                  }}
+                  disabled={updateTurnPromptTemplates.isPending || !globalTurnPromptTemplates.isSuccess}
+                  spellCheck={false}
+                  style={{ minHeight: "32rem" }}
+                  className="mt-3 w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 font-mono text-xs leading-relaxed text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-45"
                 />
-
-                {hierarchyDraftValidationMessage && (
+                <div className="mt-3" aria-label="Turn prompt variables">
+                  <p className="text-[0.625rem] font-semibold text-[var(--marinara-editor-muted)]">
+                    Available variables
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {SPATIAL_TURN_PROMPT_VARIABLES.map((variable) => (
+                      <code
+                        key={variable}
+                        className="rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-[0.625rem] text-[var(--foreground)]"
+                      >
+                        {`\${${variable}}`}
+                      </code>
+                    ))}
+                  </div>
+                </div>
+                {(turnPromptValidationMessage || turnPromptSaveError) && (
                   <p
                     className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
                     role="alert"
                   >
-                    {hierarchyDraft.profile.name.trim().length === 0
-                      ? "Enter a profile name before saving. Leading and trailing spaces will be removed."
-                      : hierarchyDraftValidationMessage}
+                    {turnPromptValidationMessage ?? turnPromptSaveError}
                   </p>
                 )}
+              </div>
+            )}
 
-                {hierarchySaveError && (
-                  <p className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]" role="alert">
-                    {hierarchySaveError}
+            <div className="mt-4 border-t border-[var(--border)] pt-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-[0.6875rem] font-semibold">
+                    {turnPromptEditing
+                      ? "Resolved preview"
+                      : liveTurnPromptProjection
+                        ? "Resolved system message"
+                        : `${modeLabel(turnPromptMode)} format`}
+                  </h3>
+                  <p className="mt-1 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                    {liveTurnPromptProjection
+                      ? `Resolved from ${chatName ?? "the current chat"}'s saved current location.`
+                      : `Open a ${modeLabel(turnPromptMode)} chat with an enabled saved map to replace the example values with its live insert.`}
                   </p>
-                )}
-
-                <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-[var(--border)] pt-3">
-                  {hierarchyEditing ? (
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {turnPromptEditing ? (
                     <>
                       <button
                         type="button"
+                        onClick={restoreBuiltInTurnPrompt}
+                        disabled={updateTurnPromptTemplates.isPending || !globalTurnPromptTemplates.isSuccess}
+                        className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--accent)] disabled:opacity-45"
+                      >
+                        <RotateCcw size="0.75rem" /> Restore built-in
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => {
-                          resetHierarchyDraft();
-                          setHierarchyEditing(false);
-                          updateSpatial.reset();
+                          resetTurnPromptDraft();
+                          setTurnPromptEditing(false);
                         }}
-                        disabled={updateSpatial.isPending}
+                        disabled={updateTurnPromptTemplates.isPending || !globalTurnPromptTemplates.isSuccess}
                         className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-medium hover:bg-[var(--accent)] disabled:opacity-45"
                       >
                         Cancel
                       </button>
                       <button
                         type="button"
-                        onClick={() => void saveHierarchyProfile()}
-                        disabled={updateSpatial.isPending || !hierarchyDraftValidation?.success}
+                        onClick={() => void saveTurnPromptTemplates()}
+                        disabled={
+                          !turnPromptValidation.success ||
+                          updateTurnPromptTemplates.isPending ||
+                          !globalTurnPromptTemplates.isSuccess
+                        }
                         className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
                       >
-                        {updateSpatial.isPending ? <LoaderCircle size="0.75rem" className="animate-spin" /> : <Save size="0.75rem" />}
-                        Save location types
+                        {updateTurnPromptTemplates.isPending ? (
+                          <LoaderCircle size="0.75rem" className="animate-spin" />
+                        ) : (
+                          <Save size="0.75rem" />
+                        )}
+                        Save templates
                       </button>
                     </>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        resetHierarchyDraft();
-                        setHierarchyEditing(true);
-                        updateSpatial.reset();
-                      }}
-                      className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)]"
-                    >
-                      <Settings2 size="0.75rem" /> Edit location types
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void copyTurnPrompt()}
+                        disabled={!globalTurnPromptTemplates.isSuccess || Boolean(turnPromptPreview.error)}
+                        className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-45"
+                      >
+                        <ClipboardCopy size="0.75rem" />
+                        {turnPromptCopyStatus === "copied"
+                          ? "Copied"
+                          : turnPromptCopyStatus === "failed"
+                            ? "Copy failed"
+                            : "Copy insert"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetTurnPromptDraft();
+                          setTurnPromptEditing(true);
+                        }}
+                        disabled={!globalTurnPromptTemplates.isSuccess}
+                        className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
+                      >
+                        <PencilLine size="0.75rem" /> Edit templates
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
-            ) : (
-              <div className="mt-4 rounded-lg border border-dashed border-[var(--border)] bg-[var(--secondary)]/30 px-3 py-4 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                Create or import a map first. Its generated or imported hierarchy vocabulary will then be editable here.
-              </div>
-            )}
-          </article>
-        )}
-
-        <article className="mari-editor-empty p-4">
-          <div className="flex items-start gap-3">
-            <Box size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
-            <div>
-              <h2 className="text-xs font-semibold">Map state stays with each chat</h2>
-              <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                Prompt libraries are global. Each chat still keeps its selected prompt option, hierarchy contents, current location, bindings, history, and unsaved drafts.
+              {!chatId && (
+                <p className="mt-3 text-[0.625rem] leading-relaxed text-amber-500">
+                  Open a Roleplay or Game chat to resolve the global template with a live saved location. You can still
+                  edit and save the global templates here.
+                </p>
+              )}
+              {liveTurnPromptProjection && (
+                <p className="mt-3 text-[0.625rem] leading-relaxed text-amber-500">
+                  Contains the current map's private model context when one is saved.
+                </p>
+              )}
+              {turnPromptPreview.error && globalTurnPromptTemplates.isSuccess && (
+                <p
+                  className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+                  role="alert"
+                >
+                  Resolved preview unavailable. {turnPromptPreview.error}
+                </p>
+              )}
+              {globalTurnPromptTemplates.isSuccess && !turnPromptPreview.error && (
+                <pre
+                  aria-label={`${modeLabel(turnPromptMode)} turn prompt insert`}
+                  className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--foreground)]"
+                >
+                  {turnPromptText}
+                </pre>
+              )}
+              <p className="mt-3 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                Lore linked to the exact current location is activated separately through the lorebook pipeline at each
+                entry's configured prompt position. It is not duplicated inside this block.
               </p>
+              {turnPromptMode === "game" && (
+                <p className="mt-2 max-w-2xl text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                  Game requests also relabel legacy <code className="font-mono">&lt;map_state&gt;</code> context as
+                  local tactical state and restrict <code className="font-mono">[map_update]</code> to movement inside
+                  this hierarchical location.
+                </p>
+              )}
             </div>
-          </div>
-        </article>
+          </article>
+
+          {chatId && supportedChat && (
+            <article className="mari-editor-panel p-4" aria-labelledby="maps-location-types-title">
+              <div className="flex flex-wrap items-start gap-3">
+                <Settings2 size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
+                <div className="min-w-52 flex-1">
+                  <h2 id="maps-location-types-title" className="text-xs font-semibold">
+                    Location types
+                  </h2>
+                  <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                    View and edit the vocabulary saved with this chat’s map. These hierarchy names and semantic base
+                    kinds are used throughout the map and reused by AI expansions.
+                  </p>
+                </div>
+                {hierarchyDraft && (
+                  <span className="rounded-full bg-[var(--secondary)] px-2 py-1 text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
+                    {hierarchyDraft.profile.mode === "custom"
+                      ? "Custom"
+                      : hierarchyDraft.profile.mode === "auto"
+                        ? "Chosen by AI"
+                        : "Template"}
+                  </span>
+                )}
+              </div>
+
+              {spatial.isLoading ? (
+                <div
+                  className="mt-4 flex min-h-20 items-center gap-2 text-xs text-[var(--marinara-editor-muted)]"
+                  role="status"
+                >
+                  <LoaderCircle size="0.875rem" className="animate-spin" /> Loading location types…
+                </div>
+              ) : hierarchyDraft && definition ? (
+                <div className="mt-4 border-t border-[var(--border)] pt-4">
+                  <SpatialHierarchyProfileFields
+                    definition={hierarchyDraft.definition}
+                    profile={hierarchyDraft.profile}
+                    editable={hierarchyEditing}
+                    disabled={updateSpatial.isPending}
+                    onChange={setHierarchyDraft}
+                  />
+
+                  {hierarchyDraftValidationMessage && (
+                    <p
+                      className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+                      role="alert"
+                    >
+                      {hierarchyDraft.profile.name.trim().length === 0
+                        ? "Enter a profile name before saving. Leading and trailing spaces will be removed."
+                        : hierarchyDraftValidationMessage}
+                    </p>
+                  )}
+
+                  {hierarchySaveError && (
+                    <p
+                      className="mt-3 rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+                      role="alert"
+                    >
+                      {hierarchySaveError}
+                    </p>
+                  )}
+
+                  <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-[var(--border)] pt-3">
+                    {hierarchyEditing ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            resetHierarchyDraft();
+                            setHierarchyEditing(false);
+                            updateSpatial.reset();
+                          }}
+                          disabled={updateSpatial.isPending}
+                          className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-medium hover:bg-[var(--accent)] disabled:opacity-45"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void saveHierarchyProfile()}
+                          disabled={updateSpatial.isPending || !hierarchyDraftValidation?.success}
+                          className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-45"
+                        >
+                          {updateSpatial.isPending ? (
+                            <LoaderCircle size="0.75rem" className="animate-spin" />
+                          ) : (
+                            <Save size="0.75rem" />
+                          )}
+                          Save location types
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetHierarchyDraft();
+                          setHierarchyEditing(true);
+                          updateSpatial.reset();
+                        }}
+                        className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-[var(--primary-foreground)]"
+                      >
+                        <Settings2 size="0.75rem" /> Edit location types
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-lg border border-dashed border-[var(--border)] bg-[var(--secondary)]/30 px-3 py-4 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                  Create or import a map first. Its generated or imported hierarchy vocabulary will then be editable
+                  here.
+                </div>
+              )}
+            </article>
+          )}
+
+          <article className="mari-editor-empty p-4">
+            <div className="flex items-start gap-3">
+              <Box size="1rem" className="mt-0.5 shrink-0 text-[var(--marinara-editor-muted)]" />
+              <div>
+                <h2 className="text-xs font-semibold">Map state stays with each chat</h2>
+                <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-editor-muted)]">
+                  Prompt libraries are global. Each chat still keeps its selected prompt option, hierarchy contents,
+                  current location, bindings, history, and unsaved drafts.
+                </p>
+              </div>
+            </div>
+          </article>
         </div>
       </div>
     </section>
   );
 }
 
-function MapsFieldGroup({
-  label,
-  icon,
-  children,
-}: {
-  label: string;
-  icon: ReactNode;
-  children: ReactNode;
-}) {
+function MapsFieldGroup({ label, icon, children }: { label: string; icon: ReactNode; children: ReactNode }) {
   return (
-    <section className="mari-editor-panel space-y-2 p-3" aria-labelledby={`maps-agent-${label.toLowerCase().replace(/\s+/gu, "-")}`}>
+    <section
+      className="mari-editor-panel space-y-2 p-3"
+      aria-labelledby={`maps-agent-${label.toLowerCase().replace(/\s+/gu, "-")}`}
+    >
       <div className="flex items-center gap-1.5">
         <span className="text-[var(--marinara-editor-accent)]">{icon}</span>
         <h2

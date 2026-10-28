@@ -1,42 +1,33 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");
-const panel = readFileSync(
-  join(
-    root,
-    "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",
-  ),
-  "utf8",
+const panel = slurp2Source(
+  join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx"),
 );
-const home = readFileSync(
-  join(
-    root,
-    "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
-  ),
-  "utf8",
+// Finishing the bulk create moved into the wizard model.
+const wizardModel = slurp2Source(
+  join(root, "packages/slurp2/src/engine/packages/client/src/slp/features/onboarding/slp-onboarding-wizard-model.ts"),
 );
-const settings = readFileSync(
-  join(
-    root,
-    "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
-  ),
-  "utf8",
+const home = slurp2Source(join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"));
+const settings = slurp2BackstageSource();
+const storage = slurp2Source(
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
 );
-const storage = readFileSync(
-  join(
-    root,
-    "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  ),
-  "utf8",
+const routes = slurp2Source(join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"));
+const creatorCard = slurp2Source(
+  join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx"),
 );
-const routes = readFileSync(
-  join(
-    root,
-    "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts",
-  ),
-  "utf8",
+const postCard = slurp2Source(
+  join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpPostCard.tsx"),
+);
+const fanActivity = slurp2Source(
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts"),
+);
+const responseFormat = slurp2Source(
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-response-format.ts"),
 );
 
 assert.match(
@@ -44,9 +35,12 @@ assert.match(
   /\.\.\.\(selectionOnly\s*\? \{\}\s*:\s*\{[\s\S]*?onboarding:/u,
   "Adding creators must not change the completed onboarding state",
 );
+assert.doesNotMatch(panel, /showConfirmDialog/u, "onboarding must not wait on the disconnected host dialog store");
+assert.match(panel, /open=\{providerConfirmationOpen\}[\s\S]*?void performFinish\(\)/u);
+assert.match(panel, /open=\{providerConfirmationOpen\}[\s\S]*?panelStyle=\{getSlpAccentStyle\(SLP_PINK/u);
 assert.match(
-  panel,
-  /const finish = async \(\) => \{[\s\S]*?bulkCreate\.mutateAsync\([\s\S]*?\} catch \(error\) \{[\s\S]*?if \(error instanceof Error\) setCreationError\(error\.message\);/u,
+  wizardModel,
+  /const performFinish = async \(retryIds\?: string\[\]\) => \{[\s\S]*?bulkCreate\.mutateAsync\([\s\S]*?\} catch \(error\) \{[\s\S]*?if \(error instanceof Error\) setCreationError\(error\.message\);/u,
   "Bulk-create failures must preserve the caught error",
 );
 assert.doesNotMatch(
@@ -66,12 +60,12 @@ assert.match(
 );
 assert.match(
   home,
-  /selectionOnly=\{onboardingMode === "add-creators"\}[\s\S]*?onComplete=\{\(\) => \{\s*if \(onboardingMode === "first-run"\) \{\s*setOnboardingState\("completed"\);\s*setOnboardingMode\(null\);\s*\}\s*\}\}/u,
-  "The settings callback must close only full onboarding after completion",
+  /selectionOnly=\{onboardingMode === "add-creators"\}[\s\S]*?onComplete=\{\(\) => \{\s*if \(onboardingMode === "first-run"\) \{\s*setOnboardingState\("completed"\);\s*\}\s*\}\}/u,
+  "The settings callback must keep the completion result visible",
 );
 assert.match(
   settings,
-  /section === "creators" && <div className="flex justify-end"><button[^>]+onClick=\{onAddCreators\}/u,
+  /section === "creators"[\s\S]*?onAddCreators/u,
   "Add creators must be shown in the Creators settings section",
 );
 assert.doesNotMatch(
@@ -84,11 +78,13 @@ assert.match(
   /setImagesEnabled\(settings\.autoPostingImagesEnabled\)/u,
   "The wizard must restore the saved image-post preference",
 );
-assert.match(
-  panel,
-  /autoPostingImagesEnabled: imagesEnabled/u,
-  "The wizard must save the image-post preference",
+assert.match(panel, /autoPostingImagesEnabled: imagesEnabled/u, "The wizard must save the image-post preference");
+// The intro slides are gone: the Basic screen opens with Mari and the real AI cost note.
+const basicSetup = slurp2Source(
+  join(root, "packages/slurp2/src/engine/packages/client/src/slp/features/onboarding/SlpBasicSetup.tsx"),
 );
+assert.doesNotMatch(panel, /type Intro =|LAST_INTRO/u, "the first run has no intro slides");
+assert.match(basicSetup, /say\.hello1[\s\S]*?say\.cost/u, "the Basic screen discloses the AI cost first");
 assert.doesNotMatch(
   panel,
   /imageGenerationUseAvatarReferences: imagesEnabled/u,
@@ -98,13 +94,41 @@ assert.match(storage, /autoPostingImagesEnabled: z\.boolean\(\)/u);
 assert.match(storage, /autoPostingImagesEnabled: false/u);
 assert.match(
   routes,
-  /settings\.generationConnectionId[\s\S]*?connections\.getWithKey\(settings\.generationConnectionId\)[\s\S]*?: await connections\.getDefaultForAgents\(\)/u,
-  "Creator creation must inherit the Engine agent connection when Slurp has no override",
+  /resolveSlurpTextConnection\(\s*connections,\s*connectionId === undefined \? settings\.generationConnectionId : connectionId,\s*\)/u,
+  "Creator creation must use the selected connection, then the shared Slurp fallback ladder",
+);
+assert.match(
+  routes,
+  /slpBulkCreatorAccountCreateSchema\.extend\(\{[\s\S]*?connectionId: z\.string\(\)\.min\(1\)\.nullable\(\)\.optional\(\)/u,
+  "Creator creation must accept the wizard connection override",
+);
+assert.match(
+  panel,
+  /step === 5 && completion === "creationFailed"[\s\S]*?if \(step === 5\) returnToSetup\(\)/u,
+  "A failed creator setup must allow the user to return to the review step",
 );
 assert.match(
   home,
-  /function StageProfileView\(\{[\s\S]*?viewerAccount,\s*slurpSettings,\s*postCardCtx,/u,
+  /function StageProfileView\(\{[\s\S]*?viewerAccount,[\s\S]*?viewerActorAccount,[\s\S]*?slurpSettings,[\s\S]*?postCardCtx,/u,
   "Creator profile pages must receive their Slurp settings prop",
 );
+assert.match(
+  home,
+  /const closeOnboarding = \(\) => \{[\s\S]*?onboardingMode === "first-run"[\s\S]*?setOnboardingState\("completed"\)[\s\S]*?setOnboardingMode\(null\)/u,
+  "Closing first-run setup must persist completion",
+);
+assert.match(
+  home,
+  /const viewingOwnCreator = profile\.sourceAccountId === viewerAccount\?\.entityId/u,
+  "Profile ownership must follow the active persona",
+);
+// Step 3.1 (user): no refresh action; the feed refetches itself (30 s poll + focus, see
+// slurp2-step3.1-shell-polish) and new posts wait behind the "New posts" pill.
+assert.doesNotMatch(home, /onRefresh=/u, "The timeline has no manual refresh action");
+assert.doesNotMatch(creatorCard, /\brepost|Repeat2/iu, "Slurp creator cards must not expose repost actions");
+assert.doesNotMatch(postCard, /\brepost|Repeat2/iu, "Slurp post cards must not expose repost actions");
+assert.doesNotMatch(fanActivity, /fanRepostsPerRefresh|repost/iu, "Synthetic Slurp audience activity must not repost");
+assert.doesNotMatch(responseFormat, /enum: \[[^\]]*repost/iu, "Slurp model output must not request reposts");
+assert.match(routes, /parsed\.data\.type === "repost"[\s\S]*?Reposts are not available in Slurp/u);
 
 console.log("Slurp onboarding regressions passed.");

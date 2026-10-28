@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "beholder",
+  "name": "Beholder",
+  "version": "1.3.14",
+  "description": "Keeps track of what each character is wearing and holding, plus any injuries, so the story stays consistent. You can check it on a paper doll from the roleplay toolbar. Works with big online models, or with the free Beholder model that runs privately on your computer. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+  "engine": {
+    "min": "2.4.4",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "roleplay-tracker",
+      "tracker-panel"
+    ]
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "c7ab972853e8f0d9e89fc282cff20bb9dfb571b95dffa3c4a6e659a76f9d78a8",
+      "bytes": 10086
+    },
+    {
+      "path": "client.js",
+      "sha256": "805fc19711e45bd5a6d337895c5185511af9cef0aa989ac20451445120f38e3e",
+      "bytes": 452061
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

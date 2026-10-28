@@ -1,27 +1,25 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import englishCatalog from "./locales/en.json";
+import koreanCatalog from "./locales/ko.json";
 
 export type LtmLocalizationContext = {
   locale?: string;
   direction?: "ltr" | "rtl";
 };
 
-type TranslationValues = Record<
-  string,
-  string | number | boolean | null | undefined
->;
+type TranslationValues = Record<string, string | number | boolean | null | undefined>;
 type TranslationCatalog = Record<string, string>;
-export type LtmTranslationFunction = (
-  key: string,
-  values?: TranslationValues,
-) => string;
+export type LtmTranslationFunction = (key: string, values?: TranslationValues) => string;
+
+function stringEntries(catalog: object) {
+  return Object.fromEntries(
+    Object.entries(catalog).filter(([key, value]) => key !== "_meta" && typeof value === "string"),
+  ) as TranslationCatalog;
+}
 
 const catalogs: Record<string, TranslationCatalog> = {
-  en: Object.fromEntries(
-    Object.entries(englishCatalog).filter(
-      ([key, value]) => key !== "_meta" && typeof value === "string",
-    ),
-  ) as TranslationCatalog,
+  en: stringEntries(englishCatalog),
+  ko: stringEntries(koreanCatalog),
 };
 const pluralRulesByLocale = new Map<string, Intl.PluralRules>();
 
@@ -79,8 +77,7 @@ const defaultLocalization: LtmLocalizationValue = {
   t: (key, values) => translateLtm(undefined, key, values),
 };
 
-const LocalizationContext =
-  createContext<LtmLocalizationValue>(defaultLocalization);
+const LocalizationContext = createContext<LtmLocalizationValue>(defaultLocalization);
 
 export function LtmLocalizationProvider({
   localization,
@@ -99,11 +96,7 @@ export function LtmLocalizationProvider({
     }),
     [direction, locale],
   );
-  return (
-    <LocalizationContext.Provider value={value}>
-      {children}
-    </LocalizationContext.Provider>
-  );
+  return <LocalizationContext.Provider value={value}>{children}</LocalizationContext.Provider>;
 }
 
 export function useLtmTranslation() {

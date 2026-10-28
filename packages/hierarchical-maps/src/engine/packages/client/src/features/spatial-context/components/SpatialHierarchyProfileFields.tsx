@@ -79,9 +79,7 @@ export function SpatialHierarchyProfileFields({
                   ...profile,
                   mode: "custom",
                   types: profile.types.map((candidate) =>
-                    candidate.id === type.id
-                      ? { ...candidate, label: event.target.value }
-                      : candidate,
+                    candidate.id === type.id ? { ...candidate, label: event.target.value } : candidate,
                   ),
                 })
               }
@@ -113,11 +111,16 @@ export function SpatialHierarchyProfileFields({
               className="min-h-11 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-2 text-[0.625rem] disabled:cursor-default disabled:opacity-70"
             >
               {(["region", "settlement", "place", "building", "floor", "room"] as const).map((kind) => (
-                <option key={kind} value={kind}>{kind}</option>
+                <option key={kind} value={kind}>
+                  {kind}
+                </option>
               ))}
             </select>
             {editable && (
-              <div className="col-span-2 flex items-center justify-end gap-1" aria-label={`Order ${type.label || "location type"}`}>
+              <div
+                className="col-span-2 flex items-center justify-end gap-1"
+                aria-label={`Order ${type.label || "location type"}`}
+              >
                 <button
                   type="button"
                   disabled={disabled || index === 0}
@@ -162,27 +165,27 @@ export function SpatialHierarchyProfileFields({
 
       {editable && (
         <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={disabled || profile.types.length >= 40}
-          onClick={() => {
-            const base = hierarchyTypeId(`custom-${profile.types.length + 1}`);
-            let id = base;
-            let suffix = 2;
-            while (profile.types.some((type) => type.id === id)) id = `${base}_${suffix++}`;
-            applyProfile({
-              ...profile,
-              mode: "custom",
-              types: [
-                ...profile.types,
-                { id, label: `Location type ${profile.types.length + 1}`, baseKind: "place" },
-              ],
-            });
-          }}
-          className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
-        >
-          <Plus size="0.75rem" /> Add location type
-        </button>
+          <button
+            type="button"
+            disabled={disabled || profile.types.length >= 40}
+            onClick={() => {
+              const base = hierarchyTypeId(`custom-${profile.types.length + 1}`);
+              let id = base;
+              let suffix = 2;
+              while (profile.types.some((type) => type.id === id)) id = `${base}_${suffix++}`;
+              applyProfile({
+                ...profile,
+                mode: "custom",
+                types: [
+                  ...profile.types,
+                  { id, label: `Location type ${profile.types.length + 1}`, baseKind: "place" },
+                ],
+              });
+            }}
+            className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
+          >
+            <Plus size="0.75rem" /> Add location type
+          </button>
           <button
             type="button"
             disabled={disabled}

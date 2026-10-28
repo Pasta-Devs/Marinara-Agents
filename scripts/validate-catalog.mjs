@@ -4,11 +4,8 @@ import { readFile, readdir } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import {
-  CATALOG_ARTWORK_SIZE,
-  catalogArtworkRelativePath,
-  catalogArtworkUrl,
-} from "./catalog-artwork.mjs";
+import { AVATAR_PACKAGE_IDS, assertAvatarPackageContract } from "./avatar-package-checks.mjs";
+import { CATALOG_ARTWORK_SIZE, catalogArtworkRelativePath, catalogArtworkUrl } from "./catalog-artwork.mjs";
 import {
   LEGACY_CATALOG_MAJOR,
   assertManifestBuildProvenance,
@@ -16,23 +13,115 @@ import {
   createCatalogLanes,
   readCatalogFamily,
 } from "./catalog-lanes.mjs";
+import { buildReleaseNotesDocument, listPackagesWithChangelogs } from "./catalog-release-notes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
+import { INCOMPLETE_PACKAGE_IDS, STAGING_ONLY_PACKAGE_IDS } from "./catalog-incomplete.mjs";
 import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
-import { OFFICIAL_PACKAGE_GUIDANCE, withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
+import {
+  assertDeclaredFilesMatchManifest,
+  assertEveryPackageManifestIntegrity,
+  readZip,
+} from "./package-manifest-integrity.mjs";
+import {
+  OFFICIAL_PACKAGE_GUIDANCE,
+  withPackageActivationGuidance,
+  withoutPackageActivationGuidance,
+} from "./catalog-package-guidance.mjs";
 import {
   assertPortableFilenameComponent,
   assertPortableRelativePath,
   packageArtifactName,
   resolveContainedPortablePath,
 } from "./catalog-path-safety.mjs";
+import {
+  RULESET_ASSET_PATH,
+  assertRulesetApplies,
+  assertRulesetAssetDocument,
+  assertRulesetBattle,
+  assertRulesetCatalogs,
+  assertRulesetCombat,
+  assertRulesetCreatures,
+  assertRulesetPackageContract,
+  assertRulesetReactions,
+  assertRulesetScaled,
+  isRulesetPackage,
+  rulesetCatalogAssetPaths,
+} from "./ruleset-package-checks.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const { catalog, catalogsByMajor, legacyCatalog } = await readCatalogFamily(repoRoot);
+const { catalog, catalogsByMajor, legacyCatalog, previewCatalogsByMajor, previewLegacyCatalog } =
+  await readCatalogFamily(repoRoot);
 const MIN_ENGINE_VERSION = "2.3.0";
 const REQUIRED_MAX_ENGINE_EXCLUSIVE = "4.0.0";
 const ENGINE_CAPABILITY_API = Object.freeze({ major: 1, minor: 9 });
 if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.packages)) throw new Error("Invalid catalog envelope");
-const expectedCatalogsByMajor = createCatalogLanes(catalog);
+// Held-back packages (catalog-incomplete.mjs) keep their source, payload, and
+// artifact in the tree, but each tier must land in exactly one place: an
+// incomplete package in no catalog at all, a staging-only package in the
+// preview overlay and never in the published lanes that stable users read and
+// promotion copies verbatim. These also catch a stale committed entry that
+// predates marking the id.
+const publishedIds = new Set();
+for (const lane of [legacyCatalog, ...catalogsByMajor.values()]) {
+  for (const entry of lane?.packages ?? []) publishedIds.add(entry.manifest.id);
+}
+const previewIds = new Set();
+for (const lane of [previewLegacyCatalog, ...previewCatalogsByMajor.values()]) {
+  for (const entry of lane?.packages ?? []) previewIds.add(entry.manifest.id);
+}
+for (const id of publishedIds) {
+  if (INCOMPLETE_PACKAGE_IDS.has(id)) {
+    throw new Error(
+      `${id} is marked incomplete (scripts/catalog-incomplete.mjs) and must not appear in any catalog — rebuild the catalog to drop it`,
+    );
+  }
+  if (STAGING_ONLY_PACKAGE_IDS.has(id)) {
+    throw new Error(
+      `${id} is marked staging-only (scripts/catalog-incomplete.mjs) and must not appear in the published lanes — rebuild the catalog to move it to the preview overlay`,
+    );
+  }
+}
+for (const id of previewIds) {
+  if (INCOMPLETE_PACKAGE_IDS.has(id)) {
+    throw new Error(`${id} is marked incomplete and must not appear in the preview overlay either`);
+  }
+  if (!STAGING_ONLY_PACKAGE_IDS.has(id)) {
+    throw new Error(`${id} is in the preview overlay but is not marked staging-only — rebuild the catalog`);
+  }
+}
+for (const id of STAGING_ONLY_PACKAGE_IDS) {
+  if (!previewIds.has(id)) {
+    throw new Error(`${id} is marked staging-only but is missing from the preview overlay — rebuild its package`);
+  }
+}
+// Lane derivation is checked per family: published lanes against the packages
+// stable users receive, preview lanes against the staging-only overlay.
+const publishedCatalog = {
+  ...catalog,
+  packages: catalog.packages.filter((entry) => !STAGING_ONLY_PACKAGE_IDS.has(entry.manifest.id)),
+};
+const previewCatalog = {
+  ...catalog,
+  packages: catalog.packages.filter((entry) => STAGING_ONLY_PACKAGE_IDS.has(entry.manifest.id)),
+};
+if (previewCatalog.packages.length > 0) {
+  const expectedPreviewLanes = createCatalogLanes(previewCatalog);
+  for (const [major, expectedLane] of expectedPreviewLanes) {
+    if (JSON.stringify(previewCatalogsByMajor.get(major)) !== JSON.stringify(expectedLane)) {
+      throw new Error(
+        `catalog/preview/v${major}/catalog.json does not match its packages' Engine compatibility ranges`,
+      );
+    }
+  }
+  if (JSON.stringify(previewLegacyCatalog) !== JSON.stringify(expectedPreviewLanes.get(LEGACY_CATALOG_MAJOR))) {
+    throw new Error(
+      `catalog/preview/catalog.json must remain an exact alias of catalog/preview/v${LEGACY_CATALOG_MAJOR}/catalog.json`,
+    );
+  }
+} else if (previewCatalogsByMajor.size > 0 || previewLegacyCatalog) {
+  throw new Error("catalog/preview exists with no staging-only packages — rebuild the catalog to remove it");
+}
+const expectedCatalogsByMajor = createCatalogLanes(publishedCatalog);
 if (JSON.stringify([...catalogsByMajor.keys()].sort()) !== JSON.stringify([...expectedCatalogsByMajor.keys()].sort())) {
   throw new Error("Versioned catalog lane set does not match package Engine compatibility ranges");
 }
@@ -45,6 +134,58 @@ for (const [major, expectedCatalog] of expectedCatalogsByMajor) {
 if (JSON.stringify(legacyCatalog) !== JSON.stringify(catalogsByMajor.get(LEGACY_CATALOG_MAJOR))) {
   throw new Error(`catalog/catalog.json must remain an exact alias of catalog/v${LEGACY_CATALOG_MAJOR}/catalog.json`);
 }
+
+// Release-notes sidecars get the same treatment as the lanes they sit beside: a
+// committed notes.json must be exactly what a rebuild produces, and a lane whose
+// packages publish no notes must carry no sidecar at all. Anything else means a
+// notes.json was hand-edited, or a changelog changed without a rebuild, and the
+// text users read in the update prompt would no longer match the repository.
+async function readCommittedNotes(path) {
+  let raw;
+  try {
+    raw = await readFile(join(repoRoot, path), "utf8");
+  } catch (error) {
+    // Only a missing file counts as "no sidecar". Mapping a parse failure or a
+    // permission error to absent would let a corrupt notes.json pass validation
+    // for any lane that is expected to have none.
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`${path} is not valid JSON`, { cause: error });
+  }
+}
+
+async function assertNotesSidecar(path, entries) {
+  const expected = await buildReleaseNotesDocument(repoRoot, entries);
+  const committed = await readCommittedNotes(path);
+  const wanted = Object.keys(expected.packages).length > 0 ? expected : null;
+  if (JSON.stringify(committed) !== JSON.stringify(wanted)) {
+    throw new Error(`${path} does not match the committed package changelogs — rebuild the catalog`);
+  }
+}
+
+for (const [major, lane] of expectedCatalogsByMajor) {
+  await assertNotesSidecar(`catalog/v${major}/notes.json`, lane.packages);
+}
+await assertNotesSidecar("catalog/notes.json", expectedCatalogsByMajor.get(LEGACY_CATALOG_MAJOR).packages);
+if (previewCatalog.packages.length > 0) {
+  const expectedPreviewLanes = createCatalogLanes(previewCatalog);
+  for (const [major, lane] of expectedPreviewLanes) {
+    await assertNotesSidecar(`catalog/preview/v${major}/notes.json`, lane.packages);
+  }
+  await assertNotesSidecar("catalog/preview/notes.json", expectedPreviewLanes.get(LEGACY_CATALOG_MAJOR).packages);
+} else if ((await readCommittedNotes("catalog/preview/notes.json")) !== null) {
+  // The overlay directory is removed when nothing is staging-only, so a surviving
+  // sidecar means a stale generated payload that no rebuild would produce.
+  throw new Error("catalog/preview/notes.json exists with no staging-only packages — rebuild the catalog to remove it");
+}
+const packagesWithChangelogs = await listPackagesWithChangelogs(repoRoot);
+console.log(
+  `Release notes: ${packagesWithChangelogs.length}/${publishedCatalog.packages.length} published packages ship a CHANGELOG.md.`,
+);
 const hierarchicalMapsBoundary = await assertHierarchicalMapsPrivateImportBoundary();
 
 const hierarchicalMapsOwnedSourcePaths = [
@@ -66,20 +207,27 @@ for (const relativePath of hierarchicalMapsOwnedSourcePaths) {
   }
 }
 
-const slurpOwnedSourcePaths = [
-  "packages/client/src/components/slurp",
-  "packages/client/src/hooks/use-slurp.ts",
-  "packages/client/src/slurp-package-entry.tsx",
-  "packages/client/src/stores/slurp-package.store.ts",
+// Must equal slurp2OwnedSourcePaths in the builder: the three slp roots and two permanent exceptions.
+const slurp2OwnedSourcePaths = [
+  "packages/client/src/slp",
+  "packages/server/src/slp",
+  "packages/shared/src/slp",
+  "packages/server/src/services/garnish-ads",
   "packages/server/src/db/schema/slurp.ts",
-  "packages/server/src/routes/slurp.routes.ts",
-  "packages/server/src/services/slurp",
-  "packages/server/src/services/storage/slurp.storage.ts",
 ];
-for (const relativePath of slurpOwnedSourcePaths) {
-  const packageOwnedPath = join(repoRoot, "packages/slurp/src/engine", relativePath);
-  if (!existsSync(packageOwnedPath)) {
-    throw new Error(`Slurp package source is missing: ${relativePath}`);
+for (const relativePath of slurp2OwnedSourcePaths) {
+  if (!existsSync(join(repoRoot, "packages/slurp2/src/engine", relativePath))) {
+    throw new Error(`slurp2 package source is missing: ${relativePath}`);
+  }
+}
+
+// Hierarchical Maps and Long-Term Memory have always asserted this; Slurp never did, which is how
+// ten stale copies of package-owned files survived in sources/engine long after the split. A
+// captured copy is worse than dead weight now: the remaster's slurp2_* table names would become
+// build input for Noodle, and tests that read the snapshot would check the wrong tree.
+for (const relativePath of ["packages/server/src/db/schema/slurp.ts", ...slurp2OwnedSourcePaths]) {
+  if (existsSync(join(repoRoot, "sources/engine", relativePath))) {
+    throw new Error(`Slurp source must not be captured as generic Engine material: ${relativePath}`);
   }
 }
 
@@ -88,7 +236,7 @@ const longTermMemoryBoundary = await assertPackagePrivateImportBoundary({
   sourceRoot: longTermMemorySourceRoot,
   boundaryPath: join(repoRoot, "packages/long-term-memory/engine-boundary.json"),
   displayName: "Long-Term Memory",
-  capabilityApi: { major: 1, minor: 6 },
+  capabilityApi: { major: 1, minor: 387 },
 });
 for (const relativePath of [
   "packages/shared/src/features/agents/long-term-memory",
@@ -107,13 +255,10 @@ const pixelforgeBoundary = await assertPackagePrivateImportBoundary({
   sourceRoot: join(repoRoot, "packages/pixelforge/src"),
   boundaryPath: join(repoRoot, "packages/pixelforge/engine-boundary.json"),
   displayName: "Pixelforge",
-  capabilityApi: { major: 1, minor: 10 },
+  capabilityApi: { major: 1, minor: 18 },
 });
 
-const hierarchicalMapsClientSourceRoot = join(
-  repoRoot,
-  "packages/hierarchical-maps/src/engine/packages/client/src",
-);
+const hierarchicalMapsClientSourceRoot = join(repoRoot, "packages/hierarchical-maps/src/engine/packages/client/src");
 const forbiddenHierarchicalMapsPinkText =
   /text-(?:pink|rose|fuchsia)-|text-\[var\(--(?:primary|muted-foreground)\)\](?:\/\d+)?|#(?:d4acfb|d4adfc|7a64a0)\b/iu;
 async function assertHierarchicalMapsUsesChromaText(path) {
@@ -184,6 +329,9 @@ const agentDefinitionIds = new Set();
 const expectedCategories = new Map([
   ["card-evolution-auditor", "writer"],
   ["hierarchical-maps", "tracker"],
+  // A ruleset is neither a writer nor a tracker; it is data the Game Mode setup
+  // wizard offers, so it belongs in misc.
+  ["ruleset-5e-2014", "misc"],
 ]);
 
 function assertLocalizedField(value, maximum, label) {
@@ -192,25 +340,6 @@ function assertLocalizedField(value, maximum, label) {
       `${label} does not match capability API ${ENGINE_CAPABILITY_API.major}.${ENGINE_CAPABILITY_API.minor}`,
     );
   }
-}
-
-function readZip(args, { packageId, artifactPath, member = null, purpose }) {
-  const result = spawnSync("unzip", args, {
-    encoding: member ? undefined : "utf8",
-    maxBuffer: 120 * 1024 * 1024,
-  });
-  if (result.error?.code === "ENOENT") {
-    throw new Error(
-      `Cannot ${purpose} ${packageId} artifact ${artifactPath}: unzip executable was not found; install unzip and retry`,
-    );
-  }
-  if (result.status !== 0) {
-    const detail = result.stderr?.toString().trim() || result.error?.message || `exit status ${result.status}`;
-    throw new Error(
-      `Could not ${purpose} ${member ? `member ${member} from ` : ""}${packageId} artifact ${artifactPath}: ${detail}`,
-    );
-  }
-  return result;
 }
 
 async function validateTurnGameRuntime(manifest, packageRoot) {
@@ -289,10 +418,7 @@ for (const entry of catalog.packages) {
   if (!Array.isArray(manifest.files)) throw new Error(`Missing file declarations for ${manifest.id}`);
   const declaredPaths = new Set();
   for (const [index, declared] of manifest.files.entries()) {
-    const declaredPath = assertPortableRelativePath(
-      declared?.path,
-      `Declared file ${index + 1} for ${manifest.id}`,
-    );
+    const declaredPath = assertPortableRelativePath(declared?.path, `Declared file ${index + 1} for ${manifest.id}`);
     if (declaredPaths.has(declaredPath)) {
       throw new Error(`Duplicate declared file ${declaredPath} for ${manifest.id}`);
     }
@@ -347,25 +473,19 @@ for (const entry of catalog.packages) {
       const localization = manifest.localizations[locale];
       if (
         !localization ||
-        JSON.stringify(Object.keys(localization).sort()) !==
-          JSON.stringify(["description", "homeBrowserTab", "name"])
+        JSON.stringify(Object.keys(localization).sort()) !== JSON.stringify(["description", "homeBrowserTab", "name"])
       ) {
         throw new Error(`Noodle ${locale} must contain only package and Home tab display metadata`);
       }
       if (
-        JSON.stringify(Object.keys(localization.homeBrowserTab ?? {}).sort()) !==
-        JSON.stringify(["ariaLabel", "label"])
+        JSON.stringify(Object.keys(localization.homeBrowserTab ?? {}).sort()) !== JSON.stringify(["ariaLabel", "label"])
       ) {
         throw new Error(`Noodle ${locale} must localize its Home tab label and accessibility label`);
       }
       assertLocalizedField(localization.name, 120, `Noodle ${locale} name`);
       assertLocalizedField(localization.description, 2_000, `Noodle ${locale} description`);
       assertLocalizedField(localization.homeBrowserTab.label, 40, `Noodle ${locale} Home tab label`);
-      assertLocalizedField(
-        localization.homeBrowserTab.ariaLabel,
-        100,
-        `Noodle ${locale} Home tab accessibility label`,
-      );
+      assertLocalizedField(localization.homeBrowserTab.ariaLabel, 100, `Noodle ${locale} Home tab accessibility label`);
       if (
         localization.description === manifest.description ||
         localization.homeBrowserTab.ariaLabel === manifest.contributions?.homeBrowserTab?.ariaLabel
@@ -374,7 +494,7 @@ for (const entry of catalog.packages) {
       }
     }
   }
-  if (manifest.id === "slurp") {
+  if (manifest.id === "slurp2") {
     const expectedLocales = ["de", "ko", "pl"];
     const actualLocales = Object.keys(manifest.localizations ?? {}).sort();
     if (JSON.stringify(actualLocales) !== JSON.stringify(expectedLocales)) {
@@ -384,25 +504,19 @@ for (const entry of catalog.packages) {
       const localization = manifest.localizations[locale];
       if (
         !localization ||
-        JSON.stringify(Object.keys(localization).sort()) !==
-          JSON.stringify(["description", "homeBrowserTab", "name"])
+        JSON.stringify(Object.keys(localization).sort()) !== JSON.stringify(["description", "homeBrowserTab", "name"])
       ) {
         throw new Error(`Slurp ${locale} must contain only package and Home tab display metadata`);
       }
       if (
-        JSON.stringify(Object.keys(localization.homeBrowserTab ?? {}).sort()) !==
-        JSON.stringify(["ariaLabel", "label"])
+        JSON.stringify(Object.keys(localization.homeBrowserTab ?? {}).sort()) !== JSON.stringify(["ariaLabel", "label"])
       ) {
         throw new Error(`Slurp ${locale} must localize its Home tab label and accessibility label`);
       }
       assertLocalizedField(localization.name, 120, `Slurp ${locale} name`);
       assertLocalizedField(localization.description, 2_000, `Slurp ${locale} description`);
       assertLocalizedField(localization.homeBrowserTab.label, 40, `Slurp ${locale} Home tab label`);
-      assertLocalizedField(
-        localization.homeBrowserTab.ariaLabel,
-        100,
-        `Slurp ${locale} Home tab accessibility label`,
-      );
+      assertLocalizedField(localization.homeBrowserTab.ariaLabel, 100, `Slurp ${locale} Home tab accessibility label`);
       if (
         localization.description === manifest.description ||
         localization.homeBrowserTab.ariaLabel === manifest.contributions?.homeBrowserTab?.ariaLabel
@@ -449,8 +563,7 @@ for (const entry of catalog.packages) {
     throw new Error(`Missing or invalid catalog artwork URL for ${manifest.id}`);
   }
   const expectedArtifactName = packageArtifactName(manifest.id, manifest.version);
-  const expectedArtifactUrl =
-    `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/${expectedArtifactName}`;
+  const expectedArtifactUrl = `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/${expectedArtifactName}`;
   if (artifact.url !== expectedArtifactUrl) {
     throw new Error(`Artifact URL for ${manifest.id} must be ${expectedArtifactUrl}`);
   }
@@ -539,31 +652,7 @@ for (const entry of catalog.packages) {
       throw new Error(`Unsupported Home browser tab icon format ${iconPath} for ${manifest.id}`);
     }
   }
-  for (const declared of manifest.files) {
-    const sourcePayload = await readFile(
-      await resolveContainedPortablePath(packageRoot, declared.path, `Declared file for ${manifest.id}`),
-    );
-    const archivedPayload = readZip(["-p", artifactPath, declared.path], {
-      packageId: manifest.id,
-      artifactPath,
-      member: declared.path,
-      purpose: "read",
-    });
-    for (const [location, payload] of [
-      ["source", sourcePayload],
-      ["artifact", archivedPayload.stdout],
-    ]) {
-      if (payload.byteLength !== declared.bytes) {
-        throw new Error(`${manifest.id} ${declared.path} ${location} size does not match its manifest`);
-      }
-      if (createHash("sha256").update(payload).digest("hex") !== declared.sha256) {
-        throw new Error(`${manifest.id} ${declared.path} ${location} hash does not match its manifest`);
-      }
-    }
-    if (!sourcePayload.equals(archivedPayload.stdout)) {
-      throw new Error(`${manifest.id} ${declared.path} differs between package source and artifact`);
-    }
-  }
+  await assertDeclaredFilesMatchManifest({ manifest, packageRoot, artifactPath });
 
   for (const entrypoint of [manifest.entrypoints.server, manifest.entrypoints.client].filter(Boolean)) {
     const syntax = spawnSync(
@@ -577,38 +666,92 @@ for (const entry of catalog.packages) {
   }
   if (manifest.kind.includes("turn-game")) await validateTurnGameRuntime(manifest, packageRoot);
 
-  if (!manifest.entrypoints.agents) throw new Error(`Missing agent definition entrypoint for ${manifest.id}`);
-  const agentDefinitions = JSON.parse(
-    await readFile(
-      await resolveContainedPortablePath(
-        packageRoot,
-        manifest.entrypoints.agents,
-        `Agent entrypoint for ${manifest.id}`,
+  // A `ruleset` package ships a validated data asset instead of an Agent, so the
+  // agent-definition contract below cannot apply to it; the ruleset contract takes
+  // its place. Everything else in this loop still applies to both shapes. The
+  // contract check itself runs for every package, because the binding between the
+  // kind and the reserved asset has to hold in both directions.
+  if (assertRulesetPackageContract(manifest)) {
+    const document = assertRulesetAssetDocument(
+      await readFile(
+        await resolveContainedPortablePath(packageRoot, RULESET_ASSET_PATH, `Ruleset asset for ${manifest.id}`),
+        "utf8",
       ),
-      "utf8",
-    ),
-  );
-  if (!Array.isArray(agentDefinitions) || agentDefinitions.length === 0) {
-    throw new Error(`Missing agent definitions for ${manifest.id}`);
-  }
-  if (!agentDefinitions.some((definition) => definition.id === manifest.id)) {
-    throw new Error(`Package ${manifest.id} does not define its matching agent id`);
-  }
-  const matchingDefinitions = agentDefinitions.filter((definition) => definition.id === manifest.id);
-  if (matchingDefinitions.some((definition) => definition.description !== manifest.description)) {
-    throw new Error(`Package ${manifest.id} agent description does not match its manifest description`);
-  }
-  for (const definition of agentDefinitions) {
-    if (!definition?.id || agentDefinitionIds.has(definition.id)) {
-      throw new Error(`Duplicate or missing agent definition id: ${definition?.id}`);
+      manifest.id,
+    );
+    // Catalogs ship beside the ruleset file and are read by the same Engine
+    // seam, so they are checked here for the same reason: what this repository
+    // publishes has to be installable.
+    const catalogSources = new Map();
+    for (const catalogPath of rulesetCatalogAssetPaths(manifest)) {
+      const path = await resolveContainedPortablePath(packageRoot, catalogPath, `Catalog asset for ${manifest.id}`);
+      catalogSources.set(catalogPath, await readFile(path, "utf8"));
     }
-    if (!["writer", "tracker", "misc"].includes(definition.category)) {
-      throw new Error(`Invalid agent category for ${definition.id}`);
+    assertRulesetCatalogs(manifest, document, catalogSources);
+    // The battle block ships inside the same file and is gated the same way, so it is checked here
+    // for the same reason: what this repository publishes has to be installable.
+    assertRulesetBattle(manifest, document);
+    // A scaled column rides inside a catalog entry, inline or in an asset, and is gated the same way.
+    assertRulesetScaled(manifest, document, catalogSources);
+    // So does the combat block, and the bestiary whose creatures are written in its own names.
+    assertRulesetCombat(manifest, document);
+    assertRulesetCreatures(manifest, document, catalogSources);
+    assertRulesetReactions(manifest, document, catalogSources);
+    assertRulesetApplies(manifest, document, catalogSources);
+  } else {
+    if (!manifest.entrypoints.agents) throw new Error(`Missing agent definition entrypoint for ${manifest.id}`);
+    const agentDefinitions = JSON.parse(
+      await readFile(
+        await resolveContainedPortablePath(
+          packageRoot,
+          manifest.entrypoints.agents,
+          `Agent entrypoint for ${manifest.id}`,
+        ),
+        "utf8",
+      ),
+    );
+    if (!Array.isArray(agentDefinitions) || agentDefinitions.length === 0) {
+      throw new Error(`Missing agent definitions for ${manifest.id}`);
     }
-    if (typeof definition.defaultPromptTemplate !== "string") {
-      throw new Error(`Missing default prompt template for ${definition.id}`);
+    if (!agentDefinitions.some((definition) => definition.id === manifest.id)) {
+      throw new Error(`Package ${manifest.id} does not define its matching agent id`);
     }
-    agentDefinitionIds.add(definition.id);
+    const matchingDefinitions = agentDefinitions.filter((definition) => definition.id === manifest.id);
+    const activeAgentDescription = withoutPackageActivationGuidance(manifest.id, manifest.description);
+    if (
+      matchingDefinitions.some(
+        (definition) =>
+          definition.description !== manifest.description && definition.description !== activeAgentDescription,
+      )
+    ) {
+      throw new Error(`Package ${manifest.id} agent description does not match its manifest description`);
+    }
+    for (const definition of agentDefinitions) {
+      if (!definition?.id || agentDefinitionIds.has(definition.id)) {
+        throw new Error(`Duplicate or missing agent definition id: ${definition?.id}`);
+      }
+      if (!["writer", "tracker", "misc"].includes(definition.category)) {
+        throw new Error(`Invalid agent category for ${definition.id}`);
+      }
+      if (typeof definition.defaultPromptTemplate !== "string") {
+        throw new Error(`Missing default prompt template for ${definition.id}`);
+      }
+      agentDefinitionIds.add(definition.id);
+    }
+    if (manifest.id === "beholder") {
+      // Canonical GENERAL_PROMPT from GetBeholder/Beholder-ME at ecee80e57cb84ad54c02c9c1b3d081e8cbd2799b.
+      const prompt = matchingDefinitions[0]?.defaultPromptTemplate ?? "";
+      const promptSha256 = createHash("sha256").update(prompt).digest("hex");
+      if (
+        prompt.length !== 3_709 ||
+        promptSha256 !== "03fd72e0569a389c9cf6241fb61ee6fd8e9ed9f26a9b1cc7ed5ef61f073c5002"
+      ) {
+        throw new Error("Beholder must ship the canonical benchmarked 3,709-character delta prompt");
+      }
+      if (compareEngineVersions(manifest.engine.min, "2.4.3") < 0) {
+        throw new Error("Beholder's delta prompt requires Engine 2.4.3 or newer");
+      }
+    }
   }
 
   const hasServer = Boolean(manifest.entrypoints.server);
@@ -732,11 +875,7 @@ for (const entry of catalog.packages) {
         ),
         "utf8",
       );
-      for (const marker of [
-        "data-marinara-call-video-fit",
-        "data-marinara-call-stage",
-        "data-marinara-call-chat",
-      ]) {
+      for (const marker of ["data-marinara-call-video-fit", "data-marinara-call-stage", "data-marinara-call-chat"]) {
         if (!clientSource.includes(marker)) {
           throw new Error(`${manifest.id} client runtime is missing the ${marker} layout contract`);
         }
@@ -745,19 +884,68 @@ for (const entry of catalog.packages) {
   }
 }
 
-const guidanceIds = Object.keys(OFFICIAL_PACKAGE_GUIDANCE).sort();
+// The loop above only ever sees `catalog.packages`, so a package held out of
+// every catalog by INCOMPLETE_PACKAGE_IDS had no byte check at all — which is
+// how pixelforge shipped a manifest, artifact, and source that disagreed
+// (#544). Sweep the rest of packages/ with the same assertions.
+const uncataloguedIntegrity = await assertEveryPackageManifestIntegrity({ repoRoot, cataloguedIds: ids });
+
+// The avatar packages are checked from source whether or not they are listed yet, because they are
+// built ahead of the Engine surfaces that read them (scripts/avatar-package-checks.mjs).
+for (const id of AVATAR_PACKAGE_IDS) {
+  const packageRoot = await resolveContainedPortablePath(join(repoRoot, "packages"), id, `Package directory for ${id}`);
+  const manifest = JSON.parse(
+    await readFile(await resolveContainedPortablePath(packageRoot, "manifest.json", `Manifest for ${id}`), "utf8"),
+  );
+  const agentDefinitions = JSON.parse(
+    await readFile(
+      await resolveContainedPortablePath(packageRoot, manifest.entrypoints?.agents, `Agent entrypoint for ${id}`),
+      "utf8",
+    ),
+  );
+  assertAvatarPackageContract(manifest, agentDefinitions);
+}
+
+// Guidance may be authored ahead of listing for an incomplete package (its id
+// is absent from the catalog by design), so exempt those ids from exactness.
+const guidanceIds = Object.keys(OFFICIAL_PACKAGE_GUIDANCE)
+  .filter((id) => !INCOMPLETE_PACKAGE_IDS.has(id))
+  .sort();
 if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
   throw new Error("Official package activation guidance must cover exactly the downloadable catalog");
 }
 
-const agentOnly = catalog.packages.filter(
-  (entry) => !entry.manifest.entrypoints.server && !entry.manifest.entrypoints.client,
+// Counted over the PUBLISHED lanes — what a stable user actually receives.
+// Staging-only packages live in the preview overlay and are counted separately.
+// A ruleset ships neither a server runtime nor an Agent, so the agent/feature
+// split does not describe it: "no server entrypoint" would silently file it under
+// agents. It gets its own count instead of being miscounted as one.
+const rulesets = publishedCatalog.packages.filter((entry) => isRulesetPackage(entry.manifest)).length;
+const agentOnly = publishedCatalog.packages.filter(
+  (entry) => !isRulesetPackage(entry.manifest) && !entry.manifest.entrypoints.server,
 ).length;
-const features = catalog.packages.length - agentOnly;
-if (catalog.packages.length !== 35 || agentOnly !== 24 || features !== 11) {
-  throw new Error(`Expected 24 agents and 11 features, found ${agentOnly} and ${features}`);
+const features = publishedCatalog.packages.length - agentOnly - rulesets;
+if (publishedCatalog.packages.length !== 43 || agentOnly !== 26 || features !== 17 || rulesets !== 0) {
+  throw new Error(`Expected 26 agents, 17 features, and 0 rulesets, found ${agentOnly}, ${features}, and ${rulesets}`);
 }
-console.log(`Catalog valid: ${catalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
+console.log(
+  `Catalog valid: ${publishedCatalog.packages.length} packages (${agentOnly} agents, ${features} features, ${rulesets} rulesets).`,
+);
+if (uncataloguedIntegrity.checked.length > 0) {
+  const withoutArtifact = uncataloguedIntegrity.withoutArtifact;
+  console.log(
+    `Uncatalogued package manifests valid: ${uncataloguedIntegrity.checked.join(", ")}` +
+      `${withoutArtifact.length > 0 ? ` (source only, no committed artifact: ${withoutArtifact.join(", ")})` : ""}.`,
+  );
+}
+if (previewCatalog.packages.length > 0) {
+  console.log(
+    `Preview overlay valid: ${previewCatalog.packages.length} staging-only package(s) (${previewCatalog.packages
+      .map((entry) => entry.manifest.id)
+      .sort()
+      .join(", ")}) — hidden from stable users.`,
+  );
+}
 console.log(
   `Catalog lanes valid: ${[...catalogsByMajor.entries()]
     .map(([major, lane]) => `v${major}=${lane.packages.length}`)

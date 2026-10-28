@@ -2,8 +2,6 @@ import {
   buildSpatialLocationIndex,
   compareSpatialLocations,
   getSpatialDescendantIds,
-  spatialContextDefinitionSchema,
-  validateSpatialContextDefinition,
   wouldCreateSpatialCycle,
   type SpatialChildPresentation,
   type SpatialContextDefinition,
@@ -12,6 +10,7 @@ import {
   type SpatialLocationKind,
   type SpatialOwnerMode,
 } from "@marinara-engine/shared";
+import { spatialMapDefinitionSchema, validateSpatialMapDefinition } from "../../../../maps-shared/src/maps-model";
 
 export interface SpatialDefinitionDifference {
   added: string[];
@@ -126,9 +125,7 @@ export function startNewSpatialMap(
     location,
     definition: {
       ...result.definition,
-      locations: result.definition.locations.map((candidate) =>
-        candidate.id === location.id ? location : candidate,
-      ),
+      locations: result.definition.locations.map((candidate) => (candidate.id === location.id ? location : candidate)),
     },
   };
 }
@@ -188,9 +185,7 @@ function spatialDirectLinkPairKey(firstId: string, secondId: string): string {
   return firstId < secondId ? `${firstId}\u0000${secondId}` : `${secondId}\u0000${firstId}`;
 }
 
-function spatialDirectLinkRecords(
-  definition: SpatialContextDefinition,
-): Map<string, SpatialDirectLinkRecord[]> {
+function spatialDirectLinkRecords(definition: SpatialContextDefinition): Map<string, SpatialDirectLinkRecord[]> {
   const recordsByPair = new Map<string, SpatialDirectLinkRecord[]>();
   for (const location of definition.locations) {
     location.links.forEach((link, linkIndex) => {
@@ -203,14 +198,9 @@ function spatialDirectLinkRecords(
   return recordsByPair;
 }
 
-export function canonicalizeSpatialDirectLinks(
-  definition: SpatialContextDefinition,
-): SpatialContextDefinition {
+export function canonicalizeSpatialDirectLinks(definition: SpatialContextDefinition): SpatialContextDefinition {
   const recordsByPair = spatialDirectLinkRecords(definition);
-  const canonicalByPair = new Map<
-    string,
-    { record: SpatialDirectLinkRecord; bidirectional: boolean }
-  >();
+  const canonicalByPair = new Map<string, { record: SpatialDirectLinkRecord; bidirectional: boolean }>();
 
   for (const [key, records] of recordsByPair) {
     const oneWayRecords = records.filter((record) => !record.link.bidirectional);
@@ -273,13 +263,12 @@ export function setSpatialDirectLinkDirection(
   return {
     ...canonical,
     locations: canonical.locations.map((location) => {
-      const links = location.links.filter(
-        (link) => spatialDirectLinkPairKey(location.id, link.targetId) !== pairKey,
-      );
+      const links = location.links.filter((link) => spatialDirectLinkPairKey(location.id, link.targetId) !== pairKey);
       if (location.id !== sourceId) {
         return links.length === location.links.length ? location : { ...location, links };
       }
-      const insertionIndex = existing?.sourceId === sourceId ? Math.min(existing.linkIndex, links.length) : links.length;
+      const insertionIndex =
+        existing?.sourceId === sourceId ? Math.min(existing.linkIndex, links.length) : links.length;
       links.splice(insertionIndex, 0, nextLink);
       return { ...location, links };
     }),
@@ -316,9 +305,7 @@ export function removeSpatialDirectLink(
   const pairKey = spatialDirectLinkPairKey(firstLocationId, secondLocationId);
   let changed = false;
   const locations = definition.locations.map((location) => {
-    const links = location.links.filter(
-      (link) => spatialDirectLinkPairKey(location.id, link.targetId) !== pairKey,
-    );
+    const links = location.links.filter((link) => spatialDirectLinkPairKey(location.id, link.targetId) !== pairKey);
     if (links.length === location.links.length) return location;
     changed = true;
     return { ...location, links };
@@ -399,9 +386,10 @@ export function removeSpatialSubtree(
   const removedIds = new Set([locationId, ...getSpatialDescendantIds(definition, locationId)]);
   return {
     ...definition,
-    startingLocationId: definition.startingLocationId && removedIds.has(definition.startingLocationId)
-      ? null
-      : definition.startingLocationId,
+    startingLocationId:
+      definition.startingLocationId && removedIds.has(definition.startingLocationId)
+        ? null
+        : definition.startingLocationId,
     locations: definition.locations
       .filter((location) => !removedIds.has(location.id))
       .map((location) => ({
@@ -412,8 +400,8 @@ export function removeSpatialSubtree(
 }
 
 export function spatialDefinitionIssues(definition: SpatialContextDefinition): SpatialDefinitionIssue[] {
-  const issues = [...validateSpatialContextDefinition(definition).issues];
-  const parsed = spatialContextDefinitionSchema.safeParse(definition);
+  const issues = [...validateSpatialMapDefinition(definition).issues];
+  const parsed = spatialMapDefinitionSchema.safeParse(definition);
   if (!parsed.success) {
     for (const schemaIssue of parsed.error.issues) {
       const path = schemaIssue.path.filter(

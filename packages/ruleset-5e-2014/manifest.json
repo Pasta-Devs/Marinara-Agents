@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 46
+  },
+  "builtAgainst": {
+    "engineVersion": "2.4.6",
+    "engineCommit": "bd6464e61f03ad7d7743f2986f1371d0280c7c85"
+  },
+  "id": "ruleset-5e-2014",
+  "name": "5e (SRD 5.1)",
+  "version": "0.9.1",
+  "description": "Play Game Mode by the 5e rules (SRD 5.1): ability checks, saving throws, a full character sheet with spells and class features, and 5e combat against 319 monsters, on a battle board or without positions. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
+  "engine": {
+    "min": "2.4.6",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "ruleset"
+  ],
+  "entrypoints": {},
+  "contributions": {
+    "assets": {
+      "paths": [
+        "ruleset.json",
+        "catalogs/spells.json",
+        "catalogs/features.json",
+        "catalogs/creatures.json"
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "ruleset.json",
+      "sha256": "154fbae80ed86286a29ac1629f550dd052baf0f33ed0012d4a406a4ecf1202c0",
+      "bytes": 93257
+    },
+    {
+      "path": "catalogs/spells.json",
+      "sha256": "5073dbe894c942d752bb29df18440d47d4e4366f2aba12915905f86405018284",
+      "bytes": 314974
+    },
+    {
+      "path": "catalogs/features.json",
+      "sha256": "3970e951d5c1a477334f225b1831b8ea2f7b9ce02e7488aa011a8e14edd537e9",
+      "bytes": 199372
+    },
+    {
+      "path": "catalogs/creatures.json",
+      "sha256": "621feee41734fc0441c0edd6ddd01b47d3d79ea517a3a35c0aaae47076285246",
+      "bytes": 779881
+    }
+  ],
+  "permissions": [],
+  "restartRequired": false
+}

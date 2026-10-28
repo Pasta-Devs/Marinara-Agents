@@ -1,0 +1,14 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": { "locale": "es", "direction": "ltr" },
+  "package": {
+    "name": "Memory Nag",
+    "description": "Mantiene una breve bóveda de recuerdos de rol por chat y recupera solo los detalles pendientes relevantes para el turno actual. Añade el agente en Ajustes del chat → Agentes → Agentes de seguimiento del modo Rol."
+  },
+  "agents": {
+    "memory-nag": {
+      "name": "Memory Nag",
+      "description": "Mantiene una breve bóveda de recuerdos de rol por chat y recupera solo los detalles pendientes relevantes para el turno actual."
+    }
+  }
+}

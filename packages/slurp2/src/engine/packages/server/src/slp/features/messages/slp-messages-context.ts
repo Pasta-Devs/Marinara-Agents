@@ -1,0 +1,157 @@
+import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
+import type { SlurpMessagesStorage } from "../../data/messages/slp-messages-storage.js";
+import type { SlurpMessage } from "../../data/messages/slp-messages-storage-types.js";
+import { resolveSlurpCreatorAvailability } from "../../modules/creators/slp-creator-schedule-context.js";
+import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import type { FastifyInstance } from "fastify";
+import { SLURP_SUPPORT_ACCOUNT_ID } from "../../../../../shared/src/slp/slp-support.js";
+
+/** Storage handles and access checks shared by every message route. Created once per mount. */
+export function createSlpMessagesContext(
+  app: FastifyInstance,
+  slurp: SlpMessagesStorageDependencies["slurp"],
+  messages: SlpMessagesStorageDependencies["messages"],
+) {
+  const population = createSlurpPopulationStorage(app.db);
+
+  const creatorPresence = async (
+    creator: NonNullable<Awaited<ReturnType<typeof slurp.getNoodlerAccountById>>>,
+    threadId?: string,
+  ) => {
+    const threadMessages = threadId ? await messages.listMessages(threadId) : [];
+    const latestMessage = threadMessages
+      .filter((message) => message.role === "creator")
+      .reduce<string | null>(
+        (latest, message) => (!latest || message.createdAt > latest ? message.createdAt : latest),
+        null,
+      );
+    const latestPost = await slurp.getNoodlerLatestPublishedPost(creator.id);
+    const source = await slurp.resolveAccountSource(creator);
+    let availability = source
+      ? await resolveSlurpCreatorAvailability(
+          createCharactersStorage(app.db),
+          source,
+          undefined,
+          new Date(),
+          latestPost?.createdAt ?? null,
+          await slurp.getSettings(),
+        )
+      : { online: true, activity: null, minutesUntilOnline: 0 };
+
+    // Check if this specific thread has extended online availability
+    if (threadId) {
+      const thread = await messages.getThreadById(threadId);
+      if (thread?.extendedOnlineUntil && thread.extendedOnlineUntil > new Date().toISOString()) {
+        availability = { online: true, activity: "chatting", minutesUntilOnline: 0 };
+      }
+    }
+
+    if (threadId) {
+      const overrides = await messages.getDetailsOverrides(threadId);
+      availability = { ...availability, ...overrides.availability };
+    }
+
+    return {
+      creatorLastActiveAt: latestPost?.createdAt ?? null,
+      creatorLastMessageAt: latestMessage,
+      creatorAutoPosting: Boolean(creator.settings.scheduler.autoPosting?.enabled),
+      creatorAvailability: availability,
+    };
+  };
+
+  /** Every route needs the same "is this a real persona" gate, so it lives in one helper. */
+  const requireViewer = async (personaId: string) => slurp.getViewer(personaId);
+
+  /**
+   * A message as the fan is allowed to see it.
+   *
+   * A pay-per-view message the fan has not unlocked must not travel over the wire at all;
+   * hiding it in the client would still hand the text to anyone reading the response. Every
+   * fan-facing response that carries a message, including a fresh reply, goes through here.
+   */
+  // The stored media path is server storage: it is dropped from every fan-facing message (undefined
+  // keys do not survive JSON), while storage keeps it for the server's own file handling.
+  const maskForViewer = <T extends SlurpMessage | null>(message: T): T =>
+    message?.kind === "ppv" && !message.unlockedAt
+      ? {
+          ...message,
+          content: "",
+          imageUrl: null,
+          metadata: {
+            ...message.metadata,
+            imagePrompt: undefined,
+            imageDescription: undefined,
+            noodlerMediaPath: undefined,
+          },
+        }
+      : message?.kind === "post_preview" && message.metadata.previewLocked === true
+        ? {
+            ...message,
+            content: "",
+            imageUrl: null,
+            metadata: { ...message.metadata, content: "", imageUrl: null, noodlerMediaPath: undefined },
+          }
+        : message
+          ? { ...message, metadata: { ...message.metadata, noodlerMediaPath: undefined } }
+          : message;
+
+  /** The messages of a thread as this side is allowed to see them. The Creator side sees what they wrote. */
+  const visibleMessages = async (threadId: string, side: "viewer" | "creator") =>
+    (await messages.listMessages(threadId)).map((message) => (side === "viewer" ? maskForViewer(message) : message));
+
+  /**
+   * Re-read a thread and enrich it, so every response carries the same joined shape.
+   *
+   * `side` defaults to the fan, which is the safe default: their copy has the rapport score, the
+   * mood, the notes and the strike count stripped. Every thread response goes through here, so a
+   * new endpoint cannot leak the simulation's internals by forgetting to.
+   */
+  const freshView = async (threadId: string, side: "viewer" | "creator" = "viewer") => {
+    const thread = await messages.getThreadById(threadId);
+    if (!thread) return null;
+    const view = await messages.viewThread(thread);
+    return side === "creator" ? view : { ...view, ...messages.forViewer(thread) };
+  };
+
+  /**
+   * A creator the viewer owns. The creator-side routes are gated on this: a player must not be
+   * able to accept requests or read the rapport panel for somebody else's creator.
+   */
+  const ownsCreator = async (personaId: string, creatorAccountId: string) => {
+    const creator = await slurp.getNoodlerAccountById(creatorAccountId);
+    return Boolean(creator && creator.sourceKind === "persona" && creator.sourceEntityId === personaId);
+  };
+
+  /**
+   * The seat a persona has in a thread: the one writing to the Creator ("viewer"), the Creator's own
+   * ("creator"), or none. Slurp Support's threads are the player's from every persona.
+   */
+  const seatIn = async (
+    personaId: string,
+    thread: { viewerAccountId: string; creatorAccountId: string },
+  ): Promise<"viewer" | "creator" | null> => {
+    if (thread.viewerAccountId === personaId) return "viewer";
+    if (await ownsCreator(personaId, thread.creatorAccountId)) return "creator";
+    return thread.viewerAccountId === SLURP_SUPPORT_ACCOUNT_ID ? "viewer" : null;
+  };
+
+  return {
+    slurp,
+    messages,
+    seatIn,
+    population,
+    creatorPresence,
+    requireViewer,
+    maskForViewer,
+    visibleMessages,
+    freshView,
+    ownsCreator,
+  };
+}
+
+export type SlpMessagesContext = ReturnType<typeof createSlpMessagesContext>;
+
+export type SlpMessagesStorageDependencies = {
+  slurp: Record<string, any>;
+  messages: SlurpMessagesStorage;
+};

@@ -1,0 +1,190 @@
+import assert from "node:assert/strict";
+import { createRequire, registerHooks } from "node:module";
+const require = createRequire(import.meta.url);
+
+// The builder overlays captured host sources onto each package. These parser
+// fixtures need only its JSON helper, not a full copied server tree.
+const sourceHooks = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (
+      specifier === "../game/jsonish.js" &&
+      context.parentURL?.includes("/src/engine/packages/server/src/services/")
+    ) {
+      return nextResolve(
+        new URL("../sources/engine/packages/server/src/services/game/jsonish.ts", import.meta.url).href,
+        context,
+      );
+    }
+    return nextResolve(specifier, context);
+  },
+});
+const {
+  NOODLE_EMPTY_TIMELINE_REASON,
+  parseNoodleGeneratedRefresh,
+  parseNoodleGeneratedRefreshResponse,
+  validateNoodleGeneratedRefresh,
+} = require("../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-refresh");
+const {
+  parseNoodleGeneratedProfiles,
+} = require("../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-profiles");
+sourceHooks.deregister();
+
+assert.deepEqual(parseNoodleGeneratedProfiles([]), { profiles: [], rejected: [] });
+assert.deepEqual(
+  parseNoodleGeneratedProfiles({
+    profiles: [
+      {
+        entityId: "character-2",
+        name: "Lygus",
+        handle: "lygus",
+        bio: "A spectator.",
+        location: "The Exomyth",
+      },
+    ],
+  }),
+  {
+    profiles: [
+      {
+        entityId: "character-2",
+        name: "Lygus",
+        handle: "lygus",
+        bio: "A spectator.",
+        location: "The Exomyth",
+      },
+    ],
+    rejected: [],
+  },
+);
+assert.deepEqual(parseNoodleGeneratedProfiles([{ profiles: [] }]), { profiles: [], rejected: [] });
+assert.throws(() => parseNoodleGeneratedProfiles({ profiles: null }));
+assert.throws(() => parseNoodleGeneratedProfiles([{ profiles: null }]));
+assert.ok(parseNoodleGeneratedProfiles({ profiles: [{ entityId: "invalid" }] }).rejected[0]?.issueCount);
+assert.deepEqual(
+  parseNoodleGeneratedProfiles([
+    {
+      entityId: "character-1",
+      name: "Dottore",
+      handle: "dottore",
+      bio: "A scholar of progress.",
+      location: "Snezhnaya",
+    },
+  ]),
+  {
+    profiles: [
+      {
+        entityId: "character-1",
+        name: "Dottore",
+        handle: "dottore",
+        bio: "A scholar of progress.",
+        location: "Snezhnaya",
+      },
+    ],
+    rejected: [],
+  },
+);
+
+for (const emptyResponse of ["[]", "[\n]", '{"posts":[],"interactions":[],"follows":[]}']) {
+  const empty = parseNoodleGeneratedRefreshResponse(emptyResponse);
+  assert.deepEqual(empty.refresh, { posts: [], interactions: [], follows: [], digests: [] });
+  assert.equal(validateNoodleGeneratedRefresh(empty.refresh, new Set(), new Set()), NOODLE_EMPTY_TIMELINE_REASON);
+}
+
+const parsed = parseNoodleGeneratedRefreshResponse(
+  JSON.stringify([
+    {
+      tempId: "post-1",
+      authorHandle: "character",
+      content: "A short update.",
+      imagePrompt: null,
+      attachGalleryImage: false,
+      poll: null,
+    },
+  ]),
+);
+assert.equal(parsed.refresh.posts.length, 1);
+assert.equal(parsed.refresh.posts[0]?.authorHandle, "character");
+assert.equal(validateNoodleGeneratedRefresh(parsed.refresh, new Set(["character"]), new Set(["character"])), null);
+
+const wrappedRefresh = parseNoodleGeneratedRefreshResponse(
+  JSON.stringify([
+    {
+      posts: [
+        {
+          tempId: "post-1",
+          authorHandle: "@character",
+          content: "A short update.",
+          poll: null,
+          imagePrompt: null,
+          attachGalleryImage: false,
+        },
+      ],
+      interactions: [],
+      follows: [],
+      digests: [],
+    },
+  ]),
+);
+assert.equal(wrappedRefresh.refresh.posts.length, 1, "a wrapped refresh object must be unwrapped");
+assert.equal(wrappedRefresh.rejected.length, 0);
+assert.equal(wrappedRefresh.refresh.posts[0]?.authorHandle, "@character");
+assert.equal(
+  validateNoodleGeneratedRefresh(wrappedRefresh.refresh, new Set(["character"]), new Set(["character"])),
+  null,
+);
+
+const invitedOnlyFixture = parseNoodleGeneratedRefreshResponse(
+  JSON.stringify([
+    {
+      posts: [
+        {
+          tempId: "post_001",
+          authorHandle: "@doctor_ratio",
+          content: "The hypothesis still needs a rigorous proof.",
+          poll: null,
+          imagePrompt: null,
+          attachGalleryImage: false,
+        },
+        {
+          tempId: "post_002",
+          authorHandle: "@dottore",
+          content: "Experimentation will settle it sooner.",
+          poll: null,
+          imagePrompt: null,
+          attachGalleryImage: false,
+        },
+      ],
+      interactions: [{ type: "reply", targetTempId: "post_001" }],
+      follows: [],
+      digests: [],
+    },
+  ]),
+);
+assert.equal(invitedOnlyFixture.refresh.posts.length, 2, "wrapped valid posts must survive a malformed interaction");
+assert.equal(invitedOnlyFixture.rejected.length, 1);
+assert.equal(invitedOnlyFixture.rejected[0]?.collection, "interactions");
+assert.equal(invitedOnlyFixture.rejected[0]?.index, 0);
+
+// Over-long generated text is clipped to the field limit instead of losing the
+// whole row, in the keyed-object form and in the top-level array form.
+const overLongPost = {
+  tempId: "post_003",
+  authorHandle: "@dottore",
+  content: "n".repeat(4600),
+  poll: null,
+  imagePrompt: null,
+  attachGalleryImage: false,
+};
+const clippedObject = parseNoodleGeneratedRefresh({ posts: [overLongPost], interactions: [], follows: [] });
+assert.equal(clippedObject.rejected.length, 0, "an over-long post must not be rejected");
+assert.equal(clippedObject.refresh.posts.length, 1);
+assert.equal(clippedObject.refresh.posts[0]?.content.length, 4000);
+
+const clippedArray = parseNoodleGeneratedRefresh([
+  overLongPost,
+  { actorHandle: "@dottore", type: "reply", targetTempId: "post_003", content: "r".repeat(2600) },
+]);
+assert.equal(clippedArray.rejected.length, 0, "an over-long array row must not be rejected");
+assert.equal(clippedArray.refresh.posts[0]?.content.length, 4000);
+assert.equal(clippedArray.refresh.interactions[0]?.content?.length, 2000);
+
+console.log("Noodle generated refresh regressions passed.");

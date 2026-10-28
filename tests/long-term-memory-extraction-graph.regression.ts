@@ -1,41 +1,51 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdtemp, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 async function main() {
-  const source =
-    "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
+  const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const {
     compileEvidenceUnitExtraction,
+    diagnosticsRequireExtractionReview,
     evidenceUnitMessages,
     evidenceUnitResponseFormat,
     parseEvidenceUnitPayload,
-  } =
-    await import(`${source}/evidence-unit-extraction.ts`);
-  const { compileLtmEvidenceUnits } = await import(
-    `${source}/evidence-unit-compiler.ts`
+  } = await import(`${source}/extraction/evidence-unit-extraction.ts`);
+  const { compileLtmEvidenceUnits } = await import(`${source}/extraction/evidence-unit-compiler.ts`);
+  const { deduplicateUnits } = await import(`${source}/extraction/dedup.ts`);
+  const { analyzeTrustedLtmNoteSubjects, buildTrustedLtmSubjectCatalog, trustedLtmIdentityNotesForSource } =
+    await import(`${source}/identity/subject-catalog.ts`);
+  const { prepareLtmSubjectIdentityContext, resolveLtmSubjectIdentities } = await import(
+    `${source}/identity/subject-identity.ts`
   );
-  const { deduplicateUnits } = await import(`${source}/dedup.ts`);
-  const {
-    analyzeTrustedLtmNoteSubjects,
-    buildTrustedLtmSubjectCatalog,
-    subjectsEqual,
-    trustedLtmIdentityNotesForSource,
-  } = await import(`${source}/subject-identity.ts`);
-  const { projectLtmDraftMutationGroup } = await import(
-    `${source}/draft-projector.ts`
-  );
-  const { sourceHashForLtmSourceNote } = await import(
-    `${source}/source-hash.ts`
-  );
+  const { subjectsEqual } = await import(`${source}/identity/subject-equality.ts`);
+  const { projectLtmDraftMutationGroup } = await import(`${source}/drafts/draft-projector.ts`);
+  const { sourceHashForLtmSourceNote } = await import(`${source}/extraction/source-hash.ts`);
   const { normalizeStructuredSummaryEvidenceUnits } = await import(
-    `${source}/structured-summary-normalizer.ts`
+    `${source}/extraction/structured-summary-normalizer.ts`
   );
-  const { resolveScopedEvidenceUnitTargets } = await import(
-    `${source}/scoped-targets.ts`
+  const { validateLtmEvidenceUnits } = await import(`${source}/extraction/evidence-unit-validation.ts`);
+  const { resolveScopedEvidenceUnitTargets, scopedVariantNoteId } = await import(
+    `${source}/extraction/scoped-targets.ts`
   );
-  const { ltmNoteIdSchema } = await import(
-    "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts"
+  const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
+  const { processLongTermMemorySource } = await import(`${source}/extraction/source-processing.ts`);
+  const { projectLongTermMemoryDraftReview } = await import(`${source}/drafts/draft-review.ts`);
+  const { applyLongTermMemoryDraft, preflightLongTermMemoryDraft } = await import(`${source}/drafts/reconciliation.ts`);
+  const { LongTermMemoryDraftStore } = await import(`${source}/drafts/draft-store.ts`);
+  const { LongTermMemoryStorage } = await import(`${source}/persistence/storage.ts`);
+  const { longTermMemoryRecallIndexPath, rebuildLongTermMemoryIndexes } = await import(`${source}/recall/rebuild.ts`);
+  const { flushLtmIndexRebuild } = await import(`${source}/recall/rebuild-job.ts`);
+  const { getLtmExtractionConfig, updateLtmExtractionConfig } = await import(
+    `${source}/extraction/extraction-config.ts`
   );
+  const { ltmNoteIdSchema } =
+    await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
+  const { DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION } =
+    await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/constants.ts");
 
   const timestamp = "2026-07-21T00:00:00.000Z";
   const sourceNote = (
@@ -65,21 +75,16 @@ async function main() {
   const unit = (
     note: ReturnType<typeof sourceNote>,
     input: {
-      bucket:
-        | "timeline_event"
-        | "character_fact"
-        | "relationship_state"
-        | "world_fact"
-        | "thread"
-        | "tone";
+      bucket: "timeline_event" | "character_fact" | "relationship_state" | "world_fact" | "thread" | "tone";
       subjectId: string;
       sectionKey: string;
       title?: string;
       text: string;
       claimKind?: "static" | "change";
+      status?: "active" | "resolved";
       links?: Array<{
         target: string;
-        relation: "extracted_from" | "evidenced_by" | "caused_by";
+        relation: "extracted_from" | "evidenced_by" | "caused_by" | "resolved_in" | "affects_character" | "involves";
       }>;
       subjectNames?: string[];
       dimensionChanges?: Record<string, number>;
@@ -92,7 +97,7 @@ async function main() {
     evidence: [`source_note:${note.id}`],
     confidence: 0.9,
     salience: 0.8,
-    status: "active" as const,
+    status: input.status ?? ("active" as const),
     links: input.links ?? [],
     sourceHash: sourceHashForLtmSourceNote(note),
   });
@@ -101,6 +106,7 @@ async function main() {
     units: ReturnType<typeof unit>[],
     skipStructuredBackfill = true,
     existingNotes: any[] = [],
+    scope: Record<string, unknown> = {},
   ) =>
     compileEvidenceUnitExtraction({
       unitResponse: { summary: "Extraction graph regression", units },
@@ -108,7 +114,7 @@ async function main() {
       sourceText: note.sections.source.text,
       sourceNote: note,
       existingNotes,
-      scope: {},
+      scope: scope as any,
       modes: ["roleplay"],
       mode: "roleplay",
       sourceHash: sourceHashForLtmSourceNote(note),
@@ -120,6 +126,7 @@ async function main() {
     { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-a" },
     "Mara learned the observatory script and is guarded. Alice and Rowan trusted each other less after the argument.",
   );
+  const scopedChat = { ...chat, scope: { chatId: "chat-a", chatIds: ["chat-a"] } };
 
   const linklessCharacter = compile(chat, [
     unit(chat, {
@@ -133,10 +140,20 @@ async function main() {
   ]);
   assert.equal(linklessCharacter.accounting.keptUnits, 1);
   assert.equal(linklessCharacter.compiledResponse.mutations.length, 1);
-  assert.equal(
-    linklessCharacter.compiledResponse.mutations[0]?.claimKind,
-    "static",
-  );
+  assert.equal(linklessCharacter.compiledResponse.mutations[0]?.claimKind, "static");
+
+  const unresolvedThread = compile(chat, [
+    unit(chat, {
+      bucket: "thread",
+      subjectId: "archive_open",
+      sectionKey: "summary",
+      text: "The archive thread remains open.",
+      claimKind: "static",
+      status: "active",
+    }),
+  ]);
+  assert.equal(unresolvedThread.accounting.keptUnits, 1);
+  assert.equal(unresolvedThread.outcome.droppedCandidates.length, 0);
 
   const relationshipWithoutCause = compile(chat, [
     unit(chat, {
@@ -156,6 +173,10 @@ async function main() {
     ),
     true,
   );
+  assert.equal(
+    relationshipWithoutCause.outcome.droppedCandidates[0]?.validatorCode,
+    "relationship_state_missing_caused_by",
+  );
 
   const relationshipWithMissingCause = compile(chat, [
     unit(chat, {
@@ -171,11 +192,216 @@ async function main() {
   ]);
   assert.equal(relationshipWithMissingCause.accounting.keptUnits, 0);
   assert.equal(
-    relationshipWithMissingCause.outcome.droppedCandidates.some((candidate) =>
-      candidate.message.includes("does not exist"),
+    relationshipWithMissingCause.outcome.droppedCandidates.some(
+      (candidate) =>
+        candidate.message.includes("missing a caused_by link") &&
+        !candidate.message.includes("timeline_missing_argument"),
     ),
     true,
   );
+  assert.equal(
+    relationshipWithMissingCause.outcome.droppedCandidates[0]?.validatorCode,
+    "relationship_state_missing_caused_by",
+  );
+  const unknownLinkTarget = compile(chat, [
+    unit(chat, {
+      bucket: "world_fact",
+      subjectId: "missing_link_fact",
+      sectionKey: "facts",
+      text: "A fact linked to a missing memory.",
+      links: [{ target: "missing_memory", relation: "evidenced_by" }],
+    }),
+  ]);
+  assert.equal(unknownLinkTarget.outcome.droppedCandidates[0]?.validatorCode, "unknown_link_target");
+  assert.doesNotMatch(unknownLinkTarget.outcome.droppedCandidates[0]?.message ?? "", /missing_memory/u);
+  const closureAfterInitialDrop = compile(chat, [
+    unit(chat, {
+      bucket: "relationship_state",
+      subjectId: "removed_relationship",
+      sectionKey: "state",
+      text: "Alice and Rowan's trust changed after the argument.",
+      claimKind: "change",
+      subjectNames: ["Alice", "Rowan"],
+      dimensionChanges: { trust: -12 },
+    }),
+    unit(chat, {
+      bucket: "world_fact",
+      subjectId: "dependent_fact",
+      sectionKey: "facts",
+      text: "The observatory kept a record of Alice and Rowan's trust.",
+      links: [{ target: "rel_removed_relationship", relation: "evidenced_by" }],
+    }),
+  ]);
+  const closureDrop = closureAfterInitialDrop.outcome.droppedCandidates.find(
+    (candidate) => candidate.validatorCode === "unknown_link_target",
+  );
+  assert.ok(closureDrop);
+  assert.doesNotMatch(closureDrop.message, /rel_removed_relationship/u);
+  assert.equal(
+    closureAfterInitialDrop.diagnostics.find(
+      (diagnostic) => diagnostic.details?.validatorCode === "unknown_link_target",
+    )?.details?.validationStage,
+    "closure",
+  );
+  // Issue #1448: a unit dropped after validation must not leave a dangling link in the compiled draft.
+  const lateDropSource = sourceNote(
+    "source_late_drop_links",
+    { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-late-drop" },
+    "Mara told the coffee story at the cafe. The cafe serves only coffee. Mara swore off coffee for good.",
+  );
+  const lateDrop = compile(lateDropSource, [
+    unit(lateDropSource, {
+      bucket: "timeline_event",
+      subjectId: "coffee_story_told",
+      sectionKey: "event",
+      text: "Mara told the coffee story at the cafe.",
+      claimKind: "change",
+      links: [
+        { target: lateDropSource.id, relation: "extracted_from" },
+        { target: "char_mara", relation: "affects_character" },
+      ],
+    }),
+    unit(lateDropSource, {
+      bucket: "thread",
+      subjectId: "coffee_story",
+      sectionKey: "summary",
+      text: "Whether the coffee story is true stays open.",
+      claimKind: "change",
+    }),
+    unit(lateDropSource, {
+      bucket: "world_fact",
+      subjectId: "cafe_menu",
+      sectionKey: "facts",
+      text: "The cafe serves only coffee.",
+      claimKind: "static",
+      links: [{ target: "thread_coffee_story", relation: "involves" }],
+    }),
+    unit(lateDropSource, {
+      bucket: "character_fact",
+      subjectId: "mara",
+      sectionKey: "developments",
+      text: "Mara swore off coffee for good.",
+      claimKind: "change",
+      subjectNames: ["Mara"],
+    }),
+  ]);
+  const lateDropCreated = lateDrop.compiledResponse.mutations.flatMap((mutation) =>
+    mutation.kind === "create_note" ? [mutation.note] : [],
+  );
+  assert.deepEqual(lateDropCreated.map((note) => note.type).sort(), ["timeline_event", "world"]);
+  const lateDropTargets = new Set([lateDropSource.id, ...lateDropCreated.map((note) => note.id)]);
+  for (const mutation of lateDrop.compiledResponse.mutations)
+    for (const link of mutation.kind === "create_note"
+      ? mutation.note.links
+      : mutation.kind === "add_link"
+        ? [mutation.link]
+        : [])
+      assert.ok(lateDropTargets.has(link.target), `draft link target must exist: ${link.target}`);
+  assert.equal(lateDrop.accounting.keptUnits, 2);
+  assert.equal(lateDrop.accounting.validationRejections, 2);
+  assert.deepEqual(
+    lateDrop.diagnostics
+      .filter((diagnostic) => diagnostic.code === "unknown_link_target")
+      .map((diagnostic) => [diagnostic.severity, diagnostic.details?.linkTarget])
+      .sort(),
+    [
+      ["warning", "char_mara"],
+      ["warning", "thread_coffee_story"],
+    ],
+    "a non-structural link to a dropped unit is stripped with a warning",
+  );
+  assert.equal(lateDrop.requiresReview, false);
+  // Without provenance no extracted_from link is added, so the event graph drops the cause of a relationship
+  // change that another event still grounds.
+  const lateCauseSource = {
+    ...sourceNote(
+      "source_late_cause",
+      { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-late-cause" },
+      "Mara told the coffee story at the cafe. Alice and Rowan's trust changed after the coffee story.",
+    ),
+    provenance: undefined,
+  } as any;
+  const lateCause = compile(lateCauseSource, [
+    unit(lateCauseSource, {
+      bucket: "timeline_event",
+      subjectId: "coffee_spilled",
+      sectionKey: "event",
+      text: "Mara told the coffee story at the cafe.",
+      claimKind: "change",
+    }),
+    unit(lateCauseSource, {
+      bucket: "timeline_event",
+      subjectId: "cafe_visit",
+      sectionKey: "event",
+      text: "Mara told the coffee story at the cafe.",
+      claimKind: "change",
+      links: [{ target: lateCauseSource.id, relation: "extracted_from" }],
+    }),
+    unit(lateCauseSource, {
+      bucket: "relationship_state",
+      subjectId: "alice_rowan",
+      sectionKey: "state",
+      text: "Alice and Rowan's trust changed after the coffee story.",
+      claimKind: "change",
+      subjectNames: ["Alice", "Rowan"],
+      dimensionChanges: { trust: -12 },
+      links: [
+        { target: "timeline_coffee_spilled", relation: "caused_by" },
+        { target: "timeline_cafe_visit", relation: "evidenced_by" },
+      ],
+    }),
+  ]);
+  assert.deepEqual(
+    lateCause.compiledResponse.mutations.flatMap((mutation) =>
+      mutation.kind === "create_note" ? [mutation.note.type] : [],
+    ),
+    ["timeline_event"],
+  );
+  const lateCauseDrop = lateCause.diagnostics.find(
+    (diagnostic) => diagnostic.details?.validatorCode === "relationship_state_missing_caused_by",
+  );
+  assert.equal(lateCauseDrop?.details?.validationStage, "closure");
+  assert.equal(lateCause.accounting.keptUnits, 1);
+  assert.equal(lateCause.accounting.validationRejections, 2, "the late relationship drop is counted");
+  const sourceHashMismatch = compile(chat, [
+    {
+      ...unit(chat, {
+        bucket: "world_fact",
+        subjectId: "stale_source_fact",
+        sectionKey: "facts",
+        text: "A fact extracted from a stale source version.",
+      }),
+      sourceHash: "stale-source-hash",
+    },
+  ]);
+  assert.equal(sourceHashMismatch.outcome.droppedCandidates[0]?.validatorCode, "source_hash_mismatch");
+
+  // Issue #1137: a flat summary (no recognized headings) must normalize a
+  // timeline_event to the event section instead of dropping it as invalid.
+  const flatSummaryTimeline = unit(chat, {
+    bucket: "timeline_event",
+    subjectId: "argument_strained_trust",
+    sectionKey: "facts",
+    text: "Alice and Rowan argued, straining their trust.",
+    links: [{ target: chat.id, relation: "extracted_from" }],
+  });
+  const flatTimelineResult = compile(chat, [flatSummaryTimeline]);
+  assert.equal(flatTimelineResult.accounting.keptUnits, 1);
+  assert.equal(flatTimelineResult.outcome.droppedCandidates.length, 0);
+  assert.equal(flatTimelineResult.unitResponse.units[0]?.sectionKey, "event");
+  // The validator guard and its recovery candidate stay intact for direct callers.
+  const rawInvalidTimeline = validateLtmEvidenceUnits({
+    units: [flatSummaryTimeline],
+    sourceText: chat.sections.source.text,
+    sourceNote: chat,
+    existingNotes: [],
+    expectedSourceHash: sourceHashForLtmSourceNote(chat),
+  });
+  const rawInvalidTimelineDrop = rawInvalidTimeline.droppedCandidates[0];
+  assert.equal(rawInvalidTimelineDrop?.validatorCode, "invalid_timeline_section");
+  assert.equal(rawInvalidTimelineDrop?.recoveryCandidate?.text, flatSummaryTimeline.text);
+  assert.equal(rawInvalidTimelineDrop?.recoveryCandidate?.sourceHash, flatSummaryTimeline.sourceHash);
+  assert.deepEqual(rawInvalidTimelineDrop?.recoveryCandidate?.evidence, flatSummaryTimeline.evidence);
 
   const relationshipWithEvent = compile(chat, [
     unit(chat, {
@@ -193,13 +419,136 @@ async function main() {
       claimKind: "change",
       subjectNames: ["Alice", "Rowan"],
       dimensionChanges: { trust: -12 },
-      links: [
-        { target: "timeline_argument_strained_trust", relation: "caused_by" },
-      ],
+      links: [{ target: "timeline_argument_strained_trust", relation: "caused_by" }],
     }),
   ]);
   assert.equal(relationshipWithEvent.accounting.keptUnits, 2);
   assert.equal(relationshipWithEvent.compiledResponse.mutations.length, 2);
+
+  // Issue #1362: an event caused by another event in the same response keeps that
+  // caused_by link next to its source link, and a bare provider target resolves to it.
+  const causeEvent = unit(chat, {
+    bucket: "timeline_event",
+    subjectId: "archive_breach",
+    sectionKey: "event",
+    text: "Mara broke into the archive.",
+    links: [{ target: chat.id, relation: "extracted_from" }],
+  });
+  const effectEvent = unit(chat, {
+    bucket: "timeline_event",
+    subjectId: "archive_alarm",
+    sectionKey: "event",
+    text: "The archive alarm sounded and the guards sealed the doors.",
+    links: [
+      { target: chat.id, relation: "extracted_from" },
+      { target: "archive_breach", relation: "caused_by" },
+    ],
+  });
+  const parsedEventCause = parseEvidenceUnitPayload(
+    { summary: "Event cause parser regression", units: [causeEvent, effectEvent] },
+    sourceHashForLtmSourceNote(chat),
+  );
+  assert.equal(parsedEventCause.parserRejections, 0);
+  assert.deepEqual(parsedEventCause.response.units[1]?.links, [
+    { target: chat.id, relation: "extracted_from" },
+    { target: "timeline_archive_breach", relation: "caused_by" },
+  ]);
+  const eventCause = compile(chat, parsedEventCause.response.units as ReturnType<typeof unit>[]);
+  assert.equal(eventCause.accounting.keptUnits, 2);
+  assert.equal(eventCause.accounting.validationRejections, 0);
+  assert.equal(eventCause.diagnostics.filter((diagnostic) => diagnostic.severity === "error").length, 0);
+  const eventNotes = eventCause.compiledResponse.mutations.flatMap((mutation) =>
+    mutation.kind === "create_note" ? [mutation.note] : [],
+  );
+  const causeNote = eventNotes.find((note) => note.id.startsWith("timeline_archive_breach"));
+  const effectNote = eventNotes.find((note) => note.id.startsWith("timeline_archive_alarm"));
+  assert.ok(causeNote && effectNote, "both events must compile to notes");
+  assert.deepEqual(
+    effectNote.links.map((link) => `${link.relation}:${link.target}`).sort(),
+    [`caused_by:${causeNote.id}`, `extracted_from:${chat.id}`],
+    "the event-to-event caused_by link must survive compilation beside extracted_from",
+  );
+
+  const resolvedThread = unit(chat, {
+    bucket: "thread",
+    subjectId: "thread_archive_open",
+    sectionKey: "summary",
+    text: "The archive thread is resolved after Mara returned.",
+    claimKind: "change",
+    status: "resolved",
+    links: [{ target: "timeline_archive_reopened", relation: "resolved_in" }],
+  });
+  const resolutionEvent = unit(chat, {
+    bucket: "timeline_event",
+    subjectId: "archive_reopened",
+    sectionKey: "event",
+    text: "Mara returned and reopened the archive.",
+    claimKind: "change",
+    links: [{ target: chat.id, relation: "extracted_from" }],
+  });
+  const existingThread = {
+    ...chat,
+    id: "thread_archive_open",
+    type: "thread" as const,
+    status: "active" as const,
+    tags: ["typed_memory"],
+    sections: { summary: { text: "The archive thread remains open.", updatedAt: timestamp } },
+  };
+  const parsedResolution = parseEvidenceUnitPayload(
+    { summary: "Resolved thread parser regression", units: [resolvedThread, resolutionEvent] },
+    sourceHashForLtmSourceNote(chat),
+  );
+  assert.equal(parsedResolution.parserRejections, 0);
+  assert.equal(parsedResolution.response.units.length, 2);
+  assert.deepEqual(parsedResolution.response.units[0]?.links, [
+    { target: "timeline_archive_reopened", relation: "resolved_in" },
+  ]);
+  const resolvedThreadValidation = compile(chat, [resolvedThread, resolutionEvent], true, [existingThread]);
+  assert.equal(resolvedThreadValidation.accounting.keptUnits, 2);
+  assert.equal(
+    resolvedThreadValidation.compiledResponse.mutations.some(
+      (mutation) => mutation.kind === "create_note" && mutation.note.type === "thread",
+    ),
+    false,
+  );
+  assert.equal(
+    resolvedThreadValidation.compiledResponse.mutations.some(
+      (mutation) =>
+        mutation.kind === "set_status" && mutation.noteId === existingThread.id && mutation.status === "resolved",
+    ),
+    true,
+  );
+  assert.equal(
+    resolvedThreadValidation.diagnostics.some((diagnostic) => diagnostic.code === "resolved_thread_missing_fanout"),
+    false,
+  );
+  const missingThreadTarget = compile(chat, [resolvedThread]);
+  assert.equal(missingThreadTarget.accounting.keptUnits, 0);
+  assert.equal(missingThreadTarget.outcome.droppedCandidates[0]?.validatorCode, "unknown_link_target");
+  // Issue #1137: a resolution event from a flat summary is normalized to the
+  // event section, so it still satisfies the resolved thread's fan-out.
+  const repairedResolutionEvent = compile(chat, [resolvedThread, { ...resolutionEvent, sectionKey: "facts" }]);
+  assert.equal(repairedResolutionEvent.accounting.keptUnits, 2);
+  assert.equal(
+    repairedResolutionEvent.outcome.droppedCandidates.some(
+      (candidate) => candidate.validatorCode === "unknown_link_target",
+    ),
+    false,
+  );
+  const missingResolutionEvent = compile(chat, [
+    unit(chat, {
+      bucket: "thread",
+      subjectId: "archive_missing",
+      sectionKey: "summary",
+      text: "The archive thread is resolved.",
+      claimKind: "change",
+      status: "resolved",
+    }),
+  ]);
+  assert.equal(
+    missingResolutionEvent.diagnostics.some((diagnostic) => diagnostic.code === "resolved_thread_missing_fanout"),
+    true,
+  );
 
   const evidenceCharacter = {
     id: "char_mara",
@@ -234,9 +583,7 @@ async function main() {
     modes: ["roleplay"],
   });
   assert.equal(currentEvidence.mutations[0]?.kind, "append_section");
-  assert.deepEqual(currentEvidence.mutations[0]?.evidence, [
-    `source_note:${chat.id}`,
-  ]);
+  assert.deepEqual(currentEvidence.mutations[0]?.evidence, [`source_note:${chat.id}`]);
 
   const structuredCharacterSource = sourceNote(
     "source_structured_character_text",
@@ -265,30 +612,1525 @@ async function main() {
     false,
   );
   assert.equal(
-    structuredCharacterUnits[0]?.text.includes("distinguishes his case as an \"exoneree\" rather than parolee"),
+    structuredCharacterUnits[0]?.text.includes('distinguishes his case as an "exoneree" rather than parolee'),
+    true,
+  );
+  assert.equal(structuredCharacterUnits[1]?.text.startsWith("Began processing Damo's state compensation claim"), true);
+
+  // Issue #1137: an unrecognized `##` heading must close the previous section so
+  // its following fields are not misattributed to the last known bucket.
+  const unknownHeadingSource = sourceNote(
+    "source_unknown_heading",
+    { kind: "chat_summary", sourceId: "chat-unknown", entryId: "summary-unknown" },
+    [
+      "## character_fact",
+      "- Mara | section: facts | text: Mara reads old scripts.",
+      "## misc_notes",
+      "- Rowan | section: facts | text: Rowan guards the gate.",
+    ].join("\n"),
+  );
+  const unknownHeadingUnits = normalizeStructuredSummaryEvidenceUnits({
+    units: [],
+    sourceText: unknownHeadingSource.sections.source.text,
+    sourceNote: unknownHeadingSource,
+    sourceHash: sourceHashForLtmSourceNote(unknownHeadingSource),
+    mode: "roleplay",
+    modes: ["roleplay"],
+  }).units.filter((candidate) => candidate.bucket === "character_fact");
+  assert.deepEqual(
+    unknownHeadingUnits.map((candidate) => candidate.subjectId),
+    ["mara"],
+    "fields under an unrecognized heading must not be attributed to the previous section",
+  );
+
+  // Issue #1137: structured backfill must not append a unit that duplicates a
+  // provider candidate already returned for the same source. The shorthand line
+  // folds its leading description into the parsed text, so a provider unit with
+  // only the canonical `text:` value must still count as covered.
+  const structuredCharacterProviderResult = normalizeStructuredSummaryEvidenceUnits({
+    units: [
+      unit(structuredCharacterSource, {
+        bucket: "character_fact",
+        subjectId: "denise",
+        sectionKey: "facts",
+        text: 'Damo\'s reentry case officer at the Marlowe Street reentry office; distinguishes his case as an "exoneree" rather than parolee, entitling him to state compensation.',
+        subjectNames: ["Denise"],
+      }),
+      unit(structuredCharacterSource, {
+        bucket: "character_fact",
+        subjectId: "denise",
+        sectionKey: "facts",
+        text: "Began processing Damo's state compensation claim using his college records as evidence of disrupted earning potential, and referred him to civil rights attorney Mara Castellano for a possible civil suit.",
+        subjectNames: ["Denise"],
+      }),
+    ],
+    sourceText: structuredCharacterSource.sections.source.text,
+    sourceNote: structuredCharacterSource,
+    sourceHash: sourceHashForLtmSourceNote(structuredCharacterSource),
+    mode: "roleplay",
+    modes: ["roleplay"],
+  });
+  assert.equal(
+    structuredCharacterProviderResult.addedUnits,
+    0,
+    "structured backfill must not duplicate provider candidates for the same source",
+  );
+  assert.equal(
+    structuredCharacterProviderResult.units.filter((candidate) => candidate.bucket === "character_fact").length,
+    2,
+  );
+
+  // Issue #1137: provider coverage must be symmetric and must not compare two
+  // backfill lines against each other, or a richer structured fact whose text
+  // contains a shorter sibling/provider fact for the same subject and section is
+  // dropped. The provider already holding the short fact must not hide the
+  // richer structured sibling, while an exact provider duplicate is still
+  // suppressed rather than re-added.
+  const nestedBackfillSource = sourceNote(
+    "source_nested_backfill",
+    { kind: "chat_summary", sourceId: "chat-nested", entryId: "summary-nested" },
+    [
+      "## character_fact",
+      "- Alice | section: facts | text: Alice has a scar on her left cheek.",
+      "- Alice | section: facts | text: Alice has a scar on her left cheek and speaks French.",
+    ].join("\n"),
+  );
+  const nestedBackfillResult = normalizeStructuredSummaryEvidenceUnits({
+    units: [
+      unit(nestedBackfillSource, {
+        bucket: "character_fact",
+        subjectId: "alice",
+        sectionKey: "facts",
+        text: "Alice has a scar on her left cheek.",
+        subjectNames: ["Alice"],
+      }),
+    ],
+    sourceText: nestedBackfillSource.sections.source.text,
+    sourceNote: nestedBackfillSource,
+    sourceHash: sourceHashForLtmSourceNote(nestedBackfillSource),
+    mode: "roleplay",
+    modes: ["roleplay"],
+  });
+  const nestedBackfillTexts = nestedBackfillResult.units
+    .filter((candidate) => candidate.bucket === "character_fact")
+    .map((candidate) => candidate.text);
+  assert.equal(nestedBackfillTexts.length, 2, "a richer sibling backfill fact must not be suppressed");
+  assert.equal(
+    nestedBackfillTexts.some((text) => text.includes("speaks French")),
+    true,
+    "the distinct detail from the richer backfill fact must be retained",
+  );
+  assert.equal(
+    nestedBackfillTexts.filter((text) => text === "Alice has a scar on her left cheek.").length,
+    1,
+    "a provider fact already covering the structured line must not be re-added",
+  );
+
+  // A cause written in words on a structured character line resolves to an
+  // event the extraction holds, as relationship causes do, or is left out. It must
+  // not become an invented `timeline_<words>` id that validation then drops.
+  const wordCauseLine =
+    "- Mara | section: facts | text: Mara reads the observatory script fluently. | caused_by: the night lesson";
+  const wordCauseSource = sourceNote(
+    "source_word_cause",
+    { kind: "chat_summary", sourceId: "chat-word-cause", entryId: "summary-word-cause" },
+    ["## character_fact", wordCauseLine].join("\n"),
+  );
+  const normalizeWordCause = (
+    note: ReturnType<typeof sourceNote>,
+    units: ReturnType<typeof unit>[],
+    existingNotes: any[] = [],
+  ) =>
+    normalizeStructuredSummaryEvidenceUnits({
+      units,
+      sourceText: note.sections.source.text,
+      sourceNote: note,
+      sourceHash: sourceHashForLtmSourceNote(note),
+      existingNotes,
+      mode: "roleplay",
+      modes: ["roleplay"],
+    }).units;
+  // Validation drops are reported as `candidate_dropped_*` with the validator code in the details.
+  const hasDropCode = (result: ReturnType<typeof compile>, code: string) =>
+    result.diagnostics.some((diagnostic) => diagnostic.code === code || diagnostic.details?.validatorCode === code);
+  const unmatchedWordCause = compile(wordCauseSource, [], false);
+  assert.equal(
+    hasDropCode(unmatchedWordCause, "unknown_link_target"),
+    false,
+    "a cause that matches no event must not drop the fact the server added",
+  );
+  assert.equal(unmatchedWordCause.accounting.keptUnits, 1);
+  assert.deepEqual(
+    normalizeWordCause(wordCauseSource, []).find((candidate) => candidate.bucket === "character_fact")?.links,
+    [],
+    "a static fact keeps no link for a cause that matches no event",
+  );
+
+  const nightLessonEvent = (note: ReturnType<typeof sourceNote>) =>
+    unit(note, {
+      bucket: "timeline_event",
+      subjectId: "night_lesson",
+      sectionKey: "event",
+      text: "Rowan taught Mara the observatory script at night.",
+      claimKind: "change",
+      links: [{ target: note.id, relation: "extracted_from" }],
+    });
+  const matchedWordCause = normalizeWordCause(wordCauseSource, [nightLessonEvent(wordCauseSource)]);
+  const matchedNightLesson = matchedWordCause.find((candidate) => candidate.bucket === "timeline_event");
+  assert.deepEqual(
+    matchedWordCause.find((candidate) => candidate.bucket === "character_fact")?.links,
+    [{ target: `timeline_${matchedNightLesson?.subjectId}`, relation: "evidenced_by" }],
+    "a cause in words resolves to the matching event in the answer",
+  );
+  const matchedWordCauseCompiled = compile(wordCauseSource, [nightLessonEvent(wordCauseSource)], false);
+  assert.equal(hasDropCode(matchedWordCauseCompiled, "unknown_link_target"), false);
+  assert.equal(matchedWordCauseCompiled.accounting.keptUnits, 2);
+
+  const exactCauseSource = sourceNote(
+    "source_exact_cause",
+    { kind: "chat_summary", sourceId: "chat-exact-cause", entryId: "summary-exact-cause" },
+    [
+      "## character_fact",
+      "- Mara | section: facts | text: Mara reads the observatory script fluently. | caused_by: night_lesson",
+    ].join("\n"),
+  );
+  const exactCause = normalizeWordCause(exactCauseSource, [nightLessonEvent(exactCauseSource)]);
+  assert.deepEqual(
+    exactCause.find((candidate) => candidate.bucket === "character_fact")?.links,
+    [
+      {
+        target: `timeline_${exactCause.find((candidate) => candidate.bucket === "timeline_event")?.subjectId}`,
+        relation: "evidenced_by",
+      },
+    ],
+    "a cause given as the event id keeps its link",
+  );
+
+  const unmatchedChangeSource = sourceNote(
+    "source_word_cause_change",
+    { kind: "chat_summary", sourceId: "chat-word-cause-change", entryId: "summary-word-cause-change" },
+    [
+      "## character_fact",
+      "- Mara | section: developments | text: Mara started reading the observatory script aloud. | caused_by: the night lesson",
+    ].join("\n"),
+  );
+  const unmatchedChange = compile(unmatchedChangeSource, [], false);
+  assert.equal(
+    hasDropCode(unmatchedChange, "unknown_link_target"),
+    false,
+    "a change fact's unmatched cause must not become an invented event link",
+  );
+  assert.equal(
+    hasDropCode(unmatchedChange, "source_event_graph_open"),
+    true,
+    "a change fact still without an event is dropped for the missing event",
+  );
+
+  const existingNightLesson = {
+    id: "timeline_night_lesson_abc",
+    title: "Night lesson",
+    type: "timeline_event" as const,
+    status: "active" as const,
+    modes: ["roleplay" as const],
+    scope: {},
+    tags: [],
+    keywords: [],
+    links: [],
+    sections: { event: { text: "Rowan taught Mara the observatory script at night.", updatedAt: timestamp } },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    version: 1,
+  };
+  assert.deepEqual(
+    normalizeWordCause(wordCauseSource, [], [existingNightLesson]).find(
+      (candidate) => candidate.bucket === "character_fact",
+    )?.links,
+    [{ target: existingNightLesson.id, relation: "evidenced_by" }],
+    "a cause in words resolves to a matching event already in the vault",
+  );
+
+  const sourceIdCauseSource = sourceNote(
+    "source_id_cause",
+    { kind: "chat_summary", sourceId: "chat-id-cause", entryId: "summary-id-cause" },
+    [
+      "## character_fact",
+      "- Mara | section: facts | text: Mara reads the observatory script fluently. | evidenced_by: source_id_cause",
+    ].join("\n"),
+  );
+  assert.deepEqual(
+    normalizeWordCause(sourceIdCauseSource, []).find((candidate) => candidate.bucket === "character_fact")?.links,
+    [{ target: sourceIdCauseSource.id, relation: "evidenced_by" }],
+    "evidence given as a held note id links to that note",
+  );
+
+  // A declared event the model left out is not held, so a change fact's unmatched cause
+  // must not fall back to it; the fact is dropped for its missing event instead.
+  const omittedEventSource = sourceNote(
+    "source_omitted_event",
+    { kind: "chat_summary", sourceId: "chat-omitted-event", entryId: "summary-omitted-event" },
+    [
+      "## timeline_event",
+      "- market_fire: The market burned down.",
+      "## character_fact",
+      "- Mara | section: developments | text: Mara started selling bread from a cart. | caused_by: the old quarrel",
+    ].join("\n"),
+  );
+  const omittedEvent = compile(omittedEventSource, [], false);
+  assert.equal(
+    hasDropCode(omittedEvent, "unknown_link_target"),
+    false,
+    "an unmatched cause must not fall back to a declared event the extraction does not hold",
+  );
+  assert.equal(hasDropCode(omittedEvent, "source_event_graph_open"), true);
+
+  // A cause matches an event id on whole words only, for relationship and character
+  // lines alike: a short id such as `rain` is not inside "the training", a short cause
+  // such as "rain" is not inside `training_session`, and the `timeline_` prefix every
+  // event id carries is not a word of the event.
+  const vaultEvent = (id: string, text: string) => ({
+    ...existingNightLesson,
+    id,
+    title: id,
+    sections: { event: { text, updatedAt: timestamp } },
+  });
+  const rainEvent = vaultEvent("timeline_rain", "It rained over the harbor all night.");
+  const trainingEvent = vaultEvent("timeline_training_session", "Mara and Rowan sparred in the yard.");
+  const fireworksEvent = vaultEvent("timeline_fireworks_show", "Fireworks lit up the harbor.");
+  const causeTargets = (cause: string, existingNotes: any[]) => {
+    const note = sourceNote(
+      "source_cause_words",
+      { kind: "chat_summary", sourceId: "chat-cause-words", entryId: "summary-cause-words" },
+      [
+        "## relationship_state",
+        `- alice_rowan | text: Alice and Rowan trust each other again. | caused_by: ${cause}`,
+        "## character_fact",
+        `- Mara | section: facts | text: Mara is calm now. | caused_by: ${cause}`,
+      ].join("\n"),
+    );
+    const units = normalizeWordCause(note, [], existingNotes);
+    return ["relationship_state", "character_fact"].map(
+      (bucket) => units.find((candidate) => candidate.bucket === bucket)?.links[0]?.target,
+    );
+  };
+  for (const [cause, event] of [
+    ["the training", rainEvent],
+    ["timeline", rainEvent],
+    ["rain", trainingEvent],
+    ["fire", fireworksEvent],
+  ] as const) {
+    assert.equal(
+      causeTargets(cause, [event]).includes(event.id),
+      false,
+      `the cause "${cause}" must not link to ${event.id}`,
+    );
+  }
+  assert.deepEqual(
+    causeTargets("the long training session at the old barracks", [rainEvent, trainingEvent]),
+    [trainingEvent.id, trainingEvent.id],
+    "a cause that names an event id in words links to it beside a shorter event id",
+  );
+  assert.deepEqual(
+    causeTargets("the training sessions", [trainingEvent]),
+    [trainingEvent.id, trainingEvent.id],
+    "a cause that names an event in the plural links to it",
+  );
+
+  // A change fact whose cause matches no event falls back to an event id the summary
+  // declares in its line, on whole words too: `art_show` is not in "start showing".
+  const lineWordsSource = sourceNote(
+    "source_line_words",
+    { kind: "chat_summary", sourceId: "chat-line-words", entryId: "summary-line-words" },
+    [
+      "## timeline_event",
+      "- art_show: Mara exhibited her paintings at the harbor hall.",
+      "- market_fire: The market burned down.",
+      "## character_fact",
+      "- Mara | section: developments | text: Mara will start showing her students the old script. | caused_by: the long winter",
+    ].join("\n"),
+  );
+  const declaredEvents = [
+    ["art_show", "Mara exhibited her paintings at the harbor hall."],
+    ["market_fire", "The market burned down."],
+  ].map(([subjectId, text]) =>
+    unit(lineWordsSource, { bucket: "timeline_event", subjectId, sectionKey: "event", text }),
+  );
+  assert.deepEqual(
+    normalizeWordCause(lineWordsSource, declaredEvents).find((candidate) => candidate.bucket === "character_fact")
+      ?.links,
+    [],
+    "an event id inside a word of a change fact's line is not that fact's event",
+  );
+
+  const idiomaticStaticSource = sourceNote(
+    "source_static_fact_heuristic",
+    { kind: "chat_summary", sourceId: "chat-static", entryId: "summary-static" },
+    [
+      "## character_fact",
+      "- Rowan | section: facts | text: Rowan decided the old observatory was not worth visiting again.",
+    ].join("\n"),
+  );
+  const idiomaticStaticUnit = normalizeStructuredSummaryEvidenceUnits({
+    units: [],
+    sourceText: idiomaticStaticSource.sections.source.text,
+    sourceNote: idiomaticStaticSource,
+    sourceHash: sourceHashForLtmSourceNote(idiomaticStaticSource),
+    mode: "roleplay",
+    modes: ["roleplay"],
+  }).units.find((candidate) => candidate.bucket === "character_fact");
+  assert.equal(idiomaticStaticUnit?.sectionKey, "facts");
+  assert.equal(idiomaticStaticUnit?.claimKind, "static");
+
+  const explicitStaticTransition = normalizeStructuredSummaryEvidenceUnits({
+    units: [],
+    sourceText: [
+      "## character_fact",
+      "- Rowan | section: facts | text: Rowan decided to become a case officer.",
+      "- Mara | section: facts | text: Mara lost her assigned officer role.",
+    ].join("\n"),
+    sourceNote: idiomaticStaticSource,
+    sourceHash: sourceHashForLtmSourceNote(idiomaticStaticSource),
+    mode: "roleplay",
+    modes: ["roleplay"],
+  }).units.filter((candidate) => candidate.bucket === "character_fact");
+  assert.equal(
+    explicitStaticTransition.every((candidate) => candidate.sectionKey === "developments"),
     true,
   );
   assert.equal(
-    structuredCharacterUnits[1]?.text.startsWith("Began processing Damo's state compensation claim"),
+    explicitStaticTransition.every((candidate) => candidate.claimKind === "change"),
     true,
   );
 
-  const invalidEventWithDependent = compile(chat, [
+  const durableNarrativeCharacter = compile(chat, [
     unit(chat, {
-      bucket: "timeline_event",
-      subjectId: "invalid_argument",
-      sectionKey: "history",
-      text: "Alice and Rowan argued.",
+      bucket: "character_fact",
+      subjectId: "rowan",
+      sectionKey: "facts",
+      text: "Rowan met Mara and is her assigned case officer.",
+      claimKind: "static",
+      subjectNames: ["Rowan"],
     }),
+  ]);
+  assert.equal(durableNarrativeCharacter.accounting.keptUnits, 1);
+
+  const durablePastNarrativeCharacter = compile(chat, [
+    unit(chat, {
+      bucket: "character_fact",
+      subjectId: "rowan",
+      sectionKey: "facts",
+      text: "Rowan told Mara he was her assigned case officer.",
+      claimKind: "static",
+      subjectNames: ["Rowan"],
+    }),
+  ]);
+  assert.equal(durablePastNarrativeCharacter.accounting.keptUnits, 1);
+
+  for (const text of ["Rowan met Mara and works as a doctor.", "Rowan told Mara he serves as her case officer."]) {
+    const result = compile(chat, [
+      unit(chat, {
+        bucket: "character_fact",
+        subjectId: "rowan",
+        sectionKey: "facts",
+        text,
+        claimKind: "static",
+        subjectNames: ["Rowan"],
+      }),
+    ]);
+    assert.equal(result.accounting.keptUnits, 1, text);
+  }
+
+  const assertEventShapedWarningKept = (
+    text: string,
+    subject: { subjectId: string; subjectNames: string[] } = {
+      subjectId: "rowan",
+      subjectNames: ["Rowan"],
+    },
+  ) => {
+    const result = compile(chat, [
+      unit(chat, {
+        bucket: "character_fact",
+        subjectId: subject.subjectId,
+        sectionKey: "facts",
+        text,
+        claimKind: "static",
+        subjectNames: subject.subjectNames,
+      }),
+    ]);
+    assert.equal(result.accounting.keptUnits, 1, text);
+    assert.equal(result.outcome.droppedCandidates.length, 0, text);
+    assert.ok(
+      result.diagnostics.some(
+        (diagnostic) => diagnostic.code === "event_shaped_character_fact" && diagnostic.severity === "warning",
+      ),
+      text,
+    );
+    return result;
+  };
+
+  assertEventShapedWarningKept("Rowan met Mara at the observatory.");
+  assertEventShapedWarningKept("Rowan met Mara and is walking away.");
+  assertEventShapedWarningKept("Rowan met Mara and uses a lantern.");
+  assertEventShapedWarningKept("Rowan met Mara and is walking away, but is her assigned case officer.");
+  const mara = { subjectId: "mara", subjectNames: ["Mara"] };
+  assertEventShapedWarningKept("Mara learned to read the observatory script.", mara);
+  assertEventShapedWarningKept("Mara discovered she could read the observatory script.", mara);
+  assertEventShapedWarningKept("Mara carries the observatory key.", mara);
+  assertEventShapedWarningKept("Mara returned to the observatory.", mara);
+
+  {
+    // A name that starts with a note prefix word keeps that word in the memory's id: "Char Aznable" is
+    // `char_char_aznable`, and Rel Varga with Sayla Mass is `rel_rel_varga_sayla_mass`. Removing the prefix once
+    // left `char_aznable`, another note, so extraction made a second memory and dropped events linked to the first.
+    const roster = [
+      { id: "char-aznable", name: "Char Aznable" },
+      { id: "rel-varga", name: "Rel Varga" },
+      { id: "sayla-mass", name: "Sayla Mass" },
+      { id: "mara", name: "Mara" },
+    ];
+    const rosterScope = { characterIds: roster.map((character) => character.id) };
+    const canonicalNotes = [
+      { id: "char_char_aznable", type: "character", title: "Char Aznable", keys: ["char-aznable"], section: "facts" },
+      {
+        id: "rel_rel_varga_sayla_mass",
+        type: "relationship",
+        title: "Rel Varga and Sayla Mass",
+        keys: ["rel-varga", "sayla-mass"],
+        section: "state",
+      },
+    ];
+    const extractFromRoster = async (
+      sourceText: string,
+      withCanonicalNotes: boolean,
+      withModelRelationship = true,
+      extraFacts: [string, string, string][] = [],
+    ) => {
+      const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-prefix-word-names-"));
+      const releaseHost = configurePackageRuntime({
+        isDebugAgentsEnabled: () => false,
+        logger: { debug() {}, info() {}, warn() {}, error() {} },
+        dataDir,
+        resources: {
+          listCharacters: async () => roster.map(({ id, name }) => ({ id, data: { name }, comment: "" })),
+          listPersonas: async () => [],
+          listLorebooks: async () => [],
+        },
+        persistence: { getChat: async () => null, listChats: async () => [], updateChatMetadata: async () => {} },
+      });
+      const root = join(dataDir, "long-term-memory");
+      try {
+        const storage = new LongTermMemoryStorage(root);
+        for (const note of withCanonicalNotes ? canonicalNotes : []) {
+          await storage.createNote({
+            id: note.id,
+            title: note.title,
+            type: note.type,
+            status: "active",
+            modes: ["roleplay"],
+            scope: rosterScope,
+            tags: [],
+            keywords: [],
+            links: [],
+            subjects: note.keys.map((id) => ({ key: `character:${id}`, ref: { kind: "character", id } })),
+            sections: { [note.section]: { text: `${note.title} met at the hangar.`, updatedAt: timestamp } },
+          } as never);
+        }
+        await storage.createNote({
+          ...chat,
+          id: "source_prefix_word_names",
+          scope: rosterScope,
+          sections: { source: { text: sourceText, updatedAt: timestamp } },
+        } as never);
+        const source = (await storage.getNote("source_prefix_word_names"))!;
+        const fact = (
+          bucket: string,
+          subjectId: string,
+          subjectNames: string[],
+          text: string,
+          links: object[] = [],
+        ) => ({
+          bucket,
+          subjectId,
+          sectionKey: bucket === "timeline_event" ? "event" : bucket === "character_fact" ? "facts" : "state",
+          text,
+          claimKind: bucket === "timeline_event" ? "change" : "static",
+          importance: "major",
+          evidence: [`source_note:${source.id}`],
+          confidence: 0.9,
+          salience: 0.8,
+          status: "active",
+          links,
+          subjectNames,
+          sourceHash: sourceHashForLtmSourceNote(source),
+        });
+        const units = [
+          fact("character_fact", "char_aznable", ["Char Aznable"], "Char Aznable pilots a red mobile suit."),
+          fact(
+            "relationship_state",
+            "rel_varga_sayla_mass",
+            ["Rel Varga", "Sayla Mass"],
+            "Rel Varga trusts Sayla Mass.",
+          ),
+          fact("character_fact", "mara", ["Mara"], "Mara repairs the hangar lights."),
+          fact("timeline_event", "fleet_defection", [], "Char Aznable defected from the fleet.", [
+            { target: source.id, relation: "extracted_from" },
+            { target: "char_aznable", relation: "affects_character" },
+          ]),
+          ...extraFacts.map(([subjectId, name, text]) => fact("character_fact", subjectId, [name], text)),
+        ].filter((unit) => withModelRelationship || unit.bucket !== "relationship_state");
+        const committed = await processLongTermMemorySource({
+          sourceNote: source as never,
+          languageModel: {
+            name: "FixtureModel",
+            model: "fixture-model",
+            maxContext: null,
+            maxOutputTokens: null,
+            fitContext(messages: unknown[], fitOptions: { maxTokens: number }) {
+              return {
+                messages,
+                maxTokens: fitOptions.maxTokens,
+                estimatedTokensBefore: 20,
+                estimatedTokensAfter: 20,
+                trimmed: false,
+              };
+            },
+            async chatComplete() {
+              return { content: JSON.stringify({ summary: "Prefix-word names.", units }), finishReason: "stop" };
+            },
+          } as never,
+          scope: rosterScope,
+          modes: ["roleplay"],
+          mode: "roleplay",
+          extractionMode: "roleplay",
+          operationId: randomUUID(),
+          root,
+          applyLowRisk: false,
+        });
+        return committed.draft;
+      } finally {
+        releaseHost();
+        await rm(dataDir, { recursive: true, force: true });
+      }
+    };
+    const createdIds = (draft: { mutations: any[] }) =>
+      draft.mutations
+        .flatMap((mutation) =>
+          mutation.kind === "create_note" && mutation.note.type !== "timeline_event" ? [mutation.note.id] : [],
+        )
+        .sort();
+    const updatedIds = (draft: { mutations: any[] }) =>
+      [
+        ...new Set(draft.mutations.flatMap((mutation) => (mutation.kind === "create_note" ? [] : [mutation.noteId]))),
+      ].sort();
+    const plainSource =
+      "Char Aznable pilots a red mobile suit. Rel Varga trusts Sayla Mass. Mara repairs the hangar lights. Char Aznable defected from the fleet.";
+    const created = await extractFromRoster(plainSource, false);
+    assert.deepEqual(
+      createdIds(created),
+      ["char_char_aznable", "char_mara", "rel_rel_varga_sayla_mass"],
+      "a new memory for a name that starts with a prefix word keeps the whole name in its id",
+    );
+    assert.deepEqual(created.extractionOutcome!.droppedCandidates, []);
+    const defection = created.mutations.find(
+      (mutation: any) => mutation.kind === "create_note" && mutation.note.type === "timeline_event",
+    ) as any;
+    assert.ok(
+      defection?.note.links.some(
+        (link: any) => link.target === "char_char_aznable" && link.relation === "affects_character",
+      ),
+      "an event that affects the character links to the character's memory",
+    );
+
+    // A structured summary takes the other normalizer path; the existing memories are updated, not copied. The
+    // model leaves the relationship out, so the summary line supplies it, with the section's dimensions.
+    const structuredSource = [
+      "## character_fact",
+      "- Char Aznable | section: facts | text: Char Aznable pilots a red mobile suit.",
+      "## relationship_state",
+      "relationship_id: rel_varga_sayla_mass",
+      "dimensions: trust 80",
+      "- Rel Varga and Sayla Mass | characters: Rel Varga, Sayla Mass | text: Rel Varga trusts Sayla Mass.",
+      "",
+      "Mara repairs the hangar lights. Char Aznable defected from the fleet.",
+    ].join("\n");
+    const updated = await extractFromRoster(structuredSource, true, false);
+    assert.deepEqual(createdIds(updated), ["char_mara"]);
+    assert.deepEqual(updatedIds(updated), ["char_char_aznable", "rel_rel_varga_sayla_mass"]);
+    const relationshipUpdate = updated.mutations.find(
+      (mutation: any) => mutation.noteId === "rel_rel_varga_sayla_mass",
+    ) as any;
+    assert.equal(
+      relationshipUpdate?.section.dimensions?.trust,
+      80,
+      "the summary's relationship dimensions reach the memory",
+    );
+
+    // A summary section that names the character by its id gives that memory's section. The hint is keyed with the
+    // prefix stripped once (`char_aznable`), while identity's id keeps the repeated prefix.
+    const sectionSource = [
+      "## character_fact",
+      "character_id: char_char_aznable",
+      "section: core",
+      "",
+      "Char Aznable pilots a red mobile suit. Mara repairs the hangar lights.",
+    ].join("\n");
+    const sectioned = await extractFromRoster(sectionSource, true, false);
+    const characterUpdates = sectioned.mutations.filter((mutation: any) => mutation.noteId === "char_char_aznable");
+    assert.ok(characterUpdates.length > 0, "the summary updates the character's memory");
+    assert.deepEqual(
+      [...new Set(characterUpdates.map((mutation: any) => mutation.sectionKey))],
+      ["core"],
+      "the summary's section for a character whose id repeats its prefix reaches the memory",
+    );
+
+    // A name a structured summary writes out is not an id: "Char Aznable" keeps its first word, while an id followed
+    // by the name (`char_mara (Mara)`) is still an id. The character's section hint reaches its memory, a summary line
+    // for a fact the model already returned is not added again under a shortened subject (`aznable`) for identity to
+    // drop, and a relationship only the summary holds is kept rather than dropped under one (`varga_sayla_mass`).
+    const namedSource = [
+      "Char Aznable carries a red pendant. Mara carries a brass key. Char Aznable defected from the fleet.",
+      "## character_fact",
+      "character: Char Aznable",
+      "section: profile",
+      "- Char Aznable | section: profile | text: Char Aznable pilots a red mobile suit.",
+      "- character: Char Aznable | section: profile | text: Char Aznable leads the Red Comet squadron.",
+      "## character_fact",
+      "character: Mara",
+      "section: profile",
+      "- char_mara | section: profile | text: Mara repairs the hangar lights.",
+      "- char_mara (Mara) | section: profile | text: Mara keeps a spare fuse.",
+      "- character: char_mara (Mara) | section: profile | text: Mara signs the hangar log.",
+      "## relationship_state",
+      "- Rel Varga, Sayla Mass | text: Rel Varga trusts Sayla Mass.",
+      "- relationship: Rel Varga, Sayla Mass | text: Rel Varga trusts Sayla Mass.",
+      "- Rel Varga, Sayla Mass | caused_by: the hangar fire | text: Rel Varga owes Sayla Mass a favor.",
+    ].join("\n");
+    const named = await extractFromRoster(namedSource, false, false, [
+      ["char_aznable", "Char Aznable", "Char Aznable carries a red pendant."],
+      ["mara", "Mara", "Mara carries a brass key."],
+    ]);
+    const createdSections = (draft: { mutations: any[] }, noteId: string) =>
+      Object.keys(
+        draft.mutations.find((mutation) => mutation.kind === "create_note" && mutation.note.id === noteId)?.note
+          .sections ?? {},
+      );
+    assert.deepEqual(
+      createdIds(named),
+      ["char_char_aznable", "char_mara", "rel_rel_varga_sayla_mass"],
+      "a summary line that names its characters reaches the memory with the whole names in its id",
+    );
+    assert.deepEqual(
+      createdSections(named, "char_char_aznable"),
+      ["profile"],
+      "a summary's section hint for a name that starts with a prefix word reaches the memory",
+    );
+    assert.match(
+      named.mutations.find((mutation) => mutation.note?.id === "char_char_aznable")?.note.sections.profile.text ?? "",
+      /Red Comet squadron/,
+      "a summary line that names its character in a field reaches the memory",
+    );
+    assert.deepEqual(createdSections(named, "char_mara"), ["profile"]);
+    for (const text of [/spare fuse/, /hangar log/]) {
+      assert.match(
+        named.mutations.find((mutation) => mutation.note?.id === "char_mara")?.note.sections.profile.text ?? "",
+        text,
+        "a summary line that writes an id and then the name keeps the id",
+      );
+    }
+    assert.deepEqual(
+      named.extractionOutcome!.droppedCandidates,
+      [],
+      "a summary line that names its characters is not dropped under a shortened subject",
+    );
+    assert.deepEqual(
+      named.mutations
+        .flatMap((mutation) => (mutation.note?.type === "timeline_event" ? [mutation.note.sections.event.text] : []))
+        .sort(),
+      [
+        "- Char Aznable defected from the fleet.",
+        "- Rel Varga and Sayla Mass relationship changed after the hangar fire.",
+      ],
+      "the event made for the relationship's cause names the pair as the summary wrote it",
+    );
+    // A memory saved under the shorter id before (`char_aznable`, subject id `aznable`) still takes the hint.
+    const namedSummary = sourceNote(
+      "source_named_summary",
+      { kind: "chat_summary", sourceId: "chat-named", entryId: "summary-named" },
+      namedSource,
+    );
+    const legacyMemoryUnit = normalizeStructuredSummaryEvidenceUnits({
+      units: [
+        {
+          ...unit(namedSummary, {
+            bucket: "character_fact",
+            subjectId: "aznable",
+            sectionKey: "facts",
+            text: "Char Aznable carries a red pendant.",
+          }),
+          subjects: [{ key: "character:char-aznable", ref: { kind: "character" as const, id: "char-aznable" } }],
+        },
+      ],
+      sourceText: namedSource,
+      sourceNote: namedSummary,
+      sourceHash: sourceHashForLtmSourceNote(namedSummary),
+      mode: "roleplay",
+      modes: ["roleplay"],
+      addStructuredUnits: false,
+    }).units[0];
+    assert.equal(
+      legacyMemoryUnit?.sectionKey,
+      "profile",
+      "a memory saved under the shorter id still takes the summary's section hint",
+    );
+    const fieldPairUnit = normalizeStructuredSummaryEvidenceUnits({
+      units: [],
+      sourceText: [
+        "## relationship_state",
+        "- characters: Rel Varga, Sayla Mass | text: Rel Varga trusts Sayla Mass.",
+      ].join("\n"),
+      sourceNote: namedSummary,
+      sourceHash: sourceHashForLtmSourceNote(namedSummary),
+      mode: "roleplay",
+      modes: ["roleplay"],
+      addStructuredUnits: true,
+    }).units.find((candidate) => candidate.bucket === "relationship_state");
+    assert.equal(
+      fieldPairUnit?.subjectId,
+      "rel_rel_varga_sayla_mass",
+      "a relationship line that names its pair in a characters field gets the id the leading pair gets",
+    );
+  }
+
+  {
+    const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-event-shaped-review-"));
+    const releaseHost = configurePackageRuntime({
+      isDebugAgentsEnabled: () => false,
+      logger: { debug() {}, info() {}, warn() {}, error() {} },
+      dataDir,
+      resources: {
+        listCharacters: async () => [{ id: "mara", data: { name: "Mara" }, comment: "" }],
+        listPersonas: async () => [],
+        listLorebooks: async () => [],
+      },
+      persistence: {
+        getChat: async () => null,
+        listChats: async () => [],
+        updateChatMetadata: async () => {},
+      },
+    });
+    const root = join(dataDir, "long-term-memory");
+    const reviewScope = { characterIds: ["mara"] };
+    try {
+      const storage = new LongTermMemoryStorage(root);
+      const reviewSourceText = "Mara learned to read the observatory script.";
+      await storage.createNote({
+        ...chat,
+        id: "source_event_shaped_review",
+        title: "Event-shaped review source",
+        scope: reviewScope,
+        sections: { source: { text: reviewSourceText, updatedAt: timestamp } },
+      } as never);
+      const reviewSource = (await storage.getNote("source_event_shaped_review"))!;
+      const sourceHash = sourceHashForLtmSourceNote(reviewSource);
+      const committed = await processLongTermMemorySource({
+        sourceNote: reviewSource as never,
+        languageModel: {
+          name: "FixtureModel",
+          model: "fixture-model",
+          maxContext: null,
+          maxOutputTokens: null,
+          fitContext(messages: unknown[], fitOptions: { maxTokens: number }) {
+            return {
+              messages,
+              maxTokens: fitOptions.maxTokens,
+              estimatedTokensBefore: 20,
+              estimatedTokensAfter: 20,
+              trimmed: false,
+            };
+          },
+          async chatComplete() {
+            return {
+              content: JSON.stringify({
+                summary: "One durable outcome.",
+                units: [
+                  {
+                    bucket: "character_fact",
+                    subjectId: "mara",
+                    sectionKey: "facts",
+                    text: reviewSourceText,
+                    claimKind: "static",
+                    importance: "major",
+                    evidence: [`source_note:${reviewSource.id}`],
+                    confidence: 0.9,
+                    salience: 0.8,
+                    status: "active",
+                    links: [],
+                    subjectNames: ["Mara"],
+                    sourceHash,
+                  },
+                ],
+              }),
+              finishReason: "stop",
+            };
+          },
+        } as never,
+        scope: reviewScope,
+        modes: ["roleplay"],
+        mode: "roleplay",
+        extractionMode: "roleplay",
+        operationId: randomUUID(),
+        root,
+        applyLowRisk: true,
+      });
+      assert.equal(committed.draft.reviewRequired, true, "event-shaped character facts must require review");
+      assert.ok(
+        committed.diagnostics.some(
+          (diagnostic) => diagnostic.code === "event_shaped_character_fact" && diagnostic.severity === "warning",
+        ),
+        "event-shaped character facts must warn without hard-dropping",
+      );
+      assert.ok(committed.draft.mutations.length > 0, "event-shaped durable outcomes must remain available for review");
+      assert.equal(
+        committed.appliedMutationIds.length,
+        0,
+        "event-shaped character facts must block low-risk auto-apply",
+      );
+    } finally {
+      releaseHost();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  }
+
+  {
+    // A chat memory the user shared with a character keeps one copy. The chat's new evidence becomes a
+    // review suggestion on it, never a silent private copy and never an automatic write.
+    const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-shared-memory-review-"));
+    const releaseHost = configurePackageRuntime({
+      isDebugAgentsEnabled: () => false,
+      logger: { debug() {}, info() {}, warn() {}, error() {} },
+      dataDir,
+      resources: { listCharacters: async () => [], listPersonas: async () => [], listLorebooks: async () => [] },
+      persistence: { getChat: async () => null, listChats: async () => [], updateChatMetadata: async () => {} },
+    });
+    const root = join(dataDir, "long-term-memory");
+    const chatOnly = { chatId: "chat-shared", chatIds: ["chat-shared"] };
+    const sharedScope = { ...chatOnly, characterIds: ["character-shared"] };
+    try {
+      const storage = new LongTermMemoryStorage(root);
+      const newFact = "The harbor gate now opens only for a brass token.";
+      await storage.createNote({
+        ...chat,
+        id: "source_shared_world",
+        title: "Shared world source",
+        scope: chatOnly,
+        provenance: { kind: "chat_summary", sourceId: "chat-shared", entryId: "summary-shared" },
+        sections: { source: { text: newFact, updatedAt: timestamp } },
+      } as never);
+      await storage.createNote({
+        id: "world_harbor_gate",
+        title: "Harbor gate",
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: sharedScope,
+        tags: [],
+        keywords: ["harbor"],
+        links: [],
+        sections: { facts: { text: "The harbor gate closes at dusk.", updatedAt: timestamp } },
+      } as never);
+      const sharedSource = (await storage.getNote("source_shared_world"))!;
+      const committed = await processLongTermMemorySource({
+        sourceNote: sharedSource as never,
+        languageModel: {
+          name: "FixtureModel",
+          model: "fixture-model",
+          maxContext: null,
+          maxOutputTokens: null,
+          fitContext(messages: unknown[], fitOptions: { maxTokens: number }) {
+            return {
+              messages,
+              maxTokens: fitOptions.maxTokens,
+              estimatedTokensBefore: 20,
+              estimatedTokensAfter: 20,
+              trimmed: false,
+            };
+          },
+          async chatComplete() {
+            return {
+              content: JSON.stringify({
+                summary: "The harbor gate changed.",
+                units: [
+                  {
+                    bucket: "world_fact",
+                    subjectId: "harbor_gate",
+                    sectionKey: "facts",
+                    text: newFact,
+                    claimKind: "static",
+                    importance: "major",
+                    evidence: [`source_note:${sharedSource.id}`],
+                    confidence: 0.95,
+                    salience: 0.8,
+                    status: "active",
+                    links: [],
+                    sourceHash: sourceHashForLtmSourceNote(sharedSource),
+                  },
+                ],
+              }),
+              finishReason: "stop",
+            };
+          },
+        } as never,
+        scope: chatOnly,
+        modes: ["roleplay"],
+        mode: "roleplay",
+        extractionMode: "roleplay",
+        operationId: randomUUID(),
+        root,
+        applyLowRisk: true,
+      });
+      assert.equal(
+        committed.draft.mutations.some(
+          (mutation) => mutation.kind === "create_note" && mutation.note.id.startsWith("world_harbor_gate_"),
+        ),
+        false,
+        "the chat's evidence must not fork a private copy of the shared memory",
+      );
+      const sharedMutations = committed.draft.mutations.filter(
+        (mutation) => mutation.kind !== "create_note" && mutation.noteId === "world_harbor_gate",
+      );
+      assert.ok(sharedMutations.length > 0, "the chat's evidence must be offered on the shared memory");
+      assert.ok(
+        sharedMutations.every((mutation) => mutation.risk !== "low"),
+        "changes to a shared memory are never low risk",
+      );
+      assert.equal(
+        committed.appliedMutationIds.some((id) => sharedMutations.some((mutation) => mutation.id === id)),
+        false,
+        "low-risk auto-apply must leave changes to a shared memory for review",
+      );
+      assert.equal(committed.draft.status, "pending");
+      assert.equal(
+        (await storage.getNote("world_harbor_gate"))!.sections.facts?.text,
+        "The harbor gate closes at dusk.",
+      );
+
+      const review = await projectLongTermMemoryDraftReview({ root });
+      const reviewTarget = review.sources
+        .flatMap((reviewSource) => reviewSource.targets)
+        .find((target) => target.noteId === "world_harbor_gate");
+      assert.ok(reviewTarget, "the shared memory must appear in Review");
+      assert.ok(
+        reviewTarget.rows.every((row) =>
+          row.diagnostics.some(
+            (diagnostic) => diagnostic.code === "shared_memory_update" && diagnostic.mutationId === row.mutation.id,
+          ),
+        ),
+        "every Review row on the shared memory must say the change reaches beyond the chat",
+      );
+
+      // Even a change marked low risk (a memory shared after extraction keeps its stored risk) cannot reach the shared
+      // memory through auto-apply: auto-apply leaves it for Review instead of failing the batch.
+      const drafts = new LongTermMemoryDraftStore(root);
+      const pending = (await drafts.getDraft(committed.draft.id))!;
+      await drafts.updateDraft(pending.id, {
+        mutations: pending.mutations.map((mutation) => ({ ...mutation, risk: "low" as const })),
+      });
+      const autoApplied = await applyLongTermMemoryDraft(pending.id, {
+        root,
+        actor: "maintenance_api",
+        autoApplyLowRiskOnly: true,
+        rebuildIndexes: false,
+      });
+      assert.ok(
+        sharedMutations.every(
+          (mutation) =>
+            !autoApplied.appliedMutationIds.includes(mutation.id) &&
+            autoApplied.skippedMutationIds.includes(mutation.id),
+        ),
+        "low-risk auto-apply must leave every change to the shared memory for Review",
+      );
+      assert.equal(
+        (await storage.getNote("world_harbor_gate"))!.sections.facts?.text,
+        "The harbor gate closes at dusk.",
+      );
+
+      // Only a memory shared beyond this chat is admitted: once it belongs to another chat, even a reviewed apply fails.
+      await storage.updateNote("world_harbor_gate", {
+        scope: { chatId: "chat-other", chatIds: ["chat-other"], characterIds: ["character-shared"] },
+      });
+      await assert.rejects(
+        applyLongTermMemoryDraft(pending.id, {
+          root,
+          mutationIds: sharedMutations.map((mutation) => mutation.id),
+          rebuildIndexes: false,
+        }),
+        /belongs to another scope/u,
+      );
+      await storage.updateNote("world_harbor_gate", { scope: sharedScope });
+
+      const accepted = await applyLongTermMemoryDraft(pending.id, {
+        root,
+        mutationIds: sharedMutations.map((mutation) => mutation.id),
+        rebuildIndexes: false,
+      });
+      assert.deepEqual(
+        new Set(
+          sharedMutations.map((mutation) => mutation.id).filter((id) => accepted.appliedMutationIds.includes(id)),
+        ),
+        new Set(sharedMutations.map((mutation) => mutation.id)),
+      );
+      const updated = (await storage.getNote("world_harbor_gate"))!;
+      assert.match(
+        updated.sections.facts?.text ?? "",
+        /brass token/u,
+        "accepting the suggestion updates the shared memory",
+      );
+      assert.deepEqual(updated.scope.characterIds, ["character-shared"], "accepting keeps the memory shared");
+
+      // Accepting one row writes only what you selected: a chat memory's link to a shared event does not carry
+      // that event's own pending change along with it. A static link applies alone; a change that needs the event
+      // grounded in this source waits until you accept the event's row too.
+      await storage.createNote({
+        id: "timeline_harbor_closing",
+        title: "Harbor closing",
+        type: "timeline_event",
+        status: "active",
+        modes: ["roleplay"],
+        scope: sharedScope,
+        tags: ["typed_memory", "timeline_event"],
+        keywords: [],
+        links: [],
+        sections: { event: { text: "The harbor closed for the storm.", updatedAt: timestamp } },
+      } as never);
+      await storage.createNote({
+        id: "world_lantern_house",
+        title: "Lantern house",
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: chatOnly,
+        tags: [],
+        keywords: ["lantern"],
+        links: [],
+        sections: { facts: { text: "The lantern house watches the harbor.", updatedAt: timestamp } },
+      } as never);
+      await storage.createNote({
+        id: "world_harbor_watch",
+        title: "Harbor watch",
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: chatOnly,
+        tags: [],
+        keywords: ["watch"],
+        links: [],
+        sections: { facts: { text: "The harbor watch guards the quay.", updatedAt: timestamp } },
+      } as never);
+      const linkMutationId = randomUUID();
+      const changeLinkMutationId = randomUUID();
+      const eventMutationId = randomUUID();
+      const linkDraft = await drafts.createDraft({
+        source: { sourceNoteId: sharedSource.id, chatId: "chat-shared" },
+        scope: chatOnly,
+        modes: ["roleplay"],
+        response: {
+          summary: "Link a chat memory to a shared event.",
+          mutations: [
+            {
+              id: linkMutationId,
+              kind: "add_link",
+              claimKind: "static",
+              risk: "medium",
+              confidence: 0.9,
+              summary: "Link the lantern house to the closing",
+              evidence: [`source_note:${sharedSource.id}`],
+              noteId: "world_lantern_house",
+              link: { target: "timeline_harbor_closing", relation: "evidenced_by" },
+            },
+            {
+              id: changeLinkMutationId,
+              kind: "add_link",
+              claimKind: "change",
+              risk: "medium",
+              confidence: 0.9,
+              summary: "The watch changed with the closing",
+              evidence: [`source_note:${sharedSource.id}`],
+              noteId: "world_harbor_watch",
+              link: { target: "timeline_harbor_closing", relation: "caused_by" },
+            },
+            {
+              id: eventMutationId,
+              kind: "update_section",
+              risk: "medium",
+              confidence: 0.9,
+              summary: "Change the shared event",
+              evidence: [`source_note:${sharedSource.id}`],
+              noteId: "timeline_harbor_closing",
+              sectionKey: "event",
+              section: { text: "The harbor closed for good.", updatedAt: timestamp },
+            },
+          ],
+        },
+      } as never);
+      const linked = await applyLongTermMemoryDraft(linkDraft.id, {
+        root,
+        mutationIds: [linkMutationId],
+        rebuildIndexes: false,
+      });
+      assert.deepEqual(linked.appliedMutationIds, [linkMutationId]);
+      assert.equal(
+        (await storage.getNote("timeline_harbor_closing"))!.sections.event?.text,
+        "The harbor closed for the storm.",
+        "accepting one row must not write a shared event's change you did not select",
+      );
+      assert.equal((await storage.getNote("world_lantern_house"))!.links[0]?.target, "timeline_harbor_closing");
+      await assert.rejects(
+        applyLongTermMemoryDraft(linkDraft.id, {
+          root,
+          mutationIds: [changeLinkMutationId],
+          rebuildIndexes: false,
+        }),
+        /grounded in the same source/u,
+      );
+      assert.equal(
+        (await storage.getNote("timeline_harbor_closing"))!.sections.event?.text,
+        "The harbor closed for the storm.",
+      );
+
+      // API contract: an apply writes to a shared memory only the rows it names. The link that grounds a change in a
+      // new event writes to the shared memory too, so the server blocks the change until that row is named as well.
+      // Review's client names it for you (`acceptedMutationIds` adds the link and event to the accepted ids).
+      const eventCreateId = randomUUID();
+      const groundingLinkId = randomUUID();
+      const sharedChangeId = randomUUID();
+      const changeDraft = await drafts.createDraft({
+        source: { sourceNoteId: sharedSource.id, chatId: "chat-shared" },
+        scope: chatOnly,
+        modes: ["roleplay"],
+        response: {
+          summary: "Change a shared memory through a new event.",
+          mutations: [
+            {
+              id: eventCreateId,
+              kind: "create_note",
+              risk: "medium",
+              confidence: 0.9,
+              summary: "Create the token event",
+              evidence: [`source_note:${sharedSource.id}`],
+              note: {
+                id: "timeline_gate_token",
+                title: "Gate token",
+                type: "timeline_event",
+                status: "active",
+                modes: ["roleplay"],
+                scope: chatOnly,
+                tags: ["typed_memory", "timeline_event"],
+                keywords: [],
+                links: [{ target: sharedSource.id, relation: "extracted_from" }],
+                sections: { event: { text: "The watch began stamping brass tokens.", updatedAt: timestamp } },
+              },
+            },
+            {
+              id: groundingLinkId,
+              kind: "add_link",
+              risk: "medium",
+              confidence: 0.9,
+              summary: "Ground the gate change",
+              evidence: [`source_note:${sharedSource.id}`],
+              noteId: "world_harbor_gate",
+              link: { target: "timeline_gate_token", relation: "caused_by" },
+            },
+            {
+              id: sharedChangeId,
+              kind: "append_section",
+              claimKind: "change",
+              risk: "medium",
+              confidence: 0.9,
+              summary: "The gate wants stamped tokens",
+              evidence: [`source_note:${sharedSource.id}`],
+              noteId: "world_harbor_gate",
+              sectionKey: "facts",
+              text: "Only tokens stamped by the watch open the gate.",
+            },
+          ],
+        },
+      } as never);
+      const gateBefore = (await storage.getNote("world_harbor_gate"))!;
+      const changePreflight = await preflightLongTermMemoryDraft(changeDraft.id, {
+        root,
+        mutationIds: [sharedChangeId],
+      });
+      assert.ok(
+        changePreflight.blockedMutationIds.includes(sharedChangeId),
+        "Review blocks a shared memory change that would bring an unselected row on that memory",
+      );
+      await assert.rejects(
+        applyLongTermMemoryDraft(changeDraft.id, { root, mutationIds: [sharedChangeId], rebuildIndexes: false }),
+        /belongs to another scope/u,
+      );
+      assert.deepEqual((await storage.getNote("world_harbor_gate"))!.links, gateBefore.links);
+      const changed = await applyLongTermMemoryDraft(changeDraft.id, {
+        root,
+        mutationIds: [groundingLinkId, sharedChangeId],
+        rebuildIndexes: false,
+      });
+      assert.deepEqual(new Set(changed.appliedMutationIds), new Set([eventCreateId, groundingLinkId, sharedChangeId]));
+      assert.match((await storage.getNote("world_harbor_gate"))!.sections.facts?.text ?? "", /stamped by the watch/u);
+    } finally {
+      releaseHost();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  }
+
+  {
+    // Pad diagnostics past the retained-list bound so the event-shaped warning is truncated
+    // out of the bounded array but still forces requiresReview / blocks auto-apply.
+    const padUnits = Array.from({ length: 520 }, (_, index) =>
+      unit(chat, {
+        bucket: "world_fact",
+        subjectId: `pad_diag_${index}`,
+        sectionKey: "facts",
+        text: `Unrelated token salad ${index} xyzzy quux plugh.`,
+        claimKind: "static",
+      }),
+    );
+    const truncatedEventShaped = unit(chat, {
+      bucket: "character_fact",
+      subjectId: "mara",
+      sectionKey: "facts",
+      text: "Mara learned to read the observatory script.",
+      claimKind: "static",
+      subjectNames: ["Mara"],
+    });
+    const trailingPad = unit(chat, {
+      bucket: "world_fact",
+      subjectId: "trailing_diag",
+      sectionKey: "facts",
+      text: "Trailing unrelated token salad xyzzy quux plugh.",
+      claimKind: "static",
+    });
+    const truncatedCompile = compileEvidenceUnitExtraction({
+      unitResponse: {
+        summary: "Truncated event-shaped review signal",
+        units: [...padUnits, truncatedEventShaped, trailingPad],
+      },
+      providerCandidates: padUnits.length + 2,
+      sourceText: chat.sections.source.text,
+      sourceNote: chat,
+      existingNotes: [],
+      scope: {},
+      modes: ["roleplay"],
+      mode: "roleplay",
+      sourceHash: sourceHashForLtmSourceNote(chat),
+      skipStructuredBackfill: true,
+    });
+    assert.ok(truncatedCompile.diagnostics.length <= 500);
+    assert.equal(
+      truncatedCompile.diagnostics.some((diagnostic) => diagnostic.code === "event_shaped_character_fact"),
+      false,
+      "event-shaped warning must sit outside the retained diagnostic window for this proof",
+    );
+    assert.equal(
+      truncatedCompile.requiresReview,
+      true,
+      "requiresReview must be computed from full diagnostics before truncation",
+    );
+
+    for (const reviewSignal of ["event", "borrowed", "borrowed-truncated", "control"] as const) {
+      const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-truncated-review-"));
+      const releaseHost = configurePackageRuntime({
+        isDebugAgentsEnabled: () => false,
+        logger: { debug() {}, info() {}, warn() {}, error() {} },
+        dataDir,
+        resources: {
+          listCharacters: async () => [
+            { id: "mara", data: { name: "Mara" }, comment: "" },
+            { id: "seo", data: { name: "서무진" }, comment: "" },
+          ],
+          listPersonas: async () => [],
+          listLorebooks: async () => [],
+        },
+        persistence: {
+          getChat: async () => null,
+          listChats: async () => [],
+          updateChatMetadata: async () => {},
+        },
+      });
+      const root = join(dataDir, "long-term-memory");
+      const reviewScope = { characterIds: ["mara", "seo"] };
+      try {
+        const storage = new LongTermMemoryStorage(root);
+        const durableFact = "The observatory archive keeps a cobalt ledger.";
+        const eventShapedText =
+          reviewSignal === "event"
+            ? "Mara learned to read the observatory script."
+            : "서무진 can read the observatory script.";
+        const borrowedText = "The observatory script is legible.";
+        const sourceText = `${durableFact} ${eventShapedText} ${borrowedText}`;
+        await storage.createNote({
+          ...chat,
+          id: "source_event_shaped_truncated_review",
+          title: "Truncated event-shaped review source",
+          scope: reviewScope,
+          sections: { source: { text: sourceText, updatedAt: timestamp } },
+        } as never);
+        const reviewSource = (await storage.getNote("source_event_shaped_truncated_review"))!;
+        const sourceHash = sourceHashForLtmSourceNote(reviewSource);
+        const fixtureUnits = [
+          ...Array.from(
+            { length: reviewSignal === "event" || reviewSignal === "borrowed-truncated" ? 520 : 0 },
+            (_, index) => ({
+              bucket: "world_fact" as const,
+              subjectId: `pad_diag_${index}`,
+              sectionKey: "facts",
+              text: `Unrelated token salad ${index} xyzzy quux plugh.`,
+              claimKind: "static" as const,
+              importance: "minor" as const,
+              evidence: [`source_note:${reviewSource.id}`],
+              confidence: 0.9,
+              salience: 0.5,
+              status: "active" as const,
+              links: [] as [],
+              sourceHash,
+            }),
+          ),
+          {
+            bucket: "character_fact" as const,
+            subjectId: reviewSignal === "event" ? "mara" : "seo_mujin",
+            sectionKey: reviewSignal === "event" ? "facts" : "abilities",
+            text: eventShapedText,
+            claimKind: "static" as const,
+            importance: "major" as const,
+            evidence: [`source_note:${reviewSource.id}`],
+            confidence: 0.9,
+            salience: 0.8,
+            status: "active" as const,
+            links: [] as [],
+            subjectNames: [reviewSignal === "event" ? "Mara" : "서무진"],
+            sourceHash,
+          },
+          ...(reviewSignal.startsWith("borrowed")
+            ? [
+                unit(reviewSource, {
+                  bucket: "character_fact",
+                  subjectId: "seo_mujin",
+                  sectionKey: "abilities",
+                  text: borrowedText,
+                  claimKind: "static",
+                }),
+              ]
+            : []),
+          {
+            bucket: "world_fact" as const,
+            subjectId: "cobalt_ledger",
+            sectionKey: "facts",
+            text: durableFact,
+            claimKind: "static" as const,
+            importance: "major" as const,
+            evidence: [`source_note:${reviewSource.id}`],
+            confidence: 0.95,
+            salience: 0.8,
+            status: "active" as const,
+            links: [] as [],
+            sourceHash,
+          },
+        ];
+        const recallIndexMtime = () =>
+          stat(longTermMemoryRecallIndexPath(root)).then(
+            (file) => file.mtimeMs,
+            () => null,
+          );
+        await rebuildLongTermMemoryIndexes({ root });
+        const indexBeforeExtraction = await recallIndexMtime();
+        const committed = await processLongTermMemorySource({
+          sourceNote: reviewSource as never,
+          languageModel: {
+            name: "FixtureModel",
+            model: "fixture-model",
+            maxContext: null,
+            maxOutputTokens: null,
+            fitContext(messages: unknown[], fitOptions: { maxTokens: number }) {
+              return {
+                messages,
+                maxTokens: fitOptions.maxTokens,
+                estimatedTokensBefore: 20,
+                estimatedTokensAfter: 20,
+                trimmed: false,
+              };
+            },
+            async chatComplete() {
+              return {
+                content: JSON.stringify({
+                  summary: "Durable world fact with a truncated event-shaped warning.",
+                  units: fixtureUnits,
+                }),
+                finishReason: "stop",
+              };
+            },
+          } as never,
+          scope: reviewScope,
+          modes: ["roleplay"],
+          mode: "roleplay",
+          extractionMode: "roleplay",
+          operationId: randomUUID(),
+          root,
+          applyLowRisk: true,
+        });
+        assert.equal(
+          committed.draft.reviewRequired,
+          reviewSignal !== "control",
+          `${reviewSignal}: required review must block auto-apply`,
+        );
+        assert.equal(
+          committed.diagnostics.some(
+            (diagnostic) =>
+              diagnostic.code ===
+              (reviewSignal === "event" ? "event_shaped_character_fact" : "borrowed_subject_identity"),
+          ),
+          reviewSignal === "borrowed",
+          `${reviewSignal}: review signal must survive even when the diagnostic is truncated`,
+        );
+        assert.ok(
+          committed.draft.mutations.some((mutation) => mutation.risk === "low"),
+          "fixture must still produce an otherwise low-risk mutation",
+        );
+        assert.equal(
+          committed.appliedMutationIds.length > 0,
+          reviewSignal === "control",
+          `${reviewSignal}: only the control may auto-apply`,
+        );
+        // #1364: extraction schedules a recall index rebuild only when it applied mutations.
+        await flushLtmIndexRebuild(root);
+        assert.equal(
+          (await recallIndexMtime()) !== indexBeforeExtraction,
+          reviewSignal === "control",
+          `${reviewSignal}: only extraction that applied mutations may rebuild the recall index`,
+        );
+      } finally {
+        releaseHost();
+        await rm(dataDir, { recursive: true, force: true });
+      }
+    }
+  }
+
+  const invalidEventWithDependent = compile(chat, [
+    {
+      ...unit(chat, {
+        bucket: "timeline_event",
+        subjectId: "invalid_argument",
+        sectionKey: "event",
+        text: "Alice and Rowan argued.",
+      }),
+      // A stale source hash is the invalidation trigger now that the normalizer
+      // repairs a non-event section instead of dropping the unit.
+      sourceHash: "stale-source-hash",
+    },
     unit(chat, {
       bucket: "world_fact",
       subjectId: "argument_aftermath",
       sectionKey: "facts",
       text: "The argument remained consequential.",
       claimKind: "change",
-      links: [
-        { target: "timeline_invalid_argument", relation: "evidenced_by" },
-      ],
+      links: [{ target: "timeline_invalid_argument", relation: "evidenced_by" }],
     }),
   ]);
   assert.equal(invalidEventWithDependent.accounting.keptUnits, 0);
@@ -299,12 +2141,15 @@ async function main() {
   );
 
   const invalidEventWithStaticFact = compile(chat, [
-    unit(chat, {
-      bucket: "timeline_event",
-      subjectId: "invalid_static_argument",
-      sectionKey: "history",
-      text: "Alice and Rowan argued.",
-    }),
+    {
+      ...unit(chat, {
+        bucket: "timeline_event",
+        subjectId: "invalid_static_argument",
+        sectionKey: "event",
+        text: "Alice and Rowan argued.",
+      }),
+      sourceHash: "stale-source-hash",
+    },
     unit(chat, {
       bucket: "world_fact",
       subjectId: "observatory",
@@ -314,10 +2159,7 @@ async function main() {
     }),
   ]);
   assert.equal(invalidEventWithStaticFact.accounting.keptUnits, 1);
-  assert.equal(
-    invalidEventWithStaticFact.compiledResponse.mutations[0]?.claimKind,
-    "static",
-  );
+  assert.equal(invalidEventWithStaticFact.compiledResponse.mutations[0]?.claimKind, "static");
   assert.equal(
     invalidEventWithDependent.diagnostics.some(
       (diagnostic) =>
@@ -349,17 +2191,14 @@ async function main() {
   assert.equal(repairedLoreCharacter.accounting.keptUnits, 1);
   assert.equal(
     repairedLoreCharacter.compiledResponse.mutations.some(
-      (mutation) =>
-        mutation.kind === "create_note" &&
-        mutation.note.type === "timeline_event",
+      (mutation) => mutation.kind === "create_note" && mutation.note.type === "timeline_event",
     ),
     false,
     "static lore must not synthesize a timeline event",
   );
   assert.equal(
     repairedLoreCharacter.compiledResponse.mutations.some(
-      (mutation) =>
-        mutation.kind === "create_note" && mutation.note.type === "character",
+      (mutation) => mutation.kind === "create_note" && mutation.note.type === "character",
     ),
     true,
     "direct source evidence must keep the linkless static character fact",
@@ -369,14 +2208,35 @@ async function main() {
   const extractionMessages = evidenceUnitMessages({
     sourceNote: chat,
     sourceText: chat.sections.source.text,
-    existingNotes: [],
     scope: {},
     modes: ["roleplay"],
     sourceHash,
     mode: "roleplay",
   } as any);
-  const unitFields = JSON.parse(String(extractionMessages[1]?.content)).unitFields;
+  const extractionPrompt = JSON.parse(String(extractionMessages[1]?.content));
+  assert.equal(
+    extractionPrompt.existingTypedNotes,
+    undefined,
+    "issue #1086: the prompt must not serialize existingTypedNotes",
+  );
+  const unitFields = extractionPrompt.unitFields;
   assert.match(unitFields.title, /short memory label/i);
+  assert.match(
+    String(extractionMessages[0]?.content),
+    /timeline_event.*directly caused another.*caused_by/,
+    "issue #1362: the prompt must ask for caused_by between same-response events",
+  );
+  for (const relation of ["planted_in", "paid_off_in", "extracted_from"]) {
+    assert.ok(
+      extractionPrompt.allowedLinkRelations?.includes(relation),
+      `issue #1138: allowedLinkRelations must advertise ${relation}`,
+    );
+  }
+  assert.match(
+    unitFields.links,
+    /"target".*"relation".*allowedLinkRelations/,
+    "a provider without response_format must still see the link object shape",
+  );
   assert.equal(
     evidenceUnitResponseFormat({
       allowedBuckets: ["timeline_event"],
@@ -384,6 +2244,150 @@ async function main() {
     }).json_schema.schema.properties.units.items.properties.title.maxLength,
     80,
   );
+  assert.equal(
+    "subjectKeys" in
+      evidenceUnitResponseFormat({ allowedBuckets: ["character_fact"], sourceHash }).json_schema.schema.properties.units
+        .items.properties,
+    false,
+    "issue #1448: the provider schema must not offer subjectKeys",
+  );
+  // Each server link rule goes out once, and the request carries no server-owned values or scope ids.
+  const scopedSource = {
+    ...chat,
+    scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["char-a"], personaIds: ["persona-a"] },
+    sections: { source: { text: "", updatedAt: timestamp, evidence: ["chat:chat-a", "summary_entry:summary-a"] } },
+  };
+  for (const mode of ["roleplay", "conversation", "game"] as const) {
+    const messages = evidenceUnitMessages({
+      sourceNote: scopedSource,
+      sourceText: "",
+      scope: scopedSource.scope,
+      modes: [mode],
+      sourceHash,
+      mode,
+      resolveSubjectNames: true,
+    } as any);
+    const system = String(messages[0]?.content);
+    const user = String(messages[1]?.content);
+    const request = `${system}\n${user}`;
+    const rules = (system.split("SERVER-ENFORCED LINK REQUIREMENTS\n")[1] ?? "")
+      .split("\n")
+      .map((line) => line.replace(/^- /, ""));
+    assert.ok(rules.length >= 4, `${mode}: the system prompt must state the server link rules`);
+    for (const rule of rules) {
+      // The user message is JSON, so a copy there has its quotes escaped.
+      const copies = system.split(rule).length - 1 + user.split(JSON.stringify(rule).slice(1, -1)).length - 1;
+      assert.equal(copies, 1, `${mode}: link rule must appear once: ${rule.slice(0, 60)}`);
+    }
+    const payload = JSON.parse(user);
+    for (const key of [
+      "validationRules",
+      "requiredEvidence",
+      "scope",
+      "modes",
+      "allowedStatuses",
+      "allowedImportance",
+      "streamAllowedStatuses",
+      "streamScanOrder",
+      "allowedTimelineRelations",
+    ]) {
+      assert.equal(key in payload, false, `${mode}: the request must not send ${key}`);
+    }
+    assert.deepEqual(Object.keys(payload.sourceNote).sort(), ["id", "title"]);
+    assert.equal("evidence" in payload.unitFields, false, `${mode}: evidence is server-owned`);
+    for (const value of [sourceHash, "chat-a", "char-a", "persona-a", "summary_entry:summary-a"]) {
+      assert.equal(request.includes(value), false, `${mode}: the request must not carry ${value}`);
+    }
+  }
+  // An imported character card describes the character, not the chat: no event from its backstory, no thread from
+  // its scenario. Only card sources get the rule.
+  const card = sourceNote(
+    "source_card_graph_regression",
+    { kind: "character", sourceId: "card-a" },
+    "Backstory:\nMara lost her ship years ago.\n\nScenario:\nThe harbor is closed.",
+  );
+  for (const [source, expected] of [
+    [card, 1],
+    [lore, 0],
+    [chat, 0],
+  ] as const) {
+    const system = String(
+      evidenceUnitMessages({
+        sourceNote: source,
+        sourceText: source.sections.source.text,
+        scope: {},
+        modes: ["roleplay"],
+        sourceHash,
+        mode: "roleplay",
+      } as any)[0]?.content,
+    );
+    assert.equal(
+      system.split("This source is an imported character card").length - 1,
+      expected,
+      `${source.id}: the character card rule goes to card sources only, once`,
+    );
+  }
+  // An empty or null optional field no longer drops a unit, and evidence always comes from the source note.
+  const trustedEvidence = [`source_note:${chat.id}`, "chat:chat-a"];
+  const optionalFieldUnits = parseEvidenceUnitPayload(
+    {
+      summary: "Optional field normalization",
+      units: [{ evidence: [] }, { title: "" }, { dimensions: null }, { evidence: ["chat:elsewhere"] }].map(
+        (extra, index) => ({
+          bucket: "world_fact",
+          subjectId: `observatory_fact_${index}`,
+          sectionKey: "facts",
+          text: `The observatory keeps record ${index}.`,
+          claimKind: "static",
+          importance: "minor",
+          confidence: 0.9,
+          salience: 0.5,
+          status: "active",
+          links: [],
+          subjectNames: [],
+          ...extra,
+        }),
+      ),
+    },
+    sourceHash,
+    trustedEvidence,
+  );
+  assert.equal(
+    optionalFieldUnits.response.units.length,
+    4,
+    JSON.stringify(optionalFieldUnits.droppedCandidates.map((candidate: any) => candidate.issues)),
+  );
+  for (const parsedUnit of optionalFieldUnits.response.units) assert.deepEqual(parsedUnit.evidence, trustedEvidence);
+  assert.equal(optionalFieldUnits.response.units[1]?.title, undefined);
+  // Issue #1448: a whitespace-only prompt template falls back to the mode's default prompt.
+  assert.ok(
+    String(
+      evidenceUnitMessages({
+        sourceNote: chat,
+        sourceText: chat.sections.source.text,
+        scope: {},
+        modes: ["conversation"],
+        sourceHash,
+        mode: "conversation",
+        systemPrompt: "   ",
+      } as any)[0]?.content,
+    ).startsWith(DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION),
+  );
+  const blankTemplateRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-blank-template-"));
+  try {
+    await updateLtmExtractionConfig(
+      {
+        promptTemplates: [{ id: "blank", name: "Blank", prompt: "   " }],
+        activePromptTemplateIdsByMode: { conversation: "blank" },
+      },
+      blankTemplateRoot,
+    );
+    const blankConfig = await getLtmExtractionConfig(blankTemplateRoot, "conversation");
+    assert.equal(blankConfig.systemPrompt, DEFAULT_LTM_EXTRACTION_PROMPT_CONVERSATION);
+    assert.equal(blankConfig.activePromptTemplateId, null);
+  } finally {
+    await rm(blankTemplateRoot, { recursive: true, force: true });
+  }
 
   const parsedSourcePrefixedLink = parseEvidenceUnitPayload(
     {
@@ -394,9 +2398,7 @@ async function main() {
           subjectId: "source_prefixed_event",
           sectionKey: "event",
           text: "Mara learned the observatory script.",
-          links: [
-            { target: `source_note:${chat.id}`, relation: "extracted_from" },
-          ],
+          links: [{ target: `source_note:${chat.id}`, relation: "extracted_from" }],
         }),
       ],
     },
@@ -406,6 +2408,163 @@ async function main() {
     parsedSourcePrefixedLink.response.units[0]?.links,
     [{ target: chat.id, relation: "extracted_from" }],
     "source_note:<id> extracted_from targets must normalize to the source note id",
+  );
+  // The request names the source note by its bare id, so a fact citing that id keeps it as the target, also on a
+  // source whose text has section headings.
+  const headedChat = sourceNote(
+    "source_chat_headed_regression",
+    { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-headed" },
+    "## world_fact\n- The observatory script is written in an old court cipher.",
+  );
+  const bareSourceLinks = parseEvidenceUnitPayload(
+    {
+      summary: "Bare source note links",
+      units: [
+        unit(headedChat, {
+          bucket: "world_fact",
+          subjectId: "observatory_script",
+          sectionKey: "facts",
+          text: "The observatory script is written in an old court cipher.",
+          claimKind: "static",
+          links: [{ target: headedChat.id, relation: "evidenced_by" }],
+        }),
+        unit(headedChat, {
+          bucket: "world_fact",
+          subjectId: "court_cipher",
+          sectionKey: "facts",
+          text: "The old court cipher is still read in the observatory.",
+          claimKind: "static",
+          links: [{ target: "source_chat_other_summary", relation: "evidenced_by" }],
+        }),
+      ],
+    },
+    sourceHashForLtmSourceNote(headedChat),
+    [`source_note:${headedChat.id}`],
+  );
+  assert.equal(
+    bareSourceLinks.response.units[1]?.links[0]?.target,
+    "timeline_source_chat_other_summary",
+    "a bare id the request did not name must still read as a timeline subject",
+  );
+  const bareSourceCompile = compile(headedChat, bareSourceLinks.response.units as ReturnType<typeof unit>[]);
+  assert.equal(bareSourceCompile.accounting.keptUnits, 1);
+  assert.ok(
+    bareSourceCompile.compiledResponse.mutations.some(
+      (mutation) =>
+        mutation.kind === "create_note" &&
+        mutation.note.links.some((link) => link.relation === "evidenced_by" && link.target === headedChat.id),
+    ),
+    "a fact that cites the source note by its bare id must keep it and the link",
+  );
+  const nearLimitEvent = parseEvidenceUnitPayload(
+    {
+      summary: "Near-limit provider event",
+      units: [
+        unit(chat, {
+          bucket: "timeline_event",
+          subjectId: `event_${"a".repeat(105)}`,
+          sectionKey: "event",
+          text: "Mara learned the observatory script.",
+          links: [{ target: chat.id, relation: "extracted_from" }],
+        }),
+        unit(chat, {
+          bucket: "character_fact",
+          subjectId: "mara",
+          sectionKey: "facts",
+          text: "Mara learned the observatory script.",
+          links: [{ target: `event_${"a".repeat(105)}`, relation: "caused_by" }],
+        }),
+      ],
+    },
+    sourceHash,
+  );
+  const boundedEvent = normalizeStructuredSummaryEvidenceUnits({
+    units: nearLimitEvent.response.units,
+    sourceText: chat.sections.source.text,
+    sourceNote: chat,
+    sourceHash,
+  }).units[0]!;
+  assert.equal(
+    ltmNoteIdSchema.safeParse(`timeline_${boundedEvent.subjectId}`).success,
+    true,
+    "provider event IDs must leave room for server-added prefix and source suffix",
+  );
+  assert.deepEqual(
+    nearLimitEvent.response.units[1]?.links,
+    [{ target: `timeline_${nearLimitEvent.response.units[0]?.subjectId}`, relation: "caused_by" }],
+    "same-response links must follow a bounded provider target",
+  );
+  const sharedLongSubject = `shared_${"a".repeat(115)}`;
+  const sharedLongSubjectResponse = parseEvidenceUnitPayload(
+    {
+      summary: "Shared near-limit provider targets",
+      units: [
+        {
+          ...unit(chat, {
+            bucket: "timeline_event",
+            subjectId: sharedLongSubject,
+            sectionKey: "event",
+            text: "Mara opened the observatory gate.",
+          }),
+          links: [
+            { target: sharedLongSubject, relation: "affects_character" },
+            { target: sharedLongSubject, relation: "involves" },
+          ],
+        },
+        {
+          ...unit(chat, {
+            bucket: "character_fact",
+            subjectId: sharedLongSubject,
+            sectionKey: "facts",
+            text: "Mara opened the observatory gate.",
+          }),
+          links: [{ target: sharedLongSubject, relation: "caused_by" }],
+        },
+      ],
+    },
+    sourceHash,
+  );
+  const sharedTimeline = sharedLongSubjectResponse.response.units.find(
+    (candidate) => candidate.bucket === "timeline_event",
+  )!;
+  const sharedCharacter = sharedLongSubjectResponse.response.units.find(
+    (candidate) => candidate.bucket === "character_fact",
+  )!;
+  assert.deepEqual(
+    sharedTimeline.links,
+    [{ target: `char_${sharedCharacter.subjectId}`, relation: "affects_character" }],
+    "relation-aware remapping must route a shared bare subject to the character target",
+  );
+  assert.deepEqual(
+    sharedCharacter.links,
+    [{ target: `timeline_${sharedTimeline.subjectId}`, relation: "caused_by" }],
+    "relation-aware remapping must route a shared bare subject to the timeline target",
+  );
+  const ambiguousGenericResponse = parseEvidenceUnitPayload(
+    {
+      summary: "Ambiguous generic target",
+      units: [
+        unit(chat, {
+          bucket: "timeline_event",
+          subjectId: "shared_identity",
+          sectionKey: "event",
+          text: "Mara opened the observatory gate.",
+          links: [{ target: "shared_identity", relation: "involves" }],
+        }),
+        unit(chat, {
+          bucket: "character_fact",
+          subjectId: "shared_identity",
+          sectionKey: "facts",
+          text: "Mara opened the observatory gate.",
+        }),
+      ],
+    },
+    sourceHash,
+  );
+  assert.deepEqual(
+    ambiguousGenericResponse.response.units[0]?.links,
+    [],
+    "generic links must fail closed when matching timeline and character targets conflict",
   );
   const oversizedPayload = parseEvidenceUnitPayload(
     {
@@ -442,26 +2601,167 @@ async function main() {
     ),
     true,
   );
+  assert.doesNotMatch(oversizedDerivedNoteId.outcome.droppedCandidates[0]?.message ?? "", /a{120}/u);
   assert.equal(
     oversizedDerivedNoteId.diagnostics.some(
-      (diagnostic) =>
-        diagnostic.details?.validatorCode === "overlong_target_note_id",
+      (diagnostic) => diagnostic.details?.validatorCode === "overlong_target_note_id",
     ),
     true,
   );
   assert.equal(
     oversizedDerivedNoteId.diagnostics.find(
-      (diagnostic) =>
-        diagnostic.details?.validatorCode === "overlong_target_note_id",
+      (diagnostic) => diagnostic.details?.validatorCode === "overlong_target_note_id",
     )?.noteId,
     undefined,
   );
-  assert.equal(
-    oversizedDerivedNoteId.outcome.droppedCandidates[0]?.recovery?.noteId,
-    undefined,
-  );
+  assert.equal(oversizedDerivedNoteId.outcome.droppedCandidates[0]?.recovery?.noteId, undefined);
+  assert.equal(oversizedDerivedNoteId.outcome.droppedCandidates[0]?.validatorCode, "overlong_target_note_id");
 
   const strictStorageIds: string[][] = [];
+  const legacyScope = {
+    chatId: "chat-a",
+    chatIds: ["chat-a"],
+    characterIds: ["character-a"],
+    personaIds: ["persona-a"],
+  };
+  const legacyHash = createHash("sha256").update("ltm_scope_v1:chat:chat-a").digest("hex").slice(0, 10);
+  const legacyNoteId = `world_legacy_scope_fact_${legacyHash}`;
+  const conflictingNote = {
+    ...chat,
+    id: "world_legacy_scope_fact",
+    type: "world" as const,
+    scope: { groupId: "group-b" },
+    tags: [],
+    sections: { facts: { text: "Other scoped memory.", updatedAt: timestamp } },
+  };
+  const legacyNote = {
+    ...chat,
+    id: legacyNoteId,
+    type: "world" as const,
+    scope: legacyScope,
+    tags: [],
+    sections: { facts: { text: "Legacy scoped memory.", updatedAt: timestamp } },
+  };
+  const legacyResolution = await resolveScopedEvidenceUnitTargets({
+    units: [
+      unit(chat, {
+        bucket: "world_fact",
+        subjectId: `legacy_scope_fact_${legacyHash}`,
+        sectionKey: "facts",
+        text: "Legacy scoped memory.",
+        links: [{ target: chat.id, relation: "extracted_from" }],
+      }),
+    ],
+    existingNotes: [legacyNote, conflictingNote],
+    storage: {
+      getNotesByIds: async () =>
+        new Map([
+          [conflictingNote.id, conflictingNote],
+          [legacyNote.id, legacyNote],
+        ]),
+    },
+    scope: legacyScope,
+  });
+  assert.equal(legacyResolution.remaps.size, 0);
+  assert.equal(
+    legacyResolution.existingNotes.some((note) => note.id === legacyNote.id),
+    true,
+  );
+  assert.notEqual(scopedVariantNoteId("world_legacy_scope", legacyScope), legacyNoteId);
+  const chatOnlyDestination = { chatId: "chat-a", chatIds: ["chat-a"] };
+  const narrowerResolution = await resolveScopedEvidenceUnitTargets({
+    units: [
+      unit(chat, {
+        bucket: "world_fact",
+        subjectId: "legacy_scope_fact",
+        sectionKey: "facts",
+        text: "Only chat A may see this new evidence.",
+        links: [{ target: chat.id, relation: "extracted_from" }],
+      }),
+    ],
+    existingNotes: [{ ...legacyNote, id: "world_legacy_scope_fact" }],
+    storage: {
+      getNotesByIds: async () =>
+        new Map([["world_legacy_scope_fact", { ...legacyNote, id: "world_legacy_scope_fact" }]]),
+    },
+    scope: chatOnlyDestination,
+  });
+  assert.equal(
+    narrowerResolution.remaps.has("world_legacy_scope_fact"),
+    false,
+    "chat-only evidence for a memory with a legacy broad scope targets that memory for review instead of forking a copy",
+  );
+  assert.equal(
+    narrowerResolution.existingNotes.some((note) => note.id === "world_legacy_scope_fact"),
+    true,
+  );
+  assert.equal(narrowerResolution.units[0]?.subjectId, "legacy_scope_fact");
+  const chatCopy = {
+    ...legacyNote,
+    id: scopedVariantNoteId("world_legacy_scope_fact", chatOnlyDestination),
+    scope: chatOnlyDestination,
+  };
+  const keptCopyResolution = await resolveScopedEvidenceUnitTargets({
+    units: [
+      unit(chat, {
+        bucket: "world_fact",
+        subjectId: "legacy_scope_fact",
+        sectionKey: "facts",
+        text: "Only chat A may see this new evidence.",
+        links: [{ target: chat.id, relation: "extracted_from" }],
+      }),
+    ],
+    existingNotes: [],
+    storage: {
+      getNotesByIds: async () =>
+        new Map([
+          ["world_legacy_scope_fact", { ...legacyNote, id: "world_legacy_scope_fact" }],
+          [chatCopy.id, chatCopy],
+        ]),
+    },
+    scope: chatOnlyDestination,
+  });
+  assert.equal(
+    keptCopyResolution.remaps.get("world_legacy_scope_fact"),
+    chatCopy.id,
+    "a chat that already keeps its own copy goes on updating it, as candidate reconciliation and the prompt do",
+  );
+  const otherChatNote = {
+    ...legacyNote,
+    id: "world_legacy_scope_fact",
+    scope: { chatId: "chat-b", chatIds: ["chat-b"], characterIds: ["character-a"] },
+  };
+  const otherChatResolution = await resolveScopedEvidenceUnitTargets({
+    units: [
+      unit(chat, {
+        bucket: "world_fact",
+        subjectId: "legacy_scope_fact",
+        sectionKey: "facts",
+        text: "Only chat A may see this new evidence.",
+        links: [{ target: chat.id, relation: "extracted_from" }],
+      }),
+    ],
+    existingNotes: [],
+    storage: { getNotesByIds: async () => new Map([[otherChatNote.id, otherChatNote]]) },
+    scope: chatOnlyDestination,
+  });
+  assert.equal(
+    otherChatResolution.remaps.has("world_legacy_scope_fact"),
+    true,
+    "a memory from another chat still forks: sharing its character never lets this chat write into it",
+  );
+  const destinationScopeVariants = [
+    { groupIds: ["group-a"], chatIds: ["chat-a"] },
+    { groupIds: ["group-a"], chatIds: ["chat-b"] },
+    { groupIds: ["group-a"], characterIds: ["character-a"] },
+    { groupIds: ["group-a"], personaIds: ["persona-a"] },
+  ];
+  assert.equal(
+    new Set(destinationScopeVariants.map((scope) => scopedVariantNoteId("world_destination_union", scope))).size,
+    destinationScopeVariants.length,
+    "destination scope unions receive distinct scoped identities",
+  );
+
   const targetResolution = await resolveScopedEvidenceUnitTargets({
     units: [
       unit(chat, {
@@ -493,12 +2793,11 @@ async function main() {
     true,
   );
 
-  const malformedPayload = parseEvidenceUnitPayload(
-    { units: Array.from({ length: 100 }, () => null) },
-    sourceHash,
-  );
+  const malformedPayload = parseEvidenceUnitPayload({ units: Array.from({ length: 100 }, () => null) }, sourceHash);
   assert.equal(malformedPayload.parserRejections, 100);
   assert.equal(malformedPayload.droppedCandidates.length, 80);
+  assert.equal(malformedPayload.droppedCandidates[0]?.validatorCode, "invalid_evidence_unit_format");
+  assert.ok(malformedPayload.droppedCandidates[0]?.issues?.length);
   const countedMalformedCompilation = compileEvidenceUnitExtraction({
     unitResponse: malformedPayload.response,
     providerCandidates: malformedPayload.totalCandidates,
@@ -517,10 +2816,75 @@ async function main() {
   assert.equal(countedMalformedCompilation.outcome.droppedUnits, 100);
   assert.equal(countedMalformedCompilation.outcome.droppedCandidates.length, 80);
   assert.equal(countedMalformedCompilation.outcome.droppedCandidateDetailsTruncated, true);
-  assert.throws(
-    () => parseEvidenceUnitPayload({ units: Array.from({ length: 1_000 }, () => null) }, sourceHash),
-    /maximum is 999/,
+  const overflowPayload = parseEvidenceUnitPayload({ units: Array.from({ length: 1_000 }, () => null) }, sourceHash);
+  assert.equal(overflowPayload.totalCandidates, 1_000);
+  assert.equal(overflowPayload.parserRejections, 1_000);
+  assert.equal(overflowPayload.response.units.length, 0);
+  assert.equal(overflowPayload.droppedCandidates.length, 80);
+  assert.equal(overflowPayload.droppedCandidates.at(-1)?.reason, "candidate_overflow");
+
+  const overflowWithValid = parseEvidenceUnitPayload(
+    {
+      units: Array.from({ length: 1_000 }, (_, index) =>
+        unit(chat, {
+          bucket: "world_fact",
+          subjectId: `fact_${index}`,
+          sectionKey: "facts",
+          text: `Fact ${index}.`,
+        }),
+      ),
+    },
+    sourceHash,
   );
+  assert.equal(overflowWithValid.totalCandidates, 1_000);
+  assert.equal(overflowWithValid.response.units.length, 999);
+  assert.equal(overflowWithValid.parserRejections, 1);
+  assert.equal(overflowWithValid.droppedCandidates[0]?.reason, "candidate_overflow");
+
+  const providerSchema = evidenceUnitResponseFormat({ allowedBuckets: ["timeline_event"], sourceHash }).json_schema
+    .schema;
+  const schemaText = JSON.stringify(providerSchema);
+  assert.equal(/"(?:allOf|if|then|else|not|uniqueItems)"/u.test(schemaText), false);
+  for (const resolveSubjectNames of [true, false]) {
+    const schema = evidenceUnitResponseFormat({
+      allowedBuckets: ["character_fact", "relationship_state"],
+      sourceHash,
+      resolveSubjectNames,
+    }).json_schema.schema as any;
+    const item = schema.properties.units.items;
+    assert.equal(item.required.includes("id"), false);
+    assert.equal(item.required.includes("sourceHash"), false);
+    assert.equal(item.required.includes("evidence"), false);
+    assert.equal("evidence" in item.properties, false, "evidence is server-owned");
+    assert.equal(item.required.includes("subjectNames"), resolveSubjectNames);
+    assert.equal(item.properties.dimensions.properties.trust.minimum, 0);
+    assert.equal(item.properties.dimensionChanges.properties.trust.minimum, -100);
+    assert.equal(item.properties.links.items.properties.aspect.maxLength, 50);
+  }
+  const diagnosticHeavy = compileEvidenceUnitExtraction({
+    unitResponse: {
+      summary: "Diagnostic bound",
+      units: Array.from({ length: 600 }, (_, index) =>
+        unit(chat, {
+          bucket: "timeline_event",
+          subjectId: `invalid_event_${index}`,
+          sectionKey: "event",
+          text: "Not present in source.",
+          links: [{ target: "missing_event", relation: "evidenced_by" }],
+        }),
+      ),
+    },
+    providerCandidates: 600,
+    sourceText: chat.sections.source.text,
+    sourceNote: chat,
+    existingNotes: [],
+    scope: {},
+    modes: ["roleplay"],
+    mode: "roleplay",
+    sourceHash,
+    skipStructuredBackfill: true,
+  });
+  assert.ok(diagnosticHeavy.diagnostics.length <= 500);
 
   const existingTone = {
     ...chat,
@@ -547,8 +2911,7 @@ async function main() {
     createdAt: timestamp,
   });
   const profileMutation = toneCompilation.mutations.find(
-    (mutation) =>
-      mutation.kind === "update_section" && mutation.sectionKey === "profile",
+    (mutation) => mutation.kind === "update_section" && mutation.sectionKey === "profile",
   );
   assert.ok(profileMutation, "tone extraction must update the derived profile");
   assert.deepEqual(profileMutation?.evidence, [`source_note:${chat.id}`]);
@@ -616,7 +2979,10 @@ async function main() {
   const titledCreateCompilation = compileTitleCases(titleCases);
   const createdTitles = new Map(
     titledCreateCompilation.mutations
-      .filter((mutation): mutation is Extract<(typeof titledCreateCompilation.mutations)[number], { kind: "create_note" }> => mutation.kind === "create_note")
+      .filter(
+        (mutation): mutation is Extract<(typeof titledCreateCompilation.mutations)[number], { kind: "create_note" }> =>
+          mutation.kind === "create_note",
+      )
       .map((mutation) => [mutation.note.type, mutation.note.title]),
   );
   assert.equal(createdTitles.get("timeline_event"), "Trust-Straining Argument");
@@ -626,12 +2992,15 @@ async function main() {
   assert.equal(createdTitles.get("character"), "Mara");
   assert.equal(createdTitles.get("relationship"), "Alice and Rowan");
 
-  const untitledCreateCompilation = compileTitleCases(
-    titleCases.map(({ title: _title, ...input }) => input),
-  );
+  const untitledCreateCompilation = compileTitleCases(titleCases.map(({ title: _title, ...input }) => input));
   const fallbackTitles = new Map(
     untitledCreateCompilation.mutations
-      .filter((mutation): mutation is Extract<(typeof untitledCreateCompilation.mutations)[number], { kind: "create_note" }> => mutation.kind === "create_note")
+      .filter(
+        (
+          mutation,
+        ): mutation is Extract<(typeof untitledCreateCompilation.mutations)[number], { kind: "create_note" }> =>
+          mutation.kind === "create_note",
+      )
       .map((mutation) => [mutation.note.type, mutation.note.title]),
   );
   assert.equal(fallbackTitles.get("timeline_event"), "Argument Strained Trust");
@@ -704,28 +3073,375 @@ async function main() {
   assert.equal(staticRelationshipDelta.accounting.keptUnits, 0);
   assert.equal(
     staticRelationshipDelta.diagnostics.some(
-      (diagnostic) =>
-        diagnostic.details?.validatorCode ===
-        "static_relationship_dimension_change",
+      (diagnostic) => diagnostic.details?.validatorCode === "static_relationship_dimension_change",
     ),
     true,
   );
 
-  const dedupUnit = (
-    text: string,
-    subjectId = "dedup_subject",
-    sectionKey = "facts",
-  ) =>
+  // #1277: zero-valued deltas are "no change", an empty subjectKeys array is an omitted
+  // field, and a nameless candidate borrows a solidly named sibling with the same subjectId.
+  const staticRelationshipZeroDelta = compile(chat, [
+    unit(chat, {
+      bucket: "relationship_state",
+      subjectId: "alice_rowan_static_zero",
+      sectionKey: "state",
+      text: "Alice and Rowan trust each other.",
+      claimKind: "static",
+      subjectNames: ["Alice", "Rowan"],
+      dimensionChanges: { trust: 0 },
+    }),
+  ]);
+  assert.equal(staticRelationshipZeroDelta.accounting.keptUnits, 1);
+  assert.equal(
+    staticRelationshipZeroDelta.diagnostics.some(
+      (diagnostic) => diagnostic.details?.validatorCode === "static_relationship_dimension_change",
+    ),
+    false,
+  );
+
+  const koreanSubject = {
+    subject: { key: "character:seo_mujin", ref: { kind: "character" as const, id: "seo_mujin" } },
+    name: "서무진",
+    aliases: [],
+    canonicalSlug: "seo-mujin",
+  };
+  const parsedEmptyKeys = parseEvidenceUnitPayload(
+    {
+      summary: "Extraction graph regression",
+      units: [
+        {
+          bucket: "character_fact",
+          subjectId: "seo_mujin",
+          sectionKey: "abilities",
+          text: "서무진 can read the observatory script.",
+          claimKind: "static",
+          importance: "major",
+          keywords: [],
+          evidence: ["source_note:source_chat_graph_regression"],
+          confidence: 0.9,
+          salience: 0.8,
+          status: "active",
+          links: [],
+          subjectNames: ["서무진"],
+          subjectKeys: [],
+        },
+      ],
+    },
+    sourceHashForLtmSourceNote(chat),
+    [],
+  );
+  const namedSubjectUnit = parsedEmptyKeys.response.units[0]!;
+  assert.equal(namedSubjectUnit.subjectKeys, undefined, "empty subjectKeys must normalize to an omitted field");
+  const namelessSubjectUnit = unit(chat, {
+    bucket: "character_fact",
+    subjectId: "seo_mujin",
+    sectionKey: "abilities",
+    text: "서무진 can read the observatory script with ease.",
+    claimKind: "static",
+  });
+  const borrowedIdentityResolution = resolveLtmSubjectIdentities({
+    units: [namedSubjectUnit, namelessSubjectUnit],
+    catalog: { entries: [koreanSubject], notes: [] },
+    existingNotes: [],
+    scope: {},
+  });
+  assert.equal(borrowedIdentityResolution.units.length, 2);
+  assert.equal(
+    borrowedIdentityResolution.units[0]!.subjectId,
+    borrowedIdentityResolution.units[1]!.subjectId,
+    "a nameless candidate must borrow its named sibling's identity",
+  );
+  assert.equal(
+    borrowedIdentityResolution.diagnostics.some((diagnostic) => diagnostic.code === "borrowed_subject_identity"),
+    true,
+  );
+  assert.equal(diagnosticsRequireExtractionReview(borrowedIdentityResolution.diagnostics), true);
+
+  const { ltmScopeFamilyId, localCharacterSubjectForName } = await import(`${source}/identity/chat-scope.ts`);
+  const borrowingCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [
+      { kind: "character", id: "seo", name: "서무진", aliases: ["서 선생"] },
+      { kind: "character", id: "mara", name: "Mara", aliases: ["Guard"] },
+      { kind: "character", id: "rowan", name: "Rowan", aliases: ["Guard"] },
+      { kind: "character", id: "alex", name: "Alex Morgan", aliases: [] },
+    ],
+    notes: [],
+  });
+  const borrowingOptions = { catalog: borrowingCatalog, scope: scopedChat.scope, mode: "roleplay" as const };
+  const skippedCatalog = (name: string) => ({
+    ...borrowingCatalog,
+    identityChoices: [{ name, action: "skip" as const, familyId: ltmScopeFamilyId(scopedChat.scope)! }],
+  });
+  const pairDonor = { ...namedSubjectUnit, bucket: "relationship_state" as const, subjectNames: ["서무진", "Rowan"] };
+  const relationshipRecipient = { ...namelessSubjectUnit, bucket: "relationship_state" as const };
+
+  // Failed identities may not be rescued by a superficially similar ID, another
+  // bucket, or a donor whose identity is unavailable/contested/skipped.
+  for (const { label, donors, recipient, catalog = borrowingCatalog, sourceText, donorBasis } of [
+    {
+      label: "exact ID, not a stripped prefix",
+      donors: [namedSubjectUnit],
+      recipient: { ...namelessSubjectUnit, subjectId: "char_seo_mujin" },
+    },
+    {
+      label: "ambiguous alias",
+      donors: [{ ...namedSubjectUnit, subjectId: "guard" }],
+      recipient: { ...namelessSubjectUnit, subjectId: "guard" },
+    },
+    {
+      label: "fuzzy recipient",
+      donors: [{ ...namedSubjectUnit, subjectId: "rowen" }],
+      recipient: { ...namelessSubjectUnit, subjectId: "rowen" },
+    },
+    {
+      label: "relationship cardinality",
+      donors: [{ ...pairDonor, subjectId: "mara" }],
+      recipient: { ...relationshipRecipient, subjectId: "mara" },
+    },
+    { label: "same bucket required", donors: [namedSubjectUnit], recipient: relationshipRecipient },
+    {
+      label: "reversed relationship ID",
+      donors: [{ ...pairDonor, subjectId: "seo_mujin_rowan" }],
+      recipient: { ...relationshipRecipient, subjectId: "rowan_seo_mujin" },
+    },
+    {
+      label: "invalid explicit key",
+      donors: [namedSubjectUnit],
+      recipient: { ...namelessSubjectUnit, subjectKeys: ["character:missing"] },
+    },
+    {
+      label: "internal empty keys stay strict",
+      donors: [namedSubjectUnit],
+      recipient: { ...namelessSubjectUnit, subjectKeys: [] },
+    },
+    {
+      label: "explicit unknown name",
+      donors: [namedSubjectUnit],
+      recipient: { ...namelessSubjectUnit, subjectNames: ["없는사람"] },
+    },
+    {
+      label: "conflicting named siblings",
+      donors: [namedSubjectUnit, { ...namedSubjectUnit, subjectNames: ["Rowan"] }],
+      recipient: namelessSubjectUnit,
+    },
+    {
+      label: "ambiguous donor",
+      donors: [{ ...namedSubjectUnit, subjectNames: ["Guard"] }],
+      recipient: namelessSubjectUnit,
+    },
+    {
+      label: "fuzzy donor",
+      donors: [{ ...namedSubjectUnit, subjectNames: ["Rowen"] }],
+      recipient: namelessSubjectUnit,
+      donorBasis: "spelling_variation",
+    },
+    {
+      label: "partial donor",
+      donors: [{ ...namedSubjectUnit, subjectNames: ["Alex"] }],
+      recipient: namelessSubjectUnit,
+      sourceText: "Alex speaks.",
+      donorBasis: "partial_name_requires_review",
+    },
+    {
+      label: "out-of-scope local donor",
+      donors: [namedSubjectUnit],
+      recipient: namelessSubjectUnit,
+      catalog: {
+        entries: [
+          {
+            ...koreanSubject,
+            subject: localCharacterSubjectForName({ chatId: "other-chat" }, "서무진")!,
+            familyId: ltmScopeFamilyId({ chatId: "other-chat" })!,
+          },
+        ],
+        notes: [],
+      },
+    },
+    {
+      label: "untrusted donor",
+      donors: [{ ...namedSubjectUnit, subjectNames: ["없는사람"] }],
+      recipient: namelessSubjectUnit,
+    },
+    {
+      label: "skipped donor",
+      donors: [namedSubjectUnit],
+      recipient: namelessSubjectUnit,
+      catalog: skippedCatalog("서무진"),
+    },
+    {
+      label: "skipped recipient",
+      donors: [namedSubjectUnit],
+      recipient: namelessSubjectUnit,
+      catalog: skippedCatalog("seo_mujin"),
+    },
+    {
+      label: "contested explicit keys stay closed",
+      donors: [
+        namedSubjectUnit,
+        { ...namelessSubjectUnit, subjectKeys: ["character:seo"] },
+        { ...namelessSubjectUnit, subjectKeys: ["character:rowan"] },
+      ],
+      recipient: namelessSubjectUnit,
+    },
+  ]) {
+    const options = { ...borrowingOptions, catalog, sourceBackedNpcSourceText: sourceText };
+    const baselineContext = prepareLtmSubjectIdentityContext({ ...options, units: [recipient] });
+    const baseline = baselineContext.resolve({ units: [recipient], existingNotes: [] });
+    assert.equal(baseline.units.length, 0, `${label}: fixture must fail or skip without a donor`);
+    const context = prepareLtmSubjectIdentityContext({ ...options, units: [...donors, recipient] });
+    if (donorBasis) {
+      assert.equal(
+        context.resolve({ units: donors, existingNotes: [] }).diagnostics[0]?.details?.matchBasis,
+        donorBasis,
+        `${label}: exercise the intended rejection`,
+      );
+    }
+    const result = context.resolve({ units: [recipient], existingNotes: [] });
+    assert.deepEqual(result, baseline, `${label}: preserve rejection or skip`);
+    assert.equal(
+      context.identityKeyForUnit(recipient),
+      baselineContext.identityKeyForUnit(recipient),
+      `${label}: prediction must also stay unchanged`,
+    );
+  }
+
+  // Known, uniquely aliased, saved-choice, and newly source-backed identities all
+  // use a full-batch preparation pass; prediction and actual resolution must agree.
+  for (const reverse of [false, true]) {
+    const pairUnits = reverse ? [relationshipRecipient, pairDonor] : [pairDonor, relationshipRecipient];
+    const pairContext = prepareLtmSubjectIdentityContext({ ...borrowingOptions, units: pairUnits });
+    const pairResult = pairContext.resolve({ units: pairUnits, existingNotes: [] });
+    assert.equal(pairResult.units.length, 2);
+    assert.equal(pairResult.units[0]!.subjectKeys!.length, 2);
+    assert.deepEqual(pairResult.units[0]!.subjectKeys, pairResult.units[1]!.subjectKeys);
+    assert.equal(pairContext.identityKeyForUnit(pairDonor), pairContext.identityKeyForUnit(relationshipRecipient));
+    assert.equal(diagnosticsRequireExtractionReview(pairResult.diagnostics), true);
+    for (const { catalog, name, sourceText } of [
+      { catalog: borrowingCatalog, name: "서무진", sourceText: undefined },
+      { catalog: borrowingCatalog, name: "서 선생", sourceText: undefined },
+      {
+        catalog: {
+          ...borrowingCatalog,
+          identityChoices: [
+            {
+              name: "Guard",
+              action: "bind" as const,
+              subject: borrowingCatalog.entries[0]!.subject,
+              familyId: ltmScopeFamilyId(scopedChat.scope)!,
+            },
+          ],
+        },
+        name: "Guard",
+        sourceText: undefined,
+      },
+      { catalog: { entries: [], notes: [] }, name: "서무진", sourceText: "서무진 can read the observatory script." },
+    ]) {
+      const donor = { ...namedSubjectUnit, subjectNames: [name] };
+      const units = reverse ? [namelessSubjectUnit, donor] : [donor, namelessSubjectUnit];
+      const context = prepareLtmSubjectIdentityContext({
+        ...borrowingOptions,
+        catalog,
+        units,
+        sourceBackedNpcSourceText: sourceText,
+      });
+      const result = context.resolve({ units, existingNotes: [] });
+      assert.equal(result.units.length, 2);
+      assert.equal(result.droppedCandidates.length, 0);
+      assert.deepEqual(result.units[0]!.subjectKeys, result.units[1]!.subjectKeys);
+      assert.equal(context.identityKeyForUnit(donor), context.identityKeyForUnit(namelessSubjectUnit));
+      assert.equal(diagnosticsRequireExtractionReview(result.diagnostics), true);
+      if (sourceText) assert.ok(result.units[0]!.subjectKeys![0]!.startsWith("local_character:"));
+
+      const backfill = normalizeStructuredSummaryEvidenceUnits({
+        units,
+        sourceText:
+          "## Character Facts\n- character: 서무진 | abilities: 서무진 can read the observatory script with ease.",
+        sourceNote: scopedChat,
+        sourceHash: sourceHashForLtmSourceNote(scopedChat),
+        allowedBuckets: ["character_fact"],
+        mode: "roleplay",
+        characterIdentityKey: context.identityKeyForUnit,
+      });
+      assert.equal(backfill.addedUnits, 0, "backfill must not duplicate the borrowed character fact");
+    }
+  }
+  const englishRecipient = { ...namelessSubjectUnit, subjectId: "mara" };
+  const englishBaseline = prepareLtmSubjectIdentityContext({ ...borrowingOptions, units: [englishRecipient] });
+  const englishWithDonor = prepareLtmSubjectIdentityContext({
+    ...borrowingOptions,
+    units: [{ ...namedSubjectUnit, subjectId: "mara" }, englishRecipient],
+  });
+  assert.deepEqual(
+    englishWithDonor.resolve({ units: [englishRecipient], existingNotes: [] }),
+    englishBaseline.resolve({ units: [englishRecipient], existingNotes: [] }),
+    "successful English resolution must not borrow even from a differently named sibling",
+  );
+  assert.equal(
+    englishWithDonor.identityKeyForUnit(englishRecipient),
+    englishBaseline.identityKeyForUnit(englishRecipient),
+  );
+
+  // Korean particles and short names (#1291): a whole particle is a name boundary, a stripped particle
+  // only binds to a known name, and a 2-syllable tail of a known 3-syllable name goes to review.
+  for (const { label, roster, name, sourceText, keys, basis } of [
+    {
+      label: "particle after a new name",
+      roster: [],
+      name: "서무진",
+      sourceText: "서무진은 서가를 읽었다.",
+      keys: "local",
+    },
+    { label: "name inside a longer name", roster: [], name: "이수", sourceText: "이수이가 서가를 읽었다.", keys: [] },
+    { label: "final ㄹ rejects 으로", roster: [], name: "한별", sourceText: "한별으로 서가를 읽었다.", keys: [] },
+    { label: "returned particle binds to known", roster: ["서무진"], name: "서무진은", keys: ["character:seo"] },
+    {
+      label: "short tail needs review",
+      roster: ["도진욱"],
+      name: "진욱",
+      sourceText: "진욱이 웃었다.",
+      keys: [],
+      basis: "partial_name_requires_review",
+    },
+    { label: "exact short name wins", roster: ["도진욱", "진욱"], name: "진욱", keys: ["character:jin"] },
+  ] as Array<{
+    label: string;
+    roster: string[];
+    name: string;
+    sourceText?: string;
+    keys: "local" | string[];
+    basis?: string;
+  }>) {
+    const catalog = buildTrustedLtmSubjectCatalog({
+      roster: roster.map((rosterName) => ({
+        kind: "character" as const,
+        id: rosterName === "진욱" ? "jin" : rosterName === "서무진" ? "seo" : "do",
+        name: rosterName,
+        aliases: [],
+      })),
+      notes: [],
+    });
+    const donor = { ...namedSubjectUnit, subjectNames: [name] };
+    const result = prepareLtmSubjectIdentityContext({
+      ...borrowingOptions,
+      catalog,
+      units: [donor],
+      sourceBackedNpcSourceText: sourceText,
+    }).resolve({ units: [donor], existingNotes: [] });
+    const resolved = result.units[0]?.subjectKeys ?? [];
+    if (keys === "local") assert.ok(resolved[0]?.startsWith("local_character:"), label);
+    else assert.deepEqual(resolved, keys, label);
+    assert.equal(result.droppedCandidates.length, keys !== "local" && keys.length === 0 ? 1 : 0, label);
+    if (basis) assert.equal(result.diagnostics[0]?.details?.matchBasis, basis, label);
+  }
+
+  const dedupUnit = (text: string, subjectId = "dedup_subject", sectionKey = "facts") =>
     unit(chat, {
       bucket: "world_fact",
       subjectId,
       sectionKey,
       text,
     });
-  const shared = Array.from(
-    { length: 17 },
-    (_, index) => `shared${index}`,
-  ).join(" ");
+  const shared = Array.from({ length: 17 }, (_, index) => `shared${index}`).join(" ");
   const exactlyThreshold = dedupUnit(shared);
   const thresholdMatch = dedupUnit(`${shared} extraA extraB extraC`);
   const belowThreshold = dedupUnit(`${shared} belowA belowB belowC belowD`);
@@ -753,12 +3469,94 @@ async function main() {
   );
   assert.equal(dedupResult.deduplicated.length, 6);
   assert.equal(
-    dedupResult.diagnostics.filter(
-      (diagnostic) => diagnostic.code === "deduplicated_evidence_unit",
-    ).length,
+    dedupResult.diagnostics.filter((diagnostic) => diagnostic.code === "deduplicated_evidence_unit").length,
     4,
     "dedup must characterize same-batch, existing-note, threshold, and exact matches",
   );
+
+  const longTailText = Array.from({ length: 700 }, (_, index) => `filler${index}`).join(" ");
+  const longTailUnit = dedupUnit("The observatory gate remains sealed.", "long_tail_subject");
+  const longTailResult = deduplicateUnits(
+    [longTailUnit],
+    [
+      {
+        ...chat,
+        id: "world_long_tail_subject",
+        type: "world" as const,
+        sections: { facts: { text: `${longTailText} The observatory gate remains sealed.` } },
+      } as any,
+    ],
+  );
+  assert.equal(
+    longTailResult.deduplicated.length,
+    0,
+    "same-section duplicates must still match at a long-section tail",
+  );
+
+  const interiorUnitText = [
+    "observatory",
+    "gate",
+    "remains",
+    "sealed",
+    "during",
+    "nightly",
+    "watch",
+    "despite",
+    "storm",
+    "damage",
+    "around",
+    "hinges",
+    "after",
+    "winter",
+    "repairs",
+  ].join(" ");
+  const interiorCandidateText = interiorUnitText.replace("nightly", "nighttime");
+  const interiorResult = deduplicateUnits(
+    [dedupUnit(interiorUnitText, "interior_subject")],
+    [
+      {
+        ...chat,
+        id: "world_interior_subject",
+        type: "world" as const,
+        sections: {
+          facts: {
+            text: [
+              ...Array.from({ length: 731 }, (_, index) => `interiorfiller${index}`),
+              interiorCandidateText,
+              ...Array.from({ length: 258 }, (_, index) => `interiortail${index}`),
+            ].join(" "),
+          },
+        },
+      } as any,
+    ],
+  );
+  assert.equal(interiorResult.deduplicated.length, 0, "same-section near-duplicates must match at interior offsets");
+
+  const crossSectionResult = deduplicateUnits(
+    [dedupUnit("The observatory gate remains sealed.", "cross_scope_subject", "history")],
+    [
+      {
+        ...chat,
+        id: "world_cross_scope_subject",
+        type: "world" as const,
+        sections: { facts: { text: "The observatory gate remains sealed." } },
+      } as any,
+    ],
+  );
+  assert.equal(crossSectionResult.deduplicated.length, 1, "duplicates must remain section-scoped");
+
+  const crossNoteResult = deduplicateUnits(
+    [dedupUnit("The observatory gate remains sealed.", "cross_note_subject")],
+    [
+      {
+        ...chat,
+        id: "world_other_subject",
+        type: "world" as const,
+        sections: { facts: { text: "The observatory gate remains sealed." } },
+      } as any,
+    ],
+  );
+  assert.equal(crossNoteResult.deduplicated.length, 1, "duplicates must remain target-note scoped");
 
   const subject = (key: string, ref?: { kind: "character"; id: string }) => ({
     key,
@@ -807,19 +3605,263 @@ async function main() {
     ],
     notes: [],
   });
-  const canonicalIdentityNote = identityNote(
-    "char_seraphina",
-    "Seraphina Duvall",
-    [identityCatalog.entries.find((entry: any) => entry.name === "Seraphina Duvall")!.subject],
+  const aliasEvent = validateLtmEvidenceUnits({
+    units: [
+      unit(chat, {
+        bucket: "timeline_event",
+        subjectId: "Sera",
+        sectionKey: "event",
+        text: "Sera arrived at the observatory.",
+      }),
+    ],
+    sourceText: chat.sections.source.text,
+    sourceNote: chat,
+    existingNotes: [],
+    expectedSourceHash: sourceHashForLtmSourceNote(chat),
+    eventSubjectIdentityKeys: new Set(["sera"]),
+  });
+  assert.equal(aliasEvent.droppedCandidates[0]?.validatorCode, "event_subject_matches_character_alias");
+  assert.equal(aliasEvent.droppedCandidates[0]?.reason, "unsupported_bucket");
+  const subjectIdentityRejection = resolveLtmSubjectIdentities({
+    units: [
+      unit(chat, {
+        bucket: "character_fact",
+        subjectId: "unknown_person",
+        sectionKey: "facts",
+        text: "An unknown person has a durable fact.",
+        subjectNames: ["Unknown Person"],
+      }),
+    ],
+    catalog: identityCatalog,
+    existingNotes: [],
+    scope: {},
+    mode: "roleplay",
+  });
+  assert.equal(subjectIdentityRejection.droppedCandidates[0]?.validatorCode, "untrusted_subject_identity");
+  const collisionCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [
+      { kind: "character", id: "alex-a", name: "Alex" },
+      { kind: "character", id: "alex-b", name: "Alex" },
+      { kind: "character", id: "rowan-a", name: "Rowan" },
+      { kind: "character", id: "rowan-b", name: "Rowan" },
+    ],
+    notes: [],
+  });
+  const collisionChat = sourceNote(
+    "source_identity_collisions",
+    { kind: "chat_summary", sourceId: "chat-c", entryId: "summary-c" },
+    "alex-a remembers the gate. alex-b remembers the gate. Pair a trusts the other. Pair b trusts the other.",
   );
+  const collisionUnits = [
+    ...["alex-a", "alex-b"].map((id) => ({
+      ...unit(collisionChat, {
+        bucket: "character_fact" as const,
+        subjectId: "alex",
+        sectionKey: "facts",
+        claimKind: "static",
+        text: `${id} remembers the gate.`,
+      }),
+      subjectKeys: [`character:${id}`],
+    })),
+    ...["a", "b"].map((suffix) => ({
+      ...unit(collisionChat, {
+        bucket: "relationship_state" as const,
+        subjectId: "alex_rowan",
+        sectionKey: "state",
+        claimKind: "static",
+        text: `Pair ${suffix} trusts the other.`,
+      }),
+      subjectKeys: [`character:alex-${suffix}`, `character:rowan-${suffix}`],
+    })),
+  ];
+  const collisionResolution = resolveLtmSubjectIdentities({
+    units: collisionUnits,
+    catalog: collisionCatalog,
+    existingNotes: [],
+    scope: {},
+    mode: "roleplay",
+  });
+  assert.equal(collisionResolution.units.length, 4);
+  const collisionIds = collisionResolution.units.map((resolved: any) =>
+    resolved.bucket === "character_fact" ? `char_${resolved.subjectId}` : `rel_${resolved.subjectId}`,
+  );
+  assert.equal(new Set(collisionIds).size, 4, "distinct trusted identities must have distinct targets");
+  const collisionCompilation = compile(collisionChat, collisionResolution.units, true);
+  assert.deepEqual(
+    new Set(
+      collisionCompilation.compiledResponse.mutations.map((mutation: any) =>
+        mutation.kind === "create_note" ? mutation.note.id : mutation.noteId,
+      ),
+    ),
+    new Set(collisionIds),
+    "normalization and compilation must not mix facts from different identities",
+  );
+  for (const [index, id] of collisionIds.entries()) {
+    const created = collisionCompilation.compiledResponse.mutations.find(
+      (mutation: any) => mutation.kind === "create_note" && mutation.note.id === id,
+    );
+    assert.equal(
+      Object.values((created as any)?.note.sections ?? {}).some((section: any) =>
+        section.text.includes(collisionUnits[index]!.text),
+      ),
+      true,
+      "each distinct target must receive only its own fact",
+    );
+  }
+  const resolvedVoice = { ...collisionResolution.units[0]!, subjectId: "alex_voice", sectionKey: "voice" };
+  assert.equal(
+    normalizeStructuredSummaryEvidenceUnits({ units: [resolvedVoice], sourceText: "", sourceHash }).units[0]?.subjectId,
+    "alex_voice",
+    "a subject-bound target ending in a section name must not be stripped again",
+  );
+  const canonicalIdentityNote = identityNote("char_seraphina", "Seraphina Duvall", [
+    identityCatalog.entries.find((entry: any) => entry.name === "Seraphina Duvall")!.subject,
+  ]);
   identityCatalog.notes.push(canonicalIdentityNote);
+  const canonicalSubject = canonicalIdentityNote.subjects[0];
+  const legacyIdentityNote = {
+    ...identityNote("char_seraphina_legacy", "Legacy Seraphina", [canonicalSubject]),
+    sections: { facts: { text: "Seraphina Duvall is trusted.", updatedAt: timestamp } },
+  };
+  const canonicalizedUnit = {
+    ...unit(chat, {
+      bucket: "character_fact",
+      subjectId: "seraphina_duvall",
+      sectionKey: "facts",
+      text: "Seraphina Duvall is trusted.",
+      subjectNames: ["Seraphina Duvall"],
+    }),
+    subjects: [canonicalSubject],
+  };
+  const subjectIdentityDedup = deduplicateUnits([canonicalizedUnit], [legacyIdentityNote]);
+  assert.equal(
+    subjectIdentityDedup.deduplicated.length,
+    0,
+    "canonical subject identity must deduplicate an equivalent legacy target id",
+  );
+  const distinctSubjectDedup = deduplicateUnits(
+    [
+      {
+        ...canonicalizedUnit,
+        subjectId: "rowan_hale",
+        subjects: [subject("character:rowan", { kind: "character", id: "rowan" })],
+      },
+    ],
+    [legacyIdentityNote],
+  );
+  assert.equal(distinctSubjectDedup.deduplicated.length, 1, "distinct canonical subjects must remain separate");
+  const scopeA = { chatId: "chat-a", chatIds: ["chat-a"] };
+  const scopeB = { chatId: "chat-b", chatIds: ["chat-b"] };
+  const overlappingScope = { chatIds: ["chat-a", "chat-b"] };
+  const targetScopeNote = {
+    ...legacyIdentityNote,
+    id: "char_seraphina_scope_a",
+    scope: scopeA,
+    sections: { facts: { text: "Seraphina Duvall is cautious.", updatedAt: timestamp } },
+  };
+  const otherScopeDuplicate = {
+    ...legacyIdentityNote,
+    id: "char_seraphina_scope_b",
+    scope: scopeB,
+    sections: { facts: { text: "Seraphina Duvall is trusted.", updatedAt: timestamp } },
+  };
+  const scopedUnit = {
+    ...unit(scopedChat, {
+      bucket: "character_fact",
+      subjectId: "seraphina_scope_a",
+      sectionKey: "facts",
+      text: "Seraphina Duvall is trusted.",
+      claimKind: "static",
+      subjectNames: ["Seraphina Duvall"],
+    }),
+    subjects: [canonicalSubject],
+  };
+  const crossScopeDedup = deduplicateUnits([scopedUnit], [targetScopeNote, otherScopeDuplicate], overlappingScope);
+  assert.equal(
+    crossScopeDedup.deduplicated.length,
+    1,
+    "an identical memory in a merely overlapping scope must not suppress the target-scope write",
+  );
+  const crossScopeCompilation = compile(scopedChat, [scopedUnit], true, [targetScopeNote, otherScopeDuplicate], scopeA);
+  assert.equal(
+    crossScopeCompilation.accounting.keptUnits,
+    1,
+    "an overlapping-scope duplicate must not be dropped before the target-scope write",
+  );
+  assert.equal(
+    crossScopeCompilation.outcome.droppedCandidates.filter(
+      (candidate: any) => candidate.noteId === "char_seraphina_scope_a",
+    ).length,
+    0,
+    "the target-scope note must not be dropped as out of scope",
+  );
+  assert.equal(
+    crossScopeDedup.diagnostics.some((diagnostic) => diagnostic.code === "deduplicated_evidence_unit"),
+    false,
+  );
+  const sameScopeDedup = deduplicateUnits(
+    [scopedUnit],
+    [targetScopeNote, { ...otherScopeDuplicate, scope: scopeA }],
+    overlappingScope,
+  );
+  assert.equal(sameScopeDedup.deduplicated.length, 0, "same-scope subject duplicates must still deduplicate");
+  const omittedScopeDedup = deduplicateUnits([scopedUnit], [otherScopeDuplicate]);
+  assert.equal(
+    omittedScopeDedup.deduplicated.length,
+    1,
+    "an omitted scope must not fall back to matching a subject-equivalent note in another scope",
+  );
+  const directTargetNote = {
+    ...canonicalIdentityNote,
+    id: "char_seraphina_duvall",
+  };
+  const directTargetCatalog = buildTrustedLtmSubjectCatalog({
+    roster: [{ kind: "character", id: "seraphina", name: "Seraphina Duvall" }],
+    notes: [],
+  });
+  const directTargetIdentity = resolveLtmSubjectIdentities({
+    units: [
+      unit(chat, {
+        bucket: "character_fact",
+        subjectId: "seraphina_duvall",
+        sectionKey: "facts",
+        text: "Seraphina Duvall is trusted.",
+        subjectNames: ["Seraphina Duvall"],
+      }),
+    ],
+    catalog: directTargetCatalog,
+    existingNotes: [],
+    scope: {},
+    mode: "roleplay",
+  });
+  const directTargetResolution = await resolveScopedEvidenceUnitTargets({
+    units: directTargetIdentity.units,
+    existingNotes: directTargetIdentity.existingNotes,
+    storage: {
+      getNotesByIds: async () => new Map([[directTargetNote.id, directTargetNote]]),
+    },
+    scope: {},
+  });
+  assert.deepEqual(
+    directTargetResolution.existingNotes.map((note: any) => note.id),
+    ["char_seraphina_duvall"],
+    "direct target lookup must join a retrieval-missed canonical note to deduplication",
+  );
+  const directTargetCompilation = compile(
+    chat,
+    directTargetResolution.units,
+    true,
+    directTargetResolution.existingNotes,
+  );
+  assert.equal(directTargetCompilation.accounting.deduplications, 1);
+  assert.equal(directTargetCompilation.compiledResponse.mutations.length, 0);
   assert.deepEqual(
     trustedLtmIdentityNotesForSource({
       sourceText: "Serafina Duvall entered the observatory.",
       catalog: identityCatalog,
     }).map((note: any) => note.id),
-    ["char_seraphina"],
-    "a unique spelling variation should select the trusted canonical identity note",
+    [],
+    "a spelling variation alone must not select a trusted identity note",
   );
   assert.deepEqual(
     trustedLtmIdentityNotesForSource({
@@ -829,18 +3871,17 @@ async function main() {
     [],
     "a surname-only mention must not select a trusted identity",
   );
-  const legacySpellingNote = identityNote(
-    "char_serafina_legacy",
-    "Serafina Duvall",
-  );
+  const legacySpellingNote = identityNote("char_serafina_legacy", "Serafina Duvall");
   identityCatalog.notes.push(legacySpellingNote);
-  assert.equal(
-    analyzeTrustedLtmNoteSubjects(identityCatalog).matches.find(
-      (match: any) => match.note.id === legacySpellingNote.id,
-    )?.basis,
-    "spelling_variation",
-    "identity repair should expose the conservative fuzzy match basis",
+  const spellingIssue = analyzeTrustedLtmNoteSubjects(identityCatalog).unresolved.find(
+    (issue: any) => issue.note.id === legacySpellingNote.id,
   );
+  assert.equal(
+    spellingIssue?.basis,
+    "spelling_variation",
+    "identity repair should suggest rather than bind a fuzzy identity",
+  );
+  assert.deepEqual(spellingIssue?.candidateSubjectKeys, ["character:seraphina"]);
   const ambiguousCatalog = buildTrustedLtmSubjectCatalog({
     roster: [
       { kind: "character", id: "one", name: "Seraphina Duvall" },
@@ -848,9 +3889,7 @@ async function main() {
     ],
     notes: [],
   });
-  ambiguousCatalog.notes.push(
-    identityNote("char_one", "Seraphina Duvall", [ambiguousCatalog.entries[0]!.subject]),
-  );
+  ambiguousCatalog.notes.push(identityNote("char_one", "Seraphina Duvall", [ambiguousCatalog.entries[0]!.subject]));
   assert.deepEqual(
     trustedLtmIdentityNotesForSource({
       sourceText: "Serafina Duvall entered the observatory.",
@@ -906,7 +3945,7 @@ async function main() {
   );
 }
 
-void main().catch((error) => {
+void runRegressionToCompletion("long-term-memory-extraction-graph", main).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

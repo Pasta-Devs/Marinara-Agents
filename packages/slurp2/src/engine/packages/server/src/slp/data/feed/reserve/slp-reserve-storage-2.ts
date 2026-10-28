@@ -1,0 +1,471 @@
+import { existsSync } from "node:fs";
+import { and, desc, eq, inArray } from "../../../../db/file-query.js";
+import {
+  slpCreatorPostMediaUrl,
+  resolveCreatorMediaAbsolutePath,
+  unlinkCreatorMedia,
+} from "../../../base/media/slp-media.js";
+import {
+  slpAccounts,
+  slpPosts,
+  slpCreatorAutomaticAttempts,
+  slpCreatorPreparedPosts,
+} from "../../../../db/schema/slurp.js";
+import { newId } from "../../../../utils/id-generator.js";
+import { resolveCreatorSourceSnapshot, slpCreatorReserveFingerprintFor } from "../../creators/slp-source-resolve.js";
+import { slurpCreatorPostingIntervalMs, slurpPacedPostsPerDay } from "../../../modules/feed/slp-posting-interval.js";
+import { readSlurpCreatorPaceFactor } from "../../creators/slp-steering-storage.js";
+import {
+  ROLLING_DAY_MS,
+  elapsedPreparedSlotMs,
+  TERMINAL_PREPARED_POST_RETENTION_MS,
+} from "../../host/slp-storage-constants.js";
+import { slpReservePolicyStale, parseRecord } from "../../../modules/records/slp-storage-model.js";
+import type { SlpCreatorPreparedPostPayload, SlurpReserveStatus } from "../../../modules/records/slp-storage-model.js";
+import { mapAccount, snapshotForAccount } from "../../host/slp-storage-mappers.js";
+import { readSlurpTieStamp } from "../../../modules/projects/slp-tie-stamp.js";
+import type { SlurpStorageContext } from "../../host/slp-storage-context.js";
+import { linkSlurpPurposePost } from "../slp-purpose-storage.js";
+import { findSlurpOpportunityBySlot, recordSlurpPromiseKept } from "../slp-opportunity-storage.js";
+import { slurpTrendQuoteOf } from "../../../modules/discovery/slp-trends.js";
+
+// One publish pass at a time: the startup reconcile and the first poll could overlap, and two
+// passes both read a row as "prepared" before either marks it published (#35).
+let publishing: Promise<number> | null = null;
+
+export function createReserveStorage2(context: SlurpStorageContext) {
+  const {
+    db,
+    settingsStore,
+    characters,
+    readProjectEntries,
+    isProjectEntry,
+    loadProjects,
+    writeProjects,
+    readCreatorPrices,
+    economyFrom,
+    compensate,
+    writeWallet,
+    restoreSetting,
+    restoreWallet,
+    enqueueFinancial,
+    writeEarnings,
+    mutateCreatorStateNow,
+    creditEarningsNow,
+    getWalletNow,
+    pruneFinishedRefreshRuns,
+    reconcilePublicHandles,
+    insertInteraction,
+    normalizeLegacyNoodlerToggleInteraction,
+    upsertPollVote,
+    deleteInteractionChildren,
+    deleteStoredInteraction,
+  } = context;
+  const storage = {
+    /** `skipCreatorIds`: Creators busy in a roleplay scene (docs/SCENES.md); their posts wait. */
+    async publishDueNoodlerPreparedPosts(
+      at = new Date(),
+      skipCreatorIds: ReadonlySet<string> = new Set(),
+    ): Promise<number> {
+      while (publishing) await publishing.catch(() => 0);
+      const run = (async (): Promise<number> => {
+        // Posting settings: "feed.posting-rate" events scale posts per day here (R1-112).
+        const settings = await this.getPostingSettings();
+        if (!settings.autoPostingScheduleEnabled) return 0;
+        const due = (await this.listNoodlerPreparedPosts()).filter(
+          (item) =>
+            item.state === "prepared" &&
+            Date.parse(item.publishAt) <= at.getTime() &&
+            !skipCreatorIds.has(item.creatorAccountId),
+        );
+        if (due.length === 0) return 0;
+        // One pass over posts for the whole batch: the crash-recovery lookup below only needs
+        // to know which prepared items already published, not to rescan every post per item.
+        const publishedPreparedIds = new Map<string, { id: string }>();
+        for (const post of await db.select().from(slpPosts)) {
+          const preparedId = parseRecord(post.metadata).noodlerPreparedPostId;
+          if (typeof preparedId === "string" && !publishedPreparedIds.has(preparedId)) {
+            publishedPreparedIds.set(preparedId, { id: post.id });
+          }
+        }
+        let published = 0;
+        const discardedMediaPaths: Array<string | null> = [];
+        for (const item of due) {
+          const didPublish = await db.transaction(async (tx) => {
+            const current = (
+              await tx.select().from(slpCreatorPreparedPosts).where(eq(slpCreatorPreparedPosts.id, item.id))
+            )[0];
+            if (!current || current.state !== "prepared" || Date.parse(current.publishAt) > at.getTime()) return false;
+            const existingPost = publishedPreparedIds.get(current.id);
+            if (
+              !existingPost &&
+              Date.parse(current.publishAt) < at.getTime() - elapsedPreparedSlotMs(settings.postsPerDay)
+            ) {
+              await tx
+                .update(slpCreatorPreparedPosts)
+                .set({ state: "discarded", updatedAt: at.toISOString() })
+                .where(eq(slpCreatorPreparedPosts.id, current.id));
+              // Unlinked only after the discard commits, so a crash here leaks a file rather than
+              // leaving a publishable row whose image is already gone.
+              discardedMediaPaths.push(
+                String(parseRecord(parseRecord(current.payload).metadata).noodlerMediaPath ?? "") || null,
+              );
+              return false;
+            }
+            if (existingPost) {
+              await tx
+                .update(slpCreatorPreparedPosts)
+                .set({ state: "published", publishedPostId: existingPost.id, updatedAt: at.toISOString() })
+                .where(eq(slpCreatorPreparedPosts.id, current.id));
+              return false;
+            }
+            const accountRow = (
+              await tx.select().from(slpAccounts).where(eq(slpAccounts.id, current.creatorAccountId))
+            )[0];
+            if (!accountRow || accountRow.platform !== "slurp") {
+              await tx
+                .update(slpCreatorPreparedPosts)
+                .set({ state: "discarded", updatedAt: at.toISOString() })
+                .where(eq(slpCreatorPreparedPosts.id, current.id));
+              return false;
+            }
+            const account = mapAccount(accountRow);
+            const source = await this.resolveAccountSource(account);
+            const sourceSnapshot = source ? await resolveCreatorSourceSnapshot(db, source) : null;
+            if (!account.settings.scheduler.autoPosting?.enabled || !source || !sourceSnapshot) {
+              await tx
+                .update(slpCreatorPreparedPosts)
+                .set({ state: "discarded", updatedAt: at.toISOString() })
+                .where(eq(slpCreatorPreparedPosts.id, current.id));
+              return false;
+            }
+            // Written for an older card, schedule, disclosure, or voice: back to a scheduled slot, so the
+            // next poll writes it again for the Creator as they are now. The slot is kept, not lost.
+            const fingerprint = await slpCreatorReserveFingerprintFor(db, account, settings, source);
+            if (slpReservePolicyStale(current.policyFingerprint, fingerprint)) {
+              discardedMediaPaths.push(
+                String(parseRecord(parseRecord(current.payload).metadata).noodlerMediaPath ?? "") || null,
+              );
+              await tx
+                .update(slpCreatorPreparedPosts)
+                .set({
+                  generatedAt: at.toISOString(),
+                  payload: "{}",
+                  policyFingerprint: fingerprint,
+                  state: "scheduled",
+                  publishedPostId: null,
+                  imageState: "none",
+                  imageClaimToken: null,
+                  imageClaimLeaseUntil: null,
+                  updatedAt: at.toISOString(),
+                })
+                .where(eq(slpCreatorPreparedPosts.id, current.id));
+              return false;
+            }
+            const payload = parseRecord(current.payload) as SlpCreatorPreparedPostPayload;
+            const preparedMetadata = parseRecord(payload.metadata);
+            // A couple's shared-page post goes up on that page (7b-couples); if the page is gone, on the writer's.
+            const pageId = readSlurpTieStamp(preparedMetadata)?.pageId;
+            const pageRow = pageId ? (await tx.select().from(slpAccounts).where(eq(slpAccounts.id, pageId)))[0] : null;
+            const author = pageRow ? mapAccount(pageRow) : account;
+            // Spacing is read on the page the post goes up on, so both partners cannot fill a shared page at once.
+            const latestCreatorPost = (
+              await tx
+                .select()
+                .from(slpPosts)
+                .where(eq(slpPosts.authorAccountId, author.id))
+                .orderBy(desc(slpPosts.createdAt))
+            )[0];
+            const nextFree = latestCreatorPost
+              ? Date.parse(latestCreatorPost.createdAt) +
+                slurpCreatorPostingIntervalMs(
+                  slurpPacedPostsPerDay(settings.postsPerDay, await readSlurpCreatorPaceFactor(db, author.id)),
+                )
+              : 0;
+            if (nextFree > at.getTime() && author.id !== account.id) {
+              // A shared page: the partner posted there just now. This one waits its turn, picture kept.
+              await tx
+                .update(slpCreatorPreparedPosts)
+                .set({ publishAt: new Date(nextFree).toISOString(), updatedAt: at.toISOString() })
+                .where(eq(slpCreatorPreparedPosts.id, current.id));
+              return false;
+            }
+            if (nextFree > at.getTime()) {
+              discardedMediaPaths.push(
+                String(parseRecord(parseRecord(current.payload).metadata).noodlerMediaPath ?? "") || null,
+              );
+              await tx
+                .update(slpCreatorPreparedPosts)
+                .set({ state: "discarded", updatedAt: at.toISOString() })
+                .where(eq(slpCreatorPreparedPosts.id, current.id));
+              return false;
+            }
+            if (typeof payload.content !== "string" || !payload.content.trim()) {
+              await tx
+                .update(slpCreatorPreparedPosts)
+                .set({ state: "discarded", updatedAt: at.toISOString() })
+                .where(eq(slpCreatorPreparedPosts.id, current.id));
+              return false;
+            }
+            const postId = newId();
+            const imageState = current.imageState === "attached" ? "attached" : "closed";
+            const hasMedia = typeof preparedMetadata.noodlerMediaPath === "string";
+            // A post with no generated picture may carry an existing gallery image instead.
+            const galleryImageUrl =
+              typeof preparedMetadata.galleryAttachmentImageUrl === "string"
+                ? preparedMetadata.galleryAttachmentImageUrl
+                : null;
+            // A Story is a picture with a line under it. The prepared payload carries the story
+            // intent, but a run whose image never attached publishes as an ordinary post.
+            if (!hasMedia) delete preparedMetadata.noodlerPostType;
+            await tx.insert(slpPosts).values({
+              id: postId,
+              authorAccountId: author.id,
+              title: typeof payload.title === "string" ? payload.title : null,
+              content: payload.content,
+              imageUrl: hasMedia ? slpCreatorPostMediaUrl(postId) : galleryImageUrl,
+              imagePrompt: typeof payload.imagePrompt === "string" ? payload.imagePrompt : null,
+              parentPostId: null,
+              quotePostId: slurpTrendQuoteOf(preparedMetadata),
+              source: "generated",
+              projectId: typeof payload.projectId === "string" ? payload.projectId : null,
+              projectChapter: typeof payload.projectChapter === "string" ? payload.projectChapter : null,
+              access: payload.access === "public" ? "public" : "locked",
+              metadata: JSON.stringify({ ...preparedMetadata, noodlerPreparedPostId: current.id }),
+              authorSnapshot: JSON.stringify(snapshotForAccount(author)),
+              // A late publish is stamped with the moment it actually happened. Using publishAt
+              // would file the post behind whatever the feed received during the delay.
+              createdAt: Date.parse(current.publishAt) < at.getTime() ? at.toISOString() : current.publishAt,
+              updatedAt: at.toISOString(),
+            });
+            await tx
+              .update(slpCreatorPreparedPosts)
+              .set({
+                state: "published",
+                publishedPostId: postId,
+                imageState,
+                imageClaimToken: null,
+                imageClaimLeaseUntil: null,
+                updatedAt: at.toISOString(),
+              })
+              .where(eq(slpCreatorPreparedPosts.id, current.id));
+            return postId;
+          });
+          if (!didPublish) continue;
+          published += 1;
+          // Outside the transaction on purpose. Advancing is bookkeeping, not part of publishing:
+          // a project that failed to advance must not roll back a post the audience can already see.
+          if (typeof item.payload.projectId === "string" && item.payload.projectId) {
+            await this.advanceProject(item.creatorAccountId, item.payload.projectId, didPublish);
+          }
+          // A promise is kept when the post goes up, not when its slot was prepared: a prepared slot
+          // can still be discarded (R1-034). Best effort, like the steps around it.
+          const opportunity = await findSlurpOpportunityBySlot(db, item.id).catch(() => null);
+          if (opportunity)
+            await recordSlurpPromiseKept(db, opportunity, { postId: didPublish, at }).catch(() => undefined);
+          // A drop links its tease and countdowns to itself; a tease links to a drop already up (3b).
+          await linkSlurpPurposePost(db, {
+            id: didPublish,
+            authorAccountId: item.creatorAccountId,
+            metadata: parseRecord(item.payload.metadata),
+          }).catch(() => undefined);
+        }
+        for (const path of discardedMediaPaths) unlinkCreatorMedia(path);
+        return published;
+      })();
+      publishing = run;
+      try {
+        return await run;
+      } finally {
+        publishing = null;
+      }
+    },
+    async reconcileNoodlerPreparedPosts(at = new Date()): Promise<number> {
+      // Posting settings: "feed.posting-rate" events scale posts per day here (R1-112).
+      const settings = await this.getPostingSettings();
+      const repaired = await db.transaction(async (tx) => {
+        const [items, posts] = await Promise.all([
+          tx.select().from(slpCreatorPreparedPosts),
+          tx.select().from(slpPosts),
+        ]);
+        const postsByPreparedId = new Map<string, typeof posts>();
+        for (const post of posts) {
+          const preparedId = parseRecord(post.metadata).noodlerPreparedPostId;
+          if (typeof preparedId !== "string") continue;
+          const existing = postsByPreparedId.get(preparedId) ?? [];
+          existing.push(post);
+          postsByPreparedId.set(preparedId, existing);
+        }
+        let count = 0;
+        for (const item of items) {
+          const linkedPosts = (postsByPreparedId.get(item.id) ?? []).sort((left, right) =>
+            left.id.localeCompare(right.id),
+          );
+          const linkedPost = linkedPosts[0];
+          if (linkedPost) {
+            if (item.state !== "published" || item.publishedPostId !== linkedPost.id) {
+              await tx
+                .update(slpCreatorPreparedPosts)
+                .set({ state: "published", publishedPostId: linkedPost.id, updatedAt: at.toISOString() })
+                .where(eq(slpCreatorPreparedPosts.id, item.id));
+              count += 1;
+            }
+          } else if (item.state === "published") {
+            // The linked post is gone. Re-preparing is only right while the slot is still in the
+            // future; a row whose publishAt has passed would be republished by the very next poll,
+            // so a user who deletes an automatic post would watch it come back. Discard those.
+            const slotStillAhead = Date.parse(item.publishAt) > at.getTime();
+            await tx
+              .update(slpCreatorPreparedPosts)
+              .set(
+                slotStillAhead
+                  ? { state: "prepared", publishedPostId: null, updatedAt: at.toISOString() }
+                  : { state: "discarded", updatedAt: at.toISOString() },
+              )
+              .where(eq(slpCreatorPreparedPosts.id, item.id));
+            count += 1;
+          }
+        }
+        return count;
+      });
+      const items = await this.listNoodlerPreparedPosts();
+      const active = items.filter((item) => item.state === "scheduled" || item.state === "prepared");
+      const accounts = new Map((await this.listNoodlerAccounts()).map((account) => [account.id, account]));
+      const sources = new Map(
+        await Promise.all(
+          [...accounts.values()].map(
+            async (account) => [account.id, await this.resolveAccountSource(account)] as const,
+          ),
+        ),
+      );
+      const missingSourceAccountIds = new Set(
+        (
+          await Promise.all(
+            [...accounts.values()].map(async (account) => {
+              const source = sources.get(account.id) ?? null;
+              return !source || !(await resolveCreatorSourceSnapshot(db, source)) ? account.id : null;
+            }),
+          )
+        ).filter((id): id is string => id !== null),
+      );
+      const invalidIds = active
+        .filter((item) => {
+          const account = accounts.get(item.creatorAccountId);
+          const source = account ? (sources.get(account.id) ?? null) : null;
+          return (
+            // A row whose timestamps do not parse can never become due and would otherwise make
+            // every status read and publish pass fail until someone edited storage by hand.
+            Number.isNaN(Date.parse(item.publishAt)) ||
+            Number.isNaN(Date.parse(item.generatedAt)) ||
+            Date.parse(item.publishAt) < at.getTime() - elapsedPreparedSlotMs(settings.postsPerDay) ||
+            !account ||
+            !source ||
+            missingSourceAccountIds.has(item.creatorAccountId) ||
+            !account.settings.scheduler.autoPosting?.enabled
+          );
+        })
+        .map((item) => item.id);
+      const invalidIdSet = new Set(invalidIds);
+      // Soonest first, so lowering postsPerDay discards the latest excess items and leaves
+      // the imminent ones intact.
+      const validFuture = active
+        .filter((item) => !invalidIdSet.has(item.id) && Date.parse(item.publishAt) > at.getTime())
+        .sort((a, b) => Date.parse(a.publishAt) - Date.parse(b.publishAt));
+      const excessIds = validFuture.slice(settings.postsPerDay).map((item) => item.id);
+      const discardedSet = new Set([...invalidIds, ...excessIds]);
+      const discarded = [...discardedSet];
+      if (discarded.length > 0) {
+        await db.transaction(async (tx) =>
+          tx
+            .update(slpCreatorPreparedPosts)
+            .set({ state: "discarded", updatedAt: at.toISOString() })
+            .where(inArray(slpCreatorPreparedPosts.id, discarded)),
+        );
+        for (const item of active.filter(
+          (candidate) => candidate.state === "prepared" && discardedSet.has(candidate.id),
+        )) {
+          unlinkCreatorMedia(String(parseRecord(item.payload.metadata).noodlerMediaPath ?? "") || null);
+        }
+      }
+      // A crash between the durable row write and the media promotion leaves a row pointing at a
+      // file that is not there; publishing it would give the post a 404 image route. Drop the
+      // reference instead, so the post publishes as text.
+      for (const item of items) {
+        if (item.state !== "prepared" || discardedSet.has(item.id)) continue;
+        const mediaPath = item.payload.metadata.noodlerMediaPath;
+        if (typeof mediaPath !== "string" || !mediaPath) continue;
+        const absolute = resolveCreatorMediaAbsolutePath(mediaPath);
+        if (absolute && existsSync(absolute)) continue;
+        const { noodlerMediaPath: _missing, ...metadata } = item.payload.metadata;
+        await db.transaction(async (tx) =>
+          tx
+            .update(slpCreatorPreparedPosts)
+            .set({
+              payload: JSON.stringify({ ...item.payload, metadata }),
+              imageState: "closed",
+              updatedAt: at.toISOString(),
+            })
+            .where(eq(slpCreatorPreparedPosts.id, item.id)),
+        );
+      }
+      // Published and discarded rows only exist for crash recovery, and this table is read whole
+      // on every poll, so aged terminal rows are dropped instead of accumulating forever.
+      const pruneBefore = at.getTime() - TERMINAL_PREPARED_POST_RETENTION_MS;
+      const prunable = items
+        .filter(
+          (item) =>
+            item.state !== "scheduled" &&
+            item.state !== "prepared" &&
+            !discardedSet.has(item.id) &&
+            !(Date.parse(item.updatedAt) > pruneBefore),
+        )
+        .map((item) => item.id);
+      if (prunable.length > 0) {
+        await db.delete(slpCreatorPreparedPosts).where(inArray(slpCreatorPreparedPosts.id, prunable));
+      }
+      return repaired + discarded.length;
+    },
+    async getNoodlerReserveStatus(at = new Date()): Promise<SlurpReserveStatus> {
+      // Posting settings: "feed.posting-rate" events scale posts per day here (R1-112).
+      const settings = await this.getPostingSettings();
+      const state = await this.ensureNoodlerReserveState(at);
+      const effectiveMs = Date.parse(state.lastObservedBudgetTime);
+      const cutoff = effectiveMs - ROLLING_DAY_MS;
+      const [items, attempts, creators] = await Promise.all([
+        this.listNoodlerPreparedPosts(),
+        db.select().from(slpCreatorAutomaticAttempts),
+        this.listAutoPostEnabledAccounts(),
+      ]);
+      const prepared = items.filter((item) => item.state === "prepared");
+      const upcoming = items.filter(
+        (item) =>
+          (item.state === "scheduled" || item.state === "prepared") && Date.parse(item.publishAt) > at.getTime(),
+      );
+      return {
+        preparedCount: prepared.length,
+        preparedThrough: prepared.reduce<string | null>(
+          (latest, item) => (!latest || item.publishAt > latest ? item.publishAt : latest),
+          null,
+        ),
+        textAttemptsUsed: attempts.filter(
+          (row) => row.kind === "text" && row.outcome !== "failed" && Date.parse(row.claimedAt) > cutoff,
+        ).length,
+        imageAttemptsUsed: attempts.filter(
+          (row) => row.kind === "image" && row.outcome !== "failed" && Date.parse(row.claimedAt) > cutoff,
+        ).length,
+        postsPerDay: settings.postsPerDay,
+        preparationNotBefore: state.preparationNotBefore,
+        creators: creators.map((account) => ({
+          accountId: account.id,
+          nextPreparedAt: prepared.find((item) => item.creatorAccountId === account.id)?.publishAt ?? null,
+          // Settings shows who is holding reserve and how many, so the count travels with the row.
+          preparedCount: prepared.filter((item) => item.creatorAccountId === account.id).length,
+          slots: upcoming
+            .filter((item) => item.creatorAccountId === account.id)
+            .map((item) => ({ id: item.id, publishAt: item.publishAt, state: item.state })),
+        })),
+      };
+    },
+  } satisfies ThisType<Record<string, any>>;
+  return storage;
+}

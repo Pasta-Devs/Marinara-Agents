@@ -58,11 +58,7 @@ export interface GameMapBindingReconciliationSelection {
 export class GameMapBindingError extends Error {
   constructor(
     readonly code:
-      | "map_missing"
-      | "target_missing"
-      | "target_type_mismatch"
-      | "target_already_bound"
-      | "reconciliation_stale",
+      "map_missing" | "target_missing" | "target_type_mismatch" | "target_already_bound" | "reconciliation_stale",
     message: string,
   ) {
     super(message);
@@ -289,8 +285,7 @@ export function clearGameMapSpatialLocationBindings(metadata: Record<string, unk
     typeof metadata.activeGameMapId === "string"
       ? metadata.activeGameMapId
       : getGameMapId(metadata.gameMap as GameMap | null | undefined);
-  const activeMap =
-    clearedMaps.find((map, index) => getGameMapId(map, index) === previousActiveId) ?? clearedMaps[0]!;
+  const activeMap = clearedMaps.find((map, index) => getGameMapId(map, index) === previousActiveId) ?? clearedMaps[0]!;
   return {
     ...metadata,
     gameMaps: clearedMaps,
@@ -413,9 +408,7 @@ function bindExactLocation<T extends { spatialLocationId?: string }>(
 ): { value: T; bound: boolean } {
   if (value.spatialLocationId?.trim()) return { value, bound: false };
   const locationId = locationsByName.get(normalizeBindingName(name));
-  return locationId
-    ? { value: withSpatialLocationId(value, locationId), bound: true }
-    : { value, bound: false };
+  return locationId ? { value: withSpatialLocationId(value, locationId), bound: true } : { value, bound: false };
 }
 
 export function bindGameMapsToExactSpatialLocations(
@@ -459,8 +452,7 @@ export function bindGameMapsToExactSpatialLocations(
     typeof metadata.activeGameMapId === "string"
       ? metadata.activeGameMapId
       : getGameMapId(metadata.gameMap as GameMap | null | undefined);
-  const activeMap =
-    updatedMaps.find((map, index) => getGameMapId(map, index) === previousActiveId) ?? updatedMaps[0]!;
+  const activeMap = updatedMaps.find((map, index) => getGameMapId(map, index) === previousActiveId) ?? updatedMaps[0]!;
   return {
     metadata: {
       ...metadata,

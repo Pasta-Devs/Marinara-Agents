@@ -1,0 +1,14 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": { "locale": "de", "direction": "ltr" },
+  "package": {
+    "name": "Memory Nag",
+    "description": "Führt pro Chat einen kurzen Tresor mit Rollenspiel-Erinnerungen und ruft nur ungelöste Details ab, die für den aktuellen Zug wichtig sind. Füge den Agenten im Rollenspielmodus unter Chat-Einstellungen → Agenten → Tracker-Agenten hinzu."
+  },
+  "agents": {
+    "memory-nag": {
+      "name": "Memory Nag",
+      "description": "Führt pro Chat einen kurzen Tresor mit Rollenspiel-Erinnerungen und ruft nur ungelöste Details ab, die für den aktuellen Zug wichtig sind."
+    }
+  }
+}

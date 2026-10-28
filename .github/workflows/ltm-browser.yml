@@ -1,0 +1,121 @@
+name: Long-Term Memory Package Browser
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - ".github/workflows/ltm-browser.yml"
+      - "artifacts/long-term-memory-*.zip"
+      - "packages/long-term-memory/**"
+      - "scripts/typecheck-packages.mjs"
+      - "tests/engine-visual-styles.ts"
+      - "tests/long-term-memory-*"
+      - "tests/regression-helpers.ts"
+      - "tests/regression-helpers.mjs"
+
+concurrency:
+  group: ltm-browser-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ltm-browser:
+    name: Long-Term Memory package browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Marinara Agents
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout Marinara Engine staging
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Pasta-Devs/Marinara-Engine
+          ref: staging
+          path: engine
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: engine/package.json
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Install Engine dependencies
+        run: pnpm --dir engine install --frozen-lockfile
+
+      # The browser regression loads Playwright from the Engine checkout, so install that version's Chromium.
+      - name: Install Playwright Chromium
+        run: pnpm --dir engine exec playwright install --with-deps chromium
+
+      - name: Run Long-Term Memory browser regression
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+        run: pnpm --dir engine --filter @marinara-engine/server exec tsx "$GITHUB_WORKSPACE/tests/long-term-memory-browser.regression.ts"
+
+      # routes and installation import the Engine server, which loads the built shared package (dist/ is not committed).
+      - name: Build Engine shared package
+        run: pnpm --dir engine --filter @marinara-engine/shared build
+
+      # These need the Engine checkout (its fastify, shared sources, server or styles), so they run through its tsx like
+      # the browser regression. routes-imports, -scope-identity and -backup start from their own seed and have
+      # scenario-only assertions, so they run beside the direct routes scenario. Engine-free suites run in ltm-node.
+      - name: Run Engine-backed Long-Term Memory regressions
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+        run: |
+          for test in storage branch-recall engine-fields routes routes-imports routes-scope-identity routes-backup \
+            installation host-styles; do
+            pnpm --dir engine --filter @marinara-engine/server exec tsx "$GITHUB_WORKSPACE/tests/long-term-memory-$test.regression.ts"
+          done
+
+      # The strict run checks the package against the Engine's own dependency types, so it needs this Engine checkout;
+      # Pull Request Checks has none and runs only the name check. tsc comes from the Agents lockfile, installed last so
+      # the regressions above resolve the package's imports exactly as before.
+      - name: Install locked Agents dependencies
+        run: npm ci
+
+      - name: Typecheck Long-Term Memory strictly
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+        run: node scripts/typecheck-packages.mjs long-term-memory
+
+  ltm-node:
+    name: Long-Term Memory package regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Marinara Agents
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked Agents dependencies
+        run: npm ci
+
+      # These import only package source and Agents dependencies, so they need no Engine checkout. index-keys runs in
+      # Pull Request Checks through npm run test:security.
+      - name: Run Engine-free Long-Term Memory regressions
+        run: |
+          for test in candidate-reconciliation chat-transcript-import conversation-summary-import debug-log delta-review extraction-graph \
+            extraction-reliability local-characters rebuild-job runtime; do
+            npx tsx "tests/long-term-memory-$test.regression.ts"
+          done

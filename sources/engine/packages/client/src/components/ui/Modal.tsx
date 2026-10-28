@@ -52,11 +52,53 @@ export function Modal({
 }: ModalProps) {
   const portalContainer = useContext(ModalPortalContext);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
   // Track mounted state separately so we can play the exit animation
   // before actually removing the DOM nodes.
   const [mounted, setMounted] = useState(false);
   const [animating, setAnimating] = useState<"enter" | "exit" | null>(null);
   const enterRafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusTimer = window.setTimeout(() => {
+      const first = panelRef.current?.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      (first ?? panelRef.current)?.focus();
+    }, 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) return;
+    openerRef.current?.focus();
+    openerRef.current = null;
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || !panelRef.current) return;
+      const focusable = Array.from(panelRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ));
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open]);
 
   useEffect(() => {
     if (enterRafRef.current !== null) {
@@ -119,7 +161,7 @@ export function Modal({
 
   return createPortal(
     <div
-      ref={overlayRef}
+        ref={overlayRef}
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -136,7 +178,7 @@ export function Modal({
       }}
       onTransitionEnd={handleAnimationEnd}
       onClick={(e) => {
-        if (!closeDisabled && e.target === overlayRef.current) onClose();
+        if (!closeDisabled && (e.target === overlayRef.current || e.target === e.currentTarget.querySelector(".mari-modal-backdrop"))) onClose();
       }}
     >
       {/* Backdrop */}
@@ -150,6 +192,8 @@ export function Modal({
 
       {/* Panel */}
       <div
+        ref={panelRef}
+        tabIndex={-1}
         className={`mari-modal-panel ${NEUTRAL_PANEL_SHELL} relative flex w-full flex-col ${width} max-h-[calc(100dvh-1.5rem)] sm:max-h-[min(90dvh,52rem)]${
           mobileFullscreen
             ? " max-sm:h-full max-sm:max-h-none max-sm:max-w-none max-sm:rounded-none max-sm:border-0 max-sm:pt-[env(safe-area-inset-top)] max-sm:pb-[env(safe-area-inset-bottom)]"
@@ -167,6 +211,7 @@ export function Modal({
           <h2 className={NEUTRAL_PANEL_TITLE}>{title}</h2>
           <button
             type="button"
+            aria-label="Close dialog"
             onClick={() => {
               if (!closeDisabled) onClose();
             }}

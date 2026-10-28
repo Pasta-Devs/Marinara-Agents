@@ -8,16 +8,25 @@ import {
 import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
-import {
-  resolveStoredChatOptions,
-  resolveStoredMaxTokens,
-} from "../generation/generation-parameters.js";
+import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/generation-parameters.js";
 import type { ImageCaptioningRuntime } from "../generation/image-captioning-runtime.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { noodleSamplingOptions } from "./noodle-sampling-options.js";
-import { noodleTimelineRefreshMaxTokens } from "./noodle-post-target.js";
+import {
+  NOODLE_TIMELINE_MIN_OUTPUT_TOKENS,
+  noodleTimelineMaxTokensForPrompt,
+  noodleTimelineRefreshMaxTokens,
+} from "./noodle-post-target.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
-import type { ChatMessage } from "../llm/base-provider.js";
+import {
+  BaseLLMProvider,
+  fitMessagesToContext,
+  llmFetch,
+  type ChatCompletionResult,
+  type ChatMessage,
+  type ChatOptions,
+  type LLMUsage,
+} from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
@@ -29,10 +38,11 @@ import { createPromptOverridesStorage } from "../storage/prompt-overrides.storag
 import { commitGeneratedNoodleActivity, prepareGeneratedNoodleMedia } from "./noodle-generated-activity.service.js";
 import {
   deduplicateGeneratedNoodleContent,
+  NOODLE_EMPTY_TIMELINE_REASON,
   parseNoodleGeneratedRefreshResponse,
   validateNoodleGeneratedRefresh,
 } from "./noodle-generated-refresh.js";
-import { normalizeNoodleHandle } from "./noodle-handle.js";
+import { createNoodleHandleResolver, noodleHandleKeySet } from "./noodle-handle.js";
 import { chooseNoodleParticipantAccounts, collectNoodlePriorityAccountIds } from "./noodle-participant-selection.js";
 import { buildRefreshPrompt } from "./noodle-public-prompt.service.js";
 import { generateMissingNoodleProfiles } from "./noodle-public-profiles.service.js";
@@ -52,6 +62,11 @@ import type { ConnectionAdmissionMode } from "../generation/connection-admission
 import { isUnsupportedNoodleVisionInputError } from "./noodle-vision.js";
 import { formatNoodleMessagesForLog } from "./noodle-generation-log.js";
 import { ensureAmbientNoodleAccounts } from "./noodle-ambient-profiles.js";
+import {
+  canRetryNoodleVisionRequest,
+  resolveNoodleVisionSupport,
+  selectNoodleVisionRequest,
+} from "./noodle-model-capabilities.js";
 
 type PublicGenerationConnection = NonNullable<
   Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>
@@ -69,6 +84,74 @@ type PublicGenerationInput = {
   /** Scheduler-owned automatic refreshes pass background so they yield to user generation. */
   admissionMode?: ConnectionAdmissionMode;
 };
+
+class NoodleTimelineTooLongError extends Error {
+  constructor() {
+    super(
+      "The timeline prompt is too long for this connection's context window. No timeline changes were saved. In Noodle settings, use fewer active accounts or turn off Lorebook context. You can also turn off Allow Noodle references in some chats, or load the model with a larger context size.",
+    );
+  }
+}
+
+/**
+ * Lowers each timeline request's max_tokens to fit the primary connection's context, so the context
+ * fitter never has to cut the prompt. It wraps the Engine's whole fallback chain: the Engine only builds
+ * a fallback around a provider it created itself, so a configured fallback gets the lowered request too.
+ */
+class NoodleTimelineBudgetProvider extends BaseLLMProvider {
+  /** True when this connection's last answer ran out of a lowered max_tokens. */
+  answeredUnderLoweredBudget = false;
+
+  constructor(private readonly provider: BaseLLMProvider) {
+    // This facade delegates all I/O; keep connection credentials confined to the wrapped provider.
+    super("", "", provider.maxContextValue ?? undefined, null, provider.maxTokensOverrideValue);
+  }
+
+  private sized(messages: ChatMessage[], options: ChatOptions): ChatOptions {
+    if (options.maxTokens === undefined) return options;
+    const fit = fitMessagesToContext(messages, {
+      maxContext: this.provider.maxContextValue ?? undefined,
+      maxTokens: options.maxTokens,
+    });
+    const maxTokens = noodleTimelineMaxTokensForPrompt(fit, options.maxTokens);
+    if (maxTokens === null) {
+      logger.warn(
+        "[noodle] The timeline prompt needs ~%d of the connection's %d context tokens, leaving less than %d tokens for the answer",
+        fit.estimatedTokensBefore,
+        fit.maxContext,
+        Math.min(options.maxTokens, NOODLE_TIMELINE_MIN_OUTPUT_TOKENS),
+      );
+      throw new NoodleTimelineTooLongError();
+    }
+    if (maxTokens < options.maxTokens)
+      logDebugOverride(
+        options.debugMode === true,
+        "[debug/noodle] Lowered the answer budget from %d to %d tokens so the whole prompt fits the %d-token context",
+        options.maxTokens,
+        maxTokens,
+        fit.maxContext,
+      );
+    return { ...options, maxTokens };
+  }
+
+  async *chat(messages: ChatMessage[], options: ChatOptions): AsyncGenerator<string, LLMUsage | void, unknown> {
+    return yield* this.provider.chat(messages, this.sized(messages, options));
+  }
+
+  override async chatComplete(messages: ChatMessage[], options: ChatOptions): Promise<ChatCompletionResult> {
+    this.answeredUnderLoweredBudget = false;
+    const sized = this.sized(messages, options);
+    const result = await this.provider.chatComplete(messages, sized);
+    // Only a length stop under the lowered budget counts. A fallback connection that answered got the
+    // lowered budget too, unless its own saved settings set one.
+    this.answeredUnderLoweredBudget = sized.maxTokens !== options.maxTokens && result.finishReason === "length";
+    return result;
+  }
+
+  override embed(texts: string[], model: string, signal?: AbortSignal): Promise<number[][]> {
+    return this.provider.embed(texts, model, signal);
+  }
+}
 
 function parseStringArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string" && item.length > 0);
@@ -147,14 +230,17 @@ export function createPublicNoodleGenerationService(db: DB) {
           input.connection.defaultParameters,
         );
         const fallbackConnection = await connections.getFallbackForMain();
-        const provider = withConnectionFallbackProvider({
-          primary: primaryProvider,
+        const fallbackArgs = {
           primaryConnectionId: input.connection.id,
           fallbackConnection,
           fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
           category: "main",
           admissionMode: input.admissionMode,
-        });
+        } as const;
+        const provider = withConnectionFallbackProvider({ primary: primaryProvider, ...fallbackArgs });
+        const timelineProvider = new NoodleTimelineBudgetProvider(
+          withConnectionFallbackProvider({ primary: primaryProvider, ...fallbackArgs }),
+        );
         await ensurePersonaAccounts(noodle, characters);
         if (settings.allowProfessorMari) await ensureProfessorMariAccount(noodle, characters);
         const personaAccount = await resolvePersonaAccount(noodle, characters, input.personaId);
@@ -195,7 +281,7 @@ export function createPublicNoodleGenerationService(db: DB) {
         ];
         const [recentSelectionInteractions, recentCompletedRuns] = await Promise.all([
           noodle.listInteractions(recentSelectionPosts.map((post) => post.id)),
-          noodle.listRefreshRuns({ status: "completed", limit: 1 }),
+          noodle.listCompletedRefreshRunAccountIds(settings.participantSelectionMode === "all" ? 100 : 1),
         ]);
         const priorityAccountIds = collectNoodlePriorityAccountIds({
           accounts: participantAccounts,
@@ -208,7 +294,8 @@ export function createPublicNoodleGenerationService(db: DB) {
           settings,
           selectedGroupCharacterIds,
           followedAccountIds: new Set(personaAccount?.settings.social.followingAccountIds ?? []),
-          recentlyActiveAccountIds: new Set(recentCompletedRuns[0]?.activeAccountIds ?? []),
+          recentlyActiveAccountIds: new Set(recentCompletedRuns[0] ?? []),
+          recentlyActiveAccountIdsByRun: recentCompletedRuns.map((accountIds) => new Set(accountIds)),
           priorityAccountIds,
         });
         if (selectedParticipants.length === 0) {
@@ -247,8 +334,27 @@ export function createPublicNoodleGenerationService(db: DB) {
           imageCaptioning,
           debugMode,
         });
-        logDebugOverride(debugMode, "[debug/noodle] Prompt sent to model:\n%s", prompt.promptForLog);
-        if (prompt.visionAttachmentCount > 0)
+        let visionSupport: boolean | null = null;
+        if (prompt.visionAttachmentCount > 0) {
+          try {
+            visionSupport = await resolveNoodleVisionSupport(input.connection, llmFetch);
+          } catch (error) {
+            logger.debug(error, "[noodle/vision] Could not preflight the selected model's vision capability");
+          }
+        }
+        const initialRequest = selectNoodleVisionRequest(prompt, visionSupport);
+        const useTextOnlyPreflight = initialRequest.attemptKind === "text_only_fallback";
+        let requestMessages: ChatMessage[] = initialRequest.messages;
+        let firstAttemptKind: NoodleRefreshAttemptKind = initialRequest.attemptKind;
+        const firstPromptForLog = initialRequest.promptForLog;
+        logDebugOverride(debugMode, "[debug/noodle] Prompt sent to model:\n%s", firstPromptForLog);
+        if (useTextOnlyPreflight)
+          logDebugOverride(
+            debugMode,
+            "[debug/noodle] Omitted %d timeline image input(s) because the selected NanoGPT model reports no vision support",
+            prompt.visionAttachmentCount,
+          );
+        else if (prompt.visionAttachmentCount > 0)
           logDebugOverride(
             debugMode,
             "[debug/noodle] Attached %d timeline image input(s) to the refresh prompt",
@@ -270,7 +376,7 @@ export function createPublicNoodleGenerationService(db: DB) {
         }
         run = await noodle.createRefreshRun({
           activeAccountIds: activeAccounts.map((account) => account.id),
-          prompt: prompt.promptForLog,
+          prompt: firstPromptForLog,
         });
         const runId = run.id;
         const timelineMaxTokens = clampGenerationMaxOutputTokens({
@@ -297,16 +403,24 @@ export function createPublicNoodleGenerationService(db: DB) {
           debugMode,
           responseFormat: noodleResponseFormat(input.connection.model, "timeline"),
         } as const;
-        let requestMessages: ChatMessage[] = prompt.messages;
-        let firstAttemptKind: NoodleRefreshAttemptKind = "initial";
-        let result: Awaited<ReturnType<typeof provider.chatComplete>>;
+        // A lowered answer that ran out of room is a context problem, not a bad answer worth correcting.
+        const cutByLoweredBudget = (completion: ChatCompletionResult) =>
+          completion.finishReason === "length" && timelineProvider.answeredUnderLoweredBudget;
+        let result: Awaited<ReturnType<typeof timelineProvider.chatComplete>>;
         try {
-          result = await provider.chatComplete(prompt.messages, completionOptions);
+          result = await timelineProvider.chatComplete(requestMessages, completionOptions);
         } catch (error) {
-          if (prompt.visionAttachmentCount === 0 || !isUnsupportedNoodleVisionInputError(error)) throw error;
+          const imagesTooLong = error instanceof NoodleTimelineTooLongError;
+          if (
+            !canRetryNoodleVisionRequest(firstAttemptKind, prompt.visionAttachmentCount) ||
+            !(imagesTooLong || isUnsupportedNoodleVisionInputError(error))
+          )
+            throw error;
           logger.warn(
             error,
-            "[noodle/vision] The selected timeline model rejected image input; retrying the refresh as text-only",
+            imagesTooLong
+              ? "[noodle/vision] The timeline prompt does not fit the context with its images; retrying the refresh as text-only"
+              : "[noodle/vision] The selected timeline model rejected image input; retrying the refresh as text-only",
           );
           logDebugOverride(
             debugMode,
@@ -315,7 +429,7 @@ export function createPublicNoodleGenerationService(db: DB) {
           );
           requestMessages = prompt.textOnlyMessages;
           firstAttemptKind = "text_only_fallback";
-          result = await provider.chatComplete(prompt.textOnlyMessages, completionOptions);
+          result = await timelineProvider.chatComplete(prompt.textOnlyMessages, completionOptions);
         }
         let content = result.content ?? "";
         logDebugOverride(
@@ -327,10 +441,21 @@ export function createPublicNoodleGenerationService(db: DB) {
         );
         let parsedGenerated: ReturnType<typeof parseNoodleGeneratedRefreshResponse> | null = null;
         let retryReason: string | null = null;
+        // Validation must agree with the resolver persistence uses, or an alias
+        // that resolves to the persona passes here and is dropped later without
+        // the correction retry ever running.
+        const resolveActiveAccount = createNoodleHandleResolver([
+          ...(personaAccount ? [personaAccount] : []),
+          ...selectedParticipants,
+        ]);
+        const selectedParticipantIds = new Set(selectedParticipants.map((account) => account.id));
+        const knownHandles = noodleHandleKeySet(activeAccounts);
         const allowedActorHandles = new Set(
-          selectedParticipants.map((account) => normalizeNoodleHandle(account.handle)),
+          [...knownHandles].filter((key) => {
+            const account = resolveActiveAccount(key);
+            return account ? selectedParticipantIds.has(account.id) : false;
+          }),
         );
-        const knownHandles = new Set(activeAccounts.map((account) => normalizeNoodleHandle(account.handle)));
         try {
           parsedGenerated = parseNoodleGeneratedRefreshResponse(content);
           retryReason = validateNoodleGeneratedRefresh(parsedGenerated.refresh, allowedActorHandles, knownHandles);
@@ -344,6 +469,7 @@ export function createPublicNoodleGenerationService(db: DB) {
           rejectionReason: retryReason,
           createdAt: new Date().toISOString(),
         });
+        if (retryReason && cutByLoweredBudget(result)) throw new NoodleTimelineTooLongError();
         if (retryReason) {
           const allowedHandles = selectedParticipants.map((account) => `@${account.handle}`);
           const knownTargetHandles = activeAccounts.map((account) => `@${account.handle}`);
@@ -353,6 +479,7 @@ export function createPublicNoodleGenerationService(db: DB) {
             `Reason: ${retryReason}.`,
             `Regenerate the complete JSON object now. Authors and actors must use only these selected participant handles: ${allowedHandles.join(", ")}.`,
             `Follow targets may additionally use these known handles: ${knownTargetHandles.join(", ")}.`,
+            "Return at least one activity permitted by the configured quotas. [] and an object whose activity collections are all empty are invalid.",
             "Do not invent, rename, or omit an authorHandle, actorHandle, or targetHandle. Return JSON only.",
           ].join("\n");
           const correctionMessages = [...requestMessages, { role: "user" as const, content: correction }];
@@ -361,7 +488,7 @@ export function createPublicNoodleGenerationService(db: DB) {
             "[debug/noodle] Correction prompt sent to model:\n%s",
             formatNoodleMessagesForLog(correctionMessages),
           );
-          result = await provider.chatComplete(correctionMessages, completionOptions);
+          result = await timelineProvider.chatComplete(correctionMessages, completionOptions);
           content = result.content ?? "";
           logDebugOverride(
             debugMode,
@@ -389,6 +516,12 @@ export function createPublicNoodleGenerationService(db: DB) {
             rejectionReason: correctedRetryReason,
             createdAt: new Date().toISOString(),
           });
+          if (correctedRetryReason && cutByLoweredBudget(result)) throw new NoodleTimelineTooLongError();
+          if (retryReason === NOODLE_EMPTY_TIMELINE_REASON && correctedRetryReason === NOODLE_EMPTY_TIMELINE_REASON) {
+            throw new Error(
+              "The generation model returned no timeline activity twice. No timeline changes were saved. Try again, or lower Accounts per refresh.",
+            );
+          }
           if (correctedRetryReason)
             throw new Error(`Noodle timeline correction could not be used because ${correctedRetryReason}.`);
         }

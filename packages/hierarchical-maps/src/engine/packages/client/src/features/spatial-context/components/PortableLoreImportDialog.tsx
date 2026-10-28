@@ -1,10 +1,6 @@
 import { AlertTriangle, BookOpen, Copy, Link2, Loader2, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import type {
-  PortableLoreBundle,
-  PortableLoreImportPlan,
-  PortableLoreImportStrategy,
-} from "../portable-lore";
+import type { PortableLoreBundle, PortableLoreImportPlan, PortableLoreImportStrategy } from "../portable-lore";
 import { portableLoreImportOutcome } from "../portable-lore";
 import { useModalKeyboardNavigation } from "./use-modal-keyboard-navigation";
 
@@ -13,19 +9,10 @@ interface PortableLoreImportDialogProps {
   plan: PortableLoreImportPlan;
   busy: boolean;
   onCancel: () => void;
-  onImport: (
-    strategy: PortableLoreImportStrategy,
-    selections: ReadonlyMap<string, string | null>,
-  ) => void;
+  onImport: (strategy: PortableLoreImportStrategy, selections: ReadonlyMap<string, string | null>) => void;
 }
 
-export function PortableLoreImportDialog({
-  bundle,
-  plan,
-  busy,
-  onCancel,
-  onImport,
-}: PortableLoreImportDialogProps) {
+export function PortableLoreImportDialog({ bundle, plan, busy, onCancel, onImport }: PortableLoreImportDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   useModalKeyboardNavigation({
@@ -35,37 +22,23 @@ export function PortableLoreImportDialog({
     disabled: busy,
     onEscape: onCancel,
   });
-  const ambiguousEntries = useMemo(
-    () => plan.entries.filter((entry) => entry.candidates.length > 1),
-    [plan.entries],
-  );
+  const ambiguousEntries = useMemo(() => plan.entries.filter((entry) => entry.candidates.length > 1), [plan.entries]);
   const [selections, setSelections] = useState<Record<string, string>>(() =>
     Object.fromEntries(ambiguousEntries.map((entry) => [entry.entryKey, ""])),
   );
   const [mappingOpen, setMappingOpen] = useState(false);
-  const reuseReady = ambiguousEntries.every(
-    (entry) => selections[entry.entryKey],
-  );
+  const reuseReady = ambiguousEntries.every((entry) => selections[entry.entryKey]);
   const selectionMap = () =>
     new Map(
       ambiguousEntries
         .filter((entry) => Boolean(selections[entry.entryKey]))
         .map((entry): [string, string | null] => [
           entry.entryKey,
-          selections[entry.entryKey] === "__new__"
-            ? null
-            : selections[entry.entryKey]!,
+          selections[entry.entryKey] === "__new__" ? null : selections[entry.entryKey]!,
         ]),
     );
-  const separateOutcome = portableLoreImportOutcome(
-    plan,
-    "separate",
-  );
-  const reuseOutcome = portableLoreImportOutcome(
-    plan,
-    "reuse",
-    selectionMap(),
-  );
+  const separateOutcome = portableLoreImportOutcome(plan, "separate");
+  const reuseOutcome = portableLoreImportOutcome(plan, "reuse", selectionMap());
 
   return (
     <div
@@ -78,18 +51,14 @@ export function PortableLoreImportDialog({
     >
       <div className="flex max-h-[min(90vh,52rem)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] shadow-2xl">
         <div className="flex min-h-12 items-center gap-3 border-b border-[var(--marinara-chat-chrome-panel-divider)] px-4 py-3">
-          <BookOpen
-            size="0.9375rem"
-            className="text-[var(--marinara-chat-chrome-accent)]"
-          />
+          <BookOpen size="0.9375rem" className="text-[var(--marinara-chat-chrome-accent)]" />
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
               Restore portable map lore
             </h2>
             <p className="text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
               {bundle.books.length} lorebook
-              {bundle.books.length === 1 ? "" : "s"} · {plan.entries.length}{" "}
-              entr
+              {bundle.books.length === 1 ? "" : "s"} · {plan.entries.length} entr
               {plan.entries.length === 1 ? "y" : "ies"}
             </p>
           </div>
@@ -117,36 +86,28 @@ export function PortableLoreImportDialog({
                 key={label}
                 className="rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] px-3 py-2"
               >
-                <p className="text-lg font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
-                  {value}
-                </p>
-                <p className="text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">
-                  {label}
-                </p>
+                <p className="text-lg font-semibold text-[var(--marinara-chat-chrome-panel-title)]">{value}</p>
+                <p className="text-[0.625rem] text-[var(--marinara-chat-chrome-panel-muted)]">{label}</p>
               </div>
             ))}
           </div>
 
           <p className="text-xs leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
-            Exact IDs are authoritative. A unique content match compares the
-            complete portable entry settings, not its name. Duplicate names are
-            never attached automatically.
+            Exact IDs are authoritative. A unique content match compares the complete portable entry settings, not its
+            name. Duplicate names are never attached automatically.
           </p>
 
           {ambiguousEntries.length > 0 && (
             <section className="space-y-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
               <div className="flex items-start gap-2">
-                <AlertTriangle
-                  size="0.875rem"
-                  className="mt-0.5 shrink-0 text-amber-400"
-                />
+                <AlertTriangle size="0.875rem" className="mt-0.5 shrink-0 text-amber-400" />
                 <div>
                   <h3 className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
                     Choose every ambiguous match
                   </h3>
                   <p className="mt-0.5 text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-muted)]">
-                    These entries have identical portable content in more than
-                    one destination. Choose an exact row or import a new copy.
+                    These entries have identical portable content in more than one destination. Choose an exact row or
+                    import a new copy.
                   </p>
                 </div>
               </div>
@@ -168,8 +129,7 @@ export function PortableLoreImportDialog({
                     <option value="">Choose a destination…</option>
                     {entry.candidates.map((candidate) => (
                       <option key={candidate.entryId} value={candidate.entryId}>
-                        {candidate.lorebookName} → {candidate.entryName} (
-                        {candidate.entryId})
+                        {candidate.lorebookName} → {candidate.entryName} ({candidate.entryId})
                       </option>
                     ))}
                     <option value="__new__">Import a new copy</option>
@@ -189,11 +149,9 @@ export function PortableLoreImportDialog({
             {mappingOpen && (
               <div className="mt-3 max-h-56 space-y-1 overflow-y-auto font-mono text-[0.625rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
                 {bundle.references.map((reference, index) => (
-                  <p
-                    key={`${reference.locationId}-${reference.originalEntryId}-${index}`}
-                  >
-                    {reference.locationName} → {reference.originalLorebookName} →{" "}
-                    {reference.originalEntryName} → {reference.originalEntryId}
+                  <p key={`${reference.locationId}-${reference.originalEntryId}-${index}`}>
+                    {reference.locationName} → {reference.originalLorebookName} → {reference.originalEntryName} →{" "}
+                    {reference.originalEntryId}
                   </p>
                 ))}
               </div>
@@ -201,9 +159,7 @@ export function PortableLoreImportDialog({
           </details>
 
           <section className="space-y-2">
-            <h3 className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
-              Expected outcome
-            </h3>
+            <h3 className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">Expected outcome</h3>
             <div className="grid gap-2 sm:grid-cols-2">
               <div className="rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-3">
                 <p className="text-xs font-semibold text-[var(--marinara-chat-chrome-panel-title)]">
@@ -211,8 +167,8 @@ export function PortableLoreImportDialog({
                 </p>
                 <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
                   Reuse 0 entries. Import {separateOutcome.importedEntries} entr
-                  {separateOutcome.importedEntries === 1 ? "y" : "ies"} into{" "}
-                  {separateOutcome.createdLorebooks.length} new lorebook
+                  {separateOutcome.importedEntries === 1 ? "y" : "ies"} into {separateOutcome.createdLorebooks.length}{" "}
+                  new lorebook
                   {separateOutcome.createdLorebooks.length === 1 ? "" : "s"}.
                 </p>
                 <ul className="mt-2 space-y-1 text-[0.6875rem] text-[var(--marinara-chat-chrome-panel-text)]">
@@ -230,12 +186,11 @@ export function PortableLoreImportDialog({
                 </p>
                 <p className="mt-1 text-[0.6875rem] leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
                   Reuse {reuseOutcome.reusedEntries} entr
-                  {reuseOutcome.reusedEntries === 1 ? "y" : "ies"} from{" "}
-                  {reuseOutcome.reusedLorebooks.length} existing lorebook
-                  {reuseOutcome.reusedLorebooks.length === 1 ? "" : "s"}; import{" "}
-                  {reuseOutcome.importedEntries} entr
-                  {reuseOutcome.importedEntries === 1 ? "y" : "ies"} into{" "}
-                  {reuseOutcome.createdLorebooks.length} new lorebook
+                  {reuseOutcome.reusedEntries === 1 ? "y" : "ies"} from {reuseOutcome.reusedLorebooks.length} existing
+                  lorebook
+                  {reuseOutcome.reusedLorebooks.length === 1 ? "" : "s"}; import {reuseOutcome.importedEntries} entr
+                  {reuseOutcome.importedEntries === 1 ? "y" : "ies"} into {reuseOutcome.createdLorebooks.length} new
+                  lorebook
                   {reuseOutcome.createdLorebooks.length === 1 ? "" : "s"}.
                 </p>
                 {reuseOutcome.unresolvedEntries > 0 && (
@@ -267,12 +222,8 @@ export function PortableLoreImportDialog({
             onClick={() => onImport("separate", new Map())}
             className="mari-chrome-control min-h-11 justify-center px-3 text-xs disabled:opacity-45"
           >
-            {busy ? (
-              <Loader2 size="0.75rem" className="animate-spin" />
-            ) : (
-              <Copy size="0.75rem" />
-            )}{" "}
-            Import separate copies
+            {busy ? <Loader2 size="0.75rem" className="animate-spin" /> : <Copy size="0.75rem" />} Import separate
+            copies
           </button>
           <button
             type="button"
@@ -280,12 +231,8 @@ export function PortableLoreImportDialog({
             onClick={() => onImport("reuse", selectionMap())}
             className="mari-chrome-control min-h-11 justify-center border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] px-3 text-xs disabled:opacity-45"
           >
-            {busy ? (
-              <Loader2 size="0.75rem" className="animate-spin" />
-            ) : (
-              <Link2 size="0.75rem" />
-            )}{" "}
-            Reuse matches & import the rest
+            {busy ? <Loader2 size="0.75rem" className="animate-spin" /> : <Link2 size="0.75rem" />} Reuse matches &
+            import the rest
           </button>
         </div>
       </div>

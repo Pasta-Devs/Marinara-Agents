@@ -1,15 +1,9 @@
 import { basename } from "path";
-import {
-  type APIProvider,
-  type NoodleAccount,
-} from "@marinara-engine/shared";
+import { type APIProvider, type NoodleAccount } from "@marinara-engine/shared";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { noodleSamplingOptions } from "./noodle-sampling-options.js";
-import {
-  resolveStoredChatOptions,
-  resolveStoredMaxTokens,
-} from "../generation/generation-parameters.js";
+import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/generation-parameters.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import type { BaseLLMProvider, ChatMessage } from "../llm/base-provider.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
@@ -20,16 +14,8 @@ import { allocateAmbientProfileHandles } from "./noodle-ambient-profile-generati
 import { noodleAccountsNeedingProfiles } from "./noodle-profile-selection.js";
 import { normalizeNoodleHandle } from "./noodle-handle.js";
 import { NOODLE_ADULT_PLATFORM_POLICY } from "./noodle-prompt.js";
-import {
-  NOODLE_JSON_OUTPUT_HEADING,
-  noodleResponseFormat,
-} from "./noodle-response-format.js";
-import {
-  characterContextFromRow,
-  escapePromptAttribute,
-  generatedProfileSettings,
-  parseRecord,
-} from "./noodle-public-support.js";
+import { NOODLE_JSON_OUTPUT_HEADING, noodleResponseFormat } from "./noodle-response-format.js";
+import { characterContextFromRow, escapePromptAttribute, generatedProfileSettings } from "./noodle-public-support.js";
 
 function shuffle<T>(items: T[]): T[] {
   const next = [...items];
@@ -90,17 +76,12 @@ export async function generateMissingNoodleProfiles(input: {
   for (const account of noodleAccountsNeedingProfiles(input.accounts)) {
     const row = await input.characters.getById(account.entityId);
     if (!row) continue;
-    const bannerUrl = await pickRandomCharacterBannerUrl(
-      input.characterGallery,
-      account.entityId,
-    );
+    const bannerUrl = await pickRandomCharacterBannerUrl(input.characterGallery, account.entityId);
     targets.push({ account, row, bannerUrl });
   }
   if (targets.length === 0) return;
 
-  const characterBlocks = targets
-    .map(({ account, row }) => buildNoodleProfileTargetBlock(account, row))
-    .join("\n\n");
+  const characterBlocks = targets.map(({ account, row }) => buildNoodleProfileTargetBlock(account, row)).join("\n\n");
   const outputFormat = [
     NOODLE_JSON_OUTPUT_HEADING,
     JSON.stringify(
@@ -109,8 +90,7 @@ export async function generateMissingNoodleProfiles(input: {
           {
             entityId: "exact entityId from profile_target",
             name: "display name for the social profile",
-            handle:
-              "short @nickname without @, lowercase letters/numbers/underscores preferred",
+            handle: "short @nickname without @, lowercase letters/numbers/underscores preferred",
             bio: "short in-character social media bio",
             location: "short profile location, fictional or canonical if known",
           },
@@ -133,58 +113,52 @@ export async function generateMissingNoodleProfiles(input: {
     },
     {
       role: "user",
-      content: [
-        "# Characters Needing Noodle Profiles",
-        characterBlocks,
-        "",
-        outputFormat,
-      ].join("\n"),
+      content: ["# Characters Needing Noodle Profiles", characterBlocks, "", outputFormat].join("\n"),
     },
   ];
-  const promptForLog = messages
-    .map((m) => `${m.role.toUpperCase()}:\n${m.content}`)
-    .join("\n\n");
-  logDebugOverride(
-    input.debugMode,
-    "[debug/noodle] Profile prompt sent to model:\n%s",
-    promptForLog,
-  );
+  const promptForLog = messages.map((m) => `${m.role.toUpperCase()}:\n${m.content}`).join("\n\n");
+  logDebugOverride(input.debugMode, "[debug/noodle] Profile prompt sent to model:\n%s", promptForLog);
   const maxTokens = clampGenerationMaxOutputTokens({
     provider: input.connection.provider as APIProvider,
     model: input.connection.model,
-    maxTokens: resolveStoredMaxTokens(
-      input.connection.defaultParameters,
-      profileSetupMaxTokens(targets.length),
-    ),
+    maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, profileSetupMaxTokens(targets.length)),
     maxTokensOverride: input.connection.maxTokensOverride,
   });
-  const result = await input.provider.chatComplete(messages, {
+  const completionOptions = {
     model: input.connection.model,
     maxTokens,
     ...noodleSamplingOptions(
-      resolveStoredChatOptions(
-        input.connection.defaultParameters,
-        input.connection.provider,
-        input.connection.model,
-      ),
+      resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
       { temperature: 0.55, topP: 0.9 },
     ),
     stream: false,
     debugMode: input.debugMode,
     responseFormat: noodleResponseFormat(input.connection.model, "profiles"),
-  });
-  const generated = parseNoodleGeneratedProfiles(
-    parseGameJsonish(result.content ?? ""),
-  );
+  } as const;
+  const result = await input.provider.chatComplete(messages, completionOptions);
+  let generated = parseNoodleGeneratedProfiles(parseGameJsonish(result.content ?? ""));
+  if (generated.profiles.length === 0 && targets.length > 0) {
+    logger.warn("[noodle] Profile generation returned no profiles; retrying once after an empty response");
+    const retry = await input.provider.chatComplete(
+      [
+        ...messages,
+        ...(result.content?.trim() ? [{ role: "assistant" as const, content: result.content }] : []),
+        {
+          role: "user",
+          content: `The previous response contained no usable profiles. Return exactly one valid profile for every requested entityId. Use the requested JSON profile schema. Return JSON only.`,
+        },
+      ],
+      completionOptions,
+    );
+    generated = parseNoodleGeneratedProfiles(parseGameJsonish(retry.content ?? ""));
+  }
   if (generated.rejected.length > 0) {
     logger.warn(
       "[noodle] Skipped %d invalid generated profile row(s); valid profiles will still be applied",
       generated.rejected.length,
     );
   }
-  const profileByEntityId = new Map(
-    generated.profiles.map((profile) => [profile.entityId, profile]),
-  );
+  const profileByEntityId = new Map(generated.profiles.map((profile) => [profile.entityId, profile]));
   const allocatedHandles = allocateAmbientProfileHandles(
     targets.map(({ account }) => account),
     profileByEntityId,
@@ -194,9 +168,7 @@ export async function generateMissingNoodleProfiles(input: {
     const profile = profileByEntityId.get(target.account.entityId);
     if (!profile) continue;
     await input.noodle.updateAccountProfile(target.account.id, {
-      handle:
-        allocatedHandles.get(target.account.id) ??
-        normalizeNoodleHandle(target.account.handle),
+      handle: allocatedHandles.get(target.account.id) ?? normalizeNoodleHandle(target.account.handle),
       displayName: profile.name,
       bio: profile.bio,
       avatarUrl: target.row.avatarPath ?? target.account.avatarUrl,

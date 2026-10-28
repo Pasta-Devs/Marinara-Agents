@@ -427,7 +427,7 @@ export function GameWorldMap({
           <div
             data-marinara-maps-world-canvas
             data-compact={compact ? "true" : "false"}
-            className="relative aspect-[16/9] w-full overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]"
+            className="relative aspect-square w-full overflow-hidden rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)]"
           >
             {mapBackgroundImageUrl && (
               <img

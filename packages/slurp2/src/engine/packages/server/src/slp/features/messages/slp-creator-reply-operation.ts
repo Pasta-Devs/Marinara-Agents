@@ -1,0 +1,79 @@
+import type { SlpCreatorReplyResult } from "../../../../../shared/src/slp/slp-social.types.js";
+import type { DB } from "../../../db/connection.js";
+import { logger } from "../../../lib/logger.js";
+import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
+import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
+import { createSlurpStorage } from "../../data/slp-storage.js";
+import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
+import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
+import { generateCreatorReply } from "./slp-reply-generation-service.js";
+import { slurpCreatorInScene } from "./scenes/slp-roleplay-scene-lock.js";
+
+export async function generateAndApplyCreatorReply(
+  db: DB,
+  input: {
+    postId: string;
+    parentInteractionId: string;
+    viewerPersonaId: string;
+    viewerActorAccountId: string;
+    debugMode?: boolean;
+  },
+): Promise<SlpCreatorReplyResult> {
+  const noodle = createSlurpStorage(db);
+  const releaseClaim = async (claimId: string) => {
+    try {
+      await noodle.releaseNoodlerCreatorReplyClaim(claimId);
+    } catch (releaseError) {
+      logger.error(releaseError, "[noodler-reply] Failed to release the creator reply claim %s", claimId);
+    }
+  };
+  const post = await noodle.getNoodlerPostById(input.postId);
+  if (!post) return { status: "ineligible" };
+  // In a locking roleplay scene with someone (docs/SCENES.md): she answers comments afterwards.
+  if (await slurpCreatorInScene(db, post.authorAccountId)) return { status: "busy" };
+
+  const locked = await tryCreatorAccountOperation(post.authorAccountId, async () => {
+    const settings = await noodle.getSettings();
+    const connection = await resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId);
+    if (!connection) return { status: "connection_not_found" } as const;
+    const claim = await noodle.claimNoodlerCreatorReply(
+      post.authorAccountId,
+      post.id,
+      input.parentInteractionId,
+      input.viewerPersonaId,
+      input.viewerActorAccountId,
+      undefined,
+      settings.creatorRepliesPerDay,
+    );
+    if (claim.status !== "claimed") return claim;
+    let content: string;
+    let moodShift;
+    try {
+      ({ content, moodShift } = await generateCreatorReply({
+        db,
+        creator: claim.creator,
+        viewer: claim.viewer,
+        post: claim.post,
+        parent: claim.parent,
+        allowLockedImageContext: true,
+        connection,
+        debugMode: input.debugMode,
+      }));
+    } catch (error) {
+      await releaseClaim(claim.claimId);
+      throw error;
+    }
+    // Being rude in public counts as much as being rude in private. Never at the price of the
+    // reply itself, which is already written by this point.
+    await createSlurpMessagesStorage(db)
+      .applyExternalMoodShift(claim.viewer.id, claim.creator.id, moodShift)
+      .catch(() => undefined);
+    const interaction = await noodle.finalizeNoodlerCreatorReplyClaim(claim.claimId, content);
+    if (!interaction) {
+      await releaseClaim(claim.claimId);
+      throw new Error("Failed to persist the generated Slurp creator reply.");
+    }
+    return { status: "generated", interaction } as const;
+  });
+  return locked.acquired ? locked.value : { status: "busy" };
+}

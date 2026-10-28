@@ -104,7 +104,7 @@ export interface ImageGenRequest {
   imageEndpointId?: string;
   /** Optional ComfyUI workflow JSON. Placeholders like %prompt%, %width%, %height%, %seed% will be replaced. */
   comfyWorkflow?: string;
-  /** Optional connection-scoped defaults for local Stable Diffusion backends. */
+  /** Optional connection-scoped generation defaults and API request parameters. */
   imageDefaults?: ImageGenerationDefaultsProfile | null;
   /** Allow this explicit image-generation connection to call local/private URLs. */
   allowLocalUrls?: boolean;
@@ -1045,6 +1045,36 @@ function openAITextPrompt(request: ImageGenRequest): string {
   return `${prompt}\n\nDo not include: ${negativePrompt}.`;
 }
 
+function withImageCustomParameters(request: ImageGenRequest, body: Record<string, unknown>): Record<string, unknown> {
+  const custom = request.imageDefaults?.customParameters;
+  if (!custom || !Object.keys(custom).length) return body;
+  // Request-body fields only: never spread these into fetch options or headers.
+  const merged = { ...body, ...custom };
+  logDebugOverride(
+    request.debugMode === true,
+    "[debug/image] final custom request payload:\n%s",
+    JSON.stringify(merged, null, 2),
+  );
+  return merged;
+}
+
+function applyImageCustomFormParameters(request: ImageGenRequest, body: FormData): void {
+  const custom = request.imageDefaults?.customParameters;
+  if (!custom || !Object.keys(custom).length) return;
+  for (const [key, value] of Object.entries(custom)) {
+    body.set(key, typeof value === "string" ? value : JSON.stringify(value));
+  }
+  logDebugOverride(
+    request.debugMode === true,
+    "[debug/image] final custom form payload:\n%s",
+    JSON.stringify(
+      [...body.entries()].map(([key, value]) => [key, typeof value === "string" ? value : `[file: ${value.name}]`]),
+      null,
+      2,
+    ),
+  );
+}
+
 async function generateOpenAI(baseUrl: string, apiKey: string, request: ImageGenRequest): Promise<ImageGenResult> {
   const usesGptImageApi = isOpenAIGptImageModel(request.model);
   const references = openAIReferenceImages(request);
@@ -1070,6 +1100,7 @@ async function generateOpenAI(baseUrl: string, apiKey: string, request: ImageGen
       );
     });
 
+    applyImageCustomFormParameters(request, formData);
     const resp = await imageFetch(
       openAIImagesUrl(baseUrl, "edits"),
       {
@@ -1112,7 +1143,7 @@ async function generateOpenAI(baseUrl: string, apiKey: string, request: ImageGen
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(withImageCustomParameters(request, body)),
       signal: imageRequestSignal(request),
     },
     { allowLocal: request.allowLocalUrls },
@@ -1187,7 +1218,7 @@ async function generateXAI(baseUrl: string, apiKey: string, request: ImageGenReq
 }
 
 async function generateVenice(baseUrl: string, apiKey: string, request: ImageGenRequest): Promise<ImageGenResult> {
-  const body = buildVeniceImageRequest(request);
+  const body = withImageCustomParameters(request, buildVeniceImageRequest(request));
   logDebugOverride(
     request.debugMode === true,
     "[debug/image/venice] final request payload:\n%s",
@@ -1201,7 +1232,7 @@ async function generateVenice(baseUrl: string, apiKey: string, request: ImageGen
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(withImageCustomParameters(request, body)),
       signal: imageRequestSignal(request),
     },
     { allowLocal: request.allowLocalUrls },
@@ -1222,7 +1253,7 @@ async function generateVenice(baseUrl: string, apiKey: string, request: ImageGen
 }
 
 async function generateZai(baseUrl: string, apiKey: string, request: ImageGenRequest): Promise<ImageGenResult> {
-  const body = buildZaiImageRequest(request);
+  const body = withImageCustomParameters(request, buildZaiImageRequest(request));
   logDebugOverride(
     request.debugMode === true,
     "[debug/image/zai] final request payload:\n%s",
@@ -1262,13 +1293,16 @@ async function generateAtlasCloudImage(
   request: ImageGenRequest,
 ): Promise<ImageGenResult> {
   const reference = openAIReferenceImages(request)[0];
-  const body = buildAtlasCloudImageRequest({
-    model: request.model ?? "",
-    prompt: request.prompt,
-    width: request.width,
-    height: request.height,
-    referenceImageDataUrl: reference ? imageDataUrlFromReference(reference) : undefined,
-  });
+  const body = withImageCustomParameters(
+    request,
+    buildAtlasCloudImageRequest({
+      model: request.model ?? "",
+      prompt: request.prompt,
+      width: request.width,
+      height: request.height,
+      referenceImageDataUrl: reference ? imageDataUrlFromReference(reference) : undefined,
+    }),
+  );
   logDebugOverride(
     request.debugMode === true,
     "[debug/image/atlas-cloud] final request payload:\n%s",
@@ -1316,7 +1350,7 @@ async function generateNanoGPT(baseUrl: string, apiKey: string, request: ImageGe
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(withImageCustomParameters(request, body)),
       signal: imageRequestSignal(request),
     },
     { allowLocal: request.allowLocalUrls },
@@ -1417,7 +1451,7 @@ async function generateHorde(baseUrl: string, apiKey: string, request: ImageGenR
     {
       method: "POST",
       headers: hordeHeaders(apiKey),
-      body: JSON.stringify(body),
+      body: JSON.stringify(withImageCustomParameters(request, body)),
       signal: imageRequestSignal(request),
     },
     { allowLocal: request.allowLocalUrls },
@@ -1609,6 +1643,7 @@ async function generateStability(baseUrl: string, apiKey: string, request: Image
     formData.append("mode", "image-to-image");
   }
   formData.append("output_format", "png");
+  applyImageCustomFormParameters(request, formData);
 
   const resp = await imageFetch(
     endpoint.url,
@@ -1659,7 +1694,7 @@ async function generateStabilityV1(baseUrl: string, apiKey: string, request: Ima
         Authorization: `Bearer ${apiKey}`,
         Accept: "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(withImageCustomParameters(request, body)),
       signal: imageRequestSignal(request),
     },
     { allowLocal: request.allowLocalUrls },
@@ -1697,7 +1732,7 @@ async function generateTogetherAI(baseUrl: string, apiKey: string, request: Imag
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(withImageCustomParameters(request, body)),
       signal: imageRequestSignal(request),
     },
     { allowLocal: request.allowLocalUrls },
@@ -1765,7 +1800,7 @@ export function buildArliImageRequest(request: ImageGenRequest): Record<string, 
 
 async function generateArli(baseUrl: string, apiKey: string, request: ImageGenRequest): Promise<ImageGenResult> {
   if (!apiKey.trim()) throw new Error("Arli.ai image generation requires an API key");
-  const body = buildArliImageRequest(request);
+  const body = withImageCustomParameters(request, buildArliImageRequest(request));
   const useImg2Img = Array.isArray(body.init_images);
   logDebugOverride(
     request.debugMode === true,
@@ -1802,6 +1837,8 @@ async function generateArli(baseUrl: string, apiKey: string, request: ImageGenRe
 
 const NOVELAI_V4_PROMPT_HINT =
   "NovelAI V4/V4.5 prompts support roughly 512 T5 tokens and reject most Unicode prompt characters; try a shorter ASCII prompt without emoji or non-Latin text.";
+const NOVELAI_V5_PROMPT_HINT =
+  "NovelAI V5 prompts support up to 1471 tokens (Full) or 703 tokens (Curated) and accept Unicode text including Japanese and Chinese; try a shorter prompt.";
 const NOVELAI_SIZE_MULTIPLE = 64;
 const NOVELAI_MIN_DIMENSION = 64;
 const NOVELAI_MAX_DIMENSION = 2048;
@@ -1866,7 +1903,9 @@ export function resolveNovelAiRequestSize(
   defaults: NovelAiDefaults = resolveNovelAiDefaults(request),
 ): { width: number; height: number } {
   const model = request.model || "nai-diffusion-4-5-full";
-  const scenePrompt = isNovelAiV4Model(model) ? sanitizeNovelAiV4Prompt(request.prompt) : request.prompt;
+  const scenePrompt = isNovelAiV4Model(model)
+    ? sanitizeNovelAiV4Prompt(request.prompt, isNovelAiV5Model(model))
+    : request.prompt;
   return resolveNovelAiSize(request, scenePrompt, defaults);
 }
 
@@ -1875,7 +1914,13 @@ export function resolveNovelAiStyleReferenceSecondaryStrength(fidelity: number):
 }
 
 function isNovelAiV4Model(model: string): boolean {
-  return /^nai-diffusion-(?:4(?:-(?:curated-preview|full))?|4-5(?:-(?:curated|full))?)$/i.test(model.trim());
+  return /^nai-diffusion-(?:4(?:-(?:curated-preview|full))?|4-5(?:-(?:curated|full))?|5(?:-(?:curated|full))?)$/i.test(
+    model.trim(),
+  );
+}
+
+function isNovelAiV5Model(model: string): boolean {
+  return /^nai-diffusion-5(?:-(?:curated|full))?$/i.test(model.trim());
 }
 
 function isNovelAiPreciseReferenceModel(model: string): boolean {
@@ -1991,7 +2036,7 @@ function cloneNovelAiRequestForMetadata(body: Record<string, unknown>): Record<s
   return metadataBody;
 }
 
-function sanitizeNovelAiV4Prompt(value: string): string {
+function sanitizeNovelAiV4Prompt(value: string, allowUnicode = false): string {
   return value
     .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
     .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
@@ -1999,9 +2044,9 @@ function sanitizeNovelAiV4Prompt(value: string): string {
     .replace(/\u2026/g, "...")
     .replace(/\u00A0/g, " ")
     .replace(/[\u200B-\u200D\uFEFF]/g, "")
-    .normalize("NFKD")
+    .normalize(allowUnicode ? "NFC" : "NFKD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, " ")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, allowUnicode ? "$&" : " ")
     .replace(/[ \t]+/g, " ")
     .replace(/\s*\n\s*/g, "\n")
     .trim();
@@ -2010,10 +2055,10 @@ function sanitizeNovelAiV4Prompt(value: string): string {
 function prepareNovelAiPrompt(value: string, fieldName: string, model: string): string {
   if (!isNovelAiV4Model(model)) return value;
 
-  const sanitized = sanitizeNovelAiV4Prompt(value);
+  const sanitized = sanitizeNovelAiV4Prompt(value, isNovelAiV5Model(model));
   if (value.trim() && !sanitized) {
     throw new Error(
-      `NovelAI ${fieldName} contains only unsupported V4/V4.5 prompt characters. ${NOVELAI_V4_PROMPT_HINT}`,
+      `NovelAI ${fieldName} contains only unsupported ${isNovelAiV5Model(model) ? "V5" : "V4/V4.5"} prompt characters. ${isNovelAiV5Model(model) ? NOVELAI_V5_PROMPT_HINT : NOVELAI_V4_PROMPT_HINT}`,
     );
   }
   return sanitized;
@@ -2192,13 +2237,13 @@ async function generateNovelAI(baseUrl: string, apiKey: string, request: ImageGe
     );
   }
 
-  const body: Record<string, unknown> = {
+  const body = withImageCustomParameters(request, {
     input: prompt,
     model,
     action: "generate",
     parameters,
     use_new_shared_trial: true,
-  };
+  });
   const metadataBody = cloneNovelAiRequestForMetadata(body);
 
   const hasReferences = directorReferenceImages.length > 0;
@@ -2218,7 +2263,7 @@ async function generateNovelAI(baseUrl: string, apiKey: string, request: ImageGe
 
   if (!resp.ok) {
     const errText = await resp.text().catch(() => "Unknown error");
-    const hint = isV4 ? ` ${NOVELAI_V4_PROMPT_HINT}` : "";
+    const hint = isV4 ? ` ${isNovelAiV5Model(model) ? NOVELAI_V5_PROMPT_HINT : NOVELAI_V4_PROMPT_HINT}` : "";
     const referenceDetail = hasReferences ? ` with ${directorReferenceImages.length} precise reference image(s)` : "";
     throw new Error(
       `NovelAI image generation failed (${resp.status})${referenceDetail}: ${sanitizeErrorText(errText)}${hint}`,
@@ -2548,7 +2593,7 @@ async function generateOpenRouterImageApi(
   apiKey: string,
   request: ImageGenRequest,
 ): Promise<ImageGenResult> {
-  const body = buildOpenRouterImagesRequest(request);
+  const body = withImageCustomParameters(request, buildOpenRouterImagesRequest(request));
   logDebugOverride(
     request.debugMode === true,
     "[debug/image/openrouter-images] final request payload:\n%s",
@@ -2617,7 +2662,7 @@ async function generateOpenRouter(baseUrl: string, apiKey: string, request: Imag
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(withImageCustomParameters(request, body)),
       signal: imageRequestSignal(request),
     },
     { allowLocal: request.allowLocalUrls },
@@ -2716,12 +2761,14 @@ async function generateViaChatCompletions(
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model: request.model || "nai-diffusion-4-5-full",
-        messages: [{ role: "user", content: messageContent }],
-        stream: false,
-        temperature: 0.7,
-      }),
+      body: JSON.stringify(
+        withImageCustomParameters(request, {
+          model: request.model || "nai-diffusion-4-5-full",
+          messages: [{ role: "user", content: messageContent }],
+          stream: false,
+          temperature: 0.7,
+        }),
+      ),
       signal: imageRequestSignal(request),
     },
     { allowLocal: request.allowLocalUrls },
@@ -3184,7 +3231,23 @@ export function buildSwarmUiGenerationBody(request: ImageGenRequest, sessionId: 
   if (model) body.model = model;
 
   const workflowText = request.comfyWorkflow?.trim();
-  if (!workflowText) return body;
+  if (!workflowText) {
+    const loras = defaults.loras.filter((lora) => lora.model.trim());
+    if (loras.length > 0) {
+      body.loras = loras.map((lora) => lora.model).join(",");
+      body.loraweights = loras.map((lora) => lora.strength).join(",");
+    }
+    const references = collectComfyReferenceImages(request, defaults);
+    if (references.length > 0) {
+      body.promptimages = references
+        .map((reference) => {
+          const { base64, mimeType } = decodeReferenceImage(reference);
+          return `data:${mimeType};base64,${base64}`;
+        })
+        .join("|");
+    }
+    return body;
+  }
   if (/%reference_image_name(?:_0[1-4])?%/.test(workflowText)) {
     throw new Error(
       "SwarmUI workflows must use %reference_image% placeholders; backend-local filename placeholders cannot be distributed safely.",
@@ -3263,6 +3326,7 @@ async function generateSwarmUI(baseUrl: string, apiKey: string, request: ImageGe
   const sessionId = await createSwarmUiSession(base, apiKey, request);
   const body = buildSwarmUiGenerationBody(request, sessionId);
   const debugBody: Record<string, unknown> = { ...body, session_id: "[session]" };
+  if (debugBody.promptimages) debugBody.promptimages = "[reference images]";
   if (typeof debugBody.comfyworkflowraw === "string") {
     debugBody.comfyworkflowraw = redactSwarmUiWorkflowImages(debugBody.comfyworkflowraw, request);
   }

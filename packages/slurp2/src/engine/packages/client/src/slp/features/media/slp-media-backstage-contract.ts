@@ -1,0 +1,78 @@
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
+import { useSlurpConnections } from "../../base/state/slp-host-connections";
+import type { SlpBackstageSection, SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
+import type { SlurpSettings } from "../settings/slp-settings-contract";
+import { useSlurpImageConnections, useUpdateSlurpImageConnections } from "./slp-image-connection-hooks";
+
+/**
+ * Image generation connections and readiness. Media owns these because post, story, message and
+ * audience image generation all read the same settings, so no single content feature can own them.
+ */
+export function useSlpMediaBackstageState({
+  section,
+  target,
+  creators,
+}: {
+  section: SlpBackstageSection;
+  target: SlpBackstageTarget;
+  creators: SlpCreatorManagedStageProfile[];
+}) {
+  const { t } = useTranslation();
+  const imageSettingsQuery = useSlurpImageConnections(
+    section === "overview" || section === "basic" || section === "creators",
+  );
+  const updateImages = useUpdateSlurpImageConnections();
+  const connectionsQuery = useSlurpConnections(
+    section === "overview" ||
+      section === "basic" ||
+      target === "images" ||
+      target === "ads" ||
+      section === "creators" ||
+      target === "audience",
+  );
+  const [imageWizardOpen, setImageWizardOpen] = useState(false);
+  const [imageDraft, setImageDraft] = useState<Pick<
+    SlurpSettings,
+    "imageContextMode" | "autoPostingImagesEnabled" | "allowGalleryImageAttachments" | "imageWidth" | "imageHeight"
+  > | null>(null);
+
+  const imageConnections = (connectionsQuery.data ?? []).filter(
+    (connection) => connection.provider === "image_generation",
+  );
+  const imageSettings = imageSettingsQuery.data;
+  const imageEnabledCreators = creators.filter((creator) => creator.autoPosting.imagesEnabled);
+  const selectedImageConnection = imageConnections.find(
+    (connection) => connection.id === imageSettings?.defaultConnectionId,
+  );
+  // Ready only when a picture can actually be drawn: the Slurp default resolves, or the Engine has a
+  // default image connection to fall back to, as the server does (R1-058). Any image connection
+  // existing was not enough.
+  const engineDefaultImageConnection = imageConnections.some(
+    (connection) => connection.defaultForAgents === true || connection.defaultForAgents === "true",
+  );
+  const imagesReady =
+    Boolean(selectedImageConnection || engineDefaultImageConnection) && imageEnabledCreators.length > 0;
+  const imageConnectionLabel = selectedImageConnection
+    ? (selectedImageConnection.name ?? selectedImageConnection.model ?? selectedImageConnection.id)
+    : t("ui.slurp.settings.images.engineDefault");
+
+  return {
+    imageSettingsQuery,
+    updateImages,
+    connectionsQuery,
+    imageWizardOpen,
+    setImageWizardOpen,
+    imageDraft,
+    setImageDraft,
+    imageConnections,
+    imageSettings,
+    imageEnabledCreators,
+    imagesReady,
+    selectedImageConnection,
+    imageConnectionLabel,
+  };
+}
+
+export type SlpMediaBackstageState = ReturnType<typeof useSlpMediaBackstageState>;

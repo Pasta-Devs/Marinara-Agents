@@ -1,0 +1,47 @@
+import assert from "node:assert/strict";
+import {
+  SLURP_DEFAULT_CREATOR_MESSAGING,
+  readSlurpCreatorMessaging,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-messaging.js";
+import { slurp2Source } from "./slurp2-source";
+
+const read = (path: string) => slurp2Source(path);
+const server = "packages/slurp2/src/engine/packages/server/src/";
+
+// 6.1 — every payment gets a reaction, and only automatic Creators react.
+const reaction = read(server + "services/slurp/slurp-payment-reaction.ts");
+assert.match(reaction, /creator\.sourceKind !== "character"\) return;/u);
+for (const [file, kind] of [
+  ["routes/slurp.routes.ts", "tip"],
+  ["routes/slurp.routes.ts", "unlock"],
+  ["routes/slurp-messages.routes.ts", "ppv"],
+  ["routes/slurp-messages.routes.ts", "commission"],
+] as const) {
+  assert.match(read(server + file), new RegExp(`reactToSlurpPayment\\([\\s\\S]{0,300}?kind: "${kind}"`, "u"), kind);
+}
+
+// 6.2 — a guided Story stays a Story instead of waiting for the rotation.
+assert.match(read(server + "services/slurp/slurp-generation.service.ts"), /input\.request\.postType === "story"/u);
+assert.match(read(server + "routes/slurp.routes.ts"), /(?:slp|slurp)CreatorGenerationRequestSchema/u);
+assert.match(
+  read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"),
+  /format,\n\s*postType,\n\s*linkedPostId:/u,
+  "the guided post must send its post type",
+);
+
+// 6.3 — a fan's direct-message notes never reach a public post. Posts read only approved
+// continuity, whose scopes keep fan-private records out (see slp-continuity-prompt.ts).
+const generation = read(server + "services/slurp/slurp-generation.service.ts");
+assert.doesNotMatch(generation, /fanMemory|tier === "longterm"/u);
+
+// 6.4 — the per-Creator proactive switch defaults on, round-trips, and stops follow-ups.
+assert.equal(SLURP_DEFAULT_CREATOR_MESSAGING.proactiveMessages, true);
+assert.equal(readSlurpCreatorMessaging({ proactiveMessages: false }).proactiveMessages, false);
+assert.equal(readSlurpCreatorMessaging({}).proactiveMessages, true);
+assert.match(
+  read(server + "services/slurp/slurp-follow-up-scheduler.service.ts"),
+  // Pulse + E decision (changed on purpose): the switch drops openers only; promises still go out.
+  /if \(!messaging\.proactiveMessages && followUp\.type === "opener"\) \{[\s\S]{0,200}?cancelScheduledFollowUp/u,
+);
+
+console.log("slurp roleplay loop regression: ok");

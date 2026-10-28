@@ -1,6 +1,24 @@
-import type { LtmNote } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type {
+  LtmExtractionDropReason,
+  LtmNote,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
 export type LabelLocalizer = (key: string) => string;
+
+export const rejectionReasonLabels: Partial<Record<LtmExtractionDropReason, string>> = {
+  invalid_format: "ui.longTermMemory.reviewqueue.rejectionReasonInvalidFormat",
+  candidate_overflow: "ui.longTermMemory.reviewqueue.rejectionReasonCandidateOverflow",
+  placeholder_output: "ui.longTermMemory.reviewqueue.rejectionReasonPlaceholderOutput",
+  quote_not_found_in_source: "ui.longTermMemory.reviewqueue.rejectionReasonQuoteNotFound",
+  missing_source_evidence: "ui.longTermMemory.reviewqueue.rejectionReasonMissingEvidence",
+  source_summary_payload: "ui.longTermMemory.reviewqueue.rejectionReasonSourceSummary",
+  unsupported_bucket: "ui.longTermMemory.reviewqueue.rejectionReasonUnsupportedBucket",
+  target_note_outside_scope: "ui.longTermMemory.reviewqueue.rejectionReasonOutsideScope",
+  ambiguous_subject: "ui.longTermMemory.reviewqueue.rejectionReasonAmbiguousSubject",
+  untrusted_subject: "ui.longTermMemory.reviewqueue.rejectionReasonUntrustedSubject",
+  invalid_subject_cardinality: "ui.longTermMemory.reviewqueue.rejectionReasonInvalidSubjectCardinality",
+  too_long_to_keep_safely: "ui.longTermMemory.reviewqueue.rejectionReasonTooLong",
+};
 
 export const labelKeys = {
   noteType: {
@@ -22,6 +40,12 @@ export const labelKeys = {
     conversation: "ui.longTermMemory.sourcesworkspace.conversation",
     roleplay: "ui.longTermMemory.sourcesworkspace.roleplay",
     game: "ui.longTermMemory.sourcesworkspace.game",
+  },
+  scopeKind: {
+    all: "ui.longTermMemory.sourcesworkspace.all",
+    chat: "ui.longTermMemory.sourcesworkspace.chats",
+    character: "ui.longTermMemory.sourcesworkspace.characters",
+    persona: "ui.longTermMemory.sourcesworkspace.personas",
   },
   importance: {
     critical: "ui.longTermMemory.memoryvault.critical",
@@ -46,27 +70,30 @@ export const labelKeys = {
   },
   maintenanceAction: {
     rebuild_indexes: "ui.longTermMemory.memorysettings.reindexRecallData",
-    quarantine_malformed_notes:
-      "ui.longTermMemory.memorysettings.quarantineMalformedNotes",
-    backfill_imported_source_titles:
-      "ui.longTermMemory.memorysettings.backfillSourceTitles",
+    quarantine_malformed_notes: "ui.longTermMemory.memorysettings.quarantineMalformedNotes",
+    backfill_imported_source_titles: "ui.longTermMemory.memorysettings.backfillSourceTitles",
+  },
+  identityMatchBasis: {
+    bound_subjects: "ui.longTermMemory.memorysettings.basisBoundSubjects",
+    exact_name: "ui.longTermMemory.memorysettings.basisExactName",
+    unique_alias: "ui.longTermMemory.memorysettings.basisUniqueAlias",
+    trait_or_qualified_alias: "ui.longTermMemory.memorysettings.basisQualifiedAlias",
+    spelling_variation: "ui.longTermMemory.memorysettings.basisSpellingVariation",
+    unordered_pair: "ui.longTermMemory.memorysettings.basisUnorderedPair",
   },
   maintenanceResult: {
     rebuilt: "ui.longTermMemory.memorysettings.resultRebuilt",
     backfilled: "ui.longTermMemory.memorysettings.resultBackfilled",
-    no_titles_to_backfill:
-      "ui.longTermMemory.memorysettings.resultNoTitlesToBackfill",
+    no_titles_to_backfill: "ui.longTermMemory.memorysettings.resultNoTitlesToBackfill",
     quarantined: "ui.longTermMemory.memorysettings.resultQuarantined",
-    no_malformed_notes:
-      "ui.longTermMemory.memorysettings.resultNoMalformedNotes",
+    no_malformed_notes: "ui.longTermMemory.memorysettings.resultNoMalformedNotes",
   },
   relation: {
     occurred_in: "ui.longTermMemory.memoryvault.relationOccurredIn",
     triggered_by: "ui.longTermMemory.memoryvault.relationTriggeredBy",
     resolved_in: "ui.longTermMemory.memoryvault.relationResolvedIn",
     evidenced_by: "ui.longTermMemory.memoryvault.relationEvidencedBy",
-    affects_relationship:
-      "ui.longTermMemory.memoryvault.relationAffectsRelationship",
+    affects_relationship: "ui.longTermMemory.memoryvault.relationAffectsRelationship",
     affects_character: "ui.longTermMemory.memoryvault.relationAffectsCharacter",
     caused_by: "ui.longTermMemory.memoryvault.relationCausedBy",
     involves: "ui.longTermMemory.memoryvault.relationInvolves",
@@ -106,6 +133,32 @@ export const labelKeys = {
     building: "ui.longTermMemory.longtermmemorydetail.vaultRebuilding",
     failed: "ui.longTermMemory.longtermmemorydetail.rebuildFailed",
   },
+  reviewCode: {
+    source_stale: "ui.longTermMemory.reviewqueue.codeSourceStale",
+    source_context_unbound: "ui.longTermMemory.reviewqueue.codeSourceContextUnbound",
+    source_missing: "ui.longTermMemory.reviewqueue.codeSourceMissing",
+    source_invalid: "ui.longTermMemory.reviewqueue.codeSourceInvalid",
+    draft_superseded: "ui.longTermMemory.reviewqueue.codeDraftSuperseded",
+    draft_invalidated: "ui.longTermMemory.reviewqueue.codeDraftInvalidated",
+    draft_not_pending: "ui.longTermMemory.reviewqueue.codeDraftNotPending",
+    projection_failed: "ui.longTermMemory.reviewqueue.codeProjectionFailed",
+    no_mutations: "ui.longTermMemory.reviewqueue.codeNoMutations",
+    ltm_draft_source_stale: "ui.longTermMemory.reviewqueue.codeSourceStale",
+    ltm_draft_source_context_unbound: "ui.longTermMemory.reviewqueue.codeSourceContextUnbound",
+    ltm_draft_source_missing: "ui.longTermMemory.reviewqueue.codeSourceMissing",
+    ltm_draft_source_invalid: "ui.longTermMemory.reviewqueue.codeSourceInvalid",
+    ltm_draft_superseded: "ui.longTermMemory.reviewqueue.codeDraftSuperseded",
+    ltm_draft_invalidated: "ui.longTermMemory.reviewqueue.codeDraftInvalidated",
+    ltm_draft_not_pending: "ui.longTermMemory.reviewqueue.codeDraftNotPending",
+    ltm_draft_target_missing: "ui.longTermMemory.reviewqueue.codeDraftTargetMissing",
+    ltm_draft_target_scope_conflict: "ui.longTermMemory.reviewqueue.codeDraftTargetScopeConflict",
+    ltm_draft_mutation_invalid: "ui.longTermMemory.reviewqueue.codeDraftMutationInvalid",
+    ltm_draft_edit_invalid: "ui.longTermMemory.reviewqueue.codeDraftEditInvalid",
+    ltm_draft_ambiguous_link: "ui.longTermMemory.reviewqueue.codeDraftAmbiguousLink",
+    ltm_draft_ambiguous_link_stale: "ui.longTermMemory.reviewqueue.codeDraftAmbiguousLinkStale",
+    ltm_draft_ambiguous_link_scope: "ui.longTermMemory.reviewqueue.codeDraftAmbiguousLinkScope",
+    preflight_blocked: "ui.longTermMemory.reviewqueue.codePreflightBlocked",
+  },
   transferClassification: {
     ready: "ui.longTermMemory.sourcesworkspace.transferReady",
     conflict: "ui.longTermMemory.sourcesworkspace.transferConflict",
@@ -113,26 +166,43 @@ export const labelKeys = {
   },
 } as const;
 
-export function localizedLabel(
-  value: string,
-  localizeUi: LabelLocalizer,
-  keys: Readonly<Record<string, string>>,
-) {
+export function localizedLabel(value: string, localizeUi: LabelLocalizer, keys: Readonly<Record<string, string>>) {
   const key = keys[value];
   return key ? localizeUi(key) : humanizeLabel(value);
 }
 
-export function memoryLabel(
-  note: Pick<LtmNote, "title"> | null | undefined,
-  untitledMemory: string,
+/** Codes the engine raises for many different causes: the sentence alone would hide which one. */
+const catchAllReviewCodes: ReadonlySet<string> = new Set(["preflight_blocked", "projection_failed"]);
+
+/**
+ * A review-queue block or preflight code as one plain sentence; the engine's own message stays the fallback.
+ * A catch-all code keeps its message after the sentence, so the cause is read rather than hovered.
+ */
+export function reviewCodeText(
+  code: string,
+  message: string,
+  localizeUi: LabelLocalizer,
+  humanizeText: (text: string) => string = (text) => text,
 ) {
+  const key: string | undefined = labelKeys.reviewCode[code as keyof typeof labelKeys.reviewCode];
+  if (!key) return `${humanizeLabel(code)}: ${humanizeText(message)}`;
+  const detail = catchAllReviewCodes.has(code) ? humanizeText(message).trim() : "";
+  return detail ? `${localizeUi(key)} ${detail}` : localizeUi(key);
+}
+
+export type ScopeKind = keyof typeof labelKeys.scopeKind;
+
+/** The scope-picker tab rail: every kind in display order with its localized label. */
+export function scopeKindCategories(localizeUi: LabelLocalizer): Array<[ScopeKind, string]> {
+  return (Object.keys(labelKeys.scopeKind) as ScopeKind[]).map((kind) => [kind, localizeUi(labelKeys.scopeKind[kind])]);
+}
+
+export function memoryLabel(note: Pick<LtmNote, "title"> | null | undefined, untitledMemory: string) {
   return note?.title?.trim() || untitledMemory;
 }
 
 export function noteTypeLabel(type: string, localizeUi?: LabelLocalizer) {
-  return localizeUi
-    ? localizedLabel(type, localizeUi, labelKeys.noteType)
-    : humanizeLabel(type);
+  return localizeUi ? localizedLabel(type, localizeUi, labelKeys.noteType) : humanizeLabel(type);
 }
 
 export function humanizeLabel(value: string) {
@@ -141,16 +211,12 @@ export function humanizeLabel(value: string) {
 }
 
 export function scopeTargetLabel(
-  kind: "chat" | "character" | "group" | "persona",
+  kind: "chat" | "character" | "group" | "persona" | "local_character",
   id: string,
   targets: ReadonlyArray<{ id: string; label: string }>,
-  fallbackLabels: Partial<
-    Record<"chat" | "character" | "group" | "persona", string>
-  > = {},
+  fallbackLabels: Partial<Record<"chat" | "character" | "group" | "persona" | "local_character", string>> = {},
 ) {
-  const target = targets.find(
-    (item) => item.id === id || item.id === `${kind}:${id}`,
-  );
+  const target = targets.find((item) => item.id === id || item.id === `${kind}:${id}`);
   if (target?.label && target.label !== id) return target.label;
   return fallbackLabels[kind] ?? humanizeLabel(kind);
 }

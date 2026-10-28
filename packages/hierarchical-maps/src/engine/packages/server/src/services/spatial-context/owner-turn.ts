@@ -119,9 +119,7 @@ export async function findAppliedSpatialOwnerTurn(
       409,
     );
   }
-  const travel = input.transition.travelMode
-    ? await resolveAppliedTravel(input.chatId, input.transition)
-    : undefined;
+  const travel = input.transition.travelMode ? await resolveAppliedTravel(input.chatId, input.transition) : undefined;
   return {
     messageId: existing.messageId,
     snapshot: existing,

@@ -1,8 +1,7 @@
 import { lstat, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
-const WINDOWS_RESERVED_COMPONENT =
-  /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu;
+const WINDOWS_RESERVED_COMPONENT = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu;
 
 function isUnsafePortableSegment(segment) {
   return (
@@ -61,12 +60,7 @@ function assertCanonicalContainment(canonicalRoot, canonicalCandidate, label) {
   }
 }
 
-export async function resolveContainedPortablePath(
-  root,
-  value,
-  label = "Path",
-  { allowMissing = false } = {},
-) {
+export async function resolveContainedPortablePath(root, value, label = "Path", { allowMissing = false } = {}) {
   const candidate = resolvePortableRelativePath(root, value, label);
   const canonicalRoot = await realpath(root);
   try {
@@ -101,11 +95,7 @@ export async function resolveContainedPortablePath(
 
 export function assertPortableFilenameComponent(value, label = "Filename component") {
   assertPortableRelativePath(value, label);
-  if (
-    value.includes("/") ||
-    !/^[A-Za-z0-9][A-Za-z0-9._+-]*$/u.test(value) ||
-    value.endsWith(".")
-  ) {
+  if (value.includes("/") || !/^[A-Za-z0-9][A-Za-z0-9._+-]*$/u.test(value) || value.endsWith(".")) {
     throw new Error(`${label} must be a portable filename component`);
   }
   return value;

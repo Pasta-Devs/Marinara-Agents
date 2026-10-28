@@ -6,24 +6,35 @@ on:
     paths:
       - ".github/workflows/noodle-browser.yml"
       - "artifacts/noodle-*.zip"
-      - "artifacts/slurp-*.zip"
+      - "artifacts/slurp2-*.zip"
       - "artwork/agent-covers/noodle.png"
-      - "artwork/agent-covers/slurp.png"
+      - "artwork/agent-covers/slurp2.png"
       - "artwork/sources/noodle-*"
       - "artwork/sources/slurp-*"
-      - "catalog/catalog.json"
-      - "catalog/v*/catalog.json"
-      - "package.json"
-      - "package-lock.json"
+      # NOTE: intentionally NOT triggering on catalog/*.json, package.json,
+      # package-lock.json, or scripts/build-feature-packages.mjs. Those are shared
+      # across every package — each release regenerates the catalog, can touch the
+      # lockfile and bumps its version line in the build script — so triggering on
+      # them ran this Noodle/Slurp browser suite on unrelated package PRs. Noodle/Slurp
+      # changes are already covered by packages/noodle|slurp2/**, the noodle/slurp2
+      # artifacts above, and the harness scripts and sources/engine below.
       - "packages/noodle/**"
-      - "packages/slurp/**"
-      - "scripts/build-feature-packages.mjs"
+      - "packages/slurp2/**"
+      - "tests/slurp-*.regression.ts"
+      - "tests/slurp2-*.regression.ts"
+      - "tests/slurp2-source.ts"
+      - "tests/tsconfig.regressions.json"
+      - "scripts/run-slurp-regressions.mjs"
       - "scripts/install-package-browser-fixture.mjs"
       - "scripts/run-package-browser-tests.mjs"
       - "scripts/start-package-browser-servers.mjs"
       - "sources/engine/**"
+      - "scripts/validate-vendored-engine.mjs"
+      - "scripts/vendored-engine-baseline.json"
+      - "scripts/tests/vendored-engine.regression.mjs"
       - "tests/package-noodle.e2e.ts"
-      - "tests/package-slurp.e2e.ts"
+      - "tests/package-noodle-picker-scope.e2e.ts"
+      - "tests/package-slurp2.e2e.ts"
       - "tests/playwright.package.config.ts"
 
 concurrency:
@@ -43,13 +54,13 @@ jobs:
 
     steps:
       - name: Checkout Marinara Agents
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Checkout Marinara Engine staging
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Pasta-Devs/Marinara-Engine
           ref: staging
@@ -57,13 +68,76 @@ jobs:
           persist-credentials: false
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@8912a9102ac27614460f54aedde9e1e7f9aec20d # v6.0.5
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           package_json_file: engine/package.json
           run_install: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Install package runner dependencies
+        run: npm ci
+
+      - name: Check vendored Engine drift against the shrinking baseline
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if git diff --quiet "origin/$BASE_REF...HEAD" -- packages/noodle sources/engine scripts/vendored-engine-baseline.json scripts/validate-vendored-engine.mjs; then
+            echo "Vendored Engine check skipped: no Noodle or snapshot changes."
+          else
+            node scripts/validate-vendored-engine.mjs --baseline-ref "origin/$BASE_REF"
+          fi
+
+      - name: Install Engine dependencies
+        run: pnpm --dir engine install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Rebuild the Noodle artifact
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+        run: node scripts/build-feature-packages.mjs noodle
+
+      - name: Run package-owned Noodle browser suite
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+        run: npm run test:browser:noodle
+
+  slurp2-browser:
+    name: Slurp package browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Marinara Agents
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout Marinara Engine staging
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Pasta-Devs/Marinara-Engine
+          ref: staging
+          path: engine
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: engine/package.json
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
 
@@ -73,20 +147,23 @@ jobs:
       - name: Install Engine dependencies
         run: pnpm --dir engine install --frozen-lockfile
 
+      - name: Build Engine shared package
+        run: pnpm --dir engine --filter @marinara-engine/shared build
+
+      - name: Slurp regressions
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+        run: npm run test:slurp:regressions
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Rebuild the Noodle and Slurp artifacts
+      - name: Rebuild the Slurp artifact
         env:
           MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
-        run: node scripts/build-feature-packages.mjs noodle slurp
-
-      - name: Run package-owned Noodle browser suite
-        env:
-          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
-        run: npm run test:browser:noodle
+        run: node scripts/build-feature-packages.mjs slurp2
 
       - name: Run package-owned Slurp browser suite
         env:
           MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
-        run: npm run test:browser:slurp
+        run: npm run test:browser:slurp2

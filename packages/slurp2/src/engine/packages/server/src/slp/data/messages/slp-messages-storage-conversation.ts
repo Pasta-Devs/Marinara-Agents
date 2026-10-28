@@ -1,0 +1,464 @@
+// ──────────────────────────────────────────────
+// Storage: Slurp direct messages
+// ──────────────────────────────────────────────
+//
+// Its own module rather than more of `slurp.storage.ts`, which is already past five thousand
+// lines. It composes that storage for accounts, subscriptions, and the wallet instead of
+// reimplementing them, so a DM tip and a profile tip move coins through exactly one code path.
+import { and, desc, eq, gt, inArray } from "../../../db/file-query.js";
+import { newId } from "../../../utils/id-generator.js";
+import type { DB } from "../../../db/connection.js";
+import {
+  slurpMessageClaims,
+  slurpMessages,
+  slurpReplyBubbles,
+  slurpFollowUps,
+  slurpThreads,
+} from "../../../db/schema/slurp.js";
+import {
+  slurpMessagePreview,
+  type SlurpCreatorMessaging,
+  type SlurpMessageKind,
+} from "../../modules/messages/slp-messaging.js";
+import { mapMessage, now } from "./slp-messages-storage-helpers.js";
+import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
+import { int } from "./slp-messages-storage-helpers.js";
+import { isUnsolicitedCreatorMessage, slurpAllowsUnsolicitedText } from "../../modules/messages/slp-follow-up.js";
+import { createSlurpPopulationStorage } from "../audience/slp-audience-storage-funnel.js";
+import type { SlurpMessage } from "./slp-messages-storage-types.js";
+import type { SlurpMessagesContext } from "./slp-messages-storage-context.js";
+
+export function createMessagesStorageConversation(context: SlurpMessagesContext) {
+  const {
+    db,
+    slurp,
+    messageUnlocks,
+    createSlurpPaymentIntent,
+    resetSlurpPaymentIntentAfterInsufficientFunds,
+    markSlurpPaymentIntentCharged,
+    persistSlurpPaymentCreditedAmount,
+    compensateSlurpPayment,
+  } = context;
+  return {
+    /** Append one message and roll the thread's preview, unread counts, and cached rapport. */
+    async appendMessage(
+      threadId: string,
+      input: {
+        id?: string;
+        senderAccountId: string;
+        role: "viewer" | "creator";
+        kind?: SlurpMessageKind;
+        content?: string;
+        imageUrl?: string | null;
+        price?: number;
+        unlockedAt?: string | null;
+        metadata?: Record<string, unknown>;
+        createdAt?: string;
+        replyObligationCreatedAt?: string;
+        preserveReplyObligation?: boolean;
+        scheduledFollowUpId?: string;
+        replyBubbleId?: string;
+        paymentReactionSince?: string;
+      },
+    ): Promise<SlurpMessage | null> {
+      const thread = await context.storage.getThreadById(threadId);
+      if (!thread) return null;
+      const kind = input.kind ?? "text";
+      const content = input.content ?? "";
+      const price = Math.max(0, Math.trunc(input.price ?? 0));
+      const timestamp = now();
+      if (thread.state === "declined") return null;
+      const sender =
+        input.role === "creator"
+          ? await slurp.getNoodlerAccountById(input.senderAccountId)
+          : ((await slurp.getViewer(input.senderAccountId).catch(() => null)) ??
+            (await slurp.getNoodlerAccountById(input.senderAccountId)));
+      const message = {
+        id: input.id ?? newId(),
+        threadId,
+        senderAccountId: input.senderAccountId,
+        role: input.role,
+        kind,
+        content,
+        imageUrl: input.imageUrl ?? null,
+        imagePrompt: null,
+        imageClaimToken: null,
+        imageClaimLeaseUntil: null,
+        price: String(price),
+        unlockedAt: input.unlockedAt ?? null,
+        readAt: null,
+        metadata: JSON.stringify(input.metadata ?? {}),
+        senderSnapshot: JSON.stringify(
+          sender ? { displayName: sender.displayName, handle: sender.handle, avatarUrl: sender.avatarUrl ?? null } : {},
+        ),
+        createdAt: input.createdAt ?? timestamp,
+      };
+      const rapport = await context.storage.rapportFor(thread.viewerAccountId, thread.creatorAccountId);
+      // Settings › Messaging "Stop after one unanswered text": checked only when the message about
+      // to be appended is itself unsolicited (an opener, a check-in, a recurring update, a
+      // drama-choice question, the canned first-touch opener). Read once here, applied inside the
+      // transaction below against the thread's live history, so this is the one race-proof gate
+      // every send path shares — including the ones that call `sendCreatorMessage` directly and
+      // never pass through the follow-up scheduler's own, earlier, AI-spend-saving check.
+      const checkUnsolicitedGate = isUnsolicitedCreatorMessage({ role: input.role, kind, metadata: input.metadata });
+      const pauseUntilReply = checkUnsolicitedGate
+        ? (await slurp.getSettings()).messagesPauseFollowUpsUntilReply
+        : false;
+      let stored = false;
+      try {
+        await db.transaction(async (tx) => {
+          const currentRows = await tx.select().from(slurpThreads).where(eq(slurpThreads.id, threadId));
+          const current = currentRows[0];
+          if (!current) return;
+          if (pauseUntilReply) {
+            const recentRows = await tx
+              .select()
+              .from(slurpMessages)
+              .where(eq(slurpMessages.threadId, threadId))
+              .orderBy(desc(slurpMessages.createdAt))
+              .limit(60);
+            // The query is newest-first; the gate scans oldest-first, same order `listMessages` uses.
+            if (!slurpAllowsUnsolicitedText(recentRows.map(mapMessage).reverse())) return;
+          }
+          if (current.state === "declined") return;
+          if (input.paymentReactionSince) {
+            const recentMessages = await tx
+              .select({ metadata: slurpMessages.metadata, createdAt: slurpMessages.createdAt })
+              .from(slurpMessages)
+              .where(eq(slurpMessages.threadId, threadId));
+            if (
+              recentMessages.some(
+                (row) =>
+                  String(row.createdAt) >= input.paymentReactionSince &&
+                  String(row.metadata ?? "").includes("paymentReaction"),
+              )
+            )
+              return;
+          }
+          if (input.replyBubbleId) {
+            const [bubble] = await tx
+              .select({ id: slurpReplyBubbles.id })
+              .from(slurpReplyBubbles)
+              .where(and(eq(slurpReplyBubbles.id, input.replyBubbleId), eq(slurpReplyBubbles.threadId, threadId)))
+              .limit(1);
+            if (!bubble) return;
+            await tx.delete(slurpReplyBubbles).where(eq(slurpReplyBubbles.id, input.replyBubbleId));
+          }
+          if (input.scheduledFollowUpId) {
+            const [followUp] = await tx
+              .select({ status: slurpFollowUps.status })
+              .from(slurpFollowUps)
+              .where(and(eq(slurpFollowUps.id, input.scheduledFollowUpId), eq(slurpFollowUps.threadId, threadId)))
+              .limit(1);
+            if (followUp?.status !== "claimed") return;
+          }
+          await tx.insert(slurpMessages).values(message);
+          // A quote, a delivery or a system note is not an answer. Letting one clear the obligation
+          // meant a fan who wrote just before an automatic delivery never got a reply.
+          const notAnAnswer = kind === "system" || kind.startsWith("commission");
+          // A Support desk notice or note (`deskQuiet`, docs/SUPPORT-DESK.md) asks nobody for an answer.
+          const quiet = input.role === "viewer" && input.metadata?.deskQuiet === true;
+          const newerViewer =
+            input.role === "creator" && (input.preserveReplyObligation || notAnAnswer)
+              ? current.needsReply === "true"
+              : input.role === "creator" && input.replyObligationCreatedAt
+                ? (
+                    await tx
+                      .select()
+                      .from(slurpMessages)
+                      .where(
+                        and(
+                          eq(slurpMessages.threadId, threadId),
+                          eq(slurpMessages.role, "viewer"),
+                          gt(slurpMessages.createdAt, input.replyObligationCreatedAt),
+                        ),
+                      )
+                      .limit(1)
+                  ).length > 0
+                : false;
+          await tx
+            .update(slurpThreads)
+            .set({
+              state: input.role === "creator" && current.state === "request" ? "active" : current.state,
+              lastMessageAt: message.createdAt > current.lastMessageAt ? message.createdAt : current.lastMessageAt,
+              // A line with no words (a scene's "ended" note) keeps the last real preview, not a blank.
+              lastMessagePreview:
+                message.createdAt >= current.lastMessageAt
+                  ? slurpMessagePreview(kind, content, price) || current.lastMessagePreview
+                  : current.lastMessagePreview,
+              viewerUnread: input.role === "creator" ? String(Number(current.viewerUnread) + 1) : current.viewerUnread,
+              creatorUnread: quiet
+                ? current.creatorUnread
+                : input.role === "viewer"
+                  ? String(Number(current.creatorUnread) + 1)
+                  : newerViewer
+                    ? current.creatorUnread
+                    : "0",
+              needsReply: quiet ? current.needsReply : input.role === "viewer" || newerViewer ? "true" : "false",
+              replyNotBeforeAt: input.role === "creator" && !newerViewer ? null : current.replyNotBeforeAt,
+              rapport: JSON.stringify(rapport),
+              updatedAt: timestamp,
+            })
+            .where(eq(slurpThreads.id, threadId));
+          if (input.role === "viewer") {
+            // The fan came back on their own, so "checking in on you" (or writing first) has nothing left to do.
+            // Promises, reminders and updates still owe the fan something and stay.
+            await tx
+              .update(slurpFollowUps)
+              .set({ status: "cancelled", cancelledAt: timestamp, updatedAt: timestamp })
+              .where(
+                and(
+                  eq(slurpFollowUps.threadId, threadId),
+                  inArray(slurpFollowUps.type, ["check_in", "opener"]),
+                  eq(slurpFollowUps.status, "pending"),
+                ),
+              );
+          }
+          if (input.scheduledFollowUpId) {
+            await tx
+              .update(slurpFollowUps)
+              .set({ status: "sent", sentAt: timestamp, updatedAt: timestamp })
+              .where(eq(slurpFollowUps.id, input.scheduledFollowUpId));
+          }
+          stored = true;
+        });
+      } catch (error) {
+        if (input.id && isSlurpFileUniqueConstraintError(error, "slurp2_messages", ["id"]))
+          return context.storage.getMessageById(input.id);
+        throw error;
+      }
+      return stored ? mapMessage(message) : null;
+    },
+    /** Persist the visible bubble and its delayed siblings as one recoverable unit. */
+    async appendReplyBatch(
+      threadId: string,
+      input: {
+        first: { id?: string; senderAccountId: string; content: string };
+        delayed: Array<{
+          id: string;
+          batchId: string;
+          sequence: number;
+          senderAccountId: string;
+          content: string;
+          deliverAt: string;
+          generationEpoch: number;
+          createdAt: string;
+        }>;
+      },
+    ): Promise<SlurpMessage | null> {
+      const thread = await context.storage.getThreadById(threadId);
+      if (!thread) return null;
+      const rapport = await context.storage.rapportFor(thread.viewerAccountId, thread.creatorAccountId);
+      const timestamp = now();
+      const creator = await slurp.getNoodlerAccountById(input.first.senderAccountId);
+      const first = {
+        id: input.first.id ?? newId(),
+        threadId,
+        senderAccountId: input.first.senderAccountId,
+        role: "creator" as const,
+        kind: "text" as const,
+        content: input.first.content,
+        imageUrl: null,
+        imagePrompt: null,
+        imageClaimToken: null,
+        imageClaimLeaseUntil: null,
+        price: "0",
+        unlockedAt: null,
+        readAt: null,
+        metadata: "{}",
+        senderSnapshot: JSON.stringify(
+          creator
+            ? { displayName: creator.displayName, handle: creator.handle, avatarUrl: creator.avatarUrl ?? null }
+            : {},
+        ),
+        createdAt: timestamp,
+      };
+      const rows = input.delayed.map((bubble) => ({
+        id: bubble.id,
+        batchId: bubble.batchId,
+        sequence: String(bubble.sequence),
+        threadId,
+        senderAccountId: bubble.senderAccountId,
+        messageId: bubble.id,
+        content: bubble.content,
+        deliverAt: bubble.deliverAt,
+        generationEpoch: String(bubble.generationEpoch),
+        createdAt: bubble.createdAt,
+      }));
+      let stored = false;
+      await db.transaction(async (tx) => {
+        const currentRows = await tx.select().from(slurpThreads).where(eq(slurpThreads.id, threadId));
+        const current = currentRows[0];
+        if (!current) return;
+        const claimRows = await tx
+          .select()
+          .from(slurpMessageClaims)
+          .where(eq(slurpMessageClaims.id, input.first.id ?? "__missing_claim__"));
+        const claim = claimRows[0];
+        if (
+          !claim ||
+          String(claim.threadId) !== threadId ||
+          String(claim.generationEpoch ?? "0") !== String(current.generationEpoch ?? "0") ||
+          (current.state !== "active" && current.state !== "request")
+        )
+          return;
+        // The fan's newest message, not the thread's: a delayed bubble stored after the fan spoke
+        // must not void the answer that fan is still owed.
+        const latestRows = await tx
+          .select()
+          .from(slurpMessages)
+          .where(and(eq(slurpMessages.threadId, threadId), eq(slurpMessages.role, "viewer")))
+          .orderBy(desc(slurpMessages.createdAt), desc(slurpMessages.id))
+          .limit(1);
+        // A newer fan message voids this reply; the next one answers both messages together.
+        if (latestRows[0]?.id !== claim.triggerMessageId) return;
+        await tx.insert(slurpMessages).values(first);
+        // Bubbles still queued from an earlier reply were never seen and were not in this reply's
+        // prompt. Delivering them after this answer put an old thought below a new one.
+        await tx.delete(slurpReplyBubbles).where(eq(slurpReplyBubbles.threadId, threadId));
+        if (rows.length > 0) await tx.insert(slurpReplyBubbles).values(rows);
+        // Answering is reading. Nothing cleared this before, so `listThreadsAwaitingReply` kept
+        // handing the same answered message back to the queued-reply scheduler and the creator
+        // re-answered it once a minute, forever, until the fan spoke again.
+        for (const row of await tx
+          .select()
+          .from(slurpMessages)
+          .where(and(eq(slurpMessages.threadId, threadId), eq(slurpMessages.role, "viewer")))) {
+          if (row.readAt) continue;
+          await tx.update(slurpMessages).set({ readAt: timestamp }).where(eq(slurpMessages.id, row.id));
+        }
+        await tx
+          .update(slurpMessageClaims)
+          .set({ replyMessageId: first.id })
+          .where(eq(slurpMessageClaims.id, input.first.id ?? "__missing_claim__"));
+        await tx
+          .update(slurpThreads)
+          .set({
+            state: current.state === "request" ? "active" : current.state,
+            lastMessageAt: timestamp,
+            lastMessagePreview: slurpMessagePreview("text", first.content, 0),
+            viewerUnread: String(Number(current.viewerUnread) + 1),
+            creatorUnread: "0",
+            needsReply: "false",
+            replyNotBeforeAt: null,
+            rapport: JSON.stringify(rapport),
+            updatedAt: timestamp,
+          })
+          .where(eq(slurpThreads.id, threadId));
+        stored = true;
+      });
+      return stored ? mapMessage(first) : null;
+    },
+    async unlockMessage(viewerAccountId: string, messageId: string): Promise<SlurpMessage | null> {
+      const previous = messageUnlocks.get(messageId) ?? Promise.resolve(null);
+      const current = previous
+        .catch(() => null)
+        .then(() => context.storage.unlockMessageUnlocked(viewerAccountId, messageId));
+      messageUnlocks.set(messageId, current);
+      try {
+        return await current;
+      } finally {
+        if (messageUnlocks.get(messageId) === current) messageUnlocks.delete(messageId);
+      }
+    },
+    async unlockMessageUnlocked(viewerAccountId: string, messageId: string): Promise<SlurpMessage | null> {
+      const rows = await db.select().from(slurpMessages).where(eq(slurpMessages.id, messageId));
+      const row = rows[0];
+      if (!row) return null;
+      const thread = await context.storage.getThreadById(String(row.threadId));
+      // Only a PPV message is content-locked. Without the kind check a tip or a commission quote —
+      // both stored with a price and no `unlockedAt` — could be "unlocked" and charged a second time.
+      if (String(row.kind) !== "ppv") return null;
+      if (!thread || thread.viewerAccountId !== viewerAccountId || Number(row.price ?? 0) <= 0) return null;
+      if (row.unlockedAt) return mapMessage(row);
+      const price = int(row.price as string);
+      const settings = await slurp.getSettings();
+      if (settings.walletEnabled) {
+        const paymentId = `ppv:${messageId}`;
+        const creditOperationId = `message:${messageId}:ppv`;
+        const paymentIntent = await createSlurpPaymentIntent(
+          slurp,
+          { viewerAccountId, creatorAccountId: thread.creatorAccountId, price, note: "PPV unlock", creditOperationId },
+          paymentId,
+        );
+        if (paymentIntent === "unpayable") return null;
+        const charged =
+          paymentIntent === "charged" || paymentIntent === "settled"
+            ? true
+            : await slurp.spendCoins(viewerAccountId, "ppv", price, thread.creatorAccountId, paymentId);
+        if (!charged) {
+          await resetSlurpPaymentIntentAfterInsufficientFunds(slurp, paymentId);
+          return null;
+        }
+        await markSlurpPaymentIntentCharged(slurp, paymentId);
+        try {
+          await slurp.creditCreatorIncome(thread.creatorAccountId, price, "ppv", `message:${messageId}:ppv`);
+          await persistSlurpPaymentCreditedAmount(slurp, paymentId, thread.creatorAccountId, creditOperationId);
+          await slurp.notifyCreatorIncome(thread.creatorAccountId, "ppv", price, viewerAccountId, messageId);
+          // Paying to see something is the strongest signal in a thread, and it reached the funnel
+          // nowhere: only profile unlocks did, so the same coins counted or not by where they were spent.
+          await slurp.advanceAudienceTie(viewerAccountId, thread.creatorAccountId, {
+            stage: "regular",
+            spent: price,
+            unlocked: price,
+          });
+          const unlockedAt = now();
+          await db.update(slurpMessages).set({ unlockedAt }).where(eq(slurpMessages.id, messageId));
+          return mapMessage({ ...row, unlockedAt });
+        } catch (error) {
+          await compensateSlurpPayment(
+            slurp,
+            {
+              viewerAccountId,
+              creatorAccountId: thread.creatorAccountId,
+              price,
+              note: "failed PPV unlock",
+              creditOperationId,
+            },
+            error,
+            paymentId,
+          );
+          throw error;
+        }
+      }
+      const unlockedAt = now();
+      await db.update(slurpMessages).set({ unlockedAt }).where(eq(slurpMessages.id, messageId));
+      return mapMessage({ ...row, unlockedAt });
+    },
+    async sendCreatorMessage(
+      creatorAccountId: string,
+      viewerAccountId: string,
+      input: {
+        id?: string;
+        content: string;
+        kind?: SlurpMessageKind;
+        price?: number;
+        unlockedAt?: string | null;
+        imageUrl?: string | null;
+        metadata?: Record<string, unknown>;
+      },
+    ): Promise<SlurpMessage | null> {
+      // A counterpart is a persona, an ambient Slurp account, or a generated population member.
+      // Gating on personas alone meant a fan the world sent could write to a Creator and never be
+      // answered — an obligation with no way to discharge it.
+      const counterpartExists =
+        Boolean(await slurp.getViewer(viewerAccountId).catch(() => null)) ||
+        Boolean(await slurp.getNoodlerAccountById(viewerAccountId)) ||
+        Boolean(await createSlurpPopulationStorage(db).get(viewerAccountId));
+      if (!counterpartExists) return null;
+      const opened = await context.storage.openThread(viewerAccountId, creatorAccountId, "creator");
+      if (opened.status !== "ok") return null;
+      return context.storage.appendMessage(opened.thread.id, {
+        id: input.id,
+        senderAccountId: creatorAccountId,
+        role: "creator",
+        content: input.content,
+        kind: input.kind,
+        price: input.price,
+        unlockedAt: input.unlockedAt,
+        imageUrl: input.imageUrl ?? null,
+        metadata: input.metadata,
+      });
+    },
+  };
+}

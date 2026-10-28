@@ -24,10 +24,19 @@ export function resolveImageGenerationService(conn: ImageDefaultsConnection): st
 
 export function resolveConnectionImageDefaults(conn: ImageDefaultsConnection): ImageGenerationDefaultsProfile | null {
   const service = imageSourceToDefaultsService(resolveImageGenerationService(conn));
-  if (!service) return null;
-
   const params = parseDefaultParametersRoot(conn.defaultParameters);
-  return normalizeImageGenerationProfile(params[IMAGE_DEFAULTS_STORAGE_KEY], service).profile;
+  const customParameters =
+    params.customParameters && typeof params.customParameters === "object" && !Array.isArray(params.customParameters)
+      ? (params.customParameters as Record<string, unknown>)
+      : {};
+  const hasCustomParameters = Object.keys(customParameters).length > 0;
+  if (!service && !hasCustomParameters) return null;
+  return {
+    ...(service
+      ? normalizeImageGenerationProfile(params[IMAGE_DEFAULTS_STORAGE_KEY], service).profile
+      : { version: 1 as const, service: "api" as const, seed: -1 }),
+    ...(hasCustomParameters ? { customParameters } : {}),
+  };
 }
 
 function parseDefaultParametersRoot(

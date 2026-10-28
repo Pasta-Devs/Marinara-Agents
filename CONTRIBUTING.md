@@ -23,7 +23,11 @@ git pull
 git checkout -b feature/short-description
 ```
 
-Open a draft PR against `staging` as soon as implementation starts, then mark it **Ready for review** after validation and self-review. Draft PRs cannot merge and are intentionally skipped by CodeRabbit. Every ready PR must pass the catalog check, CodeQL security analysis, native Code Quality analysis, and CodeRabbit review. Dependency changes must also pass the low-severity dependency audit. PRs from active Pasta-Devs organization members and owners do not require a separate human approval; organization members with repository merge permission may merge internal PRs into `staging` after those gates pass. Outside and first-time contributors require an approving review from repository owner `SpicyMarinara`. Approval from another Pasta-Devs member does not satisfy this gate. Only `SpicyMarinara` may promote this repository's `staging` branch into `main`.
+Open a draft PR against `staging` as soon as implementation starts, then mark it **Ready for review** after validation and self-review. Draft PRs cannot merge, and automatic Dottore review waits until they are ready. Every ready PR must pass the catalog check, CodeQL security analysis, native Code Quality analysis, and Dottore Review. Dependency changes must also pass the low-severity dependency audit. PRs from active Pasta-Devs organization members and owners do not require a separate human approval; organization members with repository merge permission may merge internal PRs into `staging` after those gates pass. Outside and first-time contributors require an approving review from repository owner `SpicyMarinara`. Approval from another Pasta-Devs member does not satisfy this gate. Only `SpicyMarinara` may promote this repository's `staging` branch into `main`.
+
+Dottore is this repository's automated reviewer. The wrapper pins shared Marinara-Engine tooling and uses this repository's model variables, API-key secrets, and base-branch review rules. Automatic reviews run on ready PRs and subsequent pushes. Drafts are withheld for automatic, manual and direct requests; marking a supported PR Ready starts its review through the existing automatic trigger. If a review does not start, an owner, organization member, or collaborator can comment `/dottore`; `/dottore full` requests a full examination. Before merging, verify a **Viable** or **Viable, With Notes** verdict for the current head and resolve all confirmed findings. See the [shared Dottore guide](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/.github/dottore-review/README.md) for the commands, configuration, and trust boundaries. CodeRabbit's automatic reviews and automatic chat replies are disabled here.
+
+The staging wrapper checks live PR readiness before starting the shared reviewer, including requests from the existing Ready trigger and manual commands. Examination starts without waiting for CI; required checks and the current-head viable review remain merge gates. The automatic dispatcher follows `DOTTORE_AUTO_REVIEW`; marking a PR Ready does not override that setting. Event dispatchers run from GitHub's default branch, so changes to their event subscriptions activate only after a normal `main` release. A staging wrapper update does not change the `main` wrapper.
 
 Marinara Engine automatically follows the matching Agent channel: Engine `staging` reads this repository's `staging` catalog and artifacts, while stable Engine builds read `main`. Test package installs and updates from an Engine staging checkout before promotion.
 
@@ -44,6 +48,8 @@ Developer/
 
 Set `MARINARA_ENGINE_ROOT` when the Engine checkout is elsewhere.
 
+Run `node scripts/validate-vendored-engine.mjs --baseline-ref origin/staging` with `MARINARA_ENGINE_ROOT` pointing to an Engine `staging` checkout to inspect every file in `sources/engine/`. A file also tracked by Engine is current or drifted; a vendored-only file is orphaned. Untracked output in the host checkout cannot make an orphan look current. The tracked compiled snapshot under `sources/engine/packages/shared/dist/` remains in scope because `sources/package-shared.ts` imports it as a package build input. Package-owned overlays outside `sources/engine/` are not traversed. The check skips with a notice when no Engine path is supplied. CI runs it in the Noodle browser job that already checks out Engine. `scripts/vendored-engine-baseline.json` records the existing divergent copies by status and both source/host hashes; later PRs may only remove entries. New drift, changes to either side of a stale copy, and a newly missing host file fail the gate. When a copy matches Engine or is removed, remove its baseline entry too. A file absent from Engine may still be package-owned runtime code: trace its package imports before deleting it. Host-service migration is tracked in Marinara-Engine#6385.
+
 After a fresh checkout, and whenever `package.json` or `package-lock.json` changes, install this repository's pinned build dependencies:
 
 ```bash
@@ -61,9 +67,30 @@ The root `package.json` pins libraries that feature sources import but that the 
 - `schemas/` — package schema documents
 - `scripts/` — catalog builders and validation
 - `sources/engine/` — captured generic Engine dependencies required to reproduce feature bundles
+- `sources/host-client-overlay/` — stands in for the Engine stores, services and components the Engine hands package clients through `globalThis.__MARINARA_HOST__` (capability API 1.341): the UI, chat, agent, Local Model, dialog, gallery, encounter, game state and backfill stores, TTS, app dialogs, the API client, the emoji catalog and `Modal`. Every feature build stacks it over `sources/engine/`, so package code uses the Engine's live objects; `scripts/esbuild-host-plugins.mjs` takes React, React Query, zustand, sonner, zod, i18next, framer-motion, tailwind-merge and clsx from the host the same way. A package must never bundle a copy of these: the build's client gates (`scripts/client-host-gates.mjs`) refuse one, and `validate-catalog.mjs` refuses a client that writes the Engine's browser storage (`marinara-engine-ui`, the active chat, drafts, pending map moves, pinned gallery images) or opens its audio cache
+- `sources/host-runtime-overlay/` — stands in for the stateful Engine server services Calls, Noodle and Slurp used to bundle: the Local Model, provider routing and fallback, connection admission, the command and service registries, image and video generation, and the logger. Each module calls the Engine through `api.runtime` (capability API 1.341), bound by the generated server entry in `activate()`; a missing host member answers HTTP 501 `host_feature_unavailable` instead of running a copy. The build's server gates (`scripts/server-host-gates.mjs`) refuse a bundled copy, and `scripts/server-engine-modules-baseline.json` lists the Engine storage modules that may stay bundled for reads, with a reason each; that list may only shrink
+- `sources/forge-kit/` — modules shared by Gacha Forge and Otome Forge. Plain `.mjs` that may import only `node:` modules, because Gacha Forge pastes them into its bundle as text. Hard-coded game values are options whose defaults are Gacha Forge's.
 - `tests/` — integration proof for package behavior
 
 The catalog contains Writer, Tracker, and Misc Agents. Feature packages such as Maps, Calls, and Conversation games are still represented by Agent definitions so installation and per-chat availability use one consistent lifecycle.
+
+## Using the Engine's host
+
+Since capability API 1.341, Marinara Engine hands every package the code it already runs, so a package never ships a second copy of it. A copy keeps its own state beside the Engine's: the bundled UI store reset Engine settings (#1478), a bundled chat store left game boards playable while a character replied, and bundled server services started a second llama-server or overwrote chat metadata. The Engine documents the contract in [Optional agent packages](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/development/optional-agent-packages.md#host-client-namespace).
+
+- **Client.** The Engine sets `globalThis.__MARINARA_HOST__ = { version: 1, ... }` before it loads any package client. `scripts/esbuild-host-plugins.mjs` resolves React, React DOM, React Query, zustand, sonner, zod, i18next, react-i18next, framer-motion, tailwind-merge and clsx to the Engine's own modules, and `marinara:host` to the namespace and its one `QueryClient`. `sources/host-client-overlay/` does the same for the Engine's stores, TTS, app dialogs, API client, emoji catalog and `Modal`. Render with the host `QueryClient` and toast through `sonner`'s `toast`; never render your own `<Toaster>`, dialog renderer or `QueryClient`, and keep your own i18next instance inside `<I18nextProvider>` (`initReactI18next` is withheld). Start a new package-owned query key with the package id.
+- **Server.** Calls, Noodle and Slurp reach Engine services through `api.runtime` (`sources/host-runtime-overlay/`). Every server takes `zod`, `adm-zip`, `dotenv`, `nanoid`, `jsonrepair` and the Engine's other externals from the Engine's `packages/server` dependencies, so each must stay a direct dependency there.
+- **Never fall back to a copy.** When the Engine lacks a member, report the feature unavailable ("needs a newer Marinara Engine"). Only the UI and chat store adapters keep a read-only copy, and it never writes.
+- **Never write the Engine's browser storage.** `validate-catalog.mjs` refuses a client that writes `marinara-engine-ui`, the active chat, drafts, pending map moves or pinned gallery images, or opens the TTS audio cache.
+- **Gate on the capability API, not `engine.min`.** A package built this way declares `schemaVersion: 2` and the capability API it needs, so an older Engine never installs it and keeps the version it has.
+- **React majors.** Packages render with the Engine's React. Replacing a host slot with a new React major (or another library major) requires a capability API major, so a package built against one major never runs against another.
+- **Motion slots.** The existing `framer-motion` host slot stays on Motion 13. The Engine may run Motion 14 itself,
+  with the complete legacy namespace retained through its `framer-motion-v13` npm alias. Opt in to Motion 14 by
+  importing `motion/react` and declaring capability API 1.377 or newer. Pass the package's declared `capabilityApi`
+  to `hostModulesPlugin`; it rejects the new slot under an older declaration. Export inventories use
+  `MARINARA_HOST_MODULE_IMPORTS` from the Engine contract, so legacy builds probe the alias, not the primary 14
+  dependency. Engine-backed strict package typechecks apply the same mapping through TypeScript paths. Keep each animation tree on one slot: their presence, config and layout contexts are distinct.
+
 
 ## Building Packages
 
@@ -79,7 +106,86 @@ Rebuild Engine-derived feature packages with:
 node scripts/build-feature-packages.mjs
 ```
 
-Both builders accept package IDs for a focused rebuild. When a build changes an artifact, commit the package payload, manifest, ZIP, catalog entry, and captured Engine sources together. Do not hand-edit generated bundles, checksums, byte sizes, or ZIP contents.
+Rebuild `ruleset` packages, which ship a data asset instead of an Agent, with:
+
+```bash
+node scripts/build-ruleset-packages.mjs
+```
+
+A ruleset may also ship **catalogs**: ready-made entries the Engine's sheet editor offers in a picker, declared in `ruleset.json` and shipped either inline or as `catalogs/<id>.json` assets beside it. They are ordinary declared assets, so the ruleset builder hash-pins and zips them like any other payload, and `validate-catalog.mjs` checks that each one parses, names its own catalog, stays inside the Engine's size and entry limits, and only writes rows the sheet's own lists could hold. Declaring a catalog asset requires Capability API 1.21.
+
+A ruleset may also carry an optional `battle` block, which lends a fight the sheet's own hit point pool, spell slot pools and the catalog-marked rows that become combat skills, and writes the fight's cost back afterwards. It lives inside `ruleset.json`, so the manifest cannot show it; `validate-catalog.mjs` checks that every pool and column it names exists on the sheet beside it, and that a ruleset carrying one declares Capability API 1.22 or newer. It is not a combat adapter: the damage arithmetic stays the Engine's.
+
+A ruleset may also carry an optional `combat` block, which says how a fight is **resolved** by its own rules rather than what a fight may borrow from the sheet: what is rolled and against what, the budgets a turn holds, which sheet lists are weapons and which are abilities, what its conditions do, concentration, what happens to a character at zero, its damage types and the threat scale an opponent is picked from. It ships inside `ruleset.json` like `battle`, so `validate-catalog.mjs` checks that every pool, field, derived value, column, budget, condition, save, track and tier it names exists beside it, and that a ruleset carrying one declares Capability API 1.26 or newer.
+
+A catalog may finally declare `"holds": "creatures"` and carry a **bestiary**: opponents instead of sheet rows, each written in the names the combat block already declares. A bestiary feeds no sheet list and the sheet editor's picker never offers it. `validate-catalog.mjs` checks that every creature names a declared threat tier, budget, save, ability, condition and damage type, that a sequence names another action of the same block and never itself or another sequence, and that a ruleset carrying one declares Capability API 1.27 or newer.
+
+A creature in a bestiary may instead carry a **sheet** in the ruleset's own terms (ability scores, skills, saves, bonuses, fields and list rows), which a fight builds exactly as it builds a party member, so a spellcaster casts from its own slots. The sheet then says the creature's health, defense, initiative, speed, abilities and saves, so none of those may also be given beside it. It needs no actions of its own, and may still carry printed ones, up to the usual 12. `validate-catalog.mjs` checks every id and value on it against the ruleset's own sheet, that a picked row names a catalog that feeds its list and an entry that catalog really holds, and that a ruleset carrying one declares Capability API 1.34 or newer. A catalog entry's `mechanics.reaction` may likewise name the moment it waits for (`{ "on": "aimed" | "hit" | "harmed" | "used", "at": "source" | "chosen", "cancels": true, "against": { "catalogs": [...] } }`, with `cancels` only on an aimed or used one), which needs Capability API 1.33 or newer, 1.44 for `used` or `against`, and 1.46 for `hit`.
+
+The combat block may also declare **contests** and the `checks` they read (Capability API 1.43, with a plain creature's own `checks` beside them), conditions that change numbers through `modifiers`, the `own-checks-*` effects and `levels` of a plain track (1.45), and an applied condition may end after one use (`endsAfter`) or count down as turns begin (`duration.at`, also 1.45). A creature's own action may be a `reaction` and land on itself with `self: true` (1.46). `validate-catalog.mjs` restates the Engine's rules for each of these and refuses a package that uses one under an older declaration.
+
+A catalog entry's row may finally carry an optional `scaled` map: up to four of that row's own number columns whose value the ruleset keeps up to date rather than the player, each one a value reference into the sheet with an optional step table. It can ride inline or inside a `catalogs/<id>.json` asset, so `validate-catalog.mjs` reads both and checks that every scaled column is a number column of the row's own list, that `values` still holds a starting number for it, that the row is its entry's only one for that list, and that a ruleset carrying one declares Capability API 1.23 or newer.
+
+The `ruleset-5e-2014` catalogs are generated from Open5e's `srd-2014` fixtures, which are not committed here. Regenerate them with a local copy of that data:
+
+```bash
+node scripts/build-5e-srd-catalogs.mjs --source <fixtures dir>
+```
+
+It is deterministic and rewrites `packages/ruleset-5e-2014/ruleset.json` in place, so a rebuild that changes nothing leaves the tree byte-identical. Run the ruleset builder afterwards to re-derive the manifest hashes. Do not hand-edit the generated catalog files.
+
+The first two builders accept package IDs for a focused rebuild; the ruleset builder always rebuilds every ruleset package. When a build changes an artifact, commit the package payload, manifest, ZIP, catalog entry, and captured Engine sources together. Do not hand-edit generated bundles, checksums, byte sizes, or ZIP contents.
+
+The catalog `generatedAt` field is preserved across rebuilds rather than stamped with the current time. This keeps a no-op rebuild byte-identical and stops the timestamp from being a guaranteed merge conflict between concurrent package PRs. A rebuild that touches nothing substantive should leave `catalog/**/catalog.json` unchanged — if `git status` shows only a `generatedAt` diff, discard it. To intentionally refresh the timestamp (for example when promoting a release), run the builder with `MARINARA_CATALOG_STAMP_GENERATED_AT=1`.
+
+### Release notes
+
+A package documents its own releases in `packages/<id>/CHANGELOG.md`, newest first:
+
+```markdown
+## 1.3.0 — 2026-09-01
+- Scene detection now handles flashbacks.
+- Fixed the tracker losing state after a summary.
+
+## 1.2.1 — 2026-08-20 [highlight]
+- Fixed the agent silently failing on long chats.
+```
+
+The catalog build turns these into a `notes.json` published beside every `catalog.json` — the published lanes, the legacy alias, and the preview overlay. The Engine shows the newest entry in its update prompt and the whole list as a Version history in Download Agents.
+
+Notes live in a sidecar, never on a catalog entry and never in a manifest. The Engine's catalog entry schema is strict and its parser drops entries carrying keys it does not know, so a new entry key would empty the Agents browser on every already-shipped Engine that predates it. A manifest key is worse: it rewrites every artifact and every checksum to publish a sentence.
+
+Rules:
+
+- **A minor or major bump needs an entry; a patch does not.** The build fails on a feature release with no matching changelog entry, including a package's first appearance. Optional notes rot, and a version history full of gaps reads as abandoned software.
+- **The newest entry must be the version the catalog publishes.** Otherwise the notes describe a release nobody is installing.
+- **The dot means "you will notice this", not "you should install this".** The Engine's prompt updates everything at once; the marker only decides what a user reads first. It defaults from the version bump — minor and major are notable, patch is not — so you rarely set it by hand. `[highlight]` is for a patch that repairs something badly broken; `[quiet]` is for a minor that only adds something invisible. Mark everything and the marker stops meaning anything.
+- **English only.** Notes are not localized. The chrome around them is.
+- **Plain text.** The Engine renders notes verbatim, never as Markdown or HTML, because an operator can point it at any catalog. Bullet characters survive; links and formatting do not.
+- Caps: 1000 characters per entry and 20 entries per package, both enforced at build time. Older entries fall off the end; an over-long entry fails the build rather than being truncated in someone's update prompt.
+
+`validate-catalog.mjs` re-derives every sidecar from the committed changelogs and rejects a mismatch, so a hand-edited `notes.json` cannot drift from the repository.
+
+### Packages that are not ready for everyone
+
+`scripts/catalog-incomplete.mjs` holds two sets, because "not finished" and "not promoted" are different states. Both keep the package building normally — payload, manifest, artifact, and locales stay committed so development and testing continue — and both are enforced at the single catalog chokepoint (`writeCatalogFamily`), so every builder inherits them and whichever builder runs next relocates or drops a stale committed entry for a newly-marked id.
+
+| Set | Stable (`main`) users | Staging users |
+| --- | --- | --- |
+| `INCOMPLETE_PACKAGE_IDS` | hidden | hidden |
+| `STAGING_ONLY_PACKAGE_IDS` | hidden | visible and installable |
+
+Use `INCOMPLETE_PACKAGE_IDS` while a package is still being built and is not ready for anyone. Use `STAGING_ONLY_PACKAGE_IDS` once it is ready for testers but not for the stable channel. A package graduates `INCOMPLETE_PACKAGE_IDS` → `STAGING_ONLY_PACKAGE_IDS` → neither; an id may not sit in both.
+
+**Why the staging tier needs an overlay.** Promotion is a wholesale `staging` → `main` merge, so both branches end up with byte-identical catalogs. A package therefore cannot be shown on one branch and hidden on the other by catalog *content* — only the Engine knows which channel it is on. So a staging-only package is cut from the published lanes (which stable users read, and which promotion copies verbatim) and written to a **preview overlay** under `catalog/preview/`, mirroring the normal lane layout. The overlay rides along on `main` inertly: a stable Engine never requests it. A staging Engine fetches it and merges it over the published lanes.
+
+This is fail-hidden, never fail-leak: an Engine that predates preview-overlay support simply never sees a staging-only package, and no Engine can reveal one to stable users by being out of date.
+
+When a package is ready to ship to everyone: delete its id from both sets, rebuild its package (which re-adds the catalog entry to the published lanes and removes the overlay), update the package-count assertion in `validate-catalog.mjs` and the README catalog tables, and land all of it in one PR.
+
+`validate-catalog.mjs` enforces that each tier lands in exactly one place: an incomplete id in no catalog at all, a staging-only id in the overlay and never in the published lanes, no orphaned overlay entry or empty overlay directory. Activation guidance and README coverage may exist ahead of a listing.
+
+For local testing against a development Engine, build with `MARINARA_CATALOG_INCLUDE_INCOMPLETE=1` to publish every held-back package into the normal lanes, and point the Engine's `MARINARA_AGENT_CATALOG_URL` override at it. Never commit a catalog generated that way — validation rejects it.
 
 ### Engine compatibility and catalog lanes
 
@@ -96,11 +202,15 @@ Hierarchical Maps also owns `packages/hierarchical-maps/engine-boundary.json`. I
 Every pull request must run:
 
 ```bash
+npm run check
 node scripts/test-catalog-lanes.mjs
 node scripts/validate-package-locales.mjs
 node scripts/validate-catalog.mjs
+node scripts/tests/catalog-release-notes.regression.mjs
 git diff --check
 ```
+
+`npm run check` verifies Prettier formatting and ESLint rules for package-owned source, repository scripts, and tests. Use `npm run format` to apply Prettier. Generated bundles, artifacts, catalogs, and captured Engine snapshots are excluded; rebuild those through their owning scripts instead of formatting them by hand.
 
 Catalog validation verifies every versioned lane and the legacy alias, package count and identity, Engine compatibility, categories, README coverage, package manifests, permissions, entrypoints, declared file hashes and sizes, ZIP checksums and contents, generated JavaScript syntax, runtime registration, and package-specific contracts.
 
@@ -118,6 +228,8 @@ For a translation, copy the package's English catalog to a BCP 47 locale filenam
 
 These package-adjacent metadata catalogs do not localize executable package interfaces by themselves. Package-owned interfaces keep their own UI catalogs, such as Long-Term Memory's `src/engine/.../locales/en.json`. Loading localized package metadata in **Agents → Download Agents** remains Engine-owned integration work; do not extend the strict Engine manifest or catalog schema from this repository alone.
 
+Noodle and Memory Nag UI translations remain partial, but `scripts/package-ui-translation-baseline.json` records the keys already shipped in each translated catalog. Localization validation names any removed locale/key, including a removal disguised by adding another translation. Add newly reviewed translations to this baseline before release. An intentional key rename or removal must update its baseline in the same PR and explain why the translation is no longer needed; do not lower coverage merely to pass validation.
+
 Also manually install or update affected packages through **Agents → Download Agents** in a compatible Marinara Engine checkout. Verify the supported chat modes, restart behavior, uninstall cleanup, and an offline restart when relevant. Describe exactly what was tested in the PR; do not tick checklist items that were not personally verified.
 
 ## Pull Request Expectations
@@ -126,7 +238,7 @@ Also manually install or update affected packages through **Agents → Download 
 - Target `staging`; contributions to `main` are not accepted.
 - Keep the PR focused and explain the user-facing reason for the change.
 - Mark the PR ready for review only after local validation and self-review.
-- Let CodeRabbit review the ready PR and address actionable findings.
+- Let Dottore review the ready PR, address confirmed findings, and verify its viable verdict covers the final head.
 - Outside and first-time contributors must obtain an approving review from `SpicyMarinara`. Approval from another Pasta-Devs member does not satisfy this gate. Active organization members and owners do not require separate owner approval; those with repository merge permission may merge internal PRs after the required automated gates pass.
 - Update the README and linked Engine documentation when catalog membership, compatibility, setup, or user-visible behavior changes.
 - Include the generated package and catalog outputs when payloads change.
@@ -137,7 +249,7 @@ Also manually install or update affected packages through **Agents → Download 
 A new package must include:
 
 1. A unique directory and `manifest.json` under `packages/`.
-2. At least one Agent definition matching the package ID.
+2. At least one Agent definition matching the package ID. A `ruleset` package is the exception: it ships a validated `ruleset.json` data asset instead of an Agent definition, declares `entrypoints: {}`, no permissions, and no restart, and is built by `node scripts/build-ruleset-packages.mjs`.
 3. Correct category, modes, entrypoints, permissions, compatibility, and restart requirement.
 4. Reproducible package payloads and a generated ZIP artifact.
 5. A catalog entry with valid hashes, sizes, and documentation URL.

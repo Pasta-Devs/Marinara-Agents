@@ -2,17 +2,19 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 async function main() {
   const {
     LTM_DEBUG_MAX_EVENT_BYTES,
     LTM_DEBUG_MAX_LOG_BYTES,
+    LTM_DEBUG_TRIM_TARGET_BYTES,
     readLtmDebugLog,
     recordLtmDebugEvent,
   } =
-    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/debug-log.ts");
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/maintenance/debug-log.ts");
   const { getLongTermMemoryDirectories } =
-    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/paths.ts");
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/paths.ts");
   const root = await mkdtemp(join(tmpdir(), "marinara-ltm-debug-log-"));
   try {
     const boundedCounts = await recordLtmDebugEvent({
@@ -21,10 +23,7 @@ async function main() {
       action: "bounded-counts",
       status: "ok",
       counts: Object.fromEntries(
-        Array.from({ length: 200 }, (_, index) => [
-          `${index}-${"count-key-".repeat(40)}`,
-          index,
-        ]),
+        Array.from({ length: 200 }, (_, index) => [`${index}-${"count-key-".repeat(40)}`, index]),
       ),
     });
     assert.ok(boundedCounts?.counts);
@@ -41,22 +40,14 @@ async function main() {
       message: "界".repeat(10_000),
       uiSummary: "界".repeat(10_000),
       error: new Error("e".repeat(10_000)),
-      counts: Object.fromEntries(
-        Array.from({ length: 200 }, (_, index) => [
-          `${index}-${"界".repeat(300)}`,
-          index,
-        ]),
-      ),
+      counts: Object.fromEntries(Array.from({ length: 200 }, (_, index) => [`${index}-${"界".repeat(300)}`, index])),
       diagnostics: Array.from({ length: 200 }, (_, index) => ({
         index,
         text: "d".repeat(10_000),
         nested: { one: { two: { three: { four: { five: "too deep" } } } } },
       })),
       details: Object.fromEntries(
-        Array.from({ length: 200 }, (_, index) => [
-          `key-${index}`,
-          ["v".repeat(10_000), "discarded"],
-        ]),
+        Array.from({ length: 200 }, (_, index) => [`key-${index}`, ["v".repeat(10_000), "discarded"]]),
       ),
     });
     assert.ok(oversized);
@@ -65,13 +56,8 @@ async function main() {
     assert.equal(oversized.counts, undefined);
     assert.equal(oversized.diagnostics, undefined);
     const debugPath = getLongTermMemoryDirectories(root).debugLog;
-    const firstLine = (await readFile(debugPath, "utf8"))
-      .trim()
-      .split("\n")[1]!;
-    assert.equal(
-      Buffer.byteLength(`${firstLine}\n`) <= LTM_DEBUG_MAX_EVENT_BYTES,
-      true,
-    );
+    const firstLine = (await readFile(debugPath, "utf8")).trim().split("\n")[1]!;
+    assert.equal(Buffer.byteLength(`${firstLine}\n`) <= LTM_DEBUG_MAX_EVENT_BYTES, true);
     assert.deepEqual(JSON.parse(firstLine), oversized);
 
     await Promise.all(
@@ -94,27 +80,55 @@ async function main() {
     const lines = content.trim().split("\n");
     assert.equal(lines.length < 81, true);
     for (const line of lines) assert.doesNotThrow(() => JSON.parse(line));
-    const errors = await readLtmDebugLog({ status: "error" }, root);
-    assert.equal(errors.length > 0, true);
+    for (const [filter, field, expected] of [
+      [{ status: "error" as const }, "status", "error"],
+      [{ phase: "retrieval" as const }, "phase", "retrieval"],
+    ] as const) {
+      const filtered = await readLtmDebugLog(filter, root);
+      assert.equal(filtered.length > 0, true);
+      assert.equal(
+        filtered.every((event) => event[field] === expected),
+        true,
+      );
+    }
+
+    // A full log is trimmed well below the cap, so the lines after a trim are plain appends again.
+    const largeEvent = (action: string) =>
+      recordLtmDebugEvent({
+        root,
+        phase: "retrieval",
+        action,
+        status: "ok",
+        diagnostics: Array.from({ length: 30 }, (_, diagnosticIndex) => ({
+          diagnosticIndex,
+          payload: `${action}:`.padEnd(2_000, "z"),
+        })),
+      });
+    let size = (await stat(debugPath)).size;
+    let trimmed = false;
+    for (let index = 0; index < 80 && !trimmed; index += 1) {
+      await largeEvent(`trim-${index}`);
+      const next = (await stat(debugPath)).size;
+      trimmed = next < size;
+      size = next;
+    }
+    assert.equal(trimmed, true, "filling the log must trim it");
+    assert.equal(size <= LTM_DEBUG_TRIM_TARGET_BYTES, true, "a trimmed log must end at or below the trim target");
+    const afterTrim = await readFile(debugPath, "utf8");
+    await largeEvent("after-trim");
+    const afterNext = await readFile(debugPath, "utf8");
     assert.equal(
-      errors.every((event) => event.status === "error"),
+      afterNext.startsWith(afterTrim),
       true,
-    );
-    const retrieval = await readLtmDebugLog({ phase: "retrieval" }, root);
-    assert.equal(retrieval.length > 0, true);
-    assert.equal(
-      retrieval.every((event) => event.phase === "retrieval"),
-      true,
+      "the line after a trim must be appended, not trigger another rewrite",
     );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-  process.stdout.write(
-    "Long-Term Memory debug log regression: bounds, rotation, and filters ok\n",
-  );
+  process.stdout.write("Long-Term Memory debug log regression: bounds, rotation, and filters ok\n");
 }
 
-void main().catch((error) => {
+void runRegressionToCompletion("long-term-memory-debug-log", main).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

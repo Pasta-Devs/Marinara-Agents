@@ -1,0 +1,133 @@
+import assert from "node:assert/strict";
+import { join } from "node:path";
+
+import {
+  slurpPollBackoffMs,
+  SLURP_POLL_BACKOFF_MAX_MS,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/base/model/slp-poll-backoff.js";
+import { slurp2Source } from "./slurp2-source";
+
+// A healthy poll keeps its normal cadence; a connection that keeps failing is retried
+// exponentially slower instead of once a minute forever, and never slower than the cap.
+assert.equal(slurpPollBackoffMs(60_000, 0), 60_000);
+assert.equal(slurpPollBackoffMs(60_000, -1), 60_000);
+assert.equal(slurpPollBackoffMs(60_000, 1), 120_000);
+assert.equal(slurpPollBackoffMs(60_000, 3), 480_000);
+assert.equal(slurpPollBackoffMs(60_000, 50), SLURP_POLL_BACKOFF_MAX_MS);
+
+const root = join(import.meta.dirname, "..");
+const read = (path: string) =>
+  slurp2Source(join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp", path));
+
+const storage = slurp2Source(
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
+);
+const autoPost = read("slurp-autopost-scheduler.service.ts");
+assert.match(autoPost, /slurpPollBackoffMs\(POLL_MS, consecutiveFailures\)/);
+assert.match(autoPost, /consecutiveFailures = failed \? consecutiveFailures \+ 1 : 0;/);
+// Cosmetic image work has its own brake and must never touch the publishing poll's clock. It used
+// to set `failed`, so a single creator whose picture could not be drawn — most often because no
+// image connection is configured at all — walked the reserve poll out to thirty minutes and held
+// it there, and due posts stopped going out for a reason that had nothing to do with posting.
+assert.doesNotMatch(
+  autoPost,
+  /failed = artwork === "unavailable"|failed = failed \|\| redrawn === "failed"/u,
+  "artwork and image retries must not feed the publishing poll's backoff",
+);
+assert.match(autoPost, /imageWorkFailures = imageWorkFailed \? imageWorkFailures \+ 1 : 0;/u);
+assert.match(
+  autoPost,
+  /imageWorkNotBefore = imageWorkFailed \? Date\.now\(\) \+ slurpPollBackoffMs\(POLL_MS, imageWorkFailures\) : 0;/u,
+  "a failing image backend must still be backed off, just on its own clock",
+);
+assert.match(autoPost, /if \(Date\.now\(\) >= imageWorkNotBefore\) \{/u);
+
+const fanActivity = read("slurp-fan-activity-scheduler.service.ts");
+assert.match(fanActivity, /schedule\(slurpPollBackoffMs\(POLL_MS, consecutiveFailures\)\)/);
+
+// Unattended artwork must yield the image connection to the user's own work.
+const artwork = read("slurp-artwork.operation.ts");
+const backfill = artwork.slice(artwork.indexOf("export async function backfillNextCreatorArtwork"));
+assert.match(backfill, /admissionMode: \{ kind: "background" \}/);
+assert.match(backfill, /if \(slpIsAdmissionFailure\(error\)\) return "idle";/);
+
+console.log("slurp poll backoff regression passed");
+
+// A post whose image failed publishes anyway, keeps its prompt, and is redrawn later — bounded
+// by an attempt budget so a broken image connection cannot retry for ever.
+const images = read("slurp-images.service.ts");
+assert.match(images, /imageRetryAttempts: attempts/);
+// The prompt is kept even once the automatic budget is spent. Deleting it left a permanently
+// image-less post with no record of what the picture was meant to be, so nobody could redraw it
+// by hand — which is the one thing left to do after three automatic failures. The automatic pass
+// stops on the attempt counter checked below, so the prompt never needed to be the off switch.
+assert.doesNotMatch(images, /imagePrompt: attempts >= SLP_CREATOR_POST_IMAGE_RETRY_LIMIT \? null : undefined/);
+assert.match(images, /if \(slpIsAdmissionFailure\(error\)\) \{\s*await noodle\.releasePostImageClaim/);
+assert.match(images, /retryNextFailedPostImage/);
+assert.match(images, /admissionMode: \{ kind: "background" \}/);
+assert.match(autoPost, /retryNextFailedPostImage\(\)/);
+
+const awaitingStart = storage.indexOf("async listNoodlerPostsAwaitingImageRetry");
+const awaiting = storage.slice(awaitingStart, storage.indexOf("// Unbounded", awaitingStart));
+// Posts waiting on the user's own prompt review are never hijacked by the automatic retry.
+assert.match(
+  awaiting,
+  /metadata\.imagePendingReview === true \|\|\s*\(metadata\.imageGenerationFailed !== true && metadata\.imageGenerationDeferred !== true\)/,
+);
+assert.match(awaiting, /slpCreatorPostImageRetryAttempts\(metadata\) >= SLP_CREATOR_POST_IMAGE_RETRY_LIMIT/);
+
+// The failure fallbacks persist the prompt, or there would be nothing to redraw from.
+const generation = read("slurp-generation.service.ts");
+// The persist sites moved from the generation service into the post media operation, where the
+// prompt is `prompt`: three failure fallbacks and two success paths.
+assert.equal(generation.split("imagePrompt: prompt").length - 1, 5);
+
+// A busy or unconfigured image connection is a deferral, not a provider failure: counting it as
+// a failure would back the whole poll off while the user is simply using the connection.
+assert.match(images, /let deferred = 0;/);
+assert.match(images, /return result\.deferred > 0 \? "idle" : "failed";/);
+// The attempt counter comes from persisted JSON: a NaN would read as "under the limit" for ever.
+const retryHelper = read("slurp-image-retry.ts");
+assert.match(retryHelper, /Number\.isFinite\(attempts\) && attempts > 0 \? attempts : 0/);
+assert.doesNotMatch(images, /Number\(claimed\.metadata\.imageRetryAttempts/);
+assert.doesNotMatch(storage, /Number\(metadata\.imageRetryAttempts/);
+// The per-minute candidate scan is bounded.
+assert.match(storage, /\.limit\(IMAGE_RETRY_SCAN_LIMIT\)/);
+
+console.log("slurp image retry regression passed");
+
+// The Engine's fallback wrapper takes no admission mode. Passing one there compiles (the
+// package bundles with esbuild, which does not typecheck) but drops it, so the generation ran
+// unadmitted and never booked its daily attempt — the reserve poll then regenerated a post on
+// every pass. Admission must wrap the composed provider instead.
+// slurp-public-generation.service.ts was deleted: it had no importers, so its copy of this rule
+// would have passed forever no matter what the running code did. The invariant itself still
+// matters, so it stays pointed at the live generation path.
+// The composed provider is built in the host integrations, which the generation service calls.
+for (const file of ["slp/base/host/slp-generation-integrations.ts"]) {
+  const source = slurp2Source(join(root, "packages/slurp2/src/engine/packages/server/src", file));
+  const fallbackStart = source.indexOf("withConnectionFallbackProvider({");
+  const fallbackCall = source.slice(fallbackStart, source.indexOf("})", fallbackStart));
+  assert.doesNotMatch(fallbackCall, /admissionMode/, `${file} passes admissionMode to the fallback wrapper`);
+  assert.match(
+    source,
+    /withConnectionAdmissionProvider\(\s*(?:fallbackProvider|withConnectionFallbackProvider\()/,
+    `${file} does not admit its provider`,
+  );
+}
+
+// The correction pass is a step inside an already-admitted run, so it must not book a second
+// attempt. This used to be asserted only against the dead public-generation file.
+const admittedGeneration = read("slurp-generation.service.ts");
+assert.equal(
+  admittedGeneration.split("provider.chatComplete").length - 1,
+  3, // first call, correction turn, and revision turn
+  "the first call, correction and revision turns share one admission",
+);
+assert.doesNotMatch(
+  admittedGeneration.slice(admittedGeneration.indexOf("const correctionMessages")),
+  /withConnectionAdmissionProvider\(/,
+  "the correction turn must not request its own admission",
+);
+
+console.log("slurp connection admission regression passed");

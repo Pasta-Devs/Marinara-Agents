@@ -1,0 +1,610 @@
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { configurePackageRuntime } from "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts";
+import {
+  previewPackageInterop,
+  previewPackageLorebooks,
+  importPackageInterop,
+} from "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/interop.ts";
+import {
+  ltmInteropPreviewResponseSchema,
+  ltmLorebookPreviewResponseSchema,
+  ltmImportSourceNotesRequestSchema,
+} from "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts";
+import {
+  errorMessage,
+  failedResponseError,
+  mergeSourcePreviewPages,
+  mergeLorebookPreviewPages,
+  fetchSourceDetails,
+  request,
+  requestAllNotes,
+  requestNotesByIds,
+} from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/api.ts";
+
+async function main() {
+  const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-source-pages-"));
+  const root = join(dataDir, "long-term-memory");
+  const characters = Array.from({ length: 205 }, (_, index) => ({
+    id: `character-${String(index).padStart(3, "0")}`,
+    data: { name: `Navigator ${index}`, description: "Keeps the charts." },
+    comment: "",
+  }));
+  const chats = ["roleplay", "conversation"].map((mode) => ({
+    id: `chat-${mode}`,
+    name: mode,
+    mode,
+    characterIds: [],
+    groupId: null,
+    personaId: null,
+    connectionId: null,
+    metadata:
+      mode === "roleplay"
+        ? {
+            summaryEntries: Array.from({ length: 205 }, (_, index) => ({
+              id: `summary-${String(index).padStart(3, "0")}`,
+              content: `Voyage ${index}.`,
+            })),
+          }
+        : { daySummaries: { "2026-09-01": "A separate conversation." } },
+    lastMessageAt: null,
+    updatedAt: "2026-09-13T00:00:00.000Z",
+  }));
+  const books = [
+    {
+      id: "book-a",
+      data: { name: "Atlas", category: "World" },
+      entries: [{ id: "long-entry", name: "Long Entry", content: "A coast worth remembering. ".repeat(210_000) }],
+    },
+    ...Array.from({ length: 105 }, (_, index) => ({
+      id: `book-${String(index).padStart(3, "0")}`,
+      data: { name: `Empty atlas ${index}` },
+      entries: [],
+    })),
+  ];
+  const release = configurePackageRuntime({
+    dataDir,
+    logger: { debug() {}, info() {}, warn() {}, error() {} },
+    resources: {
+      async listCharacters() {
+        return [...characters].reverse();
+      },
+      async listPersonas() {
+        return [];
+      },
+      async listLorebooks() {
+        return [...books].reverse();
+      },
+    },
+    persistence: {
+      async listChats() {
+        return chats;
+      },
+      async getChat(id) {
+        return chats.find((chat) => chat.id === id) ?? null;
+      },
+      async updateChatMetadata() {},
+    },
+  });
+  try {
+    const first = ltmInteropPreviewResponseSchema.parse(
+      await previewPackageInterop({ source: "characters", query: "Navigator", limit: 100 }, root),
+    );
+    assert.equal(first.samples.length, 100);
+    assert.equal(first.hasMore, true);
+    assert.ok(first.nextCursor);
+    assert.equal(first.samples[0]?.sourceId, "character-000");
+    // Remove an earlier item and insert one before the cursor: continuation neither
+    // skips existing later records nor returns the earlier records a second time.
+    characters.shift();
+    characters.unshift({
+      id: "character-000-new",
+      data: { name: "Navigator new", description: "New chart." },
+      comment: "",
+    });
+    const second = ltmInteropPreviewResponseSchema.parse(
+      await previewPackageInterop(
+        { source: "characters", query: "  NAVIGATOR  ", limit: 100, cursor: first.nextCursor },
+        root,
+      ),
+    );
+    const third = ltmInteropPreviewResponseSchema.parse(
+      await previewPackageInterop(
+        { source: "characters", query: "Navigator", limit: 100, cursor: second.nextCursor! },
+        root,
+      ),
+    );
+    assert.equal(second.samples[0]?.sourceId, "character-100");
+    assert.equal(third.samples.length, 5);
+    assert.equal(third.hasMore, false);
+    assert.equal(third.nextCursor, null);
+    const merged = mergeSourcePreviewPages([first, second, third])!;
+    assert.equal(merged.samples.length, 205);
+    assert.equal(new Set(merged.samples.map((sample) => sample.sourceId)).size, 205);
+    for (const changed of [
+      { source: "chats" as const },
+      { mode: "game" as const },
+      { query: "different" },
+      { sourceScope: { chatId: "other" } },
+      { cursor: "not-a-cursor" },
+    ]) {
+      await assert.rejects(
+        previewPackageInterop(
+          { source: "characters", query: "Navigator", limit: 100, cursor: first.nextCursor, ...changed },
+          root,
+        ),
+        (error: any) => error.code === "ltm_invalid_source_cursor" && error.statusCode === 400,
+      );
+    }
+    const importedId = second.samples[0]!.sourceId;
+    await importPackageInterop(
+      {
+        source: "characters",
+        sourceIds: [importedId],
+        destinationScope: { characterIds: [importedId] },
+        limit: 100,
+        extract: false,
+      },
+      root,
+      new AbortController().signal,
+    );
+    const refreshedSecond = await previewPackageInterop(
+      { source: "characters", query: "Navigator", limit: 100, cursor: first.nextCursor },
+      root,
+    );
+    assert.equal(refreshedSecond.samples[0]?.status, "imported");
+    assert.equal(
+      mergeSourcePreviewPages([first, second, refreshedSecond])?.samples.find((row) => row.sourceId === importedId)
+        ?.status,
+      "imported",
+    );
+    assert.equal(
+      ltmImportSourceNotesRequestSchema.safeParse({
+        source: "characters",
+        sourceIds: characters.slice(0, 101).map((row) => row.id),
+      }).success,
+      false,
+    );
+
+    const scopedPages = [];
+    let cursor: string | undefined;
+    do {
+      const page = ltmInteropPreviewResponseSchema.parse(
+        await previewPackageInterop(
+          { source: "chats", sourceScope: { chatId: "chat-roleplay" }, mode: "roleplay", limit: 100, cursor },
+          root,
+        ),
+      );
+      scopedPages.push(page);
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    assert.equal(mergeSourcePreviewPages(scopedPages)?.samples.length, 205);
+    assert.ok(scopedPages.every((page) => page.samples.every((row) => row.sourceId.startsWith("chat-roleplay:"))));
+
+    const lorePages = [];
+    cursor = undefined;
+    do {
+      const page = ltmLorebookPreviewResponseSchema.parse(await previewPackageLorebooks({ limit: 100, cursor }, root));
+      assert.ok(page.books.length <= 100 && page.counts.candidates <= 100);
+      lorePages.push(page);
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    const normalizedLoreContinuation = await previewPackageLorebooks(
+      { limit: 100, query: "   ", cursor: lorePages[0]!.nextCursor! },
+      root,
+    );
+    assert.deepEqual(normalizedLoreContinuation, lorePages[1], "blank search keeps empty-book pagination unchanged");
+    const lore = mergeLorebookPreviewPages(lorePages)!;
+    assert.equal(lore.books.length, 106, "all empty books and the large book remain reachable");
+    assert.equal(lore.counts.candidates, lore.totals.candidates, "a large entry continues until every chunk is loaded");
+    const entry = lore.books.find((book) => book.id === "book-a")!.entries[0]!;
+    assert.ok(entry.candidates.length > 100);
+    assert.equal(entry.candidateCount, entry.candidates.length);
+    assert.equal(new Set(entry.candidates.map((candidate) => candidate.sourceId)).size, entry.candidates.length);
+    assert.equal(
+      mergeLorebookPreviewPages([...lorePages, lorePages.at(-1)!])?.counts.candidates,
+      lore.counts.candidates,
+      "append deduplicates repeated pages",
+    );
+    await assert.rejects(
+      previewPackageLorebooks({ limit: 100, query: "Atlas", cursor: lorePages[0]!.nextCursor! }, root),
+      (error: any) => error.code === "ltm_invalid_source_cursor",
+    );
+    const originalFetch = globalThis.fetch;
+    const detailBatches: string[][] = [];
+    const detailIds = Array.from({ length: 205 }, (_, index) => `detail-${index}`);
+    const detailSignal = new AbortController().signal;
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      assert.equal(init?.signal, detailSignal);
+      assert.equal(body.source, "lorebooks");
+      assert.deepEqual(body.sourceScope, { chatId: "chat-roleplay" });
+      assert.equal(body.mode, "roleplay");
+      assert.ok(body.sourceIds.length <= 100);
+      detailBatches.push(body.sourceIds);
+      return Response.json({
+        source: "lorebooks",
+        details: body.sourceIds.filter((id: string) => id !== "detail-204").map((sourceId: string) => ({ sourceId })),
+        missingSourceIds: body.sourceIds.filter((id: string) => id === "detail-204"),
+      });
+    };
+    try {
+      const details = await fetchSourceDetails(
+        {
+          source: "lorebooks",
+          sourceIds: [...detailIds, detailIds[0]!],
+          mode: "roleplay",
+          sourceScope: { chatId: "chat-roleplay" },
+        },
+        detailSignal,
+      );
+      assert.deepEqual(
+        detailBatches.map((batch) => batch.length),
+        [100, 100, 5],
+      );
+      assert.deepEqual(
+        details.details.map((detail) => detail.sourceId),
+        detailIds.slice(0, -1),
+      );
+      assert.deepEqual(details.missingSourceIds, ["detail-204"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    // #1375: an HTTP status line is not a message for the user; the caller's localized fallback shows instead.
+    globalThis.fetch = async (url) =>
+      String(url).endsWith("/locked")
+        ? Response.json({ error: "Memory is locked." }, { status: 409 })
+        : new Response("", { status: 404, statusText: "Not Found" });
+    try {
+      const statusOnly = await request("/missing").catch((error: unknown) => error);
+      assert.equal((statusOnly as { status?: number }).status, 404);
+      assert.equal(errorMessage(statusOnly, "Could not load."), "Could not load.");
+      assert.equal(
+        errorMessage(await request("/locked").catch((error: unknown) => error), "Could not load."),
+        "Memory is locked.",
+      );
+      // The raw-Response export paths read the body themselves and share the same error construction.
+      assert.equal(
+        errorMessage(
+          await failedResponseError(new Response("", { status: 500, statusText: "Internal Server Error" })),
+          "Could not export.",
+        ),
+        "Could not export.",
+      );
+      assert.equal(
+        errorMessage(
+          await failedResponseError(Response.json({ error: "Export blocked." }, { status: 409 })),
+          "Could not export.",
+        ),
+        "Export blocked.",
+      );
+      // An unexpected server failure has no text for users: LTM's route fallback, or the Engine's generic 500 for a
+      // route without routeError. The caller's localized message shows; the server text stays on the error.
+      const routeFallback = await failedResponseError(
+        Response.json({ error: "Failed to reset settings", code: "ltm_unexpected_failure" }, { status: 500 }),
+      );
+      assert.equal(errorMessage(routeFallback, "Could not reset memory settings."), "Could not reset memory settings.");
+      assert.equal(routeFallback.message, "Failed to reset settings");
+      assert.equal(
+        errorMessage(
+          await failedResponseError(Response.json({ error: "Internal Server Error" }, { status: 500 })),
+          "Could not reset memory settings.",
+        ),
+        "Could not reset memory settings.",
+      );
+      assert.equal(
+        errorMessage(
+          await failedResponseError(
+            Response.json({ error: "Memory not found.", code: "ltm_note_not_found" }, { status: 404 }),
+          ),
+          "Could not load.",
+        ),
+        "Memory not found.",
+      );
+      assert.equal(
+        errorMessage(
+          await failedResponseError(Response.json({ error: "Export fixture failed." }, { status: 500 })),
+          "Could not export.",
+        ),
+        "Export fixture failed.",
+      );
+      assert.equal(errorMessage(new Error("Plain failure"), "Could not load."), "Plain failure");
+      assert.equal(errorMessage("not an error", "Could not load."), "Could not load.");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    console.log(
+      "Long-Term Memory source pagination passed: scoped cursors, mutation-safe continuation, import status, limits, empty books, split entries, status-only request errors, unexpected server failures and export failures.",
+    );
+  } finally {
+    release();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+}
+// #1751: imported notes whose source is gone are listed on an unfiltered first page only, and never by a false match.
+async function outdatedNotes() {
+  const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-outdated-"));
+  const root = join(dataDir, "long-term-memory");
+  const characters = ["alpha", "beta"].map((id) => ({
+    id: `character-${id}`,
+    data: { name: `Navigator ${id}`, description: "Keeps the charts." },
+    comment: "",
+  }));
+  const chat = {
+    id: "chat-voyage",
+    name: "Voyage",
+    mode: "roleplay",
+    characterIds: [],
+    groupId: null,
+    personaId: null,
+    connectionId: null,
+    metadata: {
+      summaryEntries: [
+        { id: "summary-a", content: "The first voyage." },
+        { id: "summary-b", content: "The second voyage." },
+      ],
+    },
+    lastMessageAt: null,
+    updatedAt: "2026-09-13T00:00:00.000Z",
+  };
+  const chatsInVault = [chat];
+  const chatMessages = [
+    {
+      id: "m1",
+      chatId: chat.id,
+      role: "user",
+      characterId: null,
+      content: "I open the Moon Vault.",
+      activeSwipeIndex: 0,
+      extra: {},
+      createdAt: "2026-09-13T00:00:00.000Z",
+    },
+  ];
+  const books = [
+    {
+      id: "book-atlas",
+      data: { name: "Atlas", category: "World" },
+      entries: [
+        { id: "entry-coast", name: "Coast", content: "A coast worth remembering." },
+        { id: "entry-reef", name: "Reef", content: "A reef worth avoiding." },
+      ],
+    },
+  ];
+  const release = configurePackageRuntime({
+    dataDir,
+    logger: { debug() {}, info() {}, warn() {}, error() {} },
+    resources: {
+      async listCharacters() {
+        return characters;
+      },
+      async listPersonas() {
+        return [];
+      },
+      async listLorebooks() {
+        return books;
+      },
+    },
+    persistence: {
+      async listChats() {
+        return chatsInVault;
+      },
+      async getChat(id) {
+        return chatsInVault.find((row) => row.id === id) ?? null;
+      },
+      async listMessages() {
+        return chatMessages;
+      },
+      async updateChatMetadata() {},
+    },
+  });
+  try {
+    const signal = new AbortController().signal;
+    const importOne = async (source: "characters" | "chats" | "messages" | "lorebooks", sourceId: string) => {
+      const done = await importPackageInterop(
+        {
+          source,
+          sourceIds: [sourceId],
+          ...(source === "messages" ? { chatId: chat.id } : {}),
+          destinationScope: { characterIds: ["character-alpha"] },
+          extract: false,
+          limit: 100,
+        },
+        root,
+        signal,
+      );
+      assert.equal(done.imported.length, 1, `imported ${sourceId}`);
+      return done.imported[0]!.note.id;
+    };
+    const previewSources = {
+      characters: { source: "characters" as const, limit: 100 },
+      chats: { source: "chats" as const, limit: 100 },
+      messages: { source: "messages" as const, chatId: chat.id, limit: 100 },
+    };
+    const sampleId = async (name: keyof typeof previewSources, index = 0) =>
+      (await previewPackageInterop(previewSources[name], root)).samples[index]!.sourceId;
+    const coastSourceId = (await previewPackageLorebooks({ limit: 100 }, root)).books
+      .flatMap((book) => book.entries)
+      .find((item) => item.id === "entry-coast")!.candidates[0]!.sourceId;
+
+    const characterNote = await importOne("characters", await sampleId("characters"));
+    const summaryNote = await importOne("chats", await sampleId("chats"));
+    const messageNote = await importOne("messages", await sampleId("messages"));
+    const loreNote = await importOne("lorebooks", coastSourceId);
+
+    // Nothing is missing yet, so no preview reports an outdated note.
+    for (const name of Object.keys(previewSources) as (keyof typeof previewSources)[]) {
+      assert.equal((await previewPackageInterop(previewSources[name], root)).outdated, undefined);
+    }
+    assert.equal((await previewPackageLorebooks({ limit: 100 }, root)).outdated, undefined);
+
+    // Delete every imported source; one note's sibling stays, so only the imported piece is reported.
+    characters.shift();
+    chat.metadata.summaryEntries.shift();
+    chatMessages.length = 0;
+    books[0]!.entries.shift();
+    const outdatedIds = async (preview: { outdated?: { noteId: string }[] }) =>
+      (preview.outdated ?? []).map((row) => row.noteId).sort();
+    for (const [name, noteId] of [
+      ["characters", characterNote],
+      ["chats", summaryNote],
+      ["messages", messageNote],
+    ] as const) {
+      const preview = ltmInteropPreviewResponseSchema.parse(await previewPackageInterop(previewSources[name], root));
+      assert.deepEqual(await outdatedIds(preview), [noteId], `${name} reports its note as outdated`);
+      assert.equal(preview.outdated![0]!.title.length > 0, true);
+      // A search reports nothing: it has not seen the whole source.
+      assert.equal(
+        (await previewPackageInterop({ ...previewSources[name], query: "zzz-no-match" }, root)).outdated,
+        undefined,
+        `${name} search reports nothing`,
+      );
+    }
+    // The chat note is judged by its chat's scope, not the scope it was imported with: this chat has no characters.
+    assert.equal(
+      (
+        await previewPackageInterop(
+          { ...previewSources.messages, sourceScope: { characterIds: ["character-alpha"] } },
+          root,
+        )
+      ).outdated,
+      undefined,
+      "a chat outside the source scope is not reported",
+    );
+    const lorePreview = ltmLorebookPreviewResponseSchema.parse(await previewPackageLorebooks({ limit: 100 }, root));
+    assert.deepEqual(await outdatedIds(lorePreview), [loreNote], "lorebooks report the deleted entry");
+    assert.equal((await previewPackageLorebooks({ limit: 100, query: "Atlas" }, root)).outdated, undefined);
+
+    // A branch sibling that repeats an imported summary is deduplicated without making its note look outdated.
+    await importOne("chats", (await previewPackageInterop(previewSources.chats, root)).samples[0]!.sourceId);
+    chat.groupId = "group-branches" as never;
+    chatsInVault.push({
+      ...chat,
+      id: "chat-voyage-branch",
+      metadata: {
+        summaryEntries: [
+          { id: "summary-b", content: "The second voyage." },
+          { id: "summary-c", content: "The third voyage." },
+        ],
+      },
+    });
+    await importOne("chats", "chat-voyage-branch:summary-b");
+    assert.deepEqual(
+      await outdatedIds(await previewPackageInterop(previewSources.chats, root)),
+      [summaryNote],
+      "a deduplicated branch sibling is not outdated",
+    );
+    // A mode filter that hides the roleplay chats' rows does not turn their still existing sources into outdated notes.
+    assert.deepEqual(
+      await outdatedIds(await previewPackageInterop({ ...previewSources.chats, mode: "game" }, root)),
+      [summaryNote],
+      "a mode filter keeps existing sources",
+    );
+    // A source scope that excludes the gone note's chat lists nothing.
+    assert.equal(
+      (await previewPackageInterop({ ...previewSources.chats, sourceScope: { chatIds: ["chat-elsewhere"] } }, root))
+        .outdated,
+      undefined,
+    );
+    // Only the first page lists the notes.
+    const firstPage = await previewPackageInterop({ ...previewSources.chats, limit: 1 }, root);
+    assert.deepEqual(await outdatedIds(firstPage), [summaryNote]);
+    assert.ok(firstPage.nextCursor);
+    assert.equal(
+      (await previewPackageInterop({ ...previewSources.chats, limit: 1, cursor: firstPage.nextCursor! }, root))
+        .outdated,
+      undefined,
+      "a continuation page reports nothing",
+    );
+
+    // A continuation page carries no list; the merged result keeps the first page's.
+    const chatsPage = ltmInteropPreviewResponseSchema.parse(await previewPackageInterop(previewSources.chats, root));
+    assert.deepEqual(
+      mergeSourcePreviewPages([chatsPage, { ...chatsPage, outdated: undefined }])?.outdated?.map((row) => row.noteId),
+      [summaryNote],
+    );
+    assert.deepEqual(
+      mergeLorebookPreviewPages([lorePreview, { ...lorePreview, outdated: undefined }])?.outdated?.map(
+        (row) => row.noteId,
+      ),
+      [loreNote],
+    );
+  } finally {
+    release();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+}
+// Client note requests page through the whole vault, send the stored admin secret, and stop at the note limit.
+async function noteRequestPaging() {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+  const requestedOffsets: string[] = [];
+  const requestedHeaders: Headers[] = [];
+  try {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { localStorage: { getItem: () => "  ltm-secret  " } },
+    });
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input : input.url,
+        "http://localhost",
+      );
+      requestedHeaders.push(new Headers(init?.headers));
+      requestedOffsets.push(url.searchParams.get("offset") ?? "");
+      const offset = Number(url.searchParams.get("offset"));
+      return new Response(JSON.stringify(offset === 0 ? Array.from({ length: 500 }, (_, id) => id) : [500]));
+    }) as typeof fetch;
+    assert.equal((await requestAllNotes<number>("/notes?includeGlobal=true")).length, 501);
+    assert.deepEqual(requestedOffsets, ["0", "500"]);
+    assert.equal(requestedHeaders[0].get("X-Admin-Secret"), "ltm-secret");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete (globalThis as { window?: Window }).window;
+    else globalThis.window = originalWindow;
+  }
+  try {
+    globalThis.fetch = (async () => new Response(JSON.stringify([]))) as typeof fetch;
+    await assert.rejects(requestNotesByIds<{ id: string }>(["source_missing"]), /context unavailable for 1 note/u);
+    assert.deepEqual(await requestNotesByIds<{ id: string }>(["target_missing"], undefined, true), []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  requestedOffsets.length = 0;
+  requestedHeaders.length = 0;
+  try {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { localStorage: { getItem: () => null } },
+    });
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input : input.url,
+        "http://localhost",
+      );
+      requestedHeaders.push(new Headers(init?.headers));
+      requestedOffsets.push(url.searchParams.get("offset") ?? "");
+      return new Response(JSON.stringify(Array.from({ length: 500 }, (_, id) => id)));
+    }) as typeof fetch;
+    await assert.rejects(requestAllNotes<number>("/notes"), {
+      message: "Long-Term Memory note limit exceeded (100,000 notes)",
+    });
+    assert.equal(requestedOffsets.length, 201);
+    assert.equal(requestedOffsets.at(-1), "100000");
+    assert.equal(requestedHeaders[0].has("X-Admin-Secret"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete (globalThis as { window?: Window }).window;
+    else globalThis.window = originalWindow;
+  }
+}
+
+void (async () => {
+  await main();
+  await outdatedNotes();
+  await noteRequestPaging();
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

@@ -1,0 +1,72 @@
+import assert from "node:assert/strict";
+import { slurpPostCameraSource } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-camera-source";
+import {
+  slurpPostEffort,
+  slurpProductionProfile,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-production-profile";
+import { SLURP_THREAD_STATE_DEFAULT } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-creator-state";
+import {
+  SLURP_DEFAULT_REPLY_DELAYS,
+  slurpReplyPacing,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-messaging";
+import { slurpRapportTier } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-rapport";
+
+const share = (options: Parameters<typeof slurpPostCameraSource>[2], source: string) => {
+  let hits = 0;
+  for (let sequence = 0; sequence < 400; sequence += 1) {
+    if (slurpPostCameraSource("camera-creator", sequence, options) === source) hits += 1;
+  }
+  return hits / 400;
+};
+
+// A planned shoot is not photographed at arm's length, and an ordinary day is not on a tripod.
+const setSelfies = share({ companyCanHoldCamera: true, intent: "set", effort: "high" }, "selfie");
+const casualSelfies = share({ companyCanHoldCamera: true, intent: "casual", effort: "low" }, "selfie");
+assert.ok(setSelfies < 0.2, `a planned shoot is a selfie ${Math.round(setSelfies * 100)}% of the time`);
+assert.ok(casualSelfies > setSelfies * 2, "an ordinary day should still be mostly a phone in her hand");
+// Slice I (user, 2026-09-28): the old "a planned shoot is mostly a timer" rule is loosened (timer shots
+// ~15-20 % of a feed, more camera variety). A planned shoot is still shot hands-free: a timer, the desk
+// camera or somebody else holding it, just not always the timer.
+const setShare = (source: string) => share({ companyCanHoldCamera: true, intent: "set", effort: "high" }, source);
+const setHandsFree = setShare("tripod") + setShare("desk") + setShare("partner");
+assert.ok(setHandsFree > 0.5, `a planned shoot is hands-free only ${Math.round(setHandsFree * 100)}% of the time`);
+assert.ok(setShare("tripod") > 0.1 && setShare("tripod") < 0.35, "the timer is part of a shoot, not all of it");
+// Nothing is ruled out: the draw stays a draw. Mirror shots are rare on purpose since 0.2.75 (image
+// models drew the Creator twice), but a planned shoot can still use one.
+assert.ok(share({ companyCanHoldCamera: true, intent: "set", effort: "high" }, "mirror") > 0.01);
+
+// Two Creators who shoot the same way no longer share one effort sequence.
+const profile = slurpProductionProfile("creator-one", "polished");
+const one = Array.from({ length: 24 }, (_, index) => slurpPostEffort(profile, index, "creator-one"));
+const two = Array.from({ length: 24 }, (_, index) => slurpPostEffort(profile, index, "creator-two"));
+assert.notDeepEqual(one, two, "same style, same effort sequence");
+
+// A conversation starts between strangers.
+assert.equal(SLURP_THREAD_STATE_DEFAULT.posture, "open");
+assert.equal(SLURP_THREAD_STATE_DEFAULT.familiarity, 0);
+assert.equal(slurpRapportTier(0), "stranger");
+
+// A first message from a stranger is answered the same hour, not two hours later.
+const rapport = { score: 0, tier: "stranger" as const, contributions: [] };
+const firstReply = slurpReplyPacing({
+  online: false,
+  rapport,
+  subscribed: false,
+  messageLength: 40,
+  minutesUntilOnline: null,
+  firstContact: true,
+});
+assert.ok(firstReply.notBeforeMs <= 60 * 60_000, `a first reply waits ${firstReply.notBeforeMs / 60_000} minutes`);
+// A cold thread the Creator has already answered still waits longer than an online reply.
+const laterReply = slurpReplyPacing({
+  online: false,
+  rapport,
+  subscribed: false,
+  messageLength: 40,
+  minutesUntilOnline: null,
+});
+assert.ok(laterReply.notBeforeMs >= firstReply.notBeforeMs);
+assert.ok(SLURP_DEFAULT_REPLY_DELAYS.messagesUnknownReturnDelayMinutes <= 60);
+assert.ok(SLURP_DEFAULT_REPLY_DELAYS.messagesMaxReplyDelayMinutes <= 120);
+
+console.log("slurp realism regression passed");

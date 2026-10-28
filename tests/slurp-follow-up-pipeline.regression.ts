@@ -1,0 +1,42 @@
+import assert from "node:assert/strict";
+import { slurp2Source } from "./slurp2-source";
+
+const read = (path: string) => slurp2Source(path);
+const scheduler = read(
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-follow-up-scheduler.service.ts",
+);
+
+// 2.3 — a follow-up obeys cool-off, night quiet and known offline schedule delays.
+assert.match(scheduler, /const coolingOff = Boolean\(thread\.coolUntil/u);
+assert.match(scheduler, /resolveSlurpCreatorAvailability\(/u);
+assert.match(
+  scheduler,
+  /if \(coolingOff \|\| quiet \|\| \(!availability\.online && availability\.minutesUntilOnline !== null\)\) \{[\s\S]{0,900}?postponeScheduledFollowUp\([\s\S]{0,600}?continue;/u,
+  "a silenced follow-up must be postponed, not sent",
+);
+assert.match(
+  scheduler,
+  /!availability\.online && availability\.minutesUntilOnline !== null/u,
+  "unknown return time must not livelock a follow-up",
+);
+assert.doesNotMatch(scheduler, /coolingOff: false/u, "the follow-up must pass the real cool-off state");
+
+// 2.4 — the follow-up reply applies the same outcome as a normal reply.
+assert.match(scheduler, /recordCreatorStateSignals\(threadRow\.creatorAccountId, reply\.stateSignals\)/u);
+// Step 6.5: the boundary also takes the player's cool-off minutes.
+assert.match(
+  scheduler,
+  /applyFollowUpBoundary\(\s*messages,\s+threadRow\.id,\s+reply\.latitude,\s+settings\.messagesCoolOffMinutes,?\s*\)/u,
+);
+
+// 2.2 — the thread route and the client type both carry the scheduled follow-ups the UI renders.
+for (const route of ["packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts"]) {
+  assert.match(read(route), /scheduledFollowUps: thread\.scheduledFollowUps/u, route);
+}
+assert.match(
+  read("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts"),
+  /scheduledFollowUps: Array<\{/u,
+  "SlurpThreadRelationship must declare scheduledFollowUps",
+);
+
+console.log("slurp follow-up pipeline regression: ok");

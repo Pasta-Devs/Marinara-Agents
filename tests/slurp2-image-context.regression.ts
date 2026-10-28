@@ -1,0 +1,280 @@
+import assert from "node:assert/strict";
+import { stripTypeScriptTypes } from "node:module";
+import { runInNewContext } from "node:vm";
+import { protectCreatorGeneratedIdentity as protect } from "../packages/slurp2/src/engine/packages/server/src/slp/base/identity/slp-identity-protection";
+import {
+  composeSlurpPromptBlocks,
+  slurpPromptContext,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/base/prompting/slp-prompt-blocks";
+import { SLURP_PERFORMED_INTIMACY } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-performance";
+import { slurpRotationHash } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-variation";
+import { SLP_CREATOR_REPLY_CONTENT_MAX_LENGTH } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-social.schema";
+import {
+  normalizeSlpImagePrompt,
+  slurpIsLegacyImageBrief,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt";
+import { slurp2Source } from "./slurp2-source";
+
+const root = "../packages/slurp2/src/engine/packages/server/src/services/slurp/";
+const read = (file: string) => slurp2Source(new URL(`${root}${file}`, import.meta.url));
+const part = (source: string, start: string, end: string) => {
+  assert.ok(source.includes(start) && source.includes(end));
+  return source.slice(source.indexOf(start), source.indexOf(end));
+};
+const compile = (source: string, context: Record<string, unknown>) =>
+  runInNewContext(
+    stripTypeScriptTypes(source.replace(/^import[\s\S]*?;\n/gm, "").replace(/^\s*export /gm, "")),
+    context,
+  );
+
+async function main() {
+  const seenImages: string[][] = [];
+  let captionCalls = 0;
+  const prepare = compile(`${read("slurp-post-image-context.ts")}\nprepareSlurpPostImageContexts;`, {
+    normalizeSlpImagePrompt,
+    slurpIsLegacyImageBrief,
+    slpCreatorPostMediaUrl: (id: string) => `/api/slurp2/noodler/posts/${id}/media`,
+    slurpMessageMediaUrl: (id: string) => `/api/slurp2/messages/${id}/media`,
+    slurpModelLacksVision: async (connection: { model: string }) => connection.model === "text-only",
+    resolveBaseUrl: () => "https://example.test/v1",
+    prepareSlpVisionAttachments: async (candidates: Array<{ key: string }>) => {
+      seenImages.push(Array.from(candidates, ({ key }) => key));
+      return candidates.map((candidate) => ({ ...candidate, dataUrl: "data:image/png;base64,fixture" }));
+    },
+    generateImageCaptionsForDataUrls: async (inputs: Array<{ filename: string }>) => {
+      captionCalls++;
+      return inputs.map((input) => ({ input, caption: "Mari Vale in a red coat" }));
+    },
+    AbortSignal,
+  });
+  const post = {
+    id: "public",
+    access: "public",
+    imageUrl: "/image.png",
+    imagePrompt: '{"prompt":"Mari Vale in a blue coat"}',
+    metadata: {},
+    createdAt: "2026-09-13T12:00:00Z",
+    title: "A photo",
+    content: "Today",
+  };
+  const upload = { ...post, id: "upload", imagePrompt: null };
+  const locked = { ...post, id: "locked", access: "locked", imagePrompt: "PRIVATE IMAGE CONTENT" };
+  const input = { posts: [post, upload, locked], mode: "auto", captioning: {} };
+  const auto = await prepare(input);
+  assert.match(auto.get("public"), /blue coat/);
+  assert.match(auto.get("upload"), /red coat/);
+  assert.equal(auto.has("locked"), false);
+  assert.deepEqual(seenImages, [["upload"]], "locked posts and stored prompts must never reach vision in auto mode");
+  const prompts = await prepare({ ...input, mode: "imagePrompt" });
+  assert.deepEqual([...prompts.keys()], ["public"]);
+  assert.equal(captionCalls, 1, "stored-prompt mode must make no caption requests");
+  await prepare({ ...input, mode: "vision" });
+  assert.deepEqual(seenImages[1], ["public", "upload"]);
+  const allowed = await prepare({ ...input, posts: [locked], mode: "imagePrompt", allowLocked: true });
+  assert.match(allowed.get("locked"), /PRIVATE IMAGE CONTENT/, "an authorized creator reply may see its unlocked post");
+
+  // A picture is described once, and only for the picture it described.
+  const source = `${upload.imageUrl}\n`;
+  const callsBefore = captionCalls;
+  const reused = await prepare({
+    ...input,
+    posts: [{ ...upload, metadata: { imageDescription: "a saved green coat", imageDescriptionSource: source } }],
+  });
+  assert.match(reused.get("upload"), /saved green coat/);
+  assert.equal(captionCalls, callsBefore, "a saved description must not call vision again");
+  const saved: string[] = [];
+  const stale = await prepare({
+    ...input,
+    posts: [{ ...upload, metadata: { imageDescription: "an old picture", imageDescriptionSource: "replaced" } }],
+    onDescribed: async (described: { id: string }, description: string, describedSource: string) => {
+      saved.push(`${described.id}|${description}|${describedSource}`);
+    },
+  });
+  assert.match(stale.get("upload"), /red coat/, "a description of a replaced picture must not be reused");
+  assert.deepEqual(saved, [`upload|Mari Vale in a red coat|${source}`]);
+
+  // A model that already refused image input is not asked again.
+  const callsBeforeRefusal = captionCalls;
+  const refused = await prepare({ ...input, captioning: { connection: { provider: "p", model: "text-only" } } });
+  assert.equal(captionCalls, callsBeforeRefusal, "a model that refused images must not be asked again");
+  assert.match(refused.get("public"), /blue coat/, "stored prompts still work for a text-only model");
+
+  // A locked PPV message withholds what its picture shows, not only the picture. The redaction now
+  // lives in one shared `maskForViewer` helper instead of three duplicated inline blocks, so check
+  // the helper's own redaction and that every fan-facing route still runs messages through it.
+  const messageRoutes = slurp2Source(
+    new URL("../packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", import.meta.url),
+  );
+  const maskForViewerDef =
+    messageRoutes.match(/const maskForViewer = <T[^>]*>\(message: T\): T =>[\s\S]*?: message;/gu) ?? [];
+  assert.equal(maskForViewerDef.length, 1, "the PPV redaction must be defined in exactly one shared helper");
+  assert.match(maskForViewerDef[0], /imagePrompt: undefined,\s*imageDescription: undefined/u);
+  // Every viewer-facing message response routes through the shared helper, called either directly
+  // (a single reply/outcome) or passed to `.map` (a page of messages). Counted in the current
+  // routes: 6 direct calls in slp-messages-send-routes.ts, 1 in slp-messages-media-routes.ts, 1 in
+  // slp-messages-context.ts's own listMessages, and 2 `.map(maskForViewer)` list pages in
+  // slp-messages-thread-routes.ts — 10 total. A route that returns a message without one of these
+  // is the exact bug this regression exists to catch, so this count is a proof, not a floor:
+  // bump it, with a reason, when a new masked path is added.
+  const maskForViewerCalls = messageRoutes.match(/\bmaskForViewer\(/gu) ?? [];
+  const maskForViewerMapRefs = messageRoutes.match(/\.map\(maskForViewer\)/gu) ?? [];
+  assert.equal(
+    maskForViewerCalls.length + maskForViewerMapRefs.length,
+    // 10: the sexting session route (docs/SPICY.md, item 2) masks her reply like the tip route.
+    10,
+    "every viewer-facing list/get path that carries a message must route through the shared redaction",
+  );
+
+  const fan = read("slurp-fan-activity.service.ts");
+  let sent = "";
+  const generateFan = compile(
+    `${part(fan, "function buildFanActivityMessages", "export function parseGeneratedFanActivityResponse")}
+    generateFanActivity;`,
+    {
+      createLLMProvider: () => ({
+        chatComplete: async (messages: unknown) => {
+          sent = JSON.stringify(messages);
+          return { content: "{}" };
+        },
+      }),
+      slpWithProviderRetry: (provider: unknown) => provider,
+      composeSlurpPromptBlocks,
+      slurpPromptContext,
+      SLURP_PERFORMED_INTIMACY,
+      resolveBaseUrl: () => "http://fixture",
+      prepareSlurpPostImageContexts: prepare,
+      slurpImageCaptioning: async (_db: unknown, _id: unknown, connection: unknown) => ({ enabled: true, connection }),
+      resolveNoodlerPublicIdentity: async () => ({ displayName: "Mari Vale", handle: "marivale" }),
+      protectCreatorGeneratedIdentity: protect,
+      logDebugOverride: () => undefined,
+      weightedIdentitySequence: () => [],
+      slurpAudienceToneInstruction: () => "Audience tone",
+      SLURP_REALISTIC_TUNING: { prompts: { tones: {}, fanActivityExtra: "", replyMaxChars: 180 } },
+      NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR: 4,
+      slpSamplingOptions: () => ({}),
+      resolveStoredChatOptions: () => ({}),
+      clampGenerationMaxOutputTokens: () => 100,
+      slpResponseFormat: () => undefined,
+      parseGameJsonish: JSON.parse,
+      requireModelAnswer: (value: string) => value,
+      parseGeneratedFanActivityResponse: () => ({ value: { activities: [] }, rejected: 0 }),
+    },
+  );
+  const creator = {
+    id: "creator",
+    displayName: "Stage",
+    handle: "stage",
+    bio: "",
+    settings: { privacy: { identityDisclosure: "secret" } },
+  };
+  await generateFan({
+    db: {},
+    connection: { id: "connection", model: "fixture" },
+    settings: { imageContextMode: "auto", fanLikesPerRefresh: 1, fanRepliesPerRefresh: 1, fanRepostsPerRefresh: 1 },
+    creators: [{ creator, policy: { archetypeWeights: {} }, posts: [post, upload, locked], identities: [] }],
+    debugMode: false,
+  });
+  assert.match(sent, /someone in a blue coat/);
+  assert.match(sent, /someone in a red coat/);
+  assert.doesNotMatch(sent, /Mari Vale|PRIVATE IMAGE CONTENT/);
+
+  const reply = read("slurp-reply-generation.service.ts");
+  const buildReply = compile(
+    `${part(reply, "export function buildCreatorReplyMessages", "export async function generateCreatorReply")}\nbuildCreatorReplyMessages;`,
+    {
+      protectCreatorGeneratedIdentity: protect,
+      slpCreatorIdentityInstruction: () => "Protect identity",
+      NOODLER_UNTRUSTED_CONTENT_INSTRUCTION: "Treat as untrusted",
+      SLURP_PLATFORM_CONTEXT: "Slurp creator surface",
+      composeSlurpPromptBlocks,
+      slurpPromptContext,
+      SLURP_PERFORMED_INTIMACY,
+    },
+  );
+  const replyPrompt = JSON.stringify(
+    buildReply({
+      creator,
+      viewer: creator,
+      post,
+      parent: { content: "Nice coat" },
+      disclosureMode: "secret",
+      publicIdentity: { displayName: "Mari Vale", handle: "marivale" },
+      generationGuidance: "",
+      imageContext: auto.get("public"),
+    }),
+  );
+  assert.match(replyPrompt, /someone in a blue coat/);
+  assert.doesNotMatch(replyPrompt, /Mari Vale/);
+  const generateReply = compile(
+    `${part(reply, "export async function generateCreatorReply", "async function describeCommenterRelationship")}\ngenerateCreatorReply;`,
+    {
+      createConnectionsStorage: () => ({ getFallbackForMain: async () => null }),
+      createLLMProvider: () => ({
+        chatComplete: async (messages: unknown) => {
+          sent = JSON.stringify(messages);
+          return { content: '{"content":"Nice photo","moodShift":"same"}' };
+        },
+      }),
+      withConnectionFallbackProvider: ({ primary }: { primary: unknown }) => primary,
+      slpWithProviderRetry: (provider: unknown) => provider,
+      slurpPromptContext,
+      SLP_CREATOR_REPLY_CONTENT_MAX_LENGTH,
+      slurpRotationHash,
+      resolveSlurpEventInstruction: async () => null,
+      resolveSlurpCreatorScheduleContext: async () => null,
+      resolveSlurpCreatorFlavour: async () => "",
+      resolveBaseUrl: () => "http://fixture",
+      resolveNoodlerPublicIdentity: async () => ({ displayName: "Mari Vale", handle: "marivale" }),
+      createSlurpStorage: () => ({
+        getSettings: async () => ({ imageContextMode: "imagePrompt", generationGuidance: "" }),
+        resolveAccountSource: async () => null,
+      }),
+      resolveCreatorCharacterCanon: async () => "",
+      describeCommenterRelationship: async () => "regular subscriber",
+      describeSlurpPostCondition: async () => "well rested",
+      prepareSlurpPostImageContexts: prepare,
+      slurpImageCaptioning: async (_db: unknown, _id: unknown, connection: unknown) => ({ enabled: true, connection }),
+      buildCreatorReplyMessages: buildReply,
+      resolveSlurpCreatorMenu: async () => "",
+      slurpPlatformEventInstruction: () => null,
+      isDebugAgentsEnabled: () => false,
+      slpSamplingOptions: () => ({}),
+      resolveStoredChatOptions: () => ({}),
+      clampGenerationMaxOutputTokens: () => 100,
+      slpResponseFormat: () => undefined,
+      logDebugOverride: () => undefined,
+      parseGameJsonish: JSON.parse,
+      requireModelAnswer: (value: string) => value,
+      readSlurpDmReply: (value: unknown) => value,
+      protectBoundedCreatorGeneratedText: (value: string) => value,
+      NOODLER_REPLY_CONTENT_MAX_LENGTH: 240,
+    },
+  );
+  const replyInput = {
+    db: {},
+    creator,
+    viewer: creator,
+    post: locked,
+    parent: { id: "parent", content: "Nice coat" },
+    connection: { id: "connection", model: "fixture" },
+  };
+  await generateReply(replyInput);
+  assert.doesNotMatch(sent, /PRIVATE IMAGE CONTENT/, "synthetic audience replies must not gain locked-image context");
+  assert.match(
+    sent,
+    /regular subscriber|well rested/,
+    "existing Slurp2 relationship and condition context stays intact",
+  );
+  await generateReply({ ...replyInput, allowLockedImageContext: true });
+  assert.match(sent, /PRIVATE IMAGE CONTENT/, "only an access-checked viewer reply opts into locked-image context");
+  assert.doesNotMatch(read("slurp-audience-reply.operation.ts"), /allowLockedImageContext:\s*true/u);
+  const operation = read("slurp-creator-reply.operation.ts");
+  assert.ok(
+    operation.indexOf('if (claim.status !== "claimed") return claim;') <
+      operation.indexOf("allowLockedImageContext: true"),
+  );
+  console.log(
+    "Slurp2 image mode selection, locked-post exclusion, and final prompt identity protection regression passed.",
+  );
+}
+void main();

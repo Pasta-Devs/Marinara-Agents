@@ -2,10 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Link2, Loader2, Map, RefreshCw, Unlink } from "lucide-react";
 import { toast } from "sonner";
 import type { GameMap, SpatialContextDefinition, SpatialLocation } from "@marinara-engine/shared";
-import {
-  useUpdateSpatialGameMapBinding,
-  type UpdateGameMapBindingInput,
-} from "../use-spatial-resources";
+import { useUpdateSpatialGameMapBinding, type UpdateGameMapBindingInput } from "../use-spatial-resources";
 import {
   useApplyGameMapBindingReconciliation,
   useGameMapBindingReconciliation,
@@ -264,7 +261,13 @@ export function GameMapBindingsPanel({
     [maps, selectedMapId],
   );
   const effectiveMapId = selectedMap
-    ? mapId(selectedMap, Math.max(0, maps.findIndex((candidate) => candidate === selectedMap)))
+    ? mapId(
+        selectedMap,
+        Math.max(
+          0,
+          maps.findIndex((candidate) => candidate === selectedMap),
+        ),
+      )
     : "";
 
   useEffect(() => {
@@ -284,7 +287,8 @@ export function GameMapBindingsPanel({
   if (maps.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-[var(--marinara-chat-chrome-panel-border)] px-3 py-4 text-xs leading-relaxed text-[var(--marinara-chat-chrome-panel-muted)]">
-        Generate or add a Game map first. You can then bind its whole area, individual cells, or nodes to this story location.
+        Generate or add a Game map first. You can then bind its whole area, individual cells, or nodes to this story
+        location.
       </div>
     );
   }
@@ -299,7 +303,9 @@ export function GameMapBindingsPanel({
     if (!effectiveMapId || disabled || updateBinding.isPending) return;
     try {
       await updateBinding.mutateAsync(buildInput(chatId, effectiveMapId, targetValue, spatialLocationId));
-      toast.success(spatialLocationId ? `Bound ${targetLabel} to ${location.name}.` : `Cleared ${targetLabel} binding.`);
+      toast.success(
+        spatialLocationId ? `Bound ${targetLabel} to ${location.name}.` : `Cleared ${targetLabel} binding.`,
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to update the Game map binding.");
     }
@@ -321,7 +327,11 @@ export function GameMapBindingsPanel({
 
       <label className="block space-y-1.5">
         <span className="text-xs font-medium">Game map</span>
-        <select className={CONTROL_CLASS} value={effectiveMapId} onChange={(event) => setSelectedMapId(event.target.value)}>
+        <select
+          className={CONTROL_CLASS}
+          value={effectiveMapId}
+          onChange={(event) => setSelectedMapId(event.target.value)}
+        >
           {maps.map((map, index) => (
             <option key={mapId(map, index)} value={mapId(map, index)}>
               {map.name || `Map ${index + 1}`}

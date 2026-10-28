@@ -1,27 +1,20 @@
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
+import { INCOMPLETE_PACKAGE_IDS } from "./catalog-incomplete.mjs";
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
 function normalizeArchivePath(value) {
-  if (
-    !value ||
-    value.includes("\\") ||
-    value.startsWith("/") ||
-    value.includes("\0")
-  ) {
+  if (!value || value.includes("\\") || value.startsWith("/") || value.includes("\0")) {
     throw new Error(`Unsafe package path: ${JSON.stringify(value)}`);
   }
   const parts = value.split("/");
-  if (
-    parts.some(
-      (part) => !part || part === "." || part === ".." || part.includes(":"),
-    )
-  ) {
+  if (parts.some((part) => !part || part === "." || part === ".." || part.includes(":"))) {
     throw new Error(`Unsafe package path: ${JSON.stringify(value)}`);
   }
   return parts.join("/");
@@ -40,44 +33,49 @@ function isSymlink(entry) {
   return ((entry.attr >>> 16) & 0o170000) === 0o120000;
 }
 
-export async function installPackageBrowserFixture({
-  agentsRoot,
-  engineRoot,
-  dataDir,
-  packageId,
-}) {
-  const packageRoot = join(agentsRoot, "packages", packageId);
-  const manifest = JSON.parse(
-    await readFile(join(packageRoot, "manifest.json"), "utf8"),
-  );
-  if (manifest.id !== packageId)
-    throw new Error(`Package manifest ID does not match ${packageId}`);
+/**
+ * Installs `packageId`, or every id in `packageIds`, from this checkout's catalog and artifacts into one fresh
+ * `capability-packages` folder with a single installed.json.
+ */
+export async function installPackageBrowserFixture({ agentsRoot, engineRoot, dataDir, packageId, packageIds }) {
+  const installRoot = join(dataDir, "capability-packages");
+  await rm(installRoot, { recursive: true, force: true });
+  const packages = [];
+  for (const id of [...new Set(packageIds ?? [packageId])]) {
+    packages.push(await installOne({ agentsRoot, engineRoot, installRoot, packageId: id }));
+  }
+  await writeFile(join(installRoot, "installed.json"), `${JSON.stringify({ schemaVersion: 1, packages }, null, 2)}\n`, {
+    mode: 0o600,
+  });
+}
 
-  const catalog = JSON.parse(
-    await readFile(join(agentsRoot, "catalog", "catalog.json"), "utf8"),
-  );
-  const catalogEntry = catalog.packages.find(
-    (entry) => entry.manifest?.id === packageId,
-  );
-  if (!catalogEntry)
-    throw new Error(`${packageId} is missing from catalog/catalog.json`);
+async function installOne({ agentsRoot, engineRoot, installRoot, packageId }) {
+  const packageRoot = join(agentsRoot, "packages", packageId);
+  const manifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "utf8"));
+  if (manifest.id !== packageId) throw new Error(`Package manifest ID does not match ${packageId}`);
+
+  const catalog = JSON.parse(await readFile(join(agentsRoot, "catalog", "catalog.json"), "utf8"));
+  const previewCatalogPath = join(agentsRoot, "catalog", "preview", "catalog.json");
+  if (process.env.MARINARA_CATALOG_INCLUDE_INCOMPLETE === "1" && existsSync(previewCatalogPath)) {
+    const preview = JSON.parse(await readFile(previewCatalogPath, "utf8"));
+    catalog.packages = [...catalog.packages, ...preview.packages];
+  }
+  const artifactPath = join(agentsRoot, "artifacts", `${packageId}-${manifest.version}.zip`);
+  const archive = await readFile(artifactPath);
+  // A package still in development is in no catalog lane, so its own artifact stands in for the catalog's integrity
+  // metadata; every payload is still checked against its manifest below.
+  const catalogEntry =
+    catalog.packages.find((entry) => entry.manifest?.id === packageId) ??
+    (INCOMPLETE_PACKAGE_IDS.has(packageId)
+      ? { manifest, artifact: { bytes: archive.byteLength, sha256: sha256(archive) } }
+      : null);
+  if (!catalogEntry) throw new Error(`${packageId} is missing from catalog/catalog.json`);
   if (JSON.stringify(catalogEntry.manifest) !== JSON.stringify(manifest)) {
     throw new Error(`${packageId} manifest does not match its catalog entry`);
   }
 
-  const artifactPath = join(
-    agentsRoot,
-    "artifacts",
-    `${packageId}-${manifest.version}.zip`,
-  );
-  const archive = await readFile(artifactPath);
-  if (
-    archive.byteLength !== catalogEntry.artifact.bytes ||
-    sha256(archive) !== catalogEntry.artifact.sha256
-  ) {
-    throw new Error(
-      `${packageId} artifact does not match its catalog integrity metadata`,
-    );
+  if (archive.byteLength !== catalogEntry.artifact.bytes || sha256(archive) !== catalogEntry.artifact.sha256) {
+    throw new Error(`${packageId} artifact does not match its catalog integrity metadata`);
   }
 
   const requireFromEngine = createRequire(join(engineRoot, "package.json"));
@@ -85,38 +83,22 @@ export async function installPackageBrowserFixture({
   const zip = new AdmZip(archive);
   const entries = zip.getEntries().filter((entry) => !entry.isDirectory);
   const names = new Set();
-  const declared = new Map(
-    manifest.files.map((file) => [normalizeArchivePath(file.path), file]),
-  );
-  const manifestEntry = entries.find(
-    (entry) => entry.entryName === "manifest.json",
-  );
-  if (!manifestEntry)
-    throw new Error(`${packageId} artifact has no manifest.json`);
+  const declared = new Map(manifest.files.map((file) => [normalizeArchivePath(file.path), file]));
+  const manifestEntry = entries.find((entry) => entry.entryName === "manifest.json");
+  if (!manifestEntry) throw new Error(`${packageId} artifact has no manifest.json`);
   const archivedManifest = JSON.parse(manifestEntry.getData().toString("utf8"));
   if (JSON.stringify(archivedManifest) !== JSON.stringify(manifest)) {
-    throw new Error(
-      `${packageId} artifact manifest differs from the package manifest`,
-    );
+    throw new Error(`${packageId} artifact manifest differs from the package manifest`);
   }
 
-  const installRoot = join(dataDir, "capability-packages");
-  const versionRoot = join(
-    installRoot,
-    "versions",
-    packageId,
-    manifest.version,
-  );
-  await rm(installRoot, { recursive: true, force: true });
+  const versionRoot = join(installRoot, "versions", packageId, manifest.version);
   await mkdir(versionRoot, { recursive: true });
 
   for (const entry of entries) {
     const name = normalizeArchivePath(entry.entryName);
-    if (names.has(name))
-      throw new Error(`${packageId} artifact contains duplicate path ${name}`);
+    if (names.has(name)) throw new Error(`${packageId} artifact contains duplicate path ${name}`);
     names.add(name);
-    if (isSymlink(entry))
-      throw new Error(`${packageId} artifact contains a symbolic link`);
+    if (isSymlink(entry)) throw new Error(`${packageId} artifact contains a symbolic link`);
     if (name === "manifest.json") {
       await writeFile(join(versionRoot, name), entry.getData(), {
         mode: 0o600,
@@ -124,13 +106,9 @@ export async function installPackageBrowserFixture({
       continue;
     }
     const declaration = declared.get(name);
-    if (!declaration)
-      throw new Error(`${packageId} artifact contains undeclared file ${name}`);
+    if (!declaration) throw new Error(`${packageId} artifact contains undeclared file ${name}`);
     const data = entry.getData();
-    if (
-      data.byteLength !== declaration.bytes ||
-      sha256(data) !== declaration.sha256
-    ) {
+    if (data.byteLength !== declaration.bytes || sha256(data) !== declaration.sha256) {
       throw new Error(`${packageId} artifact payload does not match ${name}`);
     }
     const destination = inside(versionRoot, join(versionRoot, name));
@@ -139,33 +117,18 @@ export async function installPackageBrowserFixture({
   }
 
   if (entries.length !== declared.size + 1) {
-    throw new Error(
-      `${packageId} artifact contains missing or extra payload files`,
-    );
+    throw new Error(`${packageId} artifact contains missing or extra payload files`);
   }
 
-  await writeFile(
-    join(installRoot, "installed.json"),
-    `${JSON.stringify(
-      {
-        schemaVersion: 1,
-        packages: [
-          {
-            id: packageId,
-            version: manifest.version,
-            manifest,
-            installedAt: new Date().toISOString(),
-            status: "active",
-            error: null,
-            readiness: manifest.entrypoints.server ? "pending" : "ready",
-            readinessError: null,
-            legacy: false,
-          },
-        ],
-      },
-      null,
-      2,
-    )}\n`,
-    { mode: 0o600 },
-  );
+  return {
+    id: packageId,
+    version: manifest.version,
+    manifest,
+    installedAt: new Date().toISOString(),
+    status: "active",
+    error: null,
+    readiness: manifest.entrypoints.server ? "pending" : "ready",
+    readinessError: null,
+    legacy: false,
+  };
 }

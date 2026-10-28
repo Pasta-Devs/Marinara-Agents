@@ -11,7 +11,7 @@
   "agents": {
     "virtual-phone": {
       "name": "Virtual Phone",
-      "description": "Adds persistent in-story phones for personas and configured characters, with Engine-backed calls, apps, notifications, and a polished docked device shell. Add the Agent in Chat Settings → Agents → Misc Agents, then open the phone from the chat toolbar."
+      "description": "Adds persistent in-story phones for personas and configured characters, with Engine-backed calls, apps, notifications, and a polished docked device shell."
     }
   }
 }

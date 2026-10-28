@@ -4,7 +4,6 @@ import {
   resolveSpatialLocationDepth,
   resolveSpatialBreadcrumb,
   spatialRadialPlacement,
-  spatialContextDefinitionSchema,
   wouldCreateSpatialCycle,
   type SpatialChildPresentation,
   type SpatialContextDefinition,
@@ -27,6 +26,8 @@ import {
   type SpatialHierarchyProfile,
   type SpatialHierarchyType,
   type SpatialGenerationPromptTemplates,
+  SPATIAL_MAP_LOCATION_LIMIT,
+  spatialMapDefinitionSchema,
 } from "../../../../maps-shared/src/maps-model.js";
 
 interface SpatialDraftSizeSpec {
@@ -114,10 +115,7 @@ export const SPATIAL_DRAFT_SIZE_SPECS: Record<SpatialMapDraftSize, SpatialDraftS
 
 export { SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT };
 
-export function resolveSpatialDraftSizeSpec(
-  size: SpatialMapDraftSize,
-  targetLocations?: number,
-): SpatialDraftSizeSpec {
+export function resolveSpatialDraftSizeSpec(size: SpatialMapDraftSize, targetLocations?: number): SpatialDraftSizeSpec {
   const preset = SPATIAL_DRAFT_SIZE_SPECS[size];
   if (targetLocations === undefined) return preset;
   const normalizedTarget = Math.max(1, Math.min(Math.trunc(targetLocations), SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT));
@@ -151,14 +149,10 @@ function alias(value: unknown): string {
 
 function stringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return Array.from(
-    new Set(value.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean)),
-  );
+  return Array.from(new Set(value.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean)));
 }
 
-
 function finiteNumber(value: unknown): number | null {
-
   const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -253,7 +247,10 @@ function generatedLocationIcon(value: unknown, name: string, kind: SpatialLocati
   if (emoji) return emoji;
 
   const normalizedName = name.toLocaleLowerCase();
-  return GENERATED_ICON_NAME_RULES.find(([pattern]) => pattern.test(normalizedName))?.[1] ?? GENERATED_ICON_KIND_DEFAULTS[kind];
+  return (
+    GENERATED_ICON_NAME_RULES.find(([pattern]) => pattern.test(normalizedName))?.[1] ??
+    GENERATED_ICON_KIND_DEFAULTS[kind]
+  );
 }
 
 function readPlacement(record: Record<string, unknown>): SpatialLocation["placement"] {
@@ -297,10 +294,7 @@ export interface SpatialMapPlanProvenanceRecord {
 export function readSpatialMapPlanProvenance(value: unknown): SpatialMapPlanProvenanceRecord[] {
   return readPlanLocations(value).map((location) => ({
     sourceKeys: stringList(location.sourceKeys),
-    origin:
-      location.origin === "inferred" || location.provenance === "inferred"
-        ? "inferred"
-        : "added_by_ai",
+    origin: location.origin === "inferred" || location.provenance === "inferred" ? "inferred" : "added_by_ai",
   }));
 }
 
@@ -318,7 +312,9 @@ function readPlanHierarchyTypes(value: unknown): SpatialHierarchyType[] {
     const baseId = id;
     while (used.has(id)) id = `${baseId}_${suffix++}`;
     used.add(id);
-    return [{ id, label, baseKind, ...(text(record.description, 240) ? { description: text(record.description, 240) } : {}) }];
+    return [
+      { id, label, baseKind, ...(text(record.description, 240) ? { description: text(record.description, 240) } : {}) },
+    ];
   });
 }
 
@@ -385,7 +381,6 @@ export function readSpatialHierarchyProfile(
   );
 }
 
-
 function normalizeLayouts(locations: SpatialLocation[]): SpatialLocation[] {
   const childrenByParent = new Map<string, SpatialLocation[]>();
   for (const location of locations) {
@@ -443,12 +438,7 @@ function inferredRouteLabel(
   if (parent?.childPresentation === "layers" || (source.kind === "floor" && target.kind === "floor")) {
     return "Stairs";
   }
-  if (
-    parent?.kind === "building" ||
-    parent?.kind === "floor" ||
-    source.kind === "room" ||
-    target.kind === "room"
-  ) {
+  if (parent?.kind === "building" || parent?.kind === "floor" || source.kind === "room" || target.kind === "room") {
     return "Hallway";
   }
   if (parent?.kind === "settlement") return "Street";
@@ -479,7 +469,8 @@ function ensureSparseSiblingRouteLinks(locations: SpatialLocation[]): SpatialLoc
         if (!siblingIds.has(location.id)) continue;
         for (const link of location.links) {
           if (!siblingIds.has(link.targetId)) continue;
-          const neighborId = location.id === currentId ? link.targetId : link.targetId === currentId ? location.id : null;
+          const neighborId =
+            location.id === currentId ? link.targetId : link.targetId === currentId ? location.id : null;
           if (!neighborId || visited.has(neighborId)) continue;
           visited.add(neighborId);
           pending.push(neighborId);
@@ -525,10 +516,7 @@ export function normalizeSpatialMapPlan(
   options: NormalizeSpatialMapPlanOptions,
 ): SpatialContextDefinition {
   const size = resolveSpatialDraftSizeSpec(options.size, options.targetLocations);
-  const locationLimit = Math.max(
-    0,
-    Math.min(options.maxLocations ?? size.maxLocations, SPATIAL_CONTEXT_LIMITS.maxLocations),
-  );
+  const locationLimit = Math.max(0, Math.min(options.maxLocations ?? size.maxLocations, SPATIAL_MAP_LOCATION_LIMIT));
   const rawLocations = readPlanLocations(value).slice(0, locationLimit);
   if (rawLocations.length === 0) {
     throw new Error("The model did not return any locations.");
@@ -562,9 +550,7 @@ export function normalizeSpatialMapPlan(
     const kind = locationKind(record.kind, name, !parentSource);
     const icon = generatedLocationIcon(record.icon, name, kind);
     const lorebookEntryIds = Array.from(
-      new Set(
-        stringList(record.sourceKeys).flatMap((sourceKey) => options.sourceEntryIdsByKey?.get(sourceKey) ?? []),
-      ),
+      new Set(stringList(record.sourceKeys).flatMap((sourceKey) => options.sourceEntryIdsByKey?.get(sourceKey) ?? [])),
     ).slice(0, SPATIAL_CONTEXT_LIMITS.maxLorebookEntryIdsPerLocation);
     if (options.requireLoreSource && lorebookEntryIds.length === 0) {
       throw new Error(`Strict canon location "${name}" did not cite a valid lore source.`);
@@ -592,10 +578,7 @@ export function normalizeSpatialMapPlan(
       ? { ...location, parentId: null }
       : location,
   );
-  const maxDepth = Math.max(
-    1,
-    Math.min(options.maxDepth ?? size.maxDepth, SPATIAL_CONTEXT_LIMITS.maxDepth),
-  );
+  const maxDepth = Math.max(1, Math.min(options.maxDepth ?? size.maxDepth, SPATIAL_CONTEXT_LIMITS.maxDepth));
   locations = locations.map((location) =>
     resolveSpatialLocationDepth({ locations }, location) > maxDepth ? { ...location, parentId: null } : location,
   );
@@ -605,8 +588,7 @@ export function normalizeSpatialMapPlan(
     const seenTargets = new Set<string>();
     const links = rawLinks.flatMap((rawLink) => {
       const targetKey = alias(rawLink.targetKey ?? rawLink.targetId);
-      const targetId =
-        sourceByAlias.get(targetKey)?.id ?? options.externalLinkTargetIdsByKey?.get(targetKey);
+      const targetId = sourceByAlias.get(targetKey)?.id ?? options.externalLinkTargetIdsByKey?.get(targetKey);
       if (!targetId || targetId === location.id || seenTargets.has(targetId)) return [];
       seenTargets.add(targetId);
       const label = text(rawLink.label, SPATIAL_CONTEXT_LIMITS.maxLinkLabelLength);
@@ -649,7 +631,7 @@ export function normalizeSpatialMapPlan(
         locations: [...options.externalDefinition.locations, ...locations],
       }
     : definition;
-  const parsed = spatialContextDefinitionSchema.safeParse(validationDefinition);
+  const parsed = spatialMapDefinitionSchema.safeParse(validationDefinition);
   if (!parsed.success) {
     throw new Error(parsed.error.issues[0]?.message ?? "The generated map is invalid.");
   }
@@ -672,7 +654,7 @@ export function normalizeSpatialMapExpansionPlan(
     throw new Error("Choose an active location to expand.");
   }
 
-  const remainingLocationCapacity = SPATIAL_CONTEXT_LIMITS.maxLocations - options.definition.locations.length;
+  const remainingLocationCapacity = SPATIAL_MAP_LOCATION_LIMIT - options.definition.locations.length;
   if (remainingLocationCapacity < 1) {
     throw new Error("This map already contains the maximum number of locations.");
   }
@@ -712,8 +694,7 @@ export function normalizeSpatialMapExpansionPlan(
   );
   const rootLocations = generated.locations.filter((location) => generatedRootIds.has(location.id));
   const firstSortOrder = Math.max(-1, ...existingChildren.map((location) => location.sortOrder)) + 1;
-  const firstLayerOrder =
-    Math.max(-1, ...existingChildren.map((location) => location.layerOrder ?? -1)) + 1;
+  const firstLayerOrder = Math.max(-1, ...existingChildren.map((location) => location.layerOrder ?? -1)) + 1;
   const rootIndexById = new Map(rootLocations.map((location, index) => [location.id, index]));
   const combinedSiblingCount = existingChildren.length + rootLocations.length;
 
@@ -756,11 +737,9 @@ export function normalizeSpatialMapExpansionPlan(
         .filter((location) => location.placement)
         .sort((left, right) => {
           const leftDistance =
-            (left.placement!.x - source.placement!.x) ** 2 +
-            (left.placement!.y - source.placement!.y) ** 2;
+            (left.placement!.x - source.placement!.x) ** 2 + (left.placement!.y - source.placement!.y) ** 2;
           const rightDistance =
-            (right.placement!.x - source.placement!.x) ** 2 +
-            (right.placement!.y - source.placement!.y) ** 2;
+            (right.placement!.x - source.placement!.x) ** 2 + (right.placement!.y - source.placement!.y) ** 2;
           return leftDistance - rightDistance;
         })[0];
     }
@@ -770,11 +749,7 @@ export function normalizeSpatialMapExpansionPlan(
       )[0];
     }
     attachmentTarget ??= [...activeExistingChildren].sort(compareSpatialLocations).at(-1);
-    if (
-      source &&
-      attachmentTarget &&
-      source.links.length < SPATIAL_CONTEXT_LIMITS.maxLinksPerLocation
-    ) {
+    if (source && attachmentTarget && source.links.length < SPATIAL_CONTEXT_LIMITS.maxLinksPerLocation) {
       addedLocations = addedLocations.map((location) =>
         location.id === source.id
           ? {
@@ -798,7 +773,7 @@ export function normalizeSpatialMapExpansionPlan(
     ...options.definition,
     locations: [...options.definition.locations, ...addedLocations],
   };
-  const parsed = spatialContextDefinitionSchema.safeParse(definition);
+  const parsed = spatialMapDefinitionSchema.safeParse(definition);
   if (!parsed.success) {
     throw new Error(parsed.error.issues[0]?.message ?? "The generated expansion is invalid.");
   }
@@ -856,7 +831,6 @@ function hierarchyPromptLines(
   return [];
 }
 
-
 export function buildSpatialMapExpansionPrompt(options: BuildSpatialMapExpansionPromptOptions): {
   messages: Array<{ role: "system" | "user"; content: string }>;
   maxTokens: number;
@@ -865,7 +839,7 @@ export function buildSpatialMapExpansionPrompt(options: BuildSpatialMapExpansion
   if (!target || target.status !== "active") {
     throw new Error("Choose an active location to expand.");
   }
-  const remainingLocationCapacity = SPATIAL_CONTEXT_LIMITS.maxLocations - options.definition.locations.length;
+  const remainingLocationCapacity = SPATIAL_MAP_LOCATION_LIMIT - options.definition.locations.length;
   if (remainingLocationCapacity < 1) {
     throw new Error("This map already contains the maximum number of locations.");
   }
@@ -878,7 +852,9 @@ export function buildSpatialMapExpansionPrompt(options: BuildSpatialMapExpansion
   const maxNewLocations = Math.min(size.maxLocations, remainingLocationCapacity);
   const targetLocations = Math.min(size.targetLocations, maxNewLocations);
   const maxNewDepth = Math.min(size.maxDepth, availableDepth);
-  const breadcrumb = resolveSpatialBreadcrumb(options.definition, target.id).map((location) => location.name).join(" > ");
+  const breadcrumb = resolveSpatialBreadcrumb(options.definition, target.id)
+    .map((location) => location.name)
+    .join(" > ");
   const existingChildIds = new Set(
     options.definition.locations
       .filter((location) => location.parentId === target.id && location.status === "active")
@@ -923,17 +899,17 @@ export function buildSpatialMapExpansionPrompt(options: BuildSpatialMapExpansion
   const outputSchema =
     'Schema: {"locations":[{"key":string,"parentKey":string|null,"name":string,"typeKey":string,"kind":"region"|"settlement"|"place"|"building"|"floor"|"room","description":string,"modelMemory":string,"awarenessSummary":string,"icon":string,"sourceKeys":[string],"origin":"inferred"|"added_by_ai","childPresentation":"map"|"layers"|"list","placement":{"x":number,"y":number}|null,"layerOrder":number|null,"links":[{"targetKey":string,"label":string,"bidirectional":boolean,"state":"available"|"hidden"|"blocked"}]}]}';
   const promptTemplates =
-    options.promptTemplates ?? resolveSpatialGenerationPromptOption(defaultGenerationPreferences(options.definition.ownerMode)).prompts;
+    options.promptTemplates ??
+    resolveSpatialGenerationPromptOption(defaultGenerationPreferences(options.definition.ownerMode)).prompts;
   const variables = {
     ...options.promptVariables,
     groundingRules: groundingPromptLines(options.groundingMode).join("\n"),
     targetLocations,
     maxLocations: maxNewLocations,
     maxDepth: maxNewDepth,
-    hierarchyRules: hierarchyPromptLines(
-      options.hierarchyProfile?.mode ?? "template",
-      options.hierarchyProfile,
-    ).join("\n"),
+    hierarchyRules: hierarchyPromptLines(options.hierarchyProfile?.mode ?? "template", options.hierarchyProfile).join(
+      "\n",
+    ),
     routeRules: routeGraphPromptLines().join("\n"),
     existingConnectionRule:
       existingChildren.length > 0
@@ -972,7 +948,8 @@ export function buildSpatialMapDraftPrompt(options: BuildSpatialMapPromptOptions
   const outputSchema =
     'Schema: {"worldName":string,"hierarchyName":string,"locationTypes":[{"key":string,"label":string,"baseKind":"region"|"settlement"|"place"|"building"|"floor"|"room"}],"startingLocationKey":string,"locations":[{"key":string,"parentKey":string|null,"name":string,"typeKey":string,"kind":"region"|"settlement"|"place"|"building"|"floor"|"room","description":string,"modelMemory":string,"awarenessSummary":string,"icon":string,"sourceKeys":[string],"origin":"inferred"|"added_by_ai","childPresentation":"map"|"layers"|"list","placement":{"x":number,"y":number}|null,"layerOrder":number|null,"links":[{"targetKey":string,"label":string,"bidirectional":boolean,"state":"available"|"hidden"|"blocked"}]}]}';
   const promptTemplates =
-    options.promptTemplates ?? resolveSpatialGenerationPromptOption(defaultGenerationPreferences(options.ownerMode)).prompts;
+    options.promptTemplates ??
+    resolveSpatialGenerationPromptOption(defaultGenerationPreferences(options.ownerMode)).prompts;
   const variables = {
     ...options.promptVariables,
     groundingRules: groundingPromptLines(options.groundingMode).join("\n"),

@@ -107,9 +107,7 @@ export async function evaluateOwnerApproval({ env = process.env, request = githu
             token: env.PASTA_DEVS_MEMBERS_TOKEN,
             path: `/orgs/${encodeURIComponent(organization)}/memberships/${encodeURIComponent(authorLogin)}`,
           });
-          internal =
-            membership.state === "active" &&
-            (membership.role === "admin" || membership.role === "member");
+          internal = membership.state === "active" && (membership.role === "admin" || membership.role === "member");
         } catch (error) {
           if (error.status !== 404) {
             state = "error";
@@ -127,9 +125,7 @@ export async function evaluateOwnerApproval({ env = process.env, request = githu
       const reviews = await listPullRequestReviews(request, githubToken, repositoryPath, pullNumber);
       const latestOwnerReview = reviews
         .filter((review) => review.user?.login?.toLowerCase() === "spicymarinara")
-        .filter((review) =>
-          ["APPROVED", "CHANGES_REQUESTED", "DISMISSED"].includes(review.state),
-        )
+        .filter((review) => ["APPROVED", "CHANGES_REQUESTED", "DISMISSED"].includes(review.state))
         .sort((left, right) => left.id - right.id)
         .at(-1);
 
@@ -149,9 +145,7 @@ export async function evaluateOwnerApproval({ env = process.env, request = githu
     try {
       await publishStatus();
     } catch (publishError) {
-      console.error(
-        `Error status publication failed with status ${publishError?.status ?? "unknown"}.`,
-      );
+      console.error(`Error status publication failed with status ${publishError?.status ?? "unknown"}.`);
     }
   }
 

@@ -1,0 +1,383 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 341
+  },
+  "builtAgainst": {
+    "engineVersion": "2.5.0",
+    "engineCommit": "2039583caf0288d31a5696ae3546f5b4913e7e6f"
+  },
+  "id": "saucelings",
+  "name": "Saucelings",
+  "version": "0.23.1",
+  "description": "A Tamagotchi-style pet in Home: pick a character to look after an egg, let their personality drive their care schedule, cover the gaps they miss, watch its sauce temperament shift, retire elders to a Menagerie, and let the caretaker find eggs of their own invention while you chat. Install it, restart Marinara Engine when prompted, then open Home → Saucelings.",
+  "engine": {
+    "min": "2.5.0",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "home-browser-tab",
+      "home-widget"
+    ],
+    "homeBrowserTab": {
+      "label": "Saucelings",
+      "ariaLabel": "Open Saucelings",
+      "iconPaths": [
+        "saucelings-icon.png"
+      ]
+    },
+    "homeWidgets": [
+      {
+        "id": "sauceling-compact",
+        "label": "Sauceling",
+        "description": "Compact view of your sauceling's meters and caretaker status",
+        "size": "compact",
+        "icon": "heart",
+        "accent": "orange",
+        "surface": "soft",
+        "header": "compact"
+      },
+      {
+        "id": "sauceling-nook",
+        "label": "Sauceling Nook",
+        "description": "Quick Feed and Play actions plus the latest caretaker remark",
+        "size": "large",
+        "icon": "sparkles",
+        "accent": "orange",
+        "surface": "soft",
+        "header": "banner"
+      }
+    ],
+    "assets": {
+      "paths": [
+        "sprites/atlas.json",
+        "sprites/rigamuffin.webp",
+        "sprites/fluttino.webp",
+        "sprites/lentino.webp",
+        "sprites/shellbini.webp",
+        "sprites/tortellump.webp",
+        "sprites/mossaboo.webp",
+        "sprites/puddlepip.webp",
+        "sprites/snufflump.webp",
+        "sprites/burrowl.webp",
+        "sprites/prismite.webp",
+        "sprites/thundrake.webp",
+        "sprites/clockrit.webp",
+        "sprites/wickwisp.webp",
+        "sprites/cauldrop.webp",
+        "sprites/webbit.webp",
+        "sprites/fx-tomato.webp",
+        "sprites/fx-heart.webp",
+        "sprites/fx-sparkle.webp",
+        "sprites/fx-z.webp",
+        "sprites/fx-note.webp",
+        "sprites/fx-question.webp",
+        "sprites/fx-bang.webp",
+        "sprites/scene-nest.webp",
+        "sprites/scene-rigamuffin.webp",
+        "sprites/scene-fluttino.webp",
+        "sprites/scene-lentino.webp",
+        "sprites/scene-shellbini.webp",
+        "sprites/scene-tortellump.webp",
+        "sprites/scene-mossaboo.webp",
+        "sprites/scene-puddlepip.webp",
+        "sprites/scene-snufflump.webp",
+        "sprites/scene-burrowl.webp",
+        "sprites/scene-prismite.webp",
+        "sprites/scene-thundrake.webp",
+        "sprites/scene-clockrit.webp",
+        "sprites/scene-wickwisp.webp",
+        "sprites/scene-cauldrop.webp",
+        "sprites/scene-webbit.webp",
+        "sprites/fx-extras.webp",
+        "sprites/fx-auras.webp",
+        "sprites/fx-moves.webp",
+        "sprites/prismite-live.webp",
+        "sprites/thundrake-live.webp",
+        "sprites/clockrit-live.webp",
+        "sprites/wickwisp-live.webp",
+        "sprites/cauldrop-live.webp",
+        "sprites/webbit-live.webp"
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "9bf51fe9ac60152d24db068d2c0025ffef8d36ebc0261c1855f2db9475e28273",
+      "bytes": 730
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "5c9d4640b9a7eef829b33c509603014c0352b23aa853b77591b779a9af6922de",
+      "bytes": 106672
+    },
+    {
+      "path": "client.js",
+      "sha256": "fdeb4f4816ba1269a9e56d8ab543ad5a291e1f8e166a9d10a6a1412d1a47c916",
+      "bytes": 256578
+    },
+    {
+      "path": "saucelings-icon.png",
+      "sha256": "ad9bd2848d94b242e8f19c1427a7d19e61bc3a59561c08fb7155675d9f06d036",
+      "bytes": 2481
+    },
+    {
+      "path": "sprites/atlas.json",
+      "sha256": "0f183a47ea16a10bc3613a244a4674397cd7a366d6e384a1985071b719b757e3",
+      "bytes": 14572
+    },
+    {
+      "path": "sprites/rigamuffin.webp",
+      "sha256": "adf03a4480f579f53fecf8a9a3093c05f80544e1c521e0a1e6a2b22c0a4f8525",
+      "bytes": 10396
+    },
+    {
+      "path": "sprites/fluttino.webp",
+      "sha256": "b3d886262f079a3dcfa92a40364857b527c932858637c7cf01dee91e2774b03b",
+      "bytes": 13972
+    },
+    {
+      "path": "sprites/lentino.webp",
+      "sha256": "bd62de0492d7c92c726294640656a95b2864113908bcfb3e5bc9e85546b0a8b9",
+      "bytes": 9262
+    },
+    {
+      "path": "sprites/shellbini.webp",
+      "sha256": "4b3116be2fdfc3832c61349cf6fc1c6769d1b50640f83fe7b923189323c0195a",
+      "bytes": 13830
+    },
+    {
+      "path": "sprites/tortellump.webp",
+      "sha256": "9b456be0edebdaf8d7f5eba7f3cb50c0262710cd7b87b4ff9f540c31e7a0dcdd",
+      "bytes": 12340
+    },
+    {
+      "path": "sprites/mossaboo.webp",
+      "sha256": "ca9577621a806d65db71988b8adebcd85ef7e9d9770e7c9479c10502981dbf22",
+      "bytes": 10446
+    },
+    {
+      "path": "sprites/puddlepip.webp",
+      "sha256": "3248c75963a7096bd3a587bf2fe9054f081ad063c9f53698adbcd61e3d281c9d",
+      "bytes": 8528
+    },
+    {
+      "path": "sprites/snufflump.webp",
+      "sha256": "a61f691db046c677af97556f6c7dfe2ac79553fda51546e3163dbb938e757d62",
+      "bytes": 9950
+    },
+    {
+      "path": "sprites/burrowl.webp",
+      "sha256": "028219a4df6bb4fa4139808fe78c8ebaa1021f4b87e0865c19eeae7b8b81f726",
+      "bytes": 10066
+    },
+    {
+      "path": "sprites/prismite.webp",
+      "sha256": "e4803f0ab5f38a4689f1a98136bde7410399d5cf6291c663fd7fa6f0c1c01861",
+      "bytes": 11452
+    },
+    {
+      "path": "sprites/thundrake.webp",
+      "sha256": "e878066d98a9f87b30633c32a79cf65f4a625d2d88bf455df321a94b1a4dd5a0",
+      "bytes": 11476
+    },
+    {
+      "path": "sprites/clockrit.webp",
+      "sha256": "9264b3cb65eedc224a38cffd22504a5cd2ed00fa0ab73e58e6caeefbf743acf5",
+      "bytes": 12492
+    },
+    {
+      "path": "sprites/wickwisp.webp",
+      "sha256": "b0926684306a8238c5c52b0301b3f2a60bd3acd0381cd85c0368929e77992c7e",
+      "bytes": 7428
+    },
+    {
+      "path": "sprites/cauldrop.webp",
+      "sha256": "c6f10dcf6950338981ba559c5a0eb4e87b5a0867c02d0889aefe3b317588741f",
+      "bytes": 9834
+    },
+    {
+      "path": "sprites/webbit.webp",
+      "sha256": "7406520e818c0b2eb7502fd0c239cf3fd0d2af04d0025fafe0febe9fa7b80332",
+      "bytes": 13128
+    },
+    {
+      "path": "sprites/fx-tomato.webp",
+      "sha256": "3e4c3dd4a4e816fdd67e06e9b5d25264327bae77a3584e940f69c23831b117b5",
+      "bytes": 138
+    },
+    {
+      "path": "sprites/fx-heart.webp",
+      "sha256": "ed5859c17549280f0134e3c2bc674e9d937bcd63fee93fd38bfc3b78a749f263",
+      "bytes": 92
+    },
+    {
+      "path": "sprites/fx-sparkle.webp",
+      "sha256": "5f07106b524b35ce683211427bb67a15aeea205602a5d7533ca689eecbec1704",
+      "bytes": 96
+    },
+    {
+      "path": "sprites/fx-z.webp",
+      "sha256": "74a91b0cf1914f7e66ecc520a9e0f1fc18c2ab68f01a3c8753ada9185e6bb585",
+      "bytes": 96
+    },
+    {
+      "path": "sprites/fx-note.webp",
+      "sha256": "e831af1f80eb835ffe836554692dfa0f1493aaeb88e23d5fce6b3d232dfa54ba",
+      "bytes": 104
+    },
+    {
+      "path": "sprites/fx-question.webp",
+      "sha256": "42fff62dee53fe232619119959a01ee73c05649048f6a7d7fd11b18683d3e23f",
+      "bytes": 82
+    },
+    {
+      "path": "sprites/fx-bang.webp",
+      "sha256": "f9613a0f554924c75eaaa2c6d1e4f655bdc7d265baff1ae5565ce2b51d65e170",
+      "bytes": 72
+    },
+    {
+      "path": "sprites/scene-nest.webp",
+      "sha256": "f3b7c8f533c67b89d4ddaa1c0d5403fdb7b55f3e66413003dee0b90f8ed0049b",
+      "bytes": 4698
+    },
+    {
+      "path": "sprites/scene-rigamuffin.webp",
+      "sha256": "ffff115c59364e1d59e3a2cabfd302c51d4824f2d468e492ec69c8a075cd2a46",
+      "bytes": 4558
+    },
+    {
+      "path": "sprites/scene-fluttino.webp",
+      "sha256": "fc93fbb3a496ec9a6e27b75326940f3532edf48b01aa010d4279b83fce3a1f72",
+      "bytes": 3986
+    },
+    {
+      "path": "sprites/scene-lentino.webp",
+      "sha256": "0eb4d58b02d0bd76adc4d080737d8bc4b2a49123b3577588d39e893bc9f6c6d2",
+      "bytes": 4428
+    },
+    {
+      "path": "sprites/scene-shellbini.webp",
+      "sha256": "b1482986cb4219dab5161b11d3ea769a8e2af95e459c416df278640de4a8cd18",
+      "bytes": 4362
+    },
+    {
+      "path": "sprites/scene-tortellump.webp",
+      "sha256": "07c9e7e410593ff8b736426ae5a1d37a76f72660c44c21a925e5410129ad19a7",
+      "bytes": 4524
+    },
+    {
+      "path": "sprites/scene-mossaboo.webp",
+      "sha256": "1840087d60b32b7b92768e3fc1b9781ee6c0a62cf9d4514d46787b2559ff41e2",
+      "bytes": 4840
+    },
+    {
+      "path": "sprites/scene-puddlepip.webp",
+      "sha256": "7f34e02b15f074d47f120b6744173044398400d036e66088027c56279cb08f18",
+      "bytes": 4558
+    },
+    {
+      "path": "sprites/scene-snufflump.webp",
+      "sha256": "80d8f6cbfe49e364f53b8e9861a316cc0d43a4f27f01aa8a0d9f8f16c0b7b4e0",
+      "bytes": 3004
+    },
+    {
+      "path": "sprites/scene-burrowl.webp",
+      "sha256": "342016e5653419996deac8d567cd80c0d7db36581379869089e10d7a070a8de1",
+      "bytes": 5842
+    },
+    {
+      "path": "sprites/scene-prismite.webp",
+      "sha256": "c8b0a0bca2f7aed04e721de6fc4a995debc2116f6c83bf5264cedff9255fbc2a",
+      "bytes": 6424
+    },
+    {
+      "path": "sprites/scene-thundrake.webp",
+      "sha256": "84261316310ac725fe3bede49b3e9405019730652d0bcf5dc5c46fcfeb30bd88",
+      "bytes": 3910
+    },
+    {
+      "path": "sprites/scene-clockrit.webp",
+      "sha256": "a47af3f62f04608ab3f5a63b1aef8ba6fab1b9dc285421d2cc19fd798b5461f1",
+      "bytes": 5312
+    },
+    {
+      "path": "sprites/scene-wickwisp.webp",
+      "sha256": "5b227324414aaed2a5cd28d2d1d371c6c33e3efbd1b17747beeb3f550dd27f8a",
+      "bytes": 4968
+    },
+    {
+      "path": "sprites/scene-cauldrop.webp",
+      "sha256": "50b520d73e8fc8f0d736ede75cd0ebaac01b1bc1bdbaf7d323dd39d66b4f448d",
+      "bytes": 5692
+    },
+    {
+      "path": "sprites/scene-webbit.webp",
+      "sha256": "f56f96ea8f09779c7d835d65c87b17faebda3a1e4bb80c1389e662d3f5ad9980",
+      "bytes": 3984
+    },
+    {
+      "path": "sprites/fx-extras.webp",
+      "sha256": "7f0d70adbd00fadbb765492e6448e742af603a84c2673134de88b31147f21ed8",
+      "bytes": 1066
+    },
+    {
+      "path": "sprites/fx-auras.webp",
+      "sha256": "bf9180b5cd1e5aa3f5db64504ae36cc57f8a8ed25bec2a1cc7af2cf557565844",
+      "bytes": 318
+    },
+    {
+      "path": "sprites/fx-moves.webp",
+      "sha256": "dd6d9e7de15b2976d81bf679a9746b26c4c4863d55889db0d83c304d65f2d3f4",
+      "bytes": 3172
+    },
+    {
+      "path": "sprites/prismite-live.webp",
+      "sha256": "097e03dc33bed14d12c38df603034bd94b1f784d9210b26cecfb09081556deb8",
+      "bytes": 60000
+    },
+    {
+      "path": "sprites/thundrake-live.webp",
+      "sha256": "ee524b3ab894bb2f0086af4722af298695fdb54868090236b11bd2eab5998c6e",
+      "bytes": 31670
+    },
+    {
+      "path": "sprites/clockrit-live.webp",
+      "sha256": "26a785d726e2614dd5f085304bc5f5cc423da8e6720cb096dca5bb23fc4429ac",
+      "bytes": 29538
+    },
+    {
+      "path": "sprites/wickwisp-live.webp",
+      "sha256": "2bb3332a0cfe952ec8663e64242e32e2771b6fb4a93bc85ae5037b0d4f5b613f",
+      "bytes": 17620
+    },
+    {
+      "path": "sprites/cauldrop-live.webp",
+      "sha256": "a1302a67a9aaefca7739e8b6c41af5ea773d587629422ed8480130591a65af56",
+      "bytes": 19006
+    },
+    {
+      "path": "sprites/webbit-live.webp",
+      "sha256": "4ccf412b6ac644a6b2812f1d995ba6ccd122b855ee1ece875b97c35a06abe8b2",
+      "bytes": 22194
+    }
+  ],
+  "permissions": [
+    "prompt-context",
+    "routes",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

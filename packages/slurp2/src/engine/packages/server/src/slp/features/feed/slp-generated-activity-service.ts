@@ -1,0 +1,429 @@
+import { createSlpPoll, readSlpPollFromMetadata } from "../../../../../shared/src/slp/slp-polls.js";
+import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
+import { type SlpGeneratedRefresh } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { type SlpAccount, type SlpInteractionType } from "../../../../../shared/src/slp/slp-social.types.js";
+import type { DB } from "../../../db/connection.js";
+import { logger } from "../../../lib/logger.js";
+import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
+import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { createChatsStorage } from "../../../services/storage/chats.storage.js";
+import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
+import { createGalleryStorage } from "../../../services/storage/gallery.storage.js";
+import { createSlurpStorage } from "../../data/slp-storage.js";
+import { type SlurpSettings } from "../../modules/settings/slp-settings.js";
+import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
+import { canCreateGeneratedSlpInteraction } from "../../modules/feed/slp-interaction-policy.js";
+import { type ConnectionAdmissionMode } from "../../../services/generation/connection-admission.js";
+import { normalizeSlpHandle } from "../../base/identity/slp-handle.js";
+import { normalizeSlpImagePrompt } from "../../base/media/slp-image-prompt.js";
+import { slurpLeastRecentGalleryImage } from "../../base/media/slp-generated-media-policy.js";
+import { canGenerateSlpActivityForAccountKind } from "../../modules/prompting/slp-prompt.js";
+import {
+  generateSlpPostImage,
+  type SlpImagePromptReviewItem,
+  type StagedSlpPostMedia,
+} from "../media/slp-media-contract.js";
+import {
+  getErrorMessage,
+  galleryImageUrl,
+  characterGalleryImageUrl,
+  interactionDigestVerb,
+  mentionedAccountMetadata,
+  mentionedCharacterAccounts,
+  noodleDigestAccountLabel,
+  parseStringArray,
+  sinceHoursIso,
+} from "../../modules/creators/slp-public-support.js";
+
+type ImageConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
+
+type PreparedPostMedia = {
+  imagePrompt: string | null;
+  imageUrl: string | null;
+  metadata: Record<string, unknown>;
+  preview: Omit<SlpImagePromptReviewItem, "id"> | null;
+  stagedMedia: StagedSlpPostMedia | null;
+};
+
+export type PreparedGeneratedSlpMedia = {
+  posts: Map<SlpGeneratedRefresh["posts"][number], PreparedPostMedia>;
+  stagedMedia: StagedSlpPostMedia[];
+};
+
+export async function pickGalleryAttachmentForAccount(input: {
+  db: DB;
+  account: SlpAccount;
+  /** The posting account's own recent posts tell which gallery pictures it already showed. */
+  postingAccountId: string;
+  /** Pictures this batch already attached, newest first: those posts are not saved yet. */
+  batchUsed?: readonly unknown[];
+}) {
+  if (input.account.kind !== "character") return null;
+  const recentPosts = await createSlurpStorage(input.db).listNoodlerPostsByAccount(input.postingAccountId, 50);
+  const used = [...(input.batchUsed ?? []), ...recentPosts.map((post) => post.metadata?.galleryAttachmentId)];
+  const characterImages = await createCharacterGalleryStorage(input.db).listByCharacterId(input.account.entityId);
+  const characterImage = slurpLeastRecentGalleryImage(characterImages, used);
+  if (characterImage) {
+    return {
+      imageUrl: characterGalleryImageUrl(input.account.entityId, characterImage.filePath),
+      metadata: {
+        galleryAttachmentSource: "character-gallery",
+        galleryAttachmentId: characterImage.id,
+      },
+    };
+  }
+  const chats = await createChatsStorage(input.db).list();
+  const chatIds = chats
+    .filter((chat) => parseStringArray(chat.characterIds).includes(input.account.entityId))
+    .map((chat) => chat.id)
+    .slice(0, 20);
+  const chatImages = await createGalleryStorage(input.db).listByChatIds(chatIds);
+  const chatImage = slurpLeastRecentGalleryImage(chatImages, used);
+  if (!chatImage) return null;
+  return {
+    imageUrl: galleryImageUrl(chatImage.filePath, chatImage.chatId),
+    metadata: {
+      galleryAttachmentSource: "chat-gallery",
+      galleryAttachmentId: chatImage.id,
+      galleryAttachmentChatId: chatImage.chatId,
+    },
+  };
+}
+
+export async function prepareGeneratedSlpMedia(input: {
+  db: DB;
+  characters: ReturnType<typeof createCharactersStorage>;
+  chats: ReturnType<typeof createChatsStorage>;
+  gallery: ReturnType<typeof createGalleryStorage>;
+  characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
+  promptOverrides: ReturnType<typeof createPromptOverridesStorage>;
+  generated: SlpGeneratedRefresh;
+  selectedParticipants: SlpAccount[];
+  personaAccount: SlpAccount | null;
+  settings: SlurpSettings;
+  imageConnection: ImageConnection | null;
+  debugMode: boolean;
+  reviewImagePromptsBeforeSend: boolean;
+  admissionMode?: ConnectionAdmissionMode;
+}): Promise<PreparedGeneratedSlpMedia> {
+  const activeAccounts = [...(input.personaAccount ? [input.personaAccount] : []), ...input.selectedParticipants];
+  const handleToAccount = new Map(activeAccounts.map((account) => [normalizeSlpHandle(account.handle), account]));
+  const activeCharacterReferenceAccounts = activeAccounts.filter((account) => account.kind === "character");
+  const posts = new Map<SlpGeneratedRefresh["posts"][number], PreparedPostMedia>();
+  const stagedMedia: StagedSlpPostMedia[] = [];
+  const galleryUsed: unknown[] = [];
+  let remainingImagePrompts = input.settings.enableImagePrompts ? input.settings.maxImagesPerRefresh : 0;
+
+  for (const generatedPost of input.generated.posts.slice(0, input.settings.maxGeneratedPostsPerRefresh)) {
+    const account = handleToAccount.get(normalizeSlpHandle(generatedPost.authorHandle));
+    if (!account || !canGenerateSlpActivityForAccountKind(account.kind)) continue;
+    const imagePrompt = remainingImagePrompts > 0 ? normalizeSlpImagePrompt(generatedPost.imagePrompt) : null;
+    if (imagePrompt) remainingImagePrompts -= 1;
+    const prepared: PreparedPostMedia = {
+      imagePrompt,
+      imageUrl: null,
+      metadata: {},
+      preview: null,
+      stagedMedia: null,
+    };
+    if (imagePrompt && input.imageConnection) {
+      try {
+        const generatedImage = await generateSlpPostImage({
+          account,
+          referenceAccounts: activeCharacterReferenceAccounts,
+          postContent: generatedPost.content,
+          draftPrompt: imagePrompt,
+          settings: input.settings,
+          characters: input.characters,
+          characterGallery: input.characterGallery,
+          promptOverrides: input.promptOverrides,
+          imageConnection: input.imageConnection,
+          db: input.db,
+          debugMode: input.debugMode,
+          previewOnly: input.reviewImagePromptsBeforeSend === true,
+          admissionMode: input.admissionMode,
+        });
+        prepared.imageUrl = generatedImage.imageUrl;
+        Object.assign(prepared.metadata, generatedImage.metadata);
+        prepared.preview = generatedImage.preview;
+        prepared.stagedMedia = generatedImage.stagedMedia;
+        if (generatedImage.stagedMedia) stagedMedia.push(generatedImage.stagedMedia);
+      } catch (err) {
+        // A busy image connection means this background run should yield and retry, not brand
+        // the post with a permanent image failure it never actually suffered.
+        if (slpIsAdmissionFailure(err)) throw err;
+        logger.warn(err, "[slurp] Failed to generate image for %s", account.displayName);
+        prepared.imagePrompt = null;
+        prepared.metadata.imageGenerationFailed = true;
+        prepared.metadata.imageGenerationError = getErrorMessage(err).slice(0, 500);
+      }
+    } else if (imagePrompt) {
+      prepared.imagePrompt = null;
+      prepared.metadata.imageGenerationFailed = true;
+      prepared.metadata.imageGenerationError = "No image generation connection is configured.";
+    }
+    if (
+      !prepared.imageUrl &&
+      !prepared.preview &&
+      !prepared.metadata.imageGenerationFailed &&
+      input.settings.allowGalleryImageAttachments &&
+      generatedPost.attachGalleryImage === true
+    ) {
+      try {
+        const attachment = await pickGalleryAttachmentForAccount({
+          db: input.db,
+          account,
+          postingAccountId: account.id,
+          batchUsed: galleryUsed,
+        });
+        if (attachment) {
+          galleryUsed.unshift(attachment.metadata.galleryAttachmentId);
+          prepared.imageUrl = attachment.imageUrl;
+          Object.assign(prepared.metadata, attachment.metadata);
+        }
+      } catch (err) {
+        logger.warn(err, "[slurp] Failed to attach gallery image for %s", account.displayName);
+      }
+    }
+    posts.set(generatedPost, prepared);
+  }
+  return { posts, stagedMedia };
+}
+
+export async function persistGeneratedSlpActivity(input: {
+  noodle: ReturnType<typeof createSlurpStorage>;
+  characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
+  generated: SlpGeneratedRefresh;
+  selectedParticipants: SlpAccount[];
+  personaAccount: SlpAccount | null;
+  settings: SlurpSettings;
+  runId: string;
+  recalledPostIds: string[];
+  preparedMedia: PreparedGeneratedSlpMedia;
+}) {
+  const activeAccounts = [...input.selectedParticipants, ...(input.personaAccount ? [input.personaAccount] : [])];
+  const handleToAccount = new Map(
+    [...(input.personaAccount ? [input.personaAccount] : []), ...input.selectedParticipants].map((account) => [
+      normalizeSlpHandle(account.handle),
+      account,
+    ]),
+  );
+  const freshPosts = await input.noodle.listPosts({
+    since: sinceHoursIso(48),
+    limit: 200,
+  });
+  const allowedPostIds = new Set([...freshPosts.map((post) => post.id), ...input.recalledPostIds]);
+  const existingInteractionById = new Map(
+    (await input.noodle.listInteractions([...allowedPostIds])).map((interaction) => [interaction.id, interaction]),
+  );
+  const existingInteractions = [...existingInteractionById.values()];
+  const tempIdToPostId = new Map<string, string>();
+  const imagePromptReviewItems: SlpImagePromptReviewItem[] = [];
+  const committedCounts = { posts: 0, interactions: 0, follows: 0 };
+
+  for (const generatedPost of input.generated.posts.slice(0, input.settings.maxGeneratedPostsPerRefresh)) {
+    const account = handleToAccount.get(normalizeSlpHandle(generatedPost.authorHandle));
+    if (!account) continue;
+    if (!canGenerateSlpActivityForAccountKind(account.kind)) {
+      logger.warn("[slurp] Ignoring generated post attributed to persona %s", account.entityId);
+      continue;
+    }
+    const preparedMedia = input.preparedMedia.posts.get(generatedPost);
+    if (!preparedMedia) continue;
+    const mediaMetadata = { ...preparedMedia.metadata };
+    const mentionedAccounts = mentionedCharacterAccounts(activeAccounts, generatedPost.content);
+    const poll = generatedPost.poll ? createSlpPoll(generatedPost.poll) : null;
+    const post = await input.noodle.createPost({
+      authorAccountId: account.id,
+      content: generatedPost.content,
+      imagePrompt: preparedMedia.imagePrompt,
+      imageUrl: preparedMedia.imageUrl,
+      source: "generated",
+      metadata: {
+        runId: input.runId,
+        ...mediaMetadata,
+        ...mentionedAccountMetadata(mentionedAccounts),
+        ...(poll ? { poll } : {}),
+      },
+    });
+    if (!post) {
+      if (preparedMedia.stagedMedia) {
+        throw new Error("Failed to persist a generated Slurp post with staged media.");
+      }
+      continue;
+    }
+    if (preparedMedia.stagedMedia?.characterGalleryInput) {
+      const galleryImage = await input.characterGallery.create(preparedMedia.stagedMedia.characterGalleryInput);
+      if (!galleryImage) throw new Error("Failed to associate a generated Slurp image with the character gallery.");
+      await input.noodle.updatePostMedia(post.id, {
+        metadata: { characterGalleryImageId: galleryImage.id },
+      });
+    }
+    allowedPostIds.add(post.id);
+    if (preparedMedia.preview) imagePromptReviewItems.push({ id: post.id, ...preparedMedia.preview });
+    committedCounts.posts += 1;
+    if (generatedPost.tempId) tempIdToPostId.set(generatedPost.tempId, post.id);
+    const digest = await input.noodle.createDigest({
+      accountIds: [account.id, ...mentionedAccounts.map((mentionedAccount) => mentionedAccount.id)],
+      content: `${noodleDigestAccountLabel(account)} posted on Slurp: ${post.content}`,
+      sourceRunId: input.runId,
+      sourcePostId: post.id,
+    });
+    await input.noodle.updatePostMedia(post.id, {
+      metadata: { activityDigestId: digest.id },
+    });
+  }
+
+  const quotas: Record<SlpInteractionType, number> = {
+    like: input.settings.maxLikesPerRefresh,
+    reply: input.settings.maxRepliesPerRefresh,
+    vote: input.settings.maxLikesPerRefresh,
+  };
+  for (const generatedInteraction of input.generated.interactions) {
+    const interactionType = generatedInteraction.type;
+    if ((quotas[interactionType] ?? 0) <= 0) continue;
+    const actor = handleToAccount.get(normalizeSlpHandle(generatedInteraction.actorHandle));
+    if (!actor) continue;
+    if (!canGenerateSlpActivityForAccountKind(actor.kind)) {
+      logger.warn(
+        "[slurp] Ignoring generated %s interaction attributed to persona %s",
+        generatedInteraction.type,
+        actor.entityId,
+      );
+      continue;
+    }
+    const targetPostId =
+      generatedInteraction.targetPostId ?? tempIdToPostId.get(generatedInteraction.targetTempId ?? "");
+    if (!targetPostId || !allowedPostIds.has(targetPostId)) continue;
+    const targetPost = await input.noodle.getPostById(targetPostId);
+    if (!targetPost) continue;
+    const parentInteraction = generatedInteraction.parentInteractionId
+      ? (existingInteractionById.get(generatedInteraction.parentInteractionId) ?? null)
+      : null;
+    if (
+      generatedInteraction.parentInteractionId &&
+      (!parentInteraction || parentInteraction.postId !== targetPostId || parentInteraction.type !== "reply")
+    )
+      continue;
+    if (
+      !canCreateGeneratedSlpInteraction({
+        actor,
+        targetPost,
+        parentInteraction,
+        existingInteractions,
+      })
+    )
+      continue;
+    const poll = readSlpPollFromMetadata(targetPost.metadata);
+    const selectedPollOption =
+      generatedInteraction.type === "vote" ? poll?.options[generatedInteraction.pollOptionIndex ?? -1] : undefined;
+    if (generatedInteraction.type === "vote" && !selectedPollOption) continue;
+    const interaction = await input.noodle.createInteraction(targetPostId, {
+      actorAccountId: actor.id,
+      type: generatedInteraction.type,
+      content: selectedPollOption?.id ?? generatedInteraction.content ?? null,
+      parentInteractionId: parentInteraction?.id ?? null,
+    });
+    if (!interaction) continue;
+    committedCounts.interactions += 1;
+    existingInteractions.push(interaction);
+    existingInteractionById.set(interaction.id, interaction);
+    quotas[interactionType] = (quotas[interactionType] ?? 0) - 1;
+    if (generatedInteraction.type !== "like") {
+      const interactionSummary =
+        generatedInteraction.type === "vote" && poll && selectedPollOption
+          ? `${poll.question}: ${selectedPollOption.label}`
+          : interaction.content || targetPost.content;
+      await input.noodle.createDigest({
+        accountIds: Array.from(
+          new Set([actor.id, targetPost.authorAccountId, parentInteraction?.actorAccountId]),
+        ).filter((accountId): accountId is string => Boolean(accountId)),
+        content: `${noodleDigestAccountLabel(actor)} ${interactionDigestVerb(generatedInteraction.type)} a Slurp post: ${interactionSummary}`,
+        sourceRunId: input.runId,
+        sourcePostId: targetPostId,
+        sourceInteractionId: interaction.id,
+      });
+    }
+  }
+
+  const maxGeneratedFollows = Math.max(12, activeAccounts.length * 2);
+  const seenGeneratedFollows = new Set<string>();
+  for (const generatedFollow of input.generated.follows.slice(0, maxGeneratedFollows)) {
+    const actor = handleToAccount.get(normalizeSlpHandle(generatedFollow.actorHandle));
+    const target = handleToAccount.get(normalizeSlpHandle(generatedFollow.targetHandle));
+    if (!actor || !target || actor.id === target.id) continue;
+    if (!canGenerateSlpActivityForAccountKind(actor.kind)) {
+      logger.warn("[slurp] Ignoring generated follow attributed to persona %s", actor.entityId);
+      continue;
+    }
+    const followKey = `${actor.id}:${target.id}`;
+    if (seenGeneratedFollows.has(followKey)) continue;
+    seenGeneratedFollows.add(followKey);
+    const follow = await input.noodle.updateAccountFollow(actor.id, target.id, true);
+    if (!follow?.changed) continue;
+    committedCounts.follows += 1;
+    await input.noodle.createDigest({
+      accountIds: [actor.id, target.id],
+      content: `${noodleDigestAccountLabel(actor)} followed ${noodleDigestAccountLabel(target)} on Slurp.`,
+      sourceRunId: input.runId,
+    });
+  }
+  return {
+    imagePromptReviewItems,
+    committedCounts,
+    committedCount: committedCounts.posts + committedCounts.interactions + committedCounts.follows,
+  };
+}
+
+export async function commitGeneratedSlpActivity(input: {
+  db: DB;
+  generated: SlpGeneratedRefresh;
+  selectedParticipants: SlpAccount[];
+  personaAccount: SlpAccount | null;
+  settings: SlurpSettings;
+  runId: string;
+  result: string;
+  recalledPostIds: string[];
+  preparedMedia: PreparedGeneratedSlpMedia;
+  rejectedActivityCount: number;
+}) {
+  try {
+    for (const media of input.preparedMedia.stagedMedia) media.file.promote();
+    return await input.db.transaction(async (tx) => {
+      const noodle = createSlurpStorage(tx);
+      const persisted = await persistGeneratedSlpActivity({
+        noodle,
+        characterGallery: createCharacterGalleryStorage(tx),
+        generated: input.generated,
+        selectedParticipants: input.selectedParticipants,
+        personaAccount: input.personaAccount,
+        settings: input.settings,
+        runId: input.runId,
+        recalledPostIds: input.recalledPostIds,
+        preparedMedia: input.preparedMedia,
+      });
+      const candidateCount =
+        input.generated.posts.length + input.generated.interactions.length + input.generated.follows.length;
+      if (persisted.committedCount === 0) {
+        throw new Error(
+          `Timeline generation produced no activity that could be committed (0 committed; ${input.rejectedActivityCount + candidateCount} rejected).`,
+        );
+      }
+      const completedRun = await noodle.finishRefreshRun(input.runId, {
+        status: "completed",
+        result: JSON.stringify({
+          response: input.result,
+          activityCounts: {
+            ...persisted.committedCounts,
+            rejected: input.rejectedActivityCount + Math.max(0, candidateCount - persisted.committedCount),
+          },
+        }),
+      });
+      if (!completedRun) throw new Error("Slurp refresh run disappeared during activity commit.");
+      return persisted;
+    });
+  } catch (error) {
+    for (const media of input.preparedMedia.stagedMedia) media.file.compensate();
+    throw error;
+  }
+}

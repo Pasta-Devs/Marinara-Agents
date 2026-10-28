@@ -1,0 +1,105 @@
+import assert from "node:assert/strict";
+import { join } from "node:path";
+import { slurp2Source } from "./slurp2-source";
+
+// slurp-images.service.ts cannot be imported here: it pulls in the database and the LLM providers,
+// and @marinara-engine/shared is not installed in this repository. These are source assertions on
+// the wiring, which is what the defects below actually were.
+
+const root = join(import.meta.dirname, "..");
+const server = "packages/slurp2/src/engine/packages/server/src";
+const images = slurp2Source(join(root, server, "services/slurp/slurp-images.service.ts"));
+const routes = slurp2Source(join(root, server, "routes/slurp.routes.ts"));
+const rewrite = slurp2Source(join(root, server, "services/slurp/slurp-image-prompt-rewrite.ts"));
+
+// --- the rewriter is fed the draft, not the rendered template -----------------------------------
+// NOODLE_IMAGE_POST documents itself as terminal ("no LLM pass runs after it") and emits bare
+// unlabelled values for that reason. Handing the rendered template to the rewriter sent the
+// character context twice and asked it to preserve a personality trait list as a "visual fact".
+assert.match(images, /prompt: rewriteInput,/u, "the rewriter receives the draft, not the template");
+// ...and the bare draft, not the styled one: the style is passed as styleGuidance and compiled onto the
+// output, so a styled draft came back reworded and the picture carried its tags twice.
+assert.match(images, /const rewriteInput = redactIdentity\(draftPrompt\) \|\| rawRewriteInput;/u);
+
+assert.match(
+  images,
+  /const rawRewriteInput = redactIdentity\(reviewedOverride\?\.prompt \|\| compiledDraft\?\.prompt \|\| draftPrompt\);/u,
+);
+
+// When no rewrite survives, the provider gets the rendered template — the only document carrying
+// appearance notes and image habits, without which fallback pictures show the wrong character. The
+// length cap in selectSlpImageProviderPrompt is what keeps that stack bounded.
+assert.match(
+  images,
+  /const rawProviderPrompt = redactIdentity\(reviewedOverride\?\.prompt \|\| compiledPrompt\.prompt\);/u,
+);
+assert.match(images, /rawPrompt: rawProviderPrompt,/u);
+assert.match(images, /rewriteAttempted,/u);
+assert.match(images, /onFallback:/u);
+// Garnish ad images honour the interpretation setting and share the same rewrite and fallback.
+const garnish = slurp2Source(join(root, server, "services/slurp/slurp-garnish-image.service.ts"));
+assert.match(garnish, /settings\.enableImageInterpretation !== false/u);
+assert.match(garnish, /rewriteSlpImagePrompt\(/u);
+assert.match(garnish, /selectSlpImageProviderPrompt\(/u);
+
+// --- a retry is built the same way the first attempt was ----------------------------------------
+// Every retry resends our own stored draft as promptOverride. The old guard read that as a
+// user-reviewed prompt and skipped interpretation, style guidance, and character context, so the
+// first attempt and its retry sent materially different prompts.
+assert.match(images, /const skipInterpretation = Boolean\(input\.promptOverride\) && !input\.retryStoredPrompt;/u);
+assert.match(images, /!skipInterpretation/u);
+assert.match(images, /const reviewedOverride = input\.retryStoredPrompt \? null : compiledOverride;/u);
+// The negative prompt has to follow the same rule, or a retry silently loses the profile negatives.
+assert.match(images, /input\.promptOverride && !input\.retryStoredPrompt/u);
+
+// Every path that resends a stored draft must declare itself as such.
+assert.match(routes, /retryStoredPrompt: !asWritten,/u, "manual generate-image resends a stored draft");
+// A prompt the user edited, or kept from the last picture, is theirs and goes out as written. The
+// redraw box says so explicitly (R1-055), and the choice survives Try again.
+assert.match(
+  routes,
+  /const asWritten = parsed\.data\.asWritten === true \|\| \(wasAsWritten && imagePrompt === post\.imagePrompt\);/u,
+);
+const retryFlags = [...images.matchAll(/retryStoredPrompt: true,/gu)];
+assert.equal(retryFlags.length, 1, "retryNextFailedPostImage must declare the stored prompt too");
+// The flag has to actually exist on the service input, not just be passed and ignored.
+assert.match(images, /retryStoredPrompt\?: boolean;/u);
+
+// --- the interpretation model gets the same redaction the prompt beside it gets ------------------
+// characterDescription is often "${name}'s Appearance: ...", built from the linked source account,
+// so an unredacted context block sent the source's real name to the model in the same call whose
+// prompt had that name carefully replaced.
+assert.match(images, /const characterContext = redactIdentity\(/u);
+assert.match(images, /instructions: redactIdentity\(imagePromptInstructions\),/u);
+assert.match(images, /interpretationInstruction: input\.settings\.imagePromptInterpretation,/u);
+assert.match(images, /prompt: rewriteInput,/u);
+assert.match(
+  images,
+  /\(imagePromptInstructions \|\| characterContext \|\| styleGuidance\) &&\s*input\.settings\.enableImageInterpretation !== false &&\s*!skipInterpretation/u,
+  "interpretation must require rewrite context, enabled interpretation, and no reviewed override",
+);
+assert.match(rewrite, /resolveSlurpTextConnection\(connections, input.connectionId\)/u);
+
+// --- no Secret tier: Open and Hinted both get source image references ----------------------------
+assert.doesNotMatch(images, /Compose so the face cannot be identified/u);
+assert.match(images, /!input\.suppressCharacterContext && input\.linkedPublicAccount \? input\.linkedPublicAccount/u);
+// Persona-owned Creators are eligible too. Requiring kind === "character" here meant a persona got
+// appearance text and nothing else in every mode, so Open meant less for a persona than a character.
+assert.doesNotMatch(
+  images,
+  /input\.linkedPublicAccount\?\.kind === "character"\s*\?\s*input\.linkedPublicAccount/u,
+  "persona-owned Creators must not be excluded from image context",
+);
+assert.match(images, /personality: sourcePersona\.personality\?\.trim\(\) \?\? "",/u);
+
+// --- the commission path uses the same default as everything else --------------------------------
+const commission = slurp2Source(join(root, server, "services/slurp/slurp-commission-image.operation.ts"));
+// Open is the default everywhere, commissions included.
+assert.match(commission, /identityDisclosure \?\? "open"/u);
+assert.doesNotMatch(
+  commission,
+  /identityDisclosure \?\? "(hinted|secret)"/u,
+  "commissions must use the shared default",
+);
+
+console.log("slurp image prompt wiring regression passed");

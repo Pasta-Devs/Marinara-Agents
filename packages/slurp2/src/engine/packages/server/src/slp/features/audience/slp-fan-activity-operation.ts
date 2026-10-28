@@ -1,0 +1,541 @@
+import type { SlpAuthorSnapshot } from "../../../../../shared/src/slp/slp-social.types.js";
+import {
+  slurpInfluenceMultiplier,
+  type SlurpInfluenceStory,
+} from "../../../../../shared/src/slp/slp-platform-events.js";
+import type { DB } from "../../../db/connection.js";
+import { eq } from "../../../db/file-query.js";
+import { slpCreatorFanActivityState } from "../../../db/schema/slurp.js";
+import { now } from "../../../utils/id-generator.js";
+import { tryBackgroundConnection } from "../../../services/generation/connection-admission.js";
+import { createSlurpStorage } from "../../data/slp-storage.js";
+import { snapshotForAccount } from "../../data/host/slp-storage-mappers.js";
+import { type SlurpSettings } from "../../modules/settings/slp-settings.js";
+import {
+  claimManualSlpFanActivityRun,
+  claimSlpFanActivityRun,
+  dueSlpFanActivityRun,
+  finishSlpFanActivityRun,
+  markSlpFanActivityApplied,
+  parsePersistedSlpFanActivityDayPlan,
+  reconcileSlpFanActivityDayPlan,
+  storeSlpFanAcceptedActivities,
+  type SlpFanActivityDayPlanRun,
+  type PersistedSlpFanActivityDayPlan,
+} from "../../modules/audience/slp-fan-activity-day-plan.js";
+import {
+  generateCreatorFanActivityBatch,
+  prepareCreatorFanCreatorCandidates,
+  resolveCreatorFanActivityPolicy,
+  resolveCreatorFanConnection,
+} from "./slp-fan-activity-service.js";
+import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
+import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
+import { isSlurpPopulationMemberId } from "../../../../../shared/src/slp/slp-population.js";
+import {
+  NOODLER_FAN_IDENTITY_PREFIX,
+  populationCreatorFanIdentityProvider,
+  type SlpCreatorFanCastMember,
+} from "../../modules/audience/slp-fan-identity-provider.js";
+import {
+  SLURP_FAN_VOICE_PROMPT_MAX,
+  slurpFanMemoryForPrompt,
+  slurpFanTypeForPinnedOrSeed,
+  slurpFanTypeSpendTier,
+  slurpFanTypeTraits,
+  slurpFanTypeWeeklyBudget,
+  slurpResolveFanType,
+} from "../../../../../shared/src/slp/slp-fan-types.js";
+import {
+  selectSlurpAudienceCharacterIds,
+  slurpAudienceCharacterFanTypeId,
+  slurpAudienceCharacterTraits,
+  slurpAudienceCharacterVoice,
+} from "../../../../../shared/src/slp/slp-audience-characters.js";
+import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
+import { newId } from "../../../utils/id-generator.js";
+import {
+  claimSlurpModelBudget,
+  getSlurpModelBudgetLedger,
+  slurpModelWorkerAllows,
+  slurpEffectiveModelBudget,
+  spendSlurpModelBudget,
+} from "../../base/model/slp-model-worker.js";
+import { slpLiveEvents } from "../../../../../shared/src/slp/slp-extensions.js";
+
+const FAN_PLAN_ROW_PREFIX = "fan-day:";
+
+/** People who have acted before and may act again, so a Creator gets recognisable regulars. */
+const FAN_RUN_RETURNING = 10;
+
+/** New faces per run. Small, but enough that the cast is never the same list twice in a row. */
+const FAN_RUN_NEWCOMERS = 2;
+const FAN_PLAN_RETENTION_DAYS = 7;
+const FAN_ACTIVITY_RECOVERY_MAX_AGE_MS = 15 * 60 * 1000;
+
+export function slpCreatorFanActivityRunLimit(
+  settings: Pick<SlurpSettings, "fanActivityRunsPerDay" | "modelBudget"> &
+    Partial<Pick<SlurpSettings, "platformEvents" | "extWorld">>,
+  at = new Date(),
+  /** Occurrences, so a started manual event counts and a dismissed one does not (R1-112). */
+  story: SlurpInfluenceStory = {},
+) {
+  // Occasions may raise or lower audience activity ("audience.activity"); the budget cap still wins.
+  // The day plan is shared by every Creator, so only events aimed at everybody move it.
+  const boosted = Math.round(
+    settings.fanActivityRunsPerDay *
+      slurpInfluenceMultiplier(
+        slpLiveEvents({ ...settings, platformEvents: settings.platformEvents ?? [] }),
+        at,
+        "audience.activity",
+        story,
+      ),
+  );
+  return Math.min(boosted, settings.modelBudget.jobs.thread.maxPerDay);
+}
+
+export type SlpCreatorFanRunResult = {
+  status:
+    | "generated"
+    | "resumed"
+    | "not_due"
+    | "disabled"
+    | "busy"
+    | "limit_reached"
+    | "ai_off"
+    | "connection_required"
+    | "connection_not_found"
+    | "no_eligible_posts"
+    | "abandoned";
+  created: number;
+  runId?: string;
+};
+
+function localTimezone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
+}
+
+/**
+ * The characters the user invited, as cast members for one run.
+ *
+ * Each one is an account row, not a population member, so it carries `snapshotForAccount` of that
+ * row. `createNoodlerFanInteraction` compares the planned snapshot against the live row and refuses
+ * anything that differs, so a synthesised snapshot would be silently dropped at apply time.
+ *
+ * A character has no Fan Type of its own, so one is derived: the pinned type when the user chose
+ * one, else the id-derived pick that an ambient account already uses. That is what supplies the
+ * spend budget, the traits, and the behaviour weights.
+ *
+ * Rotation is by run id, so inviting more characters than the limit does not silence the tail of
+ * the list forever.
+ */
+async function drawAudienceCharacterCast(
+  db: DB,
+  settings: SlurpSettings,
+  runId: string,
+): Promise<SlpCreatorFanCastMember[]> {
+  const limit = settings.audienceCharacterLimit ?? 0;
+  if (limit <= 0) return [];
+  const noodle = createSlurpStorage(db);
+  // Provision first: a character invited since the last run has no row yet, and a renamed one
+  // needs its handle and avatar refreshed before the snapshot is taken.
+  await noodle.ensureAudienceCharacterAccounts().catch(() => undefined);
+  const invited = await noodle.listAudienceCharacterAccounts().catch(() => []);
+  if (invited.length === 0) return [];
+  const chosen = selectSlurpAudienceCharacterIds(
+    invited.map((entry) => entry.characterId),
+    limit,
+    runId,
+  );
+  const byCharacterId = new Map(invited.map((entry) => [entry.characterId, entry.account]));
+  const characters = createCharactersStorage(db);
+  // Only the drawn characters are read. The invited list can be long, and a card is the largest
+  // row this feature touches.
+  const cards = new Map(
+    await Promise.all(
+      chosen.map(
+        async (characterId) => [characterId, await characters.getById(characterId).catch(() => null)] as const,
+      ),
+    ),
+  );
+  return chosen.flatMap((characterId) => {
+    const account = byCharacterId.get(characterId);
+    if (!account) return [];
+    const type = slurpFanTypeForPinnedOrSeed(
+      settings.fanTypes,
+      slurpAudienceCharacterFanTypeId(settings, characterId),
+      account.id,
+    );
+    const weeklyBudget = slurpFanTypeWeeklyBudget(type, account.id);
+    // The character's own words are the point of inviting them, so the card wins over the Fan
+    // Type's voice. The Type still supplies everything the card cannot say: spend, hours, weights.
+    // A card with no personality or description falls back rather than sending an empty voice.
+    const card = cards.get(characterId);
+    const cardTraits = slurpAudienceCharacterTraits(card);
+    return [
+      {
+        id: account.id,
+        handle: account.handle,
+        displayName: account.displayName,
+        archetype: type.engineArchetype,
+        traits: cardTraits.length > 0 ? cardTraits : slurpFanTypeTraits(type, account.id),
+        spendTier: slurpFanTypeSpendTier(weeklyBudget),
+        voice: slurpAudienceCharacterVoice(card, SLURP_FAN_VOICE_PROMPT_MAX) ?? type.voice,
+        tone: type.tone,
+        snapshot: snapshotForAccount(account),
+      },
+    ];
+  });
+}
+
+async function readPlans(db: DB, at = new Date(), prune = true) {
+  const rows = await db.select().from(slpCreatorFanActivityState);
+  const plans = rows.flatMap((row) => {
+    try {
+      const plan = parsePersistedSlpFanActivityDayPlan(JSON.parse(row.plan));
+      return plan ? [plan] : [];
+    } catch {
+      return [];
+    }
+  });
+  if (!prune) return plans;
+  const cutoff = new Date(at.getFullYear(), at.getMonth(), at.getDate() - FAN_PLAN_RETENTION_DAYS).getTime();
+  const retained = [];
+  for (const plan of plans) {
+    const [year, month, day] = plan.localDate.split("-").map(Number);
+    const planTime = new Date(year!, month! - 1, day!).getTime();
+    const hasRecoverableRun = plan.runs.some((run) => run.status === "applying" || run.status === "generating");
+    if (planTime < cutoff && !hasRecoverableRun) {
+      await db.delete(slpCreatorFanActivityState).where(eq(slpCreatorFanActivityState.id, planRowId(plan)));
+    } else {
+      retained.push(plan);
+    }
+  }
+  return retained;
+}
+
+async function readCurrentPlan(db: DB, at: Date) {
+  const plans = await readPlans(db, at);
+  return plans.find((plan) => plan.localDate === localPlanDate(at) && plan.timezone === localTimezone()) ?? null;
+}
+
+function localPlanDate(at: Date) {
+  return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}-${String(at.getDate()).padStart(2, "0")}`;
+}
+
+function planRowId(plan: PersistedSlpFanActivityDayPlan) {
+  return `${FAN_PLAN_ROW_PREFIX}${plan.localDate}:${plan.timezone}`;
+}
+
+async function writePlan(db: DB, plan: PersistedSlpFanActivityDayPlan) {
+  const id = planRowId(plan);
+  await db.transaction(async (tx) => {
+    const rows = await tx.select().from(slpCreatorFanActivityState).where(eq(slpCreatorFanActivityState.id, id));
+    if (rows[0]) {
+      await tx
+        .update(slpCreatorFanActivityState)
+        .set({ plan: JSON.stringify(plan), updatedAt: now() })
+        .where(eq(slpCreatorFanActivityState.id, id));
+    } else {
+      await tx.insert(slpCreatorFanActivityState).values({ id, plan: JSON.stringify(plan), updatedAt: now() });
+    }
+  });
+}
+
+async function findRecoverablePlan(db: DB) {
+  for (const plan of await readPlans(db, new Date(), false)) {
+    const applying = plan.runs.find((run) => run.status === "applying");
+    if (applying) return { plan, run: applying, interrupted: false };
+    const generating = plan.runs.find((run) => run.status === "generating");
+    if (generating) return { plan, run: generating, interrupted: true };
+  }
+  return null;
+}
+
+// The switch turns on the scheduled audience. "Refresh now" is the player asking for one run, so
+// it works with the switch off; a Creator switched off on their own page stays off either way.
+function fanActivitySettingsFor(settings: SlurpSettings, manual: boolean): SlurpSettings {
+  return manual ? { ...settings, fanActivityEnabled: true } : settings;
+}
+
+async function reconcilePlan(db: DB, settings: SlurpSettings, at: Date) {
+  const noodle = createSlurpStorage(db);
+  const creators = await noodle.listNoodlerAccounts();
+  const eligibleIds = settings.fanActivityEnabled
+    ? creators
+        .filter((creator) => resolveCreatorFanActivityPolicy(settings, creator).enabled)
+        .map((creator) => creator.id)
+    : [];
+  const plan = reconcileSlpFanActivityDayPlan(
+    await readCurrentPlan(db, at),
+    eligibleIds,
+    at,
+    slpCreatorFanActivityRunLimit(settings, at, await noodle.platformInfluenceStory()),
+  );
+  await writePlan(db, plan);
+  return plan;
+}
+
+async function applyAcceptedActivities(
+  db: DB,
+  plan: PersistedSlpFanActivityDayPlan,
+  run: SlpFanActivityDayPlanRun,
+  settings: SlurpSettings,
+  finishedAt: Date,
+) {
+  const noodle = createSlurpStorage(db);
+  const manual = run.manual === true;
+  const effective = fanActivitySettingsFor(settings, manual);
+  let current = plan;
+  let created = 0;
+  // ponytail: interaction creation is idempotent by activity.id (see createNoodlerFanInteraction),
+  // so a crash mid-loop just redoes a no-op create on resume — one write after the loop is enough.
+  for (const activity of run.acceptedActivities) {
+    if (activity.applied) continue;
+    const creator = await noodle.getNoodlerAccountById(activity.creatorId);
+    if (!creator || !resolveCreatorFanActivityPolicy(effective, creator).enabled) {
+      current = markSlpFanActivityApplied(current, run.id, activity.id);
+      continue;
+    }
+    const result = await noodle.createNoodlerFanInteraction(activity.targetPostId, {
+      id: activity.id,
+      manual,
+      creatorAccountId: activity.creatorId,
+      actorId: activity.actorId,
+      actorSnapshot: activity.snapshot as SlpAuthorSnapshot,
+      runId: run.id,
+      type: activity.type as "like" | "reply",
+      content: activity.content,
+      parentInteractionId: activity.parentInteractionId ?? null,
+    });
+    if (result?.created) {
+      created += 1;
+      // Fan activity is the highest-volume thing the audience does, and it fed nothing into the
+      // Fan likes and replies are the only audience interactions in Slurp.
+      const population = createSlurpPopulationStorage(db);
+      // Same guard as `advanceAudienceTie`: a recovered plan written before the population existed
+      // still carries `noodler-fan:` archetype ids, and a tie for one is an unresolvable follower.
+      if (!activity.actorId.startsWith(NOODLER_FAN_IDENTITY_PREFIX)) {
+        // Ties are keyed by plain id, so an invited character earns a relationship here like anybody
+        // else in the crowd.
+        await population
+          .advanceTie(activity.actorId, activity.creatorId, {
+            stage: "liker",
+            interactions: 1,
+          })
+          .catch(() => undefined);
+        // `lastActiveAt` lives on the population row, and only a generated member has one. An
+        // account standing in the crowd — ambient or invited character — has nothing to touch.
+        if (isSlurpPopulationMemberId(activity.actorId)) {
+          await population.touch(activity.actorId).catch(() => undefined);
+        }
+      }
+    }
+    current = markSlpFanActivityApplied(current, run.id, activity.id);
+  }
+  current = finishSlpFanActivityRun(current, run.id, "completed", finishedAt);
+  await writePlan(db, current);
+  return created;
+}
+
+export async function runCreatorFanActivity(input: {
+  db: DB;
+  mode: "automatic" | "manual";
+  at?: Date;
+  debugMode?: boolean;
+}): Promise<SlpCreatorFanRunResult> {
+  const operation = await trySlpOperation<SlpCreatorFanRunResult>("noodler-fan-activity", async () => {
+    const at = input.at ?? new Date();
+    const noodle = createSlurpStorage(input.db);
+    const settings = fanActivitySettingsFor(await noodle.getSettings(), input.mode === "manual");
+    // "Pause all": no audience, whoever asks (the scheduler, "Fans now", a Stir play).
+    if (settings.paused) return { status: "disabled", created: 0 };
+    settings.modelBudget = await slurpEffectiveModelBudget(input.db, settings.modelBudget);
+    const recoverable = await findRecoverablePlan(input.db);
+    if (recoverable?.interrupted) {
+      const abandoned = finishSlpFanActivityRun(recoverable.plan, recoverable.run.id, "abandoned", at);
+      await writePlan(input.db, abandoned);
+    } else if (recoverable) {
+      const claimedAt = Date.parse(recoverable.run.claimedAt ?? "");
+      if (!Number.isFinite(claimedAt) || at.getTime() - claimedAt > FAN_ACTIVITY_RECOVERY_MAX_AGE_MS) {
+        const abandoned = finishSlpFanActivityRun(recoverable.plan, recoverable.run.id, "abandoned", at);
+        await writePlan(input.db, abandoned);
+      } else {
+        return {
+          status: "resumed",
+          created: await applyAcceptedActivities(input.db, recoverable.plan, recoverable.run, settings, at),
+          runId: recoverable.run.id,
+        };
+      }
+    }
+    if (!settings.fanActivityEnabled) return { status: "disabled", created: 0 };
+    let plan = await reconcilePlan(input.db, settings, at);
+
+    const connection = await resolveCreatorFanConnection(input.db, settings);
+    if (!connection) return { status: "connection_required", created: 0 };
+    const admission = tryBackgroundConnection(connection.id, at);
+    if (!admission.acquired) return { status: "busy", created: 0 };
+
+    try {
+      let run: SlpFanActivityDayPlanRun | null;
+      if (input.mode === "manual") {
+        const claimed = claimManualSlpFanActivityRun(plan, at);
+        plan = claimed.plan;
+        run = claimed.run;
+      } else {
+        run = dueSlpFanActivityRun(plan, at);
+        if (!run) return { status: "not_due", created: 0 };
+        plan = claimSlpFanActivityRun(plan, run.id, at);
+        run = plan.runs.find((candidate) => candidate.id === run!.id)!;
+      }
+      // Fan activity has its own on switch, and a scheduled run is what that switch asked for. Sent as
+      // "background", every run was refused under the default "present" budget mode — nothing
+      // detects presence — so automatic audience activity never ran. The daily caps still apply.
+      // A run the player started ("Refresh now", Stir's "Run audience") never spends the budget (0.3.6).
+      const world = input.mode !== "manual";
+      const workerContext = "present";
+      if (world && !slurpModelWorkerAllows(settings.modelBudget, workerContext))
+        return { status: "ai_off", created: 0 };
+      // Look without spending: the call is claimed below, once the run has somebody to write for,
+      // so a run with no eligible posts no longer uses a call (R1-113).
+      if (
+        world &&
+        !spendSlurpModelBudget(settings.modelBudget, await getSlurpModelBudgetLedger(input.db, at), "thread")
+      ) {
+        return { status: "limit_reached", created: 0 };
+      }
+      await writePlan(input.db, plan);
+
+      // Draw the cast for this run: mostly people who have acted before, so regulars recur and
+      // can be recognised, plus a couple of new faces so the roster churns instead of freezing
+      // into the same names forever. Churn is the cure for repetition — a fixed cast of thirty is
+      // the old six-account problem with thirty faces.
+      const population = createSlurpPopulationStorage(input.db);
+      const returning = await population.listAll(40);
+      const seeds = [
+        ...returning.slice(0, FAN_RUN_RETURNING).map((member) => member.id.replace(/^slurp-fan:/u, "")),
+        ...Array.from({ length: FAN_RUN_NEWCOMERS }, () => newId()),
+      ];
+      // Each member carries their Fan Type's voice, which is the one thing that makes a Lurker's
+      // three words and a Superfan's paragraph read as two different people.
+      const populationCast = (
+        await Promise.all(seeds.map((seed) => population.ensure(seed, at, settings.fanTypes)))
+      ).map((member) => {
+        const type = slurpResolveFanType(settings.fanTypes, member);
+        return { ...member, voice: type.voice, tone: type.tone };
+      });
+      // Mark the drawn cast as recently active. `listAll` orders by that column, so without this
+      // it kept ordering by creation time: the same earliest members were redrawn forever and
+      // anybody who actually showed up sank out of the pool. Regulars could never recur.
+      //
+      // Only population members are touched: `lastActiveAt` lives on the population row, and a
+      // character fan is an account, so touching its id would update nothing.
+      await Promise.all(populationCast.map((member) => population.touch(member.id).catch(() => undefined)));
+
+      // The characters the user put in the audience, rotated so that inviting more than the limit
+      // does not silence the ones at the end of the list.
+      const cast = [...populationCast, ...(await drawAudienceCharacterCast(input.db, settings, run.id))];
+
+      // The cast carries its relationship to each Creator. Resolved for every creator in the run,
+      // not just the first: a run covers up to twelve, and reusing one creator's ties for all of
+      // them told the model a false history rather than no history.
+      const tiesByCreator = new Map(
+        await Promise.all(
+          run.creatorIds.map(
+            async (creatorId) =>
+              [
+                creatorId,
+                new Map(
+                  (await population.listTiesForCreator(creatorId)).map((tie) => [
+                    tie.memberId,
+                    {
+                      stage: tie.stage,
+                      spent: tie.spent,
+                      knownForDays: Math.max(
+                        0,
+                        Math.round((at.getTime() - Date.parse(tie.firstSeenAt)) / 86_400_000) || 0,
+                      ),
+                      audienceArc: tie.audienceArc,
+                      memory: slurpFanMemoryForPrompt(tie, at),
+                    },
+                  ]),
+                ),
+              ] as const,
+          ),
+        ),
+      );
+
+      const creators = await prepareCreatorFanCreatorCandidates({
+        db: input.db,
+        settings,
+        creatorIds: run.creatorIds,
+        identityProvider: populationCreatorFanIdentityProvider(cast, tiesByCreator),
+      });
+      if (creators.length === 0) {
+        plan = finishSlpFanActivityRun(plan, run.id, "skipped", at);
+        await writePlan(input.db, plan);
+        return { status: "no_eligible_posts", created: 0, runId: run.id };
+      }
+      // ponytail: another worker can spend the last call between the look above and this claim; the
+      // run is then skipped rather than retried. Reserve-and-release on the ledger if that matters.
+      if (world && !(await claimSlurpModelBudget(input.db, settings.modelBudget, "thread", at))) {
+        plan = finishSlpFanActivityRun(plan, run.id, "skipped", at);
+        await writePlan(input.db, plan);
+        return { status: "limit_reached", created: 0, runId: run.id };
+      }
+
+      try {
+        const accepted = await generateCreatorFanActivityBatch({
+          db: input.db,
+          settings,
+          connection,
+          creators,
+          debugMode: input.debugMode,
+        });
+        plan = storeSlpFanAcceptedActivities(plan, run.id, accepted);
+        await writePlan(input.db, plan);
+        const storedRun = plan.runs.find((candidate) => candidate.id === run!.id)!;
+        const created = await applyAcceptedActivities(input.db, plan, storedRun, settings, at);
+        return { status: "generated", created, runId: run.id };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        plan = finishSlpFanActivityRun(plan, run.id, "abandoned", at, message.slice(0, 500));
+        await writePlan(input.db, plan);
+        throw error;
+      }
+    } finally {
+      admission.release();
+    }
+  });
+  return operation.acquired ? operation.value : { status: "busy", created: 0 };
+}
+
+export async function getCreatorFanActivityStatus(db: DB, at = new Date()) {
+  const plan = await readCurrentPlan(db, at);
+  const noodle = createSlurpStorage(db);
+  const settings = await noodle.getSettings();
+  settings.modelBudget = await slurpEffectiveModelBudget(db, settings.modelBudget);
+  const automaticRuns = plan?.runs.filter((run) => !run.manual) ?? [];
+  const lastRun = plan
+    ? ([...plan.runs]
+        .filter((run) => run.status !== "scheduled")
+        .sort(
+          (left, right) =>
+            Date.parse(left.finishedAt ?? left.scheduledAt) - Date.parse(right.finishedAt ?? right.scheduledAt),
+        )
+        .at(-1) ?? null)
+    : null;
+  return {
+    localDate: plan?.localDate ?? localPlanDate(at),
+    // Skipped runs spent nothing; counting them showed "5/6 used" on days when nothing ran.
+    usedRuns: automaticRuns.filter((run) => run.status !== "scheduled" && run.status !== "skipped").length,
+    runLimit: slpCreatorFanActivityRunLimit(settings, at, await noodle.platformInfluenceStory()),
+    lastRun,
+    // The next automatic run today, for Pulse's "Coming up" (task C).
+    nextRunAt:
+      automaticRuns
+        .filter((run) => run.status === "scheduled" && Date.parse(run.scheduledAt) > at.getTime())
+        .map((run) => run.scheduledAt)
+        .sort()[0] ?? null,
+  };
+}

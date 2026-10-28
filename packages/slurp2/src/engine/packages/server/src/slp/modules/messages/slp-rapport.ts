@@ -1,0 +1,399 @@
+/**
+ * How well one viewer and one creator know each other, as a single 0-100 score.
+ *
+ * Pure by design, for the reason `slurp-wallet.ts` and `slurp-prices.ts` are: the rules can be
+ * unit-tested without an Engine checkout, and the creator edit panel can render the exact same
+ * breakdown the prompt was built from rather than a second approximation of it.
+ *
+ * The score is never shown in a thread. It reaches the model as prose and reaches the player
+ * only through the per-creator edit panel, where every weight is editable.
+ */
+
+/** Everything the score is computed from. All counters are lifetime totals for one pair. */
+export type SlurpRapportFacts = {
+  subscribed: boolean;
+  /** Days the current unbroken subscription has run. Zero when not subscribed. */
+  subscribedDays: number;
+  /** True when the viewer used to be subscribed and is not now. */
+  lapsed: boolean;
+  tippedCoins: number;
+  unlockedCoins: number;
+  commissionsDelivered: number;
+  viewerMessages: number;
+  creatorMessages: number;
+  /** Mean characters per viewer message. Effort, not volume. */
+  averageViewerMessageLength: number;
+  /** Days since the viewer last wrote. `null` when they never have. */
+  daysSinceViewerMessage: number | null;
+};
+
+export const emptySlurpRapportFacts = (): SlurpRapportFacts => ({
+  subscribed: false,
+  subscribedDays: 0,
+  lapsed: false,
+  tippedCoins: 0,
+  unlockedCoins: 0,
+  commissionsDelivered: 0,
+  viewerMessages: 0,
+  creatorMessages: 0,
+  averageViewerMessageLength: 0,
+  daysSinceViewerMessage: null,
+});
+
+/**
+ * Per-signal weights, in score points. Each signal contributes between zero and its weight,
+ * except `recencyDecay`, which only ever subtracts. The positive weights sum to 100, so a
+ * viewer who maxes every signal scores exactly 100 and the numbers stay readable in the panel.
+ */
+export type SlurpRapportWeights = {
+  subscription: number;
+  loyalty: number;
+  tips: number;
+  unlocks: number;
+  commissions: number;
+  conversation: number;
+  effort: number;
+  reciprocity: number;
+  recencyDecay: number;
+  lapsedPenalty: number;
+};
+
+export const SLURP_DEFAULT_RAPPORT_WEIGHTS: SlurpRapportWeights = {
+  subscription: 20,
+  loyalty: 10,
+  tips: 22,
+  unlocks: 16,
+  commissions: 10,
+  conversation: 10,
+  effort: 6,
+  reciprocity: 6,
+  recencyDecay: 25,
+  lapsedPenalty: 10,
+};
+
+/** The point at which a signal counts as maxed. Everything below scales toward it. */
+const SATURATION = {
+  /** A subscription this old is as loyal as loyalty gets. */
+  loyaltyDays: 90,
+  tippedCoins: 120,
+  unlockedCoins: 90,
+  commissions: 3,
+  viewerMessages: 60,
+  /** Characters per message. Past this, longer is not more effort, it is a wall of text. */
+  messageLength: 240,
+  /** Silence this long costs the whole recency weight. */
+  silenceDays: 21,
+};
+
+/**
+ * Diminishing returns. The first tip moves the score far more than the fortieth, which is what
+ * keeps a whale from pinning the number at 100 and flattening every creator into the same warmth.
+ */
+const curve = (value: number, saturation: number): number =>
+  saturation <= 0 || value <= 0 ? 0 : Math.min(1, Math.sqrt(value / saturation));
+
+const linear = (value: number, saturation: number): number =>
+  saturation <= 0 || value <= 0 ? 0 : Math.min(1, value / saturation);
+
+export type SlurpRapportContribution = {
+  key: keyof SlurpRapportWeights;
+  /** The raw fact behind this line, for the edit panel. */
+  detail: string;
+  weight: number;
+  /** Signed points this signal added to or removed from the total. */
+  points: number;
+};
+
+export type SlurpRapport = {
+  score: number;
+  tier: SlurpRapportTier;
+  contributions: SlurpRapportContribution[];
+  /** The highest tier this pair ever reached: its doors stay open (docs/SPICY.md, item 1). */
+  peak?: SlurpRapportTier;
+  /** The highest tier the creator has told the viewer about; below `peak` she says it once. */
+  said?: SlurpRapportTier;
+};
+
+export type SlurpRapportTier = "stranger" | "acquaintance" | "regular" | "favourite" | "whale";
+
+/**
+ * Tiers name a score band for the panel and for the prompt. What a tier opens (`slurpRapportDoors`)
+ * reads `peak`, the highest tier reached, so a band edge never removes a feature the viewer had.
+ */
+export function slurpRapportTier(score: number): SlurpRapportTier {
+  if (score >= 80) return "whale";
+  if (score >= 60) return "favourite";
+  if (score >= 35) return "regular";
+  if (score >= 15) return "acquaintance";
+  return "stranger";
+}
+
+export const SLURP_RAPPORT_TIERS: readonly SlurpRapportTier[] = [
+  "stranger",
+  "acquaintance",
+  "regular",
+  "favourite",
+  "whale",
+];
+
+export function slurpRapportHigher(...tiers: (SlurpRapportTier | undefined)[]): SlurpRapportTier {
+  return SLURP_RAPPORT_TIERS[Math.max(0, ...tiers.map((tier) => (tier ? SLURP_RAPPORT_TIERS.indexOf(tier) : 0)))]!;
+}
+
+/** The tier whose doors are open: the highest one reached, never just today's band. */
+export function slurpRapportDoorTier(rapport: Pick<SlurpRapport, "tier" | "peak">): SlurpRapportTier {
+  return slurpRapportHigher(rapport.tier, rapport.peak);
+}
+
+export type SlurpRapportDoor = "spicierTalk" | "gifts" | "customDiscount" | "fullSpice";
+const DOORS_FROM: Record<SlurpRapportDoor, SlurpRapportTier> = {
+  spicierTalk: "regular",
+  gifts: "favourite",
+  customDiscount: "favourite",
+  fullSpice: "whale",
+};
+/** A favourite's customs cost this much less. */
+export const SLURP_RAPPORT_CUSTOM_DISCOUNT = 0.15;
+/** How often a favourite's spicy chat picture is a free gift "just for you". */
+export const SLURP_RAPPORT_GIFT_CHANCE = 0.25;
+
+/** What a tier opens, within her spice level and never past a hard-no (docs/SPICY.md, item 1). */
+export function slurpRapportDoors(tier: SlurpRapportTier): SlurpRapportDoor[] {
+  const at = SLURP_RAPPORT_TIERS.indexOf(tier);
+  return (Object.keys(DOORS_FROM) as SlurpRapportDoor[]).filter(
+    (door) => at >= SLURP_RAPPORT_TIERS.indexOf(DOORS_FROM[door]),
+  );
+}
+
+export function slurpRapportOpens(rapport: Pick<SlurpRapport, "tier" | "peak">, door: SlurpRapportDoor): boolean {
+  return slurpRapportDoors(slurpRapportDoorTier(rapport)).includes(door);
+}
+
+/** Carries the stored peak and announcement through a fresh score. A pair stored before the ladder starts at its tier. */
+export function slurpRapportKeepPeak(
+  computed: SlurpRapport,
+  stored: Partial<SlurpRapport> | null | undefined,
+): SlurpRapport {
+  const known = stored?.peak ?? stored?.tier;
+  return {
+    ...computed,
+    peak: slurpRapportHigher(known, computed.tier),
+    said: stored?.said ?? known ?? "stranger",
+  };
+}
+
+const STEP_UP: Partial<Record<SlurpRapportTier, string>> = {
+  regular: "one of your regulars",
+  favourite: "one of your favourite fans",
+  whale: "one of your biggest supporters",
+};
+
+/** Rapport points a relationship with the viewer's own page brings (Drama, the player as a partner). */
+export const SLURP_PARTNER_RAPPORT = 60;
+export const SLURP_CRUSH_RAPPORT = 25;
+/** Together but after a fight: still close, not as close. */
+export const SLURP_ROCKY_RAPPORT = 40;
+const PARTNER_DETAIL = {
+  partner: "you are together",
+  rocky: "you are together, but it is rocky",
+  crush: "a mutual crush",
+};
+export type SlurpRapportPartner = keyof typeof PARTNER_DETAIL;
+
+/** Who the viewer is to her through one of their own pages, read back from the score. Null: a fan. */
+export function slurpRapportPartner(rapport: Pick<SlurpRapport, "contributions">): SlurpRapportPartner | null {
+  const entry = rapport.contributions.find((item) => item.key === "partner" && item.points > 0);
+  return entry
+    ? ((Object.keys(PARTNER_DETAIL) as SlurpRapportPartner[]).find((key) => PARTNER_DETAIL[key] === entry.detail) ??
+        "partner")
+    : null;
+}
+
+export function scoreSlurpRapport(
+  facts: SlurpRapportFacts,
+  weights: SlurpRapportWeights = SLURP_DEFAULT_RAPPORT_WEIGHTS,
+  options?: {
+    /** Apply subscriber rapport boost: conversation and effort gains are 1.5x. */
+    subscriberBoost?: boolean;
+    /** Arc stat effect on loyalty: scales every positive contribution, never the penalties. */
+    gain?: number;
+    /** The viewer is the Creator's partner (or crush) through one of their own pages (Drama). */
+    partner?: SlurpRapportPartner;
+  },
+): SlurpRapport {
+  const round = (value: number) => Math.round(value * 10) / 10;
+
+  // Subscriber boost: 1.5x gains from conversation and effort
+  const conversationMultiplier = options?.subscriberBoost && facts.subscribed ? 1.5 : 1.0;
+  const effortMultiplier = options?.subscriberBoost && facts.subscribed ? 1.5 : 1.0;
+
+  const contributions: SlurpRapportContribution[] = [
+    {
+      key: "subscription",
+      detail: facts.subscribed ? "subscribed" : facts.lapsed ? "subscription lapsed" : "not subscribed",
+      weight: weights.subscription,
+      points: round(facts.subscribed ? weights.subscription : 0),
+    },
+    {
+      key: "loyalty",
+      detail: `${Math.max(0, Math.round(facts.subscribedDays))}d subscribed`,
+      weight: weights.loyalty,
+      points: round(weights.loyalty * curve(facts.subscribedDays, SATURATION.loyaltyDays)),
+    },
+    {
+      key: "tips",
+      detail: `${Math.max(0, Math.round(facts.tippedCoins))} coins tipped`,
+      weight: weights.tips,
+      points: round(weights.tips * curve(facts.tippedCoins, SATURATION.tippedCoins)),
+    },
+    {
+      key: "unlocks",
+      detail: `${Math.max(0, Math.round(facts.unlockedCoins))} coins unlocked`,
+      weight: weights.unlocks,
+      points: round(weights.unlocks * curve(facts.unlockedCoins, SATURATION.unlockedCoins)),
+    },
+    {
+      key: "commissions",
+      detail: `${Math.max(0, facts.commissionsDelivered)} delivered`,
+      weight: weights.commissions,
+      points: round(weights.commissions * curve(facts.commissionsDelivered, SATURATION.commissions)),
+    },
+    {
+      key: "conversation",
+      detail: `${Math.max(0, facts.viewerMessages)} messages sent${conversationMultiplier > 1 ? " (+50% subscriber bonus)" : ""}`,
+      weight: weights.conversation,
+      points: round(
+        weights.conversation * curve(facts.viewerMessages, SATURATION.viewerMessages) * conversationMultiplier,
+      ),
+    },
+    {
+      key: "effort",
+      detail: `${Math.max(0, Math.round(facts.averageViewerMessageLength))} chars per message${effortMultiplier > 1 ? " (+50% subscriber bonus)" : ""}`,
+      weight: weights.effort,
+      points: round(
+        weights.effort * linear(facts.averageViewerMessageLength, SATURATION.messageLength) * effortMultiplier,
+      ),
+    },
+    {
+      key: "reciprocity",
+      detail: reciprocityDetail(facts),
+      weight: weights.reciprocity,
+      points: round(weights.reciprocity * reciprocity(facts)),
+    },
+    {
+      key: "recencyDecay",
+      detail:
+        facts.daysSinceViewerMessage === null
+          ? "never written"
+          : `${Math.max(0, Math.round(facts.daysSinceViewerMessage))}d since last message`,
+      weight: weights.recencyDecay,
+      points: -round(weights.recencyDecay * silence(facts)),
+    },
+    {
+      key: "lapsedPenalty",
+      detail: facts.lapsed ? "was subscribed, is not now" : "no lapse",
+      weight: weights.lapsedPenalty,
+      points: facts.lapsed ? -round(weights.lapsedPenalty) : 0,
+    },
+  ];
+  // A relationship is history the counters cannot see: a partner starts close, a crush warm.
+  if (options?.partner) {
+    const points =
+      options.partner === "partner"
+        ? SLURP_PARTNER_RAPPORT
+        : options.partner === "rocky"
+          ? SLURP_ROCKY_RAPPORT
+          : SLURP_CRUSH_RAPPORT;
+    contributions.unshift({ key: "partner", detail: PARTNER_DETAIL[options.partner], weight: points, points });
+  }
+  const gain = Number.isFinite(options?.gain) && options!.gain! > 0 ? options!.gain! : 1;
+  const adjustedContributions = contributions.map((entry) => ({
+    ...entry,
+    points: entry.points > 0 ? round(entry.points * gain) : entry.points,
+  }));
+  const total = adjustedContributions.reduce((sum, entry) => sum + entry.points, 0);
+  const score = Math.max(0, Math.min(100, Math.round(total)));
+  return { score, tier: slurpRapportTier(score), contributions: adjustedContributions };
+}
+
+/**
+ * Silence decays the score, but only once the viewer has actually said something. A brand-new
+ * thread is not a cold one — charging it the full decay would open every first contact at zero
+ * and make the creator's opening line read as a brush-off.
+ */
+function silence(facts: SlurpRapportFacts): number {
+  if (facts.daysSinceViewerMessage === null) return 0;
+  return linear(facts.daysSinceViewerMessage, SATURATION.silenceDays);
+}
+
+/**
+ * Does the creator answer? A thread the viewer talks into and never hears back from is not a
+ * relationship, and scoring it as one would let a wall of ignored messages buy warmth.
+ */
+function reciprocity(facts: SlurpRapportFacts): number {
+  if (facts.viewerMessages <= 0) return 0;
+  return Math.min(1, facts.creatorMessages / facts.viewerMessages);
+}
+
+function reciprocityDetail(facts: SlurpRapportFacts): string {
+  return `${Math.max(0, facts.creatorMessages)} replies to ${Math.max(0, facts.viewerMessages)} messages`;
+}
+
+/** The rapport line the creator prompt reads. Prose, because that is what the model consumes. */
+export function describeSlurpRapport(rapport: SlurpRapport, viewerName: string): string {
+  const notable = rapport.contributions
+    .filter((entry) => Math.abs(entry.points) >= 1)
+    .sort((left, right) => Math.abs(right.points) - Math.abs(left.points))
+    .slice(0, 4)
+    .map((entry) => entry.detail);
+  // A partner is not a "whale": the tier names fans, so a relationship names itself.
+  const partner = slurpRapportPartner(rapport);
+  const tier = partner ? (partner === "crush" ? "your crush" : "your partner") : rapport.tier;
+  return `Your history with ${viewerName}: ${tier} (${rapport.score}/100).${
+    notable.length > 0 ? ` What stands out: ${notable.join("; ")}.` : ""
+  }`;
+}
+
+/** The DM reply prompt's rapport line: adds the step-up once the peak passes what she has said (`markRapportSaid`). */
+export function describeSlurpRapportForDm(rapport: SlurpRapport, viewerName: string): string {
+  const peak = slurpRapportDoorTier(rapport);
+  const stepUp =
+    !slurpRapportPartner(rapport) &&
+    SLURP_RAPPORT_TIERS.indexOf(peak) > SLURP_RAPPORT_TIERS.indexOf(rapport.said ?? peak)
+      ? STEP_UP[peak]
+      : undefined;
+  return `${describeSlurpRapport(rapport, viewerName)}${
+    stepUp
+      ? ` ${viewerName} just became ${stepUp}: tell them once in this reply, in one short line, in your own words.`
+      : ""
+  }`;
+}
+
+const CHAT_BRIDGE_TIER: Record<SlurpRapportTier, (her: string, you: string) => string> = {
+  stranger: () => "",
+  acquaintance: (her, you) => `${you} is a familiar name to ${her} on Slurp.`,
+  regular: (her, you) => `${you} is one of ${her}'s regulars on Slurp.`,
+  favourite: (her, you) => `${you} is one of ${her}'s favourite fans on Slurp.`,
+  whale: (her, you) => `${you} is one of ${her}'s biggest supporters on Slurp.`,
+};
+
+/**
+ * Where the player stands with a character, for an ordinary Engine chat with that character (the
+ * chat bridge, `slp-chat-context.ts`): one third-person line, or "". The tier only — the score is
+ * never shown — and nothing for a partner, whose couple line already says who they are.
+ */
+export function slurpChatBridgeRapportLine(rapport: SlurpRapport, input: { her: string; you: string }): string {
+  if (slurpRapportPartner(rapport)) return "";
+  return CHAT_BRIDGE_TIER[rapport.tier]?.(input.her, input.you) ?? "";
+}
+
+/** Read stored weights back, falling back per field so a hand-edited blob costs nothing. */
+export function readSlurpRapportWeights(value: unknown): SlurpRapportWeights {
+  const raw = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  const out = { ...SLURP_DEFAULT_RAPPORT_WEIGHTS };
+  for (const key of Object.keys(out) as (keyof SlurpRapportWeights)[]) {
+    const stored = raw[key];
+    if (typeof stored === "number" && Number.isFinite(stored) && stored >= 0 && stored <= 100) out[key] = stored;
+  }
+  return out;
+}

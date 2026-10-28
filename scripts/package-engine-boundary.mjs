@@ -15,7 +15,11 @@ async function listSourceFiles(root) {
   for (const entry of await readdir(root, { withFileTypes: true })) {
     const path = resolve(root, entry.name);
     let realPath;
-    try { realPath = realpathSync(path); } catch { continue; }
+    try {
+      realPath = realpathSync(path);
+    } catch {
+      continue;
+    }
     if (!isWithin(realRoot, realPath)) continue;
     if (entry.isDirectory()) files.push(...(await listSourceFiles(realPath)));
     else if (sourceExtensions.includes(extname(entry.name))) files.push(realPath);
@@ -82,10 +86,7 @@ export async function readPackageEngineBoundary({ boundaryPath, displayName, cap
   if (!capabilityApi) throw new Error(`${displayName} must declare its capability API`);
   const boundary = JSON.parse(await readFile(boundaryPath, "utf8"));
   if (boundary.schemaVersion !== 1) throw new Error(`Unsupported ${displayName} boundary schema`);
-  if (
-    boundary.capabilityApi?.major !== capabilityApi.major ||
-    boundary.capabilityApi?.minor !== capabilityApi.minor
-  ) {
+  if (boundary.capabilityApi?.major !== capabilityApi.major || boundary.capabilityApi?.minor !== capabilityApi.minor) {
     throw new Error(`${displayName} must target capability API ${capabilityApi.major}.${capabilityApi.minor}`);
   }
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(boundary.builtAgainst?.engineVersion ?? "")) {
@@ -100,12 +101,7 @@ export async function readPackageEngineBoundary({ boundaryPath, displayName, cap
   return boundary;
 }
 
-export async function assertPackagePrivateImportBoundary({
-  sourceRoot,
-  boundaryPath,
-  displayName,
-  capabilityApi,
-}) {
+export async function assertPackagePrivateImportBoundary({ sourceRoot, boundaryPath, displayName, capabilityApi }) {
   const [boundary, actual] = await Promise.all([
     readPackageEngineBoundary({ boundaryPath, displayName, capabilityApi }),
     findPackagePrivateEngineImports(sourceRoot),

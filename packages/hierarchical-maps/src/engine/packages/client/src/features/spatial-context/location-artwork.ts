@@ -8,9 +8,7 @@ export interface LocationArtworkAssignment {
   mapBackgroundPosition?: { x: number; y: number };
 }
 
-export interface LocationArtworkGap<
-  TLocation extends LocationArtworkAssignment,
-> {
+export interface LocationArtworkGap<TLocation extends LocationArtworkAssignment> {
   location: TLocation;
   referenceMissing: boolean;
   mapBackgroundMissing: boolean;
@@ -28,43 +26,29 @@ export interface LocationArtworkReplacement {
  * until both Gallery queries finish so a loading or failed query cannot make a
  * valid assignment look dangling.
  */
-export function locationArtworkGaps<
-  TLocation extends LocationArtworkAssignment,
->(
+export function locationArtworkGaps<TLocation extends LocationArtworkAssignment>(
   locations: readonly TLocation[],
   availableReferenceIds: ReadonlySet<string>,
   referencesResolved: boolean,
 ): Array<LocationArtworkGap<TLocation>> {
   const isAvailable = (referenceId: string | null | undefined) =>
-    Boolean(
-      referenceId &&
-      (!referencesResolved || availableReferenceIds.has(referenceId)),
-    );
+    Boolean(referenceId && (!referencesResolved || availableReferenceIds.has(referenceId)));
 
   return locations.flatMap((location) => {
     if (location.status !== "active") return [];
     const referenceMissing = !isAvailable(location.referenceImageId);
-    const mapBackgroundMissing =
-      location.childPresentation === "map" &&
-      !isAvailable(location.mapBackgroundImageId);
-    return referenceMissing || mapBackgroundMissing
-      ? [{ location, referenceMissing, mapBackgroundMissing }]
-      : [];
+    const mapBackgroundMissing = location.childPresentation === "map" && !isAvailable(location.mapBackgroundImageId);
+    return referenceMissing || mapBackgroundMissing ? [{ location, referenceMissing, mapBackgroundMissing }] : [];
   });
 }
 
 export function replacementArtworkPatch(
-  gap: Pick<
-    LocationArtworkGap<LocationArtworkAssignment>,
-    "referenceMissing" | "mapBackgroundMissing"
-  >,
+  gap: Pick<LocationArtworkGap<LocationArtworkAssignment>, "referenceMissing" | "mapBackgroundMissing">,
   imageId: string,
   currentBackgroundPosition?: { x: number; y: number },
 ): LocationArtworkReplacement {
   return {
-    ...(gap.referenceMissing
-      ? { referenceImageId: imageId, useReferenceImage: true as const }
-      : {}),
+    ...(gap.referenceMissing ? { referenceImageId: imageId, useReferenceImage: true as const } : {}),
     ...(gap.mapBackgroundMissing
       ? {
           mapBackgroundImageId: imageId,
@@ -75,9 +59,7 @@ export function replacementArtworkPatch(
 }
 
 /** Preserve artwork roles changed after generation began while filling roles that remain unchanged and missing. */
-export function replacementArtworkPatchForCurrentLocation<
-  TLocation extends LocationArtworkAssignment,
->(
+export function replacementArtworkPatchForCurrentLocation<TLocation extends LocationArtworkAssignment>(
   originalGap: LocationArtworkGap<TLocation>,
   currentLocation: TLocation,
   imageId: string,

@@ -1,10 +1,15 @@
 import { z } from "zod";
-import type {
-  SpatialContextDefinition,
-  SpatialContextResponse,
-  SpatialLocation,
-  SpatialLocationKind,
-  SpatialOwnerMode,
+import {
+  spatialContextDefinitionSchema,
+  spatialLocationSchema,
+  updateSpatialContextRequestSchema,
+  validateSpatialContextDefinition,
+  type SpatialContextDefinition,
+  type SpatialContextResponse,
+  type SpatialDefinitionValidationResult,
+  type SpatialLocation,
+  type SpatialLocationKind,
+  type SpatialOwnerMode,
 } from "@marinara-engine/shared";
 
 export const HIERARCHY_PROFILE_VERSION = 1 as const;
@@ -19,6 +24,45 @@ export const GLOBAL_GALLERY_SPATIAL_REFERENCE_PREFIX = "global-gallery:";
 export const DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID = "default";
 export const SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY = "spatialMapGenerationPromptLibraries";
 export const SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY = "spatialMapTurnPromptTemplates";
+
+/**
+ * Matches the Engine's `SPATIAL_CONTEXT_LIMITS.maxLocations`, which Game start re-validates (#1132).
+ * ponytail: the vendored shared snapshot is frozen at 500, so Maps re-applies its own ceiling here
+ * until it validates through the host contract (Marinara-Engine#6385).
+ */
+export const SPATIAL_MAP_LOCATION_LIMIT = 5_000;
+
+export function validateSpatialMapDefinition(definition: SpatialContextDefinition): SpatialDefinitionValidationResult {
+  const issues = validateSpatialContextDefinition(definition).issues.filter(
+    (issue) => issue.code !== "too_many_locations",
+  );
+  if (definition.locations.length > SPATIAL_MAP_LOCATION_LIMIT) {
+    issues.unshift({
+      code: "too_many_locations",
+      message: `A spatial map can contain at most ${SPATIAL_MAP_LOCATION_LIMIT} locations.`,
+      path: ["locations"],
+    });
+  }
+  return { valid: issues.length === 0, issues };
+}
+
+export const spatialMapDefinitionSchema = spatialContextDefinitionSchema
+  .innerType()
+  .extend({ locations: z.array(spatialLocationSchema).max(SPATIAL_MAP_LOCATION_LIMIT) })
+  .superRefine((definition, ctx) => {
+    for (const issue of validateSpatialMapDefinition(definition).issues) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: issue.message,
+        path: issue.path,
+        params: { spatialCode: issue.code, locationId: issue.locationId },
+      });
+    }
+  });
+
+export const updateSpatialMapRequestSchema = updateSpatialContextRequestSchema.extend({
+  definition: spatialMapDefinitionSchema,
+});
 
 export const BUILT_IN_GENERATION_GUIDANCE =
   "Build a practical, easy-to-browse location hierarchy that matches this setting. Use the world's own vocabulary, include only useful playable places, and connect ordinary travel routes without overfilling the map.";
@@ -341,7 +385,10 @@ export const spatialHierarchyTypeSchema = z
 
 export const spatialLinkPresentationSchema = z
   .object({
-    color: z.string().regex(/^#[0-9A-Fa-f]{6}$/u, "Choose a six-digit hex color.").optional(),
+    color: z
+      .string()
+      .regex(/^#[0-9A-Fa-f]{6}$/u, "Choose a six-digit hex color.")
+      .optional(),
     lineStyle: z.enum(SPATIAL_LINK_LINE_STYLES).optional(),
   })
   .strict();
@@ -359,27 +406,27 @@ const spatialHierarchyProfileBaseSchema = z
   .strict();
 
 export const spatialHierarchyProfileSchema = spatialHierarchyProfileBaseSchema.superRefine((profile, context) => {
-    const ids = new Set<string>();
-    for (const [index, type] of profile.types.entries()) {
-      if (ids.has(type.id)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Hierarchy type ID ${type.id} is duplicated.`,
-          path: ["types", index, "id"],
-        });
-      }
-      ids.add(type.id);
+  const ids = new Set<string>();
+  for (const [index, type] of profile.types.entries()) {
+    if (ids.has(type.id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Hierarchy type ID ${type.id} is duplicated.`,
+        path: ["types", index, "id"],
+      });
     }
-    for (const [locationId, typeId] of Object.entries(profile.locationTypeIds)) {
-      if (!ids.has(typeId)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Location ${locationId} references unknown hierarchy type ${typeId}.`,
-          path: ["locationTypeIds", locationId],
-        });
-      }
+    ids.add(type.id);
+  }
+  for (const [locationId, typeId] of Object.entries(profile.locationTypeIds)) {
+    if (!ids.has(typeId)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Location ${locationId} references unknown hierarchy type ${typeId}.`,
+        path: ["locationTypeIds", locationId],
+      });
     }
-  });
+  }
+});
 
 const spatialGenerationPromptTemplatesSchema = z
   .object({

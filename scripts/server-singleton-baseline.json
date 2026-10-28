@@ -1,0 +1,4 @@
+{
+  "_note": "Published package servers that still ship a copy of a stateful Engine service, by fingerprint (scripts/tests/server-singleton-gate.regression.mjs). This list may only shrink; the de-dup rebuild of Calls, Noodle and Slurp (Pasta-Devs/Marinara-Agents#1487) empties it.",
+  "packages": {}
+}

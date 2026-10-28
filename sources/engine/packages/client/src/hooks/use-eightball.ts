@@ -108,7 +108,6 @@ export function useStartEightBall(chatId: string) {
 }
 
 export function useEightBallMove(chatId: string) {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars: { move: EightBallMove }) => api.post<OutcomeResponse>(`/turn-games/${chatId}/move`, vars),
     onSuccess: (res) => {

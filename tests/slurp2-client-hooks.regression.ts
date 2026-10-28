@@ -1,0 +1,685 @@
+import assert from "node:assert/strict";
+import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+
+import { SLURP2_SOURCE_MODULES } from "./slurp2-source";
+
+// Slice 7 proof: the client state layer moved into `slp/` without changing what it exposes, which
+// endpoints it calls, or how the query cache is keyed. The frozen inventories below were taken from
+// `hooks/use-slurp.ts` at `26a80fe7`, the commit the split started from.
+
+const engine = join(import.meta.dirname, "../packages/slurp2/src/engine");
+const clientSrc = join(engine, "packages/client/src");
+const slpRoot = join(clientSrc, "slp");
+
+function walk(dir: string, base = ""): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const rel = base ? `${base}/${entry.name}` : entry.name;
+    return entry.isDirectory() ? walk(join(dir, entry.name), rel) : [rel];
+  });
+}
+
+// Slice 9 moved Backstage into `slp/`, and Slice 10 moved the rest of `components/slurp/`. This
+// proof is about the state layer that came out of `hooks/use-slurp.ts`, the package store and the
+// `lib/` helpers, so every file the source map attributes to a *component* key is excluded.
+// Otherwise each component moved into the namespace inflates these counts and the proof decays into
+// a number that gets rebaselined every slice instead of catching real state-layer drift.
+const componentFiles = new Set(
+  Object.entries(SLURP2_SOURCE_MODULES)
+    .filter(([key]) => key.startsWith("packages/client/src/components/slurp/"))
+    .flatMap(([, files]) => files)
+    .filter((file) => file.startsWith("packages/client/src/slp/"))
+    .map((file) => file.replace("packages/client/src/slp/", "")),
+);
+const paths = walk(slpRoot)
+  .filter((path) => /\.tsx?$/u.test(path))
+  .filter((path) => !componentFiles.has(path));
+const sources = new Map(paths.map((path) => [path, readFileSync(join(slpRoot, path), "utf8")]));
+const combined = [...sources.values()].join("\n");
+
+// The monolith is gone and nothing re-introduces it or a compatibility shim.
+assert.ok(!existsSync(join(clientSrc, "hooks/use-slurp.ts")), "hooks/use-slurp.ts must not come back");
+for (const legacy of [
+  "stores/slurp-package.store.ts",
+  "hooks/use-slurp-media-src.ts",
+  "lib/slurp-discovery.ts",
+  "lib/slurp-refresh-batch.ts",
+]) {
+  assert.ok(!existsSync(join(clientSrc, legacy)), `${legacy} must not survive the move`);
+}
+
+// 1. Complete hook coverage: every name the monolith exported still exists, exactly once.
+const EXPORTED_BEFORE = [
+  "GeneratedCreatorSlpPost",
+  "SlpAmbientProfileRerollResult",
+  "SlpPostDraft",
+  "SlpPostDraftRequest",
+  "SlpRefreshResult",
+  "SlpCreatorConnectionCounts",
+  "SlpCreatorContentFormat",
+  "SlpCreatorFirstPostJob",
+  "SlpCreatorPostDraftImage",
+  "SlpCreatorViewerWallets",
+  "SlurpAdInput",
+  "SlurpAmbientProfile",
+  "SlurpArcChapterReach",
+  "SlurpArcChoice",
+  "SlurpArcEffects",
+  "SlurpArcHistoryEntry",
+  "SlurpArcTimeline",
+  "SlurpArcType",
+  "SlurpAudienceCharacterGroup",
+  "SlurpAudienceCharacterSummary",
+  "SlurpAudienceMember",
+  "SlurpAutopurgePreview",
+  "SlurpAutopurgeResult",
+  "SlurpBackupJob",
+  "SlurpCommission",
+  "SlurpComposeTarget",
+  "SlurpContentRating",
+  "SlurpCreatorArcConfig",
+  "SlurpCreatorBulkPatch",
+  "SlurpCreatorMessaging",
+  "SlurpCreatorMetrics",
+  "SlurpDiscoveryGender",
+  "SlurpDmPolicy",
+  "SlurpEventGroup",
+  "SlurpEventItem",
+  "SlurpEventKind",
+  "SlurpFollowerEntry",
+  "SlurpGoalProgress",
+  "SlurpImageConnections",
+  "SlurpImprovementJob",
+  "SlurpImprovementProposal",
+  "SlurpMaintenanceSummary",
+  "SlurpManagedStageProfile",
+  "SlurpMessage",
+  "SlurpPostAccess",
+  "SlurpPostGuidance",
+  "SlurpPostGuidanceEntry",
+  "SlurpProfilePost",
+  "SlurpProject",
+  "SlurpPromotion",
+  "SlurpPromptBlockDefinition",
+  "SlurpPromptBlockOverride",
+  "SlurpPromptDebug",
+  "SlurpPromptDefinition",
+  "SlurpPromptErrorKind",
+  "SlurpRapport",
+  "SlurpRapportContribution",
+  "SlurpReserveStatus",
+  "SlurpRestoreInspection",
+  "SlurpScheduleSlot",
+  "SlurpScheduleStatus",
+  "SlurpSendResponse",
+  "SlurpSettings",
+  "SlurpSettingsUpdate",
+  "SlurpStageProfileInput",
+  "SlurpStudioCreator",
+  "SlurpStudioPost",
+  "SlurpSubscriberEntry",
+  "SlurpThread",
+  "SlurpThreadRelationship",
+  "SlurpTopFan",
+  "SlurpViewerScope",
+  "SlurpWallet",
+  "SlurpWalletEntry",
+  "applySlurpRestoreInspection",
+  "discardSlurpRestoreInspection",
+  "downloadSlurpBackup",
+  "getSlurpBackupJob",
+  "getSlurpPromptErrorKind",
+  "inspectSlurpRestore",
+  "slpKeys",
+  "startSlurpBackup",
+  "startSlurpRestore",
+  "useAcceptSlurpCommission",
+  "useAdoptCreatorSourceIdentity",
+  "useApplySlurpImprovementProposals",
+  "useBroadcastSlurpMessage",
+  "useBulkCreateCreatorStageProfiles",
+  "useBulkUpdateSlurpCreators",
+  "useCancelSlurpFollowUp",
+  "useClaimSlurpDailyRefill",
+  "useConfirmCreatorImagePrompts",
+  "useCounterSlurpCommission",
+  "useCreateCreatorInteraction",
+  "useCreateCreatorPost",
+  "useCreateCreatorStageProfile",
+  "useCreateSlurpAd",
+  "useCreateSlurpCommission",
+  "useCreateSlurpImprovementJob",
+  "useCreateSlurpProject",
+  "useDeclineSlurpCommission",
+  "useDeleteAllSlurpData",
+  "useDeleteCreatorInteraction",
+  "useDeleteCreatorPost",
+  "useDeleteCreatorStageProfile",
+  "useDeleteSlurpAd",
+  "useDeleteSlurpProject",
+  "useDeleteUnusedSlurpData",
+  "useDeliverSlurpCommission",
+  "useDirectSlurpProject",
+  "useDismissCreatorSourceChanges",
+  "useDismissSlurpImprovementProposals",
+  "useDraftSlurpCreatorReply",
+  "useEnqueueCreatorFirstPosts",
+  "useForceSlurpReply",
+  "useGenerateSlpPostDraft",
+  "useGenerateCreatorArtwork",
+  "useGenerateCreatorSlpPost",
+  "useGenerateCreatorPostImage",
+  "useGenerateCreatorStageProfileDraft",
+  "useGenerateSlurpAdImage",
+  "useGenerateSlurpAds",
+  "useGenerateSlurpArcType",
+  "useGenerateSlurpPostGuidance",
+  "useGenerateSlurpProject",
+  "useGenerateSlurpViewerImage",
+  "useHideSlurpAd",
+  "useHideSlurpAdBrand",
+  "useImportSlurpAds",
+  "useLoadCreatorPostImage",
+  "useMarkCreatorFeedSeen",
+  "useMarkSlurpNotificationsSeen",
+  "useCreatorAccounts",
+  "useCreatorConnectionCounts",
+  "useCreatorEligibleAccounts",
+  "useCreatorFanActivityStatus",
+  "useCreatorFirstPostStatus",
+  "useCreatorFollowers",
+  "useCreatorPosts",
+  "useCreatorReserveStatus",
+  "useCreatorSubscribers",
+  "useCreatorUnseenCount",
+  "useCreatorViewer",
+  "useCreatorViewerWallets",
+  "useOpenSlurpCreatorThread",
+  "useQuoteSlurpCommission",
+  "useReactToSlurpMessage",
+  "useRecordSlurpAdAction",
+  "useRecordSlurpStoryView",
+  "useRefreshCreatorConversationSchedule",
+  "useRefreshCreatorFanActivityNow",
+  "useRefreshTargetedCreatorsNow",
+  "useRemoveCreatorAvatar",
+  "useRemoveCreatorInteraction",
+  "useReplaceCreatorPostImage",
+  "useReplaceSlurpDiscoveryTag",
+  "useRequestSlurpReply",
+  "useRerollAmbientProfiles",
+  "useResetSlurpAds",
+  "useResetSlurpArcType",
+  "useResetSlurpThread",
+  "useResolveSlurpArcProfile",
+  "useResolveSlurpMessageRequest",
+  "useRunCreatorAutoPostNow",
+  "useRunSlurpAutopurge",
+  "useSaveSlurpProjectToLibrary",
+  "useSendSlurpCreatorImage",
+  "useSendSlurpCreatorPpv",
+  "useSendSlurpCreatorReply",
+  "useSendSlurpMessage",
+  "useSendSlurpViewerImage",
+  "useSetSlurpCreatorMessaging",
+  "useSetSlurpCreatorPrice",
+  "useSetSlurpGoal",
+  "useSetSlurpImprovementJobState",
+  "useSetSlurpThreadNotes",
+  "useSetSlurpWalletCoinsForDevelopment",
+  // useSlurpAdPool was removed in 0.3.9 with its only caller, so it is no longer a snapshot export.
+  "useSlurpAdLorebooks",
+  "useSlurpAdState",
+  "useSlurpAmbientProfiles",
+  "useSlurpArcConfig",
+  "useSlurpArcs",
+  "useSlurpAudienceCharacterGroups",
+  "useSlurpAudienceCharacters",
+  "useSlurpAudienceMember",
+  "useSlurpAutopurgePreview",
+  "useSlurpCheatDirective",
+  "useSlurpCompose",
+  "useSlurpComposeTargets",
+  "useSlurpConnections",
+  "useSlurpCreatorMessagingSettings",
+  "useSlurpCreatorMetrics",
+  "useSlurpDiscoveryTagUsage",
+  "useSlurpImageConnections",
+  "useSlurpImprovementJobs",
+  "useSlurpInlineAds",
+  "useSlurpMaintenanceSummary",
+  "useSlurpMessagePrompt",
+  "useSlurpNotifications",
+  "useSlurpOlderMessages",
+  "useSlurpPayout",
+  "useSlurpPostGuidance",
+  "useSlurpProjects",
+  "useSlurpPromptBlocks",
+  "useSlurpRapport",
+  "useSlurpSettings",
+  "useSlurpSettingsDefaults",
+  "useSlurpStoryViews",
+  "useSlurpStudio",
+  "useSlurpThread",
+  "useSlurpThreads",
+  "useSlurpWallet",
+  "useSyncSlurpAdLorebook",
+  "useTipInSlurpThread",
+  "useTipSlurpCreator",
+  "useToggleCreatorFollow",
+  "useToggleCreatorSubscription",
+  "useTriggerCreatorReply",
+  "useUnhideSlurpAdBrand",
+  "useUnlockCreatorPost",
+  "useUnlockSlurpMessage",
+  "useUpdateAmbientProfile",
+  "useUpdateCreatorAutoPosting",
+  "useUpdateCreatorFanActivity",
+  "useUpdateCreatorInteraction",
+  "useUpdateCreatorPost",
+  "useUpdateCreatorProfileLocation",
+  "useUpdateCreatorScheduleSlot",
+  "useUpdateCreatorStageProfile",
+  "useUpdateSlurpAd",
+  "useUpdateSlurpArcConfig",
+  "useUpdateSlurpConnectionsForCreators",
+  "useUpdateSlurpImageConnections",
+  "useUpdateSlurpPostGuidance",
+  "useUpdateSlurpProject",
+  "useUpdateSlurpSettings",
+  "useUploadCreatorAvatar",
+  "useUploadCreatorBanner",
+  "useUseCreatorSourceAvatar",
+];
+const exported = new Map<string, string[]>();
+for (const [path, source] of sources) {
+  for (const match of source.matchAll(/^export\s+(?:async\s+)?(?:function|const|type)\s+([A-Za-z0-9_]+)/gmu)) {
+    exported.set(match[1], [...(exported.get(match[1]) ?? []), path]);
+  }
+}
+for (const name of EXPORTED_BEFORE) {
+  const where = exported.get(name) ?? [];
+  assert.equal(where.length, 1, `${name} must have exactly one definition, found ${where.length}: ${where}`);
+}
+
+// 2. One query-key factory per cache, and the key values themselves are untouched.
+const factories = [...combined.matchAll(/^export const ([A-Za-z0-9_]+Keys) = \{/gmu)].map((m) => m[1]).sort();
+assert.deepEqual(factories, ["messageKeys", "slpKeys"], "exactly two query-key factories may exist");
+const NOODLE_KEYS_BEFORE = `export const slpKeys = {
+  // Slurp shares the Engine's query cache (Pasta-Devs/Marinara-Agents#1487). Its keys used to start with "noodle",
+  // which Noodle's own keys also do, so they start with the package id.
+  all: ["slurp2"] as const,
+  bootstrap: () => [...slpKeys.all, "bootstrap"] as const,
+  settings: () => ["slurp", "settings"] as const,
+  refreshIndicator: () => [...slpKeys.all, "refresh-indicator"] as const,
+  noodlerRoot: () => [...slpKeys.all, "noodler"] as const,
+  noodlerAccounts: () => [...slpKeys.noodlerRoot(), "accounts"] as const,
+  noodlerConnectionCounts: () => [...slpKeys.noodlerRoot(), "connection-counts"] as const,
+  noodlerEligibleAccountsRoot: () => [...slpKeys.noodlerRoot(), "eligible"] as const,
+  noodlerEligibleAccounts: (search: string, kind: string) =>
+    [...slpKeys.noodlerEligibleAccountsRoot(), search, kind] as const,
+  noodlerPosts: (accountId: string) => [...slpKeys.noodlerRoot(), "posts", accountId] as const,
+  noodlerSubscribers: (accountId: string) => [...slpKeys.noodlerRoot(), "subscribers", accountId] as const,
+  noodlerFollowers: (accountId: string) => [...slpKeys.noodlerRoot(), "followers", accountId] as const,
+  audienceMember: (memberId: string, creatorAccountId: string) =>
+    [...slpKeys.noodlerRoot(), "audience", memberId, creatorAccountId] as const,
+  slpCreatorViewers: () => [...slpKeys.noodlerRoot(), "viewers"] as const,
+  viewer: (personaId: string) => [...slpKeys.slpCreatorViewers(), personaId] as const,
+  noodlerUnseenCount: (personaId: string) => [...slpKeys.slpCreatorViewers(), "unseen-count", personaId] as const,
+  noodlerReserveStatus: () => [...slpKeys.noodlerRoot(), "reserve-status"] as const,
+  noodlerImageConnections: () => [...slpKeys.noodlerRoot(), "image-connections"] as const,
+  noodlerPostGuidance: () => [...slpKeys.noodlerRoot(), "post-guidance"] as const,
+  noodlerFanStatus: () => [...slpKeys.noodlerRoot(), "fan-status"] as const,
+  notificationsRoot: () => [...slpKeys.noodlerRoot(), "notifications"] as const,
+  notifications: (personaId: string) => [...slpKeys.notificationsRoot(), "stream", personaId] as const,
+  notificationUnseenCount: (personaId: string) => [...slpKeys.notificationsRoot(), "unseen-count", personaId] as const,
+  // contextTags belongs in the key: it is part of the request, so leaving it
+  // out meant switching tab or crossing into evening never refetched.
+  ads: (personaId: string, creatorId?: string | null, contextTags: string[] = []) =>
+    [...slpKeys.slpCreatorViewers(), "ads", personaId, creatorId ?? "none", contextTags] as const,
+  adPool: () => [...slpKeys.noodlerRoot(), "ad-pool"] as const,
+  adState: (personaId: string) => [...slpKeys.slpCreatorViewers(), "ad-state", personaId] as const,
+};`;
+assert.equal(
+  readFileSync(join(slpRoot, "base/state/slp-query-keys.ts"), "utf8").match(
+    /export const slpKeys = \{[\s\S]*?\n\};/u,
+  )?.[0],
+  NOODLE_KEYS_BEFORE,
+  "slpKeys values and ordering must be preserved exactly",
+);
+// `messageKeys` still hangs off the same root, so messaging invalidation still matches.
+assert.match(
+  readFileSync(join(slpRoot, "features/messages/slp-message-keys.ts"), "utf8"),
+  /root: \(\) => \[\.\.\.slpKeys\.noodlerRoot\(\), "messages"\]/u,
+);
+
+// 3. Endpoint and HTTP-method preservation: the same request multiset, nothing added or dropped.
+const callsBefore = readFileSync(join(import.meta.dirname, "fixtures/slurp2-client-hooks.staging.txt"), "utf8")
+  .split("\n")
+  .map((call) => call.replaceAll("\\u0020", " "))
+  .filter(Boolean);
+const mapStagingCall = (call: string) => call.replace("/slurp2/noodler/", "/slurp2/slurp/");
+const addedCalls = [
+  "get /slurp2/extras/offer",
+  "post /slurp2/extras/offer/answer",
+  "get /slurp2/messages/unread-count?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/slurp/notifications/unseen-count?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/slurp/posts/${encodeURIComponent(postId)}/deep-details",
+  "get /slurp2/slurp/messages/${encodeURIComponent(messageId)}/deep-details?personaId=${encodeURIComponent(personaId)}",
+  "post /slurp2/settings/prompt-blocks/generate-preview",
+  // The studio keeps every block live for the preview Creator (useSlurpLivePromptBlocks).
+  "post /slurp2/settings/prompt-blocks/preview",
+  "get /slurp2/continuity/${encodeURIComponent(creatorAccountId!)}?${query}",
+  "get /slurp2/messages/threads/${encodeURIComponent(threadId!)}/requests?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/slurp/tasks",
+  // Paid sexting sessions (docs/SPICY.md, item 2).
+  "post /slurp2/messages/sexting",
+  "get /slurp2/slurp/trends",
+  "get /slurp2/slurp/viewer/feed?personaId=${encodeURIComponent(personaId)}&tab=all&limit=20${cursorQuery(current.nextCursor)}",
+  "get /slurp2/slurp/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20",
+  "post /slurp2/slurp/accounts/${encodeURIComponent(input.accountId)}/appearance",
+  "post /slurp2/story/events/${encodeURIComponent(eventId)}/start",
+  "patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings",
+  "patch /slurp2/continuity/facts/${encodeURIComponent(input.id)}",
+  "post /slurp2/continuity/${input.path}",
+  "post /slurp2/messages/threads/${encodeURIComponent(threadId!)}/requests/${encodeURIComponent(input.requestId)}/action",
+  "post /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe",
+  "patch /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe/${encodeURIComponent(id)}",
+  "delete /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe/${encodeURIComponent(id)}",
+  "post /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe/import",
+  "post /slurp2/slurp/wardrobe/lorebook-entries",
+  // Story packs: bundled gallery, preview, selective apply, export, and timeline actions.
+  "get /slurp2/story-packs/bundled",
+  "post /slurp2/story-packs/bundled/${encodeURIComponent(id)}/preview",
+  "post /slurp2/story-packs/export",
+  "post /slurp2/story-packs/preview",
+  "post /slurp2/story-packs/previews/${encodeURIComponent(input.previewId)}/apply",
+  "post /slurp2/story/occurrences/${encodeURIComponent(input.id)}/status",
+  // Client calls added since the staging snapshot. The multiset check below only passes when every
+  // call the live source makes is named somewhere in this file; a call that is neither in the
+  // frozen staging fixture nor named here fails the test, so this list is what makes a silent
+  // addition (or removal, the other direction of the same check) impossible to miss. It was last
+  // refreshed mechanically from a source diff (7e31e6080) — present here, not independently vetted.
+  "delete ${path(creatorId)}/ideas/${encodeURIComponent(ideaId)}",
+  "delete ${path(creatorId)}/support-note",
+  "delete /slurp2/data/unused",
+  "delete /slurp2/slurp/ads/brands/${encodeURIComponent(id)}",
+  "get ${base}?personaId=${encodeURIComponent(personaId!)}",
+  "get ${base}?personaId=${encodeURIComponent(personaId!)}",
+  "post ${path(creatorId)}/rewrite-prepared",
+  "post ${path}/noticed",
+  "get /connections",
+  "get /slurp2/ambient-profiles",
+  "get /slurp2/continuity",
+  "get /slurp2/continuity/${encodeURIComponent(creatorId)}/signals",
+  "get /slurp2/discovery-tags/usage",
+  "get /slurp2/messages/compose?personaId=${encodeURIComponent(personaId!)}&creatorAccountId=${encodeURIComponent(creatorAccountId!)}${support ? ",
+  "get /slurp2/messages/creators/${encodeURIComponent(creatorAccountId!)}/rapport?personaId=${encodeURIComponent(personaId!)}&viewerAccountId=${encodeURIComponent(viewerAccountId!)}",
+  "get /slurp2/messages/creators/${encodeURIComponent(creatorAccountId!)}/settings?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/messages/threads/${encodeURIComponent(input.threadId)}?personaId=${encodeURIComponent(input.personaId)}&cursorAt=${encodeURIComponent(input.cursor.createdAt)}&cursorId=${encodeURIComponent(input.cursor.id)}",
+  "get /slurp2/messages/threads/${encodeURIComponent(threadId!)}?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/messages/threads/${encodeURIComponent(threadId!)}?personaId=${encodeURIComponent(personaId!)}&search=${encodeURIComponent(search.trim())}&limit=120${pageParam ? ",
+  "get /slurp2/messages/threads?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/model-budget/usage",
+  "get /slurp2/settings/audience-characters?limit=30&offset=${pageParam}",
+  "get /slurp2/slurp/accounts/${encodeURIComponent(accountId!)}/followers",
+  "get /slurp2/slurp/accounts/${encodeURIComponent(accountId!)}/subscribers?limit=20${cursorQuery(pageParam)}",
+  "get /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe",
+  "get /slurp2/slurp/accounts/bulk/${encodeURIComponent(input.executionId!)}",
+  "get /slurp2/slurp/ads/brands",
+  "get /slurp2/slurp/ads/lorebooks",
+  "get /slurp2/slurp/desk?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/slurp/drama",
+  "get /slurp2/slurp/live",
+  "get /slurp2/slurp/live/${encodeURIComponent(showId)}${query}",
+  "post /slurp2/slurp/live/${encodeURIComponent(showId)}/beat",
+  "post /slurp2/slurp/live/${encodeURIComponent(showId)}/end",
+  "post /slurp2/slurp/live/${encodeURIComponent(showId)}/private",
+  "post /slurp2/slurp/live/${encodeURIComponent(showId)}/tip",
+  "post /slurp2/slurp/live/host",
+  "get /slurp2/slurp/eligible-accounts?limit=100&offset=${pageParam}&search=${encodeURIComponent(normalizedSearch)}${kind === ",
+  "get /slurp2/slurp/fan-activity/status",
+  "get /slurp2/slurp/first-posts/status?executionId=${encodeURIComponent(executionId!)}",
+  "get /slurp2/slurp/image-style-profiles",
+  "get /slurp2/slurp/notifications?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/slurp/stories/${encodeURIComponent(storyId!)}/views?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/slurp/studio?personaId=${encodeURIComponent(personaId!)}${mark ? ",
+  "get /slurp2/slurp/viewer/ads/state?personaId=${encodeURIComponent(personaId!)}",
+  "get /slurp2/slurp/viewer/feed?personaId=${encodeURIComponent(personaId!)}&tab=${tab}&limit=20${\n          term ? ",
+  "get /slurp2/slurp/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20${cursorQuery(next)}",
+  "get /slurp2/slurp/wardrobe/lorebooks",
+  "get /slurp2/story/calendar?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}",
+  "get /slurp2/story/timeline",
+  "delete /slurp2/story-packs/${encodeURIComponent(id)}",
+  "delete /slurp2/story/facts/${encodeURIComponent(factId)}",
+  "patch /slurp2/messages/threads/${encodeURIComponent(threadId!)}/details",
+  "patch /slurp2/slurp/accounts/${encodeURIComponent(id)}/steering",
+  "patch /slurp2/slurp/ads/brands/${encodeURIComponent(id)}",
+  "patch /slurp2/slurp/ads/pool/${encodeURIComponent(id)}",
+  "post ${base}${path}",
+  "post ${base}/plan",
+  "post ${base}/play",
+  "post ${base}/plays/${encodeURIComponent(id)}/undo",
+  "post ${base}/preview",
+  "post ${base}/suggestions/${encodeURIComponent(id)}/dismiss",
+  "post ${path(creatorId)}/ideas",
+  "post ${path(creatorId)}/support-undo",
+  "post ${threadPath(input.threadId)}/scene/plan",
+  "post ${threadPath(threadId)}/scene/origin",
+  "post /slurp2${retry.path}",
+  "post /slurp2/backstage/improvement-jobs/${encodeURIComponent(jobId)}/apply",
+  "post /slurp2/messages/cheat",
+  "post /slurp2/messages/creators/${encodeURIComponent(input.creatorAccountId)}/draft-reply",
+  "post /slurp2/messages/creators/${encodeURIComponent(input.creatorAccountId)}/reply",
+  "post /slurp2/messages/creators/${encodeURIComponent(input.creatorAccountId)}/request-fan-reply",
+  "post /slurp2/messages/ppv/unlock",
+  "post /slurp2/messages/share-post",
+  "post /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/messages/${encodeURIComponent(input.messageId)}/delete",
+  "post /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/messages/${encodeURIComponent(input.messageId)}/edit",
+  "post /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/regenerate",
+  "post /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/request-reply",
+  "post /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/viewer-image",
+  "post /slurp2/messages/threads/${encodeURIComponent(threadId)}/summary",
+  "post /slurp2/refresh",
+  "post /slurp2/slurp/accounts/${encodeURIComponent(accountId)}/page/compose",
+  "post /slurp2/slurp/accounts/${encodeURIComponent(creatorId)}/wardrobe/import-preview",
+  "post /slurp2/slurp/accounts/${encodeURIComponent(typeof input === ",
+  "post /slurp2/slurp/accounts/bulk",
+  "post /slurp2/slurp/accounts/bulk-update",
+  "post /slurp2/slurp/actions/${name}",
+  "post /slurp2/slurp/actions/list-brands",
+  "post /slurp2/slurp/actions/run-audience",
+  "post /slurp2/slurp/ads/brands",
+  "post /slurp2/slurp/ads/brands/${encodeURIComponent(brandId)}/products",
+  "post /slurp2/slurp/ads/generate",
+  "post /slurp2/slurp/ads/import",
+  "post /slurp2/slurp/ads/pool/${encodeURIComponent(id)}/picture",
+  "post /slurp2/slurp/desk/note",
+  "post /slurp2/slurp/desk/offer/answer",
+  "post /slurp2/slurp/desk/ticket/resolve",
+  "post /slurp2/slurp/drama/choice",
+  "post /slurp2/slurp/drama/runs/${encodeURIComponent(runId)}/end",
+  "post /slurp2/slurp/drama/start",
+  "post /slurp2/slurp/fan-activity/refresh-now",
+  "post /slurp2/slurp/notifications/${encodeURIComponent(event.id)}/fan-note",
+  "post /slurp2/slurp/onboarding/scene/keep",
+  "post /slurp2/slurp/posts/${encodeURIComponent(input.postId)}/report",
+  "post /slurp2/slurp/posts/${encodeURIComponent(postId)}/gamble-unlock",
+  "post /slurp2/slurp/refresh/images/cancel",
+  "post /slurp2/slurp/stir/play",
+  "post /slurp2/slurp/stir/preview",
+  "post /slurp2/slurp/stories/${encodeURIComponent(input.storyId)}/view",
+  "put /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/notes",
+  "put /slurp2/slurp/accounts/${encodeURIComponent(input.accountId)}/page",
+  "post /slurp2/slurp/accounts/${encodeURIComponent(accountId)}/strategy/suggest",
+  "upload /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/image-upload",
+  "get /slurp2/settings/carryover-reach",
+];
+const removedCalls = [
+  // The staging ads-pool GET went with the removed useSlurpAdPool hook (0.3.9).
+  "get /slurp2/slurp/ads/pool",
+  "post /slurp2/slurp/posts/${encodeURIComponent(id)}/restore",
+  "patch /slurp2/accounts/${encodeURIComponent(accountId)}/settings",
+  "get /slurp2/slurp/viewer?personaId=${encodedPersonaId}",
+];
+// Classic runtime mode is gone, so the block catalog no longer takes a mode.
+const renamedCalls = new Map([
+  ["get /slurp2/settings/prompt-blocks?mode=${encodeURIComponent(mode)}", "get /slurp2/settings/prompt-blocks"],
+]);
+const calls = [
+  // The generic may hold `;` (an object type), so it is matched across the whole type argument. The
+  // lookahead keeps that scan inside one call, so it cannot run on into the next api call.
+  ...combined.matchAll(
+    /api\.(get|post|put|patch|delete|upload|raw)\s*(?:<(?:(?!api\.)[\s\S])*?>)?\s*\(\s*[`"]([^`"]*)/gu,
+  ),
+]
+  .map((m) => `${m[1]} ${m[2]}`)
+  .sort();
+assert.deepEqual(
+  calls,
+  callsBefore
+    .map(mapStagingCall)
+    .filter((call) => {
+      // Viewer access was removed; its one settings patch went with it.
+      const index = removedCalls.indexOf(call);
+      if (index < 0) return true;
+      removedCalls.splice(index, 1);
+      return false;
+    })
+    .map((call) => renamedCalls.get(call) ?? call)
+    .concat(addedCalls)
+    .sort(),
+  "client request paths and HTTP methods must match",
+);
+
+// 4. Mutation and invalidation behaviour: the cache-touching call counts did not drift.
+const counts = Object.fromEntries(
+  [
+    "useMutation",
+    "useQuery",
+    "useInfiniteQuery",
+    "invalidateQueries",
+    "setQueryData",
+    "cancelQueries",
+    "removeQueries",
+    "refetchQueries",
+    "onMutate",
+    "onError",
+    "onSettled",
+  ].map((name) => [name, combined.split(name).length - 1]),
+);
+assert.deepEqual(
+  counts,
+  {
+    // 0.3.27 "Suggest page style": one mutation, its two error states, and the strategy save now
+    // refreshes the list when settled (a refused apply also means the list is stale).
+    // 0.3.63: +1 (useStartSlurpSexting buys a sexting session).
+    // 0.4.12: Live v3 hooks: +4 useMutation, +7 useQuery, +3 setQueryData (a tip, a beat or a private block returns the fresh show).
+    useMutation: 231,
+    // 0.3.28: +2 (the import and the one query of SlpMessageDeepDetails). 0.3.42: +1 (carryover reach).
+    // 0.3.44: +2 (the import and the trends row query).
+    // 0.3.63: +1 (its useQueryClient).
+    useQuery: 309,
+    useInfiniteQuery: 9,
+    // 0.3.35: +2 (adding a Creator refreshes the settings, which now hold the image name choice).
+    // Configurator: +1 (an extension switch drops the cached feed, trend and Stir reads).
+    // Life panel: +3 useMutation, +4 useQuery, +1 invalidateQueries, +3 onError.
+    invalidateQueries: 159,
+    setQueryData: 32,
+    cancelQueries: 7,
+    removeQueries: 1,
+    refetchQueries: 0,
+    onMutate: 2,
+    // SlpConnectionsPanel.tsx moved into the SlurpBackstagePrompts component mapping, so its one
+    // onError no longer counts as state-layer code. +1: SlpDeskQuickReplies (R2) toasts a failed save.
+    onError: 98,
+    // 0.3.63: +1 (the sexting buy refreshes the thread when settled).
+    onSettled: 41,
+  },
+  "query and mutation wiring counts match the monolith plus the later Slurp2 hooks",
+);
+
+// The shared invalidators are still called directly from the mutation callbacks that owned them.
+const invalidatorCalls = {
+  invalidateSlurpMessages: [...combined.matchAll(/=>\s*invalidateSlurpMessages\(/gu)].length,
+  invalidateSlurpProjects: [...combined.matchAll(/=>\s*invalidateSlurpProjects\(/gu)].length,
+  mergeSlurpViewerShell: [...combined.matchAll(/=>\s*mergeSlurpViewerShell\(/gu)].length,
+};
+assert.deepEqual(
+  invalidatorCalls,
+  {
+    // 0.3.63: +1 (the sexting buy).
+    invalidateSlurpMessages: 36,
+    invalidateSlurpProjects: 5,
+    mergeSlurpViewerShell: 4,
+  },
+  "shared invalidation helpers must stay wired to the same call sites",
+);
+
+// 5. Feature ownership: a sample hook from every owning module lives where it belongs.
+for (const [name, path] of [
+  ["slpKeys", "base/state/slp-query-keys.ts"],
+  ["cursorQuery", "base/state/slp-page-cursor.ts"],
+  ["useSlurpUIStore", "base/state/slp-package-store.ts"],
+  ["useSlurpMediaSrc", "base/media/slp-media-src.ts"],
+  ["useSlurpConnections", "base/state/slp-host-connections.ts"],
+  ["useSlurpInlineAds", "features/ads/slp-ads-hooks.ts"],
+  ["useSlurpSettings", "features/settings/slp-settings-hooks.ts"],
+  ["useSlurpImageConnections", "features/media/slp-image-connection-hooks.ts"],
+  ["useSlurpPostGuidance", "features/settings/slp-post-guidance-contract.ts"],
+  ["startSlurpBackup", "features/maintenance/slp-backup.ts"],
+  ["useRunSlurpAutopurge", "features/maintenance/slp-maintenance-hooks.ts"],
+  ["useSlurpImprovementJobs", "features/maintenance/slp-improvement-hooks.ts"],
+  ["useSlurpDiscoveryTagUsage", "features/discovery/slp-discovery-tag-hooks.ts"],
+  ["filterAndSortSlurpCreators", "features/discovery/slp-discovery.ts"],
+  ["useCreatorAccounts", "features/creators/slp-creators-hooks.ts"],
+  ["useUpdateCreatorStageProfile", "features/creators/slp-creator-profile-hooks.ts"],
+  ["useRefreshTargetedCreatorsNow", "features/creators/slp-creator-refresh-hooks.ts"],
+  ["refreshSlurpCreatorBatch", "features/creators/slp-refresh-batch.ts"],
+  ["useCreatorSubscribers", "features/audience/slp-audience-hooks.ts"],
+  ["useSlurpAmbientProfiles", "features/audience/slp-ambient-profile-hooks.ts"],
+  ["useCreatorFanActivityStatus", "features/audience/slp-fan-activity-hooks.ts"],
+  ["useSlurpWallet", "features/economy/slp-economy-hooks.ts"],
+  ["useSlurpNotifications", "features/notifications/slp-notification-hooks.ts"],
+  ["useSlurpProjects", "features/projects/slp-projects-hooks.ts"],
+  ["useCreatorPosts", "features/feed/slp-feed-post-hooks.ts"],
+  ["useCreatorViewer", "features/feed/slp-feed-viewer-hooks.ts"],
+  ["useCreatorReserveStatus", "features/feed/slp-feed-schedule-hooks.ts"],
+  ["useEnqueueCreatorFirstPosts", "features/onboarding/slp-first-post-hooks.ts"],
+  ["messageKeys", "features/messages/slp-message-keys.ts"],
+  ["useSlurpThread", "features/messages/slp-messages-hooks.ts"],
+  ["useSendSlurpMessage", "features/messages/slp-message-action-hooks.ts"],
+  ["useCreateSlurpCommission", "features/messages/commissions/slp-commission-hooks.ts"],
+] as const) {
+  assert.deepEqual(exported.get(name), [path], `${name} must live in ${path}`);
+}
+
+// 6. The generic Engine persona hook stays outside Slurp, and Slurp uses the Engine's API client.
+const generic = join(clientSrc, "hooks/use-creator-personas.ts");
+assert.ok(existsSync(generic), "the generic persona hook must stay outside the slp roots");
+assert.doesNotMatch(readFileSync(generic, "utf8"), /\/slp\//u, "the generic hook must not reach into Slurp");
+assert.ok(!paths.some((path) => /creator-personas/u.test(path)), "Slurp must not fork the generic persona hook");
+// The feature build stacks sources/host-client-overlay's lib/api-client.ts, which is the Engine's own client
+// (__MARINARA_HOST__.api); a package copy would carry a second ApiError class and its own rules (#1487).
+assert.ok(!existsSync(join(clientSrc, "lib/api-client.ts")), "Slurp must not carry its own API client");
+
+// 7. The Creators panel keeps its filter state and opens the shared settings modal.
+const creatorsPanel = readFileSync(join(slpRoot, "features/creators/SlpCreatorsPanel.tsx"), "utf8");
+assert.match(creatorsPanel, /setCreatorFilter:\s*setFilter/u);
+assert.match(creatorsPanel, /openSlpCreatorSettings\(creator\.id\)/u);
+assert.doesNotMatch(creatorsPanel, /setSlpCreator(?:Filter|Tab)/u);
+
+// 8. No client `slp` file reaches into server `slp`; the shared rules are the only crossing point.
+for (const [path, source] of sources) {
+  for (const match of source.matchAll(/from\s*"([^"]+)"/gu)) {
+    assert.ok(!/server\/src\/slp/u.test(match[1]), `${path} must not import server slp code: ${match[1]}`);
+  }
+}
+
+// 9. Nothing in the new namespace is a barrel or an oversized file.
+for (const path of paths) {
+  assert.ok(!/(^|\/)index\.tsx?$/u.test(path), `${path} must not be a generic barrel`);
+  assert.ok((sources.get(path) ?? "").split("\n").length <= 800, `${path} must stay under 800 lines`);
+}
+
+console.log("Slurp2 client hook split regressions passed.");

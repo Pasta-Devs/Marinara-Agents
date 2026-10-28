@@ -1,0 +1,23 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Beholder",
+    "description": "Keeps track of what each character is wearing and holding, plus any injuries, so the story stays consistent. You can check it on a paper doll from the roleplay toolbar. Works with big online models, or with the free Beholder model that runs privately on your computer. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode."
+  },
+  "agents": {
+    "beholder": {
+      "name": "Beholder",
+      "description": "Keeps track of what each character is wearing and holding, plus any injuries, so the story stays consistent. You can check it on a paper doll from the roleplay toolbar. Works with big online models, or with the free Beholder model that runs privately on your computer.",
+      "promptTemplates": {
+        "beholder-local-five-pass": {
+          "name": "Beholder local model — five passes",
+          "description": "Five narrow calls, one per tracked lane, for a locally hosted Beholder extractor (for example Beholder-Q8 behind koboldcpp or llama.cpp). That model is trained to answer one lane at a time, so the single-prompt option is off-distribution for it. Requires an Engine build with multi-pass Beholder support."
+        }
+      }
+    }
+  }
+}

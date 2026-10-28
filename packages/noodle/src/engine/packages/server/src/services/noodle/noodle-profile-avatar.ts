@@ -16,14 +16,11 @@ export function resolveNoodleAvatarCropAfterProfileUpdate(input: {
 }): AvatarCrop | null | undefined {
   if (input.nextAvatarUrl === undefined) {
     if (input.currentCrop) return undefined;
-    return input.currentAvatarUrl &&
-      input.currentAvatarUrl === input.sourceAvatarUrl
+    return input.currentAvatarUrl && input.currentAvatarUrl === input.sourceAvatarUrl
       ? (input.sourceCrop ?? undefined)
       : undefined;
   }
   if (input.nextAvatarUrl !== input.currentAvatarUrl) return null;
   if (input.currentCrop) return input.currentCrop;
-  return input.nextAvatarUrl && input.nextAvatarUrl === input.sourceAvatarUrl
-    ? (input.sourceCrop ?? null)
-    : null;
+  return input.nextAvatarUrl && input.nextAvatarUrl === input.sourceAvatarUrl ? (input.sourceCrop ?? null) : null;
 }

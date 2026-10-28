@@ -5,6 +5,7 @@ import { resolveIllustratorPromptRuntime } from "../generation/illustrator-promp
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { loadPrompt, NOODLE_IMAGE_INTERPRET } from "../prompt-overrides/index.js";
+import { removeCopiedPromptGuidance } from "./noodle-image-prompt.js";
 
 const MAX_REWRITTEN_PROMPT_LENGTH = 12_000;
 const MAX_INSTRUCTIONS_LENGTH = 5_000;
@@ -23,9 +24,7 @@ function parseRecord(value: unknown): Record<string, unknown> {
   if (start < 0 || end <= start) return {};
   try {
     const parsed: unknown = JSON.parse(text.slice(start, end + 1));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
   }
@@ -38,11 +37,16 @@ export async function rewriteNoodleImagePrompt(input: {
   instructions?: string;
   characterContext?: string;
   styleGuidance?: string;
+  /** Noodle's own text connection, used when no Agents default connection is set. */
+  noodleConnectionId?: string | null;
+  /** Instructions the model follows but must not copy, such as the card's image habits. */
+  extraGuidance?: ReadonlyArray<string | null | undefined>;
 }): Promise<string | null> {
   const instructions = input.instructions?.trim().replace(/\s+/g, " ").slice(0, MAX_INSTRUCTIONS_LENGTH) || "";
   const prompt = input.prompt.trim().slice(0, MAX_REWRITTEN_PROMPT_LENGTH);
-  if ((!instructions && !input.styleGuidance?.trim()) || !prompt) return null;
-  const characterContext = input.characterContext?.trim().slice(0, 8_000) || "No additional character context was provided.";
+  if ((!instructions && !input.characterContext?.trim() && !input.styleGuidance?.trim()) || !prompt) return null;
+  const characterContext =
+    input.characterContext?.trim().slice(0, 8_000) || "No additional character context was provided.";
   const styleGuidance = input.styleGuidance?.trim().slice(0, 5_000) || "";
 
   try {
@@ -52,10 +56,17 @@ export async function rewriteNoodleImagePrompt(input: {
       NOODLE_IMAGE_INTERPRET,
       {},
     );
+    // Without an Agents default, Noodle's own text connection rewrites the prompt; before 1.5.3 the
+    // rewrite was skipped and the image settings were silently dropped (Pasta-Devs/Marinara-Agents#1282).
+    const noodleConnectionId = input.noodleConnectionId?.trim();
     const textConnection =
       (await connections.getDefaultForAgents()) ??
+      (noodleConnectionId ? await connections.getWithKey(noodleConnectionId) : null) ??
       (await connections.getFallbackForAgents());
-    if (!textConnection) return null;
+    if (!textConnection) {
+      logger.warn("[noodle] No text connection is available to rewrite the image prompt");
+      return null;
+    }
 
     const runtime = await resolveIllustratorPromptRuntime({
       chatMetadata: {},
@@ -76,8 +87,8 @@ export async function rewriteNoodleImagePrompt(input: {
             styleGuidance
               ? "Apply the supplied art-style guidance when the original prompt does not specify a style. Preserve an explicitly requested style in the original prompt or user instructions."
               : "",
-            "Treat the user's instructions as guidance, not text to copy into the image prompt.",
-            "Return valid JSON only: {\"prompt\":\"provider-ready image prompt\"}.",
+            "Treat the user's instructions and the art-style guidance as guidance, not text to copy into the image prompt.",
+            'Return valid JSON only: {"prompt":"provider-ready image prompt"}.',
           ].join("\n"),
         },
         {
@@ -89,7 +100,9 @@ export async function rewriteNoodleImagePrompt(input: {
             "<character_context>",
             characterContext,
             "</character_context>",
-            ...(instructions ? ["<image_prompting_instructions>", instructions, "</image_prompting_instructions>"] : []),
+            ...(instructions
+              ? ["<image_prompting_instructions>", instructions, "</image_prompting_instructions>"]
+              : []),
             ...(styleGuidance ? ["<art_style_guidance>", styleGuidance, "</art_style_guidance>"] : []),
           ].join("\n"),
         },
@@ -103,10 +116,15 @@ export async function rewriteNoodleImagePrompt(input: {
       },
     );
     const parsed = parseRecord(result.content);
-    const rewritten = typeof parsed.prompt === "string"
-      ? parsed.prompt.trim().slice(0, MAX_REWRITTEN_PROMPT_LENGTH)
-      : "";
-    return rewritten || null;
+    const rewritten =
+      typeof parsed.prompt === "string" ? parsed.prompt.trim().slice(0, MAX_REWRITTEN_PROMPT_LENGTH) : "";
+    // Guidance is applied, never sent as written, even when the model copies it. A rewrite that was
+    // nothing but copied guidance counts as no rewrite, so the caller sends the base prompt.
+    return (
+      removeCopiedPromptGuidance(rewritten, [instructions, styleGuidance, ...(input.extraGuidance ?? [])], {
+        allowEmpty: true,
+      }) || null
+    );
   } catch (error) {
     logger.warn(error, "[noodle] Image prompt instruction rewrite failed; using the original prompt");
     return null;

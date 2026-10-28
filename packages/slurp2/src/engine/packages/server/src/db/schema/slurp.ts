@@ -1,0 +1,946 @@
+// ──────────────────────────────────────────────
+// Schema: Slurp creator social media
+// ──────────────────────────────────────────────
+import { fileTable, integer, text } from "../file-schema.js";
+
+export const slpAccounts = fileTable(
+  "slurp2_accounts",
+  {
+    id: text("id").primaryKey(),
+    kind: text("kind").notNull(),
+    entityId: text("entity_id").notNull(),
+    handle: text("handle").notNull(),
+    displayName: text("display_name").notNull(),
+    bio: text("bio").notNull().default(""),
+    avatarUrl: text("avatar_url"),
+    invited: text("invited").notNull().default("false"),
+    settings: text("settings").notNull().default("{}"),
+    platform: text("platform").notNull().default("slurp"),
+    sourceKind: text("source_kind"),
+    sourceEntityId: text("source_entity_id"),
+    slurpSourceAccountId: text("slurp_source_account_id"),
+    // Rollback-only mirrors of platform/slurpSourceAccountId. Nothing reads these; they exist so a
+    // build from before the rename can still tell a NoodleR profile from a Noodle account. Without
+    // them an older build falls back to the column default and puts NoodleR content on the public
+    // timeline. Safe to drop once no supported version reads `visibility`.
+    visibility: text("visibility").notNull().default("public"),
+    publicAccountId: text("slurp_public_account_id"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  {
+    uniqueBy: [
+      {
+        keys: ["sourceKind", "sourceEntityId"],
+        // Persona viewer actors and persona Creators share a source entity, but they are separate
+        // accounts. Keep this rule for Creator rows only; the actor has its own scoped rule below.
+        when: (row) =>
+          row.platform === "slurp" &&
+          row.sourceKind != null &&
+          row.sourceEntityId != null &&
+          !(row.kind === "persona" && row.invited === "true"),
+      },
+      {
+        keys: ["sourceKind", "sourceEntityId", "invited"],
+        when: (row) =>
+          row.platform === "slurp" &&
+          row.sourceKind != null &&
+          row.sourceEntityId != null &&
+          row.kind === "persona" &&
+          row.invited === "true",
+      },
+      {
+        keys: ["handle"],
+        when: (row) => row.platform === "slurp" && !(row.kind === "persona" && row.invited === "true"),
+      },
+      {
+        keys: ["handle", "invited"],
+        when: (row) => row.platform === "slurp" && row.kind === "persona" && row.invited === "true",
+      },
+    ],
+  },
+);
+
+export const slpPosts = fileTable("slurp2_posts", {
+  id: text("id").primaryKey(),
+  authorAccountId: text("author_account_id").notNull(),
+  title: text("title"),
+  content: text("content").notNull().default(""),
+  imageUrl: text("image_url"),
+  imagePrompt: text("image_prompt"),
+  imageClaimToken: text("image_claim_token"),
+  imageClaimLeaseUntil: text("image_claim_lease_until"),
+  parentPostId: text("parent_post_id"),
+  quotePostId: text("quote_post_id"),
+  source: text("source").notNull().default("manual"),
+  /** The project this post was published into, when one claimed it. See `slurp-project.ts`. */
+  projectId: text("project_id"),
+  /** The chapter the project was on when this post was written. Kept so editing the project cannot rewrite published history. */
+  projectChapter: text("project_chapter"),
+  access: text("access").notNull().default("public"),
+  metadata: text("metadata").notNull().default("{}"),
+  authorSnapshot: text("author_snapshot").notNull().default("{}"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+/** Ordered secondary attachments. The primary remains on slurp2_posts for compatibility. */
+export const slpPostMedia = fileTable(
+  "slurp2_post_media",
+  {
+    id: text("id").primaryKey(),
+    postId: text("post_id").notNull(),
+    position: integer("position").notNull(),
+    imageUrl: text("image_url").notNull(),
+    imagePrompt: text("image_prompt"),
+    mediaPath: text("media_path").notNull(),
+    shootId: text("shoot_id"),
+    createdAt: text("created_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["postId", "position"] }] },
+);
+
+/** What went into each generated post: the full prompt, the plan, the draws. See `slp-deep-details.ts`. */
+export const slpPostDeepDetails = fileTable("slurp2_post_deep_details", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  record: text("record").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const slpAccountSubscriptions = fileTable(
+  "slurp2_account_subscriptions",
+  {
+    id: text("id").primaryKey(),
+    viewerAccountId: text("viewer_account_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["viewerAccountId", "creatorAccountId"] }] },
+);
+
+export const slpPostUnlocks = fileTable(
+  "slurp2_post_unlocks",
+  {
+    id: text("id").primaryKey(),
+    viewerAccountId: text("viewer_account_id").notNull(),
+    postId: text("post_id").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["viewerAccountId", "postId"] }] },
+);
+
+export const slpInteractions = fileTable(
+  "slurp2_interactions",
+  {
+    id: text("id").primaryKey(),
+    postId: text("post_id").notNull(),
+    parentInteractionId: text("parent_interaction_id"),
+    actorAccountId: text("actor_account_id").notNull(),
+    type: text("type").notNull(),
+    content: text("content"),
+    imageUrl: text("image_url"),
+    actorSnapshot: text("actor_snapshot").notNull().default("{}"),
+    createdAt: text("created_at").notNull(),
+  },
+  {
+    uniqueBy: [
+      {
+        keys: ["postId", "actorAccountId", "type", "parentInteractionId"],
+        when: (row) => row.type === "like" || row.type === "repost" || row.type === "vote" || row.type === "story_view",
+      },
+    ],
+  },
+);
+
+export const slpReports = fileTable(
+  "slurp2_reports",
+  {
+    id: text("id").primaryKey(),
+    reporterAccountId: text("reporter_account_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    reason: text("reason").notNull(),
+    details: text("details").notNull().default(""),
+    snapshot: text("snapshot").notNull().default("{}"),
+    createdAt: text("created_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["reporterAccountId", "targetType", "targetId"] }] },
+);
+
+export const slpCreatorCreatorReplyClaims = fileTable(
+  "slurp2_creator_reply_claims",
+  {
+    id: text("id").primaryKey(),
+    postId: text("post_id").notNull(),
+    parentInteractionId: text("parent_interaction_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    replyInteractionId: text("reply_interaction_id"),
+    claimedAt: text("claimed_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["parentInteractionId", "creatorAccountId"] }] },
+);
+
+export const slpCreatorPreparedPosts = fileTable(
+  "slurp2_prepared_posts",
+  {
+    id: text("id").primaryKey(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    generatedAt: text("generated_at").notNull(),
+    publishAt: text("publish_at").notNull(),
+    payload: text("payload").notNull(),
+    policyFingerprint: text("policy_fingerprint").notNull(),
+    state: text("state").notNull().default("prepared"),
+    publishedPostId: text("published_post_id"),
+    imageState: text("image_state").notNull().default("none"),
+    imageClaimToken: text("image_claim_token"),
+    imageClaimLeaseUntil: text("image_claim_lease_until"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["publishedPostId"], when: (row) => row.publishedPostId != null }] },
+);
+
+export const slpCreatorAutomaticAttempts = fileTable("slurp2_automatic_attempts", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  claimedAt: text("claimed_at").notNull(),
+  outcome: text("outcome").notNull().default("claimed"),
+});
+
+export const slpCreatorReserveState = fileTable("slurp2_reserve_state", {
+  id: text("id").primaryKey(),
+  lastObservedBudgetTime: text("last_observed_budget_time").notNull(),
+  preparationNotBefore: text("preparation_not_before").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const slpCreatorFanActivityState = fileTable("slurp2_fan_activity_state", {
+  id: text("id").primaryKey(),
+  plan: text("plan").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const slpActivityDigests = fileTable("slurp2_activity_digests", {
+  id: text("id").primaryKey(),
+  accountIds: text("account_ids").notNull().default("[]"),
+  content: text("content").notNull().default(""),
+  sourceRunId: text("source_run_id"),
+  sourcePostId: text("source_post_id"),
+  sourceInteractionId: text("source_interaction_id"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const slpRefreshRuns = fileTable("slurp2_refresh_runs", {
+  id: text("id").primaryKey(),
+  status: text("status").notNull(),
+  activeAccountIds: text("active_account_ids").notNull().default("[]"),
+  prompt: text("prompt").notNull().default(""),
+  result: text("result"),
+  error: text("error"),
+  attempts: text("attempts").notNull().default("[]"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const slpCreatorFirstPostJobs = fileTable(
+  "slurp2_first_post_jobs",
+  {
+    id: text("id").primaryKey(),
+    executionId: text("execution_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    status: text("status").notNull().default("queued"),
+    attempts: text("attempts").notNull().default("0"),
+    nextAttemptAt: text("next_attempt_at").notNull(),
+    postId: text("post_id"),
+    error: text("error"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["executionId", "creatorAccountId"] }] },
+);
+
+/** Resumable, proposal-only work created from Backstage's Creator workshop. */
+export const slurpImprovementJobs = fileTable("slurp2_improvement_jobs", {
+  id: text("id").primaryKey(),
+  status: text("status").notNull().default("queued"),
+  mode: text("mode").notNull().default("missing"),
+  rebrand: text("rebrand").notNull().default("false"),
+  accountIds: text("account_ids").notNull().default("[]"),
+  modules: text("modules").notNull().default("[]"),
+  connectionId: text("connection_id"),
+  completed: text("completed").notNull().default("0"),
+  total: text("total").notNull().default("0"),
+  error: text("error"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const slurpImprovementProposals = fileTable("slurp2_improvement_proposals", {
+  id: text("id").primaryKey(),
+  jobId: text("job_id").notNull(),
+  accountId: text("account_id").notNull(),
+  field: text("field").notNull(),
+  beforeValue: text("before_value").notNull(),
+  afterValue: text("after_value").notNull(),
+  sourceFingerprint: text("source_fingerprint").notNull(),
+  status: text("status").notNull().default("pending"),
+  error: text("error"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// ──────────────────────────────────────────────
+// Direct messages
+// ──────────────────────────────────────────────
+
+/**
+ * One thread per viewer/creator pair.
+ *
+ * `state` is the gate: a viewer who does not clear the creator's DM policy lands in `request`
+ * and stays there until the creator accepts. Only `active` threads generate replies, so the
+ * gate is one column rather than a rule spread across every read path.
+ */
+export const slurpThreads = fileTable(
+  "slurp2_threads",
+  {
+    id: text("id").primaryKey(),
+    viewerAccountId: text("viewer_account_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    state: text("state").notNull().default("active"),
+    openedBy: text("opened_by").notNull().default("viewer"),
+    /** Coins paid to jump a `paid-request` gate, refunded in fiction when the creator accepts. */
+    requestFeePaid: text("request_fee_paid").notNull().default("0"),
+    lastMessageAt: text("last_message_at").notNull(),
+    lastMessagePreview: text("last_message_preview").notNull().default(""),
+    viewerUnread: text("viewer_unread").notNull().default("0"),
+    creatorUnread: text("creator_unread").notNull().default("0"),
+    /** Reply work is separate from whether the Creator has opened the thread. */
+    needsReply: text("needs_reply").notNull().default("false"),
+    /** Invalidates model work that started before a reset or terminal close. */
+    generationEpoch: text("generation_epoch").notNull().default("0"),
+    replyNotBeforeAt: text("reply_not_before_at"),
+    /** Cached rapport, recomputed on every send. Kept here so the inbox sorts without a scan. */
+    rapport: text("rapport").notNull().default("{}"),
+    /**
+     * How this conversation is going, from -100 to 100. See `slurp-mood.ts`.
+     *
+     * Rapport measures months and money and cannot move inside one chat, so nothing could express
+     * "she is annoyed with you right now". This is the fast layer that can.
+     */
+    mood: text("mood").notNull().default("0"),
+    moodUpdatedAt: text("mood_updated_at"),
+    /** While set, the creator has stepped away from this conversation and is not replying. */
+    coolUntil: text("cool_until"),
+    /**
+     * While set, Creator stays online for this conversation due to hot momentum.
+     *
+     * Active conversations extend availability: a Creator in the flow sticks around
+     * even if their schedule says they should be offline. Cleared when conversation
+     * goes cold or fan doesn't reply within inactivity threshold.
+     */
+    extendedOnlineUntil: text("extended_online_until"),
+    /**
+     * Scheduled follow-up messages from Creator (array).
+     *
+     * Allows multiple pending follow-ups for promises, task updates, recurring check-ins, etc.
+     * Each entry: { id, scheduledAt, type, reason, context, relatedNoteId?, sequenceNumber?, totalInSequence? }
+     *
+     * Types:
+     * - reminder: One-time reminder
+     * - promise_delivery: Fulfilling a promise (tip rewards, exclusive content)
+     * - task_update: Progress updates on commissions/tasks
+     * - check_in: Proactive check-in after conversation
+     * - recurring: Repeating updates (daily check-ins, workout logs, etc.)
+     */
+    scheduledFollowUps: text("scheduled_follow_ups").notNull().default("[]"),
+    /**
+     * When the pair last emptied this conversation.
+     *
+     * Commissions outlive a clear because coins moved, but they must not keep hanging in a chat
+     * the player just emptied. The timestamp is what lets the thread hide what predates it while
+     * the ledger keeps every row.
+     */
+    clearedAt: text("cleared_at"),
+    /** Per-fan Creator state, separate from global mood and lifetime rapport. */
+    threadState: text("thread_state").notNull().default("{}"),
+    /** Cool-off periods this thread has had. Two inside the strike window closes it for good. */
+    strikes: text("strikes").notNull().default("0"),
+    lastStrikeAt: text("last_strike_at"),
+    /** Working and long-term facts the creator has learned about this fan. See `slurp-thread-notes.ts`. */
+    notes: text("notes").notNull().default("[]"),
+    /**
+     * The Engine roleplay scene this conversation is in while it runs (docs/SCENES.md). Set only by the
+     * Engine's claim and cleared only by the release for the same scene: it locks the thread and keeps
+     * the Creator busy everywhere else.
+     */
+    sceneChatId: text("scene_chat_id"),
+    sceneStartedAt: text("scene_started_at"),
+    /** A paid sexting session, JSON `SlurpSexting` (docs/SPICY.md, item 2); kept after its end for the tip prompt. */
+    sexting: text("sexting"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["viewerAccountId", "creatorAccountId"] }] },
+);
+
+/** One durable Creator follow-up job. The thread JSON field remains a legacy import source only. */
+export const slurpFollowUps = fileTable(
+  "slurp2_follow_ups",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id").notNull(),
+    viewerAccountId: text("viewer_account_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    scheduledAt: text("scheduled_at").notNull(),
+    type: text("type").notNull(),
+    reason: text("reason").notNull(),
+    context: text("context").notNull().default(""),
+    relatedNoteId: text("related_note_id"),
+    sequenceNumber: text("sequence_number"),
+    totalInSequence: text("total_in_sequence"),
+    recurringPattern: text("recurring_pattern"),
+    /**
+     * When the promise first came due. `scheduledAt` moves with every wait; this does not, so the
+     * Creator knows when she is late (task E). Null on rows from before it: `scheduledAt` stands in.
+     */
+    firstDueAt: text("first_due_at"),
+    status: text("status").notNull().default("pending"),
+    claimedAt: text("claimed_at"),
+    sentAt: text("sent_at"),
+    cancelledAt: text("cancelled_at"),
+    failedAt: text("failed_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["id"] }] },
+);
+
+/**
+ * One message. The image columns are copied from `slurp2_posts` verbatim so a DM attachment
+ * moves through the same claim-token and lease machinery the post pipeline already runs.
+ *
+ * A thread has exactly one viewer, so `unlockedAt` on the row replaces a join table: a mass
+ * message fans out into one row per subscriber thread and every read path stays identical.
+ */
+export const slurpMessages = fileTable("slurp2_messages", {
+  id: text("id").primaryKey(),
+  threadId: text("thread_id").notNull(),
+  senderAccountId: text("sender_account_id").notNull(),
+  /** "viewer" or "creator". Stored rather than derived so a deleted account still renders. */
+  role: text("role").notNull(),
+  kind: text("kind").notNull().default("text"),
+  content: text("content").notNull().default(""),
+  imageUrl: text("image_url"),
+  imagePrompt: text("image_prompt"),
+  imageClaimToken: text("image_claim_token"),
+  imageClaimLeaseUntil: text("image_claim_lease_until"),
+  /** Coins: the unlock price of a locked message, or the amount of a tip. */
+  price: text("price").notNull().default("0"),
+  unlockedAt: text("unlocked_at"),
+  readAt: text("read_at"),
+  metadata: text("metadata").notNull().default("{}"),
+  senderSnapshot: text("sender_snapshot").notNull().default("{}"),
+  createdAt: text("created_at").notNull(),
+});
+
+/** What went into each generated Creator reply, the last few per thread. See `slp-deep-details.ts`. */
+export const slpMessageDeepDetails = fileTable("slurp2_message_deep_details", {
+  /** The id of the reply's first bubble. */
+  id: text("id").primaryKey(),
+  threadId: text("thread_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  record: text("record").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+/**
+ * Reply claims, mirroring `slurp2_creator_reply_claims`. A thread may have at most one reply in
+ * flight, so the claim keys on the thread: a scheduler pass and a live send cannot double-reply.
+ */
+export const slurpMessageClaims = fileTable(
+  "slurp2_message_claims",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id").notNull(),
+    triggerMessageId: text("trigger_message_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    replyMessageId: text("reply_message_id"),
+    generationEpoch: text("generation_epoch").notNull().default("0"),
+    claimedAt: text("claimed_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["threadId"] }] },
+);
+
+/** Later bubbles from one generated reply. The row is the durable timer. */
+export const slurpReplyBubbles = fileTable(
+  "slurp2_reply_bubbles",
+  {
+    id: text("id").primaryKey(),
+    batchId: text("batch_id").notNull(),
+    sequence: text("sequence").notNull(),
+    threadId: text("thread_id").notNull(),
+    senderAccountId: text("sender_account_id").notNull(),
+    messageId: text("message_id").notNull(),
+    content: text("content").notNull(),
+    deliverAt: text("deliver_at").notNull(),
+    generationEpoch: text("generation_epoch").notNull().default("0"),
+    createdAt: text("created_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["batchId", "sequence"] }, { keys: ["messageId"] }] },
+);
+
+export const slurpCommissions = fileTable("slurp2_commissions", {
+  id: text("id").primaryKey(),
+  threadId: text("thread_id").notNull(),
+  viewerAccountId: text("viewer_account_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  state: text("state").notNull().default("brief"),
+  brief: text("brief").notNull(),
+  price: text("price").notNull().default("0"),
+  deliveryMessageId: text("delivery_message_id"),
+  /**
+   * When an automatic delivery is due.
+   *
+   * A character Creator used to be paid and deliver in the same request, so the one thing a
+   * commission is — somebody making you a thing, and the wait for it — never happened. Null on a
+   * commission a person delivers by hand, which is what keeps the scheduler off those.
+   */
+  deliverAt: text("deliver_at"),
+  /**
+   * The finished picture, drawn and kept at accept time, waiting for that delivery.
+   *
+   * Held on the row rather than in memory: the wait outlives a restart, and the fan has paid.
+   */
+  mediaPath: text("media_path"),
+  cancellationId: text("cancellation_id"),
+  /** Stable claim key for a delivery attempt. It survives a message-write or state-update failure. */
+  deliveryId: text("delivery_id"),
+  /** Unique worker that currently owns the delivery lease. */
+  deliveryClaimToken: text("delivery_claim_token"),
+  /** Lease start time. A stopped worker's claim may be recovered after five minutes. */
+  deliveryClaimedAt: text("delivery_claimed_at"),
+  /** A fan's pending counter-offer. The Creator answers it by quoting again or holding the price. */
+  counterPrice: text("counter_price"),
+  /** Counter-offers made so far. The price is final after `SLURP_COMMISSION_MAX_HAGGLE_ROUNDS`. */
+  haggleRounds: text("haggle_rounds").notNull().default("0"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const slurpPaymentCompensations = fileTable(
+  "slurp2_payment_compensations",
+  {
+    id: text("id").primaryKey(),
+    viewerAccountId: text("viewer_account_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    amount: text("amount").notNull(),
+    creditedAmount: text("credited_amount"),
+    note: text("note").notNull().default(""),
+    creditOperationId: text("credit_operation_id"),
+    status: text("status").notNull().default("pending"),
+    claimToken: text("claim_token"),
+    refundedAt: text("refunded_at"),
+    reversedAt: text("reversed_at"),
+    /** Tip notification and audience progress committed after the paid result became durable. */
+    effectsAppliedAt: text("effects_applied_at"),
+    failedAt: text("failed_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["id"] }] },
+);
+
+/**
+ * One thing that happened, addressed to one persona.
+ *
+ * Slurp had no notification surface at all — only an unseen-post count and DM unread counts.
+ * Nothing reported a subscriber, a tip, an unlock, a milestone, or a loss, so the world could be
+ * made as alive as you like and the player would see none of it.
+ *
+ * `recipientPersonaId` is always a persona. Creator-side events reach the persona that operates
+ * the Creator; a character-backed Creator has no operator and so produces none. Fan-side events
+ * reach the persona directly.
+ *
+ * `weight` carries the significance score. The readable-handful rule means a feed is curated, not
+ * a firehose, and sorting by weight is what lets small events group and trivial ones stay hidden.
+ */
+export const slurpEvents = fileTable("slurp2_events", {
+  id: text("id").primaryKey(),
+  recipientPersonaId: text("recipient_persona_id").notNull(),
+  kind: text("kind").notNull(),
+  /** The Creator the event is about, when there is one. */
+  creatorAccountId: text("creator_account_id"),
+  /** The post, thread, or commission the event points at, so a notification can navigate. */
+  subjectId: text("subject_id"),
+  /** Who acted, for display. Stored rather than joined so a departed fan still renders. */
+  actorLabel: text("actor_label"),
+  /** One readable line about the event, from a Tier 1 bank. Null for events that need none. */
+  note: text("note"),
+  /** Stable payment operation that produced this event, when the action must be idempotent. */
+  operationId: text("operation_id"),
+  /** Coins, follower counts, or a milestone target, depending on kind. */
+  amount: text("amount").notNull().default("0"),
+  weight: text("weight").notNull().default("0"),
+  createdAt: text("created_at").notNull(),
+  seenAt: text("seen_at"),
+});
+
+/**
+ * One member of the audience.
+ *
+ * Rows are written only once a member acts somewhere the player can see, so a Creator's follower
+ * count may read 12,483 while a few hundred rows exist. Everything about a member derives from
+ * `seed`, so the row is a record that they were used, not the source of who they are.
+ *
+ * Nobody here has a profile, a post grid, or an avatar. That is what makes an audience affordable.
+ */
+export const slurpPopulation = fileTable(
+  "slurp2_population",
+  {
+    id: text("id").primaryKey(),
+    seed: text("seed").notNull(),
+    handle: text("handle").notNull(),
+    displayName: text("display_name").notNull(),
+    archetype: text("archetype").notNull(),
+    /** Which Fan Type this person is. Missing on a row written before Fan Types existed; those
+     * resolve through `archetype` at read time rather than needing a migration pass. */
+    fanTypeId: text("fan_type_id"),
+    traits: text("traits").notNull().default("[]"),
+    spendTier: text("spend_tier").notNull().default("none"),
+    activeHour: text("active_hour").notNull().default("12"),
+    joinedAt: text("joined_at").notNull(),
+    /** Last time this member did anything. Drives churn: the long-silent drift out. */
+    lastActiveAt: text("last_active_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["handle"] }] },
+);
+
+/**
+ * What one member is to one Creator.
+ *
+ * The funnel lives here. A follower count is the number of rows in follower state, not an invented
+ * number, and decay is people moving back down rather than a curve applied to a total.
+ */
+export const slurpAudienceTies = fileTable(
+  "slurp2_audience_ties",
+  {
+    id: text("id").primaryKey(),
+    memberId: text("member_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    /** stranger | viewer | liker | follower | subscriber | regular | whale | lapsed */
+    stage: text("stage").notNull().default("stranger"),
+    /** Coins this member has paid this Creator, ever. The sum of every split below, plus subscriptions. */
+    spent: text("spent").notNull().default("0"),
+    /**
+     * The spend split, because rapport weighs a tip and an unlock differently.
+     *
+     * Kept here rather than derived from the wallet ledger: that ledger is capped at 60 entries
+     * across every creator, so a whale's history silently aged out of their own rapport score.
+     */
+    tipped: text("tipped").notNull().default("0"),
+    unlocked: text("unlocked").notNull().default("0"),
+    /** Spend in the current rolling seven-day fan budget window. */
+    weeklySpent: text("weekly_spent").notNull().default("0"),
+    weeklySpendStartedAt: text("weekly_spend_started_at"),
+    /**
+     * Where this relationship is heading, as opposed to where it stands.
+     *
+     * steady | rising | cooling | burnout | returning. The stage says somebody is a subscriber; the
+     * The audience arc says whether they are on their way in or on their way out, which is the part worth
+     * telling the player about.
+     */
+    audienceArc: text("audience_arc").notNull().default("steady"),
+    audienceArcSince: text("audience_arc_since"),
+    /**
+     * When this member's subscription to this Creator is paid up to.
+     *
+     * Null for anybody who has never subscribed, and for a tie written before audience
+     * subscriptions existed. An audience member holds no wallet — they are not a viewer — so this
+     * column is the whole of their billing state: past it, the tick either renews them or lets
+     * them lapse.
+     */
+    paidThroughAt: text("paid_through_at"),
+    /** When this member first reached follower. Null for a tie that predates the column. */
+    followedAt: text("followed_at"),
+    interactions: text("interactions").notNull().default("0"),
+    firstSeenAt: text("first_seen_at").notNull(),
+    lastSeenAt: text("last_seen_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["memberId", "creatorAccountId"] }] },
+);
+
+/**
+ * Text the world wrote from a template and would rather have written properly.
+ *
+ * Unattended work never calls the model, so a commission brief or a question opened by a
+ * background tick comes from the combinatorial bank — vague on purpose, because a template that
+ * fakes specificity about a post it never read is worse than one that does not try.
+ *
+ * That vagueness is a cost of the rule, not a feature. A row here says "this was a placeholder";
+ * when the player is next present, the model rewrites it against the thing it is actually about.
+ */
+export const slurpPendingText = fileTable("slurp2_pending_text", {
+  id: text("id").primaryKey(),
+  /** commission | question | opener */
+  kind: text("kind").notNull(),
+  /** The commission, interaction, or message row whose text is a placeholder. */
+  subjectId: text("subject_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** The post a question is about. Null for the other kinds. */
+  postId: text("post_id"),
+  actorLabel: text("actor_label"),
+  /** General worker kind. Existing rows default to rewrite. */
+  jobKind: text("job_kind").notNull().default("rewrite"),
+  /** pending | running | failed. Successful jobs are removed. */
+  status: text("status").notNull().default("pending"),
+  priority: text("priority").notNull().default("2"),
+  attempts: text("attempts").notNull().default("0"),
+  claimedAt: text("claimed_at"),
+  expiresAt: text("expires_at"),
+  createdAt: text("created_at").notNull(),
+});
+
+/** New name for the generalized queue; the physical table stays put so existing jobs survive. */
+export const slurpModelJobs = slurpPendingText;
+
+/**
+ * One planned shoot a Creator can post from more than once.
+ *
+ * A Creator who moves through four cinematic locations in an afternoon reads as a script. Real
+ * output comes in batches: one afternoon, one outfit, one room, several posts spread over days.
+ * A set drop opens a session here and later posts draw from it, which is what lets a caption say
+ * "one more from yesterday" and have the picture actually match.
+ */
+export const slurpShootSessions = fileTable("slurp2_shoot_sessions", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** The variation axes the shoot was set up under, so later posts can reproduce its look. */
+  place: text("place").notNull(),
+  company: text("company").notNull(),
+  /** The camera that was set up. Later posts from this shoot cannot use a different one. */
+  cameraSource: text("camera_source").notNull(),
+  /** How many posts have drawn from this shoot, including the drop that opened it. */
+  shotsUsed: text("shots_used").notNull().default("1"),
+  shotsTaken: text("shots_taken").notNull().default("1"),
+  shotsSelected: text("shots_selected").notNull().default("1"),
+  effort: text("effort").notNull().default("medium"),
+  theme: text("theme").notNull().default("set"),
+  status: text("status").notNull().default("active"),
+  campaignId: text("campaign_id"),
+  capturedAt: text("captured_at").notNull().default(""),
+  /**
+   * The picture brief the drop was generated from, so a later picture keeps its clothes and light.
+   * Empty for shoots recorded before it existed: an unknown detail stays unknown, never invented.
+   */
+  brief: text("brief").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+});
+
+/**
+ * One planned post, decided before anything is written.
+ *
+ * The feed used to be the only record that a Creator had considered posting. Nothing said why a
+ * post exists, and nothing at all was left behind when the answer was "not today" — a quiet
+ * afternoon was indistinguishable from a failed run. The planner writes its decision here first,
+ * so a retry repeats the decision instead of making a new one, and a chosen skip is a fact rather
+ * than an absence.
+ */
+export const slurpContentOpportunities = fileTable("slurp2_content_opportunities", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** The scheduled slot this plan belongs to, when the scheduler asked for it. */
+  slotId: text("slot_id"),
+  /** How many posts the Creator had made when the plan was drawn. The draws seed off it. */
+  sequence: text("sequence").notNull(),
+  /** From `slp-content-axes.ts`. Empty for a skip: nothing is being delivered. */
+  intent: text("intent").notNull().default(""),
+  delivery: text("delivery").notNull().default(""),
+  workflow: text("workflow").notNull(),
+  access: text("access").notNull().default(""),
+  /** Why the Creator did not post. Set only when the workflow is `skip`. */
+  skipReason: text("skip_reason"),
+  /** The post this plan produced, once one exists. */
+  postId: text("post_id"),
+  /**
+   * The continuity event this plan answers, such as a fan request the Creator agreed to fulfil.
+   * A plan with a source event and no slot is a promise: it waits until the planner honours it.
+   */
+  sourceEventId: text("source_event_id"),
+  /**
+   * What a promise delivers, in the Creator's own words from the request panel. Never the fan's
+   * wording: it reaches a public post.
+   */
+  topic: text("topic"),
+  /**
+   * The beat an ordinary slot was planned around (beats planner only), as JSON. A retry repeats
+   * it, and editorial memory counts beat types from it.
+   */
+  beat: text("beat"),
+  plannedAt: text("planned_at").notNull(),
+  dueAt: text("due_at"),
+  completedAt: text("completed_at"),
+});
+
+/**
+ * A short planned sequence around one set: the set, a public teaser for it, and a later callback.
+ *
+ * A creator page converts in sequences, not single posts. Without this every set was a one-off and
+ * nothing ever pointed at it again, so a paid drop had no teaser and no follow-up.
+ */
+export const slurpContentCampaigns = fileTable("slurp2_content_campaigns", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** `open` while any stage can still run; `closed` once every stage is done, skipped, or expired. */
+  status: text("status").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+});
+
+/** One step of a campaign. A stage runs only in a slot the planner hands it, never on its own. */
+export const slurpContentCampaignStages = fileTable("slurp2_content_campaign_stages", {
+  id: text("id").primaryKey(),
+  campaignId: text("campaign_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** `set`, `teaser`, or `callback`. Also the stage's intent. */
+  kind: text("kind").notNull(),
+  position: text("position").notNull(),
+  /** The access this stage needs. A teaser only runs in a public slot. */
+  access: text("access").notNull().default(""),
+  /** `planned`, `claimed`, `completed`, `skipped`, or `cancelled`. */
+  status: text("status").notNull(),
+  opportunityId: text("opportunity_id"),
+  postId: text("post_id"),
+  /** Not before this time. A callback the same afternoon as its set is not a callback. */
+  dueAt: text("due_at").notNull(),
+  completedAt: text("completed_at"),
+});
+
+/**
+ * Durable Creator facts: boundaries, interests, plans, promises, circumstances.
+ *
+ * Keyed on the source Character or Persona as well as the Slurp account, because the source is the
+ * identity that owns canon. Not a second character card: only things that change or persist
+ * across Slurp operations belong here. See `shared/src/slp/slp-continuity.ts` for the scopes.
+ */
+export const slurpContinuityFacts = fileTable("slurp2_continuity_facts", {
+  id: text("id").primaryKey(),
+  sourceKind: text("source_kind").notNull(),
+  sourceEntityId: text("source_entity_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  factType: text("fact_type").notNull(),
+  subject: text("subject").notNull().default(""),
+  text: text("text").notNull(),
+  audienceScope: text("audience_scope").notNull(),
+  realityScope: text("reality_scope").notNull(),
+  threadId: text("thread_id"),
+  confidence: text("confidence").notNull().default("1"),
+  salience: text("salience").notNull().default("0.5"),
+  status: text("status").notNull(),
+  source: text("source").notNull(),
+  evidence: text("evidence").notNull().default(""),
+  sourceHash: text("source_hash").notNull().default(""),
+  contribution: text("contribution").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  expiresAt: text("expires_at"),
+});
+
+/** Things that happened to or around a Creator. Same identity and scopes as facts. */
+export const slurpContinuityEvents = fileTable("slurp2_continuity_events", {
+  id: text("id").primaryKey(),
+  sourceKind: text("source_kind").notNull(),
+  sourceEntityId: text("source_entity_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  eventType: text("event_type").notNull(),
+  source: text("source").notNull(),
+  realityScope: text("reality_scope").notNull(),
+  audienceScope: text("audience_scope").notNull(),
+  threadId: text("thread_id"),
+  payload: text("payload").notNull().default("{}"),
+  status: text("status").notNull(),
+  confidence: text("confidence").notNull().default("1"),
+  evidence: text("evidence").notNull().default(""),
+  relatedIds: text("related_ids").notNull().default("[]"),
+  /** Deterministic for system events, so the same thing is never recorded twice. */
+  fingerprint: text("fingerprint").notNull(),
+  contribution: text("contribution").notNull(),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at"),
+});
+
+/** Extracted changes waiting to be applied or reviewed. Nothing here is read by a prompt. */
+export const slurpContinuityProposals = fileTable("slurp2_continuity_proposals", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** `fact` or `event`. */
+  target: text("target").notNull(),
+  /** The candidate record as JSON, validated before it was stored. */
+  candidate: text("candidate").notNull(),
+  risk: text("risk").notNull(),
+  confidence: text("confidence").notNull(),
+  sourceHash: text("source_hash").notNull(),
+  sourceMessageIds: text("source_message_ids").notNull().default("[]"),
+  extractionFingerprint: text("extraction_fingerprint").notNull().default(""),
+  status: text("status").notNull(),
+  reviewer: text("reviewer"),
+  revision: text("revision").notNull().default("1"),
+  createdAt: text("created_at").notNull(),
+  reviewedAt: text("reviewed_at"),
+});
+
+/** Explicit graph edges between planning, messages, shoots, campaigns, posts, and outcomes. */
+export const slurpContinuityLinks = fileTable(
+  "slurp2_continuity_links",
+  {
+    id: text("id").primaryKey(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    fromType: text("from_type").notNull(),
+    fromId: text("from_id").notNull(),
+    toType: text("to_type").notNull(),
+    toId: text("to_id").notNull(),
+    relation: text("relation").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["fromType", "fromId", "toType", "toId", "relation"] }] },
+);
+
+/**
+ * How often subscribers have asked for the same kind of thing.
+ *
+ * A topic label and a count, deliberately nothing else: no fan identity and no private request
+ * text. That is what lets demand shape Creator-wide planning without exposing who asked.
+ */
+export const slurpDemandTrends = fileTable("slurp2_creator_demand_trends", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** Normalised, lowercase, bounded. The key a trend is counted under. */
+  topic: text("topic").notNull(),
+  count: text("count").notNull().default("1"),
+  firstSeenAt: text("first_seen_at").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+});
+
+/** One cross-process lease for the free world tick. */
+export const slurpWorldClaims = fileTable("slurp2_world_claims", {
+  id: text("id").primaryKey(),
+  token: text("token").notNull(),
+  claimedAt: text("claimed_at").notNull(),
+});
+
+/** One live show (docs: LIVE-V3-PLAN.md). `state` is the JSON `SlpLiveState` only code changes. */
+export const slurpLiveShows = fileTable("slurp2_live_shows", {
+  id: text("id").primaryKey(),
+  hostKind: text("host_kind").notNull(),
+  hostId: text("host_id").notNull(),
+  startedAt: text("started_at").notNull(),
+  endsAt: text("ends_at").notNull(),
+  endedAt: text("ended_at"),
+  state: text("state").notNull(),
+  /** Last time a player had the show open; beats and pictures only run while this is fresh. */
+  watchedAt: text("watched_at"),
+  createdAt: text("created_at").notNull(),
+});

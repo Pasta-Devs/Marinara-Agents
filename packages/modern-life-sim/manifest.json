@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 9
+  },
+  "builtAgainst": {
+    "engineVersion": "2.4.6",
+    "engineCommit": "3ec25a04e39f5eda3eea138c1c1941a169bb88be"
+  },
+  "id": "modern-life-sim",
+  "name": "Modern Life Sim",
+  "version": "0.3.2",
+  "description": "A modern life sim in its own Home tab: a town on a clock, a job, rent and needs, and a cast drawn from your character cards whose relationships grow scene by scene, with a visual-novel narrator for the scenes that matter. Install it, restart Marinara Engine when prompted, then open Home → Life Sim.",
+  "engine": {
+    "min": "2.4.4",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "client": "client.js",
+    "server": "server.mjs"
+  },
+  "contributions": {
+    "slots": [
+      "home-browser-tab"
+    ],
+    "homeBrowserTab": {
+      "label": "Life Sim",
+      "ariaLabel": "Open Modern Life Sim",
+      "iconPaths": [
+        "life-sim-icon.png"
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "ddcda224d65454296d5e3a69d376f26c33c39de4e0f935f014d5a0d8595483bd",
+      "bytes": 678
+    },
+    {
+      "path": "client.js",
+      "sha256": "185ca87725f6d3e588c63ff6c756b4b00d6b791155b9f18a4c7aba56283fbac4",
+      "bytes": 960211
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "d5672272a8267f205537f524a3ab2d52cc0531f4567ea624c06de1e67f95c890",
+      "bytes": 1285097
+    },
+    {
+      "path": "life-sim-icon.png",
+      "sha256": "6b5aa92f7be297f56ce4690cf4baa752f13681200570252fbf2e7a91e851d2ea",
+      "bytes": 7106
+    }
+  ],
+  "permissions": [
+    "network",
+    "routes",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

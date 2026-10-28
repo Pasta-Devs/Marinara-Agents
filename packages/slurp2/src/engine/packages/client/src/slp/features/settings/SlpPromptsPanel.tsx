@@ -1,0 +1,308 @@
+import { Image, MessageSquareText, MoreVertical, SlidersHorizontal } from "lucide-react";
+import type { ReactNode } from "react";
+import { Field, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
+import { PromptCard } from "../../modules/settings/SlpBackstageKit";
+import { StatusStrip } from "../../modules/settings/SlpSettingsInputs";
+import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
+import {
+  DEFAULT_SLURP_GENERATION_GUIDANCE,
+  SLURP_IMAGE_INTERPRETATION_PRESETS,
+  SLURP_IMAGE_INTERPRETATION_STYLES,
+} from "../../modules/settings/slp-backstage-format";
+import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
+import { SlurpPostGuidanceField } from "./SlpPostGuidanceField";
+import { SlurpPromptBlockBuilder } from "./SlpPromptBlockBuilder";
+import { SlpPromptOutcomeSection } from "./SlpPromptOutcomeCard";
+
+/** Prompt Studio keeps the common prompts readable and opens exact block composition on demand. */
+export function SlpPromptsPanel(page: SlpBackstagePageProps) {
+  const {
+    t,
+    settings,
+    savedSettings,
+    update,
+    updateSettings,
+    setGenerationGuidanceDraft,
+    setGenerationGuidanceEditorOpen,
+    setImagePromptDraft,
+    setImagePromptEditorOpen,
+    generationGuidanceIsDefault,
+    interpretationStyle,
+    imagePromptIsDefault,
+    selectedPresetName,
+    selectedPreset,
+    restoreDefaultImagePrompt,
+    postGuidanceQuery,
+    postGuidanceDraft,
+    stagePostGuidance,
+  } = page;
+  const postGuidanceCustom = Boolean(
+    postGuidanceDraft.public !== undefined ||
+    postGuidanceDraft.locked !== undefined ||
+    postGuidanceQuery.data?.defaults.public ||
+    postGuidanceQuery.data?.defaults.locked,
+  );
+
+  const outcomeSections = (
+    <section aria-label={t("ui.slurp.settings.prompts.outcomesTitle", { defaultValue: "Prompt outcomes" })}>
+      <div className="space-y-4">
+        <SlpPromptOutcomeSection
+          icon={<MessageSquareText size={18} aria-hidden="true" />}
+          title={t("ui.slurp.settings.prompts.voiceOutcome", { defaultValue: "Voice and writing" })}
+          summary={t("ui.slurp.settings.prompts.voiceOutcomeDetail", {
+            defaultValue: "Tone, language, maturity, and context shared across Creator writing.",
+          })}
+          customized={!generationGuidanceIsDefault}
+        >
+          <SettingAnchor settingKey="generationGuidance">
+            <PromptCard
+              title={t("ui.slurp.settings.prompts.generationGuidance")}
+              value={settings.generationGuidance}
+              isDefault={generationGuidanceIsDefault}
+              onEdit={() => {
+                setGenerationGuidanceDraft(settings.generationGuidance);
+                setGenerationGuidanceEditorOpen(true);
+              }}
+              onRestore={() => void update("generationGuidance", DEFAULT_SLURP_GENERATION_GUIDANCE)}
+            />
+          </SettingAnchor>
+        </SlpPromptOutcomeSection>
+
+        <SlpPromptOutcomeSection
+          icon={<SlidersHorizontal size={18} aria-hidden="true" />}
+          title={t("ui.slurp.settings.prompts.postOutcome", { defaultValue: "Post behavior" })}
+          summary={t("ui.slurp.settings.prompts.postOutcomeDetail", {
+            defaultValue: "What public and locked posts should achieve for their audience.",
+          })}
+          customized={postGuidanceCustom}
+        >
+          {(["public", "locked"] as const).map((access) => (
+            <SlurpPostGuidanceField
+              key={access}
+              access={access}
+              guidance={postGuidanceQuery.data}
+              inherited={postGuidanceQuery.data?.builtIn[access] ?? ""}
+              draftValue={postGuidanceDraft[access]}
+              onStage={(value) => stagePostGuidance(access, value)}
+              label={t(`ui.slurp.settings.prompts.${access}Guidance`)}
+              detail={t(`ui.slurp.settings.prompts.${access}GuidanceDetail`)}
+              clearLabel={t("ui.slurp.settings.prompts.guidanceUseBuiltIn")}
+              savedMessage={t("ui.slurp.settings.prompts.guidanceSavedAccess")}
+              disabled={postGuidanceQuery.isLoading || postGuidanceQuery.isError}
+            />
+          ))}
+        </SlpPromptOutcomeSection>
+
+        <SlpPromptOutcomeSection
+          icon={<Image size={18} aria-hidden="true" />}
+          title={t("ui.slurp.settings.prompts.imageOutcome", { defaultValue: "Image direction" })}
+          summary={t("ui.slurp.settings.prompts.imageOutcomeDetail", {
+            defaultValue: "Visual style and how Slurp turns ideas into image prompts.",
+          })}
+          customized={!imagePromptIsDefault || interpretationStyle === null}
+        >
+          <SettingAnchor settingKey="imageGenerationPrompt">
+            <PromptCard
+              title={t("ui.slurp.settings.images.instructions")}
+              value={settings.imageGenerationPrompt}
+              isDefault={imagePromptIsDefault}
+              onEdit={() => {
+                setImagePromptDraft(settings.imageGenerationPrompt);
+                setImagePromptEditorOpen(true);
+              }}
+              onRestore={() => void restoreDefaultImagePrompt()}
+            />
+          </SettingAnchor>
+          <PromptOptions label={t("ui.slurp.settings.prompts.moreSettings", { defaultValue: "More settings" })}>
+            <Toggle
+              settingKey="enableImageInterpretation"
+              label={t("ui.slurp.settings.images.enhancePrompts")}
+              detail={t("ui.slurp.settings.images.enhancePromptsDetail")}
+              value={settings.enableImageInterpretation}
+              onChange={(value) => update("enableImageInterpretation", value)}
+            />
+            {settings.enableImageInterpretation && (
+              <Field
+                settingKey="imagePromptInterpretation"
+                label={t("ui.slurp.settings.images.promptStyle")}
+                detail={
+                  interpretationStyle
+                    ? t("ui.slurp.settings.images.promptStyleDetail")
+                    : t("ui.slurp.settings.images.promptStyleCustom")
+                }
+              >
+                <div className="flex flex-wrap gap-2">
+                  {SLURP_IMAGE_INTERPRETATION_STYLES.map((style) => (
+                    <button
+                      key={style}
+                      type="button"
+                      aria-pressed={interpretationStyle === style}
+                      onClick={() =>
+                        void update("imagePromptInterpretation", SLURP_IMAGE_INTERPRETATION_PRESETS[style])
+                      }
+                      className={`min-h-11 rounded-full px-4 text-sm font-semibold ring-1 ring-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] ${interpretationStyle === style ? "bg-[image:var(--slurp-nav-active)] text-[var(--slurp-text)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-canvas)] text-[var(--slurp-muted)] ring-[var(--slurp-outline)] hover:text-[var(--slurp-text)]"}`}
+                    >
+                      {t(`ui.slurp.settings.images.promptStyle.${style}`)}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            )}
+          </PromptOptions>
+        </SlpPromptOutcomeSection>
+      </div>
+    </section>
+  );
+
+  return (
+    <div className="space-y-6">
+      <BackstagePageHeader
+        detail={t("ui.slurp.settings.prompts.studioDetail", {
+          defaultValue: "Shape how Slurp writes, speaks, and creates. Your prompts stay visible and easy to edit.",
+        })}
+        actions={
+          <SettingAnchor settingKey="promptPresets">
+            <PromptPresetToolbar
+              page={page}
+              selectedPresetName={selectedPresetName}
+              selectedPreset={selectedPreset}
+              pending={updateSettings.isPending}
+            />
+          </SettingAnchor>
+        }
+      />
+      <StatusStrip
+        label={t("ui.slurp.settings.strip.label")}
+        items={[
+          {
+            label: t("ui.slurp.settings.prompts.generationGuidance"),
+            value: generationGuidanceIsDefault
+              ? t("ui.slurp.settings.prompts.houseStyle")
+              : t("ui.slurp.settings.presets.custom"),
+            settingKey: "generationGuidance",
+          },
+        ]}
+      />
+      {/* 0.3.17: how far and which words live in Settings › Spice; this page is the house style. */}
+      <p className="px-1 text-xs leading-5 text-[var(--slurp-muted)] text-pretty">
+        {t("ui.slurp.settings.prompts.spiceMoved")}
+      </p>
+      <SettingAnchor settingKey="promptBlocks">
+        <SettingAnchor settingKey="promptInstructions">
+          <SlurpPromptBlockBuilder
+            value={settings.promptBlocks}
+            savedValue={savedSettings?.promptBlocks ?? {}}
+            instructions={settings.promptInstructions}
+            savedInstructions={savedSettings?.promptInstructions ?? []}
+            onChange={(promptBlocks) => void update("promptBlocks", promptBlocks)}
+            onChangeInstructions={(promptInstructions) => void update("promptInstructions", promptInstructions)}
+            overviewContent={outcomeSections}
+          />
+        </SettingAnchor>
+      </SettingAnchor>
+    </div>
+  );
+}
+
+function PromptOptions({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <details className="group rounded-lg bg-[var(--slurp-canvas)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+      <summary className="min-h-11 cursor-pointer list-none px-3 py-3 text-xs font-bold text-[var(--slurp-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
+        {label}
+      </summary>
+      <div className="space-y-4 border-t border-[var(--slurp-outline)] p-4">{children}</div>
+    </details>
+  );
+}
+
+function PromptPresetToolbar({
+  page,
+  selectedPresetName,
+  selectedPreset,
+  pending,
+}: {
+  page: SlpBackstagePageProps;
+  selectedPresetName: string;
+  selectedPreset: SlpBackstagePageProps["selectedPreset"];
+  pending: boolean;
+}) {
+  const {
+    t,
+    settings,
+    setSelectedPresetName,
+    presetImportRef,
+    savePromptPreset,
+    applyPromptPreset,
+    deletePromptPreset,
+    exportPromptPresets,
+    importPromptPresets,
+  } = page;
+  const actions: Array<{ label: string; action: () => void; disabled: boolean }> = [
+    { label: t("ui.slurp.settings.presets.apply"), action: () => void applyPromptPreset(), disabled: !selectedPreset },
+    { label: t("ui.slurp.settings.presets.save"), action: () => void savePromptPreset(), disabled: false },
+    {
+      label: t("ui.slurp.settings.presets.delete"),
+      action: () => void deletePromptPreset(),
+      disabled: !selectedPreset,
+    },
+    {
+      label: t("ui.slurp.settings.presets.export"),
+      action: exportPromptPresets,
+      disabled: settings.promptPresets.length === 0,
+    },
+    { label: t("ui.slurp.settings.presets.import"), action: () => presetImportRef.current?.click(), disabled: false },
+  ];
+  return (
+    <div className="flex w-full items-end gap-2 sm:w-auto">
+      <label className="block min-w-0 flex-1 text-[0.68rem] sm:min-w-40 sm:flex-none font-bold uppercase tracking-[0.08em] text-[var(--slurp-muted)]">
+        {t("ui.slurp.settings.prompts.preset", { defaultValue: "Preset" })}
+        <select
+          value={selectedPreset ? selectedPresetName : ""}
+          disabled={settings.promptPresets.length === 0}
+          onChange={(event) => setSelectedPresetName(event.target.value)}
+          aria-label={t("ui.slurp.settings.presets.choose")}
+          className="mt-1 min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-surface-raised)] px-3 text-base font-normal normal-case tracking-normal text-[var(--slurp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+        >
+          <option value="">
+            {settings.promptPresets.length > 0
+              ? t("ui.slurp.settings.presets.choose")
+              : t("ui.slurp.settings.presets.empty")}
+          </option>
+          {settings.promptPresets.map((preset) => (
+            <option key={preset.name} value={preset.name}>
+              {preset.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <details className="group relative">
+        <summary
+          aria-label={t("ui.slurp.settings.prompts.presetToolbar", { defaultValue: "Manage presets" })}
+          className="grid size-11 cursor-pointer list-none place-items-center rounded-lg bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden"
+        >
+          <MoreVertical size={18} aria-hidden="true" />
+        </summary>
+        <div className="absolute end-0 z-40 mt-2 w-48 overflow-hidden rounded-xl bg-[var(--slurp-surface-raised)] p-1.5 shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+          {actions.map(({ label, action, disabled }) => (
+            <button
+              key={label}
+              type="button"
+              disabled={disabled || pending}
+              onClick={action}
+              className="flex min-h-10 w-full items-center rounded-lg px-3 text-start text-xs font-semibold hover:bg-[var(--slurp-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </details>
+      <input
+        ref={presetImportRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(event) => void importPromptPresets(event)}
+      />
+    </div>
+  );
+}

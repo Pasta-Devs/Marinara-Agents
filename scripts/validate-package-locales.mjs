@@ -7,6 +7,7 @@ import {
   readPackageAgentDefinitions,
   readPackageManifest,
   serializePackageLocale,
+  validateShippedUiTranslations,
 } from "./package-locales.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -104,9 +105,7 @@ for (const entry of (await readdir(packagesRoot, { withFileTypes: true })).sort(
   const expectedEnglish = serializePackageLocale(buildEnglishPackageLocale(manifest, agentDefinitions));
   const actualEnglish = await readFile(join(localesRoot, "en.json"), "utf8");
   if (actualEnglish !== expectedEnglish) {
-    throw new Error(
-      `English localization for ${manifest.id} is stale. Run node scripts/sync-package-locales.mjs.`,
-    );
+    throw new Error(`English localization for ${manifest.id} is stale. Run node scripts/sync-package-locales.mjs.`);
   }
 
   for (const localeFile of localeFiles) {
@@ -139,9 +138,32 @@ const exactSharedKeys = new Set([
   "settings.notifications.customSound.status.custom",
   "settings.sections.imageGeneration.title",
   "settings.sections.notifications.title",
+  "ui.agents.customagentrepositoriesmodal.prompt",
+  "ui.characters.characterclipcard.generate",
   "ui.characters.charactercliptrimmodal.reset",
+  "ui.chat.chatgallery.copyPrompt",
+  "ui.chat.chatgallery.couldNotCopyPrompt",
+  "ui.chat.chatgallery.downloadImage",
+  "ui.chat.chatgallery.pinImageToChat",
+  "ui.chat.chatgallery.pinToChat",
+  "ui.chat.chatgallery.promptCopied",
+  "ui.chat.chatimagelightbox.closeImage",
+  "ui.chat.chatimagelightbox.imagePreview",
   "ui.chat.dependencyworkspaceapprovalcard.notNow",
   "ui.chat.homeprofessormarichat.deleteValue1",
+  "ui.chat.summarypopover.every",
+  "ui.panels.manualupdatecommand.copied",
+  "ui.panels.promptoverrideseditorbody.chars",
+  "ui.ui.imagepromptreviewmodal.belowBeforeMarinaraSendsThe",
+  "ui.ui.imagepromptreviewmodal.editThePrompt",
+  "ui.ui.imagepromptreviewmodal.ready",
+  "ui.ui.imagepromptreviewmodal.request",
+  "ui.ui.imagepromptreviewmodal.requestNeedsAPrompt",
+  "ui.ui.imagepromptreviewmodal.reviewValue1Prompt",
+  "ui.ui.imagepromptreviewmodal.reviewValue1Prompts",
+  "ui.ui.imagepromptreviewmodal.toYourProvider",
+  "ui.ui.imagepromptreviewmodal.value1",
+  "ui.ui.imagepromptreviewmodal.value1_1d0dfc9",
 ]);
 const sharedPrefixes = ["capabilities.actions.", "ui.agents.agenteditor.", "ui.noodle."];
 
@@ -198,16 +220,89 @@ for (const file of await collectSourceFiles(noodleClientRoot)) {
   }
 }
 const missingNoodleKeys = [...referencedNoodleKeys]
-  .filter(
-    (key) =>
-      !(key in noodleEnglish) &&
-      !(`${key}_one` in noodleEnglish && `${key}_other` in noodleEnglish),
-  )
+  .filter((key) => !(key in noodleEnglish) && !(`${key}_one` in noodleEnglish && `${key}_other` in noodleEnglish))
   .sort();
 if (missingNoodleKeys.length > 0) {
   throw new Error(`Noodle English localization is missing: ${missingNoodleKeys.join(", ")}`);
 }
 
+// Slurp ships its own copy of the Noodle UI catalog. Without this the Slurp client could
+// reference a key that only exists in the Noodle package and render the raw key id instead.
+const slurpClientRoot = join(repoRoot, "packages/slurp2/src/engine/packages/client/src");
+const slurpEnglish = JSON.parse(await readFile(join(slurpClientRoot, "slp/locales/en.json"), "utf8"));
+assertRecord(slurpEnglish, "Slurp en UI localization");
+const referencedSlurpKeys = new Set();
+for (const file of await collectSourceFiles(slurpClientRoot)) {
+  const source = await readFile(file, "utf8");
+  for (const match of source.matchAll(/["'](ui\.(?:noodle|slurp)\.[A-Za-z0-9_.-]+)["']/gu)) {
+    referencedSlurpKeys.add(match[1]);
+  }
+}
+const missingSlurpKeys = [...referencedSlurpKeys]
+  .filter((key) => !(key in slurpEnglish) && !(`${key}_one` in slurpEnglish && `${key}_other` in slurpEnglish))
+  .sort();
+if (missingSlurpKeys.length > 0) {
+  throw new Error(`Slurp English localization is missing: ${missingSlurpKeys.join(", ")}`);
+}
+
 console.log(
   `Noodle UI locales valid: en=${noodleEnglishKeys.length}, de=${Object.keys(noodleCatalogs.get("de")).length}, ko=${Object.keys(noodleCatalogs.get("ko")).length}, pl=${Object.keys(noodleCatalogs.get("pl")).length}.`,
 );
+
+const memoryNagUiLocaleRoot = join(
+  packagesRoot,
+  "memory-nag/src/engine/packages/client/src/features/memory-nag/locales",
+);
+const memoryNagUiLocaleFiles = (await readdir(memoryNagUiLocaleRoot)).filter((name) => name.endsWith(".json")).sort();
+const expectedMemoryNagUiLocaleFiles = [
+  "ar.json",
+  "de.json",
+  "en.json",
+  "es.json",
+  "fr.json",
+  "hi.json",
+  "ja.json",
+  "ko.json",
+  "pl.json",
+  "pt-BR.json",
+  "ru.json",
+  "zh-Hans.json",
+].sort();
+if (JSON.stringify(memoryNagUiLocaleFiles) !== JSON.stringify(expectedMemoryNagUiLocaleFiles)) {
+  throw new Error("Memory Nag UI localization must cover every supported Engine locale");
+}
+
+const memoryNagEnglish = JSON.parse(await readFile(join(memoryNagUiLocaleRoot, "en.json"), "utf8"));
+const memoryNagEnglishKeys = Object.keys(memoryNagEnglish).filter((key) => key !== "_meta");
+const memoryNagLocaleCounts = [];
+for (const localeFile of memoryNagUiLocaleFiles) {
+  const locale = localeFile.slice(0, -".json".length);
+  const catalog = JSON.parse(await readFile(join(memoryNagUiLocaleRoot, localeFile), "utf8"));
+  assertRecord(catalog, `Memory Nag ${locale} UI localization`);
+  if (catalog._meta?.locale !== locale) {
+    throw new Error(`Memory Nag ${locale} UI localization metadata must match its filename`);
+  }
+  const expectedDirection = locale === "ar" ? "rtl" : "ltr";
+  if (catalog._meta?.direction !== expectedDirection) {
+    throw new Error(`Memory Nag ${locale} UI localization direction must be ${expectedDirection}`);
+  }
+  const keys = Object.keys(catalog).filter((key) => key !== "_meta");
+  memoryNagLocaleCounts.push(`${locale}=${keys.length}`);
+  if (keys.some((key) => !memoryNagEnglishKeys.includes(key))) {
+    throw new Error(`Memory Nag ${locale} UI localization contains an unknown English key`);
+  }
+  // UI translations use the same English fallback as package metadata catalogs.
+  for (const key of keys) {
+    if (typeof catalog[key] !== "string" || !catalog[key].trim()) {
+      throw new Error(`Memory Nag ${locale} UI localization key ${key} is empty`);
+    }
+    const englishTokens = [...memoryNagEnglish[key].matchAll(/\{\{[A-Za-z0-9_]+\}\}/gu)].map((match) => match[0]);
+    const localizedTokens = [...catalog[key].matchAll(/\{\{[A-Za-z0-9_]+\}\}/gu)].map((match) => match[0]);
+    if (JSON.stringify(englishTokens.sort()) !== JSON.stringify(localizedTokens.sort())) {
+      throw new Error(`Memory Nag ${locale} UI localization key ${key} changed interpolation tokens`);
+    }
+  }
+}
+
+await validateShippedUiTranslations(repoRoot);
+console.log(`Memory Nag UI locales valid: ${memoryNagLocaleCounts.join(", ")}.`);

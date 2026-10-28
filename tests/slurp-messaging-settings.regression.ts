@@ -1,0 +1,77 @@
+// The Messaging settings tab. Each control has to reach the behaviour it names, or it is a knob
+// that does nothing — which is how the Advanced toggle in the conversation overview ended up.
+import assert from "node:assert/strict";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { readSlurpCreatorMessaging } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-messaging";
+import { slurp2Source } from "./slurp2-source";
+
+const root = "packages/slurp2/src/engine/packages";
+const settingsStorage = slurp2Source(`${root}/server/src/services/storage/slurp.storage.ts`);
+const messagesStorage = slurp2Source(`${root}/server/src/services/storage/slurp-messages.storage.ts`);
+const scheduler = slurp2Source(`${root}/server/src/services/slurp/slurp-message-scheduler.service.ts`);
+const operation = slurp2Source(`${root}/server/src/services/slurp/slurp-message.operation.ts`);
+const messaging = slurp2Source(`${root}/server/src/services/slurp/slurp-messaging.ts`);
+const view = slurp2BackstageSource();
+const sections = slurp2Source(`${root}/client/src/components/slurp/slurp-backstage.ts`);
+const locales = JSON.parse(slurp2Source(`${root}/client/src/localization/locales/en.json`)) as Record<string, string>;
+
+// Every setting is stored and defaulted.
+for (const key of [
+  "messagesAwayRepliesEnabled",
+  "messagesReplyBubbleLimit",
+  "messagesDefaultDmPolicy",
+  "messagesDefaultRequestFee",
+  "messagesDefaultPpvPrice",
+]) {
+  assert.ok(settingsStorage.includes(`${key}:`), `${key} is missing from the settings schema or its defaults`);
+  assert.ok(view.includes(`settings.${key}`), `${key} has no control in the Messaging tab`);
+}
+
+// Away replies gate the background loop, and nothing else. A commission and the rest of a reply
+// already sent are owed to the fan and still arrive.
+assert.match(scheduler, /awayReplies \? await storage\.listThreadsAwaitingReply\(\) : \[\]/u);
+assert.ok(
+  scheduler.indexOf("deliverDueSlurpCommissions") < scheduler.indexOf("messagesAwayRepliesEnabled"),
+  "commission delivery must not sit behind the away-replies switch",
+);
+assert.match(
+  operation,
+  /workerContext: "present"/u,
+  "the away-replies switch must be sufficient permission for queued Creator replies",
+);
+assert.doesNotMatch(
+  operation,
+  /workerContext: input\.force \? "background" : "present"/u,
+  "queued replies must not require a second hidden background-worker switch",
+);
+
+// The burst limit reaches the splitter, and one means one message.
+assert.match(operation, /const burstLimit = Math\.min\(settings\.messagesReplyBubbleLimit/u);
+assert.match(operation, /burstLimit > 1 &&/u);
+
+// The per-creator defaults come from settings rather than the shipped constant.
+assert.match(messaging, /defaults: SlurpCreatorMessaging = SLURP_DEFAULT_CREATOR_MESSAGING/u);
+assert.match(
+  messagesStorage,
+  /readSlurpCreatorMessaging\(\(await readMessagingBlob\(\)\)\[creatorAccountId\], await messagingDefaults\(\)\)/u,
+);
+
+// The tab is reachable and named.
+assert.match(sections, /"messaging",/u);
+assert.ok(locales["ui.slurp.settings.tabs.messaging"], "the Messaging tab has no label");
+for (const key of Object.keys(locales).filter((key) => key.startsWith("ui.slurp.settings.messaging."))) {
+  assert.ok(locales[key].trim(), `${key} is empty`);
+}
+
+// Auto-quoting is on unless the player turned it off. Saving any price used to write the whole
+// object, so a stored `false` alone is not a choice and must not keep quoting off.
+assert.equal(readSlurpCreatorMessaging(undefined).autoQuote, true, "auto-quote defaults on");
+assert.equal(readSlurpCreatorMessaging({ autoQuote: false }).autoQuote, true, "an incidental stored false is ignored");
+assert.equal(
+  readSlurpCreatorMessaging({ autoQuote: false, autoQuoteChosen: true }).autoQuote,
+  false,
+  "an explicit off survives",
+);
+assert.match(messagesStorage, /"autoQuote" in patch/u, "toggling auto-quote records that it was a choice");
+
+console.log("slurp messaging settings regression passed");

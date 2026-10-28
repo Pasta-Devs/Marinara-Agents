@@ -156,8 +156,7 @@ assert.deepEqual(parsePortableLoreBundle(complete), complete);
 const exactPlan = planPortableLoreImport(complete, [lorebook], [harborEntry]);
 assert.equal(exactPlan.exactMatches, 1);
 assert.equal(
-  exactPlan.entries.find((entry) => entry.originalEntryId === "entry-harbor")
-    ?.candidates[0]?.reason,
+  exactPlan.entries.find((entry) => entry.originalEntryId === "entry-harbor")?.candidates[0]?.reason,
   "exact-id",
 );
 
@@ -166,11 +165,7 @@ const sameContent = {
   id: "entry-copy",
   lorebookId: "book-destination",
 } as never;
-const uniquePlan = planPortableLoreImport(
-  linked,
-  [{ ...lorebook, id: "book-destination" } as never],
-  [sameContent],
-);
+const uniquePlan = planPortableLoreImport(linked, [{ ...lorebook, id: "book-destination" } as never], [sameContent]);
 assert.equal(uniquePlan.uniqueContentMatches, 1);
 const ambiguousPlan = planPortableLoreImport(
   linked,
@@ -189,38 +184,22 @@ const nameOnlyPlan = planPortableLoreImport(
     } as never,
   ],
 );
-assert.equal(
-  nameOnlyPlan.newEntries,
-  1,
-  "A matching name alone must never attach a map lore link",
-);
+assert.equal(nameOnlyPlan.newEntries, 1, "A matching name alone must never attach a map lore link");
 assert.equal(
   nextPortableLorebookName("Shrouded Coast", "Gloam Harbor", new Set()),
   "Shrouded Coast - Gloam Harbor (World Map)",
 );
 assert.equal(
-  nextPortableLorebookName(
-    "Shrouded Coast",
-    "Gloam Harbor",
-    new Set(["shrouded coast - gloam harbor (WORLD MAP)"]),
-  ),
+  nextPortableLorebookName("Shrouded Coast", "Gloam Harbor", new Set(["shrouded coast - gloam harbor (WORLD MAP)"])),
   "Shrouded Coast - Gloam Harbor (World Map) (copy)",
   "Created lorebook names must avoid case-insensitive library collisions",
 );
-const truncatedBaseName = nextPortableLorebookName(
-  "S".repeat(200),
-  "M".repeat(200),
-  new Set(),
-);
+const truncatedBaseName = nextPortableLorebookName("S".repeat(200), "M".repeat(200), new Set());
 assert.ok(
   truncatedBaseName.length <= 200 && truncatedBaseName.endsWith(" (World Map)"),
   "World Map provenance and collision suffixes must preserve the Engine lorebook name limit",
 );
-const truncatedCopyName = nextPortableLorebookName(
-  "S".repeat(200),
-  "M".repeat(200),
-  new Set([truncatedBaseName]),
-);
+const truncatedCopyName = nextPortableLorebookName("S".repeat(200), "M".repeat(200), new Set([truncatedBaseName]));
 assert.ok(
   truncatedCopyName.length <= 200 && truncatedCopyName.endsWith(" (World Map) (copy)"),
   "A maximum-length collision name must preserve both the World Map marker and copy suffix",
@@ -237,10 +216,7 @@ const namedPlan = planPortableLoreImport(
   [],
   "Gloam Harbor",
 );
-assert.equal(
-  namedPlan.books[0]?.createdName,
-  "Shrouded Coast - Gloam Harbor (World Map) (copy)",
-);
+assert.equal(namedPlan.books[0]?.createdName, "Shrouded Coast - Gloam Harbor (World Map) (copy)");
 const separateOutcome = portableLoreImportOutcome(namedPlan, "separate");
 assert.deepEqual(
   {
@@ -262,9 +238,7 @@ const reuseAllOutcome = portableLoreImportOutcome(
 assert.equal(reuseAllOutcome.reusedEntries, 1);
 assert.equal(reuseAllOutcome.importedEntries, 0);
 assert.equal(reuseAllOutcome.createdLorebooks.length, 0);
-assert.deepEqual(reuseAllOutcome.reusedLorebooks, [
-  { id: "book-destination", name: "Shrouded Coast" },
-]);
+assert.deepEqual(reuseAllOutcome.reusedLorebooks, [{ id: "book-destination", name: "Shrouded Coast" }]);
 
 async function main() {
   const librarySource = await readFile(
@@ -324,9 +298,7 @@ async function main() {
   assert.equal(reused.importedEntries, 0);
   assert.equal(reused.importedLorebooks, 0);
   assert.deepEqual(reused.createdLorebooks, []);
-  assert.deepEqual(reused.reusedLorebooks, [
-    { id: "book-destination", name: "Shrouded Coast" },
-  ]);
+  assert.deepEqual(reused.reusedLorebooks, [{ id: "book-destination", name: "Shrouded Coast" }]);
   const importedCopy = await importPortableLoreBundle({
     api,
     bundle: linked,
@@ -401,20 +373,13 @@ async function main() {
     false,
     "Imported lorebooks remain after success",
   );
-  const createdBookBody = requests.find(
-    (request) => request.method === "POST" && request.path === "/lorebooks",
-  )?.body as Record<string, unknown>;
-  assert.equal(
-    createdBookBody.name,
-    "Shrouded Coast - Imported Map (World Map)",
-  );
+  const createdBookBody = requests.find((request) => request.method === "POST" && request.path === "/lorebooks")
+    ?.body as Record<string, unknown>;
+  assert.equal(createdBookBody.name, "Shrouded Coast - Imported Map (World Map)");
   assert.equal(createdBookBody.generatedBy, "import");
   assert.equal(createdBookBody.sourceAgentId, "hierarchical-maps");
   assert.match(String(createdBookBody.description), /Imported from World Map “Imported Map”/u);
-  assert.deepEqual(createdBookBody.tags, [
-    "World Map",
-    "World Map: Imported Map",
-  ]);
+  assert.deepEqual(createdBookBody.tags, ["World Map", "World Map: Imported Map"]);
   for (const key of [
     "characterId",
     "characterIds",
@@ -427,36 +392,22 @@ async function main() {
   ]) {
     assert.equal(key in createdBookBody, false);
   }
-  const bulkBody = requests.find((request) =>
-    request.path.endsWith("/entries/bulk"),
-  )?.body as {
+  const bulkBody = requests.find((request) => request.path.endsWith("/entries/bulk"))?.body as {
     entries: Array<Record<string, unknown>>;
   };
   assert.equal(bulkBody.entries[0]?.enabled, false);
   assert.equal(
-    bulkBody.entries[0]?.relationships &&
-      Object.keys(bulkBody.entries[0].relationships as object).length,
+    bulkBody.entries[0]?.relationships && Object.keys(bulkBody.entries[0].relationships as object).length,
     0,
   );
   assert.equal(bulkBody.entries[0]?.folderId, "imported-folder-2");
   const relationshipPatch = requests.find(
-    (request) =>
-      request.method === "PATCH" &&
-      request.path === "/lorebooks/imported-book/entries/imported-entry-1",
+    (request) => request.method === "PATCH" && request.path === "/lorebooks/imported-book/entries/imported-entry-1",
   )?.body as { relationships: Record<string, string> } | undefined;
-  assert.ok(
-    relationshipPatch,
-    "The harbor entry must receive a relationship patch",
-  );
+  assert.ok(relationshipPatch, "The harbor entry must receive a relationship patch");
   assert.equal(relationshipPatch.relationships["imported-entry-2"], "supplies");
-  const remapped = remapPortableLoreReferences(
-    definition,
-    complete,
-    imported.entryIdMap,
-  );
-  assert.deepEqual(remapped.locations[0]?.lorebookEntryIds, [
-    "imported-entry-1",
-  ]);
+  const remapped = remapPortableLoreReferences(definition, complete, imported.entryIdMap);
+  assert.deepEqual(remapped.locations[0]?.lorebookEntryIds, ["imported-entry-1"]);
 
   const rollbackRequests: string[] = [];
   await assert.rejects(
@@ -508,11 +459,9 @@ async function main() {
   }
   assert.ok(rollbackFailure instanceof Error);
   assert.match(rollbackFailure.message, /orphaned-book/u);
-  assert.deepEqual(
-    (rollbackFailure as Error & { orphanedLorebookIds?: string[] })
-      .orphanedLorebookIds,
-    ["orphaned-book"],
-  );
+  assert.deepEqual((rollbackFailure as Error & { orphanedLorebookIds?: string[] }).orphanedLorebookIds, [
+    "orphaned-book",
+  ]);
 
   console.info(
     "World Maps portable lore regression passed: export scopes, readable provenance, exact/content/ambiguous matching, no name-only attachment, folder/settings preservation, relationship remapping, atomic rollback, and map-link rewrite.",

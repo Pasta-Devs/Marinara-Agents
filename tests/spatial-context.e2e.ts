@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
+import { dirname, resolve as resolvePath } from "node:path";
 import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
 
 type CapturedOpenAiRequest = {
@@ -143,8 +144,7 @@ async function generateTurn(
 
 function savedAssistantMessage(events: Array<{ type?: string; data?: unknown }>, source: string) {
   const saved = events.find((event) => event.type === "message_saved")?.data as
-    | { id?: unknown; role?: unknown; activeSwipeIndex?: unknown; content?: unknown }
-    | undefined;
+    { id?: unknown; role?: unknown; activeSwipeIndex?: unknown; content?: unknown } | undefined;
   expect(saved, `${source} must save an assistant message`).toBeTruthy();
   expect(saved?.role, `${source} must save an assistant role`).toBe("assistant");
   expect(typeof saved?.id, `${source} must return the saved message ID`).toBe("string");
@@ -306,9 +306,7 @@ const deepMapDefinition = {
     childPresentation: "map",
     placement: { x: 50, y: 50 },
     links:
-      index === 0
-        ? [{ targetId: "deep-01", label: "Archive stair", bidirectional: true, state: "available" }]
-        : [],
+      index === 0 ? [{ targetId: "deep-01", label: "Archive stair", bidirectional: true, state: "available" }] : [],
     status: "active",
     sortOrder: 0,
   })),
@@ -442,7 +440,7 @@ async function getOrCreateHierarchicalMapsAgentConfig(
       type: "hierarchical-maps",
       name: "World Maps",
       description:
-        "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
+        "Adds world maps to Roleplay and Game, from whole regions down to single rooms, with art and travel between places. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
       phase: "pre_generation",
       connectionId: null,
       imagePath: null,
@@ -460,10 +458,11 @@ async function getOrCreateHierarchicalMapsAgentConfig(
 async function openHierarchicalMapsAgentCategory(page: Page) {
   const drawer = page.locator(".mari-chat-settings-drawer");
   await expect(drawer).toBeVisible();
-  await expect(
-    drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^World map/ }),
-  ).toHaveCount(0);
-  await drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^Agents/ }).click();
+  await expect(drawer.locator('[role="button"][aria-expanded]').filter({ hasText: /^World map/ })).toHaveCount(0);
+  await drawer
+    .locator('[role="button"][aria-expanded]')
+    .filter({ hasText: /^Agents/ })
+    .click();
   const enableAgents = drawer.getByRole("checkbox", { name: /^Enable Agents/ });
   if (!(await enableAgents.isChecked())) {
     await drawer.getByText("Enable Agents", { exact: true }).click();
@@ -837,7 +836,7 @@ async function openGameSetupMapDraftReview(
     await wizard.getByRole("button", { name: /Use a template/ }).click();
     expect(createRequestCount).toBe(0);
     const library = page.locator("[data-marinara-map-template-library]");
-    await expect(library.getByRole("heading", { name: "Map templates", exact: true })).toBeVisible();
+    await expect(library.getByRole("heading", { name: "Independent templates", exact: true })).toBeVisible();
     const card = library.getByRole("heading", { name: template!.name }).locator("xpath=ancestor::article");
     await card.getByRole("button", { name: "Use template", exact: true }).click();
     const confirm = page.getByRole("dialog").filter({ hasText: "Use this map template?" });
@@ -942,7 +941,10 @@ test("World Maps activates inside its Tracker Agents entry", async ({ page }, te
       await page.getByRole("button", { name: "Chat Settings" }).click();
     }
     const drawer = await openHierarchicalMapsAgentCategory(page);
-    await drawer.getByRole("button").filter({ hasText: /^World Maps/ }).click();
+    await drawer
+      .getByRole("button")
+      .filter({ hasText: /^World Maps/ })
+      .click();
     const addDialog = page.getByRole("dialog", { name: "Add World Maps" });
     await expect(addDialog).toBeVisible();
     await addDialog.getByRole("button", { name: "Add", exact: true }).click();
@@ -985,8 +987,7 @@ test("global World Maps home activates and opens the current chat map", async ({
   });
   expect(response.ok(), await response.text()).toBeTruthy();
   const chat = (await response.json()) as { id: string };
-  const { config: mapsAgentBefore, created: mapsAgentCreated } =
-    await getOrCreateHierarchicalMapsAgentConfig(page);
+  const { config: mapsAgentBefore, created: mapsAgentCreated } = await getOrCreateHierarchicalMapsAgentConfig(page);
   const originalMapsAgentConfig: {
     description: string;
     phase: "pre_generation" | "parallel" | "post_processing";
@@ -1092,7 +1093,10 @@ test("global World Maps home activates and opens the current chat map", async ({
     await expect(createMap).toBeDisabled();
     await expectMinimumInteractiveSize(activation, "Global Maps activation control");
     await expectMinimumInteractiveSize(home.getByRole("button", { name: "Manage package" }), "Manage package control");
-    await expectMinimumInteractiveSize(home.getByRole("button", { name: "Back to Agents" }), "Global Maps back control");
+    await expectMinimumInteractiveSize(
+      home.getByRole("button", { name: "Back to Agents" }),
+      "Global Maps back control",
+    );
 
     await activation.click();
     await expect(activation).toHaveAttribute("aria-checked", "true");
@@ -1115,10 +1119,7 @@ test("global World Maps home activates and opens the current chat map", async ({
     await expect(roleplayTurnTemplate).toHaveValue(/\$\{authorityInstruction\}/u);
     const builtInRoleplayTurnTemplate = await roleplayTurnTemplate.inputValue();
     await roleplayTurnTemplate.fill(
-      `${builtInRoleplayTurnTemplate}\n${Array.from(
-        { length: 500 },
-        () => "${privateModelContextBlock}",
-      ).join("\n")}`,
+      `${builtInRoleplayTurnTemplate}\n${Array.from({ length: 500 }, () => "${privateModelContextBlock}").join("\n")}`,
     );
     await expect(home.getByRole("alert").filter({ hasText: "Resolved preview unavailable" })).toContainText(
       "40,000 characters",
@@ -1158,9 +1159,7 @@ test("global World Maps home activates and opens the current chat map", async ({
           typeof mapsAgent?.settings === "string"
             ? (JSON.parse(mapsAgent.settings) as Record<string, unknown>)
             : ((mapsAgent?.settings ?? {}) as Record<string, unknown>);
-        const templates = settings.spatialMapTurnPromptTemplates as
-          | { roleplay?: string; game?: string }
-          | undefined;
+        const templates = settings.spatialMapTurnPromptTemplates as { roleplay?: string; game?: string } | undefined;
         return {
           roleplay: templates?.roleplay?.includes("ROLEPLAY_EDITABLE_INSERT") === true,
           game: templates?.game?.includes("GAME_EDITABLE_INSERT") === true,
@@ -1189,12 +1188,18 @@ test("global World Maps home activates and opens the current chat map", async ({
     await home.locator("summary").filter({ hasText: "Available template variables" }).click();
     await expect(home.getByText("${outputSchema}", { exact: true })).toBeVisible();
     await expect(home.getByText("Required contract", { exact: true })).toBeVisible();
-    await home.getByLabel("Reusable creator guidance").fill("Prefer compact nautical districts and clear public routes.");
+    await home
+      .getByLabel("Reusable creator guidance")
+      .fill("Prefer compact nautical districts and clear public routes.");
     await home.getByRole("button", { name: "Add custom variable" }).click();
     await home.getByLabel("Custom variable 1 name").fill("districtStyle");
-    await home.getByLabel("Custom variable 1 value").fill("Favor salt-worn brick, covered arcades, and compact waterfront blocks.");
+    await home
+      .getByLabel("Custom variable 1 value")
+      .fill("Favor salt-worn brick, covered arcades, and compact waterfront blocks.");
     await systemTemplate.fill(`${await systemTemplate.inputValue()}\nKeep authored districts easy to scan.`);
-    await userTemplate.fill(`${await userTemplate.inputValue()}\nUnsaved combined-message preview marker.\n\${districtStyle}`);
+    await userTemplate.fill(
+      `${await userTemplate.inputValue()}\nUnsaved combined-message preview marker.\n\${districtStyle}`,
+    );
     await home.getByRole("button", { name: "Preview resolved prompt" }).click();
     const resolvedPromptMessages = home.getByRole("region", { name: "Resolved prompt messages" });
     await expect(resolvedPromptMessages.getByLabel("Resolved System message")).toContainText(
@@ -1292,21 +1297,20 @@ test("global World Maps home activates and opens the current chat map", async ({
     await expect
       .poll(async () => {
         const agentsResponse = await page.request.get("/api/agents");
-        const mapsAgent = ((await agentsResponse.json()) as Array<{
-          type: string;
-          connectionId?: string | null;
-          settings?: unknown;
-        }>).find((agent) => agent.type === "hierarchical-maps");
+        const mapsAgent = (
+          (await agentsResponse.json()) as Array<{
+            type: string;
+            connectionId?: string | null;
+            settings?: unknown;
+          }>
+        ).find((agent) => agent.type === "hierarchical-maps");
         const settings =
           typeof mapsAgent?.settings === "string"
             ? (JSON.parse(mapsAgent.settings) as Record<string, unknown>)
             : ((mapsAgent?.settings ?? {}) as Record<string, unknown>);
         const libraries = settings.spatialMapGenerationPromptLibraries as
-          | { roleplay?: { options?: Array<{ name?: string }> } }
-          | undefined;
-        const templates = settings.spatialMapTurnPromptTemplates as
-          | { roleplay?: string; game?: string }
-          | undefined;
+          { roleplay?: { options?: Array<{ name?: string }> } } | undefined;
+        const templates = settings.spatialMapTurnPromptTemplates as { roleplay?: string; game?: string } | undefined;
         return {
           author: settings.author,
           connectionId: mapsAgent?.connectionId,
@@ -1364,9 +1368,7 @@ test("global World Maps home activates and opens the current chat map", async ({
         .click();
       const secondaryHome = secondaryPage.locator("[data-marinara-maps-home]");
       await expect(secondaryHome).toContainText("Maps Global Library");
-      await expect(secondaryHome.getByLabel("Roleplay turn prompt insert")).toContainText(
-        "ROLEPLAY_EDITABLE_INSERT",
-      );
+      await expect(secondaryHome.getByLabel("Roleplay turn prompt insert")).toContainText("ROLEPLAY_EDITABLE_INSERT");
       const secondaryPromptOption = secondaryHome.getByLabel("Prompt option");
       await expect(secondaryPromptOption.locator("option")).toHaveText(["Default", "Nautical districts"]);
       let generatedRequest: Record<string, unknown> | null = null;
@@ -1386,8 +1388,7 @@ test("global World Maps home activates and opens the current chat map", async ({
       await expect
         .poll(() => {
           const preferences = generatedRequest?.generationPreferencesOverride as
-            | { activeOptionId?: string; options?: Array<{ name?: string }> }
-            | undefined;
+            { activeOptionId?: string; options?: Array<{ name?: string }> } | undefined;
           return {
             activeOptionId: preferences?.activeOptionId,
             optionNames: preferences?.options?.map((option) => option.name),
@@ -1404,9 +1405,7 @@ test("global World Maps home activates and opens the current chat map", async ({
       await secondaryPromptOption.selectOption({ label: "Nautical districts" });
       await expect
         .poll(async () => {
-          const spatialResponse = await secondaryPage.request.get(
-            `/api/chats/${secondaryChat!.id}/spatial-context`,
-          );
+          const spatialResponse = await secondaryPage.request.get(`/api/chats/${secondaryChat!.id}/spatial-context`);
           const payload = (await spatialResponse.json()) as {
             generationPreferences: { activeOptionId: string; options: Array<{ id: string; name: string }> };
           };
@@ -1447,7 +1446,9 @@ test("global World Maps home activates and opens the current chat map", async ({
     await home.getByRole("button", { name: "Expansion" }).click();
     await expect(home.getByLabel("Expansion System template")).toHaveValue(/AI roleplay engine/u);
     await expect(home.getByLabel("Expansion User template")).toHaveValue(/\$\{selectedMapContextBlock\}/u);
-    await expect(home.getByText("Create a map with an active location before previewing the Expansion templates.")).toBeVisible();
+    await expect(
+      home.getByText("Create a map with an active location before previewing the Expansion templates."),
+    ).toBeVisible();
     await home.getByRole("button", { name: "Edit prompt option" }).click();
     await home.getByRole("button", { name: "Delete option" }).click();
     await home.getByRole("button", { name: "Save global library" }).click();
@@ -1473,7 +1474,13 @@ test("global World Maps home activates and opens the current chat map", async ({
           customTextRemoved: !active.prompts.draftSystem.includes("Keep authored districts easy to scan."),
         };
       })
-      .toEqual({ version: 3, optionCount: 1, activeOptionId: "default", roleplayDefault: true, customTextRemoved: true });
+      .toEqual({
+        version: 3,
+        optionCount: 1,
+        activeOptionId: "default",
+        roleplayDefault: true,
+        customTextRemoved: true,
+      });
 
     await expect
       .poll(async () => {
@@ -1524,8 +1531,7 @@ test("global World Maps home activates and opens the current chat map", async ({
 
 test("World Maps editor changes the AI connection without losing the draft", async ({ page }, testInfo) => {
   test.setTimeout(60_000);
-  const { config: mapsAgentBefore, created: mapsAgentCreated } =
-    await getOrCreateHierarchicalMapsAgentConfig(page);
+  const { config: mapsAgentBefore, created: mapsAgentCreated } = await getOrCreateHierarchicalMapsAgentConfig(page);
   const originalSettings = (() => {
     if (typeof mapsAgentBefore.settings === "string") {
       try {
@@ -1599,18 +1605,13 @@ test("World Maps editor changes the AI connection without losing the draft", asy
         ? '[data-component="RightPanelMobile"]'
         : '[data-component="RightPanelDesktop"]',
     );
-    await agentsPanel
-      .locator('[data-agent-name="World Maps"]')
-      .getByText("World Maps", { exact: true })
-      .click();
+    await agentsPanel.locator('[data-agent-name="World Maps"]').getByText("World Maps", { exact: true }).click();
 
     const home = page.locator("[data-marinara-maps-home]");
     await expect(home).toBeVisible();
     const homeConnectionOverride = home.getByRole("combobox", { name: "Connection Override" });
     await expect(homeConnectionOverride).toHaveValue(unavailableConnectionId);
-    await expect(
-      homeConnectionOverride.getByRole("option", { name: "Saved connection (unavailable)" }),
-    ).toHaveCount(1);
+    await expect(homeConnectionOverride.getByRole("option", { name: "Saved connection (unavailable)" })).toHaveCount(1);
     await home.getByRole("button", { name: "Create map", exact: true }).click();
     await page.getByRole("button", { name: "Draft with AI", exact: true }).click();
 
@@ -1693,6 +1694,7 @@ test("Map templates are created outside chats and copied into Roleplay", async (
   });
   expect(sharedArtworkResponse.ok(), await sharedArtworkResponse.text()).toBeTruthy();
   const sharedArtwork = (await sharedArtworkResponse.json()) as { id: string };
+  let uploadedBackgroundId: string | null = null;
 
   try {
     await page.addInitScript((chatId) => {
@@ -1718,8 +1720,8 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     const home = page.locator("[data-marinara-maps-home]");
     await home.getByRole("button", { name: "Open world library" }).click();
     const library = page.locator("[data-marinara-map-template-library]");
-    await expect(library.getByRole("heading", { name: "Map templates", exact: true })).toBeVisible();
-    await expect(library).toContainText("shared Global Gallery artwork");
+    await expect(library.getByRole("heading", { name: "Independent templates", exact: true })).toBeVisible();
+    await expect(library).toContainText(/shared Global Gallery artwork/iu);
     await library.getByRole("button", { name: "New map template" }).first().click();
 
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
@@ -1732,11 +1734,48 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await expect(sharedArtworkOption.getByText("Shared", { exact: true })).toBeVisible();
     await sharedArtworkOption.click();
     await workspace.getByRole("button", { name: "Use selected" }).click();
+    const locationDetails = workspace.getByRole("region", { name: "Details for New world" });
+    await locationDetails.getByLabel("Child presentation").selectOption("map");
+    const globalGalleryBeforeUploadResponse = await page.request.get("/api/global-gallery");
+    expect(globalGalleryBeforeUploadResponse.ok(), await globalGalleryBeforeUploadResponse.text()).toBeTruthy();
+    const globalGalleryIdsBeforeUpload = new Set(
+      ((await globalGalleryBeforeUploadResponse.json()) as Array<{ id: string }>).map((image) => image.id),
+    );
+    const uploadBackground = locationDetails.getByRole("button", { name: "Upload child map background" });
+    await expectMinimumInteractiveSize(uploadBackground, "Template child-map background upload");
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await uploadBackground.click();
+    const fileChooser = await fileChooserPromise;
+    await fileChooser.setFiles({
+      name: "template-child-map-background.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
+    await expect(locationDetails.getByRole("img", { name: "New world child map background" })).toBeVisible();
+    const globalGalleryAfterUploadResponse = await page.request.get("/api/global-gallery");
+    expect(globalGalleryAfterUploadResponse.ok(), await globalGalleryAfterUploadResponse.text()).toBeTruthy();
+    const globalGalleryAfterUpload = (await globalGalleryAfterUploadResponse.json()) as Array<{
+      id: string;
+      prompt: string;
+      provider: string;
+      model: string;
+    }>;
+    const uploadedBackground = globalGalleryAfterUpload.find(
+      (image) =>
+        !globalGalleryIdsBeforeUpload.has(image.id) && image.prompt === "Uploaded child map background for New world.",
+    );
+    expect(uploadedBackground).toMatchObject({ provider: "upload", model: "user-upload" });
+    uploadedBackgroundId = uploadedBackground?.id ?? null;
+    expect(uploadedBackgroundId).not.toBeNull();
     await workspace.getByRole("button", { name: "Save template", exact: true }).click();
     await expect(workspace).toContainText("Saved");
     const globalGalleryBeforeImport = await page.request.get("/api/global-gallery");
     expect(globalGalleryBeforeImport.ok(), await globalGalleryBeforeImport.text()).toBeTruthy();
     const globalImageCountBeforeImport = ((await globalGalleryBeforeImport.json()) as Array<unknown>).length;
+    await workspace.getByRole("button", { name: "More map actions" }).click();
     await workspace.getByRole("button", { name: "Export world map" }).click();
     const exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
     await expect(exportDialog.getByRole("radio", { name: /Map \+ linked entries/u })).toBeChecked();
@@ -1749,10 +1788,14 @@ test("Map templates are created outside chats and copied into Roleplay", async (
       name?: string;
       artwork?: Array<{ sourceImageId: string }>;
     };
-    expect(exportedTemplate.artwork).toEqual([
-      expect.objectContaining({ sourceImageId: `global-gallery:${sharedArtwork.id}` }),
-    ]);
-    await workspace.getByRole("button", { name: "Back to map templates" }).click();
+    expect(exportedTemplate.artwork).toHaveLength(2);
+    expect(exportedTemplate.artwork).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sourceImageId: `global-gallery:${sharedArtwork.id}` }),
+        expect.objectContaining({ sourceImageId: `global-gallery:${uploadedBackgroundId}` }),
+      ]),
+    );
+    await workspace.getByRole("button", { name: "Back to map library" }).click();
 
     exportedTemplate.name = "Imported Shared Artwork World";
     await library.locator('input[type="file"]').setInputFiles({
@@ -1760,11 +1803,11 @@ test("Map templates are created outside chats and copied into Roleplay", async (
       mimeType: "application/json",
       buffer: Buffer.from(JSON.stringify(exportedTemplate)),
     });
-    await expect(page.getByText("1 existing shared image was reused.")).toBeVisible();
+    await expect(page.getByText("2 existing shared images were reused.")).toBeVisible();
     const globalGalleryAfterImport = await page.request.get("/api/global-gallery");
     expect(globalGalleryAfterImport.ok(), await globalGalleryAfterImport.text()).toBeTruthy();
     expect(((await globalGalleryAfterImport.json()) as Array<unknown>).length).toBe(globalImageCountBeforeImport);
-    await workspace.getByRole("button", { name: "Back to map templates" }).click();
+    await workspace.getByRole("button", { name: "Back to map library" }).click();
 
     const reusableTemplateCard = library
       .getByRole("heading", { name: "Reusable Test World" })
@@ -1776,7 +1819,7 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await page.getByRole("button", { name: "Chat Settings" }).click();
     const { agentEntry } = await openHierarchicalMapsAgentControls(page);
     await agentEntry.getByRole("button", { name: "Set up world map" }).click();
-    await workspace.getByRole("button", { name: "Open shared worlds and map templates" }).click();
+    await workspace.getByRole("button", { name: "Use template or shared world" }).click();
 
     const chatSettingsLibrary = page.locator("[data-marinara-map-template-library]");
     const chatSettingsTemplateCard = chatSettingsLibrary
@@ -1803,18 +1846,23 @@ test("Map templates are created outside chats and copied into Roleplay", async (
       .poll(async () => {
         const response = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
         const body = (await response.json()) as {
-          definition?: { ownerMode?: string; locations?: Array<{ referenceImageId?: string }> } | null;
+          definition?: {
+            ownerMode?: string;
+            locations?: Array<{ referenceImageId?: string; mapBackgroundImageId?: string }>;
+          } | null;
         };
         return {
           ownerMode: body.definition?.ownerMode,
           locationCount: body.definition?.locations?.length,
           referenceImageId: body.definition?.locations?.[0]?.referenceImageId,
+          mapBackgroundImageId: body.definition?.locations?.[0]?.mapBackgroundImageId,
         };
       })
       .toEqual({
         ownerMode: "roleplay",
         locationCount: 1,
         referenceImageId: `global-gallery:${sharedArtwork.id}`,
+        mapBackgroundImageId: `global-gallery:${uploadedBackgroundId}`,
       });
   } finally {
     const templatesResponse = await page.request.get("/api/chats/spatial-context/templates");
@@ -1828,9 +1876,13 @@ test("Map templates are created outside chats and copied into Roleplay", async (
         expect(response.ok(), await response.text()).toBeTruthy();
       }
     }
+    await expectDeleted(page, `/api/chats/${chat.id}`);
     const deleteSharedArtworkResponse = await page.request.delete(`/api/global-gallery/${sharedArtwork.id}`);
     expect(deleteSharedArtworkResponse.ok(), await deleteSharedArtworkResponse.text()).toBeTruthy();
-    await expectDeleted(page, `/api/chats/${chat.id}`);
+    if (uploadedBackgroundId) {
+      const deleteUploadedBackgroundResponse = await page.request.delete(`/api/global-gallery/${uploadedBackgroundId}`);
+      expect(deleteUploadedBackgroundResponse.ok(), await deleteUploadedBackgroundResponse.text()).toBeTruthy();
+    }
   }
 });
 
@@ -1996,10 +2048,12 @@ test("global World Maps home edits the current map location types", async ({ pag
   test.setTimeout(90_000);
   const agentsBeforeResponse = await page.request.get("/api/agents");
   expect(agentsBeforeResponse.ok(), await agentsBeforeResponse.text()).toBeTruthy();
-  const mapsAgentBefore = ((await agentsBeforeResponse.json()) as Array<{
-    type: string;
-    settings?: unknown;
-  }>).find((agent) => agent.type === "hierarchical-maps");
+  const mapsAgentBefore = (
+    (await agentsBeforeResponse.json()) as Array<{
+      type: string;
+      settings?: unknown;
+    }>
+  ).find((agent) => agent.type === "hierarchical-maps");
   const originalMapsAgentSettings = (() => {
     if (typeof mapsAgentBefore?.settings === "string") {
       try {
@@ -2352,7 +2406,12 @@ test("Map editor fills missing location artwork with one image per location", as
     return { started, release: releaseResponse };
   };
   const packageClientRoute = "**/api/capability-packages/hierarchical-maps/client*";
-  const packageClientSource = await readFile(new URL("../packages/hierarchical-maps/client.js", import.meta.url), "utf8");
+  // Resolved from this file: Playwright may load it as CommonJS (no import.meta), and tests/README.md also runs it
+  // from an Engine checkout, where process.cwd() is not this repository.
+  const packageClientSource = await readFile(
+    resolvePath(dirname(test.info().file), "../packages/hierarchical-maps/client.js"),
+    "utf8",
+  );
   try {
     await page.route(packageClientRoute, async (route) => {
       await route.fulfill({ status: 200, contentType: "text/javascript; charset=utf-8", body: packageClientSource });
@@ -2576,7 +2635,9 @@ test("Map editor fills missing location artwork with one image per location", as
     const beforeSave = (await beforeSaveResponse.json()) as {
       definition: { locations: Array<{ id: string; referenceImageId?: string }> };
     };
-    expect(beforeSave.definition.locations.find((location) => location.id === "ai_world")?.referenceImageId).toBeUndefined();
+    expect(
+      beforeSave.definition.locations.find((location) => location.id === "ai_world")?.referenceImageId,
+    ).toBeUndefined();
 
     await workspace.getByRole("button", { name: "Save", exact: true }).click();
     await expect(workspace).toContainText("Saved");
@@ -2758,9 +2819,7 @@ test("Large map artwork reviews keep their actions visible while requests scroll
     await expect(review).toContainText("Review 31 image requests");
     await expect(review.locator("[data-marinara-confirm-map-artwork]")).toBeVisible();
     const scroller = review.locator("[data-marinara-map-artwork-review-scroll]");
-    await expect
-      .poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight))
-      .toBe(true);
+    await expect.poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
     await scroller.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
     await expect(review.getByText("31. Location 31", { exact: true })).toBeVisible();
     await expect(review.locator("[data-marinara-confirm-map-artwork]")).toBeVisible();
@@ -2791,9 +2850,7 @@ test("missing location lore explains the problem without exposing opaque entry I
         enabled: true,
         startingLocationId: "ai_harbor",
         locations: generatedDefinition.locations.map((location) =>
-          location.id === "ai_harbor"
-            ? { ...location, lorebookEntryIds: [missingEntryId] }
-            : location,
+          location.id === "ai_harbor" ? { ...location, lorebookEntryIds: [missingEntryId] } : location,
         ),
       },
     },
@@ -2823,10 +2880,7 @@ test("missing location lore explains the problem without exposing opaque entry I
         ? '[data-component="RightPanelMobile"]'
         : '[data-component="RightPanelDesktop"]',
     );
-    await agentsPanel
-      .locator('[data-agent-name="World Maps"]')
-      .getByText("World Maps", { exact: true })
-      .click();
+    await agentsPanel.locator('[data-agent-name="World Maps"]').getByText("World Maps", { exact: true }).click();
     const home = page.locator("[data-marinara-maps-home]");
     await expect(home).toBeVisible();
     await home.getByRole("button", { name: "Edit map", exact: true }).click();
@@ -2850,7 +2904,9 @@ test("missing location lore explains the problem without exposing opaque entry I
   }
 });
 
-test("portable map import refreshes host lorebooks and linked navigation without reload", async ({ page }, testInfo) => {
+test("portable map import refreshes host lorebooks and linked navigation without reload", async ({
+  page,
+}, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "The portable import contract is viewport-independent.");
   test.setTimeout(120_000);
   const suffix = `${testInfo.project.name}-${Date.now()}`;
@@ -2898,9 +2954,7 @@ test("portable map import refreshes host lorebooks and linked navigation without
         enabled: true,
         startingLocationId: "ai_harbor",
         locations: generatedDefinition.locations.map((location) =>
-          location.id === "ai_harbor"
-            ? { ...location, lorebookEntryIds: [originalEntry.id] }
-            : location,
+          location.id === "ai_harbor" ? { ...location, lorebookEntryIds: [originalEntry.id] } : location,
         ),
       },
     },
@@ -2990,12 +3044,14 @@ test("portable map import refreshes host lorebooks and linked navigation without
 
     const lorebooksAfterImportResponse = await page.request.get("/api/lorebooks");
     expect(lorebooksAfterImportResponse.ok(), await lorebooksAfterImportResponse.text()).toBeTruthy();
-    const importedLorebook = ((await lorebooksAfterImportResponse.json()) as Array<{
-      id: string;
-      name: string;
-      enabled: boolean;
-      tokenBudget: number;
-    }>).find((candidate) => candidate.name === lorebookName);
+    const importedLorebook = (
+      (await lorebooksAfterImportResponse.json()) as Array<{
+        id: string;
+        name: string;
+        enabled: boolean;
+        tokenBudget: number;
+      }>
+    ).find((candidate) => candidate.name === lorebookName);
     expect(importedLorebook).toMatchObject({ enabled: false, tokenBudget: 1234 });
     importedLorebookId = importedLorebook?.id ?? null;
     expect(importedLorebookId).not.toBeNull();
@@ -3038,10 +3094,7 @@ test("portable map import refreshes host lorebooks and linked navigation without
 
     await page.locator('[data-tour="panel-agents"]').click();
     const agentsPanel = page.locator('[data-component="RightPanelDesktop"]');
-    await agentsPanel
-      .locator('[data-agent-name="World Maps"]')
-      .getByText("World Maps", { exact: true })
-      .click();
+    await agentsPanel.locator('[data-agent-name="World Maps"]').getByText("World Maps", { exact: true }).click();
     const home = page.locator("[data-marinara-maps-home]");
     await expect(home).toBeVisible();
     await home.getByRole("button", { name: "Edit map", exact: true }).click();
@@ -3139,10 +3192,7 @@ for (const libraryTarget of ["template", "shared-world"] as const) {
       await dismissOnboardingTutorial(page);
       await page.locator('[data-tour="panel-agents"]').click();
       const rightPanel = page.locator('[data-component="RightPanelDesktop"]');
-      await rightPanel
-        .locator('[data-agent-name="World Maps"]')
-        .getByText("World Maps", { exact: true })
-        .click();
+      await rightPanel.locator('[data-agent-name="World Maps"]').getByText("World Maps", { exact: true }).click();
       const home = page.locator("[data-marinara-maps-home]");
       await expect(home).toBeVisible();
 
@@ -3154,7 +3204,9 @@ for (const libraryTarget of ["template", "shared-world"] as const) {
       await home.getByRole("button", { name: "Open world library" }).click();
       const library = page.locator("[data-marinara-map-template-library]");
       await expect(library).toBeVisible();
-      const recordCard = library.getByRole("heading", { name: recordName, exact: true }).locator("xpath=ancestor::article");
+      const recordCard = library
+        .getByRole("heading", { name: recordName, exact: true })
+        .locator("xpath=ancestor::article");
       await recordCard
         .getByRole("button", { name: libraryTarget === "template" ? "Edit" : "Edit canonical", exact: true })
         .click();
@@ -3244,9 +3296,9 @@ for (const libraryTarget of ["template", "shared-world"] as const) {
 
       const lorebooksAfterImportResponse = await page.request.get("/api/lorebooks");
       expect(lorebooksAfterImportResponse.ok(), await lorebooksAfterImportResponse.text()).toBeTruthy();
-      const importedLorebook = ((await lorebooksAfterImportResponse.json()) as Array<{ id: string; name: string }>).find(
-        (candidate) => candidate.name === lorebookName,
-      );
+      const importedLorebook = (
+        (await lorebooksAfterImportResponse.json()) as Array<{ id: string; name: string }>
+      ).find((candidate) => candidate.name === lorebookName);
       importedLorebookId = importedLorebook?.id ?? null;
       expect(importedLorebookId).not.toBeNull();
       expect(importedLorebookId).not.toBe(originalLorebook.id);
@@ -3649,7 +3701,9 @@ test("Map loading retry and stale-write recovery preserve the working copy", asy
     expect(externalSave.ok(), await externalSave.text()).toBeTruthy();
 
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.getByRole("alert").getByText("The map changed elsewhere. Your working copy is preserved.")).toBeVisible();
+    await expect(
+      page.getByRole("alert").getByText("The map changed elsewhere. Your working copy is preserved."),
+    ).toBeVisible();
     await expect(nameInput).toHaveValue(localName);
 
     const reloadServer = page.getByRole("button", { name: "Reload server version" });
@@ -3803,7 +3857,9 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     expect(((await beforeApply.json()) as { definition: unknown }).definition).toBeNull();
 
     await page.getByRole("button", { name: "Continue to editor" }).click();
-    await expect(page.getByText("AI map draft applied. Review it, choose a start, then enable and save.")).toBeVisible();
+    await expect(
+      page.getByText("AI map draft applied. Review it, choose a start, then enable and save."),
+    ).toBeVisible();
     const hierarchy = page.locator('section[aria-label="Location hierarchy"]:visible');
     await expect(hierarchy.getByRole("button", { name: "Shrouded Coast region" })).toBeVisible();
     await expect(hierarchy.getByRole("button", { name: "Collapse Shrouded Coast" })).toBeVisible();
@@ -3814,8 +3870,14 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     await expect(firstMapSetup.getByRole("list", { name: "First map progress" })).toContainText(
       /Build.*Review.*Start here.*Enable map/u,
     );
-    await expectMinimumInteractiveSize(firstMapSetup.getByRole("button", { name: "Discard draft" }), "Discard draft control");
-    await expectMinimumInteractiveSize(firstMapSetup.getByRole("button", { name: "Regenerate" }), "Regenerate draft control");
+    await expectMinimumInteractiveSize(
+      firstMapSetup.getByRole("button", { name: "Discard draft" }),
+      "Discard draft control",
+    );
+    await expectMinimumInteractiveSize(
+      firstMapSetup.getByRole("button", { name: "Regenerate" }),
+      "Regenerate draft control",
+    );
     await firstMapSetup.getByRole("button", { name: "Regenerate" }).click();
     const regenerateDialog = page.getByRole("dialog", { name: "Regenerate this working draft?" });
     await expect(regenerateDialog).toBeVisible();
@@ -3844,7 +3906,10 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     await page.getByRole("button", { name: "Enable and save map", exact: true }).click();
     await expect(page.getByText("Saved", { exact: true })).toBeVisible();
     await expect(page.getByText("Map ready · 4 locations · Starting at Gloam Harbor", { exact: true })).toBeVisible();
-    await expectMinimumInteractiveSize(page.getByRole("button", { name: "Return to chat" }), "First-save return control");
+    await expectMinimumInteractiveSize(
+      page.getByRole("button", { name: "Return to chat" }),
+      "First-save return control",
+    );
 
     const storedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     const stored = (await storedResponse.json()) as {
@@ -3924,9 +3989,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       const mobileActions = workspace.getByRole("region", { name: "Map actions" });
       await expect(mobileActions).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Expand with AI", exact: true })).toBeVisible();
-      await expect(
-        mobileActions.getByRole("button", { name: "Open shared worlds and map templates" }),
-      ).toBeVisible();
+      await expect(mobileActions.getByRole("button", { name: "Open shared worlds and map templates" })).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Export world map" })).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Import world map" })).toBeVisible();
       await expect(mobileActions.getByRole("button", { name: "Review artwork for 4 locations" })).toBeVisible();
@@ -3958,9 +4021,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
       await expect(desktopActions.locator("[data-marinara-map-compact-only]:visible")).toHaveCount(0);
       await expect(desktopActions.getByRole("button", { name: "Export world map" })).toBeVisible();
       await expect(desktopActions.getByRole("button", { name: "Import world map" })).toBeVisible();
-      await expect(
-        desktopActions.getByRole("button", { name: "Open shared worlds and map templates" }),
-      ).toBeVisible();
+      await expect(desktopActions.getByRole("button", { name: "Open shared worlds and map templates" })).toBeVisible();
       replaceMap = desktopActions.getByRole("button", { name: "Replace map or start over" });
     }
     await expectMinimumInteractiveSize(replaceMap, "Replace map control");
@@ -4002,9 +4063,9 @@ test("AI map builder previews a validated local draft before save", async ({ pag
 
     const beforeDeleteSave = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
     expect(
-      ((await beforeDeleteSave.json()) as { definition: { locations: Array<{ id: string }> } }).definition.locations.map(
-        (location) => location.id,
-      ),
+      (
+        (await beforeDeleteSave.json()) as { definition: { locations: Array<{ id: string }> } }
+      ).definition.locations.map((location) => location.id),
     ).toContain("ai_world");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect
@@ -4178,9 +4239,7 @@ test("reciprocal and incoming Direct Links stay visible from either endpoint", a
       '[data-marinara-direct-link-source="ai_lighthouse"][data-marinara-direct-link-target="ai_sewers"]',
     );
     await expect(outgoingFromLighthouse).toHaveAttribute("data-marinara-direct-link-direction", "outgoing");
-    await expect(outgoingFromLighthouse.getByLabel("Link label for Old Sewers")).toHaveValue(
-      "Target-edited tunnel",
-    );
+    await expect(outgoingFromLighthouse.getByLabel("Link label for Old Sewers")).toHaveValue("Target-edited tunnel");
     await outgoingFromLighthouse.getByLabel("Direction for Old Sewers").selectOption("both");
     await outgoingFromLighthouse.getByRole("button", { name: "View linked location Old Sewers" }).click();
     const bothAtSewers = sewersDetails.locator(
@@ -4224,9 +4283,7 @@ test("reciprocal and incoming Direct Links stay visible from either endpoint", a
       ]);
 
     await bothAtSewers.getByRole("button", { name: "View source Blackglass Lighthouse" }).click();
-    await outgoingFromLighthouse
-      .getByRole("button", { name: "Remove Direct Link with Old Sewers" })
-      .click();
+    await outgoingFromLighthouse.getByRole("button", { name: "Remove Direct Link with Old Sewers" }).click();
     await workspace.getByRole("button", { name: "Save", exact: true }).click();
     await expect
       .poll(async () => {
@@ -4335,19 +4392,18 @@ test("Roleplay minimap keeps selected locations opaque over map artwork", async 
     const selectedMiniMapMarker = selectedMiniMapLocation.locator('[data-marinara-map-selected-location="true"]');
     await expect(selectedMiniMapMarker).toBeVisible();
     await expect
-      .poll(
-        () => computedBackgroundAlpha(selectedMiniMapMarker),
-        { message: "Selected minimap location should remain opaque over map artwork" },
-      )
+      .poll(() => computedBackgroundAlpha(selectedMiniMapMarker), {
+        message: "Selected minimap location should remain opaque over map artwork",
+      })
       .toBe(1);
   } finally {
     await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
   }
 });
 
-test("installed World Maps package keeps the editor canvas visible at 16:9", async ({ page, request }, testInfo) => {
-  test.skip(!testInfo.project.name.includes("desktop"), "The package CSS is shared across viewports.");
-  test.setTimeout(120_000);
+test("installed World Maps package keeps the editor canvas square", async ({ page, request }, testInfo) => {
+  const mobile = testInfo.project.name.includes("mobile");
+  test.setTimeout(60_000);
   const response = await page.request.post("/api/chats", {
     data: {
       name: "World Map Canvas Geometry",
@@ -4380,6 +4436,7 @@ test("installed World Maps package keeps the editor canvas visible at 16:9", asy
   const uploadedArtwork = (await artworkUpload.json()) as { id: string };
   const definition = {
     ...generatedDefinition,
+    startingLocationId: "ai_harbor",
     locations: generatedDefinition.locations.map((location) => {
       if (location.id === "ai_harbor") {
         return {
@@ -4406,25 +4463,41 @@ test("installed World Maps package keeps the editor canvas visible at 16:9", asy
   try {
     await page.addInitScript((chatId) => {
       localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: { hasCompletedOnboarding: true, sidebarOpen: false, rightPanelOpen: false },
+          version: 72,
+        }),
+      );
     }, chat.id);
     await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
       await route.fulfill({ status: 204, body: "" });
     });
     await page.goto("/");
     await dismissOnboardingTutorial(page);
+    const storyLocation = page.getByRole("region", { name: "Story location" });
+    await storyLocation.getByRole("button", { name: "Open story map" }).click();
+    const runtimeCanvases = storyLocation.locator("[data-marinara-maps-world-canvas]:visible");
+    await expect(runtimeCanvases.first()).toBeVisible();
+    for (const runtimeCanvas of await runtimeCanvases.all()) {
+      const runtimeBox = await runtimeCanvas.boundingBox();
+      expect(runtimeBox).not.toBeNull();
+      expect(runtimeBox!.width / runtimeBox!.height).toBeCloseTo(1, 2);
+    }
+    await page.screenshot({ path: testInfo.outputPath("world-maps-square-runtime.png") });
+    await storyLocation.getByRole("button", { name: "Close story map", exact: true }).click();
     await page.locator('[data-tour="panel-agents"]').click();
-    const agentsPanel = page.locator('[data-component="RightPanelDesktop"]');
-    await agentsPanel
-      .locator('[data-agent-name="World Maps"]')
-      .getByText("World Maps", { exact: true })
-      .click();
+    const agentsPanel = page.locator(
+      mobile ? '[data-component="RightPanelMobile"]' : '[data-component="RightPanelDesktop"]',
+    );
+    await agentsPanel.locator('[data-agent-name="World Maps"]').getByText("World Maps", { exact: true }).click();
     const home = page.locator("[data-marinara-maps-home]");
     await expect(home).toBeVisible();
     await home.getByRole("button", { name: "Edit map", exact: true }).click();
 
+    if (mobile) await page.getByRole("button", { name: "hierarchy", exact: true }).click();
     const locationHierarchy = page.getByRole("region", { name: "Location hierarchy" });
-    await locationHierarchy.getByRole("button", { name: "Expand Shrouded Coast" }).click();
-    await locationHierarchy.getByRole("button", { name: "Enter Shrouded Coast" }).click();
     await locationHierarchy.getByRole("button", { name: "Enter Gloam Harbor" }).click();
     await page.getByRole("button", { name: "Arrange map" }).click();
 
@@ -4435,7 +4508,8 @@ test("installed World Maps package keeps the editor canvas visible at 16:9", asy
     const canvasBox = await canvas.boundingBox();
     expect(canvasBox).not.toBeNull();
     expect(canvasBox!.height).toBeGreaterThan(100);
-    expect(canvasBox!.width / canvasBox!.height).toBeCloseTo(16 / 9, 1);
+    expect(canvasBox!.width / canvasBox!.height).toBeCloseTo(1, 2);
+    await page.screenshot({ path: testInfo.outputPath("world-maps-square-editor.png") });
   } finally {
     await page.close();
     const deleteResponse = await request.delete(`/api/chats/${chat.id}?force=true`);
@@ -4719,9 +4793,7 @@ test("AI map expansion preserves a campaign map and its current location", async
     await page.getByLabel("Line color for Old Sewers").fill("#22c55e");
     await page.getByLabel("Link state").selectOption("available");
     await locationHierarchy.getByRole("button", { name: "Enter Shrouded Coast" }).click();
-    const editorConnection = page.locator(
-      'line[data-marinara-map-connection="ai_lighthouse|ai_sewers"]',
-    );
+    const editorConnection = page.locator('line[data-marinara-map-connection="ai_lighthouse|ai_sewers"]');
     await expect(editorConnection).toHaveCount(1);
     await expect(editorConnection).toHaveAttribute("data-line-style", "dotted");
     await expect(editorConnection).toHaveAttribute("stroke", "#22C55E");
@@ -4748,7 +4820,8 @@ test("AI map expansion preserves a campaign map and its current location", async
     expect(canvasBox).not.toBeNull();
     expect(nodeBox).not.toBeNull();
     expect(canvasBox!.height).toBeGreaterThan(100);
-    expect(canvasBox!.width / canvasBox!.height).toBeCloseTo(16 / 9, 1);
+    expect(canvasBox!.width / canvasBox!.height).toBeCloseTo(1, 2);
+    await page.screenshot({ path: testInfo.outputPath("world-maps-square-editor.png") });
     const unselectedBorderColor = await lighthouseNode.evaluate((element) => getComputedStyle(element).borderColor);
     await lighthouseNode.focus();
     await lighthouseNode.click();
@@ -4821,13 +4894,17 @@ test("AI map expansion preserves a campaign map and its current location", async
     await expect(expansionHierarchy.getByRole("button", { name: /^Silver Minnow Inn/ })).toBeVisible();
 
     const beforeApply = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
-    expect(((await beforeApply.json()) as { definition: { locations: unknown[] } }).definition.locations).toHaveLength(4);
+    expect(((await beforeApply.json()) as { definition: { locations: unknown[] } }).definition.locations).toHaveLength(
+      4,
+    );
 
     await page.getByRole("button", { name: "Add to working map" }).click();
     await expect(page.getByText("AI expansion added to the working map. Review it, then Save.")).toBeVisible();
 
     const afterApply = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
-    expect(((await afterApply.json()) as { definition: { locations: unknown[] } }).definition.locations).toHaveLength(4);
+    expect(((await afterApply.json()) as { definition: { locations: unknown[] } }).definition.locations).toHaveLength(
+      4,
+    );
 
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.getByText("Saved", { exact: true })).toBeVisible();
@@ -4894,7 +4971,10 @@ test("AI map expansion preserves a campaign map and its current location", async
     await expect(hierarchy).not.toContainText("archived");
 
     const beforeProtectedSave = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
-    expect(((await beforeProtectedSave.json()) as { definition: { locations: Array<{ status: string }> } }).definition.locations).toHaveLength(6);
+    expect(
+      ((await beforeProtectedSave.json()) as { definition: { locations: Array<{ status: string }> } }).definition
+        .locations,
+    ).toHaveLength(6);
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect
       .poll(async () => {
@@ -4969,9 +5049,7 @@ test("Game setup stages a saved map template as a Game-owned working copy", asyn
       typeof beforeStartChat.metadata === "string"
         ? (JSON.parse(beforeStartChat.metadata) as Record<string, unknown>)
         : (beforeStartChat.metadata as Record<string, unknown>);
-    expect((beforeStartMetadata.gameInitialMapFallback as { id?: string } | null)?.id).toBe(
-      acceptedGameSetupMap.id,
-    );
+    expect((beforeStartMetadata.gameInitialMapFallback as { id?: string } | null)?.id).toBe(acceptedGameSetupMap.id);
 
     const startResponse = await page.request.post("/api/game/start", { data: { chatId: chat.id } });
     expect(startResponse.ok(), await startResponse.text()).toBeTruthy();
@@ -4986,22 +5064,21 @@ test("Game setup stages a saved map template as a Game-owned working copy", asyn
     expect(startedMetadata.gameMap).toBeNull();
     expect(startedMetadata.gameMaps).toEqual([]);
     expect(startedMetadata.activeGameMapId).toBeNull();
-    expect((startedMetadata.gameSetupConfig as { gameWorldMapMode?: string }).gameWorldMapMode).toBe(
-      "hierarchical",
-    );
+    expect((startedMetadata.gameSetupConfig as { gameWorldMapMode?: string }).gameWorldMapMode).toBe("hierarchical");
   } finally {
     if (template) {
-      const deleteTemplateResponse = await page.request.delete(
-        `/api/chats/spatial-context/templates/${template.id}`,
-        { data: { expectedRevision: template.revision } },
-      );
+      const deleteTemplateResponse = await page.request.delete(`/api/chats/spatial-context/templates/${template.id}`, {
+        data: { expectedRevision: template.revision },
+      });
       expect(deleteTemplateResponse.ok(), await deleteTemplateResponse.text()).toBeTruthy();
     }
     await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
   }
 });
 
-test("Game setup links a selected shared world before Start without changing its canonical record", async ({ page }, testInfo) => {
+test("Game setup links a selected shared world before Start without changing its canonical record", async ({
+  page,
+}, testInfo) => {
   test.skip(!testInfo.project.name.includes("desktop"), "The shared-world setup handoff is shared across viewports.");
   test.setTimeout(120_000);
   const { chat, sharedWorld } = await openGameSetupMapDraftReview(page, testInfo, "shared-world");
@@ -5042,7 +5119,9 @@ test("Game setup links a selected shared world before Start without changing its
   }
 });
 
-test("Game setup stages an optional hierarchical draft as the sole world map before Start", async ({ page }, testInfo) => {
+test("Game setup stages an optional hierarchical draft as the sole world map before Start", async ({
+  page,
+}, testInfo) => {
   test.setTimeout(120_000);
   const { chat } = await openGameSetupMapDraftReview(page, testInfo);
 
@@ -5052,7 +5131,9 @@ test("Game setup stages an optional hierarchical draft as the sole world map bef
     expect(((await beforeApply.json()) as { definition: unknown }).definition).toBeNull();
 
     await page.getByRole("button", { name: "Continue to editor" }).click();
-    await expect(page.getByText("AI map draft applied. Review it, choose a start, then enable and save.")).toBeVisible();
+    await expect(
+      page.getByText("AI map draft applied. Review it, choose a start, then enable and save."),
+    ).toBeVisible();
 
     const mobile = testInfo.project.name.includes("mobile");
     await expectAuthoringWorkspaceLayout(page, mobile);
@@ -5063,10 +5144,7 @@ test("Game setup stages an optional hierarchical draft as the sole world map bef
     await page.getByRole("button", { name: "Enter Gloam Harbor" }).click();
     await expect(page.getByRole("heading", { name: "Gloam Harbor", exact: true })).toBeVisible();
     if (mobile) {
-      await expect(page.getByRole("button", { name: "local", exact: true })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      );
+      await expect(page.getByRole("button", { name: "local", exact: true })).toHaveAttribute("aria-pressed", "true");
     }
     await expectAuthoringWorkspaceLayout(page, mobile);
 
@@ -5494,7 +5572,10 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       await storyLocationToggle.click();
       const locationOptions = storyLocation.locator("[data-marinara-maps-runtime-options]");
       await expect(locationOptions).toBeVisible();
-      expect(await computedBackgroundAlpha(locationOptions), "Expanded desktop location controls should be opaque").toBe(1);
+      expect(
+        await computedBackgroundAlpha(locationOptions),
+        "Expanded desktop location controls should be opaque",
+      ).toBe(1);
       await storyLocationToggle.click();
     }
     await openStoryMap.click();
@@ -5503,13 +5584,11 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     const runtimeCanvas = roleplayMap.locator("[data-marinara-maps-world-canvas]");
     const runtimeCanvasBox = await runtimeCanvas.boundingBox();
     expect(runtimeCanvasBox, "Runtime map canvas must have browser geometry").not.toBeNull();
-    expect(runtimeCanvasBox!.width / runtimeCanvasBox!.height).toBeCloseTo(16 / 9, 1);
+    expect(runtimeCanvasBox!.width / runtimeCanvasBox!.height).toBeCloseTo(1, 2);
     const harborMarker = roleplayMap.getByRole("button", { name: /Inspect Gloam Harbor/ });
     expect(await harborMarker.evaluate((element) => (element as HTMLElement).style.left)).toBe("25%");
     expect(await harborMarker.evaluate((element) => (element as HTMLElement).style.top)).toBe("60%");
-    const connectionLine = roleplayMap.locator(
-      'line[data-marinara-map-connection="ai_harbor|ai_lighthouse"]',
-    );
+    const connectionLine = roleplayMap.locator('line[data-marinara-map-connection="ai_harbor|ai_lighthouse"]');
     await expect(connectionLine).toHaveCount(1);
     await expect(connectionLine).toHaveAttribute("x1", "25%");
     await expect(connectionLine).toHaveAttribute("y1", "60%");
@@ -5521,9 +5600,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     const edgeMarker = roleplayMap.getByRole("button", { name: /Inspect World's Edge/ });
     expect(await edgeMarker.evaluate((element) => (element as HTMLElement).style.left)).toBe("0%");
     expect(await edgeMarker.evaluate((element) => (element as HTMLElement).style.top)).toBe("100%");
-    const edgeConnectionLine = roleplayMap.locator(
-      'line[data-marinara-map-connection="ai_edge|ai_harbor"]',
-    );
+    const edgeConnectionLine = roleplayMap.locator('line[data-marinara-map-connection="ai_edge|ai_harbor"]');
     await expect(edgeConnectionLine).toHaveCount(1);
     await expect(edgeConnectionLine).toHaveAttribute("x1", "0%");
     await expect(edgeConnectionLine).toHaveAttribute("y1", "100%");
@@ -5538,10 +5615,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     expect(viewport, "Browser viewport must be available").not.toBeNull();
     expect(mapPopoverBox!.y).toBeGreaterThanOrEqual(0);
     expect(mapPopoverBox!.y + mapPopoverBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
-    expect(
-      await computedBackgroundAlpha(visibleMapPopover),
-      "Story-map popover background should be opaque",
-    ).toBe(1);
+    expect(await computedBackgroundAlpha(visibleMapPopover), "Story-map popover background should be opaque").toBe(1);
     if (mobileRuntime) {
       const composerAfterMap = await page.locator("textarea.mari-chat-input-textarea").boundingBox();
       expect(composerAfterMap, "Composer must remain measurable after opening the map").not.toBeNull();
@@ -5622,7 +5696,9 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await expect(storyLocation.getByText("Moves with your next turn")).toBeVisible();
 
     await page.reload();
-    await expect(page.getByRole("region", { name: "Story location" }).getByText("Moves with your next turn")).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Story location" }).getByText("Moves with your next turn"),
+    ).toBeVisible();
     const input = page.locator("textarea.mari-chat-input-textarea");
     await input.fill("/guided Let the NPC wait at the current location.");
     await page.locator("button.mari-chat-send-btn").click();
@@ -5719,8 +5795,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     // submitted command, never the newly queued route command.
     await page.evaluate(() => {
       const runtime = document.querySelector("marinara-capability-hierarchical-maps[view='runtime']") as
-        | (HTMLElement & { capabilityProps?: Record<string, unknown> })
-        | null;
+        (HTMLElement & { capabilityProps?: Record<string, unknown> }) | null;
       if (!runtime?.capabilityProps) throw new Error("World Maps runtime capability was not mounted");
       runtime.capabilityProps = { ...runtime.capabilityProps, pendingTransition: null };
       runtime.dispatchEvent(new CustomEvent("marinara-capability-props"));
@@ -5778,7 +5853,9 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
   }
 });
 
-test("Game screen gives the hierarchical World map precedence over the session Local map", async ({ page }, testInfo) => {
+test("Game screen gives the hierarchical World map precedence over the session Local map", async ({
+  page,
+}, testInfo) => {
   test.setTimeout(90_000);
   const chatResponse = await page.request.post("/api/chats", {
     data: {
@@ -5909,7 +5986,8 @@ test("Game screen gives the hierarchical World map precedence over the session L
       expect(storyLocationBox?.height ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(1);
       expect(
         Math.abs(
-          (storyMapToggleBox?.y ?? 0) + (storyMapToggleBox?.height ?? 0) / 2 -
+          (storyMapToggleBox?.y ?? 0) +
+            (storyMapToggleBox?.height ?? 0) / 2 -
             ((actionButtonBox?.y ?? 0) + (actionButtonBox?.height ?? 0) / 2),
         ),
       ).toBeLessThanOrEqual(1);
@@ -6349,9 +6427,7 @@ test("Roleplay and Game generation, retry, and continuation share historical pro
           ["Roleplay dry run", roleplayDryRun],
           ["Roleplay normal generation", roleplayNormal],
           ["Roleplay cached Peek Prompt", roleplayCached.text],
-        ].map(([source, value]) =>
-          expectNormalizedSpatialPrompt(value!, "roleplay", source!, loreMarkers),
-        ),
+        ].map(([source, value]) => expectNormalizedSpatialPrompt(value!, "roleplay", source!, loreMarkers)),
       ).size,
     ).toBe(1);
     await expectActiveContext(roleplayChat.id, entryIds);
@@ -6438,12 +6514,7 @@ test("Roleplay and Game generation, retry, and continuation share historical pro
     );
     expect(roleplayRetry.message.id).toBe(roleplayNormalTurn.message.id);
     expect(roleplayRetry.message.activeSwipeIndex).toBe(1);
-    expectNormalizedSpatialPrompt(
-      roleplayRetry.prompt,
-      "roleplay",
-      "Roleplay historical retry",
-      loreMarkers,
-    );
+    expectNormalizedSpatialPrompt(roleplayRetry.prompt, "roleplay", "Roleplay historical retry", loreMarkers);
     expect(roleplayRetry.prompt).not.toContain("Current location ID: ai_world");
     const roleplayRetryCached = await previewPrompt(roleplayChat.id, roleplayNormalTurn.message.id);
     expect(roleplayRetryCached).toMatchObject({ source: "cached", exact: true });
@@ -6458,13 +6529,11 @@ test("Roleplay and Game generation, retry, and continuation share historical pro
       "Roleplay continuation",
     );
     expect(roleplayContinuation.message.id).toBe(roleplayWorldTurn.message.id);
-    expectNormalizedSpatialPrompt(
-      roleplayContinuation.prompt,
-      "roleplay",
-      "Roleplay continuation",
-      loreMarkers,
-      { path: "Shrouded Coast", id: "ai_world", forcedLore: false },
-    );
+    expectNormalizedSpatialPrompt(roleplayContinuation.prompt, "roleplay", "Roleplay continuation", loreMarkers, {
+      path: "Shrouded Coast",
+      id: "ai_world",
+      forcedLore: false,
+    });
     expect(roleplayContinuation.prompt).not.toContain("Current location ID: ai_harbor");
     const roleplayContinuationCached = await previewPrompt(roleplayChat.id, roleplayWorldTurn.message.id);
     expect(roleplayContinuationCached).toMatchObject({ source: "cached", exact: true });
@@ -6539,9 +6608,7 @@ test("Roleplay and Game generation, retry, and continuation share historical pro
           ["Game dry run", gameDryRun],
           ["Game GM generation", gameNormal],
           ["Game cached Peek Prompt", gameCached.text],
-        ].map(([source, value]) =>
-          expectNormalizedSpatialPrompt(value!, "game", source!, loreMarkers),
-        ),
+        ].map(([source, value]) => expectNormalizedSpatialPrompt(value!, "game", source!, loreMarkers)),
       ).size,
     ).toBe(1);
     await expectActiveContext(gameChat.id, entryIds);
@@ -6561,13 +6628,11 @@ test("Roleplay and Game generation, retry, and continuation share historical pro
       "Game accepted owner transition",
     );
     expect(gameWorldTurn.events.some((event) => event.type === "spatial_transition_committed")).toBe(true);
-    expectNormalizedSpatialPrompt(
-      gameWorldTurn.prompt,
-      "game",
-      "Game accepted owner transition",
-      loreMarkers,
-      { path: "Shrouded Coast", id: "ai_world", forcedLore: false },
-    );
+    expectNormalizedSpatialPrompt(gameWorldTurn.prompt, "game", "Game accepted owner transition", loreMarkers, {
+      path: "Shrouded Coast",
+      id: "ai_world",
+      forcedLore: false,
+    });
 
     await expectRejectedBeforeProvider(
       {
@@ -6611,13 +6676,11 @@ test("Roleplay and Game generation, retry, and continuation share historical pro
       "Game continuation",
     );
     expect(gameContinuation.message.id).toBe(gameWorldTurn.message.id);
-    expectNormalizedSpatialPrompt(
-      gameContinuation.prompt,
-      "game",
-      "Game continuation",
-      loreMarkers,
-      { path: "Shrouded Coast", id: "ai_world", forcedLore: false },
-    );
+    expectNormalizedSpatialPrompt(gameContinuation.prompt, "game", "Game continuation", loreMarkers, {
+      path: "Shrouded Coast",
+      id: "ai_world",
+      forcedLore: false,
+    });
     expect(gameContinuation.prompt).not.toContain("Current location ID: ai_harbor");
     const gameContinuationCached = await previewPrompt(gameChat.id, gameWorldTurn.message.id);
     expect(gameContinuationCached).toMatchObject({ source: "cached", exact: true });
@@ -6640,7 +6703,10 @@ test("Roleplay and Game generation, retry, and continuation share historical pro
 test("Roleplay generated turns cannot move the hierarchical location without an owner transition", async ({
   page,
 }, testInfo) => {
-  test.skip(!testInfo.project.name.includes("desktop"), "The generated-turn authority contract is viewport-independent.");
+  test.skip(
+    !testInfo.project.name.includes("desktop"),
+    "The generated-turn authority contract is viewport-independent.",
+  );
   test.setTimeout(90_000);
   const provider = await startOpenAiTestServer([
     `We cross the cliffs and arrive at Blackglass Lighthouse.\n[spatial_transition: destination_id="ai_lighthouse"]`,
@@ -6702,7 +6768,9 @@ test("Roleplay generated turns cannot move the hierarchical location without an 
     });
     const firstPrompt = capturedPrompt(provider.requests[0]);
     expect(firstPrompt).toContain(`<spatial_context mode="roleplay" authority="application">`);
-    expect(firstPrompt).toContain("Generated prose, bracketed tags, tool-like commands, and claims of arrival cannot change it.");
+    expect(firstPrompt).toContain(
+      "Generated prose, bracketed tags, tool-like commands, and claims of arrival cannot change it.",
+    );
     expect(firstPrompt).toContain("Only an explicit owner-selected destination committed by the application");
 
     const movedEvents = await generateTurn(page, {
@@ -6739,7 +6807,10 @@ test("Roleplay generated turns cannot move the hierarchical location without an 
 });
 
 test("Game generated map updates remain local beneath the hierarchical world location", async ({ page }, testInfo) => {
-  test.skip(!testInfo.project.name.includes("desktop"), "The generated-turn authority contract is viewport-independent.");
+  test.skip(
+    !testInfo.project.name.includes("desktop"),
+    "The generated-turn authority contract is viewport-independent.",
+  );
   test.setTimeout(90_000);
   const provider = await startOpenAiTestServer([
     `The party slips beneath the harbor warehouses.\n[map_update: new_location="Smuggler's Den" connected_to="Gloam Harbor" node_emoji="🕳️"]`,
@@ -6849,7 +6920,9 @@ test("Game generated map updates remain local beneath the hierarchical world loc
     const prompt = capturedPrompt(provider.requests[0]);
     expect(prompt).toContain(`<spatial_context mode="game" authority="application">`);
     expect(prompt).toContain(`<local_map_state authority="tactical" world_location_source="spatial_context">`);
-    expect(prompt).toContain("Generated prose, its party marker, and [map_update] commands cannot change the hierarchical world location");
+    expect(prompt).toContain(
+      "Generated prose, its party marker, and [map_update] commands cannot change the hierarchical world location",
+    );
   } finally {
     try {
       await expectDeletedInOrder(page, [

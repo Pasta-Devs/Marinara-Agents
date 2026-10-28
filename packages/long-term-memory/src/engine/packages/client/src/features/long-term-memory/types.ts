@@ -31,9 +31,7 @@ export type CapabilityProps = {
     longTermMemoryMaxChunks?: number;
   };
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
-  onChatSettingsChange?: (
-    patch: Record<string, unknown>,
-  ) => void | Promise<void>;
+  onChatSettingsChange?: (patch: Record<string, unknown>) => void | Promise<void>;
   onOpenAgentSettings?: () => void;
   onOpenChatSummarySettings?: () => void;
   onOpenActivePromptPresetEditor?: () => void;
@@ -54,10 +52,9 @@ export type CapabilityElement = HTMLElement & {
   __root?: Root | null;
 };
 
-export type LongTermMemoryDestination =
-  "vault" | "review" | "sources" | "settings";
+export type LongTermMemoryDestination = "vault" | "review" | "sources" | "settings";
 
-export type SourceTab = "characters" | "lorebooks" | "chats";
+export type SourceTab = "characters" | "lorebooks" | "chats" | "messages";
 
 export type LtmRecoveryHandoff = {
   key: number;
@@ -69,14 +66,21 @@ export type LtmRecoveryHandoff = {
 
 export type LongTermMemoryDestinationProps = {
   props: CapabilityProps;
-  requestedSource?: { key: number; source: SourceTab } | null;
+  requestedSource?: { key: number; source: SourceTab; sourceNoteId?: string } | null;
   onRequestedSourceHandled?: () => void;
   selectedSource?: SourceTab;
   onSourceChange?: (source: SourceTab) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onSaveRequest?: (save: (() => Promise<boolean>) | null) => void;
   onOpenMemory?: (noteId: string) => void;
   onOpenVault?: () => void;
+  onOpenSources?: (source?: SourceTab, sourceNoteId?: string) => boolean | Promise<boolean>;
   onOpenReview?: (sourceNoteId?: string) => void;
+  onOpenActivity?: (memoryId: string) => void;
+  openActivityRequest?: number;
+  openActivityMemoryId?: string | null;
+  onOpenActivityHandled?: () => void;
+  onOpenActivityMemoryIdHandled?: () => void;
   onRecoverCandidate?: (
     candidate: LtmExtractionDroppedCandidate,
     scope: LtmScope,

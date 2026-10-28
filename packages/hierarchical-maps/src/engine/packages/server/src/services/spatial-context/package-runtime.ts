@@ -14,14 +14,36 @@ let sortableSequence = 0;
 let runtimeHost: CapabilityRuntimeHost | null = null;
 let runtimeRegistration = 0;
 let resolveAgentConfig: ((agentType: string) => Promise<unknown>) | null = null;
-let writeAgentConfig:
-  | ((agentType: string, patch: Record<string, unknown>) => Promise<unknown>)
-  | null = null;
+let writeAgentConfig: ((agentType: string, patch: Record<string, unknown>) => Promise<unknown>) | null = null;
 let agentConfigUpdateQueue = Promise.resolve();
 
+export class SpatialPackageRuntimeError extends Error {
+  constructor(
+    public readonly statusCode: 501 | 503,
+    public readonly code: "host_feature_unavailable" | "spatial_runtime_unavailable",
+    message: string,
+  ) {
+    super(message);
+    this.name = "SpatialPackageRuntimeError";
+  }
+}
+
 function getRuntimeHost(): CapabilityRuntimeHost {
-  if (!runtimeHost) throw new Error("World Maps runtime is not configured");
+  if (!runtimeHost)
+    throw new SpatialPackageRuntimeError(503, "spatial_runtime_unavailable", "World Maps runtime is not configured");
   return runtimeHost;
+}
+
+export function assertPackageRuntimeAvailable(expectedRegistration?: number): number {
+  getRuntimeHost();
+  if (expectedRegistration !== undefined && expectedRegistration !== runtimeRegistration) {
+    throw new SpatialPackageRuntimeError(
+      503,
+      "spatial_runtime_unavailable",
+      "World Maps runtime is no longer available",
+    );
+  }
+  return runtimeRegistration;
 }
 
 export function configurePackageRuntime(
@@ -46,16 +68,12 @@ export function configurePackageRuntime(
 async function getPackageAgentConfig(agentType: string): Promise<Record<string, unknown>> {
   if (!resolveAgentConfig) throw new Error("World Maps agent configuration is unavailable");
   const value = await resolveAgentConfig(agentType);
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 export async function getPackageAgentConnectionId(agentType: string): Promise<string | null> {
   const config = await getPackageAgentConfig(agentType);
-  return typeof config.connectionId === "string" && config.connectionId.trim()
-    ? config.connectionId.trim()
-    : null;
+  return typeof config.connectionId === "string" && config.connectionId.trim() ? config.connectionId.trim() : null;
 }
 
 export async function updatePackageAgentSettings(
@@ -68,9 +86,7 @@ export async function updatePackageAgentSettings(
     const current = await getPackageAgentSettings(agentType);
     const saved = await writer(agentType, { settings: update(current) });
     const config =
-      saved && typeof saved === "object" && !Array.isArray(saved)
-        ? (saved as Record<string, unknown>)
-        : {};
+      saved && typeof saved === "object" && !Array.isArray(saved) ? (saved as Record<string, unknown>) : {};
     return parseAgentSettings(config.settings);
   });
   agentConfigUpdateQueue = operation.then(
@@ -102,9 +118,7 @@ export async function updatePackageAgentConfiguration(
         ...patch.settings,
       },
     });
-    return saved && typeof saved === "object" && !Array.isArray(saved)
-      ? (saved as Record<string, unknown>)
-      : {};
+    return saved && typeof saved === "object" && !Array.isArray(saved) ? (saved as Record<string, unknown>) : {};
   });
   agentConfigUpdateQueue = operation.then(
     () => undefined,
@@ -120,9 +134,7 @@ function parseAgentSettings(value: unknown): Record<string, unknown> {
   if (typeof value !== "string") return {};
   try {
     const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
   }
@@ -157,6 +169,21 @@ export function getPackageResources(): CapabilityResourceHost {
 
 export function getPackageLanguageModels(): CapabilityLanguageModelHost {
   return getRuntimeHost().languageModels;
+}
+
+export async function resolvePackageAgentLorebookEntries(
+  chatId: string,
+  signal?: AbortSignal,
+): Promise<Array<{ id: string; name?: string; content: string }>> {
+  const host = getRuntimeHost();
+  if (typeof host.resolveAgentLorebookEntries !== "function") {
+    throw new SpatialPackageRuntimeError(
+      501,
+      "host_feature_unavailable",
+      "World Maps reference lorebooks require a newer Marinara Engine.",
+    );
+  }
+  return host.resolveAgentLorebookEntries({ chatId, signal });
 }
 
 export function getPackageJson(): CapabilityJsonHost {

@@ -12,6 +12,9 @@ async function main() {
   assert.match(storage, /DEFAULT_ACCOUNT_SETTINGS/u);
   assert.match(storage, /filter\(\(row\) => row\.id !== id\)/u);
   assert.match(storage, /nextAvailableHandle/u);
+  // A bootstrap sync must not overwrite a saved bio or display name with card data.
+  assert.match(storage, /!String\(existing\.bio \?\? ""\)\.trim\(\) && input\.bio/u);
+  assert.match(storage, /sync \|\| !String\(existing\.displayName \?\? ""\)\.trim\(\)/u);
   assert.match(routes, /updateAccountFollow/u);
   assert.match(hooks, /api\.patch<\{ account: NoodleAccount; changed: boolean \}>/u);
   assert.match(hooks, /onSuccess: \(\{ account \}\)/u);
