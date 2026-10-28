@@ -202,6 +202,9 @@ jobs:
           node scripts/tests/catalog-generatedat-determinism.regression.mjs
           node scripts/tests/catalog-release-notes.regression.mjs
 
+          # Package browser runs decline the live catalog's newer versions of the packages they install.
+          node scripts/tests/package-browser-update-prompt.regression.mjs
+
           # A ruleset package ships no Agent, so the catalog's agent-definition checks
           # are skipped for it and this contract is the only thing holding its shape.
           node scripts/tests/ruleset-package.regression.mjs

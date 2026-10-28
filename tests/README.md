@@ -14,6 +14,14 @@ Set `MARINARA_ENGINE_ROOT` when the compatible Engine checkout is not at
 `../Marinara-Engine`. The Engine checkout must have its pnpm dependencies and
 Playwright Chromium browser installed.
 
+Before the Engines start, the runner reads the live staging catalog lane and
+preview overlay they compare installed packages with. Where a published version
+differs from the one it installs, it records that version as declined, so a
+branch behind `staging` does not open the Agent update prompt over the suite. A
+version published during the run can still open it. If you set
+`MARINARA_AGENT_CATALOG_URL`, the runner declines nothing and the Engine offers
+that catalog's updates as usual.
+
 `spatial-context.e2e.ts` is the World Maps package's browser integration suite. It was moved with the feature so the lightweight Engine smoke suite does not require optional routes or UI to exist.
 
 Run it against a Marinara Engine checkout that has the local World Maps package installed and active, using the Engine Playwright configuration:
