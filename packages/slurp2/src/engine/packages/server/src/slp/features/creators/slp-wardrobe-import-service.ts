@@ -1,6 +1,8 @@
 import type { APIProvider } from "@marinara-engine/shared";
 import type { SlpWardrobeLook } from "../../../../../shared/src/slp/slp-wardrobe.js";
 import type { DB } from "../../../db/connection.js";
+import { logger } from "../../../lib/logger.js";
+import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import {
   resolveStoredChatOptions,
@@ -54,4 +56,44 @@ export async function previewSlpWardrobeImport(
     },
   );
   return parseSlpWardrobeImportDrafts(response.content ?? "", input.existing);
+}
+
+const wardrobeFillTried = new Set<string>();
+
+/**
+ * The Creator's looks; an empty closet is filled once from the card first. An empty closet left
+ * every outfit to the model, and prod Creators wore the same clothes for weeks.
+ * ponytail: one try per Creator per server start; store the attempt if that costs too many calls.
+ */
+export async function ensureSlurpCreatorWardrobe(
+  db: DB,
+  input: {
+    accountId: string;
+    displayName: string;
+    connection: Parameters<typeof previewSlpWardrobeImport>[1]["connection"];
+    sourceText: string | null | undefined;
+  },
+): Promise<SlpWardrobeLook[]> {
+  const noodle = createSlurpStorage(db);
+  const looks = await noodle.listWardrobeLooks(input.accountId).catch(() => []);
+  if (looks.length || !input.sourceText || wardrobeFillTried.has(input.accountId)) return looks;
+  if (await noodle.hasWardrobeRecord(input.accountId).catch(() => true)) return looks;
+  wardrobeFillTried.add(input.accountId);
+  try {
+    const drafts = await previewSlpWardrobeImport(db, {
+      connection: input.connection,
+      sourceLabel: `Linked character: ${input.displayName}`,
+      sourceText: input.sourceText,
+      existing: [],
+    });
+    if (!drafts.length) return looks;
+    return await noodle.createWardrobeLooks(
+      input.accountId,
+      drafts.map(({ evidence: _evidence, ...look }) => look),
+      { kind: "character" },
+    );
+  } catch (error) {
+    logger.warn(error, "[slurp-wardrobe] Could not fill the wardrobe from the card");
+    return looks;
+  }
 }

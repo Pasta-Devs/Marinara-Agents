@@ -13,13 +13,22 @@ import type {
   ChapterLedger,
   ChapterNode,
   ChapterView,
+  Confrontation,
+  ConfrontationOption,
   Effect,
   ForgeChoice,
   Segment,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import {
+  CONFRONTATION_ENDINGS,
+  CONFRONTATION_ROUNDS,
+  FIRST_STAGE,
+  LAST_STAGE,
+  STANCES,
+} from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import { LIMIT_IDS } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import {
-  DATE_PLACES,
+  DATE_PLACE_KINDS,
   type DatePlan,
   type DateScore,
 } from "../../../../../client/src/features/otome-forge/shared/dates.js";
@@ -77,6 +86,7 @@ const NodeSchema: ZodType<ChapterNode> = z.object({
   cg: z.boolean().optional(),
   gate: z.boolean().optional(),
   resolves: z.array(short(80)).optional(),
+  reveals: z.array(short(80)).optional(),
 });
 
 const LedgerSchema: ZodType<ChapterLedger> = z.object({
@@ -94,10 +104,39 @@ const LedgerSchema: ZodType<ChapterLedger> = z.object({
 
 const emptyLedger = (): ChapterLedger => ({ relationship: [], conflict: [], offscreen: [] });
 
+const SelectionSchema = z.object({ kind: z.enum(["dialogue", "action"]), text: short(400) });
+const StanceOptionSchema: ZodType<ConfrontationOption> = z.object({
+  label: short(200),
+  selection: SelectionSchema,
+  segments: z.array(SegmentSchema).min(1),
+  composure: z.union([z.literal(-1), z.literal(0), z.literal(1)]),
+});
+const RoundSchema = z.object({
+  his: z.array(SegmentSchema).min(1),
+  options: z.object({
+    press: StanceOptionSchema,
+    hold: StanceOptionSchema,
+    yield: StanceOptionSchema,
+    reveal: StanceOptionSchema,
+  }),
+});
+const EndingSegments = z.array(SegmentSchema).min(1);
+
+/** A stored stance game (S/story/confrontation.ts writes it): three rounds, three endings, the picks so far. */
+export const ConfrontationSchema: ZodType<Confrontation> = z.object({
+  li: z.string(),
+  rounds: z.array(RoundSchema).min(CONFRONTATION_ROUNDS).max(CONFRONTATION_ROUNDS),
+  endings: z.object({ truth: EndingSegments, walkout: EndingSegments, standoff: EndingSegments }),
+  grievance: z.object({ text: short(), severity: z.literal("major") }),
+  disclosure: short(),
+  picks: z.array(z.enum(STANCES)).max(CONFRONTATION_ROUNDS),
+  ending: z.enum(CONFRONTATION_ENDINGS).optional(),
+});
+
 /** A date's plan (M5, SH/dates.ts); a damaged one reads as none, so the chapter is not a playable date. */
 const DatePlanSchema: ZodType<DatePlan> = z.object({
   li: z.string(),
-  place: z.enum(DATE_PLACES as [DatePlan["place"], ...DatePlan["place"][]]),
+  place: z.enum(DATE_PLACE_KINDS as [DatePlan["place"], ...DatePlan["place"][]]),
   placeName: short(120),
   herLook: short(80),
   hisLook: short(80),
@@ -136,6 +175,8 @@ export function normalizeChapter(data: unknown): Chapter | null {
       kind: z.enum(["main", "route", "repair", "story", "date"]),
       number: z.number().int().min(1).optional(),
       li: z.string().optional(),
+      stage: z.number().int().min(FIRST_STAGE).max(LAST_STAGE).optional(),
+      grievance: short(80).optional(),
       lead: z.string(),
       foil: z.string().optional(),
       title: short(200),
@@ -192,11 +233,20 @@ export function normalizeBeat(data: unknown): Beat | null {
         ),
       scores: readScores,
       musicMood: z.enum(MUSIC_MOODS),
-      cg: z.object({ at: z.number().int().min(0), brief: short(1200), cast: z.array(short(120)) }).optional(),
+      cg: z
+        .object({
+          at: z.number().int().min(0),
+          brief: short(1200),
+          cast: z.array(short(120)),
+          art: PaintSchema.optional(),
+        })
+        .optional(),
       readThrough: z.number().int().min(0),
       easedOff: z.object({ at: z.number().int().min(0), veil: z.array(z.enum(LIMIT_IDS)).optional() }).optional(),
       written: z.object({ at: z.string(), connectionId: z.string(), model: z.string() }),
       rewrites: z.number().int().min(0),
+      shown: z.literal(true).optional(),
+      confrontation: ConfrontationSchema.optional(),
     },
     () => ({
       key: data.key as string,
@@ -219,9 +269,12 @@ export function normalizeBeat(data: unknown): Beat | null {
   return beat.segments.length || beat.easedOff ? beat : null;
 }
 
-/** The plan as the client sees it: no guides, casts or ledger, and no date plan (GET .../dates shows a date). */
+/**
+ * The plan as the client sees it: no guides, casts, reveals, ledger, the grievance a repair is for, or a date's plan
+ * (GET .../dates shows a date).
+ */
 export function toChapterView(chapter: Chapter): ChapterView {
-  const { nodes, ledger: _ledger, connectionId: _connection, date: _date, ...rest } = chapter;
+  const { nodes, ledger: _ledger, connectionId: _connection, grievance: _grievance, date: _date, ...rest } = chapter;
   return {
     ...rest,
     nodes: nodes.map(({ i, kind, moment, cg, gate }) => ({
@@ -234,8 +287,11 @@ export function toChapterView(chapter: Chapter): ChapterView {
   };
 }
 
-/** The beat as the client sees it: without its effects (and a date beat without its scores). */
+/**
+ * The beat as the client sees it: without its effects, its stored confrontation (it gets a view) or a date beat's
+ * scores.
+ */
 export function toBeatView(beat: Beat): BeatView {
-  const { effects: _effects, applied: _applied, scores: _scores, ...rest } = beat;
+  const { effects: _effects, applied: _applied, confrontation: _confrontation, scores: _scores, ...rest } = beat;
   return rest;
 }

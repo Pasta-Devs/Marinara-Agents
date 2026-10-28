@@ -1,13 +1,18 @@
 // ──────────────────────────────────────────────
 // Otome Forge: Home. The love interest the player chose (or the player, in her own look) stands in a layered scene
 // tinted by the time of day, breathing, with a handwritten message of the day, his mood, tap zones that answer at once
-// from lines written in advance, the phone, Rough day? and Him / Me. Everything works without images or audio.
+// from lines written in advance, the phone, Rough day? and Him / Me. His face is M2b's: the tap's while its line shows,
+// else his note's, else cold during a rupture, painted once his faces are (cut out when they can be). His lines are
+// voiced as the reader voices his story, when Settings → Audio voices him, and the home music plays beneath
+// (OtomeForgeView's audio). Everything works without images or audio.
 // ──────────────────────────────────────────────
 // Routes (S/routes/home.ts): GET /runs/:run/home → HomeView; POST .../home/set {li?, show?} → {home};
 // POST .../home/note {li} → {note} (written by the local day's first call, the same note after); GET
-// .../lis/:li/lines → LinesView. The note is asked for once per love interest, local day and rupture state from this
-// page (a rupture that opens or is repaired makes the day's note stale, and Home's answer then has none): one request
-// in flight, and a failure waits for Try again instead of asking the model again on every visit.
+// .../lis/:li/lines → LinesView. Both are read again on every visit. The note is asked for once per love interest,
+// local day and rupture state from this page (a rupture that opens or is repaired makes the day's note stale, and
+// Home's answer then has none; the other state's request is dropped then, so a repair the same day asks again): one
+// request in flight, and a failure waits for Try again instead of asking the model again on every visit. L0 shows his
+// newest CG or the newest painted place when the server names one.
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,8 +20,10 @@ import { HeartHandshake, RotateCcw, Smartphone, UsersRound } from "lucide-react"
 import { useOtomeApi } from "../../api";
 import { runPath, useReducedMotion } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
+import { tapLineRef } from "../../lib/audio";
 import {
   fallbackTapKeys,
+  homeFace,
   localDay,
   localHour,
   pickLine,
@@ -42,13 +49,13 @@ import { timeOfDayOf, type TapZone } from "../../shared/home";
 import { PALETTE } from "../../theme/tokens";
 import type { PhoneOpen } from "../phone/PhoneScreen";
 import { faceArt } from "../phone/StickerPicker";
-import { FACE_LABEL_KEYS } from "../reader/FacePlate";
+import { FACE_LABEL_KEYS, usePreloadedFaces } from "../reader/FacePlate";
 import { CutoutFigure, useParallax, type FigureArt } from "./CutoutFigure";
 import { HimMeToggle } from "./HimMeToggle";
 import { HomeLayers } from "./HomeLayers";
 import { HomeLiPicker } from "./HomeLiPicker";
 import { MoodChip } from "./MoodChip";
-import { NoteCard, type NoteStatus } from "./NoteCard";
+import { NoteCard, useLineVoice, type NoteStatus } from "./NoteCard";
 import { RoughDaySheet } from "./RoughDaySheet";
 
 export const homeQueryKey = (runKey: string) => ["otome-forge", "home", runKey] as const;
@@ -60,12 +67,22 @@ const fetchHome = (otome: ReturnType<typeof useOtomeApi>, runKey: string) =>
 /** While a cut-out is on its way, Home asks again this often (the server never waits for one). */
 const CUTOUT_POLL_MS = 10_000;
 
+/** A cut-out Home shows is on its way: the look's, or (on him) one of his faces'. */
+const cutoutComing = (view: HomeView | undefined) =>
+  view?.look?.cutoutState === "pending" ||
+  (view?.show === "him" && Object.values(view.faces).some((face) => face?.cutoutState === "pending"));
+
+/**
+ * Home, read again on every visit: the story changes it while Home is away (a rupture that opens or is repaired, a
+ * new stage, a CG), and the host keeps an answer fresh for 30 s.
+ */
 export function useHome(runKey: string) {
   const otome = useOtomeApi();
   return useQuery({
     queryKey: homeQueryKey(runKey),
     queryFn: () => fetchHome(otome, runKey),
-    refetchInterval: (query) => (query.state.data?.look?.cutoutState === "pending" ? CUTOUT_POLL_MS : false),
+    refetchOnMount: "always",
+    refetchInterval: (query) => (cutoutComing(query.state.data) ? CUTOUT_POLL_MS : false),
   });
 }
 
@@ -84,7 +101,8 @@ export function useHomeLi(runKey: string | null, view: RunView | null): RunLiVie
 }
 
 // One note request per run, love interest, local day and rupture state on this page, kept once it lands (a read of
-// Home that started before it finished may still answer "no note yet"), and the failures that wait for Try again.
+// Home that started before it finished may still answer "no note yet") until the rupture state changes, and the
+// failures that wait for Try again.
 const noteRequests = new Map<string, Promise<NoteView>>();
 const noteFailures = new Map<string, unknown>();
 
@@ -152,10 +170,12 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
   const note = about?.note ?? null;
   const accent = li ? accentOf(li) : PALETTE.rose;
 
-  // His lines: the pack for his stage once it exists, the nearest one until then (else the catalog's lines).
+  // His lines: the pack for his stage once it exists, the nearest one until then (else the catalog's lines). Read
+  // again on every visit, as Home is: a rupture or a new stage changes them.
   const lines = useQuery({
     queryKey: linesQueryKey(runKey, li?.id ?? ""),
     enabled: !!li,
+    refetchOnMount: "always",
     queryFn: () => otome.get<LinesView>(`${runPath(runKey)}/lis/${encodeURIComponent(li?.id ?? "")}/lines`),
   });
   const ownLines = lines.data ?? null;
@@ -194,7 +214,13 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
   };
 
   useEffect(() => {
-    if (!about || !li || about.note || home.isFetching) return;
+    if (!about || !li) return;
+    // The other rupture state's note is stale now (the server replaced or will replace it): coming back to that state
+    // later today asks for a new one instead of bringing the old one back.
+    const other = `${runKey} ${li.id} ${day} ${about.rupture ? "warm" : "curt"}`;
+    noteRequests.delete(other);
+    noteFailures.delete(other);
+    if (about.note || home.isFetching) return;
     const failure = noteFailures.get(noteKey);
     if (failure !== undefined) setNoteState({ key: noteKey, error: failure });
     else writeNote(noteKey, li.id, li.name);
@@ -239,9 +265,15 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
         ? {
             ...current,
             ...patch,
-            // Another love interest: his note, faces and lines arrive with the next answer.
+            // Another love interest: his note, faces, lines and CG arrive with the next answer.
             ...(patch.li && patch.li !== current.li
-              ? { note: null, faces: {}, lines: { ready: false }, rupture: false }
+              ? {
+                  note: null,
+                  faces: {},
+                  lines: { ready: false },
+                  rupture: false,
+                  backdrop: current.backdrop?.kind === "cg" ? null : current.backdrop,
+                }
               : {}),
           }
         : current,
@@ -261,6 +293,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
   // taps afresh, and a bubble shows only beside the one who said it. ──
   const taps = useRef<number[]>([]);
   const lastLine = useRef<string | null>(null);
+  const voice = useLineVoice();
   const [bubble, setBubble] = useState<{ id: number; li: LiId; text: string; mode: TapMode } | null>(null);
   const tapsFor = li?.id;
   useEffect(() => {
@@ -268,6 +301,12 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
     lastLine.current = null;
     setBubble(null);
   }, [tapsFor]);
+  // His tap line goes with his bubble: another love interest or Me cuts it short, as the next tap does.
+  useEffect(() => {
+    if (voice.active?.startsWith("tap:")) voice.stop();
+    // Only when who is on Home changes, never because a line started.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tapsFor, show]);
   useEffect(() => {
     if (!bubble) return;
     const timer = setTimeout(() => setBubble((current) => (current?.id === bubble.id ? null : current)), BUBBLE_MS);
@@ -285,18 +324,25 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
     lastLine.current = line;
     setBubble((current) => ({ id: (current?.id ?? 0) + 1, li: li.id, text: line, mode }));
     setAnnounce(t("ui.otomeForge.home.said", { name: li.name, line }));
+    // Voiced in his voice when the settings voice him; the next tap cuts it short. Cached by its words.
+    const spoken = { speaker: li.name, text: line };
+    if (voice.can(spoken)) voice.play(tapLineRef(li.id, line), spoken);
   };
 
   const [sheet, setSheet] = useState<"rough" | "pick" | null>(null);
+  // His painted faces (cut-outs first) decode ahead, so a tap's face never waits on the network.
+  usePreloadedFaces(
+    Object.fromEntries(Object.entries(about?.faces ?? {}).map(([name, art]) => [name, art?.cutout ?? art?.url])),
+  );
 
   if (!li) return null;
   const said = bubble?.li === li.id ? bubble : null;
 
   // ── The figure. The cached look belongs to whoever it pictures: right after Him / Me flips, the other one's look is
-  // still cached, so each side checks the URL before using it. His face from the note when painted (cut-out first). ──
+  // still cached, so each side checks the URL before using it. His face (homeFace) when painted, cut-out first. ──
   const cached = data?.look ?? null;
   const pictures = (url: string | undefined) => !!url && cached?.url === url;
-  const face = note?.face ?? "";
+  const face = homeFace(note?.face ?? "", said?.mode ?? null, rupture);
   const painted = face ? faceArt(li, face) : null;
   const faceImage = face ? (about?.faces[face] ?? (painted ? { url: painted } : null)) : null;
   const himLook = li.portrait ? (pictures(li.portrait) ? cached : uncut(li.portrait)) : null;
@@ -326,7 +372,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
       onPointerMove={parallax.onPointerMove}
       onPointerLeave={parallax.onPointerLeave}
     >
-      <HomeLayers sky={sky}>
+      <HomeLayers sky={sky} backdrop={about?.backdrop ?? null}>
         {show === "him" ? (
           <CutoutFigure
             key={`him-${li.id}`}
@@ -364,7 +410,6 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
         ) : noteStatus ? (
           <NoteCard
             key={li.id}
-            runKey={runKey}
             liId={li.id}
             name={li.name}
             accent={accent}
@@ -427,7 +472,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
       </p>
 
       {sheet === "rough" ? (
-        <RoughDaySheet runKey={runKey} li={li} lines={ownLines} onClose={() => setSheet(null)} />
+        <RoughDaySheet li={li} lines={ownLines} onClose={() => setSheet(null)} />
       ) : sheet === "pick" ? (
         <HomeLiPicker
           lis={view.lis}

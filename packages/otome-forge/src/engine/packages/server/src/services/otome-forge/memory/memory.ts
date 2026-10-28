@@ -4,10 +4,11 @@
 // The kit's createForgeStoryMemory, wired to Otome's documents and generation core:
 // - `${R}:memory` holds the kit's store (records, overview, checkpoints, status), revision-checked. A write for a run
 //   that no longer exists is refused, and one that lands just after the run's delete is removed again.
-// - Sources come from S/memory/sources.ts. A `chat` source (a date, later a phone thread) never reaches the shared
-//   overview and is recalled only by its love interest's own reader or by a scene whose cast includes him. Recall
-//   always says who is present: a call that names neither `cast` nor `reader` recalls as a scene with nobody in it,
-//   so no private source can reach it by omission. Care data is never a source.
+// - Sources come from S/memory/sources.ts. A `chat` source (a love interest's route, repair or date chapter, later a
+//   phone thread) never reaches the shared overview and is recalled only by that love interest's own reader or by a
+//   scene whose cast includes them. Recall always says who is present: a call that names neither `cast` nor
+//   `reader` recalls as a scene with nobody in it, so no private source can reach it by omission. Care data is never
+//   a source.
 // - Summaries run on job `compress` on the background lane. `maintain` queues one job per run on the background
 //   queue, which holds the compress connection's background admission slot for the whole job (generateJson with lane
 //   "background"); a second call while it waits or runs makes the job go round once more. Every summary prompt ends its
@@ -109,8 +110,7 @@ export function createOtomeMemory({
   const queue = background ?? createBackgroundQueue(runtime);
   /** The summary job of each run whose maintenance is running, so its summaries resolve the connection once. */
   const running = new Map<string, SummaryJob>();
-  /** Runs with a maintenance job queued or running. */
-  const queued = new Set<string>();
+  const maintainKey = (runId: string) => `${memoryId(runId)}#maintain`;
   /** Runs whose maintenance was asked for again while their job waited or ran, with whether one asked in debug mode. */
   const again = new Map<string, boolean>();
   let disposed = false;
@@ -244,9 +244,8 @@ export function createOtomeMemory({
       if (disposed) return false;
       const job = await summaryJob(runId);
       if (!job || disposed) return false;
-      queued.add(runId);
       const fresh = queue.ensure({
-        key: `${memoryId(runId)}#maintain`,
+        key: maintainKey(runId),
         connectionId: job.connectionId,
         run: async () => {
           running.set(runId, job);
@@ -254,7 +253,9 @@ export function createOtomeMemory({
             // New canon that arrives while the job runs makes it go round again, so none waits for the next request;
             // a round logs its prompts in debug mode when any request folded into it asked for that.
             // ponytail: a call in the moment between the last round and the queue releasing the key is folded into
-            // nothing; the next recall that finds memory lagging queues it again (S/story/canon.ts recallText does).
+            // nothing (its `again` entry only sets debug mode for the next job). Status then shows the kit's real
+            // phase, so a failed summary offers Retry and memory that lags is queued again by the next recall
+            // (S/story/canon.ts recallText). The upgrade path is a queue callback fired when it releases the key.
             let debug: boolean | undefined = debugMode;
             while (debug !== undefined && !disposed) {
               const wanted = debug || again.get(runId) === true;
@@ -264,7 +265,6 @@ export function createOtomeMemory({
             }
           } finally {
             running.delete(runId);
-            queued.delete(runId);
           }
         },
       });
@@ -274,7 +274,9 @@ export function createOtomeMemory({
 
     async status(runId) {
       const status = await memory.status(runId);
-      return queued.has(runId) ? { ...status, phase: "pending", retryable: false } : status;
+      // The queue's own key: pending while a job waits, runs or backs off after an admission refusal. A job that failed
+      // before starting for any other reason, or a call in the queue's release gap, shows the kit's real phase.
+      return queue.has(maintainKey(runId)) ? { ...status, phase: "pending", retryable: false } : status;
     },
 
     invalidate(runId) {
@@ -285,7 +287,6 @@ export function createOtomeMemory({
     dispose() {
       disposed = true;
       if (!background) queue.dispose();
-      queued.clear();
       again.clear();
     },
   };

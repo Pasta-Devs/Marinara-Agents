@@ -11,7 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CalendarHeart, Eye, Feather, Heart, RotateCcw, Sparkles, Star, Wine, type LucideIcon } from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { Avatar } from "../../components/Avatar";
-import { PlushShelf } from "../../components/PlushShelf";
+import { PlushShelf, withPlush } from "../../components/PlushShelf";
 import { runPath } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
 import type { RunLiView, RunView } from "../../shared/api-types";
@@ -298,7 +298,11 @@ export function DatesHub({ runKey, view, li, onPickLi, available, onPlay }: Date
                 {t("ui.otomeForge.claw.shelfCount", { owned, total: slots.length })}
               </span>
             </div>
-            <PlushShelf plush={plush} lis={view.lis} labelledBy={`${shelfId}-shelf`} />
+            <PlushShelf
+              plush={plush}
+              lis={view.lis.map((entry) => withPlush(entry, play.data))}
+              labelledBy={`${shelfId}-shelf`}
+            />
           </section>
         </>
       ) : null}

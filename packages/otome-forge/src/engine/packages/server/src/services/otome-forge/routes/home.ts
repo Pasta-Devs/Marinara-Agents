@@ -3,7 +3,8 @@
 // ──────────────────────────────────────────────
 // GET  /runs/:run/home                → HomeView: who Home shows, today's note (null when there is none, or it was
 //                                       written before a rupture opened or was repaired), the look and its cut-out,
-//                                       his ready faces, whether his lines are ready, a rupture, unread replies
+//                                       his ready faces with their cut-outs, whether his lines are ready, a
+//                                       rupture, unread replies, and L0's picture (backdropOf)
 // POST /runs/:run/home/set {li?, show?} → {home}: the love interest Home is about, and Him or Me
 // POST /runs/:run/home/note {li}       → {note}: today's note, written by the day's first call and read back after
 // GET  /runs/:run/lis/:li/lines        → LinesView: his pre-written lines (cold only during a rupture)
@@ -11,16 +12,18 @@
 // (the first visit backfills every one), and the cut-outs of his worn look and its ready faces. A note may fail with
 // 503 `no-connection`, 422 `declined` (nothing is saved) or 502 `bad-format`.
 import { forgeLocalAvatarPath } from "@forge-kit/image-avatar-references.mjs";
-import { forgeStoryExpressionCast } from "@forge-kit/story-expressions-server.mjs";
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import { z } from "zod";
 import type {
   HomeLook,
   HomeView,
+  LiId,
   Player,
+  RunState,
   Unit,
+  World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import { FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import type { Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { cutoutView, queueCutouts, type CutoutClient } from "../art/cutout.js";
 import { ensureLinePacks, linesView, needsLines } from "../home/lines.js";
 import { noteFits, readNote, serveNote, toNoteView, todayKey } from "../home/note.js";
@@ -36,7 +39,7 @@ import {
 import { isLiId, runDocTarget, stateId, unitId } from "../ids.js";
 import { normalizeThread, unreadCount } from "../phone/chat.js";
 import { field } from "../schemas/common.js";
-import { normalizeState, readRun } from "../schemas/state.js";
+import { normalizeState, readRun, readyFaces } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 
 const SetBody = z.object({
@@ -87,6 +90,29 @@ async function lookOf(
   return { url: unit.portrait, source: "look", cutoutState: state, ...(cutout ? { cutout } : {}) };
 }
 
+/**
+ * Home's back layer: the newest CG unlocked with this love interest (album CGs name the love interest in them, so one
+ * from another love interest's scenes never stands behind him), else the newest painted place; null for the gradient.
+ */
+export function backdropOf(
+  state: Pick<RunState, "album">,
+  world: Pick<World, "places">,
+  li: LiId | null,
+): HomeView["backdrop"] {
+  const newest = <T>(items: T[], at: (item: T) => string) =>
+    items.reduce<T | undefined>((best, item) => (!best || at(item) > at(best) ? item : best), undefined);
+  const cg = newest(
+    state.album.cgs.filter((item) => !!li && item.li === li && !!item.url),
+    (item) => item.at,
+  );
+  if (cg) return { url: cg.url, kind: "cg" };
+  const place = newest(
+    Object.values(world.places).filter((item) => item.art?.state === "ready" && !!item.art.url),
+    (item) => item.art!.at,
+  );
+  return place ? { url: place.art!.url!, kind: "place" } : null;
+}
+
 export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): void {
   const { store, handle, runtime } = deps;
   const warn = (what: string) => (error: unknown) =>
@@ -109,16 +135,15 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
         store.listRun("chat", runId),
       ]);
 
-      // His ready faces on his worn look (M2b paints them), each with its cut-out once it is made.
-      // ponytail: until M2b lands no face is ever ready, so Home shows his plain look; nothing here changes then.
+      // His ready faces on his worn look (M2b paints them in the background, as the reader and the phone read them),
+      // each with its cut-out once it is made, and whether one is on its way (the client asks again until it lands).
       const faces: HomeView["faces"] = {};
       const base = unit?.portrait;
-      const ready =
-        unit && base ? (forgeStoryExpressionCast(run.world.images, unit, base, FACES).expressions ?? {}) : {};
+      const ready = unit && base ? (readyFaces(run.world, unit) ?? {}) : {};
       if (unit && base) {
         for (const [face, url] of Object.entries(ready) as Array<[Face, string]>) {
-          const { cutout } = cutoutView(runId, unit, url);
-          faces[face] = { url, ...(cutout ? { cutout } : {}) };
+          const { state, cutout } = cutoutView(runId, unit, url);
+          faces[face] = { url, cutoutState: state, ...(cutout ? { cutout } : {}) };
         }
         if (show === "him") queueCutouts(deps, runId, unit, [base, ...Object.values(ready)]);
       }
@@ -137,6 +162,7 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
         lines: { ready: !!unit && !!liState && !needsLines(unit, liState.stage) },
         rupture: !!liState?.rupture,
         unread: chats.reduce((sum, record) => sum + unreadCount(normalizeThread(record.data)), 0),
+        backdrop: backdropOf(run.state, run.world, li),
       };
       return view;
     }),

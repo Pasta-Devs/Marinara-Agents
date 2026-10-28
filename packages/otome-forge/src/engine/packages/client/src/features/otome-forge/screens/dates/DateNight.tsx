@@ -31,12 +31,14 @@ import { PromptReviewDialog, type ImagePrompt } from "../../components/PromptRev
 import { cancelStoryWork, runPath } from "../../hooks/use-reader";
 import { patchRun, runQueryKey } from "../../hooks/use-run";
 import { accentOf } from "../../lib/accent";
+import { placeEntry, readyUrl, worldPlaces } from "../../lib/reader-state";
 import { useOtomeProps } from "../../props";
 import type { Paint, RunLiView, RunView } from "../../shared/api-types";
 import {
   BASE_LOOK,
   DATE_PLACE_MOODS,
   PARTNER_CHOICE,
+  STORY_PLACE,
   type DateEntry,
   type DateFinishResult,
   type DateOutcome,
@@ -47,7 +49,7 @@ import {
 import { Reader } from "../reader/Reader";
 import { playQueryKey, type ActivityScreenProps } from "./DatesHub";
 import { LookPicker } from "./LookPicker";
-import { PLACE_ICONS, PLACE_NAME_KEYS, PlacePicker } from "./PlacePicker";
+import { PLACE_ICONS, PLACE_NAME_KEYS, PlacePicker, paintedPlaces, type PlacePick } from "./PlacePicker";
 
 export const datesQueryKey = (runKey: string) => ["otome-forge", "dates", runKey] as const;
 
@@ -117,7 +119,7 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
   const queryClient = useQueryClient();
   const dates = useDates(runKey);
   const [step, setStep] = useState<Step | null>(null);
-  const [place, setPlace] = useState<DatePlace | null>(null);
+  const [place, setPlace] = useState<PlacePick | null>(null);
   const [looks, setLooks] = useState({ hisLook: BASE_LOOK, herLook: BASE_LOOK });
   const [planError, setPlanError] = useState<unknown>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -179,7 +181,12 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
     try {
       const { date } = await otome.post<{ date: DateEntry; resumed: boolean }>(
         `${runPath(runKey)}/dates`,
-        { li: partner.id, place, ...looks },
+        {
+          li: partner.id,
+          place: place.place,
+          ...(place.storyPlace ? { storyPlace: place.storyPlace.key } : {}),
+          ...looks,
+        },
         { signal: controller.signal },
       );
       if (controller.signal.aborted) return;
@@ -249,7 +256,12 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
       {step.kind === "place" ? (
         <>
           <StepHead partner={partner} rupture={rupture} step={1} title={t("ui.otomeForge.dateNight.placeTitle")} />
-          <PlacePicker partnerName={partner.name} value={place} onChange={setPlace} />
+          <PlacePicker
+            partnerName={partner.name}
+            storyPlaces={paintedPlaces(view.world)}
+            value={place}
+            onChange={setPlace}
+          />
           <div className="of-dates-actions">
             <button
               type="button"
@@ -279,12 +291,12 @@ export function DateNight({ runKey, view, li: picked, onExit, onHome = onExit, o
           <section className="of-section of-glass of-date-summary" aria-labelledby="of-date-summary">
             <p className="of-eyebrow">{t("ui.otomeForge.dateNight.tonight")}</p>
             <h2 id="of-date-summary" className="of-section-title of-date-summary-title">
-              <PlaceIcon place={place} size={18} />
+              <PlaceIcon place={place.place} size={18} />
               <span>
-                {place === PARTNER_CHOICE
+                {place.place === PARTNER_CHOICE
                   ? t("ui.otomeForge.dateNight.summaryPartnerChoice", { name: partner.name })
                   : t("ui.otomeForge.dateNight.summary", {
-                      place: t(PLACE_NAME_KEYS[place], { name: partner.name }),
+                      place: place.storyPlace?.name ?? t(PLACE_NAME_KEYS[place.place], { name: partner.name }),
                       name: partner.name,
                     })}
               </span>
@@ -411,11 +423,17 @@ interface DateHistoryProps {
   dates: DatesView | undefined;
 }
 
-/** The evenings with this love interest so far, newest first: their keepsake (or the place's colours) and how it went. */
-function DateHistory({ partner, dates }: DateHistoryProps) {
+/**
+ * The evenings with this love interest so far, newest first: their keepsake (or a story place's picture, or the
+ * place's colours) and how it went.
+ */
+function DateHistory({ view, partner, dates }: DateHistoryProps) {
   const { t } = useTranslation();
   const finished = (dates?.dates ?? []).filter((entry) => entry.li === partner.id).slice(0, 6);
   if (!finished.length) return null;
+  const artOf = (entry: DateEntry) =>
+    (entry.keepsake?.state === "ready" && entry.keepsake.url) ||
+    (entry.place === STORY_PLACE ? readyUrl(placeEntry(worldPlaces(view.world), entry.placeName)?.art) : null);
   return (
     <section className="of-section of-glass" aria-labelledby="of-date-history">
       <h2 id="of-date-history" className="of-section-title">
@@ -424,8 +442,8 @@ function DateHistory({ partner, dates }: DateHistoryProps) {
       <ul className="of-date-history">
         {finished.map((entry) => (
           <li key={entry.key} className="of-date-memory">
-            {entry.keepsake?.state === "ready" && entry.keepsake.url ? (
-              <img className="of-date-memory-art" src={entry.keepsake.url} alt="" loading="lazy" />
+            {artOf(entry) ? (
+              <img className="of-date-memory-art" src={artOf(entry)!} alt="" loading="lazy" />
             ) : (
               <span className="of-date-memory-art of-date-memory-art--quiet" aria-hidden="true">
                 <span className="of-mood" data-mood={DATE_PLACE_MOODS[entry.place]} data-on="true" />
@@ -535,8 +553,10 @@ function DateEnding({ runKey, view, partner, dateKey, onDone, onHome, onCounted 
   const affection = result.grants.reduce((sum, grant) => sum + (grant.affection ?? 0), 0);
   const level = view.lis.find((li) => li.id === partner.id)?.level ?? partner.level;
   const rose = level > levelBefore;
+  // Make it right only when its rupture still stood as the date was counted (mended elsewhere first, it was an
+  // ordinary evening); whether it mended is the server's to say: a good evening with a scene eased off before its
+  // choice does not, nor does one that leaves another rupture standing.
   const mend = date.makeItRight;
-  // Whether it mended is the server's to say: a good evening with a scene eased off before its choice does not.
   const mended = result.mends;
   return (
     <article className="of-date-ending" data-outcome={outcome} aria-labelledby="of-date-ending">

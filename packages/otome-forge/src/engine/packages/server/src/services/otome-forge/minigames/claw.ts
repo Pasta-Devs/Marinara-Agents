@@ -15,8 +15,12 @@
 // ponytail: the server trusts the client's catch list within the daily activity cap; the ceiling is that someone
 // calling the route by hand earns at most that cap, and the upgrade path is a start-token document holding the seed.
 //
-// clawMemorySources makes each kept round a `chat` source with `audience: [li]`: only his own readers and scenes he is
-// in recall it, never the shared overview (plan §1.9, design: Private memory).
+// clawMemorySources makes each kept round a `chat` source with `audience: [li]`, titled private as a phone session is:
+// only his own readers and scenes he is in recall it, never the shared overview (plan §1.9, design: Private memory).
+// His plush wears his worn look, cut out of its background once Home has made the cut-out (M3, S/art/cutout.ts); the
+// Claw Machine never asks for one, since a cut-out is an Engine call. His lines come with the play view, read from the
+// packs he has (S/home/lines.ts linesView): the machine never asks GET /lis/:li/lines, which queues a missing pack's
+// write (a model call).
 import type { ForgeMemorySource } from "@forge-kit/story-memory.mjs";
 import type {
   ActivityGrant,
@@ -42,6 +46,7 @@ import {
   OUTSIDE_AFFECTION_DAILY_CAP,
   STARLIGHT_EARNINGS,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import { linesView } from "../home/lines.js";
 import { OtomeForgeError } from "../http.js";
 import { STATE_LIMITS, clipText, keepClawRounds, keepNewest } from "../schemas/state.js";
 import { grant } from "../state/rewards.js";
@@ -168,22 +173,43 @@ export function finishClawRound(
 }
 
 /**
- * GET /runs/:run/play: today's capped earnings (zero on a new local day), the shelf, and how each LI plays. `dates` is
- * whether Date Night with each love interest is Make it right (S/minigames/date-night.ts makeItRightView); a rupture
- * stands for it where it says nothing.
+ * The picture his plush wears: the cut-out of his worn look once it is ready, else the look itself; none without one.
+ * ponytail: his worn look is his portrait until M4's "Wear at home" outfits, as Home's is (S/routes/home.ts lookOf).
+ */
+export function plushArtOf(unit: Pick<Unit, "portrait" | "cutouts">): string | undefined {
+  const look = unit.portrait;
+  if (!look) return undefined;
+  const cut = unit.cutouts[look];
+  return cut?.state === "ready" && cut.url ? cut.url : look;
+}
+
+/**
+ * GET /runs/:run/play: today's capped earnings (zero on a new local day), the shelf, and how each LI plays (the
+ * picture their plush wears, and their claw and cold lines). `dates` is whether Date Night with each love interest is
+ * Make it right (S/minigames/date-night.ts makeItRightView); a rupture stands for it where it says nothing.
  */
 export function playView(
   state: RunState,
-  units: ReadonlyArray<Pick<Unit, "id" | "bible">>,
+  units: ReadonlyArray<Pick<Unit, "id" | "bible" | "portrait" | "cutouts" | "lines">>,
   dayKey: string,
   dates: Record<LiId, boolean> = {},
 ): PlayView {
   const today = state.daily.dayKey === dayKey;
   const lis: PlayView["lis"] = {};
   for (const id of Object.keys(state.lis)) {
-    const play = units.find((unit) => unit.id === id)?.bible?.play;
+    const unit = units.find((entry) => entry.id === id);
+    const play = unit?.bible?.play;
     const rupture = state.lis[id]!.rupture !== null;
-    lis[id] = { cheat: play?.cheat ?? "steady", style: play?.style ?? "", rupture, makeItRight: dates[id] ?? rupture };
+    const plush = unit ? plushArtOf(unit) : undefined;
+    const { claw, cold } = unit ? linesView(unit, state.lis[id]!) : { claw: null, cold: [] };
+    lis[id] = {
+      cheat: play?.cheat ?? "steady",
+      style: play?.style ?? "",
+      rupture,
+      makeItRight: dates[id] ?? rupture,
+      ...(plush ? { plush } : {}),
+      lines: { claw, cold },
+    };
   }
   return {
     dayKey,
@@ -259,7 +285,8 @@ export function clawMemorySources(state: RunState, protagonist: string): ForgeMe
     .map((round) => ({
       id: `claw:${round.id}`,
       kind: "chat" as const,
-      title: `The claw machine with ${round.name || "a love interest"}`,
+      // Private, as S/phone/memory.ts titles a phone session: a scene with others in it recalls it as theirs alone.
+      title: `The claw machine with ${round.name || "a love interest"} (private: only ${round.name || "that love interest"} and the protagonist know how it went)`,
       content: clawMemoryText(round, protagonist),
       order: orderOf(state, round.at),
       audience: [round.li as LiId],

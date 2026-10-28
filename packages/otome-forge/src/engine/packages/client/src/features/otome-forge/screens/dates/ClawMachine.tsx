@@ -2,20 +2,26 @@
 // Otome Forge: the Claw Machine. Six drops, taking turns with the love interest you picked: steer the claw (it swings
 // on its cable), drop it before the timer runs out, and cheer on their turns until they cheat in their own way. Every
 // plush won lines the shelf. No model call and no image of any kind: the plushies are drawn, and the lines are the
-// love interest's own pack written ahead (GET .../lis/:li/lines), or the catalog's until it exists.
+// love interest's own pack written ahead, or the catalog's until it exists. They come with GET /play, never from
+// GET .../lis/:li/lines, which queues a missing pack's write (a model call).
 // ──────────────────────────────────────────────
 // The rules are C/lib/claw-physics.ts (pure, seeded per round). This screen runs them: one requestAnimationFrame loop
 // steps the claw and plays each drop's animation by writing CSS custom properties straight onto the glass, and React
 // renders only what changes between moments (the prizes, the turn, the meter, a line). Reduced motion resolves every
 // drop at once and keeps the claw from swinging. Keyboard: hold ←/→ (or press them for a step), Space or Enter drops
 // on your turn and cheers on theirs (hold it to keep cheering), ↓ drops too and C cheers. Sounds go through the
-// Engine's audio player (Capability API 1.381) and can be turned off, as can the buzz on phones that have one.
+// Engine's audio player (Capability API 1.381) at Settings → Audio's sound-effect volume, silent while Mute everything
+// is on; this screen's Sound turns them off too, as it can the buzz on phones that have one.
 //
 // POST /runs/:run/claw/finish {li, round, first, caught, cheered} pays the round once: the round id is made when the
 // round starts, so Try again after a lost answer sends the same round and is never paid twice.
-// ponytail: his reactions show his base look (or initials) and are read, not heard; the ceiling is one face for every
-// line, and the upgrade path is M2b's painted faces (a win tender, a miss flustered) and voices for his claw lines.
-// ponytail: Sound and Vibration last for this screen only; the upgrade path is M2b's audio settings on the world.
+// His lines are voiced as Home's tap lines are (M2b's audio, with the kit's voice picking), while this screen's Sound is
+// on; during a rupture they are Home's own cold lines, voiced under Home's ref so one clip serves both screens. His
+// plush wears his look, cut out once Home has made the cut-out (GET /play's `plush`).
+// ponytail: his reactions show his base look (or initials); the ceiling is one face for every line, and the upgrade
+// path is M2b's painted faces (a win tender, a miss flustered).
+// ponytail: this screen's Sound and Vibration toggles last for this screen only (the world's audio settings still apply
+// beneath them); the upgrade path is a saved preference beside Settings → Audio.
 import {
   useCallback,
   useEffect,
@@ -30,7 +36,7 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { host } from "marinara:host";
 import {
@@ -54,10 +60,12 @@ import {
 } from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { Avatar } from "../../components/Avatar";
-import { PlushArt, PlushShelf, usePlushName } from "../../components/PlushShelf";
+import { PlushArt, PlushShelf, usePlushName, withPlush } from "../../components/PlushShelf";
+import { useOtomeAudio } from "../../hooks/use-otome-audio";
 import { runPath, useReducedMotion } from "../../hooks/use-reader";
 import { patchRun, runQueryKey } from "../../hooks/use-run";
 import { accentOf } from "../../lib/accent";
+import { tapLineRef } from "../../lib/audio";
 import {
   GEOMETRY,
   cheer as cheerRound,
@@ -93,7 +101,7 @@ import {
 } from "../../shared/claw";
 import { AFFECTION_EARNINGS, STARLIGHT_EARNINGS } from "../../shared/economy";
 import type { ClawLineKind } from "../../shared/home";
-import { linesQueryKey } from "../home/HomeScreen";
+import { useLineVoice } from "../home/NoteCard";
 import { playQueryKey, usePlay, type ActivityScreenProps } from "./DatesHub";
 
 // ── Sound and buzz ──
@@ -115,6 +123,7 @@ const BUZZ: Record<Cue | "cheer", number | number[]> = {
 
 interface HostAudioPlayer {
   playSfx(tag: string, assets?: unknown): void;
+  setVolumes?(volumes: { music: number; sfx: number }): void;
   unlock(): void;
   dispose(): void;
 }
@@ -135,8 +144,15 @@ interface Feedback {
   buzz: (kind: Cue | "cheer") => void;
 }
 
-/** This screen's own player (disposed with it), the asset manifest it plays from, and the optional buzz. */
+/**
+ * This screen's own player (disposed with it), the asset manifest it plays from, and the optional buzz. A cue plays at
+ * the world's sound-effect volume and never while Settings → Audio mutes everything (read as it plays, so a change
+ * there applies at once); the Engine's new player would otherwise play at its own default.
+ */
 function useFeedback(sound: boolean, vibrate: boolean): Feedback {
+  const audio = useOtomeAudio();
+  const audioRef = useRef(audio);
+  audioRef.current = audio;
   const player = useRef<HostAudioPlayer | null>(null);
   const assets = useRef<unknown>(null);
   useEffect(() => {
@@ -167,8 +183,10 @@ function useFeedback(sound: boolean, vibrate: boolean): Feedback {
   return useMemo(
     () => ({
       cue: (cue) => {
-        if (!soundRef.current) return;
+        const settings = audioRef.current?.audioSettings;
+        if (!soundRef.current || settings?.muted || (settings && settings.sfxVolume <= 0)) return;
         try {
+          if (settings) player.current?.setVolumes?.({ music: 0, sfx: settings.sfxVolume });
           player.current?.unlock();
           player.current?.playSfx(SFX[cue], assets.current);
         } catch {
@@ -241,10 +259,13 @@ const FAIL_KEYS: Record<NonNullable<DropOutcome["fail"]>, string> = {
 
 const usable = (pool: readonly string[] | undefined) => (pool ?? []).filter((line) => line.trim());
 
-/** His pool for `kind`: during a rupture only his cold lines; his own pack, else the catalog's. */
+/** His claw and cold lines (GET /play's `lines`). */
+type ClawLinePacks = Pick<LinesView, "claw" | "cold">;
+
+/** His pool for `kind`: during a rupture only his cold lines (Home's); his own pack, else the catalog's. */
 function linePool(
   t: (key: string) => string,
-  lines: LinesView | null,
+  lines: ClawLinePacks | null,
   kind: ClawLineKind,
   cheat: ClawCheat,
   rupture: boolean,
@@ -388,7 +409,8 @@ interface CabinetProps {
   preview?: boolean;
   prizes: readonly Prize[];
   leaving?: readonly Prize[];
-  li: RunLiView;
+  /** With the picture their plush wears (withPlush). */
+  li: RunLiView & { plush?: string };
   accent: string;
   label: string;
   glassRef?: (element: HTMLDivElement | null) => void;
@@ -543,13 +565,14 @@ interface Game {
 }
 
 interface ClawGameProps {
-  li: RunLiView;
+  /** With the picture their plush wears (withPlush). */
+  li: RunLiView & { plush?: string };
   accent: string;
   seed: number;
   first: ClawPlayer;
   cheat: ClawCheat;
   style: ClawStyle;
-  lines: LinesView | null;
+  lines: ClawLinePacks | null;
   rupture: boolean;
   feedback: Feedback;
   reduced: boolean;
@@ -629,6 +652,13 @@ function ClawGame({
   tRef.current = t;
   const nameRef = useRef((id: string) => plushName(id, [li]));
   nameRef.current = (id: string) => plushName(id, [li]);
+  // His lines in his voice while Sound is on; the next line cuts one short, and leaving the round stops it.
+  const voice = useLineVoice();
+  const voiceRef = useRef({ voice, sound });
+  voiceRef.current = { voice, sound };
+  useEffect(() => {
+    if (!sound) voiceRef.current.voice.stop();
+  }, [sound]);
 
   // Cosmetic picks only (which line he says): never the round's own stream.
   const rng = useMemo(() => {
@@ -652,9 +682,13 @@ function ClawGame({
       lineId.current += 1;
       const id = lineId.current;
       setUi((current) => ({ ...current, bubble: { id, text: line } }));
+      const spoken = { speaker: li.name, text: line };
+      const { voice: lineVoice, sound: audible } = voiceRef.current;
+      // A cold line is Home's own (linePool), so it shares Home's clip; a claw line has the claw's.
+      if (audible && lineVoice.can(spoken)) lineVoice.play(tapLineRef(li.id, line, rupture ? "tap" : "claw"), spoken);
       return t("ui.otomeForge.claw.said", { name: li.name, line });
     },
-    [cheat, li.name, lines, rng, rupture, t],
+    [cheat, li.id, li.name, lines, rng, rupture, t],
   );
   const sayRef = useRef(say);
   sayRef.current = say;
@@ -1452,10 +1486,6 @@ export function ClawMachine({ runKey, view, li, onExit }: ActivityScreenProps) {
   const queryClient = useQueryClient();
   const reduced = useReducedMotion();
   const play = usePlay(runKey);
-  const lines = useQuery({
-    queryKey: linesQueryKey(runKey, li.id),
-    queryFn: () => otome.get<LinesView>(`${runPath(runKey)}/lis/${encodeURIComponent(li.id)}/lines`),
-  });
   const plushName = usePlushName();
   const accent = accentOf(li);
   const [phase, setPhase] = useState<Phase>({ kind: "intro" });
@@ -1469,6 +1499,8 @@ export function ClawMachine({ runKey, view, li, onExit }: ActivityScreenProps) {
   const focusResult = useRef(false);
 
   const info = play.data?.lis[li.id] ?? null;
+  // His plush wears the picture GET /play names (his look, cut out once Home has made it).
+  const plushOwner = withPlush(li, play.data);
   const cheat: ClawCheat = info?.cheat ?? "steady";
   const style = clawStyleOf(info?.style ?? "");
   const rupture = !!info?.rupture;
@@ -1523,6 +1555,19 @@ export function ClawMachine({ runKey, view, li, onExit }: ActivityScreenProps) {
     [send],
   );
 
+  // His own line for his first plush on the shelf, or the catalog's (none during a rupture), voiced once as it shows.
+  const settledResult = phase.kind === "result" && finish?.id === phase.id ? finish.result : undefined;
+  const plushLine = settledResult?.firstPlush
+    ? (settledResult.line ?? (rupture ? null : t("ui.otomeForge.fallback.clawFirstPlush")))
+    : null;
+  const voice = useLineVoice();
+  useEffect(() => {
+    const spoken = plushLine ? { speaker: li.name, text: plushLine } : null;
+    if (spoken && sound && voice.can(spoken)) voice.play(tapLineRef(li.id, spoken.text, "claw"), spoken);
+    // Once per line, as it shows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plushLine]);
+
   // The round's end moves focus to its result, which also announces it.
   useEffect(() => {
     if (phase.kind !== "result" || !focusResult.current) return;
@@ -1551,13 +1596,13 @@ export function ClawMachine({ runKey, view, li, onExit }: ActivityScreenProps) {
     return page(
       <ClawGame
         key={phase.round}
-        li={li}
+        li={plushOwner}
         accent={accent}
         seed={phase.seed}
         first={phase.first}
         cheat={cheat}
         style={style}
-        lines={lines.data ?? null}
+        lines={info?.lines ?? null}
         rupture={rupture}
         feedback={feedback}
         reduced={reduced}
@@ -1577,10 +1622,6 @@ export function ClawMachine({ runKey, view, li, onExit }: ActivityScreenProps) {
     const failed = mine?.error;
     const starlight = result?.grants.reduce((sum, grant) => sum + (grant.starlight ?? 0), 0) ?? 0;
     const affection = result?.grants.reduce((sum, grant) => sum + (grant.affection ?? 0), 0) ?? 0;
-    // His own line for his first plush on the shelf, or the catalog's (none during a rupture).
-    const plushLine = result?.firstPlush
-      ? (result.line ?? (rupture ? null : t("ui.otomeForge.fallback.clawFirstPlush")))
-      : null;
     const shelf = { ...(play.data?.plush ?? {}), ...(result?.plush ?? {}) };
     const settled = !!result || failed !== undefined;
     return page(
@@ -1601,7 +1642,7 @@ export function ClawMachine({ runKey, view, li, onExit }: ActivityScreenProps) {
                   animate={{ opacity: 1, y: 0, rotate: 0 }}
                   transition={{ type: "spring", stiffness: 300, damping: 14, delay: 0.12 * index }}
                 >
-                  <PlushArt prize={entry.prize} li={entry.prize === liPlushId(li.id) ? li : null} />
+                  <PlushArt prize={entry.prize} li={entry.prize === liPlushId(li.id) ? plushOwner : null} />
                   <span className="of-claw-haul-name">{plushName(entry.prize, [li])}</span>
                   <span className="of-claw-haul-by">
                     {entry.by === "me"
@@ -1678,7 +1719,12 @@ export function ClawMachine({ runKey, view, li, onExit }: ActivityScreenProps) {
           <h2 id="of-claw-shelf-title" className="of-section-title">
             {t("ui.otomeForge.claw.shelfTitle")}
           </h2>
-          <PlushShelf plush={shelf} lis={view.lis} fresh={result?.newPlush ?? []} labelledBy="of-claw-shelf-title" />
+          <PlushShelf
+            plush={shelf}
+            lis={view.lis.map((entry) => withPlush(entry, play.data))}
+            fresh={result?.newPlush ?? []}
+            labelledBy="of-claw-shelf-title"
+          />
         </section>
       </>,
     );
@@ -1692,7 +1738,7 @@ export function ClawMachine({ runKey, view, li, onExit }: ActivityScreenProps) {
         preview
         title={t("ui.otomeForge.claw.marquee")}
         prizes={preview}
-        li={li}
+        li={plushOwner}
         accent={accent}
         label={t("ui.otomeForge.claw.glassLabel", { count: preview.length })}
       />

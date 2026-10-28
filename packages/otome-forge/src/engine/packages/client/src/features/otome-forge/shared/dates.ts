@@ -4,8 +4,8 @@
 // A date is a chapter `date-<n>` of kind "date": a place, two looks, three beats of choices that the date's love
 // interest scores against their likes and dislikes, and an outcome from the total over the first-play picks. Every
 // outcome pays (SH/economy.ts, within the daily activity caps). During a rupture the date is "Make it right": a good or
-// great outcome with every scene's choice made mends it. Pure TypeScript: types, constants and one pure function.
-import type { ActivityGrant, LiId, Paint } from "./api-types";
+// great outcome with every scene's choice made mends it. Pure TypeScript: types, constants and pure functions.
+import type { ActivityGrant, Grievance, LiId, LiState, Paint } from "./api-types";
 import type { MusicMood } from "./faces";
 
 /** A date is three beats, each with one scored choice. */
@@ -25,11 +25,16 @@ export const DATE_PLACE_IDS = [
 export type DatePlaceId = (typeof DATE_PLACE_IDS)[number];
 /** The love interest picks the place (the plan names it). */
 export const PARTNER_CHOICE = "partner-choice";
-export type DatePlace = DatePlaceId | typeof PARTNER_CHOICE;
+/** A place the story has painted (M2b's `world.places`): the date goes there, under its own name, before its art. */
+export const STORY_PLACE = "story";
+export type DatePlace = DatePlaceId | typeof PARTNER_CHOICE | typeof STORY_PLACE;
+/** The picker's own cards, in order (the story's painted places follow them). */
 export const DATE_PLACES: readonly DatePlace[] = [...DATE_PLACE_IDS, PARTNER_CHOICE];
+/** Every kind of place a date can be at. */
+export const DATE_PLACE_KINDS: readonly DatePlace[] = [...DATE_PLACES, STORY_PLACE];
 
 export function isDatePlace(value: unknown): value is DatePlace {
-  return typeof value === "string" && (DATE_PLACES as readonly string[]).includes(value);
+  return typeof value === "string" && (DATE_PLACE_KINDS as readonly string[]).includes(value);
 }
 
 /** The scene each place opens in: its card's gradient and the reader's (SH/faces.ts MUSIC_MOODS). */
@@ -43,6 +48,7 @@ export const DATE_PLACE_MOODS: Record<DatePlace, MusicMood> = {
   cafe: "home",
   fairground: "date",
   [PARTNER_CHOICE]: "confession",
+  [STORY_PLACE]: "date",
 };
 
 /**
@@ -62,11 +68,31 @@ export function dateOutcome(total: number): DateOutcome {
   return total >= GREAT_DATE_AT ? "great" : total >= 0 ? "good" : "awkward";
 }
 
+/** The grievance a rupture with them stands on while it is unresolved (open or festering), or null. */
+export function standingRupture(liState: Pick<LiState, "rupture" | "grievances"> | undefined): Grievance | null {
+  const id = liState?.rupture?.grievanceId;
+  const grievance = id ? liState.grievances.find((item) => item.id === id) : undefined;
+  return grievance && (grievance.status === "open" || grievance.status === "festering") ? grievance : null;
+}
+
+/**
+ * The rupture a Make it right date still tries to mend: its grievance while the rupture stands on it, else null. A
+ * date's scenes are written as they are read, so one whose rupture was mended (or moved on) elsewhere since it was
+ * planned goes on as an ordinary date: its later scenes, the hub and its finish all follow this.
+ */
+export function stillToMend(
+  plan: Pick<DatePlan, "li" | "makeItRight">,
+  lis: Readonly<Record<LiId, Pick<LiState, "rupture" | "grievances">>>,
+): Grievance | null {
+  const rupture = plan.makeItRight ? standingRupture(lis[plan.li]) : null;
+  return rupture?.id === plan.makeItRight ? rupture : null;
+}
+
 /** `chapter.date`: a date's own plan. The client never sees it whole (only a DateEntry). */
 export interface DatePlan {
   li: LiId;
   place: DatePlace;
-  /** Where it happens, named by the plan in the world's language. */
+  /** Where it happens, named by the plan in the world's language (a story place keeps the name the story gave it). */
   placeName: string;
   herLook: string;
   hisLook: string;
@@ -85,6 +111,10 @@ export interface DateEntry {
   title: string;
   place: DatePlace;
   placeName: string;
+  /**
+   * Make it right: an open date while the rupture it was planned for still stands (stillToMend); a finished one when
+   * that rupture still stood as the date was counted.
+   */
   makeItRight: boolean;
   /** reading: scenes still to read; done: read through, its outcome not counted yet; finished: counted. */
   state: "reading" | "done" | "finished";
@@ -109,6 +139,8 @@ export interface DatesView {
 export interface DateStartInput {
   li: LiId;
   place: DatePlace;
+  /** With place "story": the painted place's key in `world.places`. */
+  storyPlace?: string;
   herLook: string;
   hisLook: string;
 }
@@ -131,11 +163,12 @@ export interface DateFinishResult {
   starlight: number;
   /** True when this request counted the date (false for a replay). */
   counted: boolean;
-  /** A Make it right date that mended the rupture now (false for a replay). */
+  /** This request mended the rupture: no rupture is left with them (false for a replay). */
   repaired: boolean;
   /**
-   * A Make it right date whose every scene had its choice made and whose outcome is good or great: it mends (or
-   * mended) the rupture. The same on a replay; false for an ordinary date.
+   * A Make it right date that mended the rupture when it was counted: every scene's choice made, a good or great
+   * outcome, and no rupture left with them after it (another rupture still owed keeps one standing, as M2b's repair
+   * does). The same on a replay; false for an ordinary date and for one whose rupture was mended elsewhere first.
    */
   mends: boolean;
   keepsake: { offer: boolean };

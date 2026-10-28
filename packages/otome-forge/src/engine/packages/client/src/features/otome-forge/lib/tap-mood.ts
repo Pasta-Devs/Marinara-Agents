@@ -5,6 +5,7 @@
 // the catalog's fallback lines until then. Pure: a tap never waits for a request.
 // ──────────────────────────────────────────────
 import type { LinesView } from "../shared/api-types";
+import type { Face } from "../shared/faces";
 import type { TapZone, TimeOfDay } from "../shared/home";
 
 /** Home's time-of-day tint, a little finer than the packs' three parts of the day. */
@@ -31,6 +32,17 @@ export function isAnnoyed(taps: readonly number[], now: number): boolean {
 
 export function tapMode(taps: readonly number[], now: number, rupture: boolean): TapMode {
   return rupture ? "cold" : isAnnoyed(taps, now) ? "annoyed" : "fond";
+}
+
+/** The face he shows while a tap's line is on screen (one of his five, SH/faces.ts). */
+export const TAP_FACES: Record<TapMode, Face> = { fond: "tender", annoyed: "flustered", cold: "cold" };
+
+/**
+ * His face on Home: the tap's while its line shows, else the one his note was written with, else cold while a rupture
+ * stands, else his plain look (""). Home shows it painted once M2b has painted it, and names it either way.
+ */
+export function homeFace(note: Face | "", tap: TapMode | null, rupture: boolean): Face | "" {
+  return tap ? TAP_FACES[tap] : note || (rupture ? "cold" : "");
 }
 
 /** The hour (0–23) in `timeZone`; the device's own hour when the zone can't be read. */

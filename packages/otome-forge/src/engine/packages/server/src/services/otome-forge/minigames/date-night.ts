@@ -6,21 +6,28 @@
 //   date's own plan (`chapter.date`: place, looks, goesWrong, Make it right, the keepsake brief). One open date per
 //   love interest: asking again while it is unfinished returns it (a double tap, a retry, a reopened screen), and the
 //   check runs again inside the run's foreground queue, so two requests never plan two dates. While a rupture stands
-//   between them the date is "Make it right": the plan targets the rupture's grievance. A date keeps the kind it was
-//   planned with (its scenes were written for it): one already open when a rupture starts stays an ordinary date, and
-//   the Dates hub labels Date Night by the open date (makeItRightView), so the next one is Make it right.
+//   between them the date is "Make it right": the plan targets the rupture's grievance, and P26 and the scenes are told
+//   who holds it (the love interest's hurt, or the protagonist's). One already open when a rupture starts stays an
+//   ordinary date (it was planned as one), and the Dates hub labels Date Night by the open date (makeItRightView), so
+//   the next one is Make it right. A Make it right date stays one only while its rupture stands (SH/dates.ts
+//   stillToMend): mended or moved on elsewhere meanwhile, its later scenes, the hub and its finish are an ordinary
+//   date's. The place is one of the picker's, the love interest's own pick, or one the story has painted (M2b's
+//   world.places): the date then goes there under the name the story gave it, so its scenes open on that place's art.
+// - P26 and the date's scenes see the state as the date's love interest may know it (story/prompts.ts ownView, M3's
+//   rule): no grievance, disclosure or ledger line another love interest's own chapter left behind reaches them.
 // - The scenes are written and read through the story routes (S/story/beats.ts): each date beat has one choice whose
 //   options carry hidden scores, and the client never sees them before the date ends. A date's beats pay nothing on
 //   their own; its chapter still counts as read once its last scene is.
 // - Finish (POST /dates/:key/finish): once the last scene is read, the total over the first-play picks gives the
 //   outcome (SH/dates.ts dateOutcome). One revision-checked write of `${R}:state` counts it exactly once: 120 Starlight
 //   and 100 affection within the day's activity caps, whatever the outcome (failure pays; caps limit rewards, never
-//   play), the "first date" timeline entry, and on a Make it right date whose every scene had its choice made and
-//   whose outcome is good or great, the rupture's grievance addressed and the rupture cleared (whether it mends is the
-//   player's choices: a scene eased off before its choice decides nothing). The once-only mark is the finish's own
-//   entry in `chapters[key].applied`
-//   (`${nodes}/finish`, applied through applyChoiceEffects so the rupture moves exactly as a scene's resolve moves it).
-//   A replay answers with the same outcome and no grants.
+//   play), the "first date" timeline entry, and on a Make it right date whose rupture still stands, whose every scene
+//   had its choice made and whose outcome is good or great, the rupture's grievance addressed (whether it mends is the
+//   player's choices: a scene eased off before its choice decides nothing). The rupture then clears, or stands on the
+//   next rupture-severity grievance still owed, as a scene's resolve moves it, and the date mended it only when none is
+//   left. The once-only mark is the finish's own entry in `chapters[key].applied` (`${nodes}/finish`, applied through
+//   applyChoiceEffects); a Make it right finish leaves what it found beside it (`${nodes}/make-it-right-mended` or
+//   `-standing`). A replay answers with the same outcome, the same mend and no grants.
 // - Privacy: a completed date is a `chat` memory source with `audience: [li]` (S/story/canon.ts readStorySources), so
 //   only that love interest's own readers and scenes he is in recall it, and it never reaches the shared overview. It
 //   is never an Engine Scene.
@@ -40,6 +47,7 @@ import type {
   LiId,
   LiState,
   Paint,
+  PlaceArt,
   Player,
   RunState,
   Unit,
@@ -50,7 +58,10 @@ import {
   BASE_LOOK,
   DATE_BEATS,
   PARTNER_CHOICE,
+  STORY_PLACE,
   dateOutcome,
+  standingRupture,
+  stillToMend,
   type DateEntry,
   type DateFinishResult,
   type DateOutcome,
@@ -86,7 +97,7 @@ import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
 import { canonPicks, type BeatDeps } from "../story/beats.js";
 import { canonicalSegments, readBeat, readChapter, recallText } from "../story/canon.js";
-import { ANGST_TYPES, CHAPTER_TAGS, bibleBlock, protagonistBlock } from "../story/prompts.js";
+import { ANGST_TYPES, CHAPTER_TAGS, bibleBlock, ownView, protagonistBlock } from "../story/prompts.js";
 import { otomeWritingRules } from "../writing-rules.js";
 
 export type DateDeps = BeatDeps & {
@@ -97,6 +108,8 @@ export type DateDeps = BeatDeps & {
 
 /** The finish's entry in `chapters[key].applied`, after the beats' own `${i}/choice-<n>` picks. */
 const FINISH_CHOICE = "finish";
+/** Beside it, what a Make it right finish found: it mended the rupture, or a rupture still stands with them. */
+const MEND_MARKS = { mended: "make-it-right-mended", standing: "make-it-right-standing" } as const;
 /** Finished dates GET /dates lists (each reads its beats for its outcome). */
 const DATES_LISTED = 24;
 const DATE_KEY = /^date-([1-9]\d{0,5})$/;
@@ -108,8 +121,6 @@ const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not
 const conflict = (message: string) => new OtomeForgeError(409, message, "conflict");
 
 const clean = (value: unknown, max = TEXT_MAX) => (typeof value === "string" ? value.trim().slice(0, max) : "");
-const unresolved = (grievance: Grievance | undefined) =>
-  !!grievance && (grievance.status === "open" || grievance.status === "festering");
 
 export const isDateKey = (value: unknown): value is string => typeof value === "string" && DATE_KEY.test(value);
 
@@ -119,10 +130,20 @@ const finishMark = (chapter: Pick<Chapter, "nodes">) => `${chapter.nodes.length}
 const isFinished = (state: RunState, chapter: Chapter) =>
   !!state.chapters[chapter.key]?.applied.includes(finishMark(chapter));
 
+const mendMark = (chapter: Pick<Chapter, "nodes">, found: keyof typeof MEND_MARKS) =>
+  `${chapter.nodes.length}/${MEND_MARKS[found]}`;
+
+/** What a finished date's Make it right found when it was counted: "mended", "standing", or null (not one then). */
+function mendFound(state: RunState, chapter: Chapter): keyof typeof MEND_MARKS | null {
+  const applied = state.chapters[chapter.key]?.applied ?? [];
+  if (applied.includes(mendMark(chapter, "mended"))) return "mended";
+  return applied.includes(mendMark(chapter, "standing")) ? "standing" : null;
+}
+
 // ── P26 date-plan (structured, 0.9, planner contract) ──
 
 /** What each place is, for the planner; it adapts the place to the world and names it in the world's language. */
-const PLACE_SPIRIT: Record<Exclude<DatePlace, typeof PARTNER_CHOICE>, string> = {
+const PLACE_SPIRIT: Record<Exclude<DatePlace, typeof PARTNER_CHOICE | typeof STORY_PLACE>, string> = {
   aquarium: "a night aquarium after closing: blue light through the tanks, jellyfish drifting, footsteps echoing",
   rooftop: "a rooftop garden above the lights of the city: strung lanterns, potted lemon trees, the wind",
   bookshop: "an old bookshop after hours: narrow aisles, a hidden reading nook, the smell of paper",
@@ -165,8 +186,11 @@ export interface DatePlanInput {
   world: World;
   player: Player;
   unit: Unit;
-  liState: LiState;
+  /** The run's state; the planner sees it as the date's love interest may know it (ownView). */
+  state: RunState;
   place: DatePlace;
+  /** With place "story": the painted place the date goes to. */
+  storyPlace?: Pick<PlaceArt, "name" | "tags"> | null;
   /** The rupture's grievance this date tries to mend, or null. */
   makeItRight: Grievance | null;
   /** Recalled memory (the kit's text), or "". */
@@ -178,20 +202,27 @@ export function datePlanMessages({
   world,
   player,
   unit,
-  liState,
+  state,
   place,
+  storyPlace = null,
   makeItRight,
   memory,
 }: DatePlanInput): OtomeMessage[] {
   const name = unit.name;
+  const { liState } = ownView(state, unit.id);
   const recent = liState.angst.slice(-2);
+  // The rupture is always named (it is how they are now), with who holds it; its grievance only when it came from what
+  // they may know.
+  const mendText = makeItRight ? liState.grievances.find((item) => item.id === makeItRight.id)?.text : undefined;
   const system = [
     `You plan one DATE in an otome visual novel, a character-driven romance: an evening the protagonist and ${name} spend together. A narrator writes it later as ${DATE_BEATS} scenes the player reads, each with one choice the player makes.`,
     "Reply with ONLY a JSON object of this shape:",
     '{"title": "...", "place": "...", "tags": ["..."], "goesWrong": false, "seed": {"type": "...", "text": "..."}, "beats": [{"guide": "..."}, {"guide": "..."}, {"guide": "..."}], "keepsake": {"brief": "..."}}',
     "FIELDS",
     `- title: the date's name, 2 to 6 words; it never gives away how the evening turns.`,
-    "- place: where the date happens, named as this world would name it.",
+    storyPlace
+      ? "- place: the name of the place given below, exactly as written there."
+      : "- place: where the date happens, named as this world would name it.",
     `- beats: exactly ${DATE_BEATS} guides in play order, 2 to 4 sentences each, for the narrator: what happens, what ${name} wants in that scene besides the protagonist, the moment where what the protagonist does matters to ${name} (the scene's one choice goes there), and where it leaves things. The evening builds: arriving, the heart of it, how it ends.`,
     `- goesWrong: true when the evening should stumble somewhere real (an old wound brushed, a jealousy, an interruption, a misread), when the story so far gives it a reason; false for an evening that goes as hoped.`,
     `- seed: only when goesWrong: the conflict the stumble plants. type from: ${ANGST_TYPES.join(", ")}${recent.length ? `, never one of ${name}'s last kinds of angst (${recent.join(", ")})` : ""}; text: one line on it. Omit it otherwise.`,
@@ -203,7 +234,9 @@ export function datePlanMessages({
     "- A stumble is small: at most a minor hurt, never a break-up and never a rupture.",
     ...(makeItRight
       ? [
-          `- This is a MAKE IT RIGHT date: a rupture stands between them. Plan the evening as the protagonist's attempt to mend it: each scene gives them a real chance to make amends in their own way, and ${name}'s hurt is honest. Whether it mends is decided by the player's choices, never by the guides: no guide resolves it.`,
+          makeItRight.by === "protagonist"
+            ? `- This is a MAKE IT RIGHT date: a rupture stands between them, and it is the protagonist who was hurt. Plan the evening as ${name}'s attempt to earn back the protagonist's trust: each scene gives ${name} a real chance to make amends in their own way, and the protagonist's hurt is honest. Whether it mends is decided by the player's choices, never by the guides: no guide resolves it.`
+            : `- This is a MAKE IT RIGHT date: a rupture stands between them. Plan the evening as the protagonist's attempt to mend it: each scene gives them a real chance to make amends in their own way, and ${name}'s hurt is honest. Whether it mends is decided by the player's choices, never by the guides: no guide resolves it.`,
         ]
       : []),
     `- Write the title, the place and every guide in ${world.language}; the keepsake brief in English.`,
@@ -223,17 +256,19 @@ export function datePlanMessages({
     protagonistBlock(player),
     "",
     `THE DATE'S LOVE INTEREST (full bible; this date does not move the stage)`,
-    bibleBlock(unit, liState),
+    bibleBlock(unit, state, [unit.id]),
     "",
     "THE PLACE",
     place === PARTNER_CHOICE
       ? `${name} chooses where to take the protagonist: somewhere that says something true about ${name} (from their likes, their past or their world).`
-      : `${PLACE_SPIRIT[place]}. Adapt it to this world's setting and era, keeping its spirit.`,
+      : place === STORY_PLACE
+        ? `"${storyPlace?.name ?? ""}", a place in this world${storyPlace?.tags.trim() ? ` (${storyPlace.tags.trim()})` : ""}. The date goes there: keep that name for it.`
+        : `${PLACE_SPIRIT[place]}. Adapt it to this world's setting and era, keeping its spirit.`,
     "",
     "WHAT THEY WEAR (image tags; describe them in words if at all)",
     wear(name, unit.outfitLine || unit.bible?.look.outfitLine || ""),
     wear(player.name || "The protagonist", player.look.outfitLine),
-    makeItRight ? `\nMAKE IT RIGHT\nThe rupture (${makeItRight.id}): ${makeItRight.text}` : "",
+    makeItRight ? `\nMAKE IT RIGHT\nThe rupture (${makeItRight.id})${mendText ? `: ${mendText}` : ""}` : "",
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
     "",
@@ -261,7 +296,12 @@ export interface PlannedDate {
 /** The reply as a date, or the first rule it breaks (the repair turn names it). A seed that cannot apply is dropped. */
 export function normalizeDatePlanReply(
   reply: DatePlanReply,
-  context: { world: Pick<World, "content">; liState: Pick<LiState, "angst"> },
+  context: {
+    world: Pick<World, "content">;
+    liState: Pick<LiState, "angst">;
+    /** A story place's own name, which the date keeps whatever the reply calls it. */
+    placeName?: string;
+  },
 ): PlannedDate | string {
   const guides = reply.beats.map((beat) => clean(beat.guide)).filter(Boolean);
   if (guides.length !== DATE_BEATS || reply.beats.length !== DATE_BEATS) {
@@ -286,7 +326,7 @@ export function normalizeDatePlanReply(
       : null;
   return {
     title: clean(reply.title, 200),
-    placeName: clean(reply.place, 120),
+    placeName: context.placeName || clean(reply.place, 120),
     tags,
     goesWrong: reply.goesWrong,
     seed,
@@ -376,7 +416,7 @@ function entryOf(runId: string, chapter: Chapter, state: RunState, outcome: Date
     title: chapter.title,
     place: date.place,
     placeName: date.placeName,
-    makeItRight: !!date.makeItRight,
+    makeItRight: finished ? !!mendFound(state, chapter) : !!stillToMend(date, state.lis),
     state: finished ? "finished" : progress?.completed ? "done" : "reading",
     outcome: finished ? outcome : null,
     plannedAt: chapter.plannedAt,
@@ -408,16 +448,10 @@ export async function datesView(deps: Pick<DateDeps, "store">, runId: string): P
   };
 }
 
-/** The rupture's grievance a date with this love interest would try to mend, or null. */
-function ruptureOf(liState: LiState): Grievance | null {
-  const id = liState.rupture?.grievanceId;
-  const grievance = id ? liState.grievances.find((item) => item.id === id) : undefined;
-  return grievance && unresolved(grievance) ? grievance : null;
-}
-
 /**
  * Whether Date Night with each love interest is Make it right now (GET /play, the Dates hub's label): the open date's
- * own plan when one is open, else whether a rupture stands that a new date would try to mend.
+ * own plan while its rupture stands (stillToMend) when one is open, else whether a rupture stands that a new date
+ * would try to mend.
  */
 export async function makeItRightView(
   store: Pick<OtomeStore, "listRun">,
@@ -428,12 +462,21 @@ export async function makeItRightView(
   const view: Record<LiId, boolean> = {};
   for (const [li, liState] of Object.entries(state.lis)) {
     const open = chapters.find((item) => item.date!.li === li && !isFinished(state, item));
-    view[li] = open ? !!open.date!.makeItRight : !!ruptureOf(liState);
+    view[li] = !!(open ? stillToMend(open.date!, state.lis) : standingRupture(liState));
   }
   return view;
 }
 
 // ── Start ──
+
+/** The painted place a "story" date goes to, or null for any other place; 400 for a place the story does not have. */
+function storyPlaceOf(world: Pick<World, "places">, input: Pick<DateStartInput, "place" | "storyPlace">) {
+  if (input.place !== STORY_PLACE) return null;
+  const key = input.storyPlace;
+  const place = key && Object.hasOwn(world.places, key) ? world.places[key] : undefined;
+  if (!place?.name.trim()) throw new OtomeForgeError(400, "No such place in this story.", "bad-request");
+  return place;
+}
 
 /** The next free `date-<n>`. */
 const nextDateKey = (chapters: readonly Chapter[]) =>
@@ -453,6 +496,7 @@ export async function startDate(
   if (!first) throw runNotFound();
   if (first.world.forge.phase !== "ready") throw conflict("The world is still being forged.");
   partnerOf(first, input.li);
+  storyPlaceOf(first.world, input);
   // ponytail: the base look is the only one until M4 lists owned looks; a look id is then checked against them.
   if (input.herLook !== BASE_LOOK || input.hisLook !== BASE_LOOK) {
     throw new OtomeForgeError(400, "Only the base looks can be worn on a date yet.", "bad-request");
@@ -472,8 +516,9 @@ export async function startDate(
     const run = await readRun(deps.store, runId);
     if (!run) throw runNotFound();
     const unit = partnerOf(run, input.li);
+    const storyPlace = storyPlaceOf(run.world, input);
     const liState = run.state.lis[input.li] ?? defaultLiState();
-    const makeItRight = ruptureOf(liState);
+    const makeItRight = standingRupture(liState);
     const key = nextDateKey(await dateChapters(deps.store, runId));
     const job: ForgeMemoryJob = "structured";
     const memory = await recallText(deps, runId, {
@@ -487,7 +532,7 @@ export async function startDate(
       signal,
       debugMode,
     });
-    const context = { world: run.world, liState };
+    const context = { world: run.world, liState, ...(storyPlace ? { placeName: clean(storyPlace.name, 120) } : {}) };
     const { value, connectionId } = await generateJson(deps, {
       runId,
       job,
@@ -496,8 +541,9 @@ export async function startDate(
         world: run.world,
         player: run.player,
         unit,
-        liState,
+        state: run.state,
         place: input.place,
+        storyPlace,
         makeItRight,
         memory,
       }),
@@ -581,6 +627,12 @@ function lastLine(beats: ReadonlyArray<Beat | null>, unit: Pick<Unit, "name">, p
   return "";
 }
 
+/** `state` with `mark` added to the date's `chapters[key].applied`, beside its finish. */
+function withMark(state: RunState, key: string, mark: string): RunState {
+  const progress = state.chapters[key]!;
+  return { ...state, chapters: { ...state.chapters, [key]: { ...progress, applied: [...progress.applied, mark] } } };
+}
+
 /** The "first date" entry on the Love Timeline and in his dated firsts, the first time only. */
 function withFirstDate(state: RunState, li: LiId, chapter: Chapter, at: string): RunState {
   const current = state.lis[li];
@@ -607,8 +659,8 @@ export async function finishDate(deps: DateDeps, runId: string, key: string): Pr
   const beats = await readBeats(deps.store, runId, chapter);
   const picks = datePicks(beats);
   const outcome = outcomeOf(picks);
-  const mends = !!plan.makeItRight && everyChoiceMade(chapter, beats) && outcome !== "awkward";
-  const mend = mends ? plan.makeItRight : null;
+  // The player's whole evening, well spent: what mends a rupture that still stands when the date is counted.
+  const earned = !!plan.makeItRight && everyChoiceMade(chapter, beats) && outcome !== "awkward";
   const at = new Date().toISOString();
   // Set by the write that was saved (updateDoc applies the change again after a stale revision).
   let grants: ActivityGrant[] = [];
@@ -619,16 +671,22 @@ export async function finishDate(deps: DateDeps, runId: string, key: string): Pr
     counted = false;
     repaired = false;
     if (!current.chapters[key]?.completed) throw conflict("The date's last scene is not read yet.");
-    const before = mend ? current.lis[plan.li]?.grievances.find((item) => item.id === mend) : undefined;
+    // Null for an ordinary date, and for one whose rupture was mended (or moved on) elsewhere since it was planned.
+    const standing = stillToMend(plan, current.lis);
+    const mend = standing && earned ? standing.id : null;
     const applied = applyChoiceEffects(
       current,
       mend ? [{ li: plan.li, resolve: { id: mend, status: "addressed" } }] : [],
       { key, i: chapter.nodes.length, choice: FINISH_CHOICE, resolves: mend ? [mend] : [], at },
     );
     if (applied.replay) return current;
-    const after = mend ? applied.state.lis[plan.li]?.grievances.find((item) => item.id === mend) : undefined;
-    repaired = unresolved(before) && after?.status === "addressed";
-    const paid = grant(applied.state, {
+    const after = mend ? applied.state.lis[plan.li] : undefined;
+    // Mended as M2b's repair reports it (S/state/stages.ts healRupture): only when no rupture is left with them.
+    repaired = !!after && !after.rupture && after.grievances.find((item) => item.id === mend)?.status === "addressed";
+    const next = standing
+      ? withMark(applied.state, key, mendMark(chapter, repaired ? "mended" : "standing"))
+      : applied.state;
+    const paid = grant(next, {
       source: "date",
       starlight: STARLIGHT_EARNINGS.date,
       li: plan.li,
@@ -649,7 +707,7 @@ export async function finishDate(deps: DateDeps, runId: string, key: string): Pr
     starlight: state.wallet.starlight,
     counted,
     repaired,
-    mends,
+    mends: mendFound(state, chapter) === "mended",
     keepsake: { offer: !!run.world.images.connectionId && !!plan.keepsake.brief.trim() },
   };
 }

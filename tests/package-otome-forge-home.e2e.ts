@@ -1,8 +1,11 @@
 // Otome Forge's Home and phone (M3) in the Engine's Home tab, with /api/otome-forge/** stubbed: the layered Home with
-// his figure and face, the message of the day written once (and never asked for again by itself after a failure), his
-// mood, tap lines that need no request (and annoy him after too many), Play, Him / Me, Reply into his thread with the
-// note quoted; a thread with typing, his messages one by one, his sticker, suggestions, a sticker of hers, read
-// receipts and Close and remember; then Home without images at reduced motion, during a rupture, with Rough day?.
+// his figure and face before a painted place, the message of the day written once (and never asked for again by itself
+// after a failure), his mood, tap lines that need no Otome request (and annoy him after too many, his face showing it),
+// each voiced with his card's Engine voice under a cache key and cut short by Me, Play (cached), Him / Me, Home read
+// again on each visit under the Engine's 30 s cache (a rupture that opens brings a curt note, its repair a new warm one
+// the same day), Reply into his thread with the note quoted; a thread with typing, his messages one by one, his
+// sticker, suggestions, a sticker of hers, read receipts and Close and remember; Home without images at reduced motion,
+// during a rupture, with Rough day? voiced with no cache key; and his faces' cut-outs arriving while Home is open.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-home.e2e.ts
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -34,6 +37,9 @@ const RUN = "r-e2e-home01";
 const ILVAR = "li-ilvar-0001";
 const CASSIAN = "li-cassian-0002";
 const NOTE = "You left the lab light on again. I turned it off. Don’t thank me.";
+/** His notes later the same day: during a rupture, then after its repair. */
+const CURT_NOTE = "Busy. The audit will not wait.";
+const WARM_AGAIN = "The lab is quiet again. Come by when you can.";
 const HIS_LINES = {
   head: ["Careful with the hair.", "Again. Fine.", "You are bold today."],
   hand: ["Cold hands. Stay a moment.", "Hold on, then.", "Fine. Just this once."],
@@ -81,7 +87,10 @@ function png(width: number, height: number, [r, g, b]: [number, number, number])
 }
 
 const PORTRAIT = png(13, 19, [150, 160, 210]);
+const PORTRAIT_CUT = png(13, 19, [140, 150, 200]);
 const TENDER = png(13, 19, [230, 170, 190]);
+const TENDER_CUT = png(13, 19, [220, 160, 180]);
+const PLACE = png(16, 9, [60, 70, 110]);
 const FLUSTERED = png(13, 19, [240, 140, 170]);
 const AVATAR = png(8, 8, [231, 166, 184]);
 
@@ -89,9 +98,15 @@ const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$
 /** Exactly one of `lines`. */
 const anyOf = (lines: string[]) => new RegExp("^(?:" + lines.map(escapeRegExp).join("|") + ")$", "u");
 
-/** The M3 routes, answered in memory by the server's rules (S/routes/home.ts, S/routes/phone.ts). */
-function createHomeStub({ images = true, rupture = false, noteFailures = 0 } = {}) {
+/**
+ * The M3 routes, answered in memory by the server's rules (S/routes/home.ts, S/routes/phone.ts). `state.rupture` is
+ * the story's (the reader opens and repairs one), and a note written on the other side of it is stale, as noteFits
+ * says; `faceCutouts` has his tender face's cut-out land on the second read of Home.
+ */
+function createHomeStub({ images = true, rupture = false, noteFailures = 0, faceCutouts = false } = {}) {
   const calls: Call[] = [];
+  const state = { rupture, speakDelayMs: 0 };
+  let homeReads = 0;
   const now = () => new Date().toISOString();
   const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
   const pronouns = { subject: "he", object: "him", possessive: "his" };
@@ -111,6 +126,8 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0 } = {
       images: { connectionId: images ? "conn-image" : null, rating: "sfw", ask: false, expressions: true },
       connections: { narration: "conn-text" },
       forge: { phase: "ready", steps: [] },
+      // Voices on (Settings → Audio), so Home's lines are voiced through the Engine's voice service.
+      audio: { tts: true },
     },
     player: {
       personaId: "persona-mira",
@@ -126,6 +143,7 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0 } = {
         name: "Ilvar Thorne",
         pronouns,
         source: "card",
+        cardId: "card-ilvar",
         accent: "#9DB8F0",
         level: 2,
         stage: 2,
@@ -145,6 +163,16 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0 } = {
   };
   const home = { li: ILVAR as string, show: "him" as "him" | "me" };
   const notes = new Map<string, Json>();
+  const written = new Map<string, number>();
+  const fits = (note: Json | undefined) => !!note && note.curt === state.rupture;
+  const noteText = (li: string, count: number) =>
+    li !== ILVAR
+      ? "The canals froze at dawn. I thought of you."
+      : count === 1
+        ? NOTE
+        : state.rupture
+          ? CURT_NOTE
+          : WARM_AGAIN;
   let failuresLeft = noteFailures;
 
   // Ilvar's thread: one remembered conversation, then a message of his the player hasn't seen.
@@ -193,19 +221,33 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0 } = {
             ? { url: AVATAR, source: "avatar", cutoutState: "uncut" }
             : null
           : images && home.li === ILVAR
-            ? { url: PORTRAIT, source: "look", cutoutState: "uncut" }
+            ? faceCutouts
+              ? { url: PORTRAIT, source: "look", cutout: PORTRAIT_CUT, cutoutState: "ready" }
+              : { url: PORTRAIT, source: "look", cutoutState: "uncut" }
             : null;
+      homeReads += 1;
+      const faces =
+        faceCutouts && home.li === ILVAR
+          ? {
+              tender:
+                homeReads === 1
+                  ? { url: TENDER, cutoutState: "pending" }
+                  : { url: TENDER, cutout: TENDER_CUT, cutoutState: "ready" },
+            }
+          : {};
+      const stored = notes.get(home.li);
       return {
         status: 200,
         json: {
           li: home.li,
           show: home.show,
-          note: notes.get(home.li) ?? null,
+          note: fits(stored) ? stored : null,
           look,
-          faces: {},
+          faces,
           lines: { ready: images },
-          rupture,
+          rupture: state.rupture,
           unread: unread(),
+          backdrop: images ? { url: PLACE, kind: "place" } : null,
         },
       };
     }
@@ -220,14 +262,18 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0 } = {
         return { status: 503, json: { error: "No connection for the note.", code: "no-connection" } };
       }
       const li = call.body!.li;
-      if (!notes.has(li)) {
+      if (!fits(notes.get(li))) {
+        const count = (written.get(li) ?? 0) + 1;
+        written.set(li, count);
         notes.set(li, {
           li,
           dayKey: now().slice(0, 10),
-          text: li === ILVAR ? NOTE : "The canals froze at dawn. I thought of you.",
-          face: "tender",
+          text: noteText(li, count),
+          // A curt note names no face, so his face is the rupture's (cold).
+          face: state.rupture && count > 1 ? "" : "tender",
           mood: { word: "irritable", reason: "audit" },
-          at: now(),
+          curt: state.rupture,
+          at: new Date(Date.now() + count).toISOString(),
         });
       }
       return { status: 200, json: { note: notes.get(li) } };
@@ -241,16 +287,25 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0 } = {
           ? {
               ready: true,
               stage: 2,
-              rupture,
-              tap: rupture
+              rupture: state.rupture,
+              tap: state.rupture
                 ? null
                 : { head: tap(HIS_LINES.head), hand: tap(HIS_LINES.hand), heart: tap(HIS_LINES.heart) },
-              annoyed: rupture ? [] : ANNOYED,
+              annoyed: state.rupture ? [] : ANNOYED,
               cold: ["Not now.", "Leave it."],
               comfort: ["Sit. Tea first, then everything else."],
               claw: null,
             }
-          : { ready: false, stage: 1, rupture, tap: null, annoyed: [], cold: [], comfort: [], claw: null },
+          : {
+              ready: false,
+              stage: 1,
+              rupture: state.rupture,
+              tap: null,
+              annoyed: [],
+              cold: [],
+              comfort: [],
+              claw: null,
+            },
       };
     }
     if (path === `${base}/phone`) {
@@ -322,7 +377,7 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0 } = {
     }
     return { status: 404, json: { error: `No stub for ${call.method} ${call.path}`, code: "not-found" } };
   };
-  return { calls, answer, notes };
+  return { calls, answer, notes, state };
 }
 
 type Stub = ReturnType<typeof createHomeStub>;
@@ -338,12 +393,57 @@ async function stubRoutes(page: Page, stub: Stub, spoken: string[]) {
     });
     await route.fulfill({ status, json });
   });
-  // The Engine's voice route: a silent clip.
+  // The Engine's voice routes: his card's assigned voice, the pools, and a silent clip for each line.
+  await page.route("**/api/tts/config", (route) =>
+    route.fulfill({
+      json: {
+        enabled: true,
+        connectionId: "conn-tts",
+        connectionProfiles: {
+          "conn-tts": {
+            voiceAssignments: [{ characterId: "card-ilvar", voice: "Ilvar Voice" }],
+            npcDefaultMaleVoices: ["Pool Male"],
+            npcDefaultFemaleVoices: ["Pool Female"],
+          },
+        },
+      },
+    }),
+  );
+  await page.route("**/api/tts/voices*", (route) => route.fulfill({ json: { voices: ["Ilvar Voice", "Pool Male"] } }));
+  // A clip can take a while (state.speakDelayMs), so a line is still playing when the player moves on.
   await page.route("**/api/tts/speak", async (route) => {
     spoken.push(String(route.request().postDataJSON()?.text ?? ""));
-    await route.fulfill({ status: 200, contentType: "audio/wav", body: Buffer.alloc(44) });
+    if (stub.state.speakDelayMs) await new Promise((done) => setTimeout(done, stub.state.speakDelayMs));
+    await route.fulfill({ status: 200, contentType: "audio/wav", body: Buffer.alloc(44) }).catch(() => undefined);
   });
 }
+
+/** Records every line the Engine's voice service is asked to speak, with its voice and cache key, and its signal. */
+async function recordSpeech(page: Page) {
+  await page.evaluate(() => {
+    const service = (globalThis as any).__MARINARA_HOST__.services.tts.ttsService;
+    const speak = service.speakSequence.bind(service);
+    (window as any).__spoken = [];
+    (window as any).__signals = [];
+    service.speakSequence = (requests: any[], id: string, options: any) => {
+      (window as any).__spoken.push(...requests);
+      (window as any).__signals.push(options?.signal);
+      return speak(requests, id, options);
+    };
+  });
+}
+const voiced = (page: Page) => page.evaluate(() => (window as any).__spoken as Json[]);
+/** Whether the newest voiced line was cut short. */
+const lastLineStopped = (page: Page) =>
+  page.evaluate(() => !!((window as any).__signals as (AbortSignal | undefined)[]).at(-1)?.aborted);
+
+/** The Engine's own React Query cache keeps an answer fresh for 30 s (lib/query-client.ts); the stand-in's does not. */
+const engineStaleTime = (page: Page) =>
+  page.evaluate(() => {
+    const client = (globalThis as any).__MARINARA_HOST__.queryClient;
+    const defaults = client.getDefaultOptions();
+    client.setDefaultOptions({ ...defaults, queries: { ...defaults.queries, staleTime: 30_000 } });
+  });
 
 async function openHome(page: Page): Promise<Locator> {
   await page.route("**/api/app-settings/ui", (route) =>
@@ -370,14 +470,14 @@ const posts = (stub: Stub, suffix: string) =>
   stub.calls.filter((call) => call.method === "POST" && call.path.endsWith(suffix));
 
 /**
- * Every request Otome Forge makes from now on: its own routes and the voice service. The Engine shell's own traffic
- * (its polls and late first loads) is not Otome's, so it is left out.
+ * Every request Otome Forge makes to its own routes from now on. The voice service's (a voiced line) and the Engine
+ * shell's own traffic (its polls and late first loads) are left out.
  */
 function apiRequests(page: Page): string[] {
   const seen: string[] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
-    if (/^\/api\/(?:otome-forge|tts)\//.test(url.pathname)) seen.push(`${request.method()} ${url.pathname}`);
+    if (url.pathname.startsWith("/api/otome-forge/")) seen.push(`${request.method()} ${url.pathname}`);
   });
   return seen;
 }
@@ -394,8 +494,11 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await stubRoutes(page, stub, spoken);
   const root = await openHome(page);
+  await recordSpeech(page);
+  await engineStaleTime(page);
 
-  // Home opens on him: the layers fill the stage behind the top bar and the dock, his face from the note's mood.
+  // Home opens on him: the layers fill the stage behind the top bar and the dock, his face from the note's mood, a
+  // painted place behind him.
   await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeVisible();
   const note = root.getByRole("article", { name: "A note from Ilvar Thorne" });
   await expect(note).toContainText(NOTE);
@@ -404,6 +507,7 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   for (const layer of ["place", "tint", "light"]) {
     await expect(root.locator(`.of-home-layers [data-layer="${layer}"]`)).toHaveCount(1);
   }
+  await expect(root.locator('.of-home-l0[data-backdrop="place"] img.of-home-backdrop')).toHaveAttribute("src", PLACE);
   const [layers, body] = await Promise.all([
     root.locator(".of-home-layers").boundingBox(),
     root.locator(".of-stage-body").boundingBox(),
@@ -422,6 +526,12 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   const bubble = root.locator(".of-home-bubble");
   await expect(bubble).toHaveText(anyOf(HIS_LINES.head));
   await expect(root.locator('.of-home > p[aria-live="polite"]')).toContainText("Ilvar Thorne:");
+  // His tender face while the line shows (painted), and the line in his card's voice, cached under its own words.
+  await expect(root.getByRole("img", { name: "Ilvar Thorne, tender" })).toBeVisible();
+  await expect.poll(async () => (await voiced(page)).length).toBe(1);
+  const tapVoice = (await voiced(page))[0]!;
+  expect(tapVoice).toMatchObject({ text: await bubble.textContent(), voice: "Ilvar Voice", characterId: "card-ilvar" });
+  expect(tapVoice.cacheKey).toMatch(new RegExp(`^otome-forge:${RUN}:tap:${ILVAR}:[0-9a-z]+$`, "u"));
   // A real pointer on his chest (he breathes, so the zone never holds still for a locator click): the rows over him
   // let the tap through.
   const heart = (await zones.getByRole("button", { name: "Heart" }).boundingBox())!;
@@ -430,18 +540,36 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   for (let tap = 0; tap < 4; tap++) await page.keyboard.press("Enter");
   await expect(bubble).toHaveAttribute("data-mode", "annoyed");
   expect(ANNOYED).toContain(await bubble.textContent());
+  // Annoyed, he is flustered: that face is painted too.
+  await expect(root.getByRole("img", { name: "Ilvar Thorne, flustered" })).toHaveAttribute("src", FLUSTERED);
   expect(requests).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath("02-tap.png") });
 
-  // Play reads the note aloud through the Engine's voice service.
+  // Play reads the note aloud in his voice, cached under the note itself (taps' lines no longer play by then).
+  await expect(bubble).toHaveCount(0, { timeout: 10_000 });
   await note.getByRole("button", { name: "Hear Ilvar Thorne read the note" }).click();
-  await expect.poll(() => spoken).toEqual([NOTE]);
+  await expect.poll(async () => (await voiced(page)).at(-1)?.text).toBe(NOTE);
+  const noteVoice = (await voiced(page)).at(-1)!;
+  expect(noteVoice).toMatchObject({ voice: "Ilvar Voice", characterId: "card-ilvar" });
+  expect(noteVoice.cacheKey).toMatch(new RegExp(`^otome-forge:${RUN}:note:${ILVAR}:`, "u"));
+  await expect.poll(() => spoken.includes(NOTE)).toBe(true);
+
+  // A tap's line goes with its bubble: Me cuts it short while it still plays.
+  stub.state.speakDelayMs = 8_000;
+  const before = (await voiced(page)).length;
+  await zones.getByRole("button", { name: "Hand" }).focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await voiced(page)).length).toBe(before + 1);
+  expect((await voiced(page)).at(-1)!.cacheKey).toMatch(new RegExp(`:tap:${ILVAR}:`, "u"));
+  expect(await lastLineStopped(page)).toBe(false);
 
   // Me: the player in her own look (her persona's avatar), saved; then him again, by the keyboard.
   const him = root.getByRole("radio", { name: "Ilvar" });
   await him.focus();
   await page.keyboard.press("ArrowRight");
   await expect(root.getByRole("heading", { level: 1, name: "Mira Vale" })).toBeVisible();
+  await expect.poll(() => lastLineStopped(page)).toBe(true);
+  stub.state.speakDelayMs = 0;
   await expect(root.getByRole("img", { name: "You, Mira Vale" })).toBeVisible();
   expect(posts(stub, "/home/set").at(-1)!.body).toMatchObject({ show: "me" });
   await expect(root.locator('.of-figure[data-art="avatar"]')).toHaveCount(1);
@@ -450,19 +578,36 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeVisible();
 
   // Leaving Home and coming back reads the same note: it is never written twice.
-  await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Story" }).click();
-  await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
-  await expect(root.getByRole("article", { name: "A note from Ilvar Thorne" })).toContainText(NOTE);
+  const visitHome = async () => {
+    await root.getByRole("navigation", { name: "Game menu" }).getByRole("button", { name: "Story" }).click();
+    await root.getByRole("button", { name: "Home with Ilvar Thorne" }).click();
+  };
+  await visitHome();
+  const noteCard = root.getByRole("article", { name: "A note from Ilvar Thorne" });
+  await expect(noteCard).toContainText(NOTE);
   expect(posts(stub, "/home/note")).toHaveLength(1);
 
+  // A rupture opens in the story while Home is away, within the Engine's 30 s cache: the next visit reads Home again,
+  // so the warm note gives way to a curt one and his face is cold.
+  stub.state.rupture = true;
+  await visitHome();
+  await expect(noteCard).toContainText(CURT_NOTE);
+  await expect(root.getByRole("img", { name: "Ilvar Thorne, cold" })).toBeVisible();
+  expect(posts(stub, "/home/note")).toHaveLength(2);
+  // It is repaired the same day: a new warm note is written, never the one from before the rupture.
+  stub.state.rupture = false;
+  await visitHome();
+  await expect(noteCard).toContainText(WARM_AGAIN);
+  expect(posts(stub, "/home/note")).toHaveLength(3);
+
   // Reply opens his thread with the note quoted, focus on its heading; the quote goes with the first message.
-  await root.getByRole("article", { name: "A note from Ilvar Thorne" }).getByRole("button", { name: "Reply" }).click();
+  await noteCard.getByRole("button", { name: "Reply" }).click();
   await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
-  await expect(root.locator(".of-quote-chip")).toContainText(NOTE);
+  await expect(root.locator(".of-quote-chip")).toContainText(WARM_AGAIN);
   await root.getByRole("textbox", { name: "Message Ilvar Thorne" }).fill("I left it on for you.");
   await page.keyboard.press("Enter");
   await expect(root.getByText("Barely. The data kept me company.")).toBeVisible();
-  expect(posts(stub, "/send")[0]!.body).toMatchObject({ text: "I left it on for you.", quote: NOTE });
+  expect(posts(stub, "/send")[0]!.body).toMatchObject({ text: "I left it on for you.", quote: WARM_AGAIN });
   await expect(root.locator(".of-quote-chip")).toHaveCount(0);
   const scrolled = await root.evaluate((element) =>
     [element, ...element.querySelectorAll(".of-frame, .of-stage, .of-stage-body")]
@@ -555,9 +700,14 @@ test("Otome Forge Home without images, at reduced motion, during a rupture: init
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await stubRoutes(page, stub, []);
   const root = await openHome(page);
+  await recordSpeech(page);
 
-  // His initials on his accent colour, with labelled tap buttons; nothing breathes, drifts or follows the pointer.
-  const figure = root.getByRole("img", { name: "Ilvar Thorne", exact: true });
+  // His initials on his accent colour before the gradient alone, with labelled tap buttons; nothing breathes, drifts or
+  // follows the pointer.
+  await expect(root.locator(".of-home-l0")).toHaveCount(1);
+  await expect(root.locator(".of-home-backdrop")).toHaveCount(0);
+  // A rupture: before his note, his face is cold (named, as nothing is painted).
+  const figure = root.getByRole("img", { name: "Ilvar Thorne, cold", exact: true });
   await expect(figure).toHaveText("IT");
   const breathe = root.locator(".of-figure-breathe");
   expect(await breathe.evaluate((element) => getComputedStyle(element).animationName)).toBe("none");
@@ -590,6 +740,14 @@ test("Otome Forge Home without images, at reduced motion, during a rupture: init
   const sheet = page.getByRole("dialog", { name: "For a rough day" });
   const comfort = fallback("comfort").map((line) => `“${line}”`);
   expect(comfort).toContain(await sheet.locator(".of-comfort-line").textContent());
+  // Played in his voice with no cache key: comfort never lands in the Engine's audio cache.
+  const before = (await voiced(page)).length;
+  await sheet.getByRole("button", { name: "Hear Ilvar Thorne say it" }).click();
+  await expect.poll(async () => (await voiced(page)).length).toBe(before + 1);
+  const comfortVoice = (await voiced(page)).at(-1)!;
+  expect(comfort).toContain(`“${comfortVoice.text}”`);
+  expect(comfortVoice.voice).toBe("Ilvar Voice");
+  expect(comfortVoice.cacheKey).toBeUndefined();
   await sheet.getByRole("button", { name: "Another" }).click();
   expect(comfort).toContain(await sheet.locator(".of-comfort-line").textContent());
   await page.screenshot({ path: testInfo.outputPath("06-rough-day.png") });
@@ -609,4 +767,19 @@ test("Otome Forge Home without images, at reduced motion, during a rupture: init
   await expect(root.getByRole("button", { name: "Home with Cassian" })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("07-no-images.png") });
   expect(pageErrors).toEqual([]);
+});
+
+test("Otome Forge Home asks again while his faces' cut-outs are on their way, and shows the cut-out once it lands", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  // His look was cut out on an earlier visit; his tender face (the note's) is painted, its cut-out still on its way.
+  const stub = createHomeStub({ faceCutouts: true });
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  const figure = root.getByRole("img", { name: "Ilvar Thorne, tender" });
+  await expect(figure).toHaveAttribute("src", TENDER);
+  // Home reads itself again (every 10 s while a cut-out is coming) and the clean cut-out replaces the uncut face.
+  await expect(figure).toHaveAttribute("src", TENDER_CUT, { timeout: 25_000 });
+  await expect(root.locator('.of-figure[data-cut="true"]')).toHaveCount(1);
 });

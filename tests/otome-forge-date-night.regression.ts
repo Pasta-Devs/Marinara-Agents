@@ -2,9 +2,14 @@
 // choice scored by option index, the scores never reach the client before the date ends, and a date never ends on a
 // big choice; the outcome follows the total of the first-play picks; every outcome pays within the day's caps, once
 // (a replay pays nothing); Make it right mends the rupture on a good or great outcome with every scene's choice made
-// only (easing off a scene before its choice never mends it), and a date open before a rupture keeps its kind (the hub
-// says so); a date is private memory (a `chat` source with audience [li]) that another love interest's prompts never
-// see; starting twice plans once; and the keepsake paints only on request, once, through the image client.
+// only (easing off a scene before its choice never mends it), and says it mended only when no rupture is left (another
+// one still owed keeps it standing, as M2b's repair does); a date open before a rupture keeps its kind (the hub says
+// so), and one whose rupture is mended elsewhere goes on as an ordinary date (its later scenes, the hub, its finish);
+// the plan and scenes say who holds the rupture (the love interest's hurt, or the protagonist's); a date is private
+// memory (a `chat` source with audience [li], titled private) that another love
+// interest's prompts never see; P26 and the date's scenes see the state as its love interest may know it (M3's
+// ownView); a date can go to a place the story painted (M2b's world.places), under its own name; starting twice plans
+// once; and the keepsake paints only on request, once, through the image client.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -34,8 +39,10 @@ import { registerClawRoutes } from "../packages/otome-forge/src/engine/packages/
 import { registerDateRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/dates.ts";
 import { registerStoryRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/story.ts";
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import { normalizeChapter } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
+import { healRupture } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/state/stages.ts";
 import {
   effectsOf,
   normalizeBeatReply,
@@ -47,7 +54,16 @@ import {
   recallText,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/canon.ts";
 import type { BeatReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/prompts.ts";
-import { KAI, MIR, at, json, storyWorld } from "./fixtures/otome-forge-story.ts";
+import {
+  KAI,
+  MIR,
+  MIREILLE_ONLY,
+  RUPTURE_ID,
+  at,
+  json,
+  storyWorld,
+  withMireillesPrivateRows,
+} from "./fixtures/otome-forge-story.ts";
 
 const system = (messages: CapabilityLanguageModelMessage[]) => messages[0]!.content;
 const isDatePlanner = (messages: CapabilityLanguageModelMessage[]) => system(messages).includes("You plan one DATE");
@@ -242,10 +258,10 @@ async function startDate(t: DateWorld, body: Record<string, unknown> = START) {
   return started.body;
 }
 
-/** Reads the date's beats in order, picking `option-<pick>` in each, then lets the lookahead settle. */
-async function playDate(t: DateWorld, key: string, picks: number[]) {
-  for (const [i, pick] of picks.entries()) {
-    const params = { key, i: String(i) };
+/** Reads the date's beats in order from `from`, picking `option-<pick>` in each, then lets the lookahead settle. */
+async function playDate(t: DateWorld, key: string, picks: number[], from = 0) {
+  for (const [index, pick] of picks.entries()) {
+    const params = { key, i: String(from + index) };
     const served = await t.call("POST", beatPath, {}, params);
     assert.equal(served.status, 200, JSON.stringify(served.body));
     assert.equal("scores" in served.body.beat, false, "a date beat's scores never reach the client");
@@ -502,6 +518,8 @@ test("during a rupture the date is Make it right: a good or great outcome mends 
     assert.equal(started.date.makeItRight, true);
     const plan = t.calls[0]!.messages;
     assert.ok(system(plan).includes("MAKE IT RIGHT"));
+    // Kai holds it: the evening is the protagonist's attempt to mend it.
+    assert.ok(system(plan).includes("Plan the evening as the protagonist's attempt to mend it"));
     assert.ok(plan.at(-1)!.content.includes("She read the letters he burned."));
     await playDate(t, started.date.key, [...picks]);
     assert.ok(t.calls[1]!.messages.at(-1)!.content.includes("MAKE IT RIGHT date"));
@@ -555,6 +573,127 @@ test("easing off a Make it right date's scenes before their choices never mends 
   assert.ok((await part.state()).lis[KAI]!.rupture);
 });
 
+/** A second rupture-severity grievance Kai holds (a later Confrontation's walkout at low trust). */
+const secondRupture: Grievance = {
+  id: "g-main-2-5-0",
+  li: KAI,
+  by: "li",
+  text: "She walked out on him at the pier.",
+  severity: "rupture",
+  opened: "main-2/5",
+  status: "open",
+};
+
+test("Make it right with another rupture still owed addresses its grievance, and says the rupture still stands", async () => {
+  const first = rupture();
+  const t = await dateWorld("r-mg5date-two001", {
+    lis: { [KAI]: { ...first, grievances: [...first.grievances!, secondRupture] } },
+  });
+  const started = await startDate(t);
+  assert.equal(started.date.makeItRight, true);
+  await playDate(t, started.date.key, [1, 1, 1]);
+  const done = await finish(t, started.date.key);
+  assert.equal(done.body.outcome, "great");
+  // Its grievance is addressed, and the rupture stands on the next one owed, as M2b's repair would leave it.
+  const kai = (await t.state()).lis[KAI]!;
+  assert.deepEqual(
+    kai.grievances.map((grievance) => grievance.status),
+    ["addressed", "open"],
+  );
+  assert.equal(kai.rupture?.grievanceId, secondRupture.id);
+  // So the ending says it is not mended yet, and a replay says the same.
+  assert.deepEqual([done.body.date.makeItRight, done.body.repaired, done.body.mends], [true, false, false]);
+  const replay = await finish(t, started.date.key);
+  assert.deepEqual([replay.body.date.makeItRight, replay.body.repaired, replay.body.mends], [true, false, false]);
+  // Date Night is Make it right again, for the rupture that still stands.
+  assert.equal((await t.call("GET", "/runs/:run/play")).body.lis[KAI].makeItRight, true);
+  const next = await startDate(t);
+  assert.deepEqual([next.resumed, next.date.makeItRight], [false, true]);
+  const plan = t.calls.filter((call) => isDatePlanner(call.messages)).at(-1)!.messages;
+  assert.ok(plan.at(-1)!.content.includes(`The rupture (${secondRupture.id}): ${secondRupture.text}`));
+
+  // With the last rupture mended, it says so.
+  await playDate(t, next.date.key, [1, 1, 1]);
+  const mended = await finish(t, next.date.key);
+  assert.deepEqual([mended.body.date.makeItRight, mended.body.repaired, mended.body.mends], [true, true, true]);
+  assert.equal((await t.state()).lis[KAI]!.rupture, null);
+});
+
+test("a rupture mended elsewhere while a Make it right date is open: the rest of it is an ordinary date", async () => {
+  const t = await dateWorld("r-mg5date-heal01", { lis: { [KAI]: rupture() } });
+  const started = await startDate(t);
+  const key = started.date.key;
+  assert.equal(started.date.makeItRight, true);
+  await playDate(t, key, [1]);
+  const sceneOne = t.calls.find((call) => !isDatePlanner(call.messages) && nodeOf(call.messages) === 0)!;
+  assert.ok(sceneOne.messages.at(-1)!.content.includes("It is a MAKE IT RIGHT date"));
+  // M2b's repair chapter, read to its end from the Story screen, mends it meanwhile (S/state/stages.ts healRupture).
+  const id = "g-main-1-4-0";
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => {
+    const repair = {
+      kind: "repair" as const,
+      li: KAI,
+      grievance: id,
+      nodes: [{ i: 0, kind: "beat" as const, guide: "", cast: [KAI], resolves: [id] }],
+    };
+    return healRupture(state, repair, 0, at).state;
+  });
+  assert.equal((await t.state()).lis[KAI]!.rupture, null);
+  // The hub and the open date are Date Night again.
+  assert.equal((await t.call("GET", "/runs/:run/play")).body.lis[KAI].makeItRight, false);
+  const view = (await t.call("GET", "/runs/:run/dates")).body;
+  assert.equal(view.lis.find((entry: { li: string }) => entry.li === KAI).open.makeItRight, false);
+  // Scenes written from now on are an ordinary date's.
+  const written = t.calls.length;
+  await playDate(t, key, [1, 1], 1);
+  const later = t.calls.slice(written);
+  assert.ok(
+    later.some((call) => nodeOf(call.messages) === 2),
+    "the last scene was written after the repair",
+  );
+  for (const call of later) assert.equal(call.messages.at(-1)!.content.includes("MAKE IT RIGHT"), false);
+  // Its finish mends nothing and says nothing of mending: the ending is an ordinary date's.
+  const done = await finish(t, key);
+  assert.equal(done.body.outcome, "great");
+  assert.deepEqual([done.body.date.makeItRight, done.body.repaired, done.body.mends], [false, false, false]);
+  const replay = await finish(t, key);
+  assert.deepEqual([replay.body.date.makeItRight, replay.body.repaired, replay.body.mends], [false, false, false]);
+  assert.equal((await t.state()).lis[KAI]!.grievances[0]!.status, "addressed");
+  assert.equal((await t.call("GET", "/runs/:run/dates")).body.dates[0].makeItRight, false);
+});
+
+test("a rupture the protagonist holds: the plan and its scenes have the love interest earn back the protagonist's trust", async () => {
+  const held = rupture();
+  const grievance: Grievance = {
+    ...held.grievances![0]!,
+    by: "protagonist",
+    text: "Kai sold her secret to the guild.",
+  };
+  const t = await dateWorld("r-mg5date-hers01", { lis: { [KAI]: { ...held, grievances: [grievance] } } });
+  const started = await startDate(t);
+  assert.equal(started.date.makeItRight, true);
+  const plan = system(t.calls[0]!.messages);
+  assert.ok(
+    plan.includes(
+      "it is the protagonist who was hurt. Plan the evening as Kai's attempt to earn back the protagonist's trust: each scene gives Kai a real chance to make amends",
+    ),
+  );
+  assert.equal(plan.includes("the protagonist's attempt to mend it"), false);
+  await playDate(t, started.date.key, [1, 1, 1]);
+  const scenes = t.calls.slice(1).map((call) => call.messages.at(-1)!.content);
+  assert.equal(scenes.length, 3);
+  for (const scene of scenes) {
+    assert.ok(
+      scene.includes(
+        "It is a MAKE IT RIGHT date: a rupture stands between them (Kai sold her secret to the guild.). The protagonist is the one hurt, and Kai is trying to earn back the protagonist's trust. The protagonist's hurt is honest",
+      ),
+    );
+    assert.equal(scene.includes("The protagonist is trying to mend it"), false);
+  }
+  const done = await finish(t, started.date.key);
+  assert.deepEqual([done.body.repaired, done.body.mends], [true, true]);
+});
+
 test("a date open when a rupture starts keeps its kind, and the hub says so until the next one", async () => {
   const t = await dateWorld("r-mg5date-stale1");
   const makeItRight = async () => (await t.call("GET", "/runs/:run/play")).body.lis[KAI].makeItRight;
@@ -593,7 +732,11 @@ test("a date is private memory: a chat source for its love interest that no one 
   const source = sources.find((item) => item.id === date.key);
   assert.ok(source);
   assert.equal(source.kind, "chat");
-  assert.equal(source.title, "A date: Jellyfish Hour");
+  // Private, as M3 titles a love interest's own chapter: a scene with others in it knows nobody else was there.
+  assert.equal(
+    source.title,
+    'Kai\'s own date chapter "Jellyfish Hour" (private: only the people in its scenes know what happened in it)',
+  );
   assert.deepEqual(source.audience, [KAI]);
   assert.ok(source.content.includes("Line 1 from Kai."));
 
@@ -610,6 +753,72 @@ test("a date is private memory: a chat source for its love interest that no one 
     plan.some((message) => message.content.includes("from Kai.")),
     false,
   );
+});
+
+test("a date sees the state as its love interest may know it: nothing another love interest's own chapter left", async () => {
+  const t = await dateWorld("r-mg5date-aa0008");
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) =>
+    withMireillesPrivateRows(state, { rupture: true }),
+  );
+  const { date } = await startDate(t);
+  assert.equal(date.makeItRight, true, "the rupture still makes it Make it right");
+  await playDate(t, date.key, [1, 1, 1]);
+  assert.equal(t.calls.length, 4);
+  const text = (index: number) => t.calls[index]!.messages.map((message) => message.content).join("\n");
+  for (const [index, prompt] of [text(0), text(1), text(2), text(3)].entries()) {
+    assert.deepEqual(
+      MIREILLE_ONLY.filter((marker) => prompt.includes(marker)),
+      [],
+      `${index ? "scene" : "plan"} ${index}: nothing of Mireille's own chapters`,
+    );
+  }
+  // P26 and the scenes see what the shared story left between them, and name the rupture without its grievance.
+  for (const marker of ["KAI-MAIN-GRIEVANCE", "KAI-MAIN-DISCLOSURE"]) {
+    assert.ok(text(0).includes(marker), `the plan sees ${marker}`);
+    assert.ok(text(1).includes(marker), `the scene sees ${marker}`);
+  }
+  assert.ok(text(0).includes(`MAKE IT RIGHT\nThe rupture (${RUPTURE_ID})\n`));
+  assert.ok(text(1).includes("It is a MAKE IT RIGHT date: a rupture stands between them. The protagonist"));
+});
+
+test("a date can go to a place the story painted, under the name the story gave it", async () => {
+  const t = await dateWorld("r-mg5date-aa0009");
+  const art = {
+    state: "ready" as const,
+    at,
+    url: "/api/global-gallery/file/conservatory.png",
+    ref: "global-gallery:c1",
+  };
+  await t.store.mutateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    places: {
+      "the-glass-conservatory": { name: "The Glass Conservatory", tags: "glasshouse, ferns, rain, no humans", art },
+    },
+  }));
+  // A place the story does not have is refused before anything is planned.
+  for (const storyPlace of [undefined, "the-moon", "constructor", "__proto__"]) {
+    const refused = await t.call("POST", "/runs/:run/dates", { ...START, place: "story", storyPlace });
+    assert.deepEqual([refused.status, refused.body.code], [400, "bad-request"], String(storyPlace));
+  }
+  assert.equal(t.calls.length, 0);
+
+  const started = await startDate(t, { ...START, place: "story", storyPlace: "the-glass-conservatory" });
+  assert.equal(started.date.place, "story");
+  // The plan named it otherwise (the aquarium's reply); the date keeps the story's name, so its art shows.
+  assert.equal(started.date.placeName, "The Glass Conservatory");
+  const plan = t.calls[0]!.messages;
+  assert.ok(
+    plan
+      .at(-1)!
+      .content.includes('"The Glass Conservatory", a place in this world (glasshouse, ferns, rain, no humans).'),
+  );
+  assert.ok(system(plan).includes("- place: the name of the place given below, exactly as written there."));
+  assert.equal(plan.at(-1)!.content.includes("night aquarium"), false);
+  const stored = (await t.store.readDoc(`${t.runId}:chapter:${started.date.key}`, normalizeChapter))!;
+  assert.equal(stored.nodes[0]!.place, "The Glass Conservatory");
+  assert.equal(stored.date!.place, "story");
+  await playDate(t, started.date.key, [1]);
+  assert.ok(t.calls[1]!.messages.at(-1)!.content.includes("spend together at The Glass Conservatory"));
 });
 
 test("the keepsake paints only when asked, once the date is over, and never twice", async () => {

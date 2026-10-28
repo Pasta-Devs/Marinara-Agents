@@ -484,6 +484,16 @@ test("a closed session is a chat source for its love interest only: recalled by 
   assert.ok((await recall({ reader: MIR })).includes("PRIVATE-LEDGER"));
   assert.ok(!(await recall({ reader: MIR })).includes("PRIVATE-LIGHTHOUSE"));
   assert.ok(!(await recall({ cast: [] })).includes("PRIVATE-"), "never for a scene he is not in");
+  // A scene with Kai and Mireille in it recalls his conversation as private, so she does not know of it.
+  assert.equal(
+    sources[0]!.title,
+    `${KAI}'s phone conversation (private: only ${KAI} and the protagonist know what was said)`,
+  );
+  const together = await recall({ cast: [KAI, MIR] });
+  assert.ok(
+    together.includes(`# Recalled chat: ${KAI}'s phone conversation (private: only ${KAI} and the protagonist know`),
+    "its title marks it private in a shared scene",
+  );
 
   // Each prompt lists its own love interest's conversations and never the other's.
   const calls = t.calls.length;

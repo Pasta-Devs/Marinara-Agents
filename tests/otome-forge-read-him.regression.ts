@@ -5,9 +5,10 @@
 // round, pays once whatever the score (failure still pays) within the day's caps, and a capped day still plays; a
 // finish whose write failed lands its pay, tells and timeline entry exactly once when it is sent again; the
 // tells read right reach the next scene card and the next prompts (never one a bible edit moved); the first Read Him
-// is on his Love Timeline once; a finished set is a `chat` source recalled only by him; P25 carries the knowledge
-// boundary and the `home` contract, his tells by index and never an unrevealed truth, and is logged in debug mode;
-// a run deleted while P25 writes keeps no set.
+// is on his Love Timeline once; a finished set is a `chat` source recalled only by him, titled private; P25 carries
+// the knowledge boundary and the `home` contract, his tells by index and never an unrevealed truth, and is logged in
+// debug mode; P25 sees him as his own reader may (M3's ownView): nothing another love interest's own chapter left on
+// his rows; a run deleted while P25 writes keeps no set.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
@@ -53,7 +54,17 @@ import { otomeSceneCard } from "../packages/otome-forge/src/engine/packages/serv
 import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
 import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
 import type { FakeReply } from "./fixtures/otome-forge-fakes.ts";
-import { KAI, MIR, bible, json, storyWorld } from "./fixtures/otome-forge-story.ts";
+import {
+  KAI,
+  KAI_SHARED,
+  MIR,
+  MIREILLE_ONLY,
+  RUPTURE_ID,
+  bible,
+  json,
+  storyWorld,
+  withMireillesPrivateRows,
+} from "./fixtures/otome-forge-story.ts";
 
 type Messages = CapabilityLanguageModelMessage[];
 const isSetPrompt = (messages: Messages) => messages[0]!.content.includes("a mini-game in an otome visual novel");
@@ -486,6 +497,8 @@ test("a finished set is a chat source for its love interest only: recalled by hi
     ].sort(),
   );
   const own = sources.find((source) => source.audience?.[0] === KAI)!;
+  // Titled private, as a phone session is: a scene with others in it recalls it as theirs alone.
+  assert.equal(own.title, "Ines reads Kai (private: only Kai and the protagonist know how it went)");
   assert.match(own.content, /^Ines tried to read Kai in 5 small moments and read 5 right\./);
   assert.ok(own.content.includes("THOUGHT-KAI0"));
 
@@ -516,6 +529,28 @@ test("P25 carries the boundary and the home contract, his tells by index, never 
   assert.ok(!sent.includes("HIDDEN-TRUTH") && !sent.includes("MYSTERY-TRUTH"), "never an unrevealed truth");
   assert.equal(call!.options?.temperature, 0.9);
   assert.ok(t.logs.some((entry) => entry.level === "debugOverride" && entry.args[0] === `read-him/${KAI}`));
+});
+
+test("P25 sees him as his own reader may: nothing another love interest's own chapter left on his rows", async () => {
+  const t = await readHimWorld("r-readhim9-aaaaaa");
+  await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) =>
+    withMireillesPrivateRows(state, { rupture: true }),
+  );
+  assert.equal((await t.start()).status, 200);
+  const [call] = t.setCalls();
+  const sent = call!.messages.map((message) => message.content).join("\n");
+  assert.deepEqual(
+    MIREILLE_ONLY.filter((marker) => sent.includes(marker)),
+    [],
+    "no grievance, disclosure, rupture text or ledger line of Mireille's own chapters",
+  );
+  for (const marker of KAI_SHARED) assert.ok(sent.includes(marker), `his own ${marker}`);
+  assert.ok(
+    sent.includes("Lately: KAI-MAIN-RELATIONSHIP: he let her hold the lamp. KAI-MAIN-OFFSCREEN: Kai rewired the bell."),
+    "his newest lines among those he may know",
+  );
+  // The rupture itself is named: it is how he is with her now.
+  assert.ok(sent.includes(`A rupture stands between them (${RUPTURE_ID})`));
 });
 
 test("a bad reply gets one repair turn and then fails with nothing saved; a run deleted mid-write keeps no set", async () => {

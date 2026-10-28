@@ -16,11 +16,13 @@
 //   is its id in `claw.rounds`); the set is marked finished after it. A finish sent again, or retried after either
 //   write failed, applies it exactly once and returns what was paid.
 // - A finished set is private memory (readHimMemorySources): a `chat` source with `audience: [li]`, recalled only by
-//   his own readers and scenes he is in. An unfinished one is never a source.
+//   his own readers and scenes he is in, and titled private as a phone session is. An unfinished one is never a source.
 // P25 writes his words, so it carries the knowledge boundary and the writing rules, on the `home` contract (SFW wording
 // plus Lines and Veils, whatever the Heat). It sees his scene card (never an unrevealed secret's truth), his mask tells
 // by index, what stands between them, one thing he may know from his own recall, and the moments of his last sets so
-// none repeats. Prompts are English and never localized; the set is written in the world's language.
+// none repeats. The state reaches it as his own reader may know it (story/prompts.ts ownView, M3's rule): no grievance,
+// disclosure or ledger line another love interest's own chapter left behind. Prompts are English and never localized;
+// the set is written in the world's language.
 import { randomInt } from "node:crypto";
 import { sliceTextToTokenBudget } from "@forge-kit/shared-token-estimator.mjs";
 import { forgeDayKey } from "@forge-kit/time-zone-server.mjs";
@@ -63,7 +65,7 @@ import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
-import { betweenYou } from "../story/prompts.js";
+import { betweenYou, ownView } from "../story/prompts.js";
 import { otomeWritingRules } from "../writing-rules.js";
 
 export const READ_HIM_TEMPERATURE = 0.9;
@@ -333,10 +335,11 @@ export interface ReadHimPromptInput {
   world: Pick<World, "content" | "images" | "language" | "setting" | "premise">;
   player: Pick<Player, "name" | "pronouns">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
+  /** His state as his own reader may know it (ownView). */
   liState: LiState;
   /** One thing he may know, from his own recall (reader: him), or "". */
   recalled: string;
-  /** The newest relationship and off-screen ledger lines about him, or "". */
+  /** His newest relationship and off-screen ledger lines among those he may know (ownView). */
   lately: string[];
   /** The moments of his last sets, newest first, so none repeats. */
   recent: readonly string[];
@@ -480,13 +483,10 @@ export async function startReadHim(
     const run = await readRun(deps.store, runId);
     if (!run) throw runNotFound();
     const unit = run.units.find((entry) => entry.id === li);
-    const liState = run.state.lis[li];
-    if (!unit || !liState) throw liNotFound();
+    if (!unit || !run.state.lis[li]) throw liNotFound();
     if (!unit.bible) throw new OtomeForgeError(409, `${unit.name}'s bible is not written yet.`, "conflict");
-    const newest = <T extends { li: LiId }>(rows: readonly T[]) => [...rows].reverse().find((row) => row.li === li);
-    const lately = [newest(run.state.ledgers.relationship)?.line, newest(run.state.ledgers.offscreen)?.line].filter(
-      (line): line is string => !!line?.trim(),
-    );
+    const { liState, relationship, offscreen } = ownView(run.state, li);
+    const lately = [relationship, offscreen].filter((line) => !!line.trim());
     const [recalled, sets] = await Promise.all([
       recalledLine(deps.memory, runId, unit, lately, debugMode),
       listSets(deps.store, runId),
@@ -739,7 +739,8 @@ export async function readHimMemorySources(
     .map((set) => ({
       id: `readhim-${set.setId}`,
       kind: "chat" as const,
-      title: `${set.names.player || "The protagonist"} reads ${set.names.li || "a love interest"}`,
+      // Private, as S/phone/memory.ts titles a phone session: a scene with others in it recalls it as theirs alone.
+      title: `${set.names.player || "The protagonist"} reads ${set.names.li || "a love interest"} (private: only ${set.names.li || "that love interest"} and the protagonist know how it went)`,
       content: readHimMemoryText(set),
       order: orderOf(state, set.finished!.at),
       audience: [set.li],

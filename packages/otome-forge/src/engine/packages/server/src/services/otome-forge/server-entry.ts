@@ -5,10 +5,14 @@
 import { createForgeStoryCancellation } from "@forge-kit/story-cancel-server.mjs";
 import { forgeTimeZoneRoutes } from "@forge-kit/time-zone-server.mjs";
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
+import { createOtomeArt } from "./art/expressions.js";
 import { createBackgroundQueue } from "./background-queue.js";
 import { createHandle, type OtomeRouter, type RouteDeps } from "./http.js";
 import { INDEX_ID } from "./ids.js";
 import { createOtomeMemory } from "./memory/memory.js";
+import { registerArcRoutes } from "./routes/arcs.js";
+import { registerArtRoutes } from "./routes/art.js";
+import { registerAudioRoutes } from "./routes/audio.js";
 import { registerClawRoutes } from "./routes/claw.js";
 import { registerDateRoutes } from "./routes/dates.js";
 import { registerHomeRoutes } from "./routes/home.js";
@@ -38,11 +42,13 @@ export async function activate({ api }: ActivationContext) {
   const { runtime } = api;
   const store = createOtomeStore(runtime.persistence.documents);
   const handle = createHandle(runtime.logger);
-  // One background lane (memory summaries and line packs), one story memory and one Cancel per activation.
+  // One background lane (memory summaries and line packs), one story memory, one Cancel and one art service (faces,
+  // places, CGs; M2b) per activation.
   const background = createBackgroundQueue(runtime);
   const memory = createOtomeMemory({ runtime, store, background });
   const cancellation = createForgeStoryCancellation();
-  const deps: RouteDeps = { runtime, store, handle, memory, cancellation, background };
+  const art = createOtomeArt({ runtime, store });
+  const deps: RouteDeps = { runtime, store, handle, memory, cancellation, art, background };
   // The Engine accepts only a prefix under /api/<package id> (capability-route-registration.service.ts). Every handler
   // runs in the request's time zone (forgeTimeZoneRoutes wraps get and post, the only methods Otome uses).
   const releaseRoutes = await api.registerPrivilegedRoutes(
@@ -52,6 +58,9 @@ export async function activate({ api }: ActivationContext) {
       registerRunRoutes(router, deps);
       registerSetupRoutes(router, deps);
       registerStoryRoutes(router, deps);
+      registerArcRoutes(router, deps);
+      registerArtRoutes(router, deps);
+      registerAudioRoutes(router, deps);
       registerMemoryRoutes(router, { store, handle, memory });
       registerHomeRoutes(router, deps);
       registerPhoneRoutes(router, deps);
@@ -64,6 +73,8 @@ export async function activate({ api }: ActivationContext) {
   activeStore = store;
   return async () => {
     if (activeStore === store) activeStore = null;
+    // Nothing more is paid for after teardown: queued faces and scene paints stop before their paid call.
+    art.dispose();
     cancellation.dispose();
     memory.dispose();
     background.dispose();

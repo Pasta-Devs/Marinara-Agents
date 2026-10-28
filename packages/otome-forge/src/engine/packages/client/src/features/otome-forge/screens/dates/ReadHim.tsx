@@ -7,10 +7,11 @@
 // answered); POST .../read-him/:set/answer {round, pick} → ReadHimAnswer (the first pick is the answer); POST
 // .../read-him/:set/finish → {grants, starlight} (pays once). The Dates hub opens it with ActivityScreenProps, and the
 // router focuses its <h1> on arrival and gives the top bar's Back (to Dates). Keys 1–4 pick a reading; focus moves to
-// each new moment, to Next after an answer, and to the result; the verdict and the thought go to a polite live region. Without art the
-// face is his initials with an aura and a labelled chip (FacePlate), so nothing rests on a picture or on colour alone.
-// ponytail: faces stay the aura and chip until M2b paints them (FacePlate picks them up then), and the line is not
-// voiced until M2b's voices; the upgrade path is passing the painted faces and a voice player in, nothing here else.
+// each new moment, to Next after an answer, and to the result; the verdict and the thought go to a polite live region.
+// Each moment shows the face it names through the reader's FacePlate: their painted face once M2b's set is ready (the
+// run view's `expressions`), else their look with the face as a labelled chip, else their initials with an aura and
+// the chip, so nothing rests on a picture or on colour alone. Their line is voiced as the reader voices one (M2b's
+// audio, with the kit's voice picking) when the moment opens; the thought, like every thought, never is.
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,11 +19,12 @@ import { Check, CloudMoon, Eye, Heart, HeartCrack, RotateCcw, Sparkle, X } from 
 import { useOtomeApi } from "../../api";
 import { Avatar } from "../../components/Avatar";
 import { DeclinedPanel } from "../../components/DeclinedPanel";
+import { useAudioSnapshot, useOtomeAudio } from "../../hooks/use-otome-audio";
 import { runPath } from "../../hooks/use-reader";
 import { patchRun, runQueryKey } from "../../hooks/use-run";
 import { accentOf } from "../../lib/accent";
 import { useOtomeProps } from "../../props";
-import type { RunLiView } from "../../shared/api-types";
+import type { RunLiView, Segment } from "../../shared/api-types";
 import { AFFECTION_EARNINGS, STARLIGHT_EARNINGS } from "../../shared/economy";
 import type { ReadHimAnswer, ReadHimFinishResult, ReadHimSetView } from "../../shared/read-him";
 import { PALETTE } from "../../theme/tokens";
@@ -390,6 +392,21 @@ function Round({ li, set, index, label, answering, error, roundRef, nextRef, onA
   const last = index === set.rounds.length - 1;
   const faceLabel = round.face ? t(FACE_LABEL_KEYS[round.face]) : "";
   const truth = answer ? (round.readings[answer.trueIndex] ?? "") : "";
+
+  // Their line is voiced once, as the moment opens (never for a moment answered before, when a set is picked up again),
+  // and leaving the moment stops it. The snapshot re-renders this when the voice settings change.
+  const audio = useOtomeAudio();
+  useAudioSnapshot();
+  const [opened] = useState(() => !round.answer);
+  const said: Segment = { speaker: name, text: round.line, ...(round.face ? { expression: round.face } : {}) };
+  const voicedRef = opened && audio?.wouldSpeak(said) ? `readhim:${set.setId}:${index}` : "";
+  useEffect(() => {
+    if (!audio || !voicedRef) return;
+    void audio.speak(said, voicedRef);
+    return () => audio.stopVoice();
+    // Once per moment: the line belongs to its ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audio, voicedRef]);
   return (
     <>
       <div className="of-rh-scene">

@@ -1,7 +1,8 @@
 // ──────────────────────────────────────────────
 // Otome Forge: a choice as pill cards (intent labels, never numbers). First play is canon: the pick is saved, and
-// when it changes something between them "He'll remember that." rises over the scene. A big choice says it lasts. On
-// a replay the first pick is marked, and any option shows its branch with nothing changed.
+// when it changes something between them "{name} will remember that." rises over the scene ("They'll remember that."
+// when it touched more than one). A big choice says it lasts. On a replay the first pick is marked, and any option
+// shows its branch with nothing changed.
 // ──────────────────────────────────────────────
 import { forwardRef, useId } from "react";
 import { useTranslation } from "react-i18next";

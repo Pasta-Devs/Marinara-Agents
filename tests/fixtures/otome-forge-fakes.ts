@@ -153,6 +153,8 @@ export interface FakeRuntimeOptions {
   enabledLevels?: string[];
   /** Errors the fake admission treats as its own (`admission.isFailure`). */
   admissionFailures?: Set<unknown>;
+  /** How the fake admission runs an admitted operation; by default it just runs it. */
+  admissionRun?: <T>(operation: () => Promise<T>) => Promise<T>;
   characters?: Array<{ id: string; data: unknown; comment?: string }>;
   personas?: Array<{ id: string; data: unknown }>;
   /** The connection's own output cap (the resolved model's maxOutputTokens); 4096 by default, null for none. */
@@ -251,7 +253,7 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}) {
       admission: notInFake<Admission>("runtime.integrations.admission", {
         async run<T>(connectionId: string, mode: unknown, operation: () => Promise<T>) {
           admissions.push({ connectionId, mode });
-          return operation();
+          return options.admissionRun ? options.admissionRun(operation) : operation();
         },
         isFailure: (error: unknown) => admissionFailures.has(error),
       }),

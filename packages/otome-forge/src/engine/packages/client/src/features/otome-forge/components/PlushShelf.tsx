@@ -1,16 +1,26 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the plushies (drawn in SVG, never painted) and the shelf they line up on
 // ──────────────────────────────────────────────
-// Six series plushes and each love interest's own: his portrait, or his initials in his colour, in a round plush
-// frame with ears and stitches. The shelf shows what the protagonist has won (with a count), a silhouette for what is
-// still in the machine, and a "New" ribbon on what a round just added.
+// Six series plushes and each love interest's own: his look (cut out of its background once Home has made the cut-out,
+// M3; GET /play names the picture), else his portrait, or his initials in his colour, in a round plush frame with ears
+// and stitches. The shelf shows what the protagonist has won (with a count), a silhouette for what is still in the
+// machine, and a "New" ribbon on what a round just added.
 // ponytail: the shelf stands on Dates and after a round only, and his plush wears his base look; the upgrade path is
 // M4's Album (a shelf page there) and the look he wears from M4's Wardrobe.
 import { useId, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { accentOf, initialsOf } from "../lib/accent";
 import type { RunLiView } from "../shared/api-types";
-import { PLUSH_SERIES, liPlushId, plushLi, type PlushSeries } from "../shared/claw";
+import { PLUSH_SERIES, liPlushId, plushLi, type PlayView, type PlushSeries } from "../shared/claw";
+
+/** A love interest as their plush wears them: `plush` is GET /play's picture for it (their look, or its cut-out). */
+export type PlushOwner = Pick<RunLiView, "name" | "accent" | "portrait"> & { plush?: string };
+
+/** `li` with the picture GET /play gives their plush, when it gives one. */
+export function withPlush<T extends RunLiView>(li: T, play: Pick<PlayView, "lis"> | undefined): T & { plush?: string } {
+  const plush = play?.lis[li.id]?.plush;
+  return plush ? { ...li, plush } : li;
+}
 
 /** Each series plush's name (literal keys, so the locale validator sees them). */
 export const PLUSH_NAME_KEYS: Record<PlushSeries, string> = {
@@ -138,8 +148,8 @@ function SeriesShape({ kind }: { kind: PlushSeries }) {
 
 interface PlushArtProps {
   prize: string;
-  /** For a love interest's plush: him (his name, colour and portrait). */
-  li?: Pick<RunLiView, "name" | "accent" | "portrait"> | null;
+  /** For a love interest's plush: him (his name, colour, and the picture it wears). */
+  li?: PlushOwner | null;
   className?: string;
   style?: CSSProperties;
 }
@@ -149,6 +159,7 @@ export function PlushArt({ prize, li, className, style }: PlushArtProps) {
   const clip = `of-plush-${useId().replace(/[^a-zA-Z0-9_-]/gu, "")}`;
   const series = (PLUSH_SERIES as readonly string[]).includes(prize) ? (prize as PlushSeries) : null;
   const accent = li ? accentOf(li) : "#e7a6b8";
+  const picture = li?.plush ?? li?.portrait;
   return (
     <svg
       className={className ? `of-plush ${className}` : "of-plush"}
@@ -169,9 +180,9 @@ export function PlushArt({ prize, li, className, style }: PlushArtProps) {
           <clipPath id={clip}>
             <circle cx={32} cy={36} r={18} />
           </clipPath>
-          {li?.portrait ? (
+          {picture ? (
             <image
-              href={li.portrait}
+              href={picture}
               x={14}
               y={18}
               width={36}
@@ -228,7 +239,7 @@ export function usePlushName() {
 interface PlushShelfProps {
   /** Prize id → how many the protagonist owns. */
   plush: Record<string, number>;
-  lis: RunLiView[];
+  lis: Array<RunLiView & { plush?: string }>;
   /** Prizes a round just added: they wear a "New" ribbon. */
   fresh?: readonly string[];
   /** The id of the shelf's visible heading, which names the list. */

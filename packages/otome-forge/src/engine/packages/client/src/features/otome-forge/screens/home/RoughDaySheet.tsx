@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 // Otome Forge: Rough day? One of his comfort lines, written in advance (warmth, rest, food, company; never advice), so
-// nothing asks the model. Play reads it aloud with no cache key: comfort lines stand in for the care note on a tracked
-// day (M6), so their audio never lands in the Engine's audio cache (plan §1.9).
+// nothing asks the model. Play reads it aloud in his voice (M2b's voice picking) with no cache key: comfort lines stand
+// in for the care note on a tracked day (M6), so their audio never lands in the Engine's audio cache (plan §1.9).
 // ──────────────────────────────────────────────
 import { useId, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,23 +10,23 @@ import { Avatar } from "../../components/Avatar";
 import { Dialog } from "../../components/Dialog";
 import { accentOf } from "../../lib/accent";
 import { comfortPool, FALLBACK_COMFORT_KEYS, pickLine } from "../../lib/tap-mood";
-import type { LinesView, RunLiView } from "../../shared/api-types";
+import type { LinesView, RunLiView, Segment } from "../../shared/api-types";
 import { useLineVoice } from "./NoteCard";
 
 interface RoughDaySheetProps {
-  runKey: string;
   li: RunLiView;
   lines: LinesView | null;
   onClose: () => void;
 }
 
-export function RoughDaySheet({ runKey, li, lines, onClose }: RoughDaySheetProps) {
+export function RoughDaySheet({ li, lines, onClose }: RoughDaySheetProps) {
   const { t } = useTranslation();
   const voice = useLineVoice();
   const own = comfortPool(lines);
   const pool = own.length ? own : FALLBACK_COMFORT_KEYS.map((key) => t(key));
   const [line, setLine] = useState(() => pickLine(pool, null) ?? "");
-  const voiceId = `otome-forge:${runKey}:comfort:${li.id}`;
+  const voiceId = `comfort:${li.id}`;
+  const said: Segment = { speaker: li.name, text: line };
   const playing = voice.active === voiceId;
   const accent = accentOf(li);
   // The line describes the dialog, so it is read as the dialog opens; Another changes it in its live region.
@@ -38,13 +38,13 @@ export function RoughDaySheet({ runKey, li, lines, onClose }: RoughDaySheetProps
       onClose={onClose}
       actions={
         <>
-          {voice.available ? (
+          {voice.can(said) ? (
             <button
               type="button"
               className="of-button of-button--quiet of-button--small of-glass"
               aria-pressed={playing}
               aria-label={t("ui.otomeForge.home.comfortPlayLabel", { name: li.name })}
-              onClick={() => voice.toggle(voiceId, line, { speaker: li.name })}
+              onClick={() => voice.toggle(voiceId, said, { cache: false })}
             >
               {playing ? (
                 <Square size={14} strokeWidth={2.4} aria-hidden="true" />
@@ -59,7 +59,7 @@ export function RoughDaySheet({ runKey, li, lines, onClose }: RoughDaySheetProps
               type="button"
               className="of-button of-button--quiet of-button--small of-glass"
               onClick={() => {
-                if (playing) voice.toggle(voiceId, line, { speaker: li.name });
+                if (playing) voice.stop();
                 setLine((current) => pickLine(pool, current) ?? current);
               }}
             >

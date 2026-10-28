@@ -2,14 +2,15 @@
 // Otome Forge: every canonical memory source of a run, for the kit's createForgeStoryMemory (S/memory/memory.ts)
 // ──────────────────────────────────────────────
 // Each area exports one reader and this file concatenates them; a milestone that adds a kind of canon adds one line:
-//   M2a  story chapters (S/story/canon.ts readStorySources)
-//   M3   phone sessions (S/phone/memory.ts phoneMemorySources: `chat`, audience [his id])
+//   M2a  story chapters (S/story/canon.ts readStorySources); M2b's route and repair chapters arrive through it as
+//        `chat` with audience [li], like a date, and a Confrontation as the rounds played and its ending
+//   M3   phone sessions (S/phone/memory.ts phoneMemorySources: `chat`, audience [their id])
 //   M4   Snapshots
 //   M5   Read Him sets (S/minigames/read-him.ts readHimMemorySources) and Claw Machine rounds (S/minigames/claw.ts
-//        clawMemorySources), each `chat` with audience [his id]; a date is a `date` chapter, which S/story/canon.ts
-//        already makes a `chat` source for him alone
+//        clawMemorySources), each `chat` with audience [their id] and titled private, as a phone session is; a date
+//        is a `date` chapter, which S/story/canon.ts already makes a private `chat` source for that love interest
 // Audience entries are plain LI ids: a `chat` source is recalled only by that LI's own readers and by scenes whose cast
-// includes him, never into the shared overview (plan §1.9, design: Private memory). Care data is never a source.
+// includes them, never into the shared overview (plan §1.9, design: Private memory). Care data is never a source.
 import { orderForgeStorySources } from "@forge-kit/story-memory-integration.mjs";
 import type { ForgeMemorySource } from "@forge-kit/story-memory.mjs";
 import { playerId, stateId } from "../ids.js";

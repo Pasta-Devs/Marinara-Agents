@@ -2,7 +2,8 @@
 // Otome Forge: Date Night's rules for the one stylesheet (theme/styles.ts lists DATE_NIGHT_RULES with the others)
 // ──────────────────────────────────────────────
 // Scoped under `.of-root`, on the look's tokens. Places wear their scene's mood gradient (`.of-mood`, READER_RULES),
-// so the screen needs no image. Layout is one column at phone width (390 px): two place cards a row, the two looks
+// so the screen needs no image; a place the story painted wears its picture over it. The cards are `.of-date-place`,
+// apart from M2b's `.of-place` (the reader's painted backdrop layer). Layout is one column at phone width (390 px): two place cards a row, the two looks
 // side by side. Every animation stops under prefers-reduced-motion (MOTION_RULES).
 import { PALETTE } from "../../theme/tokens";
 
@@ -26,13 +27,13 @@ ${R} .of-places {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; border: 0;
   min-width: 0;
 }
-${R} .of-place {
+${R} .of-date-place {
   position: relative; isolation: isolate; overflow: clip; display: flex; flex-direction: column; gap: 4px;
   min-height: 128px; padding: 12px 12px 12px; border-radius: 20px; cursor: pointer; color: var(--of-text);
   border: 1px solid var(--of-border); box-shadow: inset 0 1px 0 var(--of-highlight);
   transition: transform 420ms var(--of-ease), box-shadow 420ms var(--of-ease), border-color 420ms var(--of-ease);
 }
-${R} .of-place > .of-mood { z-index: -2; opacity: 0.9; }
+${R} .of-date-place > .of-mood { z-index: -2; opacity: 0.9; }
 /* Each place glows in its own colour over its scene: blue water, lantern light, a sunset, the stars. */
 ${R} .of-place-sheen {
   position: absolute; inset: 0; z-index: -1; pointer-events: none;
@@ -40,22 +41,31 @@ ${R} .of-place-sheen {
     radial-gradient(85% 70% at 88% 0%, var(--of-place-glow, transparent), transparent 72%),
     linear-gradient(180deg, transparent 30%, var(--of-floor) 100%);
 }
-${R} .of-place[data-place="aquarium"] { --of-place-glow: rgb(96 176 236 / 0.5); }
-${R} .of-place[data-place="rooftop"] { --of-place-glow: rgb(140 214 150 / 0.4); }
-${R} .of-place[data-place="bookshop"] { --of-place-glow: rgb(214 168 110 / 0.48); }
-${R} .of-place[data-place="night-market"] { --of-place-glow: rgb(255 150 90 / 0.46); }
-${R} .of-place[data-place="observatory"] { --of-place-glow: rgb(150 140 255 / 0.5); }
-${R} .of-place[data-place="seaside"] { --of-place-glow: rgb(255 168 140 / 0.48); }
-${R} .of-place[data-place="cafe"] { --of-place-glow: rgb(196 150 118 / 0.44); }
-${R} .of-place[data-place="fairground"] { --of-place-glow: rgb(255 120 190 / 0.46); }
-${R} .of-place[data-place="partner-choice"] { --of-place-glow: rgb(230 201 138 / 0.55); }
-${R} .of-place:hover { transform: translateY(-2px); box-shadow: 0 12px 26px var(--of-glow-soft); }
-${R} .of-place:has(input:focus-visible) { outline: 2px solid var(--of-focus); outline-offset: 3px; }
-${R} .of-place[data-checked="true"] {
+${R} .of-date-place[data-place="aquarium"] { --of-place-glow: rgb(96 176 236 / 0.5); }
+${R} .of-date-place[data-place="rooftop"] { --of-place-glow: rgb(140 214 150 / 0.4); }
+${R} .of-date-place[data-place="bookshop"] { --of-place-glow: rgb(214 168 110 / 0.48); }
+${R} .of-date-place[data-place="night-market"] { --of-place-glow: rgb(255 150 90 / 0.46); }
+${R} .of-date-place[data-place="observatory"] { --of-place-glow: rgb(150 140 255 / 0.5); }
+${R} .of-date-place[data-place="seaside"] { --of-place-glow: rgb(255 168 140 / 0.48); }
+${R} .of-date-place[data-place="cafe"] { --of-place-glow: rgb(196 150 118 / 0.44); }
+${R} .of-date-place[data-place="fairground"] { --of-place-glow: rgb(255 120 190 / 0.46); }
+${R} .of-date-place[data-place="partner-choice"] { --of-place-glow: rgb(230 201 138 / 0.55); }
+${R} .of-date-place:hover { transform: translateY(-2px); box-shadow: 0 12px 26px var(--of-glow-soft); }
+${R} .of-date-place:has(input:focus-visible) { outline: 2px solid var(--of-focus); outline-offset: 3px; }
+${R} .of-date-place[data-checked="true"] {
   border-color: ${PALETTE.champagne};
   box-shadow: 0 0 0 2px ${PALETTE.champagne}, 0 10px 26px var(--of-glow);
 }
-${R} .of-place[data-partner="true"] { grid-column: 1 / -1; min-height: 96px; }
+${R} .of-date-place[data-partner="true"] { grid-column: 1 / -1; min-height: 96px; }
+/* A place the story painted: its own picture under the sheen, which keeps the words readable. */
+${R} .of-date-place-art {
+  position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; opacity: 0.85;
+}
+${R} .of-date-place[data-place="story"] { --of-place-glow: rgb(230 201 138 / 0.4); }
+${R} .of-date-place[data-place="story"] .of-place-sheen {
+  background: linear-gradient(180deg, transparent 18%, var(--of-floor) 92%);
+}
+${R} .of-places-story { grid-column: 1 / -1; margin: 6px 2px 0; }
 ${R} .of-place-icon {
   display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; margin-bottom: auto;
   color: var(--of-champagne-text);

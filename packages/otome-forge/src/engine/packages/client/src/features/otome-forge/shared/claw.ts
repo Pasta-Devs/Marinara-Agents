@@ -3,8 +3,9 @@
 // ──────────────────────────────────────────────
 // Pure TypeScript. The client plays the round (C/lib/claw-physics.ts) and the server checks the catch list and pays it
 // (S/minigames/claw.ts). Nothing here, and nothing in the game, calls a model or paints an image: the prizes are six
-// drawn plushes plus each love interest's own, which is his portrait (or initials) in a round plush frame.
-import type { ActivityGrant, ClawCheat, LiId } from "./api-types";
+// drawn plushes plus each love interest's own, which is his look (cut out once Home has made it) or his initials in a
+// round plush frame.
+import type { ActivityGrant, ClawCheat, LiId, LinesView } from "./api-types";
 
 /** The generic plush series, in shelf order. Weight (0 light … 1 heavy) makes a plush harder to hold. */
 export const PLUSH_SERIES = ["chick", "bunny", "kitty", "star", "bear", "whale"] as const;
@@ -116,8 +117,20 @@ export interface PlayView {
   plush: Record<string, number>;
   /**
    * How each love interest plays (bible.play), whether a rupture stands between them, and whether Date Night with them
-   * is Make it right: the open date's own plan when one is open (a date keeps the kind it was planned with), else
-   * whether a rupture stands.
+   * is Make it right: the open date's own plan while its rupture stands when one is open (a date keeps the kind it was
+   * planned with), else whether a rupture stands. `plush`: the picture their plush wears (their look, cut out once Home
+   * has made the cut-out), absent without a look. `lines`: the Claw Machine's lines, their fixed claw lines and the
+   * cold ones a rupture uses (as GET /lis/:li/lines gives them, read here so the machine never queues a pack's write).
    */
-  lis: Record<LiId, { cheat: ClawCheat; style: string; rupture: boolean; makeItRight: boolean }>;
+  lis: Record<
+    LiId,
+    {
+      cheat: ClawCheat;
+      style: string;
+      rupture: boolean;
+      makeItRight: boolean;
+      plush?: string;
+      lines: Pick<LinesView, "claw" | "cold">;
+    }
+  >;
 }

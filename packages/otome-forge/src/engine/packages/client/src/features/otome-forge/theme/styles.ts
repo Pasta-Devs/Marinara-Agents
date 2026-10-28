@@ -899,13 +899,17 @@ ${R} .of-reader-row { display: flex; align-items: center; gap: 8px; min-width: 0
 ${R} .of-reader-row--sub { align-items: flex-start; }
 ${R} .of-reader-title { flex: 1; min-width: 0; display: flex; flex-direction: column; text-shadow: 0 1px 12px rgb(0 0 0 / 0.3); }
 ${R}[data-look="pearl"] .of-reader-title { text-shadow: 0 1px 10px rgb(255 255 255 / 0.7); }
-${R} .of-reader-title:focus { outline: none; }
+${R} .of-reader:focus, ${R} .of-reader-title:focus { outline: none; }
 ${R} .of-reader-title:focus-visible { outline: 2px solid var(--of-focus); outline-offset: 3px; border-radius: 6px; }
 ${R} .of-reader-eyebrow {
-  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 0.68rem; font-weight: 800;
-  letter-spacing: 0.12em; text-transform: uppercase; color: var(--of-champagne-text);
+  font-size: 0.68rem; font-weight: 800; line-height: 1.3; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--of-champagne-text);
 }
-${R} .of-reader-scene-count { letter-spacing: 0.06em; color: var(--of-text-soft); }
+/* The count moves to its own line whole when the kind and count do not fit together (its leading space collapses). */
+${R} .of-reader-scene-count {
+  display: inline-block; padding-inline-start: 0.3em; white-space: nowrap; letter-spacing: 0.06em;
+  color: var(--of-text-soft);
+}
 ${R} .of-reader-name {
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
   font-family: var(--of-font-display); font-weight: 600; font-size: 1.24rem; line-height: 1.12;
@@ -1168,7 +1172,10 @@ ${R} .of-grant {
 ${R} .of-grant > span:not(.of-avatar):not(.of-badge) { flex: 1; min-width: 0; }
 ${R} .of-grant--starlight { color: var(--of-champagne-text); }
 ${R} .of-grant[data-rose="true"] .of-badge { color: ${PALETTE.ink}; background: linear-gradient(135deg, #f3dcaa, ${PALETTE.champagne}); }
-${R} .of-reader-notice { align-items: center; justify-content: space-between; }
+${R} .of-reader-notice { align-items: center; justify-content: space-between; flex-wrap: wrap; }
+/* Its action stays on one line, and goes to its own line (at its end) when the text needs the room. */
+${R} .of-reader-notice > span { flex: 1 1 16rem; }
+${R} .of-reader-notice .of-button { margin-inline-start: auto; white-space: nowrap; }
 ${R} .of-reader-show { position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); inset-inline-end: 14px; }
 /* The backlog. */
 ${R} .of-log {
@@ -1277,6 +1284,11 @@ ${R} .of-home-window {
   mask-image: linear-gradient(to bottom, #000 70%, transparent);
 }
 ${R}[data-look="pearl"] .of-home-window { opacity: 0.62; }
+/* His CG or a painted place, dimmed a little so he stands out in front of it. */
+${R} .of-home-backdrop {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(0.78) saturate(0.92);
+}
+${R}[data-look="pearl"] .of-home-backdrop { filter: brightness(0.96) saturate(0.9); }
 ${R} .of-home-l1 { position: absolute; inset: 0; background: var(--of-home-tint); }
 ${R}[data-look="pearl"] .of-home-layers[data-sky="night"] {
   --of-home-tint: linear-gradient(180deg, rgb(110 110 190 / 0.24) 0%, rgb(140 120 200 / 0.1) 62%, transparent 100%);
@@ -1730,6 +1742,201 @@ ${R} .of-sticker-choice img { width: 100%; height: 100%; object-fit: cover; obje
 ${R} .of-sticker-choice:hover { transform: scale(1.05); }
 @keyframes of-bubble-in { from { opacity: 0; transform: translateY(6px) scale(0.97); } to { opacity: 1; transform: none; } }
 @keyframes of-typing { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }`;
+// M2b: painted places and story CGs, the Confrontation's stances and ending, voices in the backlog, routes and
+// ruptures on the Story screen, and Settings → Audio.
+const PRESENTATION_RULES = `
+/* A painted place behind the scene, crossfading; the mood's colour still tints it through the vignette. */
+${R} .of-place {
+  position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0;
+  transform: scale(1.03); transition: opacity 900ms var(--of-ease);
+}
+${R} .of-place[data-on="true"] { opacity: 1; }
+${R} .of-place::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(to bottom, rgb(10 8 24 / 0.18), transparent 34%, rgb(10 8 24 / 0.42) 100%);
+}
+${R}[data-look="pearl"] .of-place::after {
+  background: linear-gradient(to bottom, rgb(255 250 246 / 0.2), transparent 34%, rgb(90 50 80 / 0.22) 100%);
+}
+/* Over a picture (a place or a CG) the header keeps its contrast: a scrim in the look's own surface colour. */
+${R}[data-look="midnight"] { --of-picture-scrim: rgb(12 9 28 / 0.72); }
+${R}[data-look="pearl"] { --of-picture-scrim: rgb(255 250 246 / 0.86); }
+${R} .of-reader[data-picture="true"] .of-reader-head::before {
+  content: ""; position: absolute; inset: 0 0 -48px; z-index: -1; pointer-events: none;
+  background: linear-gradient(to bottom, var(--of-picture-scrim) 0%, var(--of-picture-scrim) 55%, transparent 100%);
+}
+${R} .of-reader[data-picture="true"] .of-choices-heading,
+${R} .of-reader[data-picture="true"] .of-stances-round { text-shadow: none; }
+${R} .of-reader[data-picture="true"] .of-choices-heading {
+  align-self: center; padding: 2px 14px; border-radius: 999px; background: var(--of-picture-scrim);
+}
+/* A story CG takes the stage: letterbox bars close in, the image pans for about 6 s, then the box returns at 80%. */
+${R} .of-cg {
+  position: absolute; inset: 0; z-index: 1; margin: 0; overflow: clip; background: #07050f;
+  animation: of-fade-in 900ms var(--of-ease) both;
+}
+${R} .of-cg-img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%;
+  transform: scale(1.04); transition: transform 1200ms var(--of-ease);
+}
+${R} .of-cg[data-intro="true"] .of-cg-img { animation: of-cg-pan 6s cubic-bezier(0.32, 0.06, 0.3, 1) both; }
+${R} .of-cg-bar {
+  position: absolute; inset-inline: 0; height: 11%; background: #050309; transform: scaleY(0);
+  transition: transform 700ms var(--of-ease);
+}
+${R} .of-cg-bar--top { top: 0; transform-origin: top; }
+${R} .of-cg-bar--bottom { bottom: 0; transform-origin: bottom; }
+${R} .of-cg[data-intro="true"] .of-cg-bar { transform: scaleY(1); }
+/* While it pans the picture holds focus (the faded UI is inert) and a tap anywhere ends it. */
+${R} .of-cg[data-intro="true"] { cursor: pointer; }
+${R} .of-cg:focus-visible { outline-offset: -6px; }
+${R} .of-reader[data-cg="intro"] :is(.of-reader-head, .of-reader-bottom) {
+  opacity: 0; pointer-events: none; transition: opacity 600ms var(--of-ease);
+}
+${R} .of-reader[data-cg] :is(.of-reader-head, .of-reader-bottom) { transition: opacity 700ms var(--of-ease); }
+${R} .of-reader[data-cg="shown"] .of-dialogue { opacity: 0.8; transition: opacity 420ms var(--of-ease); }
+${R} .of-reader[data-cg="shown"] .of-dialogue:is(:hover, :focus-within) { opacity: 1; }
+${R} .of-reader[data-cg] .of-reader-vignette { opacity: 0.6; }
+${R} .of-cg-caption { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+${R} .of-cg-quiet .of-cost { justify-content: center; }
+/* Toasts for an unlocked CG and for audio that could not play. */
+${R} .of-toast--cg { font-weight: 800; font-size: 0.88rem; color: var(--of-champagne-text); }
+${R} .of-toast--cg svg { filter: drop-shadow(0 0 6px var(--of-wish-glow)); }
+${R} .of-toast-note { font-weight: 600; color: var(--of-text-soft); }
+${R} .of-toast--audio { font-weight: 700; font-size: 0.8rem; color: var(--of-text-soft); }
+${R} .of-reader-chip-slot { flex: none; display: flex; }
+${R} .of-reader-chip--paint {
+  cursor: pointer; color: var(--of-champagne-text); border-color: rgb(230 201 138 / 0.55); font-family: inherit;
+}
+${R} .of-reader-chip--paint:hover { background: var(--of-surface-strong); }
+${R} .of-reader-chip--paint[aria-disabled="true"] { opacity: 0.6; cursor: progress; }
+/* The Confrontation: four stances in his colour, a round marker, and the ending's card. */
+${R} .of-stances { display: flex; flex-direction: column; gap: 8px; padding: 0 4px; animation: of-rise 480ms var(--of-ease) both; }
+${R} .of-stances-round {
+  align-self: center; display: inline-flex; align-items: center; gap: 6px; padding: 3px 12px; border-radius: 999px;
+  font-size: 0.66rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--of-champagne-text);
+  background: var(--of-surface-strong); border: 1px solid rgb(230 201 138 / 0.45);
+  -webkit-backdrop-filter: var(--of-glass-blur); backdrop-filter: var(--of-glass-blur);
+}
+${R} .of-stance-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+${R} .of-stance-list > li { display: flex; min-width: 0; }
+${R} .of-stance {
+  --of-stance: var(--of-li-accent, ${PALETTE.rose});
+  position: relative; display: flex; align-items: flex-start; gap: 9px; width: 100%; min-height: 64px; padding: 10px 12px;
+  border-radius: 18px; border: 1px solid color-mix(in srgb, var(--of-stance) 45%, var(--of-border-strong));
+  background: linear-gradient(150deg, color-mix(in srgb, var(--of-stance) 20%, transparent), transparent 70%), var(--of-surface-strong);
+  -webkit-backdrop-filter: var(--of-glass-blur); backdrop-filter: var(--of-glass-blur);
+  box-shadow: inset 0 1px 0 var(--of-highlight), var(--of-panel-shadow); color: var(--of-text); text-align: start; cursor: pointer;
+  transition: transform 360ms var(--of-ease), border-color 360ms var(--of-ease), box-shadow 360ms var(--of-ease);
+}
+${R} .of-stance[data-stance="press"] { --of-stance: #F08AA4; }
+${R} .of-stance[data-stance="hold"] { --of-stance: #9DB8F0; }
+${R} .of-stance[data-stance="yield"] { --of-stance: ${PALETTE.champagne}; }
+${R} .of-stance[data-stance="reveal"] { --of-stance: #B79CF2; }
+${R} .of-stance:hover {
+  transform: translateY(-1px); border-color: var(--of-stance);
+  box-shadow: inset 0 1px 0 var(--of-highlight), 0 10px 26px color-mix(in srgb, var(--of-stance) 30%, transparent);
+}
+${R} .of-stance[aria-disabled="true"] { opacity: 0.65; cursor: progress; transform: none; }
+${R} .of-stance-mark {
+  flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: ${PALETTE.ink};
+  background: linear-gradient(140deg, color-mix(in srgb, var(--of-stance) 55%, white), var(--of-stance));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--of-stance) 45%, transparent);
+}
+${R} .of-stance-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+${R} .of-stance-name {
+  font-size: 0.66rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--of-stance) 55%, var(--of-text));
+}
+${R}[data-look="pearl"] .of-stance-name { color: color-mix(in srgb, var(--of-stance) 40%, ${PALETTE.ink}); }
+${R} .of-stance-line { font-size: 0.86rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+@container of-stage (max-width: 330px) { ${R} .of-stance-list { grid-template-columns: minmax(0, 1fr); } }
+${R} .of-outcome { gap: 8px; border-color: color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 55%, transparent); }
+${R} .of-outcome-mark {
+  display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; color: var(--of-accent-text);
+  background: radial-gradient(circle, color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 38%, transparent), transparent 70%);
+  box-shadow: 0 0 30px color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 40%, transparent);
+}
+${R} .of-outcome[data-outcome="walkout"] .of-outcome-mark { color: var(--of-danger); }
+${R} .of-outcome[data-outcome="standoff"] .of-outcome-mark { color: var(--of-champagne-text); }
+${R} .of-outcome-title {
+  font-family: var(--of-font-display); font-weight: 600; font-size: 1.65rem; line-height: 1.08; padding-bottom: 0.06em;
+  background: var(--of-title-ink); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+${R} .of-outcome-title:focus { outline: none; }
+${R} .of-outcome-title:focus-visible { outline: 2px solid var(--of-focus); outline-offset: 4px; border-radius: 6px; }
+/* The chapter's end: a stage a gate opened, a rupture a repair closed. */
+${R} .of-arc-news {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; border-radius: 14px; text-align: start;
+  font-weight: 800; font-size: 0.9rem; color: var(--of-text);
+  background: linear-gradient(120deg, color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 30%, transparent), transparent 75%), var(--of-surface-hover);
+  border: 1px solid color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 50%, transparent);
+}
+${R} .of-arc-news svg { flex: none; color: var(--of-champagne-text); }
+/* The backlog's voice replay. */
+${R} .of-log-voice { width: 34px; height: 34px; border: 0; background: transparent; color: var(--of-text-soft); }
+${R} .of-log-voice[aria-pressed="true"] { color: var(--of-accent-text); background: var(--of-tint); }
+/* The Story screen: a rupture's banner, and each love interest's route. */
+${R} .of-rupture {
+  border-color: color-mix(in srgb, var(--of-danger) 55%, transparent);
+  background: linear-gradient(150deg, color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 22%, transparent), transparent 64%), var(--of-surface);
+}
+${R} .of-rupture > .of-button { align-self: flex-start; }
+${R} .of-rupture-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+${R} .of-rupture-mark { position: relative; flex: none; display: grid; }
+${R} .of-rupture-mark .of-avatar { filter: saturate(0.7); }
+${R} .of-rupture-crack {
+  position: absolute; inset-inline-end: -4px; bottom: -4px; display: grid; place-items: center; width: 22px; height: 22px;
+  border-radius: 50%; color: #fff; background: linear-gradient(135deg, #d0587d, #8f2f52); box-shadow: 0 0 0 2px var(--of-wish-ring);
+}
+${R} .of-routes { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+${R} .of-route {
+  display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 18px;
+  border: 1px solid var(--of-border); border-inline-start: 3px solid var(--of-li-accent, ${PALETTE.rose});
+  background: linear-gradient(120deg, color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 16%, transparent), transparent 60%), var(--of-surface-hover);
+}
+${R} .of-route[data-state="open"], ${R} .of-route[data-state="reading"] {
+  border-color: rgb(230 201 138 / 0.55); box-shadow: inset 0 0 0 1px rgb(230 201 138 / 0.2), 0 8px 22px var(--of-glow-soft);
+}
+${R} .of-route[data-state="locked"] .of-avatar, ${R} .of-route[data-state="rupture"] .of-avatar { filter: saturate(0.55); }
+${R} .of-route-line {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 0.84rem; font-weight: 700;
+  color: color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 45%, var(--of-text));
+}
+${R}[data-look="pearl"] .of-route-line { color: color-mix(in srgb, var(--of-li-accent, ${PALETTE.rose}) 35%, ${PALETTE.ink}); }
+${R} .of-route-lock {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--of-text-soft);
+}
+${R} .of-route-lock svg { flex: none; }
+${R} .of-route[data-state="rupture"] .of-route-lock svg { color: var(--of-danger); }
+/* Settings → Audio: volume sliders with a filled track. */
+${R} .of-volume-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+${R} .of-volume-value { font-size: 0.8rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--of-accent-text); }
+${R} .of-range {
+  --of-range-fill: 50%;
+  -webkit-appearance: none; appearance: none; width: 100%; height: 24px; margin: 0; background: transparent; cursor: pointer;
+}
+${R} .of-range::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 999px; border: 1px solid var(--of-border-strong);
+  background: linear-gradient(to right, ${PALETTE.champagne}, ${PALETTE.rose}) 0 / var(--of-range-fill) 100% no-repeat, var(--of-input-bg);
+}
+${R}[dir="rtl"] .of-range::-webkit-slider-runnable-track {
+  background: linear-gradient(to left, ${PALETTE.champagne}, ${PALETTE.rose}) 100% 0 / var(--of-range-fill) 100% no-repeat, var(--of-input-bg);
+}
+${R} .of-range::-moz-range-track { height: 6px; border-radius: 999px; border: 1px solid var(--of-border-strong); background: var(--of-input-bg); }
+${R} .of-range::-moz-range-progress { height: 6px; border-radius: 999px; background: linear-gradient(to right, ${PALETTE.champagne}, ${PALETTE.rose}); }
+${R} .of-range::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 20px; height: 20px; margin-top: -8px; border-radius: 50%; border: 0;
+  background: var(--of-pearl); box-shadow: 0 1px 6px rgb(0 0 0 / 0.35), 0 0 0 3px var(--of-glow-soft);
+}
+${R} .of-range::-moz-range-thumb {
+  width: 20px; height: 20px; border-radius: 50%; border: 0; background: var(--of-pearl);
+  box-shadow: 0 1px 6px rgb(0 0 0 / 0.35), 0 0 0 3px var(--of-glow-soft);
+}
+${R} .of-range:focus { outline: none; }
+${R} .of-range:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--of-focus); outline-offset: 2px; }
+${R} .of-range:focus-visible::-moz-range-thumb { outline: 2px solid var(--of-focus); outline-offset: 2px; }
+${R} .of-range:disabled { opacity: 0.5; cursor: default; }`;
 
 // Dialogs render into the stage's own layer (Stage.tsx), over the top bar and the dock.
 const DIALOG_RULES = `
@@ -2128,6 +2335,9 @@ const MOTION_RULES = `
 @keyframes of-place-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @keyframes of-nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
 @keyframes of-write { 0%, 100% { transform: rotate(-8deg) translateX(-3px); } 50% { transform: rotate(6deg) translateX(3px); } }
+@keyframes of-cg-pan {
+  from { transform: scale(1.16) translate3d(0, 4%, 0); } to { transform: scale(1.04) translate3d(0, -2%, 0); }
+}
 @keyframes of-claw-shake {
   0%, 100% { transform: none; } 20% { transform: translateX(-6px) rotate(-1.2deg); }
   40% { transform: translateX(5px) rotate(1deg); } 60% { transform: translateX(-4px) rotate(-0.6deg); } 80% { transform: translateX(2px); }
@@ -2165,6 +2375,7 @@ export function otomeForgeStyles(): string {
     SETUP_RULES,
     STORY_RULES,
     READER_RULES,
+    PRESENTATION_RULES,
     HOME_RULES,
     PHONE_RULES,
     DATES_RULES,

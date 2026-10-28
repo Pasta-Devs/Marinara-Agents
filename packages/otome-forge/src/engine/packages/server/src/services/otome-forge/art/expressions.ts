@@ -1,0 +1,193 @@
+// ──────────────────────────────────────────────
+// Otome Forge: the five faces (plan M2b "Expressions"), and the art service the beat writer calls
+// ──────────────────────────────────────────────
+// The kit's createForgeStoryExpressions paints, for each love interest who speaks in a beat, his five faces (SH/faces.ts:
+// tender, flustered, cold, hurt, angry) as edits of his look, in the background and in the image connection's low
+// lane, so places, CGs and taps go first. Its rules hold as they are: a set is marked pending before its first paid
+// image and each face is filed as it lands; a failed set, or one a restart left pending, is never repainted until
+// expressions are turned on again after it (images.expressionsSince), and then only its missing faces; turning
+// expressions off parks the set as stopped before the next paid call. Only love interests get faces in R1, so the
+// cast holds no protagonist. Every face carries the world's image rating and an adult tag (art/prompts.ts).
+//
+// The kit builds one paint per unit; its client is made per run here, so each face's prompt reads that run's world
+// (rating, style) right before the call. createOtomeArt is created once per activation: queueExpressions after each
+// beat is served, queueScenePaints after each beat is written (art/cg.ts), dispose on teardown, after which nothing
+// more is paid for.
+import { forgeLocalAvatarPath } from "@forge-kit/image-avatar-references.mjs";
+import { createForgeStoryExpressions, type ForgeStoryExpressions } from "@forge-kit/story-expressions-server.mjs";
+import type { Beat, Unit, World } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { FACE_LOOKS, FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import { OTOME_FORGE_PACKAGE_ID, runDocTarget, worldId } from "../ids.js";
+import { normalizeUnit } from "../schemas/unit.js";
+import { normalizeWorld } from "../schemas/world.js";
+import { queueScenePaints, releaseBeatArt } from "./cg.js";
+import { galleryRef, type GeneratedImage } from "./image-client.js";
+import { imagesOf, paintSlot, updateIfChanged, type ArtDeps } from "./paint.js";
+import type { PaintOptions } from "./places.js";
+import { LOOK_SIZE, expressionPrompt } from "./prompts.js";
+
+/** What the kit reads of a beat to find who speaks: its lines, its choices' branches and spoken selections. */
+export type ExpressionBeat = Pick<Beat, "segments" | "choices">;
+
+export interface OtomeArt {
+  /**
+   * Queues the five faces of every love interest who speaks in `beat` whose current look has no ready set. Returns at
+   * once; painting happens in the background. Call it each time a beat is served (written or read from the store).
+   */
+  queueExpressions(runId: string, beat: ExpressionBeat, options: { debugMode: boolean }): void;
+  /**
+   * Paints the beat's new places and its CG in the background, or leaves them waiting for the tap (Ask before
+   * painting, or `review`). Call it once after a beat is written or rewritten; do not await it. It never rejects.
+   */
+  queueScenePaints(runId: string, beat: Beat, options: Omit<PaintOptions, "active">): Promise<void>;
+  /** A beat replaced by a rewrite or removed: deletes its CG's gallery image unless the album keeps it. */
+  releaseBeatArt(runId: string, beat: Pick<Beat, "cg">): Promise<void>;
+  /** Package teardown: queued faces and scene paints stop before their paid call. */
+  dispose(): void;
+}
+
+interface ExpressionRun {
+  world: World;
+}
+
+/** The base a love interest's faces are painted on. ponytail: his portrait until M4 adds a worn look (then its URL). */
+const baseOf = (unit: Pick<Unit, "portrait"> | null | undefined) => unit?.portrait ?? "";
+
+/** The kit's view of a world's images: on only with a connection, at the look's size. */
+const imagesOfRun = (run: ExpressionRun) => ({
+  ...run.world.images,
+  off: !run.world.images.connectionId,
+  portraitWidth: LOOK_SIZE.width,
+  portraitHeight: LOOK_SIZE.height,
+});
+
+export function createOtomeArt(deps: ArtDeps): OtomeArt {
+  const { runtime, store } = deps;
+  const runs = new Map<string, ForgeStoryExpressions>();
+  /** The debugMode of each run's latest request: the faces it queued log their prompts in debug mode. */
+  const debugMode = new Map<string, boolean>();
+  const running = new Map<string, Promise<unknown>>();
+  let disposed = false;
+  const active = () => !disposed;
+  const images = imagesOf(deps);
+
+  const readRun = async (runId: string): Promise<ExpressionRun | null> => {
+    const world = await store.readDoc(worldId(runId), normalizeWorld);
+    return world ? { world } : null;
+  };
+
+  /** The kit's expressions for one run: its client builds each face's prompt from that run's world. */
+  function expressionsOf(runId: string): ForgeStoryExpressions {
+    let expressions = runs.get(runId);
+    if (expressions) return expressions;
+    const client = {
+      async generateExpression(request: Record<string, unknown>) {
+        const world = await store.readDoc(worldId(runId), normalizeWorld);
+        if (!world) throw new Error("the story was deleted");
+        const style = await images.styleProfile(world.images.styleProfileId);
+        const unit = normalizeUnit(request.unit);
+        const { prompt, negativePrompt } = expressionPrompt({
+          unit,
+          base: String(request.base ?? ""),
+          face: request.expression as Face,
+          world,
+          style,
+        });
+        const image: GeneratedImage = await images.generateImage({
+          connectionId: String(request.connectionId),
+          name: unit.name || "Character",
+          prompt,
+          negativePrompt,
+          width: Number(request.width) || LOOK_SIZE.width,
+          height: Number(request.height) || LOOK_SIZE.height,
+          debugMode: request.debugMode === true,
+          referenceImages: [String(request.referenceImage)],
+        });
+        return { ...image };
+      },
+      uploadToGallery: (request: Record<string, unknown>) =>
+        images.uploadToGallery(request as unknown as Parameters<typeof images.uploadToGallery>[0]),
+      deleteGalleryImage: (id: string) => images.deleteGalleryImage(id),
+      cardAvatarImage: (path: string) => images.cardAvatarImage(path),
+      personaAvatar: (personaId: string) => images.personaAvatar(personaId),
+    };
+    expressions = createForgeStoryExpressions({
+      documents: {
+        async getById(_packageId, id) {
+          const unit = await store.readDoc(id, normalizeUnit);
+          return unit ? { id, data: unit } : null;
+        },
+        async list() {
+          return (await store.listRun("unit", runId)).map((record) => ({
+            id: record.id,
+            data: normalizeUnit(record.data),
+          }));
+        },
+      },
+      packageId: OTOME_FORGE_PACKAGE_ID,
+      logger: runtime.logger,
+      readRun,
+      images: (run) => imagesOfRun(run as ExpressionRun),
+      async connection(run) {
+        const id = (run as ExpressionRun).world.images.connectionId;
+        return id ? { id, provider: "image_generation", model: "" } : null;
+      },
+      client: () => client,
+      slot: (target, task) => paintSlot(target.id, task, "low"),
+      dedupe(key, task) {
+        const current = running.get(key) as ReturnType<typeof task> | undefined;
+        if (current) return current;
+        const started = task().finally(() => running.delete(key));
+        running.set(key, started);
+        return started;
+      },
+      background: (task) => task(),
+      // The kit's change edits a copy, and often leaves it as it was (a set it no longer owns): then nothing is written.
+      update: async (unitId, change) =>
+        (
+          await updateIfChanged(store, runDocTarget("unit", unitId), normalizeUnit, (current) => {
+            const next = structuredClone(current);
+            change(next);
+            return JSON.stringify(next) === JSON.stringify(current) ? undefined : next;
+          })
+        )?.value ?? null,
+      base: baseOf,
+      galleryRef,
+      debug: () => debugMode.get(runId) === true || runtime.isDebugAgentsEnabled(),
+      names: FACES,
+      looks: FACE_LOOKS,
+      localAvatarPath: forgeLocalAvatarPath,
+      logPrefix: "[otome-forge]",
+      scopeName: "otome-forge-expressions",
+    });
+    runs.set(runId, expressions);
+    return expressions;
+  }
+
+  return {
+    queueExpressions(runId, beat, options) {
+      if (disposed) return;
+      debugMode.set(runId, options.debugMode);
+      void (async () => {
+        const run = await readRun(runId);
+        if (!run || disposed) return;
+        // Love interests only: the kit matches each line's speaker to these names.
+        const cast = (await store.listRun("unit", runId)).map((record) => ({ name: normalizeUnit(record.data).name }));
+        expressionsOf(runId).queue(runId, run, cast, beat);
+      })().catch((error: unknown) =>
+        runtime.logger.warn(
+          "[otome-forge] expression portraits not queued: %s",
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
+    },
+    queueScenePaints: (runId, beat, options) =>
+      disposed ? Promise.resolve() : queueScenePaints(deps, runId, beat, { ...options, active }),
+    releaseBeatArt: (runId, beat) => releaseBeatArt(deps, runId, beat),
+    dispose() {
+      disposed = true;
+      for (const expressions of runs.values()) expressions.dispose();
+      runs.clear();
+    },
+  };
+}

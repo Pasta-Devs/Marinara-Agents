@@ -391,3 +391,46 @@ export function slpLiveView(
   };
 }
 export type SlpLiveView = ReturnType<typeof slpLiveView>;
+
+const LIVE_DONE_WORDS: Record<string, string> = {
+  shoutout: "shoutouts",
+  song: "a song",
+  dance: "a dance",
+  pose: "poses",
+  outfit: "an outfit change",
+  closeUp: "close-ups",
+  layer: "layers coming off",
+  flash: "a flash",
+  toy: "the toy",
+};
+
+/** The Creator's thank-you post after a show, written by code from the show's own numbers. */
+export function slpLiveSummaryText(showId: string, state: SlpLiveState): string {
+  // Built from what happened in this show, so two shows never post the same recap (prod: two
+  // Creators posted one identical line).
+  const seed = [...showId].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const pick = <T>(list: readonly T[], salt: number) => list[(seed + salt) % list.length]!;
+  const place = state.place ? ` from ${state.place}` : "";
+  const done = [...new Set(state.queue.filter((order) => order.doneAt !== null).map((order) => order.itemId))]
+    .map((id) => LIVE_DONE_WORDS[id])
+    .filter(Boolean)
+    .slice(0, 3);
+  const tippers = Object.keys(state.tippers).length;
+  const goals = state.goals.filter((goal) => goal.hitAt !== null).length;
+  const top = slpLiveTopTipper(state);
+  return [
+    pick(
+      ["Live" + place + " is over.", "That's a wrap on tonight's live" + place + ".", "Back offline" + place + "."],
+      0,
+    ),
+    done.length ? `You got ${done.join(", ")}.` : "",
+    goals ? `${goals} of ${state.goals.length} goals hit.` : "",
+    state.raised ? `${state.raised} coins from ${tippers} ${tippers === 1 ? "tipper" : "tippers"}.` : "",
+    top
+      ? pick([`${top.name}, you spoiled me.`, `Biggest tips from ${top.name} 👑`, `${top.name} carried the room.`], 1)
+      : "",
+    pick(["See you next time 💋", "Same time again? 👀", "Thank you, chat ✨"], 2),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}

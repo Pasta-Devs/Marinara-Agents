@@ -3,8 +3,8 @@
 // ──────────────────────────────────────────────
 // GET  /runs/:run/play                                      → PlayView: today's capped earnings, the plush shelf, and
 //                                                             how each love interest plays (bible.play), whether a
-//                                                             rupture stands between them, and whether Date Night
-//                                                             with them is Make it right
+//                                                             rupture stands between them, whether Date Night with
+//                                                             them is Make it right, and their claw and cold lines
 // POST /runs/:run/claw/finish {li, round, first, caught, cheered} → ClawFinishResult {grants, newPlush, firstPlush,
 //                                                             line?, capped, replay, plush, starlight}
 // Neither route calls a model or paints an image (S/minigames/claw.ts). A finish is answered once per round id: the

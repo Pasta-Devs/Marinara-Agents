@@ -1,7 +1,9 @@
 // Otome Forge's Claw Machine (M5): the finish route accepts only this machine's prizes (the six series plushes and the
 // partner's own, each once, at most seven), pays every round even when nothing was caught, within the day's activity
 // caps, and pays a round once however often (or however concurrently) its finish is sent; the shelf counts, a first
-// plush of his is a timeline entry with his plush line; the play view; each round is his private memory and costs no
+// plush of his is a timeline entry with his plush line; the play view, where his plush wears his look or its Home
+// cut-out (M3), his claw and cold lines come with it (so the machine never reads Home's lines route, which queues a
+// missing pack's write), and nothing is asked for; each round is his private memory, titled private, and costs no
 // model call, in the route or in memory upkeep, with a model and an image client that throw, and playing with one love
 // interest never evicts another's rounds; a name of any length never drops a round. The rules are pure and
 // deterministic for a seed: the grip formula, the layout, the drops, his plan by style, each cheat's effect (a bonus
@@ -357,8 +359,15 @@ test("the play view: today's caps, the shelf, and how each love interest plays",
     style: "Careful and patient, lines it up twice.",
     rupture: false,
     makeItRight: false,
+    lines: { claw: { cheer: ["c"], cheat: ["x"], win: ["w"], miss: ["m"], plush: [PLUSH_LINE] }, cold: [] },
   });
-  assert.deepEqual(view.lis[MIR], { cheat: "steady", style: "", rupture: false, makeItRight: false });
+  assert.deepEqual(view.lis[MIR], {
+    cheat: "steady",
+    style: "",
+    rupture: false,
+    makeItRight: false,
+    lines: { claw: null, cold: [] },
+  });
   // A new local day shows nothing earned yet.
   await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
     ...state,
@@ -368,6 +377,82 @@ test("the play view: today's caps, the shelf, and how each love interest plays",
   assert.deepEqual(fresh.starlight.earned, 0);
   assert.deepEqual(fresh.affection.earned, {});
   assert.equal((await t.call("GET", "/runs/:run/play")).status, 200);
+  assert.deepEqual(t.counts(), { modelCalls: 0, imageCalls: 0 });
+});
+
+test("his claw and cold lines come with the play view, which never queues a missing pack's write", async () => {
+  const t = await clawWorld();
+  const cold = ["COLD-1: Fine.", "COLD-2: Your turn."];
+  // His stage-1 pack and his fixed lines, then a route chapter takes him to stage 2, whose pack is not written yet:
+  // Home's GET .../lines would queue that pack's write (P15, a model call); the machine reads what he has.
+  await t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    lines: {
+      ...unit.lines!,
+      stages: {
+        "1": {
+          stage: 1,
+          tap: {
+            head: { morning: [], day: [], night: [] },
+            hand: { morning: [], day: [], night: [] },
+            heart: { morning: [], day: [], night: [] },
+          },
+          annoyed: [],
+          cold,
+          at: "2026-10-28T09:00:00.000Z",
+        },
+      },
+    },
+  }));
+  await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    lis: {
+      ...state.lis,
+      [KAI]: {
+        ...state.lis[KAI]!,
+        stage: 2,
+        rupture: { grievanceId: "g-main-1-1-0", since: "2026-10-28T09:00:00.000Z" },
+      },
+    },
+  }));
+  const view = (await t.call("GET", "/runs/:run/play")).body as PlayView;
+  assert.deepEqual(view.lis[KAI]!.lines, {
+    claw: { cheer: ["c"], cheat: ["x"], win: ["w"], miss: ["m"], plush: [PLUSH_LINE] },
+    cold,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(t.counts(), { modelCalls: 0, imageCalls: 0 });
+});
+
+test("his plush wears his look, or its cut-out once Home has made it, and the play view never asks for one", async () => {
+  const t = await clawWorld();
+  const look = "/api/global-gallery/file/kai-look.png";
+  const setCutouts = (cutouts: Record<string, unknown>) =>
+    t.store.mutateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+      ...unit,
+      portrait: look,
+      cutouts: cutouts as never,
+    }));
+  const plushOf = async (li: string) => ((await t.call("GET", "/runs/:run/play")).body as PlayView).lis[li]!.plush;
+  // No look, no picture: the client draws initials.
+  assert.equal(await plushOf(KAI), undefined);
+  assert.equal("plush" in ((await t.call("GET", "/runs/:run/play")).body as PlayView).lis[MIR]!, false);
+  // His look until a cut-out is ready (none yet, one on its way, one that failed).
+  await setCutouts({});
+  assert.equal(await plushOf(KAI), look);
+  await setCutouts({ [look]: { state: "pending", at: "2026-10-28T09:00:00.000Z" } });
+  assert.equal(await plushOf(KAI), look);
+  await setCutouts({ [look]: { state: "failed", at: "2026-10-28T09:00:00.000Z", error: "no remover" } });
+  assert.equal(await plushOf(KAI), look);
+  // Home's cut-out, once ready.
+  const cut = "/api/global-gallery/file/kai-cut.png";
+  await setCutouts({ [look]: { state: "ready", at: "2026-10-28T09:00:00.000Z", url: cut, ref: "global-gallery:k1" } });
+  assert.equal(await plushOf(KAI), cut);
+  // The play view reads the record and asks for nothing: no cut-out is queued, and no model or image is touched.
+  await setCutouts({});
+  await t.call("GET", "/runs/:run/play");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual((await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!.cutouts, {});
   assert.deepEqual(t.counts(), { modelCalls: 0, imageCalls: 0 });
 });
 
@@ -395,6 +480,8 @@ test("each round is his private memory, recalled only by him, and upkeep makes n
   assert.match(kai, /Ines won a bunny plush\./u);
   assert.match(kai, /Kai won a plush of Kai/u);
   assert.match(sources[1]!.content, /Neither of them won a plush\./u);
+  // Titled private, as a phone session is: a scene with others in it recalls it as theirs alone.
+  assert.equal(sources[0]!.title, "The claw machine with Kai (private: only Kai and the protagonist know how it went)");
   for (const source of sources) assert.doesNotMatch(source.content, /\b(?:he|him|his|she|her)\b/iu, "no pronouns");
 
   // Recall through the real memory: his reader sees his round, never hers, and a scene without him sees neither.

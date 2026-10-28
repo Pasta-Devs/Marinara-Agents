@@ -4,8 +4,10 @@
 // Later milestones add their own fields here, each with a default, so older states keep reading. M3: `home`. M5: each
 // love interest's `tellsLearned`, the plush shelf (`owned.plush`), each love interest's newest Claw Machine rounds
 // (`claw.rounds`) and the newest paid Read Him sets (`readHim.paid`).
+import { forgeStoryExpressionCast, forgeStoryExpressionsOn } from "@forge-kit/story-expressions-server.mjs";
 import { z, type ZodType } from "zod";
 import type {
+  AlbumCg,
   ChapterProgress,
   Favorite,
   Grievance,
@@ -19,6 +21,7 @@ import type {
   Unit,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { FIRST_STAGE, LAST_STAGE } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import {
   CLAW_MAX_CATCHES,
   CLAW_ROUNDS_KEPT,
@@ -40,23 +43,23 @@ import {
   TRUST_MIN,
   levelOf,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import { FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { isChapterKey, isLiId, playerId, stateId, worldId } from "../ids.js";
-import { ChapterDeltaSchema } from "../state/relationship.js";
+import { readChapterDelta } from "../state/relationship.js";
 import type { OtomeStore } from "../store.js";
 import { field, isRecord, readFields, validItems } from "./common.js";
 import { normalizePlayer } from "./player.js";
 import { normalizeUnit } from "./unit.js";
 import { normalizeWorld, toWorldView } from "./world.js";
 
-// ponytail: the stage range lives here until M2b's SH/arcs.ts owns the stage table; then import it from there.
-export const FIRST_STAGE = 1;
-export const LAST_STAGE = 6;
+export { FIRST_STAGE, LAST_STAGE };
 
 const TEXT_MAX = 600;
 const LIST_MAX = 200;
 const LEDGER_MAX = 300;
 const TIMELINE_MAX = 500;
 const FAVORITES_MAX = 300;
+const ALBUM_MAX = 500;
 /** Tells are 3–5 per bible; the room covers a hand-edited one. */
 const TELLS_MAX = 20;
 
@@ -84,6 +87,7 @@ const ConflictSchema: ZodType<Ledgers["conflicts"][number]> = z.object({
   type: short(80),
   status: z.enum(["open", "resolved"]),
   chapter: z.number().int().min(0),
+  key: short(120).optional(),
 });
 const TimelineSchema: ZodType<TimelineEntry> = z.object({
   at: z.string(),
@@ -97,6 +101,14 @@ const FavoriteSchema: ZodType<Favorite> = z.object({
   li: z.string().optional(),
   text: short(2000),
   ref: short(200),
+});
+
+const AlbumCgSchema: ZodType<AlbumCg> = z.object({
+  key: short(200),
+  url: z.string().max(2000),
+  ref: short(200),
+  at: z.string(),
+  li: z.string().optional(),
 });
 
 const ClawPlayerSchema = z.enum(["me", "partner"]);
@@ -146,7 +158,7 @@ export const defaultLiState = (): LiState => ({
   stage: FIRST_STAGE,
   trust: 0,
   tension: 0,
-  chapterDelta: { key: "", trust: 0, tension: 0 },
+  chapterDelta: {},
   grievances: [],
   rupture: null,
   disclosures: [],
@@ -164,7 +176,7 @@ function normalizeLiState(raw: unknown): LiState {
       stage: (value) => wholeNumber(value, FIRST_STAGE, FIRST_STAGE, LAST_STAGE),
       trust: (value) => wholeNumber(value, 0, TRUST_MIN, TRUST_MAX),
       tension: (value) => wholeNumber(value, 0, TENSION_MIN, TENSION_MAX),
-      chapterDelta: ChapterDeltaSchema,
+      chapterDelta: readChapterDelta,
       grievances: (value) => validItems(GrievanceSchema, value, LIST_MAX),
       rupture: z.object({ grievanceId: short(80), since: z.string() }).nullable(),
       disclosures: (value) => validItems(DisclosureSchema, value, LIST_MAX),
@@ -251,6 +263,7 @@ export function normalizeState(data: unknown): RunState {
     timeline: validItems(TimelineSchema, field(data, "timeline"), TIMELINE_MAX),
     favorites: validItems(FavoriteSchema, field(data, "favorites"), FAVORITES_MAX),
     home: normalizeHome(field(data, "home"), lis),
+    album: { cgs: validItems(AlbumCgSchema, field(field(data, "album"), "cgs"), ALBUM_MAX) },
     owned: { plush },
     claw: { rounds: keepClawRounds(validItems(ClawRoundSchema, field(field(data, "claw"), "rounds"))) },
     readHim: {
@@ -268,9 +281,31 @@ export const STATE_LIMITS = {
   timeline: TIMELINE_MAX,
   favorites: FAVORITES_MAX,
   list: LIST_MAX,
+  album: ALBUM_MAX,
   /** A timeline entry's text and the other short texts, in UTF-16 units (clipText). */
   text: TEXT_MAX,
 };
+
+/**
+ * His painted faces for the look he wears now (the kit's forgeStoryExpressionCast: a ready set only, and only while
+ * expressions are on). The worn look is his portrait until outfits arrive (M4).
+ */
+export function readyFaces(world: Pick<World, "images">, unit: Unit): Partial<Record<Face, string>> | undefined {
+  // ponytail: his portrait is the look until M4 adds a worn one (art/expressions.ts paints on the same base).
+  const { expressions } = forgeStoryExpressionCast(world.images, unit, unit.portrait ?? "", FACES);
+  return expressions as Partial<Record<Face, string>> | undefined;
+}
+
+/**
+ * True while the faces for the look worn now may still arrive: expressions are on, there is a look, and its set is
+ * neither ready nor given up. The kit never repaints a failed or stopped set by itself, so its faces never come.
+ */
+export function facesComing(world: Pick<World, "images">, unit: Unit): boolean {
+  const base = unit.portrait ?? "";
+  if (!base || !forgeStoryExpressionsOn(world.images)) return false;
+  const state = (unit.expressions[base] as { state?: unknown } | undefined)?.state;
+  return state !== "ready" && state !== "failed" && state !== "stopped";
+}
 
 /**
  * The Claw Machine rounds the state keeps, in the order they were played: each love interest's newest
@@ -319,15 +354,19 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
       .sort((a, b) => rank(a) - rank(b))
       .map((unit) => {
         const progress = state.lis[unit.id] ?? defaultLiState();
+        const expressions = readyFaces(world, unit);
         return {
           id: unit.id,
           name: unit.name,
           pronouns: unit.pronouns,
           source: unit.source,
+          ...(unit.cardId ? { cardId: unit.cardId } : {}),
+          voiceGender: unit.voiceGender,
           accent: unit.accent,
           ...(unit.portrait ? { portrait: unit.portrait } : {}),
           level: levelOf(progress.points),
           stage: progress.stage,
+          ...(expressions ? { expressions } : {}),
         };
       }),
     forge: world.forge,

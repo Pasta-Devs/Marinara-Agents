@@ -19,11 +19,26 @@
 //   (Starlight, Lead and Foil affection, ledgers, lastLead), then starts memory upkeep in the background.
 // - Ease off: no model call. The beat's canon is cut at the segment on screen and closed with EASE_OFF_MARKER, the
 //   beat counts as read, and the lookahead written from the uncut scene is removed (again on a retry, and by the
-//   lookahead itself when it was saved just after the cut).
+//   lookahead itself when it was saved just after the cut). A Confrontation eased off after its ending keeps its canon
+//   whole, so its lookahead stays.
 // - A date's beat (M5, chapter kind "date") has exactly one small choice whose options each carry a hidden `score`
 //   (−1/0/1, how the date's love interest takes it; at least one scores 1), read by index like the effects and saved
 //   as `beat.scores`. A date never ends on a big choice, and an option opens a grievance only on a date planned to go
 //   wrong, and then at most a minor one. S/minigames/date-night.ts totals the scores of the first-play picks.
+// M2b:
+// - A confrontation node with a love interest in it is written by P12 as a stance game (S/story/confrontation.ts):
+//   the beat's segments are its opening. Each stance is saved on the beat once (chooseStance) and its effects reach
+//   the state in one revision-checked write, exactly once; the next node is written only after the ending, since the
+//   canon waits for it. The beat is read to its end once the ending is reached (or it was eased off).
+// - Route chapters: the gate's read moves his stage, in the same state write that counts it (S/state/stages.ts
+//   passGate); a repair chapter's resolving node closes the rupture the same way (healRupture). While a rupture
+//   stands, none of his route chapters opens a beat (409 `locked`) and his gate is not counted read (stages.ts
+//   gateShut); a beat already on screen can still be finished, and what was read still replays. A stage-5 gate must
+//   end on one big choice.
+// - The art (RouteDeps.art, S/art/expressions.ts createOtomeArt): each beat served queues its speakers' faces; each
+//   beat written queues its places and CG (which wait for a tap under Ask before painting, or while the player
+//   reviews image prompts); a beat replaced by a rewrite, or removed after it, releases its CG. All of it in the
+//   background: the art never holds up or breaks the story.
 import { forgeChoiceLabel } from "@forge-kit/player-choice-text.mjs";
 import { forgeNormalizeChoiceBeat, forgePendingChoice } from "@forge-kit/player-choices-server.mjs";
 import type { ForgeStoryCancellation } from "@forge-kit/story-cancel-server.mjs";
@@ -38,8 +53,10 @@ import type {
   ReadResult,
   RunState,
   Segment,
+  StanceResult,
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { stageRow, type Stance } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import type { DateScore } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { LIMIT_IDS, type LimitId } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import {
@@ -49,20 +66,50 @@ import {
   type MusicMood,
 } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { generateJson, readOrGenerate, runForeground } from "../generation.js";
+import type { OtomeArt } from "../art/expressions.js";
 import { OtomeForgeError } from "../http.js";
-import { beatId, runDocTarget, stateId, worldId } from "../ids.js";
+import { beatId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeBeat } from "../schemas/story.js";
+import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { applyChoiceEffects } from "../state/relationship.js";
 import { readBeatToEnd } from "../state/rewards.js";
+import { countedNow, gateShut, healRupture, passGate } from "../state/stages.js";
 import type { ChapterDeps } from "./chapters.js";
 import { chapterSoFar, readBeat, readChapter, recallText } from "./canon.js";
-import { BEAT_PLACES_MAX, BEAT_SEGMENTS_MAX, BeatReplySchema, beatMessages, type BeatReply } from "./prompts.js";
+import {
+  afterRound,
+  applyConfrontation,
+  confrontationLines,
+  confrontationMainline,
+  confrontationOpponent,
+  endingOf,
+  normalizeConfrontationReply,
+  toConfrontationView,
+  type SegmentLists,
+} from "./confrontation.js";
+import {
+  BEAT_PLACES_MAX,
+  BEAT_SEGMENTS_MAX,
+  BeatReplySchema,
+  ConfrontationReplySchema,
+  beatMessages,
+  confrontationMessages,
+  type BeatReply,
+} from "./prompts.js";
 
 export interface BeatDeps extends ChapterDeps {
   /** The run-scoped Cancel (forge-kit story-cancel-server); without one, writes simply run. */
   cancellation?: ForgeStoryCancellation;
+  /** The story's art (S/art, M2b); without it nothing is painted. */
+  art?: OtomeArt;
+}
+
+/** How a request paints: its debug mode, and whether the player reviews image prompts first (an automatic paint waits). */
+export interface PaintMode {
+  debugMode: boolean;
+  review?: boolean;
 }
 
 const SEGMENT_TEXT_MAX = 4000;
@@ -75,6 +122,8 @@ const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "
 const chapterNotFound = () => new OtomeForgeError(404, "No such chapter.", "not-found");
 const beatNotFound = () => new OtomeForgeError(404, "No such beat.", "not-found");
 const conflict = (message: string) => new OtomeForgeError(409, message, "conflict");
+const locked = (message: string) => new OtomeForgeError(409, message, "locked");
+const ROUTE_LOCKED = "A rupture stands between you: this route chapter waits until it is repaired.";
 
 const str = (value: unknown, max: number) => (typeof value === "string" ? value.trim().slice(0, max) : "");
 const nameKey = (value: unknown) => str(value, NAME_MAX).normalize("NFKC").toLowerCase().replace(/\s+/g, " ");
@@ -88,6 +137,8 @@ export interface BeatContext {
   units: ReadonlyArray<Pick<Unit, "id" | "name">>;
   state: RunState;
   last: boolean;
+  /** The beat must end on one big choice (a stage-5 route chapter's gate). */
+  mustChoose?: boolean;
   /** A date's beat (M5): one scored choice, no big choice, and a grievance only when the date was planned to go wrong. */
   date?: { goesWrong: boolean };
 }
@@ -113,9 +164,11 @@ function speakerLi(context: BeatContext, speaker: string) {
   return context.units.find((unit) => sameName(speaker, unit.name));
 }
 
-/** Why the reply's thoughts break the rules (a love interest's thought before stage 2, or two in one scene), or "". */
-function thoughtProblem(context: BeatContext, segments: unknown[]): string {
-  const counts = new Map<string, number>();
+/**
+ * Why the reply's thoughts break the rules (a love interest's thought before stage 2, or two in one scene), or "".
+ * `counts` holds each love interest's thoughts read on the way to these segments, and gets theirs added.
+ */
+function thoughtProblem(context: BeatContext, segments: unknown[], counts = new Map<string, number>()): string {
   for (const raw of segments) {
     if (!raw || typeof raw !== "object") continue;
     const segment = raw as Record<string, unknown>;
@@ -157,7 +210,9 @@ export function normalizeBeatBody(raw: unknown, options: NormalizeOptions): Beat
     used.set(key, place);
     return place.name;
   };
-  let place = options.start ? resolve(options.start) : "";
+  // The place it opens in counts only once a line falls back to it: a scene that names its own place first never lists
+  // (or pays to paint) the planned one.
+  let place = "";
   const segments: Segment[] = [];
   // An empty segment is skipped, as GF's normalizer does; with choices the kit then refuses the beat, since every `at`
   // counts the reply's own segments.
@@ -170,7 +225,7 @@ export function normalizeBeatBody(raw: unknown, options: NormalizeOptions): Beat
     if (source.thought === true || source.thought === "true") segment.thought = true;
     const expression = segment.speaker ? normalizeForgeStoryExpression(source.expression, FACES) : "";
     if (expression) segment.expression = expression as Segment["expression"];
-    place = resolve(source.place) || place;
+    place = resolve(source.place) || place || (options.start ? resolve(options.start) : "");
     if (place) segment.place = place;
     segments.push(segment);
   }
@@ -203,16 +258,23 @@ type NormalizedBeat = BeatBody & { choices: ForgeChoice[] };
 
 /** The reply as a beat body with its choices, or the reason it is refused (the repair turn names it). */
 export function normalizeBeatReply(reply: BeatReply, context: BeatContext): NormalizedBeat | string {
-  const thoughts = thoughtProblem(context, reply.segments);
+  // One thought per love interest on the path with the most of them: the mainline, then in each choice (every one
+  // is played) the option that holds the most.
+  let counts = new Map<string, number>();
+  const thoughts = thoughtProblem(context, reply.segments, counts);
   if (thoughts) return thoughts;
   for (const choice of Array.isArray(reply.choices) ? reply.choices : []) {
+    const most = new Map(counts);
     for (const option of Array.isArray((choice as { options?: unknown })?.options)
       ? (choice as { options: unknown[] }).options
       : []) {
       const segments = (option as { segments?: unknown })?.segments;
-      const problem = Array.isArray(segments) ? thoughtProblem(context, segments) : "";
+      const own = new Map(counts);
+      const problem = Array.isArray(segments) ? thoughtProblem(context, segments, own) : "";
       if (problem) return problem;
+      for (const [li, count] of own) most.set(li, Math.max(most.get(li) ?? 0, count));
     }
+    counts = most;
   }
   const beat = forgeNormalizeChoiceBeat(
     reply,
@@ -224,8 +286,19 @@ export function normalizeBeatReply(reply: BeatReply, context: BeatContext): Norm
     return "the segments or choices did not follow the format (check the PLAYER CHOICES rules: 2-4 options, a selection each, branches of 1-8 segments, distinct `at` indexes)";
   }
   const choices = (beat.choices ?? []) as ForgeChoice[];
+  if (context.mustChoose && !choices.some((choice) => choice.kind === "big")) {
+    return "this node must end on ONE big choice (see the PLAYER CHOICES rules for a big choice)";
+  }
   const dateProblem = context.date ? dateChoiceProblem(reply, choices) : "";
   return dateProblem || { ...beat, choices };
+}
+
+/** P6's segment rules, lent to P12 (S/story/confrontation.ts normalizes each of its lists with them). */
+export function segmentLists(context: BeatContext): SegmentLists {
+  return {
+    list: (raw, start) => normalizeBeatBody(raw, { start, context }),
+    thoughts: (raw, counts) => thoughtProblem(context, raw, counts),
+  };
 }
 
 /** A score as stored: 1, 0 or −1; anything else (missing, a word, 2) is null. */
@@ -371,11 +444,20 @@ export async function cancellable<T>(
 
 const REWRITE_STALE = "This scene changed while it was being rewritten.";
 
+/** True once the beat holds a first-play pick: a choice, or a stance of its Confrontation. */
+const hasCanon = (beat: Beat) => Object.keys(beat.choiceCanon).length > 0 || !!beat.confrontation?.picks.length;
+
+/**
+ * True when the beat's Ease off cut its canon. A Confrontation eased off after its ending keeps its canon whole
+ * (canon.ts confrontationCanon), so what was written after it still follows it.
+ */
+const cutShort = (beat: Beat) => !!beat.easedOff && !beat.confrontation?.ending;
+
 /** True while the stored beat is still the one a rewrite was checked against: no pick, read or Ease off since. */
 const untouched = (stored: Beat, checked: Beat) =>
   stored.written.at === checked.written.at &&
   !stored.easedOff &&
-  !Object.keys(stored.choiceCanon).length &&
+  !hasCanon(stored) &&
   stored.readThrough === checked.readThrough;
 
 /**
@@ -387,19 +469,20 @@ async function generateBeat(
   runId: string,
   key: string,
   i: number,
-  { debugMode, signal, replacing }: { debugMode: boolean; signal?: AbortSignal; replacing?: Beat },
+  { debugMode, review, signal, replacing }: PaintMode & { signal?: AbortSignal; replacing?: Beat },
 ): Promise<Beat> {
   signal?.throwIfAborted();
   const { run, chapter } = await load(deps, runId, key);
   const node = chapter.nodes[i];
   if (!node) throw beatNotFound();
-  const storySoFar = await chapterSoFar(deps.store, runId, key, i, run.player.name);
-  if (storySoFar === null) throw conflict("An earlier beat of this chapter is not settled yet.");
   // The beat this one follows, as it was written from: a rewrite or an Ease off of it while this one is written
-  // makes this one stale, and it is not saved.
+  // makes this one stale, and it is not saved. Read before the story so far, so a cut that lands between the two
+  // reads shows as a change.
   const basis = i > 0 ? await readBeat(deps.store, runId, key, i - 1) : null;
   const sameBasis = (current: Beat | null) =>
-    !basis || (!!current && current.written.at === basis.written.at && !!current.easedOff === !!basis.easedOff);
+    !basis || (!!current && current.written.at === basis.written.at && cutShort(current) === cutShort(basis));
+  const storySoFar = await chapterSoFar(deps.store, runId, key, i, run.player.name);
+  if (storySoFar === null) throw conflict("An earlier beat of this chapter is not settled yet.");
   const units = castUnits(run);
   const present = units.filter((unit) => node.cast.includes(unit.id));
   const memory = await recallText(deps, runId, {
@@ -413,55 +496,95 @@ async function generateBeat(
     signal,
     debugMode,
   });
+  const last = i === chapter.nodes.length - 1;
+  const mustChoose =
+    chapter.kind === "route" && !!node.gate && !!chapter.stage && stageRow(chapter.stage).gate === "confrontation";
   const context: BeatContext = {
     node,
     units,
     state: run.state,
-    last: i === chapter.nodes.length - 1,
+    last,
+    mustChoose,
     ...(chapter.kind === "date" ? { date: { goesWrong: chapter.date?.goesWrong ?? false } } : {}),
   };
-  const { value, connectionId, model } = await generateJson(deps, {
-    runId,
-    job: "narration",
-    label: `beat/${key}/${i}`,
-    messages: beatMessages({
-      world: run.world,
-      player: run.player,
-      units,
-      state: run.state,
-      chapter,
-      node,
-      storySoFar,
-      memory,
-    }),
-    schema: BeatReplySchema,
-    normalize: (reply) => {
-      const beat = normalizeBeatReply(reply, context);
-      return typeof beat === "string" ? beat : reply;
-    },
-    temperature: 0.9,
-    maxTokens: 6000,
-    debugMode,
-    lane: "foreground",
-    signal,
-  });
-  signal?.throwIfAborted();
-  const body = normalizeBeatReply(value, context) as NormalizedBeat;
+  const opponent = confrontationOpponent(chapter, node, units);
+  const input = { world: run.world, player: run.player, units, state: run.state, chapter, node, storySoFar, memory };
+  let body: Omit<Beat, "key" | "i" | "kind" | "choiceCanon" | "applied" | "readThrough" | "written" | "rewrites">;
+  let written: { connectionId: string; model: string };
+  if (opponent) {
+    // P12: the whole stance game in one call; its opening is the beat's segments.
+    const lists = segmentLists(context);
+    const shape = { li: opponent, node, cgOpen: !!node.cg };
+    const { value, connectionId, model } = await generateJson(deps, {
+      runId,
+      job: "narration",
+      label: `confrontation/${key}/${i}`,
+      messages: confrontationMessages({ ...input, li: opponent }),
+      schema: ConfrontationReplySchema,
+      normalize: (reply) => {
+        const game = normalizeConfrontationReply(reply, shape, lists);
+        return typeof game === "string" ? game : reply;
+      },
+      temperature: 0.9,
+      maxTokens: 7000,
+      debugMode,
+      lane: "foreground",
+      signal,
+    });
+    signal?.throwIfAborted();
+    const game = normalizeConfrontationReply(value, shape, lists) as Exclude<
+      ReturnType<typeof normalizeConfrontationReply>,
+      string
+    >;
+    body = {
+      places: game.places,
+      segments: game.segments,
+      choices: [],
+      effects: {},
+      musicMood: game.musicMood,
+      ...(game.cg ? { cg: game.cg } : {}),
+      confrontation: game.confrontation,
+    };
+    written = { connectionId, model };
+  } else {
+    const { value, connectionId, model } = await generateJson(deps, {
+      runId,
+      job: "narration",
+      label: `beat/${key}/${i}`,
+      messages: beatMessages(input),
+      schema: BeatReplySchema,
+      normalize: (reply) => {
+        const beat = normalizeBeatReply(reply, context);
+        return typeof beat === "string" ? beat : reply;
+      },
+      temperature: 0.9,
+      maxTokens: 6000,
+      debugMode,
+      lane: "foreground",
+      signal,
+    });
+    signal?.throwIfAborted();
+    const scene = normalizeBeatReply(value, context) as NormalizedBeat;
+    body = {
+      places: scene.places,
+      segments: scene.segments,
+      choices: scene.choices,
+      effects: effectsOf(value, scene.choices, context),
+      ...(context.date ? { scores: scoresOf(value, scene.choices) } : {}),
+      musicMood: scene.musicMood,
+      ...(scene.cg ? { cg: scene.cg } : {}),
+    };
+    written = { connectionId, model };
+  }
   const beat: Beat = {
     key,
     i,
     kind: node.kind,
-    places: body.places,
-    segments: body.segments,
-    choices: body.choices,
+    ...body,
     choiceCanon: {},
-    effects: effectsOf(value, body.choices, context),
     applied: {},
-    ...(context.date ? { scores: scoresOf(value, body.choices) } : {}),
-    musicMood: body.musicMood,
-    ...(body.cg ? { cg: body.cg } : {}),
     readThrough: 0,
-    written: { at: new Date().toISOString(), connectionId, model },
+    written: { at: new Date().toISOString(), ...written },
     rewrites: replacing ? replacing.rewrites + 1 : 0,
   };
   const basisChanged = () => conflict("The scene before this one changed while it was being written.");
@@ -474,10 +597,13 @@ async function generateBeat(
     if (progress?.completed || (progress?.beatsRead ?? 0) > i) throw conflict(REWRITE_STALE);
   }
   const target = runDocTarget("beat", beatId(runId, key, i));
+  // The beat a rewrite replaced, as it was when replaced (its CG may have been painted while this was written).
+  let replaced = null as Beat | null;
   // A first write keeps whatever another request saved first; a rewrite replaces only the beat it was checked against.
   const saved = await deps.store.mutateDoc(target, normalizeBeat, (stored) => {
     if (!replacing) return stored ?? beat;
     if (!stored || !untouched(stored, replacing)) throw conflict(REWRITE_STALE);
+    replaced = stored;
     return beat;
   });
   // Ease off saves its cut before it removes the beats after it, so one that landed between the check above and this
@@ -486,7 +612,51 @@ async function generateBeat(
     await deps.store.removeDoc(beatId(runId, key, i));
     throw basisChanged();
   }
+  // Only the write that was saved paints: a request that lost the race to another write hands nothing on. The beat a
+  // rewrite replaced lets its CG go.
+  if (saved?.written.at === beat.written.at) {
+    paintScene(deps, runId, saved, { debugMode, review });
+    if (replaced) releaseArt(deps, runId, replaced);
+  }
   return saved ?? beat;
+}
+
+const artFailed = (deps: BeatDeps, beat: Pick<Beat, "key" | "i">, what: string) => (error: unknown) =>
+  deps.runtime.logger.warn(
+    "[otome-forge] Art for %s/%d (%s) not queued: %s",
+    beat.key,
+    beat.i,
+    what,
+    error instanceof Error ? error.message : String(error),
+  );
+
+/** Runs one art call in the background: a throw or a rejection is logged, and the story goes on. */
+function inBackground(deps: BeatDeps, beat: Pick<Beat, "key" | "i">, what: string, call: () => unknown): void {
+  try {
+    void Promise.resolve(call()).catch(artFailed(deps, beat, what));
+  } catch (error) {
+    artFailed(deps, beat, what)(error);
+  }
+}
+
+/** A written beat's places and CG (S/art/cg.ts queueScenePaints): painted now, or left waiting for the tap. */
+function paintScene(deps: BeatDeps, runId: string, beat: Beat, mode: PaintMode): void {
+  const art = deps.art;
+  if (art) inBackground(deps, beat, "scene", () => art.queueScenePaints(runId, beat, mode));
+}
+
+/** The faces of the love interests who speak in a beat served (a stance game's every line counts). */
+function queueFaces(deps: BeatDeps, runId: string, beat: Beat, debugMode: boolean): void {
+  const art = deps.art;
+  if (!art) return;
+  const lines = beat.confrontation ? { segments: confrontationLines(beat), choices: [] } : beat;
+  inBackground(deps, beat, "expressions", () => art.queueExpressions(runId, lines, { debugMode }));
+}
+
+/** A beat that is replaced or removed lets its CG's gallery image go (unless the album keeps it). */
+function releaseArt(deps: BeatDeps, runId: string, beat: Beat): void {
+  const art = deps.art;
+  if (art && beat.cg?.art) inBackground(deps, beat, "release", () => art.releaseBeatArt(runId, beat));
 }
 
 /** Whether the player may have beat `i` written now: it is the one being read, or the next one (the lookahead). */
@@ -495,10 +665,14 @@ function writable(run: RunDocuments, chapter: Chapter, i: number): boolean {
   return i < chapter.nodes.length && !progress?.completed && i <= (progress?.beatsRead ?? 0) + 1;
 }
 
-/** Queues the node after `beat` in the background of the run's queue, unless the beat ends on a big choice. */
-function queueLookahead(deps: BeatDeps, runId: string, chapter: Chapter, beat: Beat, debugMode: boolean): void {
+/**
+ * Queues the node after `beat` in the background of the run's queue, unless the beat ends on a big choice or is a
+ * Confrontation that has not ended (the stance that ends it queues it).
+ */
+function queueLookahead(deps: BeatDeps, runId: string, chapter: Chapter, beat: Beat, mode: PaintMode): void {
   const next = beat.i + 1;
   if (next >= chapter.nodes.length || beat.choices.some((choice) => choice.kind === "big")) return;
+  if (beat.confrontation && !beat.confrontation.ending) return;
   void (async () => {
     if (await readBeat(deps.store, runId, chapter.key, next)) return;
     await cancellable(deps, runId, (signal) =>
@@ -508,8 +682,10 @@ function queueLookahead(deps: BeatDeps, runId: string, chapter: Chapter, beat: B
         async () => {
           // The beat it follows may have been rewritten or eased off while this waited in the queue.
           const current = await readBeat(deps.store, runId, chapter.key, beat.i);
-          if (!current || current.written.at !== beat.written.at || current.easedOff) return null;
-          return generateBeat(deps, runId, chapter.key, next, { debugMode, signal });
+          if (!current || current.written.at !== beat.written.at || cutShort(current)) return null;
+          // A route chapter waits while a rupture stands (no beat of it opens), so nothing is paid for meanwhile.
+          if (await routeLocked(deps, runId, chapter)) return null;
+          return generateBeat(deps, runId, chapter.key, next, { ...mode, signal });
         },
       ),
     );
@@ -523,10 +699,41 @@ function queueLookahead(deps: BeatDeps, runId: string, chapter: Chapter, beat: B
   });
 }
 
-/** Removes the chapter's beats after `i` that nobody has read (they followed a beat that changed). */
+/** True while a rupture with the love interest of this route chapter stands (his route chapters stay locked). */
+async function routeLocked(deps: BeatDeps, runId: string, chapter: Chapter, state?: RunState): Promise<boolean> {
+  if (chapter.kind !== "route" || !chapter.li) return false;
+  const current = state ?? (await deps.store.readDoc(stateId(runId), normalizeState));
+  return !!current?.lis[chapter.li]?.rupture;
+}
+
+/**
+ * True while a rupture keeps beat `i` (`beat`: as stored, or null) of his route chapter from the reader: it is served,
+ * read or eased off only once it has been on screen (never one the lookahead wrote meanwhile), and his gate only when
+ * the rupture opened in it (stages.ts gateShut). Nothing is taken back: a finished chapter and the beats already read
+ * replay.
+ */
+async function ruptureHolds(
+  deps: BeatDeps,
+  runId: string,
+  chapter: Chapter,
+  state: RunState,
+  i: number,
+  beat: Beat | null,
+): Promise<boolean> {
+  const progress = state.chapters[chapter.key];
+  if (progress?.completed || i < (progress?.beatsRead ?? 0)) return false;
+  if (!(await routeLocked(deps, runId, chapter, state))) return false;
+  return !beat?.shown || gateShut(state, chapter, i);
+}
+
+/**
+ * Removes the chapter's beats after `i` that nobody has read (they followed a beat that changed). Each lets go of the CG
+ * of the revision actually removed, so one painted just before the removal is not left in the gallery.
+ */
 async function dropBeatsAfter(deps: BeatDeps, runId: string, chapter: Chapter, i: number): Promise<void> {
   for (let next = i + 1; next < chapter.nodes.length; next += 1) {
-    await deps.store.removeDoc(beatId(runId, chapter.key, next));
+    const dropped = await deps.store.takeDoc(beatId(runId, chapter.key, next), normalizeBeat);
+    if (dropped) releaseArt(deps, runId, dropped);
   }
 }
 
@@ -539,11 +746,13 @@ export async function serveBeat(
   runId: string,
   key: string,
   i: number,
-  { rewrite = false, debugMode }: { rewrite?: boolean; debugMode: boolean },
+  { rewrite = false, debugMode, review }: PaintMode & { rewrite?: boolean },
 ): Promise<Beat> {
   const { run, chapter } = await load(deps, runId, key);
   if (run.world.forge.phase !== "ready") throw conflict("The world is still being forged.");
   if (!chapter.nodes[i]) throw beatNotFound();
+  const stored = rewrite ? null : await readBeat(deps.store, runId, key, i);
+  if (await ruptureHolds(deps, runId, chapter, run.state, i, stored)) throw locked(ROUTE_LOCKED);
   let beat: Beat | null;
   if (rewrite) {
     beat = await cancellable(deps, runId, (signal) =>
@@ -556,27 +765,35 @@ export async function serveBeat(
         ]);
         const progress = state?.chapters[key];
         if (!current) throw beatNotFound();
-        if (progress?.completed || (progress?.beatsRead ?? 0) > i || Object.keys(current.choiceCanon).length) {
+        if (progress?.completed || (progress?.beatsRead ?? 0) > i || hasCanon(current)) {
           throw conflict("Only the beat being read can be rewritten, before any of its choices is made.");
         }
         await dropBeatsAfter(deps, runId, chapter, i);
-        return generateBeat(deps, runId, key, i, { debugMode, signal, replacing: current });
+        return generateBeat(deps, runId, key, i, { debugMode, review, signal, replacing: current });
       }),
     );
   } else {
-    beat = await readBeat(deps.store, runId, key, i);
+    beat = stored;
     if (!beat) {
       if (!writable(run, chapter, i)) throw conflict("This beat cannot be written yet.");
       beat = await cancellable(deps, runId, (signal) =>
         readOrGenerate(
           runId,
           () => readBeat(deps.store, runId, key, i),
-          () => generateBeat(deps, runId, key, i, { debugMode, signal }),
+          () => generateBeat(deps, runId, key, i, { debugMode, review, signal }),
         ),
       );
     }
   }
-  if (!run.state.chapters[key]?.completed) queueLookahead(deps, runId, chapter, beat, debugMode);
+  if (!beat.shown && chapter.kind === "route") {
+    // On screen from now on (ruptureHolds): a beat the lookahead wrote is not, until it is served.
+    beat =
+      (await deps.store.updateDoc(runDocTarget("beat", beatId(runId, key, i)), normalizeBeat, (current) =>
+        current && !current.shown ? { ...current, shown: true as const } : current,
+      )) ?? beat;
+  }
+  queueFaces(deps, runId, beat, debugMode);
+  if (!run.state.chapters[key]?.completed) queueLookahead(deps, runId, chapter, beat, { debugMode, review });
   return beat;
 }
 
@@ -653,7 +870,9 @@ export async function chooseOption(
     const outcome = pending ? await applyPick(deps, runId, chapter, beat, choiceId, canon) : NOTHING_REMEMBERED;
     return { beat: (await readBeat(deps.store, runId, key, i)) ?? beat, ...outcome };
   }
-  const closed = !!progress?.completed || (progress?.beatsRead ?? 0) > i;
+  // A choice past an Ease off cut is never canon, even while the cut beat is not counted as read yet.
+  const pastCut = (stored: Beat) => !!stored.easedOff && choice.at > stored.easedOff.at;
+  const closed = !!progress?.completed || (progress?.beatsRead ?? 0) > i || pastCut(beat);
   if (closed) {
     if (choice.kind === "big") throw new OtomeForgeError(409, "That choice is made.", "locked");
     return { beat, ...NOTHING_REMEMBERED };
@@ -666,14 +885,99 @@ export async function chooseOption(
       if (!current) throw beatNotFound();
       // A rewrite saved since this beat was read has other choices: the pick was made on a scene that is gone.
       if (current.written.at !== checked.written.at) throw conflict("This scene changed. Open it again.");
-      return current.choiceCanon[choiceId]
+      return current.choiceCanon[choiceId] || pastCut(current)
         ? current
         : { ...current, choiceCanon: { ...current.choiceCanon, [choiceId]: optionId } };
     })) ?? beat;
-  const picked = beat.choiceCanon[choiceId]!;
-  if (picked !== optionId && choice.kind === "big") throw new OtomeForgeError(409, "That choice is made.", "locked");
+  const picked = beat.choiceCanon[choiceId];
+  // No pick saved: an Ease off cut the scene before this choice meanwhile, and the choice is closed as above.
+  if (!picked || (picked !== optionId && choice.kind === "big")) {
+    if (choice.kind === "big") throw new OtomeForgeError(409, "That choice is made.", "locked");
+    return { beat, ...NOTHING_REMEMBERED };
+  }
   const outcome = await applyPick(deps, runId, chapter, beat, choiceId, picked);
   return { beat: (await readBeat(deps.store, runId, key, i)) ?? beat, ...outcome };
+}
+
+// ── The Confrontation's stances ──
+
+/** Applies the beat's saved stances' effects to the state once (applyConfrontation; a replay is a no-op). */
+async function applyStances(deps: BeatDeps, runId: string, chapter: Chapter, beat: Beat): Promise<Remembered> {
+  let outcome = NOTHING_REMEMBERED;
+  const at = new Date().toISOString();
+  const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
+    const { state: next, remembered, rememberedBy } = applyConfrontation(current, chapter, beat, at);
+    outcome = { remembered, rememberedBy };
+    return next;
+  });
+  if (!state) throw runNotFound();
+  return outcome;
+}
+
+/** The `applied` entries the saved stances earn: each Reveal's, and the ending's once reached. */
+const stanceEffectKeys = (beat: Beat) => [
+  ...(beat.confrontation?.picks ?? []).flatMap((stance, k) =>
+    stance === "reveal" ? [`${beat.i}/stance-${k + 1}`] : [],
+  ),
+  ...(beat.confrontation?.ending ? [`${beat.i}/confrontation`] : []),
+];
+
+/** The stance result for round `round` of the saved game. */
+function stanceResult(beat: Beat, round: number, outcome: Remembered): StanceResult {
+  return { ...afterRound(beat.confrontation!, round), confrontation: toConfrontationView(beat)!, ...outcome };
+}
+
+/**
+ * POST .../beats/:i/stance {round, stance}: the first-play stance of round `round` (1–3) on the Confrontation being
+ * read. It is saved on the beat once (the third with the ending its picks reach), then its effects reach the state
+ * once. The same stance again returns what it did; another stance for a round already played is a 409 `locked`. The
+ * ending queues the next node.
+ */
+export async function chooseStance(
+  deps: BeatDeps,
+  runId: string,
+  key: string,
+  i: number,
+  round: number,
+  stance: Stance,
+  mode: PaintMode,
+): Promise<StanceResult> {
+  const { run, chapter } = await load(deps, runId, key);
+  const beat = await readBeat(deps.store, runId, key, i);
+  const confrontation = beat?.confrontation;
+  if (!beat || !confrontation) throw new OtomeForgeError(404, "No such confrontation.", "not-found");
+  const taken = confrontation.picks[round - 1];
+  if (taken) {
+    if (taken !== stance) throw locked("That round is played.");
+    // Saved by a request that stopped before its effects: they land now (exactly once by `applied`).
+    const applied = run.state.chapters[key]?.applied ?? [];
+    const pending = stanceEffectKeys(beat).some((entry) => !applied.includes(entry));
+    const outcome = pending ? await applyStances(deps, runId, chapter, beat) : NOTHING_REMEMBERED;
+    return stanceResult(beat, round, outcome);
+  }
+  const progress = run.state.chapters[key];
+  if (beat.easedOff) throw conflict("This scene was eased off.");
+  if (progress?.completed || (progress?.beatsRead ?? 0) > i) throw locked("That confrontation is over.");
+  if ((progress?.beatsRead ?? 0) !== i) throw conflict("Stances are taken in the confrontation being read.");
+  if (round !== confrontation.picks.length + 1) throw conflict("An earlier round comes first.");
+  const saved = await deps.store.updateDoc(runDocTarget("beat", beatId(runId, key, i)), normalizeBeat, (current) => {
+    const game = current?.confrontation;
+    if (!current || !game) throw beatNotFound();
+    // A rewrite saved since this beat was read is another argument: the stance was taken in one that is gone.
+    if (current.written.at !== beat.written.at) throw conflict("This scene changed. Open it again.");
+    if (current.easedOff) throw conflict("This scene was eased off.");
+    // Another request took this round first: keep its stance.
+    if (game.picks.length >= round) return current;
+    if (game.picks.length !== round - 1) throw conflict("An earlier round comes first.");
+    const picks = [...game.picks, stance];
+    const ending = picks.length === game.rounds.length ? endingOf(game, picks) : undefined;
+    return { ...current, confrontation: { ...game, picks, ...(ending ? { ending } : {}) } };
+  });
+  if (!saved?.confrontation) throw beatNotFound();
+  if (saved.confrontation.picks[round - 1] !== stance) throw locked("That round is played.");
+  const outcome = await applyStances(deps, runId, chapter, saved);
+  if (saved.confrontation.ending) queueLookahead(deps, runId, chapter, saved, mode);
+  return stanceResult(saved, round, outcome);
 }
 
 // ── Reading, and the end of a chapter ──
@@ -689,10 +993,13 @@ export const canonPicks = (
   });
 };
 
+const readUnit = (deps: BeatDeps, runId: string, li: LiId) => deps.store.readDoc(unitId(runId, li), normalizeUnit);
+
 /**
  * Counts `beat` as read to its end, once and in order (S/state/rewards.ts readBeatToEnd: its Starlight, and on the
- * chapter's last node the chapter's Starlight, Lead and Foil affection, ledgers and lastLead, in one write). Starts
- * memory upkeep in the background when the chapter completes.
+ * chapter's last node the chapter's Starlight, Lead and Foil affection, ledgers and lastLead), with what a route
+ * chapter's gate or a repair's resolving node does (S/state/stages.ts), all in one write. Starts memory upkeep in the
+ * background when the chapter completes.
  */
 async function finishBeat(
   deps: BeatDeps,
@@ -702,18 +1009,37 @@ async function finishBeat(
   debugMode: boolean,
 ): Promise<ReadResult> {
   let outcome: Omit<ReturnType<typeof readBeatToEnd>, "state"> = { grants: [], chapterDone: false };
+  let stageUp: ReadResult["stageUp"];
+  let repaired: ReadResult["repaired"];
   let completedNow = false;
   const at = new Date().toISOString();
+  // His secrets, for the gate (the stage it opens reveals each secret due by then). Bibles are not edited mid-read.
+  const owner = chapter.kind === "route" && chapter.li ? await readUnit(deps, runId, chapter.li) : null;
   const state = await deps.store.updateDoc(runDocTarget("state", stateId(runId)), normalizeState, (current) => {
     // A pick saved on the beat whose effects never reached the state (its request stopped between the two writes, and
     // a reload shows it as made) lands in this same write, so no beat counts as read with a canon pick unapplied.
-    // The pick's `applied` entry makes this a no-op for every other pick.
-    const caughtUp = canonPicks(beat).reduce(
+    // The pick's `applied` entry makes this a no-op for every other pick; the same goes for a Confrontation's stances.
+    const picked = canonPicks(beat).reduce(
       (state, [choice, option]) => applyPickTo(state, chapter, beat, choice, option, at).state,
       current,
     );
-    const { state: next, ...rest } = readBeatToEnd(caughtUp, chapter, beat.i);
+    const caughtUp = applyConfrontation(picked, chapter, beat, at).state;
+    // A rupture shuts his gate: it is not counted (no stage, no chapter grants) until a repair, whichever way it was
+    // reached (a lookahead written before the rupture, an Ease off), unless the rupture opened in this very scene.
+    if (gateShut(caughtUp, chapter, beat.i)) throw locked(ROUTE_LOCKED);
+    const { state: read, ...rest } = readBeatToEnd(caughtUp, chapter, beat.i);
     outcome = rest;
+    let next = read;
+    stageUp = undefined;
+    repaired = undefined;
+    if (countedNow(caughtUp, read, chapter.key, beat.i)) {
+      const gate = passGate(next, chapter, beat.i, { secrets: owner?.bible?.secrets ?? [], at });
+      const picks = canonPicks(beat).flatMap(([choice, option]) => beat.effects[choice]?.[option] ?? []);
+      const heal = healRupture(gate.state, chapter, beat.i, at, picks);
+      next = heal.state;
+      if (gate.stageUp) stageUp = gate.stageUp;
+      if (heal.repaired) repaired = heal.repaired;
+    }
     completedNow = !current.chapters[chapter.key]?.completed && !!next.chapters[chapter.key]?.completed;
     return next;
   });
@@ -727,7 +1053,13 @@ async function finishBeat(
       ),
     );
   }
-  return { grants: outcome.grants, starlight: state.wallet.starlight, chapterDone: outcome.chapterDone };
+  return {
+    grants: outcome.grants,
+    starlight: state.wallet.starlight,
+    chapterDone: outcome.chapterDone,
+    ...(stageUp ? { stageUp } : {}),
+    ...(repaired ? { repaired } : {}),
+  };
 }
 
 /** True once every choice in the beat up to `through` has its first-play pick. */
@@ -749,14 +1081,18 @@ export async function readTo(
   const { run, chapter } = await load(deps, runId, key);
   const beat = await readBeat(deps.store, runId, key, i);
   if (!beat) throw beatNotFound();
-  const end = beat.easedOff?.at ?? beat.segments.length - 1;
+  if (await ruptureHolds(deps, runId, chapter, run.state, i, beat)) throw locked(ROUTE_LOCKED);
+  // A Confrontation's position indexes its mainline (the opening, the shown rounds' lines, the ending).
+  const end = beat.easedOff?.at ?? confrontationMainline(beat) - 1;
   const reached = Math.max(0, Math.min(end, Math.trunc(segment)));
   if (reached > beat.readThrough) {
     await deps.store.updateDoc(runDocTarget("beat", beatId(runId, key, i)), normalizeBeat, (current) =>
       current ? { ...current, readThrough: Math.max(current.readThrough, reached) } : current,
     );
   }
-  if (reached < end || (!beat.easedOff && !settledThrough(beat, end))) {
+  // A Confrontation is read to its end once its ending is reached (the client reads the opening, then the rounds).
+  const unsettled = beat.confrontation ? !beat.confrontation.ending : !settledThrough(beat, end);
+  if (reached < end || (!beat.easedOff && unsettled)) {
     return { grants: [], starlight: run.state.wallet.starlight, chapterDone: false };
   }
   return finishBeat(deps, runId, chapter, beat, debugMode);
@@ -783,10 +1119,10 @@ function unwrittenBeat(key: string, node: ChapterNode): Beat {
 }
 
 /**
- * POST .../beats/:i/ease-off {segment}: ends the scene at that segment with no model call. Its canon is cut there and
- * closed with the marker, the beat counts as read, and the lookahead written from the uncut scene is removed. The
- * declined panel eases off a node that was never written the same way. The suggestions are the chapter's content tags
- * that are still allowed, to offer "Veil this from now on".
+ * POST .../beats/:i/ease-off {segment}: ends the scene at that segment, or at the last choice already picked, with no
+ * model call. Its canon is cut there and closed with the marker, the beat counts as read, and the lookahead written
+ * from the uncut scene is removed. The declined panel eases off a node that was never written the same way. The
+ * suggestions are the chapter's content tags that are still allowed, to offer "Veil this from now on".
  */
 export async function easeOff(
   deps: BeatDeps,
@@ -804,23 +1140,31 @@ export async function easeOff(
   if (!current?.easedOff && (progress?.completed || (progress?.beatsRead ?? 0) !== i)) {
     throw conflict("Only the beat being read can be eased off.");
   }
-  const at = Math.max(0, Math.min((current?.segments.length ?? 0) - 1, Math.trunc(segment)));
+  // A beat on screen can be eased off. One never written or never shown cannot be skipped past a rupture's lock, nor
+  // his gate counted while it stands: refused here before anything is cut (and again in finishBeat's write).
+  if (await ruptureHolds(deps, runId, chapter, run.state, i, current)) throw locked(ROUTE_LOCKED);
+  const at = Math.max(0, Math.min((current ? confrontationMainline(current) : 0) - 1, Math.trunc(segment)));
   // At once, never behind the queue: a lookahead still being written from the uncut scene is not saved (generateBeat
   // checks the beat it follows before saving), and one already saved is removed here. A node the model declined has
   // no beat: it is saved as cut before its first line, so the story goes on from its aftermath without it (a write of
   // it still running keeps this one, since a first write never replaces a stored beat).
-  const beat = await deps.store.mutateDoc(runDocTarget("beat", beatId(runId, key, i)), normalizeBeat, (stored) =>
-    !stored
-      ? unwrittenBeat(key, node)
-      : stored.easedOff
-        ? stored
-        : { ...stored, easedOff: { at }, readThrough: Math.max(stored.readThrough, at) },
-  );
+  const beat = await deps.store.mutateDoc(runDocTarget("beat", beatId(runId, key, i)), normalizeBeat, (stored) => {
+    if (!stored) return unwrittenBeat(key, node);
+    if (stored.easedOff) return stored;
+    // Never before a pick already saved (a stale tab can ask for that): its effects are in the state, so its choice
+    // stays in the canon. chooseOption saves no pick past a cut, so every pick is canon either way.
+    const picked = stored.choices.filter((choice) => stored.choiceCanon[choice.id]).map((choice) => choice.at);
+    const cut = Math.max(at, ...picked);
+    return { ...stored, easedOff: { at: cut }, readThrough: Math.max(stored.readThrough, cut) };
+  });
   if (!beat) throw beatNotFound();
   // By where the reading stands, not by whether the beat was cut before: a retry of an Ease off that stopped after
   // saving its cut still removes the lookahead written from the uncut scene. Until the beat counts as read, no beat
-  // after it can hold a pick (chooseOption needs it read), so nothing canon is lost.
-  if (!progress?.completed && (progress?.beatsRead ?? 0) <= i) await dropBeatsAfter(deps, runId, chapter, i);
+  // after it can hold a pick (chooseOption needs it read), so nothing canon is lost. A Confrontation past its ending
+  // keeps its canon, and with it the lookahead its ending queued.
+  if (!progress?.completed && (progress?.beatsRead ?? 0) <= i && cutShort(beat)) {
+    await dropBeatsAfter(deps, runId, chapter, i);
+  }
   const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
   const veilSuggestions = chapter.tags.filter(
     (tag): tag is LimitId =>
