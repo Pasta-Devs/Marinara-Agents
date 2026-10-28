@@ -292,6 +292,7 @@
               "replaceFrom": [
                 "../../sources/forge-kit/audio-settings.mjs",
                 "src/audio-en.mjs",
+                "../../sources/forge-kit/voice-picking.mjs",
                 "src/audio-client.mjs",
                 "src/audio-story.mjs"
               ],
@@ -2148,6 +2149,20 @@
             {
               "find": "var oy=[{version:null,new:[",
               "replace": "var oy=[{version:null,fixed:[\"A chapter you forged before starting a story event no longer keeps writing ahead while the event holds it, and a big choice it already wrote no longer stops the event from starting or its scenes. Once the event is done, its choice waits for you, and Continue on its map picks it up again.\",\"While story memory catches up, a companion chat, a character message or a Character Story knows only the scenes you have played, not the ones pre-forge wrote ahead or a Compress summary of them.\"]},{version:\"1.26.0\",new:["
+            }
+          ]
+        },
+        {
+          "version": "1.26.2",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.26.1\"",
+              "replace": "ds=\"1.26.2\""
+            },
+            {
+              "find": "var oy=[{version:null,fixed:[",
+              "replace": "var oy=[{version:null,changed:[\"Nothing changes in play. Some story, art and audio helpers can now be reused by other Marinara packages.\"]},{version:\"1.26.1\",fixed:["
             }
           ]
         }

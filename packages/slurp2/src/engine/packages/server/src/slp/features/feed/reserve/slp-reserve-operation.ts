@@ -95,6 +95,10 @@ export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Pr
   let account = existingSlot ? accounts.find((candidate) => candidate.id === existingSlot.creatorAccountId) : null;
 
   if (!existingSlot) {
+    // `reconcileNoodlerPreparedPosts` caps future slots by count, so a gap in the spacing must not
+    // add a slot past that cap: it was discarded a minute later, about once a minute.
+    if (active.filter((item) => Date.parse(item.publishAt) > at.getTime()).length >= settings.postsPerDay)
+      return "covered";
     const covered = active.map((item) => item.publishAt);
     // A candidate is covered when an existing slot is within a whole interval of it, matching the
     // per-creator spacing rule below. This used to be half an interval, and the two disagreeing is

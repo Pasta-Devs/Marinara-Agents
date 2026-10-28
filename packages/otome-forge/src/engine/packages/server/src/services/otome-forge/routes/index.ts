@@ -2,11 +2,9 @@
 // Otome Forge: GET /index and POST /index/opened
 // ──────────────────────────────────────────────
 import { parseBody, type Handle, type OtomeRouter } from "../http.js";
-import { INDEX_ID } from "../ids.js";
+import { INDEX_ID, INDEX_TARGET } from "../ids.js";
 import { IndexOpenedBody, normalizeIndex } from "../schemas/index.js";
 import type { OtomeStore } from "../store.js";
-
-const INDEX_TARGET = { id: INDEX_ID, kind: "index", name: "Otome Forge" };
 
 export function registerIndexRoutes(router: OtomeRouter, { store, handle }: { store: OtomeStore; handle: Handle }) {
   // A read never creates the document: a first visit that only looks leaves no trace.

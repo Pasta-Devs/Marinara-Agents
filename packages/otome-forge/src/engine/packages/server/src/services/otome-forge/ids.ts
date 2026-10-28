@@ -9,6 +9,8 @@ import { randomInt } from "node:crypto";
 export const OTOME_FORGE_PACKAGE_ID = "otome-forge";
 export const ID_PREFIX = `${OTOME_FORGE_PACKAGE_ID}:`;
 export const INDEX_ID = `${ID_PREFIX}index`;
+/** The `{id, kind, name}` mutateDoc creates the index with. */
+export const INDEX_TARGET = { id: INDEX_ID, kind: "index", name: "Otome Forge" };
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 const RUN_KEY = /^r-[0-9a-z]{1,12}-[0-9a-z]{6}$/;
@@ -69,3 +71,20 @@ export function isLiId(value: unknown): value is string {
   const slug = LI_ID.exec(value)?.[1];
   return slug !== undefined && slug.length <= SLUG_MAX;
 }
+
+// ── A run's documents (M1). Kinds: "world", "player", "unit", "state". ──
+
+/** `${R}:world`: premise, mystery, web, content, images, connections and forge steps. */
+export const worldId = (runId: string) => `${runId}:world`;
+/** `${R}:player`: the protagonist. */
+export const playerId = (runId: string) => `${runId}:player`;
+/** `${R}:unit:${li}`: a love interest and his bible (the id shape the kit modules build). */
+export const unitId = (runId: string, li: string) => `${runId}:unit:${li}`;
+/** `${R}:state`: Starlight and each LI's points and stage. */
+export const stateId = (runId: string) => `${runId}:state`;
+
+/** Every kind a run's documents have. Deleting a run removes each; a milestone that adds a kind adds it here. */
+export const RUN_DOC_KINDS = ["world", "player", "unit", "state"] as const;
+export type RunDocKind = (typeof RUN_DOC_KINDS)[number];
+/** The `{id, kind, name}` mutateDoc creates a run document with. */
+export const runDocTarget = (kind: RunDocKind, id: string) => ({ id, kind, name: `Otome Forge ${kind}` });

@@ -54,7 +54,22 @@ test("the bundle registers its routes under /api/otome-forge, keeps the id prefi
   assert.deepEqual(host.prefixes, ["/api/otome-forge"]);
   assert.deepEqual([...host.routes.keys()].sort(), [
     "GET /api/otome-forge/index",
+    "GET /api/otome-forge/runs/:run",
+    "GET /api/otome-forge/runs/:run/lis/:li/bible",
+    "POST /api/otome-forge/age-gate",
+    "POST /api/otome-forge/age-gate/revoke",
     "POST /api/otome-forge/index/opened",
+    "POST /api/otome-forge/premise/suggest",
+    "POST /api/otome-forge/runs",
+    "POST /api/otome-forge/runs/:run/activate",
+    "POST /api/otome-forge/runs/:run/art/paint",
+    "POST /api/otome-forge/runs/:run/art/prompt",
+    "POST /api/otome-forge/runs/:run/delete",
+    "POST /api/otome-forge/runs/:run/forge/consent",
+    "POST /api/otome-forge/runs/:run/forge/retry",
+    "POST /api/otome-forge/runs/:run/lis/:li/accent",
+    "POST /api/otome-forge/runs/:run/lis/:li/bible",
+    "POST /api/otome-forge/runs/:run/settings",
   ]);
 
   await selfCheck();
