@@ -8689,7 +8689,7 @@ async function main() {
       await page.locator('[data-ltm-source-group="ready"] > summary').click();
       await page.locator('[data-ltm-source-id="chat-long:messages:m1"] [data-ltm-source-message-range]').waitFor();
       const rangeViewport = page.viewportSize();
-      await page.setViewportSize({ width: 390, height: 844 });
+      await page.setViewportSize({ width: 320, height: 844 });
       for (const [sourceId, label] of [
         ["chat-long:messages:m1", "messages 1–120"],
         ["chat-long:messages:m121", "message 121"],
@@ -8703,6 +8703,15 @@ async function main() {
         assert.ok(
           rangeBox.x + rangeBox.width <= rowBox.x + rowBox.width,
           `${sourceId}: the range label is inside the row`,
+        );
+        const badgeBox = (await longRow.locator("[data-ltm-source-status]").boundingBox())!;
+        assert.ok(
+          badgeBox.x + badgeBox.width <= rowBox.x + rowBox.width,
+          `${sourceId}: the status badge is inside the row`,
+        );
+        assert.ok(
+          (await nameLabel.evaluate((element) => element.clientWidth)) >= 100,
+          `${sourceId}: the chat name keeps a readable width`,
         );
         assert.equal(
           await nameLabel.evaluate((element) => element.scrollWidth > element.clientWidth),

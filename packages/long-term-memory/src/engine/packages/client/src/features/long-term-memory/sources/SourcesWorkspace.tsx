@@ -1538,11 +1538,11 @@ export default function SourcesWorkspace({
           data-ltm-source-open={row.sourceId}
           className="min-w-0 flex-1 text-left focus-visible:outline-none"
         >
-          <span className={`flex items-center gap-2 ${range ? "min-w-0" : "flex-wrap"}`}>
+          <span className="flex flex-wrap items-center gap-2">
             {range ? (
               <>
-                {/* A long chat name is what gets cut; the range stays whole. */}
-                <strong className="min-w-0 truncate text-sm" data-ltm-source-chat-name>
+                {/* A long chat name is what gets cut; the range and badge stay whole and wrap before the name drops below 8rem. */}
+                <strong className="min-w-[8rem] flex-1 truncate text-sm" data-ltm-source-chat-name>
                   {range.chatName}
                 </strong>
                 <span
