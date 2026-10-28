@@ -1,3 +1,7 @@
+## 1.0.2 — 2026-10-28
+
+- Much cleaner figures: every character uses one fixed stick-figure shape whose joints always stay connected, with ready poses for standing, walking, running, sitting, kneeling, all fours, lying, crouching, punching, hugging and more.
+
 ## 1.0.1 — 2026-10-28
 
 - Choose when it draws, per chat: Clear poses (default), Any body description, or Every reply.

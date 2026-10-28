@@ -3770,7 +3770,7 @@
         "schemaVersion": 1,
         "id": "stick-illustration",
         "name": "Stick Illustration",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "description": "Draws a small stick-figure picture of the characters' poses under AI messages. Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -3785,8 +3785,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "5109edf4e3cdd85061ea954539bff10c73d81603835cdb2aa8fe31d62142b7f7",
-            "bytes": 11276
+            "sha256": "76258b5ccb3766e1a7b052b5612913b9de78efbda38b500b86c7d0286cf626d6",
+            "bytes": 20105
           }
         ],
         "permissions": [
@@ -3801,9 +3801,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/stick-illustration.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/stick-illustration-1.0.1.zip",
-        "sha256": "ea94b9cc4cd46b590905a45e5b79f81de7653de3ee58be4f328ee978cda17509",
-        "bytes": 3009
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/stick-illustration-1.0.2.zip",
+        "sha256": "5b2ab44049b51c38e73bc6ffe3338bb8a2a4692176e3b32448da6b513a377144",
+        "bytes": 3824
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#stick-illustration"
     },

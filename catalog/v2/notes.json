@@ -952,6 +952,12 @@
     "stick-illustration": {
       "versions": [
         {
+          "version": "1.0.2",
+          "date": "2026-10-28",
+          "notes": "- Much cleaner figures: every character uses one fixed stick-figure shape whose joints always stay connected, with ready poses for standing, walking, running, sitting, kneeling, all fours, lying, crouching, punching, hugging and more.",
+          "highlight": false
+        },
+        {
           "version": "1.0.1",
           "date": "2026-10-28",
           "notes": "- Choose when it draws, per chat: Clear poses (default), Any body description, or Every reply.",
