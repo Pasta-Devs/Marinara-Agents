@@ -41,6 +41,7 @@ try {
     ["story-entry", ["client.js"]],
     ["upgrade-assist-client", ["client.js"]],
     ["upgrade-assist-server", ["server.mjs"]],
+    ["weapon-eligibility", ["server.mjs"]],
     ["time-zone-server", ["server.mjs"]],
     ["chat-continuity-server", ["server.mjs"]],
     ["story-cancel-server", ["server.mjs"]],

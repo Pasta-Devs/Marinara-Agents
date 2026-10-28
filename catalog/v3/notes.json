@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.27.3",
+          "date": "2026-10-28",
+          "notes": "- Characters can equip their designated weapons even when a saved weapon has a different type from their role. The intended owner sees it in Gear and can equip it without regenerating the weapon. Signature skills still activate only for their owner; other characters keep the normal weapon-type rules.\n- On short landscape screens, Gear details keep their full height and the panel scrolls, so Choose and Change remain clickable instead of being clipped inside the card.",
+          "highlight": false
+        },
+        {
           "version": "1.27.2",
           "date": "2026-10-28",
           "notes": "- The narrator, the chapter planners and characters writing messages are asked to read every character's mind more carefully: what each one knows, wants and feels.",
@@ -283,12 +289,6 @@
           "version": "1.24.2",
           "date": "2026-10-26",
           "notes": "- Personas use their assigned Engine voice for story dialogue and newly sent character messages when dialogue audio is enabled.",
-          "highlight": false
-        },
-        {
-          "version": "1.24.1",
-          "date": "2026-10-26",
-          "notes": "- Formation fights can no longer stall. An enemy that keeps turning immune can be hit again after two turns, Retreat Echo repeats one real cast only once, and a summon with no free Front Row seat waits without spending energy.\n- Remaking older Formation kits no longer locks battles. Battles wait only while a remake runs, cancelling it keeps your current kits (new characters still get theirs), a kit that failed waits for Retry in Story Continuity, and story work is never cancelled. A game left open from 1.24.0 asks you to reload first.\n- Story, event and boss fights in Formation no longer fail over a slightly wrong kit, keep the boss in the fight, and skip element barriers your team cannot meet.\n- In battle, the boss bar no longer covers row tags on phones, team editor names are readable, Echoes show their own name, Fight with fighters unplanned opens the plan, energy skills pay for later steps, and a keyboard can plan a whole turn.",
           "highlight": false
         }
       ]

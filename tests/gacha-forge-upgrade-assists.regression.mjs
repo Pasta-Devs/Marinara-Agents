@@ -361,7 +361,7 @@ test("settled auto-equip repaints the current unit's button without adopting an 
   }
 });
 
-async function shippedGrowthRoutes() {
+async function shippedGrowthRoutes({ weapon = {}, combatMode = "classic" } = {}) {
   const runId = "upgrade-route-fixture";
   const unitId = `${runId}:unit:arden`;
   const otherId = `${runId}:unit:mira`;
@@ -372,7 +372,9 @@ async function shippedGrowthRoutes() {
   let beforeSessionWrite;
   const seed = (id, kind, data) =>
     docs.set(id, { id, kind, packageId: "gacha-forge", revision: 1, data: structuredClone(data) });
-  seed("index", "index", { runs: [{ runId, name: "Synthetic upgrade world" }] });
+  seed("index", "index", {
+    runs: [{ runId, name: "Synthetic upgrade world", combat: { mode: combatMode, revision: 0 } }],
+  });
   const character = {
     kind: "character",
     name: "Arden",
@@ -385,7 +387,14 @@ async function shippedGrowthRoutes() {
   };
   seed(unitId, "unit", character);
   seed(otherId, "unit", { ...character, name: "Mira" });
-  seed(weaponId, "unit", { kind: "weapon", name: "Fixture Blade", rarity: 5, weaponType: "blade", stats: { atk: 10 } });
+  seed(weaponId, "unit", {
+    kind: "weapon",
+    name: "Fixture Blade",
+    rarity: 5,
+    weaponType: "blade",
+    stats: { atk: 10 },
+    ...weapon,
+  });
   seed(`${runId}:relics`, "relics", {
     items: { "core-free": { slot: "core", rarity: 3, level: 0, main: { key: "hpPct", value: 1 }, subs: [] } },
   });
@@ -448,8 +457,55 @@ async function shippedGrowthRoutes() {
   };
 }
 
+test("shipped weapon choices and equip honor the designated owner while preserving type checks for others", async () => {
+  const grantedSkill = { name: "Signature strike", effect: "damage", power: 80, target: "enemy", trigger: "active" };
+  const ownerId = "upgrade-route-fixture:unit:arden";
+  const cases = [
+    { weapon: { weaponType: "focus", dedicatedTo: "  aRdEn  ", grantedSkill }, allowed: true, active: true },
+    {
+      weapon: { weaponType: "focus", dedicatedToId: ownerId, dedicatedTo: "Old name", grantedSkill },
+      allowed: true,
+      active: true,
+    },
+    { weapon: { weaponType: "focus", dedicatedTo: "Arden" }, allowed: true, active: false },
+    {
+      weapon: { weaponType: "focus", dedicatedToId: "another-owner", dedicatedTo: "Arden", grantedSkill },
+      allowed: false,
+    },
+    { weapon: { weaponType: "focus", dedicatedTo: "Mira", grantedSkill }, allowed: false },
+    { weapon: { weaponType: "focus" }, allowed: false },
+    { weapon: { weaponType: "blade" }, allowed: true, active: false },
+    { weapon: { weaponType: "blade", dedicatedTo: "Mira", grantedSkill }, allowed: true, active: false },
+  ];
+  for (const combatMode of ["classic", "formation"]) {
+    for (const row of cases) {
+      const fixture = await shippedGrowthRoutes({ weapon: row.weapon, combatMode });
+      const before = structuredClone(fixture.session());
+      const view = await fixture.call("/unit");
+      assert.equal(view.ok, true);
+      assert.equal(
+        view.gear.options.some((option) => option.id === fixture.weaponId),
+        row.allowed,
+        JSON.stringify(row),
+      );
+      const equipped = await fixture.call("/equip", { slot: "weapon", weaponId: fixture.weaponId });
+      assert.equal(equipped.ok, row.allowed, JSON.stringify(equipped));
+      if (row.allowed) {
+        assert.equal(fixture.session().roster[fixture.unitId].weapon, fixture.weaponId);
+        assert.equal(equipped.gear.slots.find((slot) => slot.key === "weapon").item.grantedActive, row.active);
+        assert.deepEqual(fixture.session().wallet, before.wallet);
+        assert.equal((await fixture.call("/equip", { slot: "weapon", weaponId: "" })).ok, true);
+        assert.equal(fixture.session().roster[fixture.unitId].weapon, undefined);
+      } else {
+        assert.equal(equipped.error, "wrong-type");
+        assert.deepEqual(fixture.session(), before, "a refused weapon never changes the session");
+      }
+    }
+  }
+});
+
 test("shipped onlyFree equipment route rejects occupied weapons/relics and loses an occupancy race safely", async () => {
-  const fixture = await shippedGrowthRoutes();
+  const fixture = await shippedGrowthRoutes({ weapon: { weaponType: "focus", dedicatedTo: "Arden" } });
   const roster = fixture.session().roster;
   roster[fixture.otherId].weapon = fixture.weaponId;
   roster[fixture.otherId].core = "core-free";
@@ -477,6 +533,22 @@ test("shipped onlyFree equipment route rejects occupied weapons/relics and loses
   assert.equal(manual.ok, true, "explicit manual transfer remains available");
   assert.equal(fixture.session().roster[fixture.otherId].weapon, undefined);
   assert.equal(fixture.session().roster[fixture.unitId].weapon, fixture.weaponId);
+});
+
+test("the designated weapon exception still requires owned characters and weapons from the same run", async () => {
+  const fixture = await shippedGrowthRoutes({ weapon: { weaponType: "focus", dedicatedTo: "Arden" } });
+  assert.equal((await fixture.call("/equip", { weaponId: "another-run:unit:signature" })).error, "bad-request");
+  assert.equal(
+    (await fixture.call("/equip", { weaponId: "upgrade-route-fixture:unit:missing" })).error,
+    "not-a-weapon",
+  );
+  assert.equal((await fixture.call("/equip", { weaponId: fixture.otherId })).error, "not-a-weapon");
+  delete fixture.session().roster[fixture.weaponId];
+  assert.equal((await fixture.call("/unit")).gear.options.length, 0);
+  assert.equal((await fixture.call("/equip", { weaponId: fixture.weaponId })).error, "not-owned-weapon");
+  fixture.session().roster[fixture.weaponId] = { level: 1 };
+  delete fixture.session().roster[fixture.unitId];
+  assert.equal((await fixture.call("/equip", { weaponId: fixture.weaponId })).error, "not-owned");
 });
 
 test("shipped bulk-training route charges all tier costs once, enforces caps and preserves a competing save", async () => {

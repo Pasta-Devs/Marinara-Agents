@@ -2257,6 +2257,25 @@
               "replace": "var oy=[{version:null,new:[\"The narrator, chapter planners and characters writing messages now read every character's mind more carefully.\"]},{version:\"1.27.1\",fixed:["
             }
           ]
+        },
+        {
+          "version": "1.27.3",
+          "commits": [],
+          "edits": [
+            {
+              "find": "ds=\"1.27.2\"",
+              "replace": "ds=\"1.27.3\""
+            },
+            {
+              "find": "var oy=[{version:null,new:[",
+              "replace": "var oy=[{version:null,fixed:[\"Characters can equip their designated weapons even when an older weapon has a different type from their role. The signature skill still belongs only to its designated character. Gear controls also remain reachable by scrolling on short landscape screens.\"]},{version:\"1.27.2\",new:["
+            },
+            {
+              "find": ".gr-root.gear > .detail.wide { flex: 1 1 auto; min-height: 0; }",
+              "replace": ".gr-root.gear > .detail.wide { flex: 1 0 auto; min-height: min-content; }",
+              "reason": "Keep the Gear detail and its Choose/Change actions inside their clipped card; short landscape views scroll the containing panel instead of shrinking the card below its contents."
+            }
+          ]
         }
       ]
     },
@@ -4021,6 +4040,29 @@
               "find": "W=[`You are ${l(I.name)}. You are writing to the player through ${n}: this is a MESSAGE, not a scene.`,",
               "replace": "W=[`You are ${l(I.name)}. You are writing to the player through ${n}: this is a MESSAGE, not a scene.`,\"Put on your I-Have-Good-Theory-Of-Mind Hat.\",",
               "reason": "A character writing a message puts on the theory-of-mind hat"
+            }
+          ]
+        },
+        {
+          "version": "1.27.3",
+          "commits": [],
+          "edits": [
+            {
+              "find": "function bc(e,t,n){",
+              "sourceId": "weapon-eligibility",
+              "replaceFrom": "src/weapon-eligibility.mjs"
+            },
+            {
+              "find": "function bc(e,t,n){if(!e||e.kind!==\"weapon\"||!e.grantedSkill||!t)return null;let r=String(e.dedicatedToId||\"\").trim();if(r)return r===String(n||\"\").trim()?e.grantedSkill:null;let a=String(e.dedicatedTo||\"\").trim().toLowerCase();return a&&a===String(t.name||\"\").trim().toLowerCase()?e.grantedSkill:null}",
+              "replace": "function bc(e,t,n){return e&&e.grantedSkill&&forgeWeaponIsForCharacter(e,t,n)?e.grantedSkill:null}"
+            },
+            {
+              "find": "v&&P.data.weaponType!==v)continue;",
+              "replace": "v&&P.data.weaponType!==v&&!forgeWeaponIsForCharacter(P.data,d,c))continue;"
+            },
+            {
+              "find": "if(U&&F.data.weaponType!==U)return",
+              "replace": "if(U&&F.data.weaponType!==U&&!forgeWeaponIsForCharacter(F.data,S.data,i))return"
             }
           ]
         }
