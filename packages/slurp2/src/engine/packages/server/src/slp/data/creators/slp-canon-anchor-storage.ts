@@ -18,8 +18,8 @@ import { mergeSlurpCanonAnchors, normalizeSlurpCanonAnchors } from "../../module
 export const SLURP_CANON_ANCHORS_KEY = "slurp2.canon-anchors";
 
 // Bumped when the extraction asks for more (v2 added the routine, v3 the essentials and the wider
-// card text), so every cache refreshes once. The player's edits are merged into the new reading.
-const ANCHORS_VERSION = "v3";
+// card text, v4 the niches), so every cache refreshes once. The player's edits are merged into the new reading.
+const ANCHORS_VERSION = "v4";
 const anchorKey = (text: string) => createHash("sha256").update(`${ANCHORS_VERSION}:${text}`).digest("hex");
 const FAILED_WAIT_MS = 30 * 60_000;
 

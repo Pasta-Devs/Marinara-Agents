@@ -828,6 +828,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.6",
+          "date": "2026-10-28",
+          "notes": "- Niches: the card reading now names each Creator's page niche (main + up to two side niches, from a fixed list). The reading refreshes once for every Creator.\n- Post jobs: each ordinary post gets a kind (try-on haul, gym set, finished commission, stream setup, fan request, teaser, …). The niche weighs the jobs, the main niche keeps at most half of the last 8 posts, and a Creator never repeats one of their last 3 jobs. Spice is not changed.\n- Card notes edits keep the niche.\n- Jobs fit the post: a job with its own place (gym, kitchen, stage) only goes on a post with no place yet, intimate jobs need a card heat of at least flirty, and avoided topics drop the job.\n- The card reading refreshes once for every Creator; on a card you never edited, the heat range may shift a little with the new reading.",
+          "highlight": false
+        },
+        {
           "version": "0.4.5",
           "date": "2026-10-28",
           "notes": "- Outfits change: a Creator who never had a wardrobe gets one filled from the card once (a closet you emptied stays empty), so pictures stop showing the same clothes.\n- Pictures follow your image style: a painted style no longer gets \"personal photograph\" words. In the story it is still a photo.\n- Automatic captions are short lines under the picture (about 40–160 characters, cut at a sentence end above 280).\n- Halloween costume contest in October (Settings › Stir › Drama): three Creators post costumes, you pick the winner, the winner posts a reward set.\n- Live recaps are built from the show (what you got, goals, coins, top tipper), so two shows never post the same text.\n- The daily world tick sees the recent themes, so the feed no longer gets \"Cozy\" trends day after day.\n- Fewer wasted slots: the planner stops adding post slots past posts per day, and one slot opens one campaign.",
@@ -939,12 +945,6 @@
           "version": "0.3.41",
           "date": "2026-10-14",
           "notes": "- Faster: Slurp shows character and persona avatars as small copies instead of the full card picture. On opening Slurp the feed downloaded about 16 MB of avatar pictures (1–2.5 MB each, shown 44 px wide), and Discover about 14 MB more; those downloads also held up the feed's other requests. The small copies are made once and kept in Slurp's own media folder.\n- Faster: the \"Report\" sheet of a post or a reply is built only when you open it. Before, every post card and reply built a closed copy, which made the feed and Creator pages slower to open.\n- Faster: the ambient background colour measures the pictures on screen only after the screen has drawn, so opening a screen no longer forces extra layout work.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.40",
-          "date": "2026-10-14",
-          "notes": "- Changed: Slurp follows a Creator's gender instead of calling everyone \"she\". Drama packs use the gender of whoever plays each role (\"{her:he}\" tokens), and pack names and descriptions no longer assume a woman. Post, DM and scene prompts tell the model the Creator's pronouns. A Creator without a gender is \"they\".\n- Added: a \"Clothing style\" choice in the Creator's stage profile: Auto, Feminine, Masculine or Neutral. Auto follows gender. It decides what a \"lingerie\" spice post is: lingerie for feminine, an underwear shoot with briefs for masculine, either for neutral. Male Creators no longer get bra-and-panties shoots unless their style is Feminine. The post prompt also names the style.\n- Added: a picture of a Creator whose appearance text does not say their sex starts with \"Male.\" or \"Female.\" from their gender, so the image model stops defaulting to a woman.\n- Changed: the stage profile field hints read \"he\", \"she\" or \"they\" from the gender you picked.",
           "highlight": false
         }
       ]
