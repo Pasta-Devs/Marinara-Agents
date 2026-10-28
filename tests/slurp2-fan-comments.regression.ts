@@ -78,4 +78,26 @@ const arcIds = SLURP_ARC_LIBRARY_SEED.map((arc) => arc.id);
 for (const id of ["sale_week", "burnout_break", "gear_upgrade", "leak_scare", "page_anniversary"])
   assert.ok(arcIds.includes(id), `${id} arc ships`);
 
+// A bank with one unused line always returns it, and a spent titled bank falls back to the plain one.
+const letters = Array.from({ length: 26 }, (_, n) => `body-${String.fromCharCode(97 + n)}`);
+for (const seed of seeds.slice(0, 40)) {
+  const reaction = slurpAudienceReactionFrom(seed, letters, { taken: letters.slice(1) });
+  assert.ok(reaction.includes("body-a"), `the one unused line is picked for ${seed}`);
+}
+// Spend the titled bank one line at a time: once it is used up, no seed gets a titled line.
+const spent: string[] = [];
+for (let round = 0; round < 12; round += 1) {
+  for (const seed of seeds) {
+    const line = slurpAudienceReactionFrom(seed, letters, { title: "Gym day", taken: spent });
+    if (line.includes('"Gym day"')) spent.push(line.toLowerCase());
+  }
+}
+assert.ok(spent.length > 0, "titled lines exist");
+assert.ok(
+  seeds.every(
+    (seed) => !slurpAudienceReactionFrom(seed, letters, { title: "Gym day", taken: spent }).includes('"Gym day"'),
+  ),
+  "a spent titled bank falls back to the plain bank",
+);
+
 console.log("slurp2 fan comments: ok");

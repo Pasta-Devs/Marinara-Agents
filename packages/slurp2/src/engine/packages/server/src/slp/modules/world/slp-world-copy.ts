@@ -84,19 +84,25 @@ const quotable = (title: string | null | undefined) => {
 };
 
 /** The first pick whose line is not already under this post (`taken`: its comments, lower case). */
-function pickFresh(
+function freshLine(
   seed: string,
   salt: string,
   bank: readonly string[],
-  taken: readonly string[] = [],
+  taken: readonly string[],
   fill = (line: string) => line,
-): string {
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const line = fill(bank[pickIndex(attempt ? `${seed}#${attempt}` : seed, salt, bank.length)]!);
+): string | null {
+  const start = pickIndex(seed, salt, bank.length);
+  for (let offset = 0; offset < bank.length; offset += 1) {
+    const line = fill(bank[(start + offset) % bank.length]!);
     const key = line.toLowerCase().trim();
     if (!key || !taken.some((text) => text.includes(key))) return line;
   }
-  return fill(bank[pickIndex(seed, salt, bank.length)]!);
+  return null;
+}
+
+/** The first fresh line from the hashed start, or the start line when every line is taken. */
+function pickFresh(seed: string, salt: string, bank: readonly string[], taken: readonly string[] = []): string {
+  return freshLine(seed, salt, bank, taken) ?? bank[pickIndex(seed, salt, bank.length)]!;
 }
 
 /** What a fan's comment can see of the post: its title, and the comments already under it. */
@@ -135,10 +141,12 @@ export function slurpCommissionBrief(
 /** One question for a post. */
 export function slurpAudienceQuestion(seed: string, context: SlurpCommentContext = {}): string {
   const title = quotable(context.title);
-  if (title && pickIndex(seed, "titled", 3) === 0)
-    return pickFresh(seed, "titled-question", TITLED_QUESTIONS, context.taken, (line) =>
-      line.replace("{title}", () => title),
+  if (title && pickIndex(seed, "titled", 3) === 0) {
+    const line = freshLine(seed, "titled-question", TITLED_QUESTIONS, context.taken ?? [], (text) =>
+      text.replace("{title}", () => title),
     );
+    if (line) return line;
+  }
   return pickFresh(seed, "question", QUESTIONS, context.taken);
 }
 
@@ -386,9 +394,9 @@ export function slurpAudienceReactionFrom(
   const title = quotable(context.title);
   const body =
     title && pickIndex(seed, "titled", 4) === 0
-      ? pickFresh(seed, "titled-reaction", TITLED_REACTIONS, context.taken, (line) =>
+      ? (freshLine(seed, "titled-reaction", TITLED_REACTIONS, context.taken ?? [], (line) =>
           line.replace("{title}", () => title),
-        )
+        ) ?? pickFresh(seed, "reaction", bodies, context.taken))
       : pickFresh(seed, "reaction", bodies, context.taken);
   const tail = REACTION_TAILS[pickIndex(seed, "reaction-tail", REACTION_TAILS.length)]!;
   return `${opener ? `${opener} ` : ""}${body}${tail}`;
