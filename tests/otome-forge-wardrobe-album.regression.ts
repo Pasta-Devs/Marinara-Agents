@@ -650,7 +650,12 @@ test("the Album lists only what is unlocked: owned Memories, seen and painted CG
   const t = await itemsWorld("r-m4balbum-aaaaaa", { replies: [json(storyPlan())] });
   await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
     ...state,
-    lis: { ...state.lis, [KAI]: { ...state.lis[KAI]!, revealed: ["north-light"] } },
+    lis: {
+      ...state.lis,
+      [KAI]: { ...state.lis[KAI]!, revealed: ["north-light"] },
+      // Read Him (M5) taught two of Sol's mask tells, the last one first.
+      [SOL]: { ...state.lis[SOL]!, tellsLearned: [2, 0] },
+    },
     album: {
       cgs: [{ key: "main-1/1", url: "/api/global-gallery/file/seen.png", ref: "global-gallery:seen", at, li: KAI }],
     },
@@ -679,6 +684,7 @@ test("the Album lists only what is unlocked: owned Memories, seen and painted CG
   );
   assert.deepEqual(album.tells[KAI], ["flinches at the bell"], "the tells of a secret she has learned");
   assert.deepEqual(album.tells[MIR], [], "no tell of a secret still hidden");
+  assert.deepEqual(album.tells[SOL], ["won't sit", "polishes clean glass"], "the mask tells Read Him taught, in order");
   assert.equal(album.soundtrack.length, 6);
   assert.ok(album.soundtrack.every((entry: { track: unknown }) => entry.track === null));
   assert.ok(Array.isArray(album.timeline) && Array.isArray(album.favorites));

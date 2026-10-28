@@ -40,6 +40,7 @@ import {
   ROUTE_NODES_MIN,
   stageRow,
 } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
+import { stillToMend } from "../../../../../client/src/features/otome-forge/shared/dates.js";
 import { FACES, MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { LIMIT_IDS } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { explicitCgAllowed, imageBriefRule, otomeContentContract, otomeContractReminder } from "../content-contract.js";
@@ -450,6 +451,23 @@ CHOICE EFFECTS (extend each option above with an optional "effects" array):
 - resolve: only for a grievance id this node lists as resolvable.
 - Omit "effects" when nothing changes between them. Effects never change the story: every branch still reconverges.`;
 
+/**
+ * P6 on a date's beat (M5): exactly one small choice whose options carry a hidden score against the date's love
+ * interest's likes and dislikes (S/story/beats.ts checks it and reads it as `beat.scores`).
+ */
+export function dateChoiceInstruction(unit: Pick<Unit, "name" | "bible">, goesWrong: boolean): string {
+  const likes = unit.bible?.likes.filter((like) => like.trim()).slice(0, 6) ?? [];
+  const dislikes = unit.bible?.dislikes.filter((dislike) => dislike.trim()).slice(0, 6) ?? [];
+  return `
+
+DATE CHOICE (this node is one scene of a date with ${unit.name}):
+- Offer exactly ONE small choice in this node (2 to 4 options), at the moment where what the protagonist does matters to ${unit.name}. Never a big choice.
+- Give every option a "score" field beside its "text" and "selection" ("score": 1): 1 when ${unit.name} would love it, 0 when it passes without much, -1 when it grates against them. At least one option scores 1; let the options differ.
+- Judge by who ${unit.name} is, never by what is "nice" in general.${likes.length ? ` ${unit.name} likes: ${likes.join("; ")}.` : ""}${dislikes.length ? ` ${unit.name} dislikes: ${dislikes.join("; ")}.` : ""}
+- The labels, selections and prose never name or hint at a score; a good pick should feel right, not marked.
+- ${goesWrong ? `This evening is planned to stumble: an option may open a grievance, and on a date it is at most "minor".` : "Nothing on this date opens a grievance: leave grievance out of every option's effects."}`;
+}
+
 const VOICES_INSTRUCTION = `
 
 SPEAKER VOICES (extend the JSON shape above with an optional top-level "voices" object):
@@ -461,7 +479,10 @@ export interface BeatMessagesInput {
   /** Every love interest; the cast present is `node.cast`. */
   units: readonly Unit[];
   state: RunState;
-  chapter: Pick<Chapter, "kind" | "number" | "title" | "lead" | "foil" | "nodes" | "li" | "stage" | "grievance">;
+  chapter: Pick<
+    Chapter,
+    "kind" | "number" | "title" | "lead" | "foil" | "nodes" | "li" | "stage" | "grievance" | "date"
+  >;
   node: ChapterNode;
   /** The canonical story so far in this chapter, rendered (earlier beats), or "" for its first node. */
   storySoFar: string;
@@ -482,6 +503,11 @@ export function beatMessages({
   const present = units.filter((unit) => node.cast.includes(unit.id));
   const thinkers = present.filter((unit) => stageOf(state, unit.id) >= 2).map((unit) => unit.name);
   const last = node.i === chapter.nodes.length - 1;
+  // A date (M5) is the protagonist and one love interest; it never ends on a big choice. It is their own evening, so
+  // their card holds only what they may know (ownView), as the date's plan did.
+  const date = chapter.kind === "date" ? chapter.date : undefined;
+  const partner = date ? units.find((unit) => unit.id === date.li) : undefined;
+  const cardState = (li: LiId) => (date ? ownView(state, li).liState : liStateOf(state, li));
   const system = [
     "You are the narrator of an otome visual novel: a character-driven romance mystery. Narrate ONE node of the chapter as a scene the player taps through, a short segment at a time.",
     NO_CHOICES_SENTENCE,
@@ -515,6 +541,7 @@ export function beatMessages({
         ? MOMENT_FRAMING[node.moment]
         : "";
   const arc = arcFraming({ chapter, node, units, state });
+  const dateFraming = date && partner ? dateFramingText(date, partner, state) : "";
   const user = [
     "WORLD",
     world.setting.trim() || world.premise.trim(),
@@ -523,7 +550,7 @@ export function beatMessages({
     protagonistBlock(player),
     "",
     present.length ? "LOVE INTERESTS IN THIS NODE" : "No love interest is in this node.",
-    present.map((unit) => sceneCardBlock(unit, liStateOf(state, unit.id), node.resolves ?? [])).join("\n\n"),
+    present.map((unit) => sceneCardBlock(unit, cardState(unit.id), node.resolves ?? [])).join("\n\n"),
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
     "",
@@ -539,6 +566,7 @@ export function beatMessages({
     node.place ? `It opens here: ${node.place}` : "",
     framing,
     ...arc,
+    dateFraming,
     node.resolves?.length ? `Grievances this node may resolve: ${node.resolves.join(", ")}.` : "",
     otomeContractReminder("scene"),
   ]
@@ -549,12 +577,36 @@ export function beatMessages({
       { role: "system", content: system },
       { role: "user", content: user },
     ],
-    { enabled: true, terminal: last },
+    { enabled: true, terminal: last && !date },
   );
+  const dateChoice = date && partner ? dateChoiceInstruction(partner, date.goesWrong) : "";
   return [
-    { ...messages[0], content: messages[0].content + CHOICE_EFFECTS_INSTRUCTION + VOICES_INSTRUCTION },
+    { ...messages[0], content: messages[0].content + CHOICE_EFFECTS_INSTRUCTION + dateChoice + VOICES_INSTRUCTION },
     ...messages.slice(1),
   ];
+}
+
+/**
+ * The user turn's framing for a date's node: where they are, and what a Make it right date is for while its rupture
+ * still stands (stillToMend; mended elsewhere since, the scene is an ordinary date's), with who holds it. The rupture's
+ * grievance is named only when it came from what they may know (ownView), as on their card.
+ */
+function dateFramingText(date: NonNullable<Chapter["date"]>, partner: Unit, state: RunState): string {
+  const mending = stillToMend(date, state.lis);
+  const grievance = mending
+    ? ownView(state, partner.id).liState.grievances.find((item) => item.id === mending.id)
+    : undefined;
+  const named = grievance ? ` (${grievance.text})` : "";
+  return [
+    `This chapter is a DATE: an evening the protagonist and ${partner.name} spend together${date.placeName ? ` at ${date.placeName}` : ""}. Keep it to the two of them; anyone else passes at the edges.`,
+    !mending
+      ? ""
+      : mending.by === "protagonist"
+        ? `It is a MAKE IT RIGHT date: a rupture stands between them${named}. The protagonist is the one hurt, and ${partner.name} is trying to earn back the protagonist's trust. The protagonist's hurt is honest and does not melt for nothing; nothing in this scene resolves the rupture, and how the evening ends is decided by the protagonist's choices.`
+        : `It is a MAKE IT RIGHT date: a rupture stands between them${named}. The protagonist is trying to mend it. ${partner.name}'s hurt is honest and does not melt for nothing; nothing in this scene resolves the rupture, and how the evening ends is decided by the protagonist's choices.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 // ── M2b: arcs. What each stage's route chapter is for, and the framing P6 adds to route and repair chapters ──

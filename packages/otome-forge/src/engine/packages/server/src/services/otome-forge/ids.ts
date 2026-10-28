@@ -147,6 +147,7 @@ export const RUN_DOC_KINDS = [
   "chat",
   "banner",
   "item",
+  "readhim",
 ] as const;
 export type RunDocKind = (typeof RUN_DOC_KINDS)[number];
 /** The `{id, kind, name}` mutateDoc creates a run document with. */

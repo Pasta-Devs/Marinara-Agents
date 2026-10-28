@@ -99,13 +99,14 @@ export const voiceCacheKey = (runKey: string, ref: string) => `otome-forge:${run
 
 /**
  * The ref a Home tap line is voiced under (M3): his id and a hash of the line, since the Engine keys a clip by its ref,
- * voice and speaker but never its text, and a new stage's pack may put other words in the same place.
+ * voice and speaker but never its text, and a new stage's pack may put other words in the same place. `kind` names
+ * the screen's lines (M5's Claw Machine voices its pack lines as "claw").
  */
-export function tapLineRef(li: string, text: string): string {
+export function tapLineRef(li: string, text: string, kind = "tap"): string {
   // FNV-1a, 32 bits: plenty for a love interest's few dozen lines.
   let hash = 0x811c9dc5;
   for (let index = 0; index < text.length; index += 1) hash = Math.imul(hash ^ text.charCodeAt(index), 0x01000193);
-  return `tap:${li}:${(hash >>> 0).toString(36)}`;
+  return `${kind}:${li}:${(hash >>> 0).toString(36)}`;
 }
 
 /** The tracks generated for this story (`world.audio.tracks`), as the server keeps them. */

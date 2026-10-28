@@ -21,6 +21,10 @@ import { fetchRunView, runQueryKey, useRun } from "./hooks/use-run";
 import { accentOf } from "./lib/accent";
 import { OtomePropsContext, readOtomeProps } from "./props";
 import { BibleView } from "./screens/BibleView";
+import { ClawMachine } from "./screens/dates/ClawMachine";
+import { DateNight } from "./screens/dates/DateNight";
+import { DatesHub, type DateActivity } from "./screens/dates/DatesHub";
+import { ReadHim } from "./screens/dates/ReadHim";
 import { ForgeProgress } from "./screens/ForgeProgress";
 import { HomeScreen, useHomeLi } from "./screens/home/HomeScreen";
 import { PhoneScreen, type PhoneOpen } from "./screens/phone/PhoneScreen";
@@ -44,6 +48,8 @@ import { WorldPicker } from "./screens/WorldPicker";
 import type { OtomeIndex, RunView } from "./shared/api-types";
 
 const DOCKED: ReadonlySet<ScreenId> = new Set<ScreenId>(["home", ...DOCK_SCREENS]);
+/** The Dates activities this build opens (M5), each a screen taking ActivityScreenProps. */
+const ACTIVITIES: ReadonlySet<DateActivity> = new Set<DateActivity>(["read-him", "date-night", "claw"]);
 
 interface ScreensProps {
   lookPreference: LookPreference;
@@ -66,6 +72,10 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   // The thread the phone shows (Home's Reply opens one with the note it quotes; the phone keeps it as the player moves
   // between threads and spends the quote), or null for the thread list.
   const [phoneOpen, setPhoneOpen] = useState<PhoneOpen | null>(null);
+  // Who Dates is about: the love interest picked there, kept while a game opens and closes.
+  const [datesLi, setDatesLi] = useState<string | null>(null);
+  // Date Night reads its scenes full-stage, as the reader does: the top bar steps aside while it says so.
+  const [immersive, setImmersive] = useState(false);
   const [opening, setOpening] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const screenRef = useRef<HTMLDivElement>(null);
@@ -196,6 +206,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     setChosen("reader");
   };
   const bibleOf = view?.lis.find((li) => li.id === bibleLi) ?? null;
+  const datesOf = view?.lis.find((li) => li.id === (datesLi ?? homeLi?.id)) ?? view?.lis[0] ?? null;
 
   // Where Back leads. The opening screen and the dock's screens have none.
   const back: Partial<Record<ScreenId, ScreenId>> = {
@@ -205,6 +216,9 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     bible: "forge",
     reader: readerReturn,
     phone: "home",
+    "read-him": "dates",
+    "date-night": "dates",
+    claw: "dates",
     home: activeRun ? undefined : "picker",
   };
   const backTo = back[screen];
@@ -271,14 +285,39 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
       />
     ) : screen === "phone" && activeRun && view ? (
       <PhoneScreen runKey={activeRun} view={view} open={phoneOpen} onOpenChange={setPhoneOpen} />
+    ) : screen === "dates" && activeRun && view ? (
+      <DatesHub
+        runKey={activeRun}
+        view={view}
+        li={datesOf?.id ?? null}
+        onPickLi={setDatesLi}
+        available={ACTIVITIES}
+        onPlay={(activity, li) => {
+          setDatesLi(li);
+          go(activity);
+        }}
+      />
+    ) : screen === "read-him" && activeRun && view && datesOf ? (
+      <ReadHim runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
+    ) : screen === "date-night" && activeRun && view && datesOf ? (
+      <DateNight
+        runKey={activeRun}
+        view={view}
+        li={datesOf}
+        onExit={() => go("dates")}
+        onHome={() => go("home")}
+        onImmersive={setImmersive}
+      />
+    ) : screen === "claw" && activeRun && view && datesOf ? (
+      <ClawMachine runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
     ) : (
       <Placeholder screen={screen} />
     );
 
   return (
     <OtomeAudioProvider run={view} cue={playsHomeCue(screen, settingsReturn) ? "home" : null}>
-      {/* The reader is full-stage: its own header carries the way out. */}
-      {screen === "reader" ? null : (
+      {/* The reader (and a date's scenes) are full-stage: their own header carries the way out. */}
+      {screen === "reader" || (screen === "date-night" && immersive) ? null : (
         <TopBar
           run={
             RUN_SCREENS.has(screen)
@@ -294,7 +333,15 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         />
       )}
       <div
-        key={screen === "bible" ? `bible-${bibleLi}` : screen === "reader" ? `reader-${chapterKey}` : screen}
+        key={
+          screen === "bible"
+            ? `bible-${bibleLi}`
+            : screen === "reader"
+              ? `reader-${chapterKey}`
+              : screen === "read-him" || screen === "date-night" || screen === "claw"
+                ? `${screen}-${datesOf?.id ?? ""}`
+                : screen
+        }
         ref={screenRef}
         className="of-screen"
       >

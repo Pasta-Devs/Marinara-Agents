@@ -7,8 +7,9 @@
 // - memories: the owned Memories, Moments and Snapshots in the order won, with how far each story has been read.
 // - timeline and favorites: the state's Love Timeline (stages, Snapshots, couple sets, …) and starred lines.
 // - soundtrack: each cue with its generated track, or null for the stock one.
-// - tells: per love interest, the tells she has learned to read: those of each secret of his she has learned (its
-//   truth is out, so what gave it away reads plainly now). The seed of the R2 Dossier.
+// - tells: per love interest, the tells she has learned to read: the mask tells Read Him taught (M5), and those of each
+//   secret of his she has learned (its truth is out, so what gave it away reads plainly now). The seed of the R2
+//   Dossier.
 // Nothing the player has not won, seen or learned is listed: no banner item not owned, no CG not seen, no tell of a
 // secret still hidden.
 import type { LiState, RunState, Unit } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -28,18 +29,13 @@ import { readRun, type RunDocuments } from "../schemas/state.js";
 const MEMORY_KINDS: ReadonlySet<Item["kind"]> = new Set(["memory5", "moment4", "snapshot3"]);
 
 /**
- * The tells she has learned to read of his: each learned secret's tells, and (M5) the mask tells Read Him taught.
- * ponytail: M5's per-LI `tellsLearned` (indexes into his mask tells) is not on this branch; it is read structurally
- * here, so it joins the journal as soon as M5's state keeps it. Upgrade path: read `liState.tellsLearned` directly.
+ * The tells she has learned to read of his: the mask tells Read Him taught (M5's `tellsLearned`, indexes into his mask
+ * tells in the order learned), then each learned secret's tells.
  */
 export function learnedTells(unit: Pick<Unit, "bible">, liState: LiState): string[] {
   const bible = unit.bible;
   if (!bible) return [];
-  const learned = (liState as LiState & { tellsLearned?: unknown }).tellsLearned;
-  const mask = (Array.isArray(learned) ? learned : [])
-    .filter((index): index is number => Number.isInteger(index))
-    .map((index) => bible.mask.tells[index])
-    .filter((tell): tell is string => !!tell);
+  const mask = liState.tellsLearned.map((index) => bible.mask.tells[index]).filter((tell): tell is string => !!tell);
   const secrets = bible.secrets
     .filter((secret) => liState.revealed.includes(secret.id))
     .flatMap((secret) => secret.tells);

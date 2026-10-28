@@ -14,11 +14,14 @@ import { registerAlbumRoutes } from "./routes/album.js";
 import { registerArcRoutes } from "./routes/arcs.js";
 import { registerArtRoutes } from "./routes/art.js";
 import { registerAudioRoutes } from "./routes/audio.js";
+import { registerClawRoutes } from "./routes/claw.js";
+import { registerDateRoutes } from "./routes/dates.js";
 import { registerHomeRoutes } from "./routes/home.js";
 import { registerIndexRoutes } from "./routes/index.js";
 import { registerItemRoutes } from "./routes/items.js";
 import { registerMemoryRoutes } from "./routes/memory.js";
 import { registerPhoneRoutes } from "./routes/phone.js";
+import { registerReadHimRoutes } from "./routes/read-him.js";
 import { registerRunRoutes } from "./routes/runs.js";
 import { registerSetupRoutes } from "./routes/setup.js";
 import { registerStoryRoutes } from "./routes/story.js";
@@ -72,6 +75,9 @@ export async function activate({ api }: ActivationContext) {
       registerItemRoutes(router, deps);
       registerWardrobeRoutes(router, deps);
       registerAlbumRoutes(router, deps);
+      registerClawRoutes(router, deps);
+      registerReadHimRoutes(router, deps);
+      registerDateRoutes(router, deps);
     },
     { prefix: "/api/otome-forge" },
   );
