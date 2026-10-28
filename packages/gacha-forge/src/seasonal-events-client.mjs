@@ -94,6 +94,11 @@ async function loadForgeSeasonalEvents(host, retry = false) {
   }
   if (host._run?.runId !== runId || host._forgeSeasonalRevision !== revision) return;
   host._forgeSeasonalLoading = false;
+  // A refresh stopped by opening the event (stopForgeStoryRequests) or dropped keeps the list it was refreshing.
+  if (!result && host._forgeSeasonalState?.ok) {
+    host._renderBrowser();
+    return;
+  }
   host._forgeSeasonalLoadedAt = Date.now();
   host._forgeSeasonalServerTime =
     Number.isFinite(result?.serverNow) && result.serverNow > 0
@@ -245,7 +250,7 @@ export function wireForgeSeasonalEvents(host) {
     !host._forgeSeasonalLoading &&
     (!host._forgeSeasonalState
       ? host._run.story?.seasonalEvents === true || ["chapters", "events"].includes(host._hudView)
-      : // So finishing a chapter or Character Story opens the event without a reload.
+      : // So finishing a chapter or Character Story offers the event without a reload.
         chapterList && host._forgeSeasonalChapters !== chapterList && host._run.story?.seasonalEvents === true)
   ) {
     host._forgeSeasonalChapters = chapterList;

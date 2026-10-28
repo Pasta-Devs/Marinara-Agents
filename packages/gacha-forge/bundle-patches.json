@@ -2081,7 +2081,7 @@
             },
             {
               "find": "var oy=[{version:null,fixed:[",
-              "replace": "var oy=[{version:null,new:[\"What happens next in Chapters can offer the season's story event beside the next chapter and any Character Story. It starts the way a Character Story does: the next chapter waits until you finish it, and while it is open its card takes the chapter's place.\",\"Pre-forge now writes story events too: scenes are written ahead at no Vigor cost, each fight is designed after the scene before it, Story and images paints their art, and the event's map has the pre-forge bar with Cancel.\"],fixed:[\"An event's loader and map show its title instead of \\\"Chapter event-1\\\", and a chapter held by an open event opens the event instead of an error.\",\"Chapters reads the season's event again when your progress changes, so finishing a chapter opens the event without a reload.\"]},{version:\"1.25.2\",fixed:["
+              "replace": "var oy=[{version:null,new:[\"What happens next in Chapters can offer the season's story event beside the next chapter and any Character Story. It starts the way a Character Story does: the next chapter waits until you finish it, and while it is open its card takes the chapter's place.\",\"Pre-forge now writes story events too: scenes are written ahead at no Vigor cost, each fight is designed after the scene before it, Story and images paints their art, and the event's map has the pre-forge bar with Cancel.\"],fixed:[\"An event's loader and map show its title instead of \\\"Chapter event-1\\\", and a chapter held by an open event opens the event instead of an error.\",\"Chapters reads the season's event again when your progress changes, so What happens next offers the event as soon as you finish a chapter, without a reload.\"]},{version:\"1.25.2\",fixed:["
             },
             {
               "find": "e.innerHTML=bp(a.chapters,a.nextChapter,a.nextUnlocked,{offers:r,beats:a.bondBeats,heldBy:s})",
@@ -3798,8 +3798,8 @@
               "replace": "forgePlan=Number.isInteger(u)||forgeSeasonalChapter(u)?await a.getById(n.id,f(p,u)):null"
             },
             {
-              "find": "function forgeDesignFight(p,m,u,x){return Ph(p,m,u,x).then(",
-              "replace": "function forgeDesignFight(p,m,u,x){return(forgeSeasonalChapter(u)?forgeSeasonalEvents.designFight(p,u,x):Ph(p,m,u,x)).then("
+              "find": "function forgeDesignFight(p,m,u,x){return Ph(p,m,u,x).then(g=>(g&&g.ok&&g.guide&&!g.cached&&rt(",
+              "replace": "function forgeDesignFight(p,m,u,x){return(forgeSeasonalChapter(u)?forgeSeasonalEvents.designFight(p,u,x):Ph(p,m,u,x)).then(async g=>(g&&g.ok&&g.guide&&!g.cached&&(!forgeSeasonalChapter(u)||await forgeSeasonalEvents.choiceActive(p,u))&&rt("
             }
           ]
         }

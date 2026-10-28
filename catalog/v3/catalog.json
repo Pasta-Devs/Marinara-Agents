@@ -1060,8 +1060,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "4a76ba602f82015ff4cf7f27766c13380402d10fcc5cfd332b484072e13379a6",
-            "bytes": 1911994
+            "sha256": "3916f337a1d3c755b5fd38c5d0c0dda0bef6c5be01b75f5d74d20422a7ae19e2",
+            "bytes": 1912233
           },
           {
             "path": "farm-asc.webp",
@@ -1535,8 +1535,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "eb385c1b4f618dd42606edf8d12d51ff5a32cb32d185d9d508797d0ee2e44b02",
-            "bytes": 1016544
+            "sha256": "6ef9a406964df0e48961edad5450305cb81051c6ef19fd09f6530170a95da61b",
+            "bytes": 1016623
           },
           {
             "path": "skill-aoe_damage-dark.webp",
@@ -2389,8 +2389,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.26.0.zip",
-        "sha256": "8fc4e3516866276af15ad86da9e9b7e16de18ca63ba43fc9535f02a0980a9d35",
-        "bytes": 9160934
+        "sha256": "4056e7deda901082ab66335274f5515f8af94f82b891bc50208466101be7a548",
+        "bytes": 9161252
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     },

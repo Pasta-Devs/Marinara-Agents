@@ -47,6 +47,8 @@ const guide = (name, tier = "soldier") => ({
   opening: `${name} steps forward.`,
   objective: `Pass ${name}'s trial.`,
   outcomeOnWin: `${name} lets the procession pass.`,
+  place: `Gate of ${name}`,
+  placeTags: "gate",
   formation: [
     {
       name,
@@ -56,6 +58,8 @@ const guide = (name, tier = "soldier") => ({
       position: "front",
       stats: { hp: 10, atk: 10, def: 10, spd: 10 },
       skill: { name: "Strike", effect: "damage", power: 100, target: "enemy", description: "A clean hit." },
+      look: "a lantern-armored guard",
+      lookTags: ["armor"],
     },
   ],
   dialogueCues: [
@@ -583,6 +587,32 @@ for (const [label, close] of [
     );
     const again = await host.post("/preforge/start", { chapter });
     assert.equal(again.allowed, false);
+  });
+}
+
+for (const [label, close] of [
+  ["still open", async () => {}],
+  ["ended", (host) => host.setEvent((event) => (event.endsAt = Date.now() - 1))],
+  ["switched off", (host) => host.setRun((run) => (run.story.seasonalEvents = false))],
+]) {
+  await test(`a fight the chain is designing when the event is ${label} paints its enemy and place only while it is open`, async () => {
+    const host = await harness({
+      images: { connectionId: "fixture-images", backgrounds: true, enemyArt: true, battleBackgrounds: true },
+    });
+    await host.open();
+    const designing = host.pauseCall("fight", 1);
+    await host.post("/preforge/start", { chapter });
+    await waitFor(designing.entered, "the fight design");
+    await settle(host);
+    const before = engine.paints.length;
+    await close(host);
+    designing.release();
+    await settle(host);
+    // Open, the chain goes on to the next fights; closed, it paints nothing for a battle that can no longer open.
+    assert.deepEqual(
+      label === "still open" ? engine.paints.slice(before, before + 2) : engine.paints.slice(before),
+      label === "still open" ? ["Guard 1", "Gate of Guard 1"] : [],
+    );
   });
 }
 

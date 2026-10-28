@@ -11,6 +11,7 @@ import { forgeSeasonalEnglish } from "../packages/gacha-forge/src/seasonal-event
 import {
   adoptForgeSeasonalResponse,
   forgeSeasonalHeld,
+  openForgeSeasonalEvent,
   wireForgeSeasonalEvents,
 } from "../packages/gacha-forge/src/seasonal-events-client.mjs";
 
@@ -235,4 +236,47 @@ test("starting the event marks it opened in the list read before, so Chapters sh
   assert.match(html, /<article class="ch-card bond open" data-story-event-open="event-1">/u);
   assert.doesNotMatch(html, /data-open-chapter="2"/u);
   assert.equal(host._forgeEvent.opened, now);
+});
+
+test("opening the event while Chapters reads the events again keeps the list, so its open card still shows", async () => {
+  Object.assign(globalThis, {
+    forgeSeasonalEnglish,
+    wireForgeBannerAnimation() {},
+    syncForgeAudio() {},
+    stopForgeStoryRequests() {},
+  });
+  globalThis.document = { createElement: () => ({ dataset: {} }) };
+  let answer;
+  const host = {
+    _root: {
+      querySelector: (selector) => (selector === "[data-forge-seasonal-layout]" ? {} : null),
+      querySelectorAll: () => [],
+    },
+    _run: { runId: "w", story: { seasonalEvents: true } },
+    _forgeSeasonalRunId: "w",
+    _forgeSeasonalEnabled: true,
+    _forgeSeasonalState: { ok: true, events: [{ ...event }] },
+    _hudView: "chapters",
+    _chaptersData: { chapters: [{ chapter: 1, normal: 10, cleared: true }] },
+    _eventSlots: [],
+    _planChapter: 2,
+    _plan: null,
+    // The read is stopped by opening the event: _postJson answers null for a stopped story request.
+    _postJson: () => new Promise((resolve) => (answer = resolve)),
+    _renderBrowser() {},
+  };
+  wireForgeSeasonalEvents(host);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(typeof answer, "function", "Chapters reads the events again for new progress");
+  openForgeSeasonalEvent(host, host._forgeSeasonalState.events[0]);
+  answer(null);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(host._forgeSeasonalState.ok, true, "the stopped read keeps the list it was refreshing");
+  adoptForgeSeasonalResponse(
+    host,
+    "/story-event/plan",
+    { runId: "w", chapter: "event-1" },
+    { ok: true, plan: {}, progress: {}, event: { ...event, opened: now, after: 1 } },
+  );
+  assert.equal(forgeSeasonalNextStory(host)?.opened, now);
 });
