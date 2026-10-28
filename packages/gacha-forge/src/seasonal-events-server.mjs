@@ -344,7 +344,9 @@ export function createForgeSeasonalEvents({
       if (!forgeSeasonalEnabled(run)) return { ok: false, error: "events-off" };
       const boundary = await frontier(runId, target.data);
       if (!boundary.ready) return { ok: false, error: "event-needs-chapter-boundary" };
-      const waiting = await choices.guard(runId);
+      // The event follows chapter `after`: a choice in a chapter after it (forged, not played yet) is held with that
+      // chapter once the event opens, so it does not stop the event from opening.
+      const waiting = await choices.guard(runId, { beforeChapter: boundary.after + 1 });
       if (waiting) return waiting;
       const result = await generatePlan({ runId, run, event: target.event, after: boundary.after });
       if (!result?.ok || !allNodes(result.plan).length) return result || { ok: false, error: "generation-failed" };
@@ -479,6 +481,20 @@ export function createForgeSeasonalEvents({
     });
   }
 
+  // An opened, live, unfinished event holds every main chapter after the one it follows. This only reads, so
+  // pre-forge and the choice guards can ask it; guardMain retires an inactive event fight first.
+  async function mainHold(runId, chapter) {
+    if (!forgeSeasonalEnabled(await readRun(runId))) return null;
+    const session = await readSession(runId);
+    for (const row of await rows(runId)) {
+      const event = row.data,
+        played = progress(session, event.chapter);
+      if (event.opened && now() < event.endsAt && chapter > event.after && played < 10)
+        return { ok: false, error: "story-event-open", eventChapter: event.chapter, title: event.title };
+    }
+    return null;
+  }
+
   return {
     ensure,
     list,
@@ -487,8 +503,10 @@ export function createForgeSeasonalEvents({
     guardNode,
     complete,
     retireInactiveFight,
+    // An event chapter is active while it is live. A main chapter is not while an open event holds it: pre-forge
+    // does not write it, and its pending choice does not stop the event (Pasta-Devs/Marinara-Agents#1786).
     async choiceActive(runId, chapter) {
-      if (!forgeSeasonalChapter(chapter)) return true;
+      if (!forgeSeasonalChapter(chapter)) return !Number.isInteger(chapter) || !(await mainHold(runId, chapter));
       const event = await documents.getById(packageId, eventId(runId, Number(chapter.slice(6))));
       return (
         !!event &&
@@ -517,16 +535,7 @@ export function createForgeSeasonalEvents({
     },
     async guardMain(runId, chapter) {
       await retireInactiveFight(runId);
-      const run = await readRun(runId);
-      if (!forgeSeasonalEnabled(run)) return null;
-      const session = await readSession(runId);
-      for (const row of await rows(runId)) {
-        const event = row.data,
-          played = progress(session, event.chapter);
-        if (event.opened && now() < event.endsAt && chapter > event.after && played < 10)
-          return { ok: false, error: "story-event-open", eventChapter: event.chapter, title: event.title };
-      }
-      return null;
+      return mainHold(runId, chapter);
     },
     async runBattle(body, start = false) {
       const target = await guardNode(body, "combat", "combatIndex", !start);

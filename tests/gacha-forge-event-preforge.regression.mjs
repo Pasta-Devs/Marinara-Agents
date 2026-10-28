@@ -141,6 +141,7 @@ async function harness({
   images = { enabled: false },
   scenes = {},
   mainChapters = [],
+  sceneFor = () => null,
 } = {}) {
   engine.paints.length = 0;
   engine.held = null;
@@ -279,7 +280,7 @@ async function harness({
                               `Guard ${(fights += 1)}`,
                               /ENCOUNTER TIER: (soldier|elite|boss)/u.exec(String(messages[0].content))?.[1],
                             )
-                          : (scenes[scenesWritten] ?? scene(`Scene ${scenesWritten}`));
+                          : (sceneFor(messages) ?? scenes[scenesWritten] ?? scene(`Scene ${scenesWritten}`));
                 if (kind === "scene") scenesWritten += 1;
                 return { content: JSON.stringify(value), finishReason: "stop" };
               },
@@ -679,6 +680,121 @@ await test("writing the event ahead keeps the 1.24.10 rule, the main-story hold 
     "only a real event key is accepted",
   );
   assert.equal((await host.post("/preforge", { chapter: "event-x" })).error, "bad-request");
+});
+
+// An open event holds every main chapter after the one it follows (1.26.1, Pasta-Devs/Marinara-Agents#1786).
+const eventCanon = "SEASONAL EVENT CHARACTER CANON";
+const mainScene = (call) => call.kind === "scene" && !JSON.stringify(call.messages).includes(eventCanon);
+const mainBeats = (host) => [...host.docs.keys()].filter((id) => id.startsWith(`${runId}:beat:2:`)).length;
+const mainStatus = async (host) => (await host.post("/preforge", { chapter: 2 })).preforge;
+const endsOnBigChoice = (messages) => {
+  const text = JSON.stringify(messages);
+  return text.includes("LAST story beat") && !text.includes(eventCanon)
+    ? scene("Chapter 2 ends", { choices: [bigChoice] })
+    : null;
+};
+const closes = [
+  ["is finished", (host) => (host.session().progress[chapter] = { normal: 10 })],
+  ["ends", (host) => host.setEvent((event) => (event.endsAt = Date.now() - 1))],
+  ["is turned off", (host) => host.setRun((run) => (run.story.seasonalEvents = false))],
+];
+
+for (const [label, close] of closes) {
+  await test(`a main chapter pre-forging when the event opens stops while the event holds it, and finishes once the event ${label}`, async () => {
+    const host = await harness({ mainChapters: [mainPlan(2)] });
+    const writing = host.pauseCall("scene", 3);
+    assert.equal((await host.post("/preforge/start", { chapter: 2 })).allowed, true);
+    await waitFor(writing.entered, "chapter 2's third scene");
+    const opening = host.post("/story-event/plan", { chapter });
+    writing.release();
+    assert.equal((await opening).ok, true);
+    await settle(host);
+    const planned = host.calls.findIndex((call) => call.kind === "plan");
+    assert.equal(
+      host.calls.slice(planned).filter(mainScene).length,
+      0,
+      "no chapter 2 scene starts once the event opens",
+    );
+    assert.equal(mainBeats(host), 3, "the scene in flight is kept");
+    const held = await mainStatus(host);
+    assert.deepEqual(
+      { mode: held.mode, locked: held.locked, canAuto: held.canAuto, done: held.done },
+      { mode: "off", locked: false, canAuto: false, done: 3 },
+    );
+    assert.equal((await host.post("/preforge/start", { chapter: 2 })).allowed, false);
+    assert.equal((await host.post("/preforge/retry", { chapter: 2 })).allowed, false);
+    assert.equal((await host.post("/preforge/start", { chapter })).allowed, true, "the event pre-forges meanwhile");
+    await settle(host);
+    assert.equal(beatIds(host).length, 7);
+    assert.equal(fightIds(host).length, 3);
+    close(host);
+    const free = await mainStatus(host);
+    assert.deepEqual({ mode: free.mode, canAuto: free.canAuto }, { mode: "story", canAuto: true });
+    assert.equal((await host.post("/preforge/start", { chapter: 2 })).allowed, true);
+    await settle(host);
+    assert.equal(mainBeats(host), 7, "chapter 2 is written in full");
+    assert.deepEqual(chainWarnings(host), []);
+  });
+
+  await test(`a big choice written in a chapter the open event holds does not stop the event, and holds the main story again once the event ${label}`, async () => {
+    const host = await harness({
+      story: { preforge: "story", choices: true },
+      mainChapters: [mainPlan(2)],
+      sceneFor: endsOnBigChoice,
+    });
+    // Chapter 2's chain designs its last fight; the event's plan queues behind it. The chain then finds chapter 2 not
+    // yet held and queues its last scene behind the plan, so that scene and its big choice are written once it is.
+    const designing = host.pauseCall("fight", 3);
+    await host.post("/preforge/start", { chapter: 2 });
+    await waitFor(designing.entered, "chapter 2's last fight");
+    const planning = host.pauseCall("plan", 1);
+    const opening = host.post("/story-event/plan", { chapter });
+    for (let turn = 0; turn < 50; turn += 1) await tick();
+    designing.release();
+    await waitFor(planning.entered, "the event's plan");
+    for (let turn = 0; turn < 300; turn += 1) await tick();
+    planning.release();
+    assert.equal((await opening).ok, true);
+    await settle(host);
+    assert.equal(host.data(`${runId}:beat:2:6`).choices[0].id, "choice-1", "the held chapter's big choice is pending");
+    assert.equal((await host.post("/story-event/start", { chapter, storyIndex: 0 })).ok, true);
+    const opened = await host.post("/story-event/beat", { chapter, storyIndex: 0 });
+    assert.equal(opened.ok, true, JSON.stringify(opened));
+    assert.equal((await host.post("/preforge/start", { chapter })).allowed, true);
+    await settle(host);
+    const status = await host.status();
+    assert.deepEqual({ done: status.done, waitingChoice: status.waitingChoice }, { done: 7, waitingChoice: false });
+    assert.equal((await mainStatus(host)).mode, "off");
+    close(host);
+    assert.equal((await mainStatus(host)).waitingChoice, true);
+    const next = await host.post("/chapter-plan", { chapter: 3 });
+    assert.deepEqual({ error: next.error, chapter: next.chapter }, { error: "choice-required", chapter: 2 });
+  });
+}
+
+await test("a chapter forged ahead that ends on a big choice does not stop the event from opening, and its choice holds the main story again once the event is finished", async () => {
+  const host = await harness({
+    story: { preforge: "story", choices: true },
+    mainChapters: [mainPlan(2)],
+    sceneFor: endsOnBigChoice,
+  });
+  assert.equal((await host.post("/preforge/start", { chapter: 2 })).allowed, true);
+  await settle(host);
+  assert.equal(mainBeats(host), 7);
+  assert.equal(host.data(`${runId}:beat:2:6`).choices[0].id, "choice-1", "chapter 2 ends on a pending big choice");
+  assert.equal((await host.post("/story-events")).events[0].canStart, true);
+  const opened = await host.post("/story-event/plan", { chapter });
+  assert.equal(opened.ok, true, JSON.stringify(opened));
+  assert.equal((await host.post("/preforge/start", { chapter })).allowed, true);
+  await settle(host);
+  const status = await host.status();
+  assert.deepEqual({ done: status.done, waitingChoice: status.waitingChoice }, { done: 7, waitingChoice: false });
+  assert.equal((await mainStatus(host)).mode, "off");
+  host.session().progress[chapter] = { normal: 10 };
+  assert.equal((await mainStatus(host)).waitingChoice, true);
+  const next = await host.post("/chapter-plan", { chapter: 3 });
+  assert.deepEqual({ error: next.error, chapter: next.chapter }, { error: "choice-required", chapter: 2 });
+  assert.equal((await host.post("/story/start", { chapter: 2, storyIndex: 0, nodeIndex: 0 })).ok, true);
 });
 
 console.log(`${cases} Gacha Forge event pre-forge regression cases passed.`);

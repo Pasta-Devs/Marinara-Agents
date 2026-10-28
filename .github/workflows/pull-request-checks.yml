@@ -130,6 +130,7 @@ jobs:
           node tests/gacha-forge-battle-load.regression.mjs
           node tests/gacha-forge-event-preforge.regression.mjs
           node tests/gacha-forge-event-choice.regression.mjs
+          node tests/gacha-forge-played-history.regression.mjs
 
           # Prints how much of the reference extension's interface the Beholder package actually
           # renders. It is here so the number is read from a run rather than asserted from
