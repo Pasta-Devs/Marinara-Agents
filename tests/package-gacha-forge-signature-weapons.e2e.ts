@@ -70,7 +70,7 @@ async function openClassicGear(page: Page, testInfo: TestInfo) {
     });
     const requests: Array<{ path: string; body: any; response: any }> = [];
     await page.setViewportSize(
-      testInfo.project.name.includes("mobile") ? { width: 390, height: 844 } : { width: 1440, height: 900 },
+      testInfo.project.name.includes("mobile") ? { width: 874, height: 402 } : { width: 1440, height: 900 },
     );
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.addInitScript(
@@ -157,9 +157,9 @@ test("Classic Gear offers and equips its owner's designated weapon despite a dif
     await f.forge.locator('[data-gear-change="weapon"]').click();
     const signature = f.forge.locator(`[data-gear-pick="${f.signatureId}"]`);
     await expect(signature).toBeVisible();
-    await expect(signature).toContainText(f.signatureName);
     await expect(f.forge.locator(`[data-gear-pick="${f.unrelatedId}"]`)).toHaveCount(0);
     await signature.click();
+    await expect(f.forge.locator(".gx").getByText(f.signatureName, { exact: true })).toBeVisible();
     await f.forge.locator(`[data-gear-equip="${f.signatureId}"]`).click();
     await expect.poll(() => f.requests.filter((request) => request.path === "/equip").length).toBe(1);
     const equip = f.requests.find((request) => request.path === "/equip")!;
