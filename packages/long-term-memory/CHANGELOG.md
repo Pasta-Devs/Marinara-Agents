@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.5.4 — 2026-10-28
 
 - Re-extract says why it is waiting while settings load, and Run maintenance keeps your place after it finishes.
 - Loading placeholders stop pulsing when reduced motion is on, source tool results are announced to screen readers, and a save waiting on recall no longer ends in a stray colon.

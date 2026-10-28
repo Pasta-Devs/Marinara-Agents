@@ -1887,7 +1887,242 @@ test("an ally heir whose element cannot pass the enemy barrier steps up after on
   assert.deepEqual(rowsOf(deathStep(barred, "crosser")), ["blocked"], "then whoever is left");
 });
 
-test("fuzz: from rules 3 no side is beaten before the round cap while it has a non-token unit standing", () => {
+// Seats as the client draws them, rebuilt from the events alone after every step: cards move only on row events. A
+// revive with no row event of its own seats the unit in front, so it must already be drawn there.
+const crowded = (snapshot, battle) => {
+  const seats = new Map(
+    [...snapshot.allies.map((ally) => [ally, "ally"]), ...snapshot.enemies.map((enemy) => [enemy, "enemy"])].map(
+      ([entry, side]) => [entry.id, { side, row: entry.position === "back" ? "back" : "front", alive: true }],
+    ),
+  );
+  // The engine seats the enemies of a defeat order in front at the start, as the server already places them.
+  for (const index of snapshot.rules?.find((rule) => rule.kind === "defeat_order")?.order || []) {
+    const seat = seats.get(snapshot.enemies[index]?.id);
+    const front = [...seats.values()].filter((entry) => entry.side === "enemy" && entry.row === "front").length;
+    if (seat?.row === "back" && front < 3) seat.row = "front";
+  }
+  for (const [index, step] of battle.steps.entries()) {
+    for (const [at, event] of step.events.entries()) {
+      if (event.op === "summon") seats.set(event.id, { side: seats.get(event.from).side, row: "front", alive: true });
+      const seat = seats.get(event.id);
+      if (!seat) continue;
+      if (event.op === "row") seat.row = event.position;
+      if (event.op === "death") seat.alive = false;
+      if (event.op !== "revive") continue;
+      seat.alive = true;
+      const shown = step.events.slice(at + 1, at + 3).some((next) => next.op === "row" && next.id === event.id);
+      if (!shown && seat.row !== "front") return `step ${index}: ${event.id} is revived in front but drawn in back`;
+    }
+    for (const side of ["ally", "enemy"])
+      for (const row of ["front", "back"]) {
+        const ids = [...seats].filter(([, seat]) => seat.alive && seat.side === side && seat.row === row);
+        if (ids.length > 3) return `step ${index}: ${side} ${row} ${ids.map(([id]) => id).join(",")}`;
+      }
+  }
+  return null;
+};
+
+test("rules 4: a two-unit move seats both units before either enter trigger, so no row ever holds four", () => {
+  const enterBack = (effect, overrides = {}) => ({
+    ...kit().passive,
+    name: effect,
+    effect,
+    power: 40,
+    trigger: "enter_back",
+    row: "back",
+    ...overrides,
+  });
+  const actsOf = (battle, id) => battle.steps.find((step) => step.events.some((e) => e.op === "act" && e.id === id));
+  const passiveOf = (battle, id) =>
+    battle.steps.find((step) => step.events.some((e) => e.op === "passive" && e.id === id));
+  const rules = (snapshot, choose) =>
+    [3, FORGE_FORMATION_RULES].map((rev) => {
+      const battle = drive({ ...snapshot, formationRevision: rev }, choose);
+      return { battle, crowded: crowded(snapshot, battle) };
+    });
+
+  // #1745: the mover's enter_back revive filled the seat it had just left, and the swapped-in partner sat a fourth.
+  const revive = {
+    seed: 3,
+    allies: [
+      unit("d", { stats: weak }),
+      unit("m", { stats: strong, formationKit: kit({ passive: enterBack("revive", { target: "ally" }) }) }),
+      unit("f1", { stats: strong }),
+      support("s", "damage", { stats: strong }),
+      support("p", "heal", { stats: strong }),
+    ],
+    enemies: [unit("E", { stats: { ...strong, atk: 300 } })],
+  };
+  const swapIn = (prompt, count) =>
+    count === 2 ? plan({ actorId: "m", action: "row", moveId: "m", swapId: "p" }) : hold();
+  const [oldRevive, newRevive] = rules(revive, swapIn);
+  assert.equal(trace(actsOf(oldRevive.battle, "m")), "act:m row:m->back passive:m row:p->front");
+  assert.match(oldRevive.crowded, /ally front d,f1,s,p$/, "revision 3 replays keep the four-fighter row");
+  assert.equal(trace(actsOf(newRevive.battle, "m")), "act:m row:m->back row:p->front passive:m row:d->back");
+  assert.equal(newRevive.crowded, null, "the fallen fighter is revived into the Back Row instead");
+
+  // A Swap effect is a two-unit move too: the fighter it pushes back no longer leaves an Echo beside the pulled target.
+  const echo = {
+    seed: 5,
+    allies: [
+      unit("a", { stats: strong, formationKit: kit({ passive: enterBack("summon", { target: "self" }) }) }),
+      unit("b", { stats: strong }),
+      unit("c", { stats: strong }),
+      back("t", { stats: strong }),
+    ],
+    enemies: [
+      unit("E", {
+        stats: strong,
+        formationKit: kit({
+          passive: { ...kit().passive, name: "Pull", effect: "swap", target: "enemy", row: "front" },
+        }),
+      }),
+    ],
+  };
+  const [oldEcho, newEcho] = rules(echo, () => hold());
+  assert.match(oldEcho.crowded, /ally front b,c,t,a~1$/);
+  assert.ok(!passiveOf(newEcho.battle, "E").events.some((event) => event.op === "summon"), "no free seat, no Echo");
+  assert.equal(newEcho.crowded, null);
+
+  // A Shuffle set off mid-move used to keep the mover's transient two-front, four-back split.
+  const scatter = {
+    seed: 1,
+    allies: [
+      unit("m", {
+        stats: { ...strong, atk: 500 },
+        formationKit: kit({ passive: enterBack("damage", { target: "enemy", power: 100 }) }),
+      }),
+      unit("f1", { stats: strong }),
+      unit("f2", { stats: strong }),
+      back("p", { stats: strong }),
+      back("s1", { stats: strong }),
+      back("s2", { stats: strong }),
+    ],
+    enemies: [
+      unit("e1", {
+        stats: weak,
+        formationKit: kit({
+          passive: { ...kit().passive, name: "Scatter", effect: "shuffle", trigger: "on_death", row: "front" },
+        }),
+      }),
+      unit("e2", { stats: strong }),
+    ],
+  };
+  const [oldScatter, newScatter] = rules(scatter, (prompt, count) =>
+    count === 1 ? plan({ actorId: "m", action: "row", moveId: "m", swapId: "p" }) : hold(),
+  );
+  assert.match(oldScatter.crowded, /ally back m,f2,s1,s2$/);
+  assert.equal(newScatter.crowded, null);
+});
+
+test("rules 4: a Shuffle shows every move before its enter triggers, so a unit killed and revived is drawn where it sits", () => {
+  // The enemy's Shuffle seats x in front; y's enter_front blast kills K, whose dying blast kills x before revision 3
+  // showed x moving. Revived in front, x was still drawn in the Back Row.
+  // Ultimates no one can afford yet, so every unit casts its standard skill.
+  const slow = (overrides = {}) => kit({ ultimate: ability({ cost: 8, elementCost: 2, power: 220 }), ...overrides });
+  const mend = (overrides = {}) =>
+    slow({ standard: ability({ name: "Mend", effect: "revive", target: "ally", power: 50, cost: 2 }), ...overrides });
+  const blast = (name, trigger, row) => ({
+    ...kit().passive,
+    name,
+    effect: "aoe_damage",
+    target: "all_enemies",
+    power: trigger === "on_death" ? 150 : 100,
+    trigger,
+    row,
+  });
+  const snapshot = {
+    seed: 2,
+    allies: [
+      unit("f1", { stats: strong, formationKit: mend() }),
+      unit("f2", { stats: strong, formationKit: mend() }),
+      back("y", {
+        stats: { ...strong, atk: 900 },
+        formationKit: mend({ preferredRow: "hybrid", passive: blast("Arrive", "enter_front", "front") }),
+      }),
+      back("x", { stats: { ...weak, spd: 1 }, formationKit: mend() }),
+    ],
+    enemies: [
+      unit("S", {
+        stats: { ...strong, hp: 9000, atk: 1 },
+        formationKit: slow({
+          standard: ability({ name: "Scatter", effect: "shuffle", target: "all_enemies", cost: 2 }),
+        }),
+      }),
+      unit("K", {
+        stats: { ...weak, atk: 2000 },
+        formationKit: slow({ passive: blast("Last Gasp", "on_death", "both") }),
+      }),
+      back("eb", { stats: strong, formationKit: slow() }),
+      back("eb2", { stats: strong, formationKit: slow() }),
+    ],
+  };
+  // Whoever can, revives x.
+  const choose = (prompt) => {
+    const { fighters, fallen } = prompt.options.formation;
+    return fallen.includes("x") && fighters.length
+      ? plan({ actorId: fighters[0].id, action: "normal", targetId: "x" })
+      : hold();
+  };
+  const old = drive({ ...snapshot, formationRevision: 3 }, choose);
+  assert.match(crowded(snapshot, old), /x is revived in front but drawn in back$/u);
+  const now = drive({ ...snapshot, formationRevision: FORGE_FORMATION_RULES }, choose);
+  assert.ok(
+    events(now).some((event) => event.op === "revive" && event.id === "x"),
+    "x is still killed and revived",
+  );
+  assert.equal(crowded(snapshot, now), null);
+});
+
+test("rules 4: a unit that fell in the Back Row and is revived in front is shown moving there", () => {
+  // f retreats with a burn and dies of it in the Back Row; b then fills that row, so a's revive seats f in front.
+  const snapshot = {
+    seed: 4,
+    allies: [
+      unit("f", { stats: { ...strong, hp: 10 } }),
+      unit("a", {
+        stats: strong,
+        formationKit: kit({
+          standard: ability({ name: "Mend", effect: "revive", target: "ally", power: 50, cost: 2 }),
+        }),
+      }),
+      unit("b", { stats: strong }),
+      back("s1", { stats: strong }),
+      back("s2", { stats: strong }),
+    ],
+    enemies: [
+      unit("E", {
+        stats: { ...strong, atk: 120 },
+        formationKit: kit({
+          standard: ability({ name: "Burn", effect: "dot", target: "enemy", power: 100, duration: 3 }),
+        }),
+      }),
+    ],
+  };
+  const choose = (prompt) => {
+    const { fallen } = prompt.options.formation;
+    if (fallen.includes("f"))
+      return plan({ actorId: "b", action: "row", moveId: "b" }, { actorId: "a", action: "normal", targetId: "f" });
+    const burned = prompt.steps.some((step) =>
+      step.events.some((event) => event.op === "debuff" && event.id === "f" && event.text === "DOT"),
+    );
+    return burned ? plan({ actorId: "f", action: "row", moveId: "f" }) : hold();
+  };
+  const revived = (battle) =>
+    battle.steps
+      .find((step) => step.events.some((event) => event.op === "revive" && event.id === "f"))
+      ?.events.filter((event) => ["act", "revive", "row"].includes(event.op))
+      .map((event) => `${event.op}:${event.id}${event.op === "row" ? `->${event.position}` : ""}`)
+      .join(" ");
+  const old = drive({ ...snapshot, formationRevision: 3 }, choose);
+  assert.equal(revived(old), "act:a revive:f");
+  assert.match(crowded(snapshot, old), /f is revived in front but drawn in back$/u);
+  const now = drive({ ...snapshot, formationRevision: FORGE_FORMATION_RULES }, choose);
+  assert.equal(revived(now), "act:a revive:f row:f->front");
+  assert.equal(crowded(snapshot, now), null);
+});
+
+test("fuzz: from rules 3 no side is beaten before the round cap while it has a non-token unit standing, and from rules 4 no row holds four", () => {
   const roster = (seed) => {
     let state = seed >>> 0 || 1;
     const random = () => (state = (Math.imul(state, 1664525) + 1013904223) >>> 0) / 4294967296;
@@ -1933,48 +2168,54 @@ test("fuzz: from rules 3 no side is beaten before the round cap while it has a n
         description: "barrier",
         elements: [pick(["fire", "water", "earth"]), pick(["wind", "light", "dark"])],
       });
-    return { allies, enemies, rules, seed, formationRevision: FORGE_FORMATION_RULES, random };
+    return { allies, enemies, rules, seed, random };
   };
-  let fights = 0;
-  for (let seed = 1; seed <= 600; seed += 1)
-    for (const planned of [false, true]) {
-      const { random, ...snapshot } = roster(seed);
-      const battle = forgeFormationBattle(snapshot);
-      let next = battle.next();
-      while (!next.done) {
-        const formation = next.value.options.formation;
-        // Auto, or a random plan that also moves rows, so swaps and retreats run into deaths mid-move.
-        const entries = formation.fighters.map((fighter) => {
-          const roll = random();
-          const option = fighter.moves[Math.floor(random() * fighter.moves.length)];
-          if (roll < 0.35 && option)
-            return { actorId: fighter.id, action: "row", moveId: option.moveId, swapId: option.swapId || undefined };
-          const foe = formation.foes[Math.floor(random() * formation.foes.length)];
-          return {
-            actorId: fighter.id,
-            action: roll < 0.7 ? "normal" : roll < 0.85 ? "ultimate" : "hold",
-            targetId: foe?.id,
-          };
-        });
-        next = battle.next(planned ? plan(...entries) : { v: FORGE_FORMATION_ENGINE, action: "auto" });
+  // Revision 3 still replays fights started before 1.25.2, so it keeps its coverage.
+  for (const formationRevision of [3, FORGE_FORMATION_RULES]) {
+    let fights = 0;
+    for (let seed = 1; seed <= 600; seed += 1)
+      for (const planned of [false, true]) {
+        const { random, ...rest } = roster(seed);
+        const snapshot = { ...rest, formationRevision };
+        const battle = forgeFormationBattle(snapshot);
+        let next = battle.next();
+        while (!next.done) {
+          const formation = next.value.options.formation;
+          // Auto, or a random plan that also moves rows, so swaps and retreats run into deaths mid-move.
+          const entries = formation.fighters.map((fighter) => {
+            const roll = random();
+            const option = fighter.moves[Math.floor(random() * fighter.moves.length)];
+            if (roll < 0.35 && option)
+              return { actorId: fighter.id, action: "row", moveId: option.moveId, swapId: option.swapId || undefined };
+            const foe = formation.foes[Math.floor(random() * formation.foes.length)];
+            return {
+              actorId: fighter.id,
+              action: roll < 0.7 ? "normal" : roll < 0.85 ? "ultimate" : "hold",
+              targetId: foe?.id,
+            };
+          });
+          next = battle.next(planned ? plan(...entries) : { v: FORGE_FORMATION_ENGINE, action: "auto" });
+        }
+        const fight = next.value;
+        if (formationRevision >= 4)
+          assert.equal(crowded(snapshot, fight), null, `seed ${seed}${planned ? " (planned)" : ""}: a row holds four`);
+        const standing = new Set([...snapshot.allies, ...snapshot.enemies].map((entry) => entry.id));
+        for (const event of events(fight)) {
+          if (event.op === "death") standing.delete(event.id);
+          if (event.op === "revive") standing.add(event.id);
+        }
+        // Each side's turn opens with one 450 ms bank step; 80 of them means the fight ran into the round-40 cap.
+        const turns = fight.steps.filter(
+          (step) => step.d === 450 && step.events.some((event) => event.op === "formation-bank"),
+        ).length;
+        if (turns >= 80) continue;
+        fights += 1;
+        const beaten = fight.result === "win" ? "E" : "A";
+        assert.ok(
+          ![...standing].some((id) => id.startsWith(beaten)),
+          `seed ${seed}${planned ? " (planned)" : ""}: ${fight.result} with ${[...standing].join(",")} standing`,
+        );
       }
-      const fight = next.value;
-      const standing = new Set([...snapshot.allies, ...snapshot.enemies].map((entry) => entry.id));
-      for (const event of events(fight)) {
-        if (event.op === "death") standing.delete(event.id);
-        if (event.op === "revive") standing.add(event.id);
-      }
-      // Each side's turn opens with one 450 ms bank step; 80 of them means the fight ran into the round-40 cap.
-      const turns = fight.steps.filter(
-        (step) => step.d === 450 && step.events.some((event) => event.op === "formation-bank"),
-      ).length;
-      if (turns >= 80) continue;
-      fights += 1;
-      const beaten = fight.result === "win" ? "E" : "A";
-      assert.ok(
-        ![...standing].some((id) => id.startsWith(beaten)),
-        `seed ${seed}${planned ? " (planned)" : ""}: ${fight.result} with ${[...standing].join(",")} standing`,
-      );
-    }
-  assert.ok(fights > 1000, `most fights end before the cap (${fights})`);
+    assert.ok(fights > 1000, `most fights end before the cap (${fights})`);
+  }
 });

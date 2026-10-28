@@ -10,7 +10,7 @@
   },
   "id": "gacha-forge",
   "name": "Gacha Forge",
-  "version": "1.25.1",
+  "version": "1.25.2",
   "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
   "engine": {
     "min": "2.5.1",
@@ -299,8 +299,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "b71879a74628ef1e387c47550fd4e60fd8e028b1fa422b5c4ddcebd48a77d462",
-      "bytes": 1901669
+      "sha256": "b8ce8972fe712c538c5942c6ea9d4846572fc9db1a9720286d7f2f33f6bdd398",
+      "bytes": 1905356
     },
     {
       "path": "farm-asc.webp",
@@ -774,8 +774,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "eb547c1e7fc63c7c00f583dd33d1a9f171aa18d0825f2c8e5435061285c17f1d",
-      "bytes": 1008425
+      "sha256": "4acbe78cea33a14d2626ceace194b610bc137ad482bddee2bedd416d59085faf",
+      "bytes": 1015382
     },
     {
       "path": "skill-aoe_damage-dark.webp",
@@ -1529,13 +1529,13 @@
     },
     {
       "path": "src/formation-combat-client.mjs",
-      "sha256": "927f48f352cc2c72dccdb677cf5369af1bd287a450db884b81606325d67a8af0",
-      "bytes": 75905
+      "sha256": "691433c1361f2e160bf52875c3dbb74c417baa71c6db0ff1d582aa5fabf9244c",
+      "bytes": 75982
     },
     {
       "path": "src/formation-combat-en.mjs",
-      "sha256": "2e4a85317267e7a4b95888e2b0a543efa6799bb0db85c8d4ee45b3336941d0eb",
-      "bytes": 17873
+      "sha256": "8bbcae90af673a487b764377a0d1d8389a230101d5faac01b190cd542ceb743f",
+      "bytes": 18002
     },
     {
       "path": "src/formation-combat-server.mjs",
@@ -1544,8 +1544,8 @@
     },
     {
       "path": "src/formation-combat-shared.mjs",
-      "sha256": "b4359de121be45980f9fbf7b2d1fbe844b33cf55629a10759130b0938ae4bc4a",
-      "bytes": 69396
+      "sha256": "a032ed3d7073133ce9a18cdc0e0a5af09128b2bc587d5f097813d10ce214b505",
+      "bytes": 71666
     },
     {
       "path": "src/formation-migration-server.mjs",

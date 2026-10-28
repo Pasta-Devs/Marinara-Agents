@@ -1371,6 +1371,7 @@ export function forgeFormationErrorLabel(error) {
   if (error === "formation-rows") return forgeFormationLabel("rows");
   if (error === "formation-element-required") return forgeFormationLabel("unavailable");
   if (error === "formation-engine-changed") return forgeFormationLabel("engineChanged");
+  if (error === "story-changed") return forgeFormationLabel("storyChanged");
   if (error === "combat-conversion-failed") return forgeFormationLabel("kitFailed");
   if (["conversion-in-progress", "formation-conversion-required", "combat-conversion-in-progress"].includes(error))
     return forgeFormationLabel("kitPending");

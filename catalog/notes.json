@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.25.2",
+          "date": "2026-10-28",
+          "notes": "- Backing out of a fight while it loads and entering another now loads the new fight, not the one you left. A fight request that never answers no longer blocks later fights.\n- In Formation, a swap seats both units before either one's passive fires, so a revive, Swap, Shuffle or Echo it sets off never puts a fourth unit in a row, and revived units are drawn where they are. Fights started earlier keep their rules.\n- On a small model, replies are much less likely to fail while memory catches up: the oldest chapter summaries, or the oldest chapters of the full story history, are left out only when the reply would not fit otherwise. The previous chapter, the scene so far and your decisions always stay.\n- Story memory no longer stops for good when a chapter it already remembers reads differently later: it keeps its first memory and goes on.\n- Seasonal event fights load again after a chapter was regenerated, and a fight that can't be set up now says why.",
+          "highlight": false
+        },
+        {
           "version": "1.25.1",
           "date": "2026-10-27",
           "notes": "- Scenes that are already written can be played while pre-forge writes the rest of the chapter. Cleared scenes keep **Read again**, and a fight or a written scene you have reached keeps **Play** or **Start**. Only a scene that is not written yet waits for pre-forge, which writes it at no Vigor cost. Back on the chapter map, it turns into Play as soon as it is written.\n- Opening a weapon's page from Gear, or a relic's **Upgrade**, keeps the current view until the new one has loaded instead of cutting to an empty screen, and the relic you are upgrading is no longer faded out.",
@@ -284,12 +290,6 @@
           "date": "2026-10-26",
           "notes": "- Download individual images from every Home background picker category without selecting them. Reuse Engine gallery saving, including prepared iPhone sharing.\n- Unlock story and Character Story backgrounds and key images only after viewing their scenes, with a brief unlock notice. Future generated scenes stay out of the picker.\n- Preserve completed scenes, saved artwork and existing background choices across updates and chapter regeneration.",
           "highlight": true
-        },
-        {
-          "version": "1.20.0",
-          "date": "2026-10-25",
-          "notes": "- Add optional daily messages from randomly selected units with conversations unlocked, configured in setup or Story Continuity and disabled by default.\n- Keep incoming conversations saved, preserve drafts and pace generation within each local day without offline catch-up.\n- Open mobile Writing help above Settings with outside-tap dismissal and compact question-mark controls.\n- Request at least 8,192 output tokens for every text generation, including character messages and Formation kits, while retaining reasoning headroom. Report insufficient connection capacity instead of silently using a smaller output cap.\n- Keep Classic and Formation descriptions readable beside their setup choices.\n- Preserve the paced message deadline when reopening a world or updating its settings.",
-          "highlight": true
         }
       ]
     },
@@ -363,6 +363,12 @@
     },
     "long-term-memory": {
       "versions": [
+        {
+          "version": "1.5.4",
+          "date": "2026-10-28",
+          "notes": "- Re-extract says why it is waiting while settings load, and Run maintenance keeps your place after it finishes.\n- Loading placeholders stop pulsing when reduced motion is on, source tool results are announced to screen readers, and a save waiting on recall no longer ends in a stray colon.",
+          "highlight": false
+        },
         {
           "version": "1.5.3",
           "date": "2026-10-27",
@@ -475,12 +481,6 @@
           "version": "1.4.81",
           "date": "2026-10-22",
           "notes": "- Memory Settings has a new setting beside \"Maximum output tokens\", \"Finish cut-off answers\", off by default. With it on, when the model's extraction answer stops at the output limit, Long-Term Memory asks the model for the rest, with up to 3 extra requests for that source, each sending the source again. With it off, a source cut off this way now says that Retry will stop at the same place and names the setting.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.80",
-          "date": "2026-10-22",
-          "notes": "- No change in what Long-Term Memory does. Internally, the server file that matches names in chats and summaries to memories is split into four files.",
           "highlight": false
         }
       ]

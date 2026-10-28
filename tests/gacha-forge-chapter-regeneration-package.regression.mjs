@@ -16,6 +16,7 @@ import {
   forgeChapterRequest,
 } from "../packages/gacha-forge/src/chapter-regeneration-client.mjs";
 import { forgeChapterResetEnglish } from "../packages/gacha-forge/src/chapter-regeneration-en.mjs";
+import { forgeSeasonalRequest } from "../packages/gacha-forge/src/seasonal-events-client.mjs";
 globalThis.forgeChapterResetEnglish = forgeChapterResetEnglish;
 
 const source = await readFile(new URL("../packages/gacha-forge/server.mjs", import.meta.url), "utf8");
@@ -101,6 +102,65 @@ test("actual SDK rejects positional choices and mutations from an old displayed 
     assert.equal(current.storyRevision, 1);
     assert.equal((await f.post("/choice", current)).body.ok, true);
     assert.deepEqual(f.docs.get(beatId).data.choiceCanon, { "choice-1": "option-1" });
+  } finally {
+    await f.close();
+  }
+});
+
+test("after a chapter reset, a seasonal event fight still loads with the story version its route checks", async () => {
+  // _postJson versions the path it was called with, then maps an event chapter's path to its /story-event route.
+  const client = await readFile(new URL("../packages/gacha-forge/client.js", import.meta.url), "utf8");
+  assert.ok(client.includes("a=forgeChapterRequest(this,e,a);e=forgeSeasonalRequest(e,a);"));
+  const f = await createChapterRuntime();
+  try {
+    assert.equal((await f.post("/chapter/regenerate", { chapter: 2 })).body.storyRevision, 1);
+    f.docs.get("index").data.runs[0].story.seasonalEvents = true;
+    const session = f.session();
+    session.progress["event-1"] = { normal: 1 };
+    session.presets = [{ name: "Team", board: { front: [chapterUnitId, null, null], back: [null, null, null] } }];
+    const leader = `${chapterRunId}:unit:protagonist`;
+    f.seed(leader, "unit", { ...f.docs.get(chapterUnitId).data, name: "Mari", cardId: "", isProtagonist: true });
+    session.roster[leader] = { level: 1 };
+    f.seed(`${chapterRunId}:story-event:1`, "story-event", {
+      seq: 1,
+      chapter: "event-1",
+      state: "ready",
+      title: "The lantern trial",
+      theme: "Friends keep the coast alight.",
+      premise: "A friendly festival trial.",
+      cast: [chapterUnitId],
+      after: 1,
+      opened: Date.now(),
+      endsAt: Date.now() + 86400000,
+      rewards: [],
+    });
+    f.seed(`${chapterRunId}:chapter:event-1`, "chapter-plan", { ...freshMainPlan, chapter: "event-1", after: 1 });
+    const enemy = { name: "Sentinel", role: "Warrior", affinity: "Fire", position: "front", tier: "soldier" };
+    f.seed(`${chapterRunId}:combat:event-1:0`, "combat", {
+      chapter: "event-1",
+      combatIndex: 0,
+      enemy: "Sentinel",
+      tier: "soldier",
+      opening: "The festival ward wakes.",
+      objective: "Win the trial.",
+      outcomeOnWin: "The procession continues.",
+      formation: [
+        {
+          ...enemy,
+          stats: { hp: 1, atk: 1, def: 1, spd: 1 },
+          skill: { name: "Tap", effect: "damage", power: 10, target: "enemy" },
+        },
+      ],
+    });
+    const host = { _run: { runId: chapterRunId } };
+    adoptForgeChapterVersion(host, "/story-events", { runId: chapterRunId }, { ok: true, storyRevision: 1 });
+    // The combat screen's load, exactly as _loadBattle posts it for the event's first fight.
+    const sent = { runId: chapterRunId, chapter: "event-1", combatIndex: 0, difficulty: "normal", presetIndex: null };
+    const body = forgeChapterRequest(host, "/battle", sent);
+    const preview = await f.post(forgeSeasonalRequest("/battle", body), body);
+    assert.equal(preview.body.ok, true, JSON.stringify(preview.body));
+    assert.equal(preview.body.enemies.length, 1);
+    assert.equal(f.calls.length, 0, "the cached fight design is reused");
   } finally {
     await f.close();
   }

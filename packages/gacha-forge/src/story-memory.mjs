@@ -77,6 +77,18 @@ function memoryFrom(value) {
   };
 }
 
+// First canon stays canon: once a source has a saved record, the record's fingerprint stands for it. A source that
+// later reads differently (a package update, edited data) keeps its first record, the overview built over it and
+// recall, and never stops later canon from being summarized. Canon replaced on purpose deletes the record first.
+function keepFirstCanon(sources, records) {
+  const first = new Map();
+  for (const record of records)
+    if (typeof record?.key === "string" && typeof record.fingerprint === "string" && !first.has(record.key))
+      first.set(record.key, record.fingerprint);
+  for (const source of sources) if (first.has(source.key)) source.fingerprint = first.get(source.key);
+  return sources;
+}
+
 function validRecords(memory, sources) {
   return sources.flatMap((source) => {
     const record = memory.records.find(
@@ -451,12 +463,17 @@ export function createForgeStoryMemory({
       budget,
       maxContext,
     });
-    const sources = sourcesFrom(await readSources(runId, target), orderSources);
+    let prepared = (await read(runId)).data;
+    const sources = keepFirstCanon(sourcesFrom(await readSources(runId, target), orderSources), prepared.records);
     const stamps = sourceStamp(sources);
+    // Only canon without a record can change under a paid summary; a summary of a source that changed is never saved.
     const stillCurrent = async () =>
       current(runId, epoch) &&
       !signal.aborted &&
-      same(sourceStamp(sourcesFrom(await readSources(runId, target), orderSources)), stamps);
+      same(
+        sourceStamp(keepFirstCanon(sourcesFrom(await readSources(runId, target), orderSources), prepared.records)),
+        stamps,
+      );
     async function fold(kind, source, initial, messagesFor) {
       const text = [...source.content];
       const id = hash([
@@ -524,14 +541,9 @@ export function createForgeStoryMemory({
       return { id, value };
     }
     await setStatus({ ...state, phase: "pending", retryable: false });
-    let prepared = (await read(runId)).data;
     for (const source of sources) {
-      const existing = prepared.records.find((record) => record.key === source.key);
-      if (existing && existing.fingerprint !== source.fingerprint) {
-        const stale = await setStatus({ ...state, phase: "stale", retryable: true, reason: "source-changed" });
-        return { status: stale, budget, maxContext };
-      }
-      if (validRecords(prepared, [source]).length) continue;
+      // A record is never summarized again, so a replay or a later rendering cannot rewrite first canon.
+      if (prepared.records.some((record) => record.key === source.key)) continue;
       if (!(await stillCurrent())) return stale();
       // A conversation is already a short model-written memory: it is its own record, with no second summary.
       const folded =
@@ -783,7 +795,10 @@ export function createForgeStoryMemory({
           details: [],
           text: "",
         };
-      const sources = sourcesFrom(await readSources(options.runId, options.target), orderSources);
+      const sources = keepFirstCanon(
+        sourcesFrom(await readSources(options.runId, options.target), orderSources),
+        data.records,
+      );
       // Who may know what: a private conversation reaches only its own unit's chat and scenes that unit is in; a
       // Character Story reaches another unit's chat only through the shared overview.
       const readable = (source) => {
