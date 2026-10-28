@@ -27,6 +27,8 @@ export async function resolveSlurpEventInstruction(db: DB, creatorId: string, at
     { id: creatorId, tags },
     { occurrences: world ? occurrences : [], facts },
   );
-  const lensLine = text ? slurpWorldEventsLine(await readSlurpWorldLens(db, creatorId)) : "";
+  const lensLine = text?.includes("Platform events running today.")
+    ? slurpWorldEventsLine(await readSlurpWorldLens(db, creatorId))
+    : "";
   return text && lensLine ? `${text}\n${lensLine}` : text;
 }

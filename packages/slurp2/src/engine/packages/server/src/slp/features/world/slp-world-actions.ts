@@ -343,7 +343,7 @@ export async function applyPulse(
       : null;
   // A Creator from another era or world: now and then a regular fan reacts to the culture shock.
   const shock =
-    isComment && !sides && !partner && hash(`${action.postId}:${actor.id}:shock`) % 4 === 0
+    isComment && !sides && !partner && fanTypeId === "regular" && hash(`${action.postId}:${actor.id}:shock`) % 4 === 0
       ? slurpWorldShockBodies(await readSlurpWorldLens(db, action.creatorAccountId))
       : [];
   const result = await noodle.createNoodlerWorldInteraction(action.postId, {

@@ -106,46 +106,45 @@ function pickFresh(seed: string, salt: string, bank: readonly string[], taken: r
   return freshLine(seed, salt, bank, taken) ?? bank[pickIndex(seed, salt, bank.length)]!;
 }
 
-/** What a fan's comment can see of the post: its title, and the comments already under it. */
-/** Fans meeting a Creator from another era or world (world lens): free, one per era. */
+/** Fans meeting a Creator from another era or world (world lens): free, one per era, about the world, never the body. */
 const WORLD_SHOCK: Record<SlurpWorldLens["era"], readonly string[]> = {
   historical: [
-    "the corset alone deserves its own page",
     "sorry what year is it where you are",
-    "posting by candlelight is a choice and I respect it",
+    "posting from the past and still the best page I follow",
     "the drama in your town is better than any show",
-    "someone get this person a hair dryer, they've earned it",
     "no filter, just a century of good lighting",
+    "how do you even get these to us",
+    "history class was never this good",
   ],
   fantasy: [
-    "is that sword real??",
-    "the dragon in the back is doing half the work",
-    "what app is that mirror on",
-    "ok but does the potion actually work",
-    "sir this is a creator page, not a quest board",
-    "the elf ears are real? asking for me",
-    "how is the castle wifi",
+    "is any of this place real??",
+    "what app is your world even on",
+    "ok but is magic doing the lighting",
+    "excuse me, wizard, this is a creator page",
+    "how do you get these out of a fantasy world",
+    "I want a holiday wherever you are",
   ],
   scifi: [
     "what planet is this even",
-    "the lights in the back are from a spaceship right",
     "you're posting from the future and still look this good",
-    "does the robot help with the photos",
-    "the outfit is three centuries ahead of me",
-    "zero gravity hair is unfair",
+    "send help, my century feels so behind",
+    "is that the future? it looks expensive",
+    "how is the signal out there",
+    "the future is cooler than they told us",
   ],
   other: [
     "I don't know where you are but I want to go",
     "every post from your world is a whole new map",
-    "the sky behind you is not a colour I know",
     "explain your world to me slowly",
     "where even is this place",
+    "the sky behind you is not a colour I know",
   ],
 };
 
 export const slurpWorldShockBodies = (lens: SlurpWorldLens | undefined): readonly string[] =>
   lens ? WORLD_SHOCK[lens.era] : [];
 
+/** What a fan's comment can see of the post: its title, and the comments already under it. */
 export type SlurpCommentContext = { title?: string | null; taken?: readonly string[] };
 
 /** Deterministic index, so the same request always reads the same way. */

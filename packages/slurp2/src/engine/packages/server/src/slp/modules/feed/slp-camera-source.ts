@@ -289,10 +289,10 @@ export function slurpCameraSourceNegative(source: SlurpCameraSource): string {
   return NEGATIVE[source];
 }
 
-/** The sources this variation can actually pay for. */
 /** Sources that show a phone or a screen; a Creator whose world has neither never gets them. */
 const SCREEN_SOURCES: readonly SlurpCameraSource[] = ["mirror", "desk", "screenshot"];
 
+/** The sources this variation can actually pay for. */
 export function slurpPermittedCameraSources(options: {
   companyCanHoldCamera: boolean;
   /** False for a Creator from another era or world (the world lens). */

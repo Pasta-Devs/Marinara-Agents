@@ -41,10 +41,10 @@ export function slurpWorldLine(lens: SlurpWorldLens | undefined): string {
   if (!lens) return "";
   const parts = [
     `Your world: ${ERA_WORDS[lens.era]}.`,
-    lens.device ? `Slurp reaches you through ${lens.device}.` : "",
+    lens.device ? `Slurp works in your world through ${lens.device}.` : "",
     lens.money ? `Fans pay in ${lens.money}.` : "",
     lens.festivals.length ? `Your festivals: ${lens.festivals.join(", ")}.` : "",
-    "Name your world's own things; never phones, cameras, apps or other modern tech your world does not have.",
+    "Name your world's own things; never name phones, apps or other modern tech your world does not have.",
   ];
   return parts.filter(Boolean).join(" ");
 }

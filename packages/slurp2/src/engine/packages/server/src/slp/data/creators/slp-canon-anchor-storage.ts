@@ -191,12 +191,12 @@ export async function saveSlurpCanonAnchors(
   });
 }
 
-/** Forget the anchors, the player's edits included, so the next post reads the card again. */
 /** The Creator's world lens from the stored reading, for prompts without the card at hand. */
 export async function readSlurpWorldLens(db: DB, accountId: string): Promise<SlurpWorldLens | undefined> {
   return (await readAnchorCache(db).catch(() => ({}) as AnchorCache))[accountId]?.anchors?.world;
 }
 
+/** Forget the anchors, the player's edits included, so the next post reads the card again. */
 export async function clearSlurpCanonAnchors(db: DB, accountId: string): Promise<void> {
   failedUntil.delete(accountId);
   await updateAnchors(db, accountId, () => null);
