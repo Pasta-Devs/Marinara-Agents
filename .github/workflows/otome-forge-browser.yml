@@ -77,6 +77,8 @@ jobs:
       - name: Run Otome Forge browser suite
         env:
           MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+          # Until release 1 the package is uncatalogued, then staging-only (the preview overlay).
+          MARINARA_CATALOG_INCLUDE_INCOMPLETE: "1"
         run: npm run test:browser:otome-forge
 
       # The same real-server visit with Gacha Forge installed beside it: its unprefixed `index` document must not

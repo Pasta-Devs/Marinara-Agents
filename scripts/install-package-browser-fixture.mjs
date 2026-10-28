@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
+import { INCOMPLETE_PACKAGE_IDS } from "./catalog-incomplete.mjs";
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -59,14 +60,20 @@ async function installOne({ agentsRoot, engineRoot, installRoot, packageId }) {
     const preview = JSON.parse(await readFile(previewCatalogPath, "utf8"));
     catalog.packages = [...catalog.packages, ...preview.packages];
   }
-  const catalogEntry = catalog.packages.find((entry) => entry.manifest?.id === packageId);
+  const artifactPath = join(agentsRoot, "artifacts", `${packageId}-${manifest.version}.zip`);
+  const archive = await readFile(artifactPath);
+  // A package still in development is in no catalog lane, so its own artifact stands in for the catalog's integrity
+  // metadata; every payload is still checked against its manifest below.
+  const catalogEntry =
+    catalog.packages.find((entry) => entry.manifest?.id === packageId) ??
+    (INCOMPLETE_PACKAGE_IDS.has(packageId)
+      ? { manifest, artifact: { bytes: archive.byteLength, sha256: sha256(archive) } }
+      : null);
   if (!catalogEntry) throw new Error(`${packageId} is missing from catalog/catalog.json`);
   if (JSON.stringify(catalogEntry.manifest) !== JSON.stringify(manifest)) {
     throw new Error(`${packageId} manifest does not match its catalog entry`);
   }
 
-  const artifactPath = join(agentsRoot, "artifacts", `${packageId}-${manifest.version}.zip`);
-  const archive = await readFile(artifactPath);
   if (archive.byteLength !== catalogEntry.artifact.bytes || sha256(archive) !== catalogEntry.artifact.sha256) {
     throw new Error(`${packageId} artifact does not match its catalog integrity metadata`);
   }
