@@ -62,6 +62,7 @@ import {
 } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { generateJson, readOrGenerate, runForeground } from "../generation.js";
 import type { OtomeArt } from "../art/expressions.js";
+import { explicitCgAllowed } from "../content-contract.js";
 import { OtomeForgeError } from "../http.js";
 import { beatId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
@@ -128,6 +129,8 @@ const nameKey = (value: unknown) => str(value, NAME_MAX).normalize("NFKC").toLow
 /** What normalizing a reply needs to know about the node and its cast. */
 export interface BeatContext {
   node: ChapterNode;
+  /** The world allowed an explicit key image as the beat was written (content-contract.ts explicitCgAllowed). */
+  cgExplicit?: boolean;
   /** Every love interest, so a speaker's name can be matched to his stage. */
   units: ReadonlyArray<Pick<Unit, "id" | "name">>;
   state: RunState;
@@ -241,6 +244,7 @@ export function normalizeBeatBody(raw: unknown, options: NormalizeOptions): Beat
           .map((name) => str(name, NAME_MAX))
           .filter(Boolean)
           .slice(0, CG_CAST_MAX),
+        ...(options.context.cgExplicit && cg.explicit === true ? { explicit: true as const } : {}),
       };
     }
   }
@@ -446,7 +450,8 @@ async function generateBeat(
   const last = i === chapter.nodes.length - 1;
   const mustChoose =
     chapter.kind === "route" && !!node.gate && !!chapter.stage && stageRow(chapter.stage).gate === "confrontation";
-  const context: BeatContext = { node, units, state: run.state, last, mustChoose };
+  const cgExplicit = explicitCgAllowed(run.world);
+  const context: BeatContext = { node, units, state: run.state, last, mustChoose, cgExplicit };
   const opponent = confrontationOpponent(chapter, node, units);
   const input = { world: run.world, player: run.player, units, state: run.state, chapter, node, storySoFar, memory };
   let body: Omit<Beat, "key" | "i" | "kind" | "choiceCanon" | "applied" | "readThrough" | "written" | "rewrites">;
@@ -454,7 +459,7 @@ async function generateBeat(
   if (opponent) {
     // P12: the whole stance game in one call; its opening is the beat's segments.
     const lists = segmentLists(context);
-    const shape = { li: opponent, node, cgOpen: !!node.cg };
+    const shape = { li: opponent, node, cgOpen: !!node.cg, cgExplicit };
     const { value, connectionId, model } = await generateJson(deps, {
       runId,
       job: "narration",

@@ -20,6 +20,8 @@ export interface ImageSubject {
   personaId?: string;
   portrait?: string;
   outfits?: unknown[];
+  /** The look worn now: the kit sends its image after the faces for scene and banner art. */
+  wornOutfit?: string;
 }
 
 export interface PortraitRequest {

@@ -734,7 +734,7 @@
   "ui.otomeForge.setup.protagonistNote": "This is your story. Bring yourself.",
   "ui.otomeForge.setup.protagonistTitle": "Who are you here?",
   "ui.otomeForge.setup.ratingExplicit": "Explicit",
-  "ui.otomeForge.setup.ratingExplicitText": "Nudity may appear.",
+  "ui.otomeForge.setup.ratingExplicitText": "Nudity and sex may appear in key images of explicit scenes. Looks and faces stay clothed.",
   "ui.otomeForge.setup.ratingHint": "Separate from Heat: it decides what images may show.",
   "ui.otomeForge.setup.ratingLegend": "Image rating",
   "ui.otomeForge.setup.ratingSfw": "SFW",

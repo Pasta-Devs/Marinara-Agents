@@ -538,6 +538,8 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
         people: subjects.map((subject) => subject.person),
         world: run.world,
         style,
+        // Banner art stays clothed (at most Suggestive): its Character Story is not written yet.
+        use: "clothed",
       },
       edited,
     );

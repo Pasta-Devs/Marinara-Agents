@@ -88,8 +88,9 @@ test("planner, scene and chat prompts get the full contract; the Dark addition a
     for (const darkness of ["gentle", "angst"] as const) {
       assert.doesNotMatch(contract(kind, { darkness }), DARK_ADDITION, `${kind} under ${darkness}`);
     }
-    // Lines and Veils are named as such.
-    const dark = contract(kind, { darkness: "dark" });
+    // Lines and Veils are named as such (under SFW Heat dubious consent is held at Line, whatever the document says).
+    assert.match(contract(kind, { darkness: "dark" }), /Lines \(never written, not even implied\): dubious consent/);
+    const dark = contract(kind, { heat: "fade", darkness: "dark" });
     assert.match(dark, /Lines \(never written, not even implied\): [^\n]*non-consent[^\n]*pregnancy/);
     assert.match(dark, /Veils \(may happen only off the page[^\n]*dubious consent/);
   }
@@ -116,8 +117,11 @@ test("image prompts carry the image rating and an adult tag for every person, wh
     contract("image", { heat: "explicit", darkness: "dark" }),
     "safe for work, fully clothed, adult man, adult woman",
   );
-  assert.match(contract("image", {}, "suggestive"), /^suggestive, tasteful, adult man, adult woman$/);
-  assert.match(contract("image", {}, "explicit"), /^explicit content allowed, adult man, adult woman$/);
+  // The `image` contract is a clothed portrait's (P20's looks and Memory art): at most Suggestive, said in words too.
+  const clothed =
+    "suggestive, tasteful, clothed, adult man, adult woman, Everyone shown is an adult over 18 with an adult face and body";
+  assert.equal(contract("image", {}, "suggestive"), clothed);
+  assert.equal(contract("image", { heat: "explicit" }, "explicit"), clothed);
   const protagonist = otomeContentContract({ world: world(), lis: [{ name: "Her" }, ...LIS], kind: "image" });
   assert.equal(protagonist, "safe for work, fully clothed, adult person, adult man, adult woman");
   assert.equal(

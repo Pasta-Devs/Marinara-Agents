@@ -11,7 +11,9 @@
 //   owned (S/wish/banners.ts itemMemorySources), so the prompt carries only what the whole cast may know: scene cards
 //   without the secrets she learned in a route, the shared part of what stands between each of them and the
 //   protagonist, and recall as a scene with nobody in it (shared canon only). No love interest's own chapter reaches it.
-// - Outfit lines and key image briefs are English image text, held to the `image` contract's tags.
+// - Outfit lines and key image briefs are English image text, held to the `image` contract's tags. Above SFW a look may
+//   be revealing but stays a complete clothed look, and Memory art stays at most Suggestive (it is painted before its
+//   Character Story exists; content-contract.ts imageBriefRule). A world that raised nothing gets the prompt it got before.
 // Prompts are English and never localized; titles, premises, look names and Snapshots are in the world's language. A
 // love interest may be any gender: the prompt names them or uses their bible's pronouns.
 import { z } from "zod";
@@ -28,7 +30,7 @@ import {
   type BannerKind,
   type ItemLook,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
-import { otomeContentContract, otomeContractReminder } from "../content-contract.js";
+import { imageBriefRule, otomeContentContract, otomeContractReminder } from "../content-contract.js";
 import type { OtomeMessage } from "../generation.js";
 import { mainChapterNumber } from "../ids.js";
 import { otomeSceneCard } from "../scene-card.js";
@@ -112,6 +114,7 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
     lis: [...lis, { name: player.name, presentation: "person" as const }],
     kind: "image",
   });
+  const briefRule = kind === "memories" ? imageBriefRule(world, "clothed") : "";
   const system = [
     "You plan one banner of Wish in an otome game: the collectible side stories, looks and Snapshots the player pulls for with Starlight they earned. Nothing on a banner changes the main story.",
     KIND_TEXT[kind],
@@ -121,12 +124,18 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
       "- A premise is a situation: where they are, what is happening, what each of them wants from it. Never a plot turn, a reveal, a confession or anything the main story has not reached. How close they are follows their current stage; the scene itself is written later, when the item is first opened.",
       `- Titles, premises, look names and Snapshots are written in ${world.language || "English"}. Outfit lines and the key image brief are always English.`,
       "- An outfit line is English, visual-only, comma-separated tags for one complete look: clothes, shoes and accessories. Never the body, face, hair, pose, background or other people.",
+      world.images.rating === "sfw"
+        ? ""
+        : "- Every look stays a complete clothed look: it may be revealing (lingerie, swimwear), never nude.",
       "- The key image brief is one or two English sentences on where and how the moment is framed (place, light, what they are doing), never anyone's looks.",
+      briefRule ? `- ${briefRule}` : "",
       `- Exactly ${BANNER_SIZES.four} entries in "four" and ${BANNER_SIZES.three} in "snapshots". Use the love interest ids given below for "li".`,
       `- Snapshots: 2–3 sentences each, a small everyday moment between one love interest and the protagonist, in the third person. Spread them across the cast, at least two with ${featured.name}. Each one stays within what that love interest has seen or been told.`,
       "- Every love interest keeps their own voice, wants and mask; tenderness before stage 4 costs them something.",
       "- New ideas only: never repeat an earlier banner's title or situation.",
-    ].join("\n"),
+    ]
+      .filter(Boolean)
+      .join("\n"),
     otomeWritingRules({ story: true }),
     relabel(otomeContentContract({ world, lis, kind: "planner" }), "CONTENT CONTRACT (titles, premises and looks)"),
     relabel(

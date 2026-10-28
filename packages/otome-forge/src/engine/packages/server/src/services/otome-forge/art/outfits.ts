@@ -187,8 +187,15 @@ async function buildItemArt(
   const style = await images.styleProfile(run.world.images.styleProfileId);
   if (item.kind === "memory5") {
     const subjects = cgSubjects(item.cg!.cast, run.units, run.player);
+    // Memory art is painted before its Character Story exists, so it stays clothed (at most Suggestive).
     const prompt = cgPrompt(
-      { brief: item.cg!.brief, people: subjects.map((subject) => subject.person), world: run.world, style },
+      {
+        brief: item.cg!.brief,
+        people: subjects.map((subject) => subject.person),
+        world: run.world,
+        style,
+        use: "clothed",
+      },
       edited,
     );
     return {
@@ -442,7 +449,7 @@ async function buildPair(deps: ArtDeps, runId: string, hers: string, edited: Par
     },
   ];
   const brief = `A couple portrait of ${first(unit.name, "them")} and ${first(run.player.name, "the protagonist")} together, side by side and in full view, sharing a quiet moment, soft romantic light.`;
-  const prompt = cgPrompt({ brief, people, world: run.world, style }, edited);
+  const prompt = cgPrompt({ brief, people, world: run.world, style, use: "clothed" }, edited);
   // Each painted look is the reference, so the likeness and the clothes both carry over.
   const units: ImageSubject[] = [
     { kind: "character", portrait: hisOutfit.url },

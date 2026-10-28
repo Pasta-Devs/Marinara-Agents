@@ -6,6 +6,7 @@
 - Memories hold a Character Story to read; looks go to the Wardrobe, where your look and theirs make a couple set; Snapshots join that love interest's Love Timeline, and only they remember them.
 - Wear at home puts a look on Home, and the love interest on Home notices a new look of yours. A Memory's CG can stand behind them.
 - At affection 10, each love interest gives a Memory Selector. Banner and item art follows your image settings and is painted once.
+- NSFW mode (18+ only): Explicit Heat and Dark romance are written in full, your Lines and Veils still win, and only CGs of explicit scenes show nudity.
 
 ## 0.0.5 — 2026-10-28
 

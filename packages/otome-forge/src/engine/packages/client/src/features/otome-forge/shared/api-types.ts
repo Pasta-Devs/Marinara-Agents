@@ -763,8 +763,12 @@ export interface Beat {
   /** Picks whose effects were applied (hidden from the client). */
   applied: Record<string, true>;
   musicMood: MusicMood;
-  /** A key image's brief: `at` is the segment it opens on; `brief` is English. `art` is its paint (M2b, S/art/cg.ts). */
-  cg?: { at: number; brief: string; cast: string[]; art?: Paint };
+  /**
+   * A key image's brief: `at` is the segment it opens on; `brief` is English. `art` is its paint (M2b, S/art/cg.ts).
+   * `explicit`: the brief shows sex or nudity on the page; kept only when Heat and the image rating were both Explicit
+   * as it was written, and painted explicit only while they still are (S/content-contract.ts effectiveImageRating).
+   */
+  cg?: { at: number; brief: string; cast: string[]; explicit?: true; art?: Paint };
   /** The furthest mainline segment read (skip-read starts here). */
   readThrough: number;
   /** The player ended the scene at segment `at` (no model call); `veil` is what they chose to veil from then on. */

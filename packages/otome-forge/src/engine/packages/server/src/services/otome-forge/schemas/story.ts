@@ -195,6 +195,7 @@ export function normalizeBeat(data: unknown): Beat | null {
           at: z.number().int().min(0),
           brief: short(1200),
           cast: z.array(short(120)),
+          explicit: z.literal(true).optional(),
           art: PaintSchema.optional(),
         })
         .optional(),
