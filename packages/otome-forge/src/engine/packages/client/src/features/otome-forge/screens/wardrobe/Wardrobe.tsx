@@ -623,7 +623,9 @@ function ShowDialog({
   useEffect(() => {
     if (!result || !person) return;
     lineRef.current?.focus({ preventScroll: true });
-    void audio?.speak({ speaker: person.name, text: result.line, expression: result.face ?? "" }, voiceRef);
+    // Each Show writes a new line, and the clip kept under a ref is the first one voiced there: so none is kept.
+    const line = { speaker: person.name, text: result.line, expression: result.face ?? "" } as const;
+    void audio?.speak(line, voiceRef, { cache: false });
     // Once per line.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
@@ -697,7 +699,7 @@ function ShowDialog({
               onClick={() =>
                 speaking === voiceRef
                   ? audio.stopVoice()
-                  : void audio.speak({ speaker: person.name, text: result.line }, voiceRef)
+                  : void audio.speak({ speaker: person.name, text: result.line }, voiceRef, { cache: false })
               }
             >
               {speaking === voiceRef

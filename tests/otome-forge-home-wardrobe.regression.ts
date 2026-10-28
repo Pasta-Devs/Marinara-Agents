@@ -50,7 +50,7 @@ import {
   type HomeRouteDeps,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/home.ts";
 import {
-  noticingLook,
+  noticingLooks,
   registerWardrobeRoutes,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/wardrobe.ts";
 import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
@@ -319,7 +319,7 @@ test("Home and the Wardrobe say the line is on its way when it lands while they 
     if (armed && kind === "item") {
       armed = false;
       release();
-      await until(() => !noticingLook(t.runId), "P19 to finish");
+      await until(() => noticingLooks(t.runId).length === 0, "P19 to finish");
     }
     return listRun(kind, runId);
   }) as typeof t.store.listRun;
@@ -338,6 +338,26 @@ test("Home and the Wardrobe say the line is on its way when it lands while they 
     await t.wear("me", "base");
   }
   assert.equal(t.calls.length, 2, "one line for each new look");
+});
+
+test("Home and the Wardrobe stop saying the line is on its way once she has left the look it was for", async () => {
+  const t = await wardrobeHome("r-m4hleft-aaaaaa", { replies: [json({ text: "Amber suits you." })] });
+  await t.call("POST", "/runs/:run/home/set", { li: MIR, show: "me" });
+  // P19 for the look is queued behind a held run queue, as it is when the model is slow.
+  let release!: () => void;
+  const gate = runForeground(t.runId, () => new Promise<void>((resolve) => (release = resolve)));
+  await t.wear("me", HERS.id);
+  assert.equal((await t.home()).noticing, true, "waiting on the look she wears");
+  assert.equal((await t.call("GET", "/runs/:run/wardrobe")).body.noticing, true);
+
+  await t.wear("me", "base");
+  assert.deepEqual(noticingLooks(t.runId), [HERS.id], "the abandoned look is still queued");
+  assert.equal((await t.home()).noticing, false, "Home: nothing is coming for the base look");
+  assert.equal((await t.call("GET", "/runs/:run/wardrobe")).body.noticing, false, "the Wardrobe: the same");
+  release();
+  await gate;
+  await until(() => noticingLooks(t.runId).length === 0, "the abandoned P19 to leave the queue");
+  assert.equal(t.calls.length, 0, "a look she left is never asked for");
 });
 
 test("A Memory won after a story CG of his stands behind him and ends the Album, though its art was painted first", async () => {

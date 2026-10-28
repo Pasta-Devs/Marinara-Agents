@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createForgeStoryCancellation } from "@forge-kit/story-cancel-server.mjs";
 import { forgeKnowledgeBoundary } from "@forge-kit/story-memory-integration.mjs";
+import type { Unit } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/api-types.ts";
 import * as wish from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/wish.ts";
 import {
   paintItemNow,
@@ -33,6 +34,10 @@ import {
   readBanner,
   readItem,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/banners.ts";
+import {
+  normalizeBannerPlan,
+  type BannerPlan,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/prompts.ts";
 import { pullWish } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/pull.ts";
 import { setImages, until } from "./fixtures/otome-forge-art.ts";
 import {
@@ -130,6 +135,22 @@ test("a read creates nothing; Wish open creates the rotation's three banners onc
   const again = await t.call("POST", "/runs/:run/wish/open");
   assert.deepEqual(again.body.failed, []);
   assert.equal(t.calls.length, 3);
+});
+
+test("a Snapshot planned without a title is named by its first words, or its first characters when it has no spaces", () => {
+  // The fixture plans every slot over the whole cast, so the cast it names is the one given.
+  const kai = { id: KAI, name: "Kai" } as Unit;
+  const cast = [kai, { id: MIR, name: "Mireille" } as Unit, { id: SOL, name: "Sol" } as Unit];
+  const plan = (text: string) => {
+    const reply = bannerReply("memories");
+    const untitled = { ...reply, snapshots: reply.snapshots.map(() => ({ li: KAI, text })) };
+    const planned = normalizeBannerPlan(untitled, { kind: "memories", units: cast, featured: kai });
+    assert.equal(typeof planned, "object", String(planned));
+    return (planned as BannerPlan).snapshots[0]!.title;
+  };
+  assert.equal(plan("The lamp hums while they share a late tea, neither saying much."), "The lamp hums while they…");
+  const unspaced = "灯台の灯りがゆっくり回るあいだ、二人は黙ってお茶を飲み、どちらも本心を口にしなかった。".repeat(4);
+  assert.equal(plan(unspaced), `${[...unspaced].slice(0, 12).join("")}…`, "a short label, not the whole text");
 });
 
 test("P20 keeps the knowledge boundary, the contracts and only what the whole cast may know", async () => {

@@ -162,6 +162,8 @@ export function useItemActions(runKey: string) {
       return result;
     } catch (error) {
       fail(item.id, otome.errorMessage(error));
+      // The art was queued before the story call that failed: the screens read it again, the error text stays.
+      await invalidateCollection(queryClient, runKey).catch(() => undefined);
       return null;
     } finally {
       mark(item.id, false);

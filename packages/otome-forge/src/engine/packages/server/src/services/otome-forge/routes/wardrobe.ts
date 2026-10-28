@@ -18,7 +18,7 @@
 // activity cap (one the cap took entirely stays owed to a later Show). Two Shows of the same look to the same love
 // interest at once share one call.
 // Home (S/routes/home.ts) shows what is worn: wornLookUrl(unit) on him, cut out there as M3 cuts out every worn look,
-// and wornLookUrl(player) on Me with `player.noticed` (P19, written here) under it; `noticingLook` tells it the line
+// and wornLookUrl(player) on Me with `player.noticed` (P19, written here) under it; `noticingLooks` tells it the line
 // is on its way.
 import { forgeStoryExpressionCast } from "@forge-kit/story-expressions-server.mjs";
 import { z } from "zod";
@@ -150,12 +150,16 @@ function facesOn(world: World, unit: Unit, url: string | undefined): Partial<Rec
 /** Love interests noticing her look right now, by `${runId}|${look}` (P19 runs in the background). */
 const noticing = new Set<string>();
 
-/** True while a love interest of the run is noticing her look (the Wardrobe and Home ask again until it lands). */
-export const noticingLook = (runId: string) => [...noticing].some((key) => key.startsWith(`${runId}|`));
+/**
+ * The looks a love interest of the run is noticing right now. The Wardrobe and Home ask again until the one she wears
+ * lands; a look she has left may still be queued, but no line can arrive for it (schemas/player.ts): not waited on.
+ */
+export const noticingLooks = (runId: string) =>
+  [...noticing].filter((key) => key.startsWith(`${runId}|`)).map((key) => key.slice(runId.length + 1));
 
 export async function wardrobeView(deps: Pick<RouteDeps, "store">, runId: string): Promise<WardrobeView> {
   // Asked before the reads: a line that lands while they run then answers "on its way", never "none and done".
-  const stillNoticing = noticingLook(runId);
+  const noticingNow = noticingLooks(runId);
   const run = await readRun(deps.store, runId);
   if (!run) throw notFound("Otome Forge run");
   const allItems = await readItems(deps.store, runId);
@@ -214,7 +218,7 @@ export async function wardrobeView(deps: Pick<RouteDeps, "store">, runId: string
     me,
     couples,
     noticed: run.player.noticed,
-    noticing: stillNoticing,
+    noticing: noticingNow.includes(run.player.wornOutfit ?? ""),
   };
 }
 

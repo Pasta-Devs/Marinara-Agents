@@ -45,7 +45,7 @@ import { field } from "../schemas/common.js";
 import { normalizeState, readRun, readyFaces } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { albumCgs } from "./album.js";
-import { noticingLook } from "./wardrobe.js";
+import { noticingLooks } from "./wardrobe.js";
 
 const SetBody = z.object({
   li: z.string().min(1).max(80).optional(),
@@ -132,7 +132,7 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
     handle(async (request) => {
       const { runId } = runParam(request);
       // Asked before the reads: a line that lands while they run then answers "on its way", never "none and done".
-      const noticing = noticingLook(runId);
+      const noticingNow = noticingLooks(runId);
       const run = await readRun(store, runId);
       if (!run) throw runNotFound();
       const order = Object.keys(run.state.lis);
@@ -177,7 +177,7 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
         backdrop: backdropOf(albumCgs(run, items), run.world, li),
         // Only a line about the look she wears now is kept (schemas/player.ts), so a changed look shows none.
         noticed: run.player.noticed,
-        noticing,
+        noticing: noticingNow.includes(run.player.wornOutfit ?? ""),
       };
       return view;
     }),

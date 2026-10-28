@@ -63,6 +63,8 @@ export function useAlbum(runKey: string) {
   return useQuery({
     queryKey: albumQueryKey(runKey),
     queryFn: () => otome.get<AlbumView>(`${runPath(runKey)}/album`),
+    // The reader changes what the Album lists (read state, story CGs) while it is away, as it does Home's.
+    refetchOnMount: "always",
     refetchInterval: (query) =>
       query.state.data?.memories.some((memory) => memory.art?.state === "pending") ? POLL_MS : false,
   });

@@ -131,6 +131,7 @@ export function WishScreen({ runKey, view, onOpenStory, onOpenWardrobe }: WishSc
   const id = useId();
   const wish = useWish(runKey);
   const actions = useItemActions(runKey);
+  const opening = useOpenBanners(runKey);
   const reducedMotion = useReducedMotion();
   const [tab, setTab] = useState<WishTab>("memories");
   const [echo, setEcho] = useState<string | null>(null);
@@ -248,7 +249,7 @@ export function WishScreen({ runKey, view, onOpenStory, onOpenWardrobe }: WishSc
         tabIndex={0}
       >
         {tab !== "echoes" && (data.missing.length > 0 || data.creating) ? (
-          <NewBanners runKey={runKey} view={view} wish={data} />
+          <NewBanners view={view} wish={data} opening={opening} />
         ) : null}
         {panelBanner ? (
           <BannerPanel
@@ -289,27 +290,17 @@ export function WishScreen({ runKey, view, onOpenStory, onOpenWardrobe }: WishSc
 
 // ── This fortnight's banners, written on the player's tap ──
 
-function NewBanners({ runKey, view, wish }: { runKey: string; view: RunView; wish: WishView }) {
-  const { t } = useTranslation();
+/**
+ * Opening the fortnight's banners. It lives in WishScreen, not in the tab panel (which is keyed by tab and mounts
+ * again on a change), so a tab change neither offers Open again nor loses Cancel or what the open returned.
+ */
+function useOpenBanners(runKey: string) {
   const otome = useOtomeApi();
   const queryClient = useQueryClient();
-  const { locale } = useOtomeProps().localization;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [failed, setFailed] = useState<WishOpenResult["failed"]>([]);
   const abort = useRef<AbortController | null>(null);
-  const actionRef = useRef<HTMLButtonElement>(null);
-  const writing = busy || wish.creating;
-  const wasWriting = useRef(writing);
-
-  // The pressed button leaves (Open becomes Cancel, then Open again): focus follows to the one that took its place.
-  useEffect(() => {
-    if (wasWriting.current === writing) return;
-    wasWriting.current = writing;
-    if (document.activeElement === document.body || !document.activeElement?.isConnected) {
-      actionRef.current?.focus({ preventScroll: true });
-    }
-  }, [writing]);
 
   const open = async () => {
     if (busy) return;
@@ -340,6 +331,35 @@ function NewBanners({ runKey, view, wish }: { runKey: string; view: RunView; wis
     await cancelStoryWork(otome.post, runKey);
     void queryClient.invalidateQueries({ queryKey: wishQueryKey(runKey) });
   };
+
+  return { busy, error, failed, open, cancel };
+}
+
+type OpenBanners = ReturnType<typeof useOpenBanners>;
+
+function NewBanners({
+  view,
+  wish,
+  opening: { busy, error, failed, open, cancel },
+}: {
+  view: RunView;
+  wish: WishView;
+  opening: OpenBanners;
+}) {
+  const { t } = useTranslation();
+  const { locale } = useOtomeProps().localization;
+  const actionRef = useRef<HTMLButtonElement>(null);
+  const writing = busy || wish.creating;
+  const wasWriting = useRef(writing);
+
+  // The pressed button leaves (Open becomes Cancel, then Open again): focus follows to the one that took its place.
+  useEffect(() => {
+    if (wasWriting.current === writing) return;
+    wasWriting.current = writing;
+    if (document.activeElement === document.body || !document.activeElement?.isConnected) {
+      actionRef.current?.focus({ preventScroll: true });
+    }
+  }, [writing]);
 
   if (error && !writing) {
     return <DeclinedPanel error={error} run={view} job="structured" onRetry={() => void open()} />;
@@ -372,17 +392,15 @@ function NewBanners({ runKey, view, wish }: { runKey: string; view: RunView; wis
         </p>
       ) : null}
       {writing ? (
-        busy ? (
-          <button
-            ref={actionRef}
-            type="button"
-            className="of-button of-button--quiet of-glass"
-            onClick={() => void cancel()}
-          >
-            <X size={16} strokeWidth={2} aria-hidden="true" />
-            {t("ui.otomeForge.reader.cancel")}
-          </button>
-        ) : null
+        <button
+          ref={actionRef}
+          type="button"
+          className="of-button of-button--quiet of-glass"
+          onClick={() => void cancel()}
+        >
+          <X size={16} strokeWidth={2} aria-hidden="true" />
+          {t("ui.otomeForge.reader.cancel")}
+        </button>
       ) : (
         <>
           <button ref={actionRef} type="button" className="of-button of-button--primary" onClick={() => void open()}>

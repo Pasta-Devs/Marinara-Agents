@@ -2,7 +2,7 @@
 // Otome Forge: favourite lines, starred in the reader's backlog. A love interest's line plays again in their voice
 // from the clip kept when it was first voiced (the same cache key as the reader's).
 // ──────────────────────────────────────────────
-import type { CSSProperties } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { Quote, Square, Volume2 } from "lucide-react";
 import { useAudioSnapshot, useOtomeAudio } from "../../hooks/use-otome-audio";
@@ -15,6 +15,14 @@ export function Favorites({ view, favorites }: { view: RunView; favorites: Favor
   const formatAt = useFormatAt();
   const audio = useOtomeAudio();
   const { speaking } = useAudioSnapshot();
+  // The line this tab started: leaving the tab stops it, but never another screen's voice.
+  const started = useRef<string | null>(null);
+  useEffect(
+    () => () => {
+      if (started.current && audio?.getSnapshot().speaking === started.current) audio.stopVoice();
+    },
+    [audio],
+  );
   if (!favorites.length) {
     return (
       <p className="of-empty of-glass">
@@ -56,7 +64,13 @@ export function Favorites({ view, favorites }: { view: RunView; favorites: Favor
                         ? t("ui.otomeForge.audio.stopVoice")
                         : t("ui.otomeForge.audio.playVoice", { name: segment.speaker })
                     }
-                    onClick={() => (playing ? audio?.stopVoice() : void audio?.speak(segment, favorite.ref))}
+                    onClick={() => {
+                      if (playing) audio?.stopVoice();
+                      else {
+                        started.current = favorite.ref;
+                        void audio?.speak(segment, favorite.ref);
+                      }
+                    }}
                   >
                     {playing ? (
                       <Square size={14} strokeWidth={2} aria-hidden="true" />

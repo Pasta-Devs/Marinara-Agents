@@ -282,8 +282,10 @@ export function normalizeBannerPlan(
     const li = liOf(entry.li);
     if (!li) return `snapshots[${index}].li is not one of the love interest ids given`;
     const text = clip(entry.text, ITEM_LIMITS.snapshot);
-    // A missing title takes the Snapshot's first words.
-    const title = entry.title?.trim() || `${text.split(/\s+/).slice(0, 5).join(" ")}…`;
+    // A missing title takes the Snapshot's first words, or its first characters when it has no spaces (as in Japanese).
+    const title =
+      entry.title?.trim() ||
+      `${/\s/.test(text) ? text.split(/\s+/).slice(0, 5).join(" ") : [...text].slice(0, 12).join("")}…`;
     plan.snapshots.push({ li: li.id, title: clip(title, ITEM_LIMITS.title), text });
   }
   return plan;
