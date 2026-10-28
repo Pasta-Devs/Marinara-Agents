@@ -983,6 +983,8 @@ function homeLayout(root: Locator) {
       ],
       /** M4: the line he noticed about her look, on Me. */
       noticed: named(".of-home-noticed .of-noticed", () => "noticed line"),
+      /** The figure itself: his art, or the medallion without it. */
+      figure: named(".of-figure-img, .of-figure-medallion", () => "figure"),
       body: box(element.querySelector(".of-stage-body")!),
     };
   });
@@ -1024,6 +1026,13 @@ for (const images of [true, false]) {
           const at = `${size.width}x${size.height}${later ? " with Remind Me and Caring message" : ""}`;
           expect(layout.targets, at).toHaveLength(3);
           expect(layout.rail.length, at).toBe(later ? 6 : 4);
+          // He shows, art or medallion: on the real Engine's 360 x 600 stage his cell once kept 128 px while its
+          // cqh read 0, and he shrank to nothing.
+          expect(layout.figure, at).toHaveLength(1);
+          expect(
+            layout.figure[0].box.width >= 24 && layout.figure[0].box.height >= 24,
+            `his figure shows at ${at}`,
+          ).toBe(true);
           // Rail as M3 has it: the note keeps at least a line of its words in view.
           if (!later) expect(layout.noteText, `the note's words at ${at}`).toBeGreaterThanOrEqual(24);
           for (const target of layout.targets) {

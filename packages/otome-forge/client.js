@@ -1806,12 +1806,14 @@ ${r}[data-look="pearl"] .of-home-shade {
 ${r} .of-home[data-rupture="true"] .of-home-l1 { background: var(--of-home-tint), linear-gradient(rgb(90 110 160 / 0.16), rgb(90 110 160 / 0.16)); }
 
 /* L2: the figure's cell (a size container: cqw and cqh below are its own) and his nameplate under it. */
-/* Its first row is the cell: at least 128 px, and as tall as the line he noticed (on Me), which stands in it. */
+/* Its first row is the cell: at least 128 px, and as tall as the line he noticed (on Me), which stands in it. The
+   128 px floor is the row's, not a min-height on the cell: when a short stage left the row at that min-height, Chrome
+   kept the cell 128 px tall but read its cqh as 0, and his figure and medallion shrank to nothing. */
 ${r} .of-home-main {
-  grid-area: main; min-width: 0; display: grid; grid-template: minmax(auto, 1fr) auto / minmax(0, 1fr); gap: 8px;
+  grid-area: main; min-width: 0; display: grid; grid-template: minmax(128px, 1fr) auto / minmax(0, 1fr); gap: 8px;
   pointer-events: none;
 }
-${r} .of-home-stage { grid-area: 1 / 1; position: relative; z-index: 1; min-height: 128px; container-type: size; }
+${r} .of-home-stage { grid-area: 1 / 1; position: relative; z-index: 1; container-type: size; }
 ${r} .of-home-main > .of-home-foot { grid-area: 2 / 1; }
 /* Me: what a love interest noticed about her look (M4's P19), at the cell's inline end above her name, over the cell
    (her art may run on behind it) and under nothing that takes a tap. */
