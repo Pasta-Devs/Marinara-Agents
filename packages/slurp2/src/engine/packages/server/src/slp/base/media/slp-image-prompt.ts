@@ -195,8 +195,8 @@ const PHOTO_ONLY_WORDS: readonly [RegExp, string][] = [
 ];
 
 /** The prompt in the Creator's medium: their style leads, Slurp's photo words go (see `slurpArtStyle`). */
-export function slurpStyledImagePrompt(prompt: string, look: string): string {
-  const style = slurpArtStyle(look);
+export function slurpStyledImagePrompt(prompt: string, look: string, medium = ""): string {
+  const style = slurpArtStyle(look, medium);
   if (!style) return prompt;
   let styled = prompt;
   for (const [pattern, replacement] of PHOTO_ONLY_WORDS) styled = styled.replace(pattern, replacement);

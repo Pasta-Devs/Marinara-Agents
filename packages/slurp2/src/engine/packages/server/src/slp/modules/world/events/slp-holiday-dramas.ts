@@ -31,7 +31,7 @@ export const SLURP_COSTUME_CONTEST: SlpDrama = slpDramaSchema.parse({
     "Three Creators enter a Halloween costume contest and you are the judge. Each shows a costume that fits who they are; the winner posts a reward set.",
   builtin: true,
   roles: [{ key: "a" }, { key: "b" }, { key: "c" }, { key: "you", player: true }],
-  cooldownDays: 365,
+  cooldownDays: 300,
   maxDays: 4,
   weight: 0.1,
   stages: [

@@ -124,7 +124,7 @@ const read = (path: string) => readFileSync(new URL(path, root), "utf8");
   assert.equal(slurpArtStyle("A watercolor painter with short hair."), null);
   assert.match(
     read("server/src/slp/features/media/slp-images-service.ts"),
-    /slurpArtStyle\(styleSource, `[^`]*\$\{styleGuidance\}`\)/u,
+    /const medium = `[^`]*\$\{styleGuidance\}`/u,
     "the style profile decides the medium words",
   );
   for (const look of [anime, fox, dragon]) {
@@ -145,9 +145,18 @@ const read = (path: string) => readFileSync(new URL(path, root), "utf8");
     "no generic tag beside the specific one",
   );
   assert.equal(slurpStyledImagePrompt(`${goth}\n${brief}`, goth), `${goth}\n${brief}`, "photo Creators unchanged");
+  assert.match(
+    slurpStyledImagePrompt(`${goth}\n${brief}`, goth, "watercolor painting"),
+    /^digital illustration/u,
+    "a painted medium styles the prompt",
+  );
   const service = read("server/src/slp/features/media/slp-images-service.ts");
   // 0.3.5: the known character's name leads before the style is applied (finalPromptSubject).
-  assert.match(service, /slurpStyledImagePrompt\(finalPromptSubject, styleSource\)/u, "every picture path is styled");
+  assert.match(
+    service,
+    /slurpStyledImagePrompt\(finalPromptSubject, styleSource, medium\)/u,
+    "every picture path is styled",
+  );
   assert.match(service, /artStyle\?\.negative/u, "the negative prompt keeps photo and fursuit out");
 }
 

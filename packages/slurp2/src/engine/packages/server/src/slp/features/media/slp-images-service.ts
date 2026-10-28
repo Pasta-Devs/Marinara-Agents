@@ -607,9 +607,8 @@ async function generateCreatorPostImageRun(
       : withoutDevice;
   // A drawn Creator or a painted style profile drops the photo words; in the story it is still a photo.
   const styleSource = `${characterDescription}\n${characterImageInstructions}`;
-  const artStyle = skipInterpretation
-    ? null
-    : slurpArtStyle(styleSource, `${characterImageInstructions}\n${styleGuidance}`);
+  const medium = `${characterImageInstructions}\n${styleGuidance}`;
+  const artStyle = skipInterpretation ? null : slurpArtStyle(styleSource, medium);
   // The viewpoint in the image model's words: tags for a tag model, e621 tags for a drawn furry.
   const promptFamily = slurpPromptFamily({
     promptMode: compiledPrompt.profile.promptMode,
@@ -646,7 +645,7 @@ async function generateCreatorPostImageRun(
   const people = skipInterpretation ? "" : redactIdentity(blocks());
   const finalPromptSubject = styleLead + ownBlock + people + finalPromptBody;
   const finalPrompt = [
-    artStyle ? slurpStyledImagePrompt(finalPromptSubject, styleSource) : finalPromptSubject,
+    artStyle ? slurpStyledImagePrompt(finalPromptSubject, styleSource, medium) : finalPromptSubject,
     input.compositionGuard,
   ]
     .filter(Boolean)
