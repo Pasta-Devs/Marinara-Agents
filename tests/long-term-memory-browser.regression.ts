@@ -1029,6 +1029,33 @@ async function main() {
               nextCursor: null,
             });
           }
+          if (body.source === "messages") {
+            const chatName = "My Very Long Adventure With Some Friends In The City Of A Thousand Lanterns";
+            return send(200, {
+              source: "messages",
+              scanned: 2,
+              draftable: 2,
+              importedCount: 0,
+              samples: [
+                [1, 120],
+                [121, 121],
+              ].map(([first, last]) => ({
+                sourceId: `chat-long:messages:m${first}`,
+                title: `${chatName}, ${first === last ? "message" : "messages"} ${first === last ? first : `${first}-${last}`}`,
+                messageRange: { chatName, first, last },
+                importMode: "roleplay",
+                mutationCount: 0,
+                summary: "Messages from a long chat.",
+                snippet: "Aster: the lanterns light.",
+                status: "pending",
+                freshness: "new",
+              })),
+              totals: { matches: 2, ready: 2, imported: 0 },
+              truncated: false,
+              hasMore: false,
+              nextCursor: null,
+            });
+          }
           return send(200, {
             source: body.source ?? "chats",
             scanned: 2,
@@ -8657,6 +8684,33 @@ async function main() {
         await page.locator('[data-ltm-surface="sources"]').innerText(),
         /character card|Summary Prompt|lorebook entries as source notes/iu,
       );
+      // #1783: on a Chat Messages row with a long chat name, the name is cut and the range stays whole.
+      await page.locator('[data-ltm-source-tab="messages"]').click();
+      await page.locator('[data-ltm-source-group="ready"] > summary').click();
+      await page.locator('[data-ltm-source-id="chat-long:messages:m1"] [data-ltm-source-message-range]').waitFor();
+      const rangeViewport = page.viewportSize();
+      await page.setViewportSize({ width: 390, height: 844 });
+      for (const [sourceId, label] of [
+        ["chat-long:messages:m1", "messages 1–120"],
+        ["chat-long:messages:m121", "message 121"],
+      ]) {
+        const longRow = page.locator(`[data-ltm-source-id="${sourceId}"][data-ltm-source-row-status]`);
+        const rangeLabel = longRow.locator("[data-ltm-source-message-range]");
+        const nameLabel = longRow.locator("[data-ltm-source-chat-name]");
+        assert.equal((await rangeLabel.innerText()).trim(), label);
+        const rowBox = (await longRow.boundingBox())!;
+        const rangeBox = (await rangeLabel.boundingBox())!;
+        assert.ok(
+          rangeBox.x + rangeBox.width <= rowBox.x + rowBox.width,
+          `${sourceId}: the range label is inside the row`,
+        );
+        assert.equal(
+          await nameLabel.evaluate((element) => element.scrollWidth > element.clientWidth),
+          true,
+          `${sourceId}: the chat name is the element that is cut`,
+        );
+      }
+      if (rangeViewport) await page.setViewportSize(rangeViewport);
       await page.locator('[data-ltm-source-tab="chats"]').click();
       await page.locator('[data-ltm-source-status-filter="imported"]').click();
       assert.match(await page.locator('[data-ltm-source-status-filter="imported"]').innerText(), /\([1-9]\d*\)/u);

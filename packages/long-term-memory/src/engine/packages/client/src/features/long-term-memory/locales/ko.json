@@ -1437,5 +1437,7 @@
   "ui.longTermMemory.sourcesworkspace.reloadList": "목록 새로고침",
   "ui.longTermMemory.sourcesworkspace.entriesTab": "항목",
   "ui.longTermMemory.sourcesworkspace.lorebookEntryCountOne": "항목 {{count}}개",
-  "ui.longTermMemory.sourcesworkspace.lorebookEntryCountOther": "항목 {{count}}개"
+  "ui.longTermMemory.sourcesworkspace.lorebookEntryCountOther": "항목 {{count}}개",
+  "ui.longTermMemory.sourcesworkspace.messageValue1": "메시지 {{value1}}",
+  "ui.longTermMemory.sourcesworkspace.messagesValue1ToValue2": "메시지 {{value1}}–{{value2}}"
 }

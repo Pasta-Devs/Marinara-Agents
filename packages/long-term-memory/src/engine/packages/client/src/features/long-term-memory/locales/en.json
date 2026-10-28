@@ -1437,5 +1437,7 @@
   "ui.longTermMemory.sourcesworkspace.reloadList": "Reload list",
   "ui.longTermMemory.sourcesworkspace.entriesTab": "Entries",
   "ui.longTermMemory.sourcesworkspace.lorebookEntryCountOne": "{{count}} entry",
-  "ui.longTermMemory.sourcesworkspace.lorebookEntryCountOther": "{{count}} entries"
+  "ui.longTermMemory.sourcesworkspace.lorebookEntryCountOther": "{{count}} entries",
+  "ui.longTermMemory.sourcesworkspace.messageValue1": "message {{value1}}",
+  "ui.longTermMemory.sourcesworkspace.messagesValue1ToValue2": "messages {{value1}}–{{value2}}"
 }
