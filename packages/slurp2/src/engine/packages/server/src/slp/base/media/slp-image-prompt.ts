@@ -159,13 +159,17 @@ const ART_STYLES: readonly { tag: string; negative: string; pattern: RegExp }[] 
     tag: "digital illustration",
     negative: "photograph, photorealistic",
     pattern:
-      /\b(?:illustrat(?:ed|ion)|drawn (?:in|as|like)|cartoon(?:ish|y)?|comic(?:[- ]book)? style|painterly|pixel art|3d render(?:ed)?|cgi)\b/iu,
+      /\b(?:illustrat(?:ed|ion)|drawn (?:in|as|like)|cartoon(?:ish|y)?|comic(?:[- ]book)? style|3d render(?:ed)?|cgi)\b/iu,
   },
 ];
 const PHOTO_STYLE =
   /\b(?:photo[- ]?real(?:istic)?|photograph(?:ic|ed)?|realistic (?:style|render|photo)|real[- ]life|live[- ]action)\b/iu;
 
-export function slurpArtStyle(look: string): { tag: string; negative: string } | null {
+// A painted medium counts only in the image instructions or style profile: on a card it is often a hobby.
+const PAINTED_MEDIUM = /\b(?:painterly|digital painting|oil painting|concept art|watercolou?r|pixel art)\b/iu;
+
+export function slurpArtStyle(look: string, medium = ""): { tag: string; negative: string } | null {
+  if (PAINTED_MEDIUM.test(medium)) look = `${look}\nillustration`;
   if (!look.trim() || PHOTO_STYLE.test(look)) return null;
   const found = ART_STYLES.filter((style) => style.pattern.test(look));
   if (found.length === 0) return null;
@@ -191,8 +195,8 @@ const PHOTO_ONLY_WORDS: readonly [RegExp, string][] = [
 ];
 
 /** The prompt in the Creator's medium: their style leads, Slurp's photo words go (see `slurpArtStyle`). */
-export function slurpStyledImagePrompt(prompt: string, look: string): string {
-  const style = slurpArtStyle(look);
+export function slurpStyledImagePrompt(prompt: string, look: string, medium = ""): string {
+  const style = slurpArtStyle(look, medium);
   if (!style) return prompt;
   let styled = prompt;
   for (const [pattern, replacement] of PHOTO_ONLY_WORDS) styled = styled.replace(pattern, replacement);

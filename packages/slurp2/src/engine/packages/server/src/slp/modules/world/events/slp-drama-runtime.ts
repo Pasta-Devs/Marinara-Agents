@@ -666,6 +666,8 @@ export function slpAdvanceDrama(
         const within = withinOf(drama);
         return (
           !running().has(id) &&
+          // ponytail: the one seasonal drama is gated by id; add a `months` field to the schema when a second one comes.
+          (id !== "costume-contest" || new Date(now).getUTCMonth() === 9) &&
           (!ended[id] || now - Date.parse(ended[id]!) >= drama.start.cooldownDays * DAY) &&
           (!within || standing.has(within))
         );

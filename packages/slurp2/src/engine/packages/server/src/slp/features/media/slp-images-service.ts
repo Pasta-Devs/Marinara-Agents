@@ -605,10 +605,10 @@ async function generateCreatorPostImageRun(
     : viewpoint && !withoutDevice.includes(viewpoint.phrase)
       ? `${withoutDevice}\n${viewpoint.phrase}`
       : withoutDevice;
-  // The Creator's medium: an anime, furry or dragon Creator is drawn, so the brief's photo words go
-  // and their style leads. A photo-style Creator, and a prompt a human approved, stay as they are.
+  // A drawn Creator or a painted style profile drops the photo words; in the story it is still a photo.
   const styleSource = `${characterDescription}\n${characterImageInstructions}`;
-  const artStyle = skipInterpretation ? null : slurpArtStyle(styleSource);
+  const medium = `${characterImageInstructions}\n${styleGuidance}`;
+  const artStyle = skipInterpretation ? null : slurpArtStyle(styleSource, medium);
   // The viewpoint in the image model's words: tags for a tag model, e621 tags for a drawn furry.
   const promptFamily = slurpPromptFamily({
     promptMode: compiledPrompt.profile.promptMode,
@@ -645,7 +645,7 @@ async function generateCreatorPostImageRun(
   const people = skipInterpretation ? "" : redactIdentity(blocks());
   const finalPromptSubject = styleLead + ownBlock + people + finalPromptBody;
   const finalPrompt = [
-    artStyle ? slurpStyledImagePrompt(finalPromptSubject, styleSource) : finalPromptSubject,
+    artStyle ? slurpStyledImagePrompt(finalPromptSubject, styleSource, medium) : finalPromptSubject,
     input.compositionGuard,
   ]
     .filter(Boolean)
