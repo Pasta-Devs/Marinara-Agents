@@ -586,7 +586,8 @@ test("an event that ends while Chapters shows it closes Hard even when the refre
     stopForgeStoryRequests() {},
   });
   globalThis.document = { createElement: () => ({ dataset: {} }) };
-  const endsAt = Date.now() + 40;
+  // A wide margin so a slow runner still loads the row before the event ends.
+  const endsAt = Date.now() + 400;
   let answer = { ok: true, serverNow: Date.now(), events: [{ ...finished, endsAt, hard: 1 }] },
     reads = 0,
     filled = 0;
@@ -614,7 +615,7 @@ test("an event that ends while Chapters shows it closes Hard even when the refre
   await settle();
   assert.equal(host._forgeSeasonalState.events[0].hardOpen, true);
   assert.match(card(), />Enter event/u);
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await new Promise((resolve) => setTimeout(resolve, Math.max(0, endsAt - Date.now()) + 50));
   answer = null;
   filled = 0;
   wireForgeSeasonalEvents(host);
