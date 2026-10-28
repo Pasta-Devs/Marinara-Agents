@@ -163,6 +163,10 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["conversation", "roleplay", "game"],
     activation: "Install it, restart Marinara Engine when prompted, then open Home → Story Writer.",
   },
+  "otome-forge": {
+    modes: ["conversation", "roleplay", "game"],
+    activation: "Install it, restart Marinara Engine when prompted, then open Home → Otome Forge.",
+  },
   pixelforge: {
     modes: ["game"],
     activation: "Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
