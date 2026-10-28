@@ -41,6 +41,10 @@ export const LOOK_TOKENS: Readonly<Record<Look, LookTokens>> = {
     "text-faint": "rgb(247 241 236 / 0.5)",
     "accent-text": PALETTE.rose,
     "champagne-text": PALETTE.champagne,
+    // Rarity as text and small marks (stars, pity rings): the rarity colours themselves on the night.
+    "rarity-silver-ink": RARITY.silver,
+    "rarity-violet-ink": RARITY.violet,
+    "rarity-gold-ink": RARITY.gold,
     "on-accent": PALETTE.ink,
     surface: "rgb(40 33 74 / 0.5)",
     "surface-strong": "rgb(46 38 84 / 0.74)",
@@ -87,6 +91,10 @@ export const LOOK_TOKENS: Readonly<Record<Look, LookTokens>> = {
     "text-faint": "rgb(43 34 54 / 0.68)",
     "accent-text": "#A04D6B",
     "champagne-text": "#86621F",
+    // Darker on Pearl's glass, 4.5:1 or more like the text around them.
+    "rarity-silver-ink": "#566070",
+    "rarity-violet-ink": "#6447B0",
+    "rarity-gold-ink": "#7A5A1C",
     "on-accent": PALETTE.ink,
     surface: "rgb(255 255 255 / 0.5)",
     "surface-strong": "rgb(255 255 255 / 0.74)",

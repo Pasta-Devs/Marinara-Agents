@@ -6,6 +6,10 @@
 // the same day), Reply into his thread with the note quoted; a thread with typing, his messages one by one, his
 // sticker, suggestions, a sticker of hers, read receipts and Close and remember; Home without images at reduced motion,
 // during a rupture, with Rough day? voiced with no cache key; and his faces' cut-outs arriving while Home is open.
+// M4: what the Wardrobe's Wear at home put on stands on Home (his look's cut-out, her look on Me), with the line he
+// noticed about hers arriving while Home is open; on a small phone the longest line stands beside the rail without
+// pushing it up, clear of the note, and at every phone size and on desktop it covers no rail button, the note (its Play
+// and Reply), her name, the top bar or the dock.
 // Run: node scripts/run-package-browser-tests.mjs otome-forge tests/package-otome-forge-home.e2e.ts
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -93,6 +97,15 @@ const TENDER_CUT = png(13, 19, [220, 160, 180]);
 const PLACE = png(16, 9, [60, 70, 110]);
 const FLUSTERED = png(13, 19, [240, 140, 170]);
 const AVATAR = png(8, 8, [231, 166, 184]);
+/** M4: the looks the Wardrobe's Wear at home put on, his cut out. */
+const HIS_WORN = png(13, 19, [90, 110, 170]);
+const HIS_WORN_CUT = png(13, 19, [80, 100, 160]);
+const HER_WORN = png(13, 19, [200, 150, 90]);
+const NOTICED_LINE = "Amber suits you. Do not let it go to your head.";
+// The longest of each (P16 writes up to 30 words, P19 up to 20): on a small phone they still leave the rail its room.
+const LONG_NOTE = "You left the lab light on again tonight, so I turned it off and locked up after you. Sleep, please.";
+const LONG_NOTICED =
+  "Amber suits you more than I expected, and I keep looking, which is a problem. Do not tell anyone else.";
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 /** Exactly one of `lines`. */
@@ -105,7 +118,15 @@ const anyOf = (lines: string[]) => new RegExp("^(?:" + lines.map(escapeRegExp).j
  * his reply back until it resolves (the thread and the list say `busy` meanwhile), and `sendFailures` and
  * `closeFailures` fail that many sends (with nothing saved) or closes (409 busy).
  */
-function createHomeStub({ images = true, rupture = false, noteFailures = 0, faceCutouts = false } = {}) {
+function createHomeStub({
+  images = true,
+  rupture = false,
+  noteFailures = 0,
+  faceCutouts = false,
+  worn = false,
+  firstNote = NOTE,
+  noticedLine = NOTICED_LINE,
+} = {}) {
   const calls: Call[] = [];
   const state = {
     rupture,
@@ -116,6 +137,8 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0, face
     closeFailures: 0,
   };
   let homeReads = 0;
+  // M4: the reads of Me before the line he noticed about her look lands (it is written in the background).
+  let meReads = 0;
   const now = () => new Date().toISOString();
   const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
   const pronouns = { subject: "he", object: "him", possessive: "his" };
@@ -145,6 +168,15 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0, face
       traits: [],
       goal: "",
       look: { identityLine: "", outfitLine: "" },
+      // M4: the look she wears at home (her base look is her persona's avatar).
+      ...(worn
+        ? {
+            outfits: [
+              { id: "my-wardrobe-0-f", name: "Lantern Dress", outfitLine: "amber silk", url: HER_WORN, at: now() },
+            ],
+            wornOutfit: "my-wardrobe-0-f",
+          }
+        : {}),
     },
     lis: [
       {
@@ -157,6 +189,8 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0, face
         level: 2,
         stage: 2,
         ...(images ? { portrait: PORTRAIT, expressions: { tender: TENDER, flustered: FLUSTERED } } : {}),
+        // M4: the look he wears, whose faces are not painted yet (the run view's faces are the worn look's).
+        ...(worn ? { worn: { id: "his-wardrobe-0-f", url: HIS_WORN }, expressions: undefined } : {}),
       },
       { id: CASSIAN, name: "Cassian", pronouns, source: "archetype", accent: "#E7A6B8", level: 1, stage: 1 },
     ],
@@ -178,7 +212,7 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0, face
     li !== ILVAR
       ? "The canals froze at dawn. I thought of you."
       : count === 1
-        ? NOTE
+        ? firstNote
         : state.rupture
           ? CURT_NOTE
           : WARM_AGAIN;
@@ -226,15 +260,21 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0, face
     if (path === `${base}/home`) {
       const look =
         home.show === "me"
-          ? images
-            ? { url: AVATAR, source: "avatar", cutoutState: "uncut" }
-            : null
-          : images && home.li === ILVAR
-            ? faceCutouts
-              ? { url: PORTRAIT, source: "look", cutout: PORTRAIT_CUT, cutoutState: "ready" }
-              : { url: PORTRAIT, source: "look", cutoutState: "uncut" }
-            : null;
+          ? worn
+            ? { url: HER_WORN, source: "look", cutoutState: "uncut" }
+            : images
+              ? { url: AVATAR, source: "avatar", cutoutState: "uncut" }
+              : null
+          : worn && home.li === ILVAR
+            ? { url: HIS_WORN, source: "look", cutout: HIS_WORN_CUT, cutoutState: "ready" }
+            : images && home.li === ILVAR
+              ? faceCutouts
+                ? { url: PORTRAIT, source: "look", cutout: PORTRAIT_CUT, cutoutState: "ready" }
+                : { url: PORTRAIT, source: "look", cutoutState: "uncut" }
+              : null;
       homeReads += 1;
+      if (home.show === "me") meReads += 1;
+      const noticedNow = worn && meReads >= 2;
       const faces =
         faceCutouts && home.li === ILVAR
           ? {
@@ -257,6 +297,8 @@ function createHomeStub({ images = true, rupture = false, noteFailures = 0, face
           rupture: state.rupture,
           unread: unread(),
           backdrop: images ? { url: PLACE, kind: "place" } : null,
+          noticed: noticedNow ? { li: ILVAR, text: noticedLine, look: "my-wardrobe-0-f", at: now() } : null,
+          noticing: worn && meReads >= 1 && !noticedNow,
         },
       };
     }
@@ -940,6 +982,10 @@ function homeLayout(root: Locator) {
         ...named(".of-topbar", () => "top bar"),
         ...named(".of-dock, .of-dock-item", (node) => `dock: ${label(node)}`),
       ],
+      /** M4: the line he noticed about her look, on Me. */
+      noticed: named(".of-home-noticed .of-noticed", () => "noticed line"),
+      /** The figure itself: his art, or the medallion without it. */
+      figure: named(".of-figure-img, .of-figure-medallion", () => "figure"),
       body: box(element.querySelector(".of-stage-body")!),
     };
   });
@@ -990,6 +1036,13 @@ for (const images of [true, false]) {
           expect(layout.rail.map((button) => button.name).slice(4), at).toEqual(
             caring ? ["rail: Remind Me", "rail: Caring message"] : ["rail: Remind Me"],
           );
+          // He shows, art or medallion: on the real Engine's 360 x 600 stage his cell once kept 128 px while its
+          // cqh read 0, and he shrank to nothing.
+          expect(layout.figure, at).toHaveLength(1);
+          expect(
+            layout.figure[0].box.width >= 24 && layout.figure[0].box.height >= 24,
+            `his figure shows at ${at}`,
+          ).toBe(true);
           // The note keeps at least a line of its words in view.
           expect(layout.noteText, `the note's words at ${at}`).toBeGreaterThanOrEqual(24);
           for (const target of layout.targets) {
@@ -1033,3 +1086,136 @@ test("Otome Forge Home asks again while his faces' cut-outs are on their way, an
   await expect(figure).toHaveAttribute("src", TENDER_CUT, { timeout: 25_000 });
   await expect(root.locator('.of-figure[data-cut="true"]')).toHaveCount(1);
 });
+
+test("Otome Forge Home wears what the Wardrobe put on: his look cut out, hers on Me with the line he noticed", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const stub = createHomeStub({ worn: true });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+
+  // Him: the cut-out of the look he wears, not his base portrait (its faces are not painted yet).
+  const him = root.getByRole("img", { name: "Ilvar Thorne, tender" });
+  await expect(him).toHaveAttribute("src", HIS_WORN_CUT);
+  await expect(root.locator('.of-figure[data-art="look"][data-cut="true"]')).toHaveCount(1);
+  await expect(root.locator(".of-home-noticed")).toHaveCount(0);
+
+  // Me: her look, uncut (never her persona's avatar while she wears one); the line he noticed is still being
+  // written, so Home asks again until it lands, and says it.
+  await root.getByRole("radio", { name: "Ilvar" }).focus();
+  await page.keyboard.press("ArrowRight");
+  const me = root.getByRole("img", { name: "You, Mira Vale" });
+  await expect(me).toHaveAttribute("src", HER_WORN);
+  await expect(root.locator('.of-figure[data-art="look"][data-cut="false"]')).toHaveCount(1);
+  const noticed = root.locator(".of-home-noticed");
+  await expect(noticed).toHaveAttribute("aria-live", "polite");
+  await expect(noticed).toContainText("Ilvar Thorne noticed", { timeout: 15_000 });
+  await expect(noticed).toContainText(NOTICED_LINE);
+  await page.screenshot({ path: testInfo.outputPath("m4-me-noticed.png") });
+
+  // Him again: the line belongs to her side.
+  await page.keyboard.press("ArrowLeft");
+  await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeVisible();
+  await expect(root.locator(".of-home-noticed")).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Forge Home on a small phone: the longest line he noticed stands beside the rail and never pushes it up", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  // A phone with its browser bars showing, the longest note and the longest noticed line.
+  await page.setViewportSize({ width: 390, height: 664 });
+  const stub = createHomeStub({ worn: true, firstNote: LONG_NOTE, noticedLine: LONG_NOTICED });
+  await stubRoutes(page, stub, []);
+  const root = await openHome(page);
+  const note = root.getByRole("article", { name: "A note from Ilvar Thorne" });
+  await expect(note).toContainText(LONG_NOTE);
+  const box = async (locator: Locator) => (await locator.boundingBox())!;
+  const overlap = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  const rail = root.locator(".of-home-rail");
+  const line = root.locator(".of-home-noticed .of-noticed");
+
+  // Me, while the line is still being written: where the rail stands with nothing beside it.
+  await root.getByRole("radio", { name: "Ilvar" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(root.getByRole("heading", { level: 1, name: "Mira Vale" })).toBeVisible();
+  await expect(line).toHaveCount(0);
+  const railBefore = await box(rail);
+  await expect(line).toHaveCount(0);
+
+  // The line lands beside the rail: the rail stays where it stood (the bottom row does not grow and push it up onto
+  // the note), and the line touches neither the note, the rail nor her name.
+  await expect(line).toContainText(LONG_NOTICED, { timeout: 15_000 });
+  await page.screenshot({ path: testInfo.outputPath("m4-me-noticed-390x664.png") });
+  const [noteBox, railBox, lineBox, plateBox] = await Promise.all([
+    box(note),
+    box(rail),
+    box(line),
+    box(root.locator(".of-home-plate")),
+  ]);
+  expect(railBox).toEqual(railBefore);
+  expect(overlap(lineBox, noteBox)).toBe(false);
+  expect(overlap(lineBox, railBox)).toBe(false);
+  expect(overlap(lineBox, plateBox)).toBe(false);
+});
+
+/** Desktop sizes beside the phone ones: the project's own, and a short laptop screen. */
+const DESKTOP_SIZES = [
+  { width: 1440, height: 900 },
+  { width: 1280, height: 720 },
+];
+
+for (const images of [true, false]) {
+  test(`Otome Forge Home on Me at phone and desktop sizes (${images ? "painted" : "no images"}): the longest line he noticed covers nothing`, async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    const stub = createHomeStub({ images, worn: true, firstNote: LONG_NOTE, noticedLine: LONG_NOTICED });
+    await stubRoutes(page, stub, []);
+    const root = await openHome(page);
+    await expect(root.getByRole("article", { name: "A note from Ilvar Thorne" })).toContainText(LONG_NOTE);
+    await root.getByRole("radio", { name: "Ilvar" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(root.locator(".of-home-noticed .of-noticed")).toContainText(LONG_NOTICED, { timeout: 15_000 });
+
+    // M6's rail: Remind Me always, and Caring message beside it on a day the period tracker marks.
+    await expect(root.getByRole("button", { name: "Remind Me" })).toBeVisible();
+    for (const caring of [false, true]) {
+      if (caring) await showCaringMessage(page, root);
+      for (const size of [...PHONE_SIZES, ...DESKTOP_SIZES]) {
+        await page.setViewportSize(size);
+        await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+        const layout = await homeLayout(root);
+        const at = `${size.width}x${size.height}${caring ? " with Caring message" : ""}`;
+        expect(layout.noticed, at).toHaveLength(1);
+        expect(layout.rail, at).toHaveLength(caring ? 6 : 5);
+        expect(layout.rail.map((button) => button.name).slice(4), at).toEqual(
+          caring ? ["rail: Remind Me", "rail: Caring message"] : ["rail: Remind Me"],
+        );
+        expect(layout.noteText, `the note's words at ${at}`).toBeGreaterThanOrEqual(24);
+        const [line] = layout.noticed;
+        const inside =
+          line.box.x >= layout.body.x - 0.5 &&
+          line.box.y >= layout.body.y - 0.5 &&
+          line.box.x + line.box.width <= layout.body.x + layout.body.width + 0.5 &&
+          line.box.y + line.box.height <= layout.body.y + layout.body.height + 0.5;
+        expect(inside, `the noticed line on the stage at ${at}`).toBe(true);
+        // The note holds its Play and Reply, so clear of the note is clear of them.
+        for (const cover of [...layout.covers, ...layout.rail]) {
+          expect(overlaps(line.box, cover.box), `${cover.name} and the noticed line at ${at}`).toBe(false);
+        }
+        // The rail stays clear of the note, the top bar and the dock with the line beside it.
+        for (const button of layout.rail) {
+          for (const cover of layout.covers.filter((item) => item.name !== "nameplate")) {
+            expect(overlaps(button.box, cover.box), `${cover.name} and ${button.name} at ${at}`).toBe(false);
+          }
+        }
+      }
+    }
+  });
+}

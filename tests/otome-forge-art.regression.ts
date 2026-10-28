@@ -319,9 +319,11 @@ test("a paint waiting in the lane is built when its turn comes: a rating changed
   open();
   await Promise.all([cgTap, placeTap]);
   const place = t.paid.find((call) => call.method === "generateImage")!;
-  assert.match(place.request.prompt, /suggestive, tasteful/);
-  assert.doesNotMatch(place.request.prompt, /safe for work/);
-  assert.match(place.request.negativePrompt, /explicit nudity/);
+  // The place was built at its turn, under Suggestive: above SFW a place is scenery only, with no rating or person
+  // tags, and keeps the people, adult and SFW negatives. (The CG was built at SFW, before the change.)
+  assert.match(place.request.prompt, /no humans/);
+  assert.doesNotMatch(place.request.prompt, /safe for work|suggestive|adults only/);
+  assert.match(place.request.negativePrompt, /people, person, humans.*child, childlike.*loli.*nudity, nsfw/);
 });
 
 test("a tap that lands while another pass holds the place but paints nothing still paints it, once", async () => {

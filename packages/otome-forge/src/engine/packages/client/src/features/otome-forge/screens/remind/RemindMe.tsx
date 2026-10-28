@@ -80,8 +80,7 @@ export function readCalendar(value: unknown): CalendarView {
           ]
         : [],
     ),
-    // ponytail: banners arrive with M4's Wish, so until then the route sends none and none are drawn. Ceiling: no
-    // banner end dates before M4. Upgrade path: none here; M4's banners fill `bannerEnds`.
+    // The last day of each Wish banner still running (M4's banners; none before a story's first Wish).
     bannerEnds: rows(answer.bannerEnds).flatMap((row) =>
       isDayKey(row.day) && text(row.banner) ? [{ day: row.day, banner: text(row.banner) }] : [],
     ),

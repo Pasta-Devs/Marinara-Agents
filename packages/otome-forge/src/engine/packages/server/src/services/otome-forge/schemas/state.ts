@@ -1,8 +1,9 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the `${R}:state` document (Starlight and each love interest's points and stage), and the RunView
 // ──────────────────────────────────────────────
-// Later milestones add their own fields here, each with a default, so older states keep reading. M3: `home`. M6 adds
-// none: the period tracker and caring messages never reach a server document (plan §1.9).
+// Later milestones add their own fields here, each with a default, so older states keep reading. M3: `home`. M4:
+// `pity`, `owned`, `selector` and `pulls` (S/wish/pull.ts writes them, in the same write as the Starlight they cost).
+// M6 adds none: the period tracker and caring messages never reach a server document (plan §1.9).
 import { forgeStoryExpressionCast, forgeStoryExpressionsOn } from "@forge-kit/story-expressions-server.mjs";
 import { z, type ZodType } from "zod";
 import type {
@@ -18,6 +19,7 @@ import type {
   RunView,
   TimelineEntry,
   Unit,
+  WishPullRecord,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { FIRST_STAGE, LAST_STAGE } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
@@ -30,10 +32,18 @@ import {
   levelOf,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { FACES, type Face } from "../../../../../client/src/features/otome-forge/shared/faces.js";
+import {
+  BANNER_KINDS,
+  FOUR_STAR_EVERY,
+  HARD_PITY,
+  isItemId,
+  type BannerKind,
+  type PityCounter,
+} from "../../../../../client/src/features/otome-forge/shared/wish.js";
 import { isChapterKey, isLiId, playerId, stateId, worldId } from "../ids.js";
 import { readChapterDelta } from "../state/relationship.js";
 import type { OtomeStore } from "../store.js";
-import { field, isRecord, readFields, validItems } from "./common.js";
+import { field, isRecord, readFields, validItems, wornLookUrl } from "./common.js";
 import { normalizePlayer } from "./player.js";
 import { normalizeUnit } from "./unit.js";
 import { normalizeWorld, toWorldView } from "./world.js";
@@ -46,6 +56,8 @@ const LEDGER_MAX = 300;
 const TIMELINE_MAX = 500;
 const FAVORITES_MAX = 300;
 const ALBUM_MAX = 500;
+/** Pulls remembered for a retried request id (S/wish/pull.ts). */
+const PULLS_MAX = 20;
 
 const wholeNumber = (value: unknown, fallback: number, min: number, max = Number.MAX_SAFE_INTEGER) =>
   typeof value === "number" && Number.isInteger(value) && value >= min && value <= max ? value : fallback;
@@ -134,6 +146,50 @@ function normalizeLiState(raw: unknown): LiState {
 
 const defaultLedgers = (): Ledgers => ({ relationship: [], conflicts: [], offscreen: [] });
 
+const PullRecordSchema: ZodType<WishPullRecord> = z.object({
+  id: short(80),
+  banner: short(80),
+  at: z.string(),
+  results: z
+    .array(
+      z.object({
+        item: short(80),
+        rarity: z.union([z.literal(3), z.literal(4), z.literal(5)]),
+        isNew: z.boolean(),
+        refund: z.number().int().min(0),
+      }),
+    )
+    .max(10),
+});
+
+/** Each banner kind's pity (M4): counts below the 5★ guarantee; a damaged counter starts again from 0. */
+function normalizePity(raw: unknown): Record<BannerKind, PityCounter> {
+  const pity = {} as Record<BannerKind, PityCounter>;
+  for (const kind of BANNER_KINDS) {
+    const counter = field(raw, kind);
+    pity[kind] = {
+      count: wholeNumber(field(counter, "count"), 0, 0, HARD_PITY - 1),
+      since4: wholeNumber(field(counter, "since4"), 0, 0, FOUR_STAR_EVERY - 1),
+    };
+  }
+  return pity;
+}
+
+/**
+ * The owned item ids (M4), each once, in the order won, and when each was won (kept only for an owned id). Never
+ * capped: ownership is never dropped.
+ */
+function normalizeOwned(raw: unknown): RunState["owned"] {
+  const rawItems = field(raw, "items");
+  const items = [...new Set((Array.isArray(rawItems) ? rawItems : []).filter(isItemId))];
+  const at: Record<string, string> = {};
+  for (const id of items) {
+    const won = field(field(raw, "at"), id);
+    if (typeof won === "string" && won.length <= 40) at[id] = won;
+  }
+  return { items, at };
+}
+
 /** Who Home shows (M3): a love interest of the run, else the first in cast order; him unless the player picked Me. */
 function normalizeHome(raw: unknown, lis: RunState["lis"]): HomeState {
   const li = field(raw, "li");
@@ -176,6 +232,14 @@ export function normalizeState(data: unknown): RunState {
     }
   }
   const rawLedgers = field(data, "ledgers");
+  const selector: RunState["selector"] = {};
+  const rawSelector = field(data, "selector");
+  if (isRecord(rawSelector)) {
+    for (const [id, used] of Object.entries(rawSelector)) {
+      // An item id is the Memory it claimed; `true` is a claim from before that was recorded (it never replays).
+      if (isLiId(id) && (isItemId(used) || used === true)) selector[id] = used;
+    }
+  }
   return {
     version: 1,
     wallet: { starlight: wholeNumber(field(field(data, "wallet"), "starlight"), STARTING_STARLIGHT, 0) },
@@ -197,6 +261,10 @@ export function normalizeState(data: unknown): RunState {
     favorites: validItems(FavoriteSchema, field(data, "favorites"), FAVORITES_MAX),
     home: normalizeHome(field(data, "home"), lis),
     album: { cgs: validItems(AlbumCgSchema, field(field(data, "album"), "cgs"), ALBUM_MAX) },
+    pity: normalizePity(field(data, "pity")),
+    owned: normalizeOwned(field(data, "owned")),
+    selector,
+    pulls: validItems(PullRecordSchema, field(data, "pulls"), PULLS_MAX),
   };
 }
 
@@ -210,15 +278,15 @@ export const STATE_LIMITS = {
   favorites: FAVORITES_MAX,
   list: LIST_MAX,
   album: ALBUM_MAX,
+  pulls: PULLS_MAX,
 };
 
 /**
  * His painted faces for the look he wears now (the kit's forgeStoryExpressionCast: a ready set only, and only while
- * expressions are on). The worn look is his portrait until outfits arrive (M4).
+ * expressions are on): his worn outfit (M4), else his portrait, the base art/expressions.ts paints them on.
  */
 export function readyFaces(world: Pick<World, "images">, unit: Unit): Partial<Record<Face, string>> | undefined {
-  // ponytail: his portrait is the look until M4 adds a worn one (art/expressions.ts paints on the same base).
-  const { expressions } = forgeStoryExpressionCast(world.images, unit, unit.portrait ?? "", FACES);
+  const { expressions } = forgeStoryExpressionCast(world.images, unit, wornLookUrl(unit), FACES);
   return expressions as Partial<Record<Face, string>> | undefined;
 }
 
@@ -227,7 +295,7 @@ export function readyFaces(world: Pick<World, "images">, unit: Unit): Partial<Re
  * neither ready nor given up. The kit never repaints a failed or stopped set by itself, so its faces never come.
  */
 export function facesComing(world: Pick<World, "images">, unit: Unit): boolean {
-  const base = unit.portrait ?? "";
+  const base = wornLookUrl(unit);
   if (!base || !forgeStoryExpressionsOn(world.images)) return false;
   const state = (unit.expressions[base] as { state?: unknown } | undefined)?.state;
   return state !== "ready" && state !== "failed" && state !== "stopped";
@@ -251,6 +319,7 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
       .map((unit) => {
         const progress = state.lis[unit.id] ?? defaultLiState();
         const expressions = readyFaces(world, unit);
+        const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
         return {
           id: unit.id,
           name: unit.name,
@@ -263,6 +332,7 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
           level: levelOf(progress.points),
           stage: progress.stage,
           ...(expressions ? { expressions } : {}),
+          ...(worn ? { worn: { id: worn.id, url: worn.url } } : {}),
         };
       }),
     forge: world.forge,

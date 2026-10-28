@@ -10,17 +10,21 @@ import { createBackgroundQueue } from "./background-queue.js";
 import { createHandle, type OtomeRouter, type RouteDeps } from "./http.js";
 import { INDEX_ID } from "./ids.js";
 import { createOtomeMemory } from "./memory/memory.js";
+import { registerAlbumRoutes } from "./routes/album.js";
 import { registerArcRoutes } from "./routes/arcs.js";
 import { registerArtRoutes } from "./routes/art.js";
 import { registerAudioRoutes } from "./routes/audio.js";
 import { registerCareRoutes } from "./routes/care.js";
 import { registerHomeRoutes } from "./routes/home.js";
 import { registerIndexRoutes } from "./routes/index.js";
+import { registerItemRoutes } from "./routes/items.js";
 import { registerMemoryRoutes } from "./routes/memory.js";
 import { registerPhoneRoutes } from "./routes/phone.js";
 import { registerRunRoutes } from "./routes/runs.js";
 import { registerSetupRoutes } from "./routes/setup.js";
 import { registerStoryRoutes } from "./routes/story.js";
+import { registerWardrobeRoutes } from "./routes/wardrobe.js";
+import { registerWishRoutes } from "./routes/wish.js";
 import { normalizeIndex } from "./schemas/index.js";
 import { createOtomeStore, type OtomeStore } from "./store.js";
 
@@ -47,6 +51,9 @@ export async function activate({ api }: ActivationContext) {
   const cancellation = createForgeStoryCancellation();
   const art = createOtomeArt({ runtime, store });
   const deps: RouteDeps = { runtime, store, handle, memory, cancellation, art, background };
+  // Wish's banner art paints in the background (M4); after teardown nothing more is paid for.
+  let disposed = false;
+  const active = () => !disposed;
   // The Engine accepts only a prefix under /api/<package id> (capability-route-registration.service.ts). Every handler
   // runs in the request's time zone (forgeTimeZoneRoutes wraps get and post, the only methods Otome uses).
   const releaseRoutes = await api.registerPrivilegedRoutes(
@@ -62,6 +69,10 @@ export async function activate({ api }: ActivationContext) {
       registerMemoryRoutes(router, { store, handle, memory });
       registerHomeRoutes(router, deps);
       registerPhoneRoutes(router, deps);
+      registerWishRoutes(router, deps, { active });
+      registerItemRoutes(router, deps);
+      registerWardrobeRoutes(router, deps);
+      registerAlbumRoutes(router, deps);
       registerCareRoutes(router, deps);
     },
     { prefix: "/api/otome-forge" },
@@ -69,7 +80,8 @@ export async function activate({ api }: ActivationContext) {
   activeStore = store;
   return async () => {
     if (activeStore === store) activeStore = null;
-    // Nothing more is paid for after teardown: queued faces and scene paints stop before their paid call.
+    // Nothing more is paid for after teardown: queued faces, scene paints and banner art stop before their paid call.
+    disposed = true;
     art.dispose();
     cancellation.dispose();
     memory.dispose();

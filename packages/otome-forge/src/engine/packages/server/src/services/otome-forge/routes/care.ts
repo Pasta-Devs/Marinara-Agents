@@ -69,9 +69,9 @@ export function calendarView(run: RunDocuments, banners: readonly unknown[], tod
   }
   const anniversaries = dated.sort((a, b) => a.day.localeCompare(b.day)).map(({ row }) => row);
 
-  // ponytail: banners are M4's (`${R}:banner:${kind}-${rotation}` = {key, kind, endsDay, featuredLi, …}); until M4
-  // lands none exist and bannerEnds is []. Read field by field, so a banner of any other shape is skipped rather than
-  // a 500, and labelled with its featured love interest's name. Upgrade path: M4's banner normalizer and name.
+  // M4's banners (`${R}:banner:${kind}-${rotation}` = {key, kind, endsDay, featuredLi, …}; none before a story's first
+  // Wish), read field by field, so a banner of any other shape is skipped rather than a 500, and labelled with its
+  // featured love interest's name.
   const names = new Map(units.map((unit) => [unit.id, unit.name]));
   const bannerEnds: CalendarView["bannerEnds"] = [];
   for (const data of banners) {
