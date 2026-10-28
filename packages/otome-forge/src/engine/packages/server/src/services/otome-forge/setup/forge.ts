@@ -117,6 +117,19 @@ function schedule(
     });
 }
 
+/**
+ * Counts a job for the run before its step is stored as pending, so a concurrent settleForge never takes that step
+ * for one whose job stopped. Release it once the real job is scheduled (or the write failed).
+ */
+function holdJob(jobs: Map<string, number>, runId: string): () => void {
+  jobs.set(runId, (jobs.get(runId) ?? 0) + 1);
+  return () => {
+    const left = (jobs.get(runId) ?? 1) - 1;
+    if (left > 0) jobs.set(runId, left);
+    else jobs.delete(runId);
+  };
+}
+
 /** Resolves once every forge job queued for the run so far has finished (tests, and anything that must wait). */
 export async function forgeSettled(runId: string): Promise<void> {
   await runForeground(runId, async () => undefined);
@@ -414,12 +427,17 @@ export async function retryForgeStep(
   const step = stepOf(world, stepId);
   if (!step) throw new OtomeForgeError(404, `No forge step ${stepId.slice(0, 80)}.`, "not-found");
   if (step.state !== "failed") throw new OtomeForgeError(409, "Only a failed step can be retried.", "conflict");
-  const next = await updateWorld(deps, runId, (current) =>
-    stepOf(current, stepId)?.state === "failed" ? withStep(current, stepId, { state: "pending" }) : current,
-  );
-  if (isTextStep(stepId)) scheduleText(deps, runId, debugMode);
-  else schedulePaints(deps, runId, debugMode);
-  return next.forge;
+  const release = holdJob(isTextStep(stepId) ? textJobs : paintJobs, runId);
+  try {
+    const next = await updateWorld(deps, runId, (current) =>
+      stepOf(current, stepId)?.state === "failed" ? withStep(current, stepId, { state: "pending" }) : current,
+    );
+    if (isTextStep(stepId)) scheduleText(deps, runId, debugMode);
+    else schedulePaints(deps, runId, debugMode);
+    return next.forge;
+  } finally {
+    release();
+  }
 }
 
 /**
@@ -441,15 +459,20 @@ export async function consentForge(
     throw new OtomeForgeError(503, "This world has no image connection.", "no-connection");
   }
   const wanted = new Set(stepIds);
-  const next = await updateWorld(deps, runId, (current) => ({
-    ...current,
-    forge: {
-      ...current.forge,
-      steps: current.forge.steps.map((step) =>
-        wanted.has(step.id) && step.state === "waiting-consent" ? { ...step, state: "pending" } : step,
-      ),
-    },
-  }));
-  schedulePaints(deps, runId, debugMode);
-  return next.forge;
+  const release = holdJob(paintJobs, runId);
+  try {
+    const next = await updateWorld(deps, runId, (current) => ({
+      ...current,
+      forge: {
+        ...current.forge,
+        steps: current.forge.steps.map((step) =>
+          wanted.has(step.id) && step.state === "waiting-consent" ? { ...step, state: "pending" } : step,
+        ),
+      },
+    }));
+    schedulePaints(deps, runId, debugMode);
+    return next.forge;
+  } finally {
+    release();
+  }
 }
