@@ -17,6 +17,7 @@ import {
 import {
   slurpPermittedCameraSources,
   slurpPostCameraSource,
+  slurpScreenFreeCamera,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-camera-source.ts";
 import { compileSlurpFlavourBrief } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-creator-flavour.ts";
 import { slurpWorldShockBodies } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-copy.ts";
@@ -114,13 +115,13 @@ assert.match(
 );
 assert.match(
   slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-generation-service.ts"),
-  /screens: !\(await readSlurpWorldLens/u,
+  /const screens = !\(await readSlurpWorldLens/u,
 );
 
-// A reused shoot keeps no screen camera for a lens Creator.
-assert.match(
-  slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-generation-service.ts"),
-  /lensed && shoot\?\.cameraSource && !slurpPermittedCameraSources\(\{ companyCanHoldCamera: true, screens: false \}\)\.includes/,
-);
+// A reused shoot keeps no screen camera for a lens Creator (wired in slurp-shoot.regression.ts).
+assert.equal(slurpScreenFreeCamera("mirror", false), null);
+assert.equal(slurpScreenFreeCamera("mirror", true), "mirror");
+assert.equal(slurpScreenFreeCamera("tripod", false), "tripod");
+assert.equal(slurpScreenFreeCamera(null, true), null);
 
 console.log("slurp2 world skin: ok");
