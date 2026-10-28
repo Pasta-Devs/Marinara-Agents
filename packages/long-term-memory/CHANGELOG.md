@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- A long chat imported from Chat Messages is read in order, one piece after another. From the second piece on, the model sees the end of the piece before it, that piece's events and its open threads, so a memory can say what caused an event or continue a thread across the cut. Different chats still import side by side.
+
 ## 1.5.3 — 2026-10-27
 
 - Long-Term Memory now has a Korean interface. It follows the Engine's language setting and shows English for any text without a Korean version. The translation is machine-made and awaits review by a Korean speaker.
