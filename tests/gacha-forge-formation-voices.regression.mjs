@@ -17,12 +17,8 @@ import {
 } from "../packages/gacha-forge/src/combat-voices-client.mjs";
 import { forgeCombatVoiceEnglish } from "../packages/gacha-forge/src/combat-voices-en.mjs";
 import { createForgeUltimatePresentation } from "../packages/gacha-forge/src/combat-ultimate-client.mjs";
-import {
-  forgeExplicitVoice,
-  forgeSpeakerVoice,
-  forgeStableVoice,
-  forgeVoiceCacheKey,
-} from "../packages/gacha-forge/src/audio-client.mjs";
+import { forgeExplicitVoice, forgeSpeakerVoice, forgeStableVoice } from "../sources/forge-kit/voice-picking.mjs";
+import { forgeVoiceCacheKey } from "../packages/gacha-forge/src/audio-client.mjs";
 import { forgeSoundtrackContextKey, normalizeForgeAudio } from "../sources/forge-kit/audio-settings.mjs";
 
 const original = Object.fromEntries(

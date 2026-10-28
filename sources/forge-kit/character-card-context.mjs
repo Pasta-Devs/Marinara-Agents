@@ -8,7 +8,7 @@ function forgeCharacterCardFields(card) {
 }
 
 /** Read current linked cards for this request only. These copies are prompt input, never saved units. */
-export async function forgeHydrateStoryCharacters(units, readCard, logger) {
+export async function forgeHydrateStoryCharacters(units, readCard, logger, { logPrefix = "[gacha-forge]" } = {}) {
   const reads = new Map();
   const read = async (cardId) => {
     try {
@@ -18,7 +18,7 @@ export async function forgeHydrateStoryCharacters(units, readCard, logger) {
       // Missing and failed reads keep the same unit's legacy characterization available.
     }
     logger?.warn?.(
-      "[gacha-forge] linked character card %s could not be read; using the saved character summary",
+      `${logPrefix} linked character card %s could not be read; using the saved character summary`,
       cardId,
     );
     return null;
@@ -74,14 +74,14 @@ export function forgeIncludeStoryFocusCharacters(documents, matchedUnits, forced
 }
 
 /** Call after context fitting, immediately before sending these messages to the provider. */
-export function logForgeStoryPrompt(runtime, label, messages, options = {}) {
+export function logForgeStoryPrompt(runtime, label, messages, { debugMode, logPrefix = "gacha-forge" } = {}) {
   const override =
-    options.debugMode === true ||
+    debugMode === true ||
     runtime?.isDebugAgentsEnabled?.() === true ||
     /^(1|true)$/iu.test(process.env.DEBUG_AGENTS || "");
   const logger = runtime?.logger;
   if (!override && logger?.isLevelEnabled?.("debug") === false) return;
-  const format = "[debug/gacha-forge/%s] Messages sent to the provider: %s";
+  const format = `[debug/${logPrefix}/%s] Messages sent to the provider: %s`;
   if (typeof logger?.debugOverride === "function") {
     logger.debugOverride(override, format, label, JSON.stringify(messages));
   } else {

@@ -114,7 +114,8 @@ export async function forgeRememberSpeakerGenders(readSession, updateSession, be
   return beat;
 }
 
-export function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled, terminal }) {
+// label turns an option's text into its saved label; Gacha Forge passes none and gets forgeChoiceLabel's punctuation.
+export function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled, terminal, label = forgeChoiceLabel }) {
   const beat = normalizeBeat(raw, options);
   forgeSpeakerGenders(raw, beat?.segments);
   if (!beat || !enabled || raw?.choices == null) return beat;
@@ -140,7 +141,7 @@ export function forgeNormalizeChoiceBeat(raw, options, normalizeBeat, { enabled,
     for (const [optionIndex, option] of choice.options.entries()) {
       const rawText = typeof option?.text === "string" ? option.text.trim() : "";
       if (!rawText || rawText.length > 280) return null;
-      const text = forgeChoiceLabel(rawText);
+      const text = label(rawText);
       if (labels.has(text)) return null;
       labels.add(text);
       const selection = option.selection;
