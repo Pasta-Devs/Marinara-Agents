@@ -63,6 +63,13 @@ export const LOOK_TOKENS: Readonly<Record<Look, LookTokens>> = {
     "wish-ring": "rgb(255 244 228 / 0.85)",
     "wish-shadow": "rgb(6 3 20 / 0.55)",
     "wish-glow": "rgb(230 201 138 / 0.55)",
+    "input-bg": "rgb(18 14 40 / 0.55)",
+    "input-bg-focus": "rgb(26 20 56 / 0.78)",
+    "option-bg": "#221c45",
+    scrim: "rgb(8 6 22 / 0.6)",
+    tint: "rgb(231 166 184 / 0.14)",
+    "tint-strong": "rgb(231 166 184 / 0.24)",
+    danger: "#F08AA4",
   },
   pearl: {
     bg: [
@@ -76,7 +83,8 @@ export const LOOK_TOKENS: Readonly<Record<Look, LookTokens>> = {
     "backdrop-dim": "0.94",
     text: PALETTE.ink,
     "text-soft": "rgb(43 34 54 / 0.74)",
-    "text-faint": "rgb(43 34 54 / 0.5)",
+    // 0.68, not 0.5: counters and placeholders stay at 4.5:1 or more on Pearl's glass.
+    "text-faint": "rgb(43 34 54 / 0.68)",
     "accent-text": "#A04D6B",
     "champagne-text": "#86621F",
     "on-accent": PALETTE.ink,
@@ -101,5 +109,12 @@ export const LOOK_TOKENS: Readonly<Record<Look, LookTokens>> = {
     "wish-ring": "rgb(255 255 255 / 0.95)",
     "wish-shadow": "rgb(140 80 110 / 0.32)",
     "wish-glow": "rgb(230 201 138 / 0.6)",
+    "input-bg": "rgb(255 255 255 / 0.72)",
+    "input-bg-focus": "rgb(255 255 255 / 0.92)",
+    "option-bg": "#fffaf6",
+    scrim: "rgb(60 32 54 / 0.38)",
+    tint: "rgb(231 166 184 / 0.18)",
+    "tint-strong": "rgb(231 166 184 / 0.3)",
+    danger: "#B23A5E",
   },
 };

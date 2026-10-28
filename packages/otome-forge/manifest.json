@@ -10,7 +10,7 @@
   },
   "id": "otome-forge",
   "name": "Otome Forge",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. An early test build. Install it, restart Marinara Engine when prompted, then open Home → Otome Forge.",
   "engine": {
     "min": "2.5.1",
@@ -41,13 +41,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "6a46d5de48bbb2217a612565ba20ec124a3efc7d0d273a6fc628f78b3d7fefb9",
-      "bytes": 3273
+      "sha256": "22b3e3fffbf6fd6724bbd9e17875c1d78e1833d52cdc5a694d63e7d67a882b57",
+      "bytes": 64096
     },
     {
       "path": "client.js",
-      "sha256": "165571f3e781eeeab945fc4c0b2699c445eebf6baabc42593cbd82dd61b72c43",
-      "bytes": 344277
+      "sha256": "6692601983614845b08bee7d7f3ecdb9e31c0e0ba8aac6440e042285ac498d6f",
+      "bytes": 503570
     },
     {
       "path": "fonts/OFL.txt",

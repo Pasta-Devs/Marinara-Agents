@@ -138,9 +138,10 @@ export interface FakeLogEntry {
   override?: boolean;
 }
 
-/** One scripted model reply: text, an error to throw, or a function of the request. */
+/** One scripted model reply: text, text with its finish reason, an error to throw, or a function of the request. */
 export type FakeReply =
   | string
+  | { content: string; finishReason: string }
   | Error
   | ((messages: CapabilityLanguageModelMessage[], options?: CapabilityLanguageModelCompletionOptions) => string);
 
@@ -154,6 +155,8 @@ export interface FakeRuntimeOptions {
   admissionFailures?: Set<unknown>;
   characters?: Array<{ id: string; data: unknown; comment?: string }>;
   personas?: Array<{ id: string; data: unknown }>;
+  /** The connection's own output cap (the resolved model's maxOutputTokens); 4096 by default, null for none. */
+  maxOutputTokens?: number | null;
 }
 
 /** A runtime typed as the Engine's CapabilityRuntimeHost, with the parts Otome uses scripted and recorded. */
@@ -174,12 +177,13 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}) {
     connectionId,
     model: "fake-model",
     maxContext: 32768,
-    maxOutputTokens: 4096,
+    maxOutputTokens: options.maxOutputTokens === undefined ? 4096 : options.maxOutputTokens,
     async chatComplete(messages, completionOptions) {
       calls.push({ connectionId, messages: structuredClone(messages), options: completionOptions });
       const reply = replies.shift();
       if (reply === undefined) throw new Error("The Otome Forge fake model has no scripted reply left");
       if (reply instanceof Error) throw reply;
+      if (typeof reply === "object") return { ...reply };
       const content = typeof reply === "function" ? reply(messages, completionOptions) : reply;
       return { content, finishReason: "stop" };
     },
