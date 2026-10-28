@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookHeart, Heart, RotateCcw, UsersRound } from "lucide-react";
+import { Heart, RotateCcw } from "lucide-react";
 import { useOtomeApi } from "./api";
 import { Dock } from "./components/Dock";
 import { Stage } from "./components/Stage";
@@ -20,9 +20,11 @@ import { accentOf } from "./lib/accent";
 import { OtomePropsContext, readOtomeProps } from "./props";
 import { BibleView } from "./screens/BibleView";
 import { ForgeProgress } from "./screens/ForgeProgress";
+import { HomeScreen, useHomeLi } from "./screens/home/HomeScreen";
+import { PhoneScreen, type PhoneOpen } from "./screens/phone/PhoneScreen";
 import { Placeholder } from "./screens/Placeholder";
 import { Reader } from "./screens/reader/Reader";
-import { DOCK_SCREENS, RUN_SCREENS, type DockScreen, type ScreenId } from "./screens/screens";
+import { DOCK_SCREENS, RUN_SCREENS, playsHomeCue, type DockScreen, type ScreenId } from "./screens/screens";
 import { Settings } from "./screens/settings/Settings";
 import { SetupWizard } from "./screens/setup/SetupWizard";
 import { StoryHome } from "./screens/story/StoryHome";
@@ -47,6 +49,9 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   const [settingsReturn, setSettingsReturn] = useState<ScreenId>("picker");
   const [bibleLi, setBibleLi] = useState<string | null>(null);
   const [chapterKey, setChapterKey] = useState<string | null>(null);
+  // The thread the phone shows (Home's Reply opens one with the note it quotes; the phone keeps it as the player moves
+  // between threads and spends the quote), or null for the thread list.
+  const [phoneOpen, setPhoneOpen] = useState<PhoneOpen | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const screenRef = useRef<HTMLDivElement>(null);
@@ -56,6 +61,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
   // heading (every screen starts with an <h1 tabIndex={-1}>), which also announces it; after a failed retry, on Try again.
   const navigated = useRef(false);
   const view: RunView | null = run.data ?? null;
+  // The top bar's chip shows whoever Home is about (the player's pick, else the first love interest).
+  const homeLi = useHomeLi(activeRun, view);
   // With no choice made, the active story opens where it is: forging, or Home once it is ready.
   const screen: ScreenId =
     chosen ?? (!activeRun || run.isError ? "picker" : view?.forge.phase === "ready" ? "home" : "forge");
@@ -224,34 +231,32 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
         onExit={() => go("story")}
         onHome={() => go("home")}
       />
-    ) : screen === "home" && view ? (
-      <Placeholder screen="home">
-        <div className="of-actions">
-          <button type="button" className="of-button of-button--quiet of-glass" onClick={() => go("forge")}>
-            <UsersRound size={16} strokeWidth={2} aria-hidden="true" />
-            {t("ui.otomeForge.setup.yourCast")}
-          </button>
-          <button type="button" className="of-button of-button--quiet of-glass" onClick={() => go("picker")}>
-            <BookHeart size={16} strokeWidth={2} aria-hidden="true" />
-            {t("ui.otomeForge.common.screenPicker")}
-          </button>
-        </div>
-      </Placeholder>
+    ) : screen === "home" && activeRun && view ? (
+      <HomeScreen
+        runKey={activeRun}
+        view={view}
+        onOpenPhone={(open) => {
+          setPhoneOpen(open);
+          go("phone");
+        }}
+        onOpenCast={() => go("forge")}
+        onOpenStories={() => go("picker")}
+      />
+    ) : screen === "phone" && activeRun && view ? (
+      <PhoneScreen runKey={activeRun} view={view} open={phoneOpen} onOpenChange={setPhoneOpen} />
     ) : (
       <Placeholder screen={screen} />
     );
 
-  const firstLi = view?.lis[0] ?? null;
-  const inStory = RUN_SCREENS.has(screen) || (screen === "settings" && RUN_SCREENS.has(settingsReturn));
   return (
-    <OtomeAudioProvider run={view} cue={inStory ? "home" : null}>
+    <OtomeAudioProvider run={view} cue={playsHomeCue(screen, settingsReturn) ? "home" : null}>
       {/* The reader is full-stage: its own header carries the way out. */}
       {screen === "reader" ? null : (
         <TopBar
           run={
             RUN_SCREENS.has(screen)
               ? {
-                  li: firstLi ? { name: firstLi.name, accent: accentOf(firstLi), portraitUrl: firstLi.portrait } : null,
+                  li: homeLi ? { name: homeLi.name, accent: accentOf(homeLi), portraitUrl: homeLi.portrait } : null,
                   starlight: view?.starlight ?? null,
                 }
               : null

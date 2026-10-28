@@ -10,6 +10,7 @@ import type { OtomeErrorCode } from "../../../../client/src/features/otome-forge
 import type { ForgeStoryCancellation } from "@forge-kit/story-cancel-server.mjs";
 import type { OtomeArt } from "./art/expressions.js";
 import type { ImageClient } from "./art/image-client.js";
+import type { BackgroundQueue } from "./background-queue.js";
 import type { OtomeMemory } from "./memory/memory.js";
 import { isLiId, isRunKey, runIdOf } from "./ids.js";
 import type { OtomeStore } from "./store.js";
@@ -92,6 +93,8 @@ export interface RouteDeps {
   memory?: OtomeMemory;
   /** The run-scoped Cancel for story writes (forge-kit story-cancel-server). */
   cancellation?: ForgeStoryCancellation;
+  /** The package's background lane (line packs, M3); without it nothing is written in the background. */
+  background?: BackgroundQueue;
   /**
    * The story's art (M2b, S/art/expressions.ts createOtomeArt): faces for each beat served, places and the CG for each
    * beat written, a replaced beat's CG released. Without it nothing is painted.

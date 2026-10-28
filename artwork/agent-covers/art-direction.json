@@ -266,6 +266,12 @@
       "name": "Saucelings",
       "concept": "Mari cuddles a happy little rigatoni sauceling up by her cheek in a cosy lamplit nook, with its cracked eggshell in a woven nest and a small bowl of pasta below.",
       "palette": "Marinara tomato red, warm orange, pasta gold, cream, basil green, deep navy"
+    },
+    {
+      "id": "otome-forge",
+      "name": "Otome Hearth",
+      "concept": "At the maintainer's request, Dottore stands beside Mari as her love interest: chibi Dottore, at Mari's chibi scale, with swept-back pale icy blue hair, his black crested mask, black gloves and a white laboratory coat, smiles as he offers a blushing, heart-eyed Professor Mari a single red rose, his other hand over his heart, while she clasps her hands under her chin; bold red hearts float above them against a soft heart-shaped glow.",
+      "palette": "rose pink, lavender, heart red, icy light blue, laboratory white, deep navy, warm gold"
     }
   ]
 }
