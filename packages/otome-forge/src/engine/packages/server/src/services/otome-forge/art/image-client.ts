@@ -5,9 +5,11 @@
 // Engine has no server image API that takes a connection id, so the server calls its own HTTP routes on 127.0.0.1:
 // POST /api/characters/avatar-generation paints (with debugMode, so the Engine logs the prompt in debug mode), and
 // /api/global-gallery keeps the result. A loopback call is ordinary trusted server code and needs no permission.
-// The method is named generatePortrait so the kit's forgeWrapImageReferenceClient adds the subject's card or persona
-// avatar (or saved portrait) as a reference; that wrapper also needs characterCard, personaAvatar and cardAvatarImage.
-// Later milestones add generateOutfit, generateBannerArt, generateExpression, generatePlace and cutOut here.
+// The methods are named generatePortrait and generateBannerArt so the kit's forgeWrapImageReferenceClient adds each
+// subject's card or persona avatar (or saved portrait) as a reference; that wrapper also needs characterCard,
+// personaAvatar and cardAvatarImage. generateImage is one paid image with exactly the references it is given (a place
+// has none; an expression edit has its base) and saves nothing: uploadToGallery keeps it, in the shape the kit's
+// expressions module calls. Later milestones add generateOutfit (M4) and cutOut (M3) here.
 import { forgeWrapImageReferenceClient } from "@forge-kit/image-avatar-references.mjs";
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 
@@ -41,16 +43,62 @@ export interface PaintedImage {
   id?: string;
 }
 
+/** One paid image: the prompt goes to the Engine as the override for `name`, with these references (at most 4). */
+export interface ImageRequest {
+  connectionId: string;
+  /** Names the prompt override (`avatar:<slug of name>`) and the gallery file. */
+  name: string;
+  prompt: string;
+  negativePrompt: string;
+  width: number;
+  height: number;
+  debugMode: boolean;
+  referenceImages?: string[];
+}
+
+/** An image the Engine painted, not saved yet. `overrideTook` is false when the Engine compiled its own prompt. */
+export interface GeneratedImage {
+  mime: string;
+  ext: string;
+  base64: string;
+  width: number;
+  height: number;
+  /** The prompt the Engine sent the provider. */
+  prompt: string;
+  /** The prompt Otome asked for. */
+  sentPrompt: string;
+  overrideTook: boolean;
+}
+
+/** A story CG (M2b) or banner art (M4): `units` are the people in it, whose references the wrapper adds. */
+export interface SceneRequest extends ImageRequest {
+  units: ImageSubject[];
+}
+
 /** The parts of an Engine image style profile a prompt override has to carry itself (the Engine skips the profile). */
 export interface StyleProfile {
   styleText: string;
   positiveTags: string;
   negativeTags: string;
+  /** The profile writes tag prompts (its promptMode is "tagged" or "danbooru"), not sentences. */
+  tagged?: boolean;
 }
 
 export interface ImageClient {
   /** Paints one image and uploads it to the Global Gallery. Throws on any failure; it never retries. */
   generatePortrait(request: PortraitRequest): Promise<PaintedImage>;
+  /** Paints a scene with its people (each one's reference added by the wrapper) and uploads it. Never retries. */
+  generateBannerArt(request: SceneRequest): Promise<PaintedImage>;
+  /** One paid image, not saved. Throws on any failure; it never retries. */
+  generateImage(request: ImageRequest): Promise<GeneratedImage>;
+  /** Keeps a painted image in the Global Gallery (the kit's expressions call it with their own fields). */
+  uploadToGallery(request: {
+    image: Pick<GeneratedImage, "mime" | "ext" | "base64"> & { width?: number; height?: number };
+    name: string;
+    prompt: string;
+    provider?: string;
+    model?: string;
+  }): Promise<{ id: string; url: string }>;
   /** The chosen image style profile, else the Engine's default, else the first; empty when there is none. */
   styleProfile(profileId?: string): Promise<StyleProfile>;
   deleteGalleryImage(id: string): Promise<boolean>;
@@ -70,6 +118,9 @@ const IMAGE_TYPES: Record<string, string> = {
   "image/webp": ".webp",
   "image/avif": ".avif",
 };
+
+/** The Engine sends at most this many references to the provider (characters.routes.ts avatar-generation). */
+export const REFERENCES_MAX = 4;
 
 export const GALLERY_REF_PREFIX = "global-gallery:";
 /** The reference a document keeps for a gallery image, as the Engine's document checks expect. */
@@ -124,7 +175,7 @@ function parseJson(value: string): unknown {
   }
 }
 
-/** The loopback client, wrapped so portraits carry the subject's avatar as a reference. */
+/** The loopback client, wrapped so portraits and scenes carry their subjects' avatars as references. */
 export function createImageClient({
   baseUrl = loopbackBaseUrl(),
   fetch: fetchImpl = globalThis.fetch,
@@ -144,34 +195,8 @@ export function createImageClient({
     return response.json();
   }
 
-  async function uploadToGallery(
-    image: { mime: string; ext: string; base64: string },
-    { name, prompt, width, height }: { name: string; prompt: string; width: number; height: number },
-  ): Promise<PaintedImage> {
-    // The Engine reads only the fields sent before the file.
-    const form = new FormData();
-    form.append("prompt", prompt);
-    form.append("provider", "image_generation");
-    form.append("model", "unknown");
-    form.append("width", String(width));
-    form.append("height", String(height));
-    form.append(
-      "file",
-      new Blob([Buffer.from(image.base64, "base64")], { type: image.mime }),
-      `${fileSlug(name)}${image.ext}`,
-    );
-    const saved = (await request("/api/global-gallery/upload", { method: "POST", body: form })) as {
-      id?: unknown;
-      url?: unknown;
-    } | null;
-    const id = str(saved?.id);
-    const url = str(saved?.url);
-    if (!id || !url) throw new Error("gallery upload returned no image");
-    return { id, url };
-  }
-
   const client: ImageClient = {
-    async generatePortrait({ connectionId, name, prompt, negativePrompt, width, height, debugMode, referenceImages }) {
+    async generateImage({ connectionId, name, prompt, negativePrompt, width, height, debugMode, referenceImages }) {
       const result = (await request("/api/characters/avatar-generation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -183,15 +208,70 @@ export function createImageClient({
           width,
           height,
           debugMode,
-          referenceImages,
+          referenceImages: referenceImages?.length ? referenceImages.slice(0, REFERENCES_MAX) : undefined,
           promptOverrides: [{ id: avatarOverrideId(name), prompt, negativePrompt }],
         }),
-      })) as { image?: unknown } | null;
+      })) as { image?: unknown; prompt?: unknown } | null;
       const match = /^data:([^;,]+);base64,([\s\S]+)$/.exec(str(result?.image));
       const mime = match?.[1].toLowerCase() ?? "";
       const base64 = match?.[2].replace(/\s+/g, "") ?? "";
       if (!IMAGE_TYPES[mime] || !base64) throw new Error("engine returned no usable image");
-      return uploadToGallery({ mime, ext: IMAGE_TYPES[mime], base64 }, { name, prompt, width, height });
+      const sent = str(result?.prompt);
+      return {
+        mime,
+        ext: IMAGE_TYPES[mime],
+        base64,
+        width,
+        height,
+        prompt: sent,
+        sentPrompt: prompt,
+        overrideTook: sent === prompt,
+      };
+    },
+
+    async uploadToGallery({ image, name, prompt, provider, model }) {
+      // The Engine reads only the fields sent before the file.
+      const form = new FormData();
+      form.append("prompt", prompt);
+      form.append("provider", str(provider) || "image_generation");
+      form.append("model", str(model) || "unknown");
+      if (image.width && image.height) {
+        form.append("width", String(Math.round(image.width)));
+        form.append("height", String(Math.round(image.height)));
+      }
+      form.append(
+        "file",
+        new Blob([Buffer.from(image.base64, "base64")], { type: image.mime }),
+        `${fileSlug(name)}${image.ext}`,
+      );
+      const saved = (await request("/api/global-gallery/upload", { method: "POST", body: form })) as {
+        id?: unknown;
+        url?: unknown;
+      } | null;
+      const id = str(saved?.id);
+      const url = str(saved?.url);
+      if (!id || !url) throw new Error("gallery upload returned no image");
+      return { id, url };
+    },
+
+    async generatePortrait({ connectionId, name, prompt, negativePrompt, width, height, debugMode, referenceImages }) {
+      const image = await client.generateImage({
+        connectionId,
+        name,
+        prompt,
+        negativePrompt,
+        width,
+        height,
+        debugMode,
+        referenceImages,
+      });
+      return client.uploadToGallery({ image, name, prompt });
+    },
+
+    async generateBannerArt({ units: _units, ...request }) {
+      // `units` only tell the wrapper whose references to add; they are in `referenceImages` by now.
+      const image = await client.generateImage(request);
+      return client.uploadToGallery({ image, name: request.name, prompt: request.prompt });
     },
 
     async styleProfile(profileId) {
@@ -212,10 +292,12 @@ export function createImageClient({
         const find = (id: string) => (id ? list.find((profile) => str(profile?.id) === id) : undefined);
         const profile = find(str(profileId)) ?? find(str(profiles?.defaultProfileId)) ?? list[0];
         if (!profile) return empty;
+        const mode = str(profile.promptMode);
         return {
           styleText: str(profile.baseStyle) === "auto" ? "" : str(profile.styleText),
           positiveTags: str(profile.positiveTags),
           negativeTags: str(profile.negativeTags),
+          tagged: mode === "tagged" || mode === "danbooru",
         };
       } catch (error) {
         logger?.warn("[otome-forge] could not read the image style profiles: %s", String(error));
@@ -264,7 +346,7 @@ export function createImageClient({
       }
     },
   };
-  return forgeWrapImageReferenceClient(client, logger);
+  return forgeWrapImageReferenceClient(client, logger, { logPrefix: "[otome-forge]" });
 }
 
 const clients = new WeakMap<object, ImageClient>();

@@ -1,11 +1,13 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the backlog. Every line read since the chapter opened, newest last, each speaker in their colour and
-// thoughts in italics. A star keeps a line as a favourite (it goes to the Album's favourite lines).
+// thoughts in italics. A star keeps a line as a favourite (it goes to the Album's favourite lines). With voices on, a
+// spoken line plays its voice again (the Engine keeps the clip, so a replay costs nothing more); pressed again, it stops.
 // ──────────────────────────────────────────────
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
-import { Star } from "lucide-react";
+import { Square, Star, Volume2 } from "lucide-react";
 import { Dialog } from "../../components/Dialog";
+import type { SpeakOutcome } from "../../hooks/use-otome-audio";
 import type { LogEntry } from "../../hooks/use-reader";
 import { accentOf } from "../../lib/accent";
 import { voiceOf } from "../../lib/reader-state";
@@ -17,15 +19,23 @@ interface BacklogProps {
   protagonist: string;
   starred: ReadonlySet<string>;
   onStar: (entry: LogEntry, text: string, li: LiId | null) => Promise<void>;
+  /** Voices for the lines: whether one would be voiced, playing it, stopping it, and the line being voiced. */
+  voice?: {
+    can: (entry: LogEntry) => boolean;
+    play: (entry: LogEntry) => Promise<SpeakOutcome>;
+    stop: () => void;
+    speaking: string | null;
+  };
   onClose: () => void;
 }
 
-export function Backlog({ entries, lis, protagonist, starred, onStar, onClose }: BacklogProps) {
+export function Backlog({ entries, lis, protagonist, starred, onStar, voice: voices, onClose }: BacklogProps) {
   const { t } = useTranslation();
   const listRef = useRef<HTMLOListElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [voiceStatus, setVoiceStatus] = useState<string | null>(null);
   // Opens on the newest line, once the dialog has laid out.
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -46,6 +56,18 @@ export function Backlog({ entries, lis, protagonist, starred, onStar, onClose }:
     } finally {
       setBusy(null);
     }
+  };
+
+  const replay = async (entry: LogEntry, who: string) => {
+    if (!voices) return;
+    if (voices.speaking === entry.ref) {
+      voices.stop();
+      return;
+    }
+    setVoiceStatus(null);
+    const outcome = await voices.play(entry);
+    if (outcome === "silent") setVoiceStatus(t("ui.otomeForge.audio.noVoiceFor", { name: who }));
+    else if (outcome === "failed") setVoiceStatus(t("ui.otomeForge.audio.voiceFailed"));
   };
 
   return (
@@ -97,6 +119,29 @@ export function Backlog({ entries, lis, protagonist, starred, onStar, onClose }:
                   ) : null}
                   <span className="of-log-said">{text}</span>
                 </div>
+                {!aftermath && voices?.can(entry) ? (
+                  <button
+                    type="button"
+                    className="of-icon-button of-log-voice"
+                    aria-label={
+                      voices.speaking === entry.ref
+                        ? t("ui.otomeForge.audio.stopVoice")
+                        : t("ui.otomeForge.audio.playVoice", { name: who })
+                    }
+                    title={
+                      voices.speaking === entry.ref
+                        ? t("ui.otomeForge.audio.stopVoice")
+                        : t("ui.otomeForge.audio.playVoice", { name: who })
+                    }
+                    onClick={() => void replay(entry, who)}
+                  >
+                    {voices.speaking === entry.ref ? (
+                      <Square size={14} strokeWidth={2.2} fill="currentColor" aria-hidden="true" />
+                    ) : (
+                      <Volume2 size={16} strokeWidth={2} aria-hidden="true" />
+                    )}
+                  </button>
+                ) : null}
                 {aftermath ? null : (
                   <button
                     type="button"
@@ -119,6 +164,9 @@ export function Backlog({ entries, lis, protagonist, starred, onStar, onClose }:
       )}
       <div className="of-live" role="alert">
         {error ? <p className="of-notice of-notice--error">{error}</p> : null}
+      </div>
+      <div className="of-live" role="status" aria-live="polite">
+        {voiceStatus ? <p className="of-hint">{voiceStatus}</p> : null}
       </div>
     </Dialog>
   );

@@ -57,6 +57,8 @@ const SOURCES: ForgeMemorySource[] = [
     content: "Ava met Kai and Mireille at the observatory. The great telescope had been sabotaged.",
     order: 10000,
   },
+  // A shared side record of the kit's own kind. Otome's route and repair chapters are `chat` sources, held to their
+  // love interest (S/story/canon.ts); otome-forge-beats.regression.ts checks them with memory ready.
   {
     id: "route-li-mireille-cd34-2",
     kind: "character-story",

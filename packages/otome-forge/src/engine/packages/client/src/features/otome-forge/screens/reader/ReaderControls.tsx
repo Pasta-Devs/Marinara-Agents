@@ -1,7 +1,8 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the reader's header. The way out, the chapter's title (the screen's heading) and scene count; Auto,
 // Skip-read and the Backlog; then the scene's frame label and content tags, Hide UI, Rewrite beat (it says it costs a
-// call) and Ease off, which is always in reach.
+// call) and Ease off, which is always in reach. A place that waits for "Ask before painting" (or failed) offers its
+// paint beside its name, with its cost.
 // ──────────────────────────────────────────────
 import { useTranslation } from "react-i18next";
 import {
@@ -10,6 +11,7 @@ import {
   FastForward,
   Feather,
   MapPin,
+  Paintbrush,
   Pause,
   Play,
   RefreshCw,
@@ -82,6 +84,8 @@ interface ReaderControlsProps {
   replay: boolean;
   /** Where the current line takes place. */
   place?: string;
+  /** The place's picture waits for a tap (consent, or a retry after a failure). */
+  placePaint?: { retry: boolean; busy: boolean; onPaint: () => void };
   tags: string[];
   /** The scene is showing (not loading, not the tags card or the end card). */
   reading: boolean;
@@ -96,6 +100,8 @@ interface ReaderControlsProps {
   canEaseOff: boolean;
   onEaseOff: () => void;
   onExit: () => void;
+  /** Faded under a story CG's pan: nothing in it can be focused or pressed. */
+  inert?: boolean;
 }
 
 export function ReaderControls(props: ReaderControlsProps) {
@@ -107,7 +113,7 @@ export function ReaderControls(props: ReaderControlsProps) {
   const exitLabel = t("ui.otomeForge.reader.exit");
   const rewriteLabel = t("ui.otomeForge.reader.rewriteLabel");
   return (
-    <header className="of-reader-head" onClick={(event) => event.stopPropagation()}>
+    <header className="of-reader-head" inert={props.inert} onClick={(event) => event.stopPropagation()}>
       <div className="of-reader-row">
         <button
           type="button"
@@ -161,6 +167,28 @@ export function ReaderControls(props: ReaderControlsProps) {
             <li key={place} className="of-reader-chip of-reader-chip--place">
               <MapPin size={12} strokeWidth={2.2} aria-hidden="true" />
               {place}
+            </li>
+          ) : null}
+          {place && props.placePaint ? (
+            <li className="of-reader-chip-slot">
+              <button
+                type="button"
+                className="of-reader-chip of-reader-chip--paint"
+                aria-disabled={props.placePaint.busy}
+                aria-label={t(
+                  props.placePaint.retry
+                    ? "ui.otomeForge.reader.placeRetryLabel"
+                    : "ui.otomeForge.reader.placePaintLabel",
+                  { place },
+                )}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (!props.placePaint?.busy) props.placePaint?.onPaint();
+                }}
+              >
+                <Paintbrush size={12} strokeWidth={2.2} aria-hidden="true" />
+                {t(props.placePaint.retry ? "ui.otomeForge.reader.placeRetry" : "ui.otomeForge.reader.placePaint")}
+              </button>
             </li>
           ) : null}
           {frameKey ? <li className="of-reader-chip of-reader-chip--frame">{t(frameKey)}</li> : null}

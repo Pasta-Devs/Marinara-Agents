@@ -88,3 +88,13 @@ jobs:
           MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
           MARINARA_PACKAGE_IDS: gacha-forge
         run: npm run test:browser:otome-forge -- --grep "real server"
+
+      # A failed run's traces, screenshots and videos (the suite keeps them on failure only).
+      - name: Upload Otome Forge browser proof
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: otome-forge-browser-proof-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7

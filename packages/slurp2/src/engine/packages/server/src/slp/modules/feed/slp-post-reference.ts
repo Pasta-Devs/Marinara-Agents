@@ -10,7 +10,7 @@
  */
 import { slurpWeightedPick } from "./slp-weighted.js";
 
-export const SLURP_REFERENCE_KINDS = ["post", "set", "chat", "promise"] as const;
+export const SLURP_REFERENCE_KINDS = ["post", "set", "chat", "promise", "question"] as const;
 export type SlurpReferenceKind = (typeof SLURP_REFERENCE_KINDS)[number];
 
 export type SlurpBeatReference = { kind: SlurpReferenceKind; id: string; text: string };
@@ -22,7 +22,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const MIN_AGE_MS = DAY_MS;
 const MAX_AGE_MS = 30 * DAY_MS;
 /** A saved chat moment or a delivered request is rarer and more personal than an old post. */
-const KIND_WEIGHT: Record<SlurpReferenceKind, number> = { chat: 2, promise: 2, set: 1.5, post: 1 };
+// A fan's question answered in a later post is how a real comment section feels heard.
+const KIND_WEIGHT: Record<SlurpReferenceKind, number> = { chat: 2, promise: 2, question: 2, set: 1.5, post: 1 };
 
 type ReferencePost = {
   id: string;
@@ -38,6 +39,8 @@ export function slurpReferenceCandidates(input: {
   posts: readonly ReferencePost[];
   chatMoments: readonly { id: string; text: string }[];
   keptPromises: readonly { id: string; topic: string; completedAt: string | null }[];
+  /** Fans' questions under this Creator's posts, newest first. */
+  questions?: readonly { id: string; handle: string; question: string; postTitle: string | null; createdAt: string }[];
   at: Date;
 }): SlurpBeatReference[] {
   const inWindow = (iso: string | null) => {
@@ -69,6 +72,14 @@ export function slurpReferenceCandidates(input: {
         kind: "promise",
         id: `promise:${promise.id}`,
         text: `a request you delivered: ${promise.topic.trim()}`,
+      })),
+    ...(input.questions ?? [])
+      .filter((entry) => inWindow(entry.createdAt))
+      .slice(0, 10)
+      .map((entry): SlurpBeatReference => ({
+        kind: "question",
+        id: `question:${entry.id}`,
+        text: `the question @${entry.handle} asked under your post${entry.postTitle?.trim() ? ` "${entry.postTitle.trim()}"` : ""}: "${entry.question.trim()}" (you can answer it in this post)`,
       })),
   ].filter((reference) => reference.text);
 }
