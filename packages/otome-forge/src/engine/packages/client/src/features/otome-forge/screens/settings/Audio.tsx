@@ -202,6 +202,7 @@ function StoryAudio({ run, saving }: { run: RunView; saving: ReturnType<typeof u
             <RetryNotice
               message={t("ui.otomeForge.setup.connectionsFailed")}
               onRetry={() => void connections.refetch()}
+              retrying={connections.retrying}
             />
           ) : (
             <ConnectionSelect

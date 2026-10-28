@@ -12,6 +12,7 @@ import type { Paint, PlaceArt, World } from "../../../../../client/src/features/
 import { OtomeForgeError } from "../http.js";
 import { runDocTarget, worldId } from "../ids.js";
 import { PLACES_MAX, normalizeWorld } from "../schemas/world.js";
+import { worldStyle } from "./image-client.js";
 import { SCENE_SIZE, placePrompt, type ImagePrompt } from "./prompts.js";
 import {
   imagesOf,
@@ -189,7 +190,7 @@ export async function placePromptFor(
   if (!world) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
   const place = world.places[placeKey(name)];
   if (!place) throw notFound();
-  const style = await imagesOf(deps).styleProfile(world.images.styleProfileId);
+  const style = await worldStyle(imagesOf(deps), world.images);
   return placePrompt({ name: place.name, tags: place.tags, world, style }, edited);
 }
 
@@ -225,7 +226,7 @@ async function paintPlace(
       // Built now, so the rating and the 18+ gate are the ones in force at the paid call.
       const world = latest!;
       const place = world.places[key]!;
-      const style = await images.styleProfile(world.images.styleProfileId);
+      const style = await worldStyle(images, world.images);
       const { prompt, negativePrompt } = placePrompt(
         { name: place.name, tags: place.tags, world, style },
         options.edited,

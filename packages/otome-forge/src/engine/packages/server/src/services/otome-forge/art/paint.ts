@@ -34,6 +34,7 @@ import {
   imageClientFor,
   type ImageClient,
   type ImageSubject,
+  worldStyle,
   type PaintedImage,
 } from "./image-client.js";
 import { LOOK_SIZE, lookPrompt, type ImagePrompt } from "./prompts.js";
@@ -378,7 +379,7 @@ export async function lookPromptFor(
   const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
   if (!world) throw notFound();
   const subject = await readSubject(deps, runId, world, owner, debugMode);
-  const style = await imagesOf(deps).styleProfile(world.images.styleProfileId);
+  const style = await worldStyle(imagesOf(deps), world.images);
   return { ...lookPrompt({ ...subject, world, style }, edited), world, subject };
 }
 

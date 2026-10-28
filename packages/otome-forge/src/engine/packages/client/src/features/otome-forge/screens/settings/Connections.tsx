@@ -43,7 +43,11 @@ function StoryConnections({ run, settings }: { run: RunView; settings: SaveSetti
   // A failed list is not an empty one: the player is not told to add a connection they already have.
   if (connections.isError && connections.text.length === 0) {
     return (
-      <RetryNotice message={t("ui.otomeForge.setup.connectionsFailed")} onRetry={() => void connections.refetch()} />
+      <RetryNotice
+        message={t("ui.otomeForge.setup.connectionsFailed")}
+        onRetry={() => void connections.refetch()}
+        retrying={connections.retrying}
+      />
     );
   }
   return (
@@ -52,7 +56,7 @@ function StoryConnections({ run, settings }: { run: RunView; settings: SaveSetti
         value={form}
         connections={connections.text}
         onChange={setForm}
-        onCheckAgain={() => void connections.refetch()}
+        onCheckAgain={connections.refetch}
       />
       <SaveBar
         changed={changed && !!form.narration}

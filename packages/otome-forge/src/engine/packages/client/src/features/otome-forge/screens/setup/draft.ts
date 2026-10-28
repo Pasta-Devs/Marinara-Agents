@@ -5,6 +5,7 @@
 // wizard still works, the draft just isn't kept. A stored draft is read field by field, so a damaged or older one
 // keeps what it can. Nothing here is trusted by the server, which checks every limit again.
 import {
+  IMAGE_STYLE_MAX,
   enforceContent,
   normalizeContent,
   normalizeImageRating,
@@ -87,6 +88,8 @@ export interface DraftImages {
   rating: ImageRating;
   ask: boolean;
   expressions: boolean;
+  /** The player's own image style ("" uses the Engine's style profile). */
+  style: string;
 }
 
 /** "" means "the same as the story connection" for every job but narration. */
@@ -125,7 +128,7 @@ export function emptyDraft(): SetupDraft {
     protagonist: { personaId: "", name: "", pronouns: emptyPronouns(), traits: [], goal: "" },
     lis: [],
     content: normalizeContent(undefined),
-    images: { connectionId: null, rating: normalizeImageRating(undefined), ask: false, expressions: true },
+    images: { connectionId: null, rating: normalizeImageRating(undefined), ask: false, expressions: true, style: "" },
     connections: { narration: "", structured: "", chat: "", compress: "" },
   };
 }
@@ -209,6 +212,7 @@ export function readDraft(value: unknown): SetupDraft {
       rating: normalizeImageRating(images.rating),
       ask: bool(images.ask, draft.images.ask),
       expressions: bool(images.expressions, draft.images.expressions),
+      style: str(images.style, IMAGE_STYLE_MAX),
     },
     connections: {
       narration: str(connections.narration, 200),

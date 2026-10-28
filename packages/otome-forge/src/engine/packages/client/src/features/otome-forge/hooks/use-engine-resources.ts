@@ -3,8 +3,9 @@
 // ──────────────────────────────────────────────
 // Rows are read defensively: the Engine stores flags as "true"/"false" strings, and older routes return arrays where
 // newer ones page. Characters are paged until `hasMore` clears.
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
+import { avatarCropOf, type AvatarCrop } from "../components/Avatar";
 
 export interface ConnectionOption {
   id: string;
@@ -18,6 +19,8 @@ export interface PickerItem {
   id: string;
   name: string;
   avatarUrl: string | null;
+  /** The crop chosen for the avatar in the Engine, when it has one. */
+  avatarCrop: AvatarCrop | null;
   detail: string;
 }
 
@@ -63,7 +66,31 @@ function toItem(row: Row): PickerItem[] {
   const name = text(row.name).trim();
   if (!id || !name) return [];
   // The Engine serves avatarPath as a ready URL.
-  return [{ id, name, avatarUrl: text(row.avatarPath).trim() || null, detail: detailOf(row.summary, row.description) }];
+  return [
+    {
+      id,
+      name,
+      avatarUrl: text(row.avatarPath).trim() || null,
+      avatarCrop: avatarCropOf(row.avatarCrop),
+      detail: detailOf(row.summary, row.description),
+    },
+  ];
+}
+
+/**
+ * A list's load state as its screens read it. Try again after a failed first load is not a first load: TanStack Query
+ * clears the error and reads as pending while it asks again, which would swap the failed notice (and its focused
+ * button) for the loading line. So `isError` holds until the retry settles, and `retrying` says one is running.
+ */
+function loadState(query: UseQueryResult<unknown>) {
+  const retrying = query.isFetching && query.errorUpdatedAt > query.dataUpdatedAt;
+  return {
+    isLoading: query.isLoading && !retrying,
+    isError: query.isError || retrying,
+    retrying,
+    /** Asks the Engine again: after a failed load, or once the player has added one in the Engine. */
+    refetch: query.refetch,
+  };
 }
 
 // ── Connections ──
@@ -111,10 +138,7 @@ export function useConnections() {
   });
   return {
     ...(query.data ?? NO_CONNECTIONS),
-    isLoading: query.isLoading,
-    isError: query.isError,
-    /** Asks the Engine again: after a failed load, or once the player has added one in the Engine. */
-    refetch: query.refetch,
+    ...loadState(query),
   };
 }
 
@@ -149,10 +173,8 @@ export function useCharacterOptions() {
   const query = useQuery({ queryKey: engineResourceKeys.characters, queryFn: fetchCharacters, staleTime: STALE_TIME });
   return {
     items: query.data ?? NO_ITEMS,
-    isLoading: query.isLoading,
-    isError: query.isError,
+    ...loadState(query),
     isSuccess: query.isSuccess,
-    refetch: query.refetch,
   };
 }
 
@@ -167,9 +189,7 @@ export function usePersonaOptions() {
   });
   return {
     items: query.data ?? NO_ITEMS,
-    isLoading: query.isLoading,
-    isError: query.isError,
+    ...loadState(query),
     isSuccess: query.isSuccess,
-    refetch: query.refetch,
   };
 }

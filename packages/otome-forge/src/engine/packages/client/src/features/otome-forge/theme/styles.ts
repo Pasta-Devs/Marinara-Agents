@@ -153,14 +153,18 @@ ${R} .of-chip {
 }
 ${R} .of-chip:hover { background: var(--of-surface-strong); }
 ${R} .of-avatar {
-  flex: none; display: grid; place-items: center; width: 34px; height: 34px; overflow: hidden; border-radius: 50%;
+  position: relative; flex: none; display: grid; place-items: center; width: 34px; height: 34px; overflow: hidden;
+  border-radius: 50%;
   background:
     radial-gradient(circle at 30% 24%, rgb(255 255 255 / 0.5), transparent 52%),
     var(--of-li-accent, var(--of-rose));
   color: var(--of-on-accent); font-family: var(--of-font-display); font-weight: 600; font-size: 1rem;
   box-shadow: 0 0 0 2px var(--of-wish-ring), 0 0 14px var(--of-glow-soft);
 }
-${R} .of-avatar img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; }
+/* Out of flow, so a tall look cannot keep its own height and push past the circle: cover then always crops it. */
+${R} .of-avatar img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%;
+}
 ${R} .of-avatar--empty {
   background: transparent; color: var(--of-accent-text); box-shadow: none;
   border: 1.5px dashed var(--of-border-strong);

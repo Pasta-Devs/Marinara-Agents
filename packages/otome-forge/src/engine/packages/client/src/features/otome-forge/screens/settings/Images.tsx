@@ -1,6 +1,6 @@
 // ──────────────────────────────────────────────
 // Otome Forge Settings → Images: the story's image connection (or none: the game is fully playable without one), its
-// rating (above SFW needs the 18+ confirmation), "Ask before painting" and expressions.
+// rating (above SFW needs the 18+ confirmation), its image style, "Ask before painting" and expressions.
 // ──────────────────────────────────────────────
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,13 +14,14 @@ import { ImageRatingControl } from "../setup/ContentStep";
 import { Section } from "../setup/parts";
 import { NoStory, SaveBar, storedKey } from "./ContentSettings";
 
-type ImageForm = Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions">;
+type ImageForm = Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions"> & { style: string };
 
-const toForm = ({ connectionId, rating, ask, expressions }: ImageSettings): ImageForm => ({
+const toForm = ({ connectionId, rating, ask, expressions, style }: ImageSettings): ImageForm => ({
   connectionId,
   rating,
   ask,
   expressions,
+  style: style ?? "",
 });
 
 function StoryImages({ run, settings }: { run: RunView; settings: SaveSettings }) {
@@ -40,6 +41,7 @@ function StoryImages({ run, settings }: { run: RunView; settings: SaveSettings }
           <RetryNotice
             message={t("ui.otomeForge.setup.connectionsFailed")}
             onRetry={() => void connections.refetch()}
+            retrying={connections.retrying}
           />
         ) : (
           <ImageControls

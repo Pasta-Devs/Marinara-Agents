@@ -348,7 +348,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
             setHidden(true);
           }}
           canRewrite={reader.canRewrite}
-          rewritePaints={!!reader.cg && paintsByItself}
+          rewritePaints={paintsByItself}
           onRewrite={() => void reader.rewrite()}
           canEaseOff={reader.canEaseOff}
           onEaseOff={() => openDialog("ease")}

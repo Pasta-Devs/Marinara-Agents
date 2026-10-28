@@ -21,6 +21,7 @@ import { ARCHETYPE_IDS } from "../../../../../client/src/features/otome-forge/sh
 import {
   DEFAULT_IMAGE_RATING,
   IMAGE_RATINGS,
+  IMAGE_STYLE_MAX,
   contentNeedsAgeGate,
   enforceContent,
   imageRatingNeedsAgeGate,
@@ -83,6 +84,10 @@ const SetupLiSchema = z.union([
     notes: z.string().max(LI_NOTES_MAX).optional(),
   }),
 ]);
+const ImageStyleSchema = z
+  .string()
+  .max(IMAGE_STYLE_MAX)
+  .transform((style) => style.trim());
 const SetupBody = z.object({
   setup: z.object({
     title: z.string().max(200).optional(),
@@ -101,6 +106,7 @@ const SetupBody = z.object({
       rating: z.enum(IMAGE_RATINGS),
       ask: z.boolean(),
       expressions: z.boolean(),
+      style: ImageStyleSchema.optional(),
     }),
     connections: ConnectionsSchema,
   }),
@@ -116,6 +122,7 @@ const SettingsBody = z.object({
       ask: z.boolean().optional(),
       expressions: z.boolean().optional(),
       styleProfileId: z.string().max(200).optional(),
+      style: ImageStyleSchema.optional(),
     })
     .optional(),
   connections: ConnectionsSchema.optional(),
@@ -132,10 +139,11 @@ const ageGateNeeded = () => new OtomeForgeError(403, "Confirm the 18+ gate befor
 const readIndex = async (store: Pick<OtomeStore, "readDoc">) =>
   (await store.readDoc(INDEX_ID, normalizeIndex)) ?? normalizeIndex(undefined);
 
-/** The run as the client sees it: the protagonist's or a place's paint left pending by a restart reads as `stopped`. */
+/** The run as the client sees it: a look's or a place's paint left pending by a restart reads as `stopped`. */
 function runView(runKey: string, runId: string, { world, player, units, state }: RunDocuments) {
   const shown = player.art ? { ...player, art: paintView(runId, "player", player.art) } : player;
-  return toRunView(runKey, withPlaceViews(runId, world), shown, units, state);
+  const lis = units.map((unit) => (unit.art ? { ...unit, art: paintView(runId, `li:${unit.id}`, unit.art) } : unit));
+  return toRunView(runKey, withPlaceViews(runId, world), shown, lis, state);
 }
 
 export const registerRunRoutes: RegisterRoutes = (router, deps) => {

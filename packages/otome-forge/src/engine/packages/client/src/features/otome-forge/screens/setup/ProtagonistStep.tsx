@@ -61,7 +61,7 @@ function PersonaGrid({
               checked={value === item.id}
               onChange={() => onChange(item)}
             />
-            <Avatar name={item.name} url={item.avatarUrl} />
+            <Avatar name={item.name} url={item.avatarUrl} crop={item.avatarCrop} />
             <span className="of-tile-name">{item.name}</span>
           </label>
         ))}
@@ -156,12 +156,16 @@ export function ProtagonistStep({ draft, update }: ProtagonistStepProps) {
           {t("ui.otomeForge.setup.loadingPersonas")}
         </p>
       ) : personas.isError ? (
-        <RetryNotice message={t("ui.otomeForge.setup.personasFailed")} onRetry={() => void personas.refetch()} />
+        <RetryNotice
+          message={t("ui.otomeForge.setup.personasFailed")}
+          onRetry={() => void personas.refetch()}
+          retrying={personas.retrying}
+        />
       ) : personas.items.length === 0 ? (
         <div className="of-empty of-glass">
           <UserRound size={22} strokeWidth={1.7} aria-hidden="true" />
           <p>{t("ui.otomeForge.setup.noPersonas")}</p>
-          <CheckAgain onCheck={() => void personas.refetch()} />
+          <CheckAgain onCheck={personas.refetch} />
         </div>
       ) : (
         <PersonaGrid

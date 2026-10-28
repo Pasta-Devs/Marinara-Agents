@@ -106,14 +106,18 @@ function ConnectionSwitch({
   // A failed list is not an empty one: the player is not told to add a connection they may already have.
   if (connections.isError && !connections.text.length) {
     return (
-      <RetryNotice message={t("ui.otomeForge.setup.connectionsFailed")} onRetry={() => void connections.refetch()} />
+      <RetryNotice
+        message={t("ui.otomeForge.setup.connectionsFailed")}
+        onRetry={() => void connections.refetch()}
+        retrying={connections.retrying}
+      />
     );
   }
   if (!others.length) {
     return (
       <div className="of-inline-actions">
         <p className="of-hint">{t("ui.otomeForge.reader.noOtherConnection")}</p>
-        <CheckAgain onCheck={() => void connections.refetch()} />
+        <CheckAgain onCheck={connections.refetch} />
       </div>
     );
   }

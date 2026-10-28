@@ -479,6 +479,7 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
           voiceGender: unit.voiceGender,
           accent: unit.accent,
           ...(unit.portrait ? { portrait: unit.portrait } : {}),
+          ...(unit.art ? { art: unit.art } : {}),
           level: levelOf(progress.points),
           stage: progress.stage,
           ...(expressions ? { expressions } : {}),

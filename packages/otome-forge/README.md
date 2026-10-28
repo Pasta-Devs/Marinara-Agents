@@ -211,7 +211,7 @@ Each story has its own content settings:
 
 - The confirmation is self-reported, stored with its time, and checked by the server on every change.
 - Turning a setting down never asks.
-- Withdrawing the confirmation turns every story back to SFW, Angst and SFW images.
+- Withdrawing the confirmation turns every story back to SFW Heat, at most Angst, and SFW images.
 
 **Fixed rules:** love interests are always adults, and non-consent and pregnancy start as Lines. Darkness gives the rest of the Lines & Veils catalog its defaults:
 
@@ -239,42 +239,42 @@ Each story has its own content settings:
 
 ## What costs what
 
-Anything that costs money to generate is labelled where you start it, and nothing paid is retried by itself: text gets at most one automatic repair turn when a reply comes back in the wrong format, and images, music and voices never retry without a tap. "Call" means one request to a text connection.
+Anything that costs money to generate is labelled where you start it, and almost nothing paid is retried by itself. Text gets at most one automatic repair turn when a reply comes back in the wrong format, and a love interest's lines written ahead that failed are tried again on a Home visit at least 10 minutes later. Images, music and voices never retry without a tap. "Call" means one request to a text connection.
 
-| What you do | Text model | Images | Music | Voices |
-| --- | --- | --- | --- | --- |
-| **Surprise me** in setup | 1 call | — | — | — |
-| **Forge our story** | 1 call for the world, 1 per love interest's bible | — | — | — |
-| **Paint the cast** | 1 call to describe your look, only when your persona has no appearance text | 1 per love interest and 1 for you | — | — |
-| Faces (**Expressions** on) | — | about 5 per look, in the background | — | — |
-| Start a main chapter | 1 call to plan it | — | — | — |
-| Read a scene | 1 call per scene (the next one is written ahead) | 1 per new place and per key moment (with **Ask before painting**, on your tap) | — | each voiced line, once |
-| A confrontation | 1 call for all three rounds | — | — | each voiced line, once |
-| **Rewrite** | 1 call | 1 when the scene has a key moment, painted again (with **Ask before painting**, on your tap) | — | as any scene |
-| A route or repair chapter | 1 call to plan, then 1 per scene | as any scene | — | as any scene |
-| Story memory | background summaries of finished chapters | — | — | — |
-| **Generate music** on | 1 call per mood, for its brief | — | 1 track per mood (up to 6), made once | — |
-| Home's message of the day | 1 call per love interest you see, per day (again when a rift opens or closes) | — | — | **Play**: once |
-| Home's lines written ahead | in the background: 1 call per love interest per stage (the first also writes their comfort and Claw Machine lines) | — | — | each tap line once; comfort lines every time, never cached |
-| A phone reply | 1 call | — | — | — |
-| **Close and remember** | 1 call | — | — | — |
-| Open Wish in a new fortnight | 1 call per banner (3) | up to 3, for banner art | — | — |
-| First open of a Memory | 1 call to plan it, then 1 per scene as you read | 1, unless it was the banner art | — | its voiced line, once |
-| First open of a Moment | 1 call for its scene | — | — | as any scene |
-| First open of a look | 1 call for its first-wear scene, for a love interest's featured 5★ look only | 1, unless it was the banner art | — | as any scene |
-| **Wear at home** | your new look: 1 call, as they notice it | their look: its faces, about 5 | — | — |
-| **Show them** | 1 call each time | — | — | — |
-| A couple set's portrait | — | 1, on your tap | — | — |
-| Read Them | 1 call | — | — | each voiced line, once |
-| Date Night | 4 calls | new places and missing faces as in any scene, and 1 for a keepsake if you ask | — | as any scene |
-| **Caring message** | 1 call, or none with **Keep it off the model** or a debug condition on | — | — | **Play**: every time, never cached |
+| What you do                  | Text model                                                                                                                                                                        | Images                                                                                                                     | Music                                 | Voices                                                     |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------- |
+| **Surprise me** in setup     | 1 call                                                                                                                                                                            | —                                                                                                                          | —                                     | —                                                          |
+| **Forge our story**          | 1 call for the world, 1 per love interest's bible                                                                                                                                 | —                                                                                                                          | —                                     | —                                                          |
+| **Paint the cast**           | 1 call to describe your look, only when your persona has no appearance text                                                                                                       | 1 per love interest and 1 for you                                                                                          | —                                     | —                                                          |
+| Faces (**Expressions** on)   | —                                                                                                                                                                                 | about 5 per look, in the background                                                                                        | —                                     | —                                                          |
+| Start a main chapter         | 1 call to plan it                                                                                                                                                                 | —                                                                                                                          | —                                     | —                                                          |
+| Read a scene                 | 1 call per scene (the next one is written ahead)                                                                                                                                  | 1 per new place and per key moment (with **Ask before painting**, on your tap)                                             | —                                     | each voiced line, once                                     |
+| A confrontation              | 1 call for all three rounds                                                                                                                                                       | —                                                                                                                          | —                                     | each voiced line, once                                     |
+| **Rewrite**                  | 1 call, plus 1 to write the next scene again when it was already written ahead                                                                                                    | this scene's key moment and the next scene's, painted again when they have one (with **Ask before painting**, on your tap) | —                                     | as any scene                                               |
+| A route or repair chapter    | 1 call to plan, then 1 per scene                                                                                                                                                  | as any scene                                                                                                               | —                                     | as any scene                                               |
+| Story memory                 | background summaries of finished chapters                                                                                                                                         | —                                                                                                                          | —                                     | —                                                          |
+| **Generate music** on        | 1 call per mood, for its brief                                                                                                                                                    | —                                                                                                                          | 1 track per mood (up to 6), made once | —                                                          |
+| Home's message of the day    | 1 call per love interest you see, per day (again when a rift opens or closes)                                                                                                     | —                                                                                                                          | —                                     | **Play**: once                                             |
+| Home's lines written ahead   | in the background: 1 call per love interest per stage (the first also writes their comfort and Claw Machine lines), and again on a Home visit at least 10 minutes after a failure | —                                                                                                                          | —                                     | each tap line once; comfort lines every time, never cached |
+| A phone reply                | 1 call                                                                                                                                                                            | —                                                                                                                          | —                                     | —                                                          |
+| **Close and remember**       | 1 call                                                                                                                                                                            | —                                                                                                                          | —                                     | —                                                          |
+| Open Wish in a new fortnight | 1 call per banner (3)                                                                                                                                                             | up to 3, for banner art                                                                                                    | —                                     | —                                                          |
+| First open of a Memory       | 1 call to plan it, then 1 per scene as you read                                                                                                                                   | 1, unless it was the banner art                                                                                            | —                                     | its voiced line, once                                      |
+| First open of a Moment       | 1 call for its scene                                                                                                                                                              | —                                                                                                                          | —                                     | as any scene                                               |
+| First open of a look         | 1 call for its first-wear scene, for a love interest's featured 5★ look only                                                                                                      | 1, unless it was the banner art                                                                                            | —                                     | as any scene                                               |
+| **Wear at home**             | your new look: 1 call, as they notice it                                                                                                                                          | their look: its faces, about 5                                                                                             | —                                     | —                                                          |
+| **Show them**                | 1 call each time                                                                                                                                                                  | —                                                                                                                          | —                                     | its line, every time, never cached                         |
+| A couple set's portrait      | —                                                                                                                                                                                 | 1, on your tap                                                                                                             | —                                     | —                                                          |
+| Read Them                    | 1 call                                                                                                                                                                            | —                                                                                                                          | —                                     | each voiced line, once                                     |
+| Date Night                   | 4 calls                                                                                                                                                                           | new places and missing faces as in any scene, and 1 for a keepsake if you ask                                              | —                                     | as any scene                                               |
+| **Caring message**           | 1 call, or none with **Keep it off the model** or a debug condition on                                                                                                            | —                                                                                                                          | —                                     | **Play**: every time, never cached                         |
 
-These never call a model, paint or generate anything:
+These never call a model or paint anything. With voices on, their lines are voiced: Claw Machine lines once each, comfort lines every time.
 
 - a wish, single or ten;
 - the Claw Machine;
 - **Ease off**;
-- a tap on Home and **Rough day?** (their voice, if on, speaks a line already written);
+- a tap on Home and **Rough day?** (they speak lines already written);
 - Remind Me and the period tracker;
 - **Keep it off the model**;
 - browsing the Album, Echoes and the Wardrobe;
@@ -298,13 +298,14 @@ These never call a model, paint or generate anything:
   - your own birthday: `otome-forge:profile:v1`.
 
   Browser storage is shared with the Engine page, so other installed packages could read it. Safari may clear it after about 7 days without a visit.
+
 - **The 18+ confirmation** is self-reported and stored with the date you gave it.
-- **Deleting a story:** to remove a story and everything in it, delete it from **Your stories**.
+- **Deleting a story:** deleting it from **Your stories** removes its saves and painted images. Its generated music stays with the Engine's other generated audio, and its voiced lines stay in the Engine's voice cache in this browser.
 
 ### What leaves your device
 
 - **Prompts:** every prompt goes to the model provider of the connection that writes it. With a cloud provider, it leaves your device.
-- **Other providers:** image prompts go to your image connection, music briefs to your audio connection, and voiced lines to your voice provider.
+- **Other providers:** image prompts go to your image connection, with the reference images that keep likenesses: your persona's and your cards' avatars, and looks already painted. Music briefs go to your audio connection, and voiced lines to your voice provider.
 - **Debug mode:** with the Engine's Debug mode or `DEBUG_AGENTS` on, every prompt Otome Hearth sends is written to the Engine's server log as `[debug/otome-forge/…]`, and the Engine logs image prompts too. In debug mode, and at a debug log level, the Engine's model providers also log whole requests.
 
 ### The period tracker's rules
