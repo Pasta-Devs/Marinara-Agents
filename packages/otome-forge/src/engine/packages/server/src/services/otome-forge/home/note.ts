@@ -150,7 +150,8 @@ export function checkNote(curt: boolean, recent: readonly string[]) {
     const max = curt ? NOTE_CURT_WORDS_MAX : NOTE_WORDS_MAX;
     if (!text) return "text is empty";
     if (wordCount(text) > max) return `text must be ${max} words or fewer`;
-    if (sentenceCount(text) > 2) return "text must be one or two sentences";
+    if (sentenceCount(text) > (curt ? 1 : 2))
+      return curt ? "text must be one sentence" : "text must be one or two sentences";
     if (QUESTION_MARK.test(text)) return "the note must not ask a question";
     if (mentionsAbsence(text)) return "the note must never mention the protagonist being away";
     const same = text.toLocaleLowerCase();

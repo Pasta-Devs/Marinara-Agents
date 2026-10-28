@@ -23,6 +23,8 @@ import { galleryRef, loopbackBaseUrl, type PaintedImage } from "./image-client.j
 
 /** The Engine's own cleanup settings for a sprite sheet (sprites.routes.ts uses 35 for its cells). */
 export const CUTOUT_STRENGTH = 35;
+/** How long one loopback request may take. Cut-outs run one at a time, so a stalled cleanup would hold every later one. */
+export const CUTOUT_TIMEOUT_MS = 120_000;
 const ERROR_MAX = 300;
 
 export interface CutoutClient {
@@ -45,9 +47,12 @@ function pngSize(bytes: Buffer): { width?: number; height?: number } {
 export function createCutoutClient({
   baseUrl = loopbackBaseUrl(),
   fetch: fetchImpl = globalThis.fetch,
-}: { baseUrl?: string; fetch?: Fetch } = {}): CutoutClient {
+  timeoutMs = CUTOUT_TIMEOUT_MS,
+}: { baseUrl?: string; fetch?: Fetch; timeoutMs?: number } = {}): CutoutClient {
+  // A timeout throws inside cutOut, which records the cut-out as failed (Home pans over the uncut look instead).
+  const timeout = () => AbortSignal.timeout(timeoutMs);
   async function json(path: string, init: RequestInit): Promise<unknown> {
-    const response = await fetchImpl(`${baseUrl}${path}`, init);
+    const response = await fetchImpl(`${baseUrl}${path}`, { ...init, signal: timeout() });
     if (!response.ok) throw new Error(`engine ${path} -> ${response.status}`);
     return response.json();
   }
@@ -55,7 +60,7 @@ export function createCutoutClient({
   return {
     async cutOut(url) {
       if (!url.startsWith("/")) throw new Error("only an image the Engine serves can be cut out");
-      const source = await fetchImpl(`${baseUrl}${url}`);
+      const source = await fetchImpl(`${baseUrl}${url}`, { signal: timeout() });
       const mime = (source.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
       if (!source.ok || !SOURCE_TYPES.has(mime)) throw new Error(`could not read ${url.slice(0, 80)}`);
       const base64 = Buffer.from(await source.arrayBuffer()).toString("base64");
@@ -75,7 +80,7 @@ export function createCutoutClient({
       // ponytail: repeats image-client's gallery upload (its uploadToGallery is internal); the upgrade path is the
       // image client exposing uploadToGallery, as the plan's §1.8 lists it.
       const form = new FormData();
-      form.append("prompt", "Otome Forge Home cut-out");
+      form.append("prompt", "Otome Hearth Home cut-out");
       form.append("provider", "sprite-cleanup");
       form.append("model", "auto");
       if (width && height) {

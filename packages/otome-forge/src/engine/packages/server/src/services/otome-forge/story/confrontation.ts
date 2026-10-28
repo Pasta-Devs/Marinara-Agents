@@ -5,8 +5,9 @@
 // with four stances each (Press, Hold, Yield, Reveal), and three endings. The beat keeps the opening as its `segments`
 // and the rest as `confrontation`, which never reaches the client whole: toConfrontationView shows the rounds played
 // and the one being played, his answer to each stance taken, and the ending once reached. His composure is never
-// shown, nor a stance not taken, nor an ending not reached. Each list is normalized with P6's rules, and the game is
-// one beat: a love interest thinks at most once on any path through it (normalizeConfrontationReply).
+// shown, nor a stance not taken, nor an ending not reached. Each list is normalized with P6's rules and keeps the
+// reply's speaker voices (`voices`), and the game is one beat: a love interest thinks at most once on any path through
+// it, and it is set in at most BEAT_PLACES_MAX places (normalizeConfrontationReply).
 //
 // Resolution: composure starts at 2 and moves by each picked option's own −1, 0 or +1 within 0–4 (SH/arcs.ts). After
 // round 3, 0 is the truth (trust +1), 4 a walkout (a major grievance he holds, or a rupture when trust is at −2 or
@@ -15,6 +16,7 @@
 // `applied` entries (`${i}/stance-<k>`, `${i}/confrontation`) make each land exactly once, with the per-beat and
 // per-chapter clamps. Everything here is pure.
 import { forgeChoiceLabel } from "@forge-kit/player-choice-text.mjs";
+import { forgeSpeakerGenders } from "@forge-kit/player-choices-server.mjs";
 import type {
   Beat,
   Chapter,
@@ -121,19 +123,26 @@ export function normalizeConfrontationReply(
   if (tooLong) return tooLong;
   const openingThought = thought(reply.opening, counts);
   if (openingThought) return openingThought;
-  // Every place a list is set in (a round or an ending may move on), in order and BEAT_PLACES_MAX at most, so each one
-  // is recorded and painted. A place first met with no description takes the tags a later list gives it.
+  // Every place a list is set in (a round or an ending may move on), in order, so each one is recorded and painted;
+  // more than BEAT_PLACES_MAX get the repair turn, as an ordinary beat's do. A place first met with no description takes
+  // the tags a later list gives it.
   const places = new Map<string, { name: string; tags: string }>();
   const keep = (found: ReadonlyArray<{ name: string; tags: string }>) => {
     for (const entry of found) {
       const key = entry.name.normalize("NFKC").toLowerCase().replace(/\s+/g, " ");
       const known = places.get(key);
-      if (known ? !known.tags && entry.tags : places.size < BEAT_PLACES_MAX) places.set(key, entry);
+      if (known) {
+        if (!known.tags && entry.tags) places.set(key, entry);
+      } else if (places.size >= BEAT_PLACES_MAX) return `the confrontation uses more than ${BEAT_PLACES_MAX} places`;
+      else places.set(key, entry);
     }
+    return "";
   };
   const opening = lists.list({ segments: reply.opening, places: reply.places }, node.place ?? "");
   if (!opening) return "opening needs at least one segment with text";
-  keep(opening.places);
+  forgeSpeakerGenders(reply, opening.segments);
+  const crowded = keep(opening.places);
+  if (crowded) return crowded;
   let place = lastPlace(opening.segments, node.place ?? "");
   const list = (name: string, raw: unknown, max: number, seen: Map<string, number>): Segment[] | string => {
     if (!Array.isArray(raw) || !raw.length) return `${name} needs 1 to ${max} segments`;
@@ -142,8 +151,9 @@ export function normalizeConfrontationReply(
     if (problem) return `${name}: ${problem}`;
     const body = lists.list({ segments: raw, places: reply.places }, place);
     if (!body) return `${name} needs at least one segment with text`;
-    keep(body.places);
-    return body.segments;
+    const over = keep(body.places);
+    if (over) return `${name}: ${over}`;
+    return forgeSpeakerGenders(reply, body.segments);
   };
 
   if (!Array.isArray(reply.rounds) || reply.rounds.length !== CONFRONTATION_ROUNDS) {

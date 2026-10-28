@@ -127,10 +127,11 @@ function StoryAudio({ run, saving }: { run: RunView; saving: ReturnType<typeof u
   const changed = JSON.stringify(form) !== JSON.stringify(toForm(saved));
   const set = (change: Partial<AudioForm>) => setForm((current) => ({ ...current, ...change }));
 
-  // Only the volumes and Mute apply while they change; leaving without saving puts back what is saved.
+  // Only the volumes and Mute apply while they change, as a preview beside the saved settings (which alone decide
+  // whether music is generated); leaving without saving puts back what is saved.
   const { muted, musicVolume, dialogueVolume } = form;
   useEffect(() => {
-    audio?.configure({ ...savedRef.current, muted, musicVolume, dialogueVolume });
+    audio?.configure({ ...savedRef.current, muted, musicVolume, dialogueVolume }, savedRef.current);
   }, [audio, muted, musicVolume, dialogueVolume, stored]);
   useEffect(
     () => () => {

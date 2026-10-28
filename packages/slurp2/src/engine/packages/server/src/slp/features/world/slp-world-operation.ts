@@ -649,9 +649,8 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
           logger.warn(error, "[slurp-world] Could not apply a %s pulse", action.kind);
         }
       }
-      // The audience reacting is the only channel the world had into a Creator that she could
-      // actually feel, and it went straight into the counters without touching her. This is not a
-      // rolling average on purpose: the thing being modelled is noticing your notifications.
+      // Audience reactions are the one signal a Creator feels; not a rolling average on purpose:
+      // the thing being modelled is noticing your notifications.
       const slurpForPulse = createSlurpStorage(db);
       for (const [creatorAccountId, weight] of landedBy) {
         if (weight < SLURP_POST_LANDED_REACTIONS) continue;

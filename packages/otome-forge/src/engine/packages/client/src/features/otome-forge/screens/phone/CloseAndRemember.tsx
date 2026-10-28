@@ -51,7 +51,12 @@ export function CloseAndRemember({ runKey, li, disabled, onClosed }: CloseAndRem
         className="of-button of-button--quiet of-button--small of-glass of-thread-close"
         aria-disabled={disabled}
         title={disabled ? t("ui.otomeForge.phone.closeNothing") : label}
-        onClick={() => !disabled && setAsking(true)}
+        onClick={() => {
+          if (disabled) return;
+          // A new dialog starts clean: the last attempt's failure is not news.
+          setError(null);
+          setAsking(true);
+        }}
       >
         <BookHeart size={15} strokeWidth={2} aria-hidden="true" />
         <span>{label}</span>

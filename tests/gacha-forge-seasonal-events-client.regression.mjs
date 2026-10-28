@@ -273,3 +273,81 @@ test("a closed event card names the chapter or Character Story to finish first",
   );
   assert.match(card(undefined), /Finish the current main chapter or Character Story before starting this event\./u);
 });
+
+test("Events → Story events offers Revisit played scenes for a finished live event, not Continue event (1.26.3)", () => {
+  const pane = (played, changes = {}) => {
+    const pane = { dataset: {}, classList: { add() {} }, innerHTML: "", querySelectorAll: () => [] };
+    wireForgeSeasonalEvents({
+      _root: {
+        querySelector: (selector) =>
+          selector === '[data-screen="events"] .ev-pane'
+            ? pane
+            : selector === "[data-forge-seasonal-layout]"
+              ? {}
+              : null,
+        querySelectorAll: () => [],
+      },
+      _run: { runId: "label-world", story: { seasonalEvents: true } },
+      _forgeSeasonalRunId: "label-world",
+      _forgeSeasonalEnabled: true,
+      _forgeSeasonalState: {
+        events: [
+          { seq: 1, chapter: "event-1", endsAt: Date.now() + 86400000, live: true, opened: 1, played, ...changes },
+        ],
+      },
+      _forgeSeasonalLoadedAt: Date.now(),
+      _hudView: "events",
+      _eventId: "story-events",
+      _eventSlots: [],
+      async _postJson() {
+        return { ok: true, events: [] };
+      },
+      _renderBrowser() {},
+    });
+    return pane.innerHTML;
+  };
+  const action = (played, changes) =>
+    /data-story-event-open="event-1">([^<]*)<\/button>/u.exec(pane(played, changes))?.[1];
+  assert.deepEqual([action(0), action(3), action(10)], ["Play event", "Continue event", "Revisit played scenes"]);
+  // 1.27.0: while its Hard and Very Hard fights are open, a finished event is entered to fight them, and its card
+  // counts them against the plan's own fights.
+  assert.equal(action(10, { hardOpen: true }), "Enter event");
+  assert.match(pane(10, { hard: 2, veryhard: 0, combats: 4 }), /<p>Played 10\/10 · Hard 2\/4 · Very Hard 0\/4<\/p>/u);
+  assert.match(pane(3, { hard: 0 }), /<p>Played 3\/10<\/p>/u, "an unfinished event counts its scenes only");
+});
+
+test("a read list marks which finished events have Hard fights open: live, Seasonal events on, Very Hard unfinished", async () => {
+  const listed = async (events, story = { seasonalEvents: true }) => {
+    const host = {
+      _root: {
+        querySelector: (selector) => (selector === "[data-forge-seasonal-layout]" ? {} : null),
+        querySelectorAll: () => [],
+      },
+      _run: { runId: "hard-world", story },
+      _forgeSeasonalRunId: "hard-world",
+      _forgeSeasonalEnabled: story.seasonalEvents === true,
+      _hudView: "events",
+      _eventSlots: [],
+      async _postJson() {
+        return { ok: true, serverNow: Date.now(), events };
+      },
+      _renderBrowser() {},
+    };
+    wireForgeSeasonalEvents(host);
+    await new Promise((resolve) => setImmediate(resolve));
+    return host._forgeSeasonalState.events.map((event) => event.hardOpen);
+  };
+  const live = { seq: 1, chapter: "event-1", endsAt: Date.now() + 86400000, live: true, played: 10, combats: 3 };
+  assert.deepEqual(
+    await listed([
+      live,
+      { ...live, veryhard: 2 },
+      { ...live, veryhard: 3 },
+      { ...live, played: 9 },
+      { ...live, live: false },
+      { ...live, combats: 0 },
+    ]),
+    [true, true, false, false, false, true],
+  );
+  assert.deepEqual(await listed([live], { seasonalEvents: false }), [false]);
+});

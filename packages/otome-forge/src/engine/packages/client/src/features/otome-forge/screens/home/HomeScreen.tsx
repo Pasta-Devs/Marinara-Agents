@@ -176,38 +176,10 @@ function toFigureArt(
   return art.cutout ? { url: art.cutout, cut: true, kind: "look", fallback: uncut } : uncut;
 }
 
-type HiddenEnds = "start" | "end" | "both" | undefined;
-
 /**
- * A ref for a scroll box, and which of its ends hide content now ("start", "end" or both), for the fade that says
- * there is more; undefined while it shows everything. Measured as it scrolls and as it or its children change size.
- */
-function useHiddenEnds(): [(element: HTMLElement | null) => (() => void) | undefined, HiddenEnds] {
-  const [hidden, setHidden] = useState<HiddenEnds>();
-  const ref = useCallback((element: HTMLElement | null) => {
-    if (!element) return undefined;
-    const measure = () => {
-      const start = element.scrollTop > 1;
-      const end = element.scrollHeight - element.clientHeight - element.scrollTop > 1;
-      setHidden(start && end ? "both" : start ? "start" : end ? "end" : undefined);
-    };
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    for (const child of element.children) observer.observe(child);
-    element.addEventListener("scroll", measure, { passive: true });
-    measure();
-    return () => {
-      observer.disconnect();
-      element.removeEventListener("scroll", measure);
-    };
-  }, []);
-  return [ref, hidden];
-}
-
-/**
- * Caring message, beside Remind Me on a day the period tracker marks. Should it go while it holds focus (midnight after
- * the last period day, the tracker turned off or Delete all in another tab), focus moves to Remind Me rather than fall
- * to the page.
+ * Caring message, beside Remind Me at the foot of the rail on a day the period tracker marks. Should it go while it
+ * holds focus (midnight after the last period day, the tracker turned off or Delete all in another tab), focus moves
+ * to Remind Me rather than fall to the page.
  */
 function CaringButton({
   buttonRef,
@@ -221,7 +193,7 @@ function CaringButton({
   const { t } = useTranslation();
   const label = t("ui.otomeForge.tracker.caringMessage");
   useLayoutEffect(() => {
-    // Remind Me comes first in the foot and stays for as long as Home does, so its button is already in place here.
+    // Remind Me comes first in its row and stays for as long as Home does, so its button is already in place here.
     const [button, remind] = [buttonRef.current, fallback.current];
     // Runs as the button unmounts, while it is still in the page and still holds focus if it had it.
     return () => {
@@ -449,7 +421,6 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
   const careOpen = sheet === "care" && careFrom !== null && careFor === careFrom;
   const caringRef = useRef<HTMLButtonElement>(null);
   const remindRef = useRef<HTMLButtonElement>(null);
-  const [railRef, railHidden] = useHiddenEnds();
   useEffect(() => {
     if (sheet !== "care" || careOpen) return;
     setSheet(null);
@@ -499,30 +470,47 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
       onPointerMove={parallax.onPointerMove}
       onPointerLeave={parallax.onPointerLeave}
     >
-      <HomeLayers sky={sky} backdrop={about?.backdrop ?? null}>
-        {show === "him" ? (
-          <CutoutFigure
-            key={`him-${li.id}`}
-            who="him"
-            name={li.name}
-            accent={accent}
-            art={himArt}
-            label={figureLabel}
-            face={face}
-            mood={rupture ? "cold" : (said?.mode ?? "fond")}
-            onTap={onTap}
-          />
-        ) : (
-          // "He noticed: …" under her look arrives with the Wardrobe's Show him (M4).
-          <CutoutFigure
-            key="me"
-            who="me"
-            name={playerName}
-            accent={PALETTE.rose}
-            art={toFigureArt(herLook)}
-            label={t("ui.otomeForge.home.figureMe", { name: playerName })}
-          />
-        )}
+      <HomeLayers backdrop={about?.backdrop ?? null}>
+        <div className="of-home-main">
+          <div className="of-home-stage">
+            {show === "him" ? (
+              <CutoutFigure
+                key={`him-${li.id}`}
+                who="him"
+                name={li.name}
+                accent={accent}
+                art={himArt}
+                label={figureLabel}
+                face={face}
+                mood={rupture ? "cold" : (said?.mode ?? "fond")}
+                onTap={onTap}
+              />
+            ) : (
+              // "He noticed: …" under her look arrives with the Wardrobe's Show him (M4).
+              <CutoutFigure
+                key="me"
+                who="me"
+                name={playerName}
+                accent={PALETTE.rose}
+                art={toFigureArt(herLook)}
+                label={t("ui.otomeForge.home.figureMe", { name: playerName })}
+              />
+            )}
+          </div>
+          <div className="of-home-foot">
+            {saveError ? (
+              <p className="of-notice of-notice--error" role="alert">
+                {saveError}
+              </p>
+            ) : null}
+            <div className="of-home-plate of-glass">
+              <h1 className="of-home-name" tabIndex={-1}>
+                {show === "me" ? playerName : li.name}
+              </h1>
+              {show === "him" && note ? <MoodChip mood={note.mood} /> : null}
+            </div>
+          </div>
+        </div>
       </HomeLayers>
 
       <div className="of-home-top">
@@ -546,76 +534,58 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
         ) : null}
       </div>
 
-      <div className="of-home-middle">
-        <div ref={railRef} className="of-home-rail" data-hidden={railHidden}>
-          <button type="button" className="of-home-action of-glass" onClick={() => onOpenPhone(null)}>
-            <Smartphone size={17} strokeWidth={1.9} aria-hidden="true" />
-            <span>{t("ui.otomeForge.common.screenPhone")}</span>
-            {unread > 0 ? (
-              <span className="of-home-badge">
-                <span aria-hidden="true">{unread}</span>
-                <span className="of-visually-hidden">{t("ui.otomeForge.home.unread", { count: unread })}</span>
-              </span>
-            ) : null}
-          </button>
-          <HimMeToggle name={li.name} show={show} onChange={(next) => void save({ show: next })} />
-          <button type="button" className="of-home-action of-glass" onClick={() => setSheet("rough")}>
-            <HeartHandshake size={17} strokeWidth={1.9} aria-hidden="true" />
-            <span>{t("ui.otomeForge.home.roughDay")}</span>
-          </button>
-          <button type="button" className="of-home-action of-glass" onClick={() => setSheet("pick")}>
-            <UsersRound size={17} strokeWidth={1.9} aria-hidden="true" />
-            <span>{t("ui.otomeForge.home.whoIsHome")}</span>
-          </button>
-        </div>
-        {said && show === "him" ? (
-          <p
-            key={said.id}
-            className="of-home-bubble of-glass of-glass--strong"
-            data-mode={said.mode}
-            aria-hidden="true"
+      <div className="of-home-rail">
+        <button type="button" className="of-home-action of-glass" onClick={() => onOpenPhone(null)}>
+          <Smartphone size={17} strokeWidth={1.9} aria-hidden="true" />
+          <span>{t("ui.otomeForge.common.screenPhone")}</span>
+          {unread > 0 ? (
+            <span className="of-home-badge">
+              <span aria-hidden="true">{unread}</span>
+              <span className="of-visually-hidden">{t("ui.otomeForge.home.unread", { count: unread })}</span>
+            </span>
+          ) : null}
+        </button>
+        <HimMeToggle name={li.name} show={show} onChange={(next) => void save({ show: next })} />
+        <button type="button" className="of-home-action of-glass" onClick={() => setSheet("rough")}>
+          <HeartHandshake size={17} strokeWidth={1.9} aria-hidden="true" />
+          <span>{t("ui.otomeForge.home.roughDay")}</span>
+        </button>
+        <button type="button" className="of-home-action of-glass" onClick={() => setSheet("pick")}>
+          <UsersRound size={17} strokeWidth={1.9} aria-hidden="true" />
+          <span>{t("ui.otomeForge.home.whoIsHome")}</span>
+        </button>
+        {/* M6: Remind Me, and Caring message beside it on a day the period tracker marks, as round buttons in one row
+            at the rail's foot, named for screen readers and in a tooltip. The rail is as tall with Caring message as
+            without it, so nothing moves as it comes or goes, and the note keeps its words on the shortest phones. */}
+        <div className="of-home-rail-row">
+          <button
+            ref={remindRef}
+            type="button"
+            className="of-icon-button of-glass of-glass--strong"
+            aria-label={remindLabel}
+            title={remindLabel}
+            onClick={onOpenRemind}
           >
-            {said.text}
-          </p>
-        ) : null}
+            <CalendarDays size={18} strokeWidth={1.9} aria-hidden="true" />
+          </button>
+          {careFrom && data ? (
+            <CaringButton
+              buttonRef={caringRef}
+              fallback={remindRef}
+              onPress={() => {
+                setCareFor(careFrom);
+                setSheet("care");
+              }}
+            />
+          ) : null}
+        </div>
       </div>
 
-      <div className="of-home-foot">
-        {saveError ? (
-          <p className="of-notice of-notice--error" role="alert">
-            {saveError}
-          </p>
-        ) : null}
-        {/* Remind Me, and Caring message on a day the tracker marks, sit in the foot as round buttons (M6), named for
-            screen readers and in a tooltip: below his hand zone even on the shortest phones, with the nameplate's room
-            left to it, and nothing added to M3's rail. */}
-        <button
-          ref={remindRef}
-          type="button"
-          className="of-icon-button of-glass of-glass--strong"
-          aria-label={remindLabel}
-          title={remindLabel}
-          onClick={onOpenRemind}
-        >
-          <CalendarDays size={18} strokeWidth={1.9} aria-hidden="true" />
-        </button>
-        {careFrom && data ? (
-          <CaringButton
-            buttonRef={caringRef}
-            fallback={remindRef}
-            onPress={() => {
-              setCareFor(careFrom);
-              setSheet("care");
-            }}
-          />
-        ) : null}
-        <div className="of-home-plate of-glass">
-          <h1 className="of-home-name" tabIndex={-1}>
-            {show === "me" ? playerName : li.name}
-          </h1>
-          {show === "him" && note ? <MoodChip mood={note.mood} /> : null}
-        </div>
-      </div>
+      {said && show === "him" ? (
+        <p key={said.id} className="of-home-bubble of-glass of-glass--strong" data-mode={said.mode} aria-hidden="true">
+          {said.text}
+        </p>
+      ) : null}
 
       <p className="of-visually-hidden" aria-live="polite">
         {announce}
