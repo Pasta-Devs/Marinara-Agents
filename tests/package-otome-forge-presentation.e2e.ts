@@ -236,7 +236,10 @@ async function stubRoutes(page: Page, answer: (call: Call) => Answer | undefined
 }
 
 /** `reviewPrompts`: the Engine's "Review image prompts before sending" is on. */
-async function openOtome(page: Page, { reviewPrompts = false }: { reviewPrompts?: boolean } = {}): Promise<Locator> {
+async function openOtome(
+  page: Page,
+  { reviewPrompts = false, recordMusic = false }: { reviewPrompts?: boolean; recordMusic?: boolean } = {},
+): Promise<Locator> {
   await page.addInitScript(
     ({ version, review }) => {
       localStorage.setItem("marinara:whats-new:seen-version", version);
@@ -256,6 +259,47 @@ async function openOtome(page: Page, { reviewPrompts = false }: { reviewPrompts?
     },
     { version: appVersion, review: reviewPrompts },
   );
+  if (recordMusic)
+    await page.addInitScript(() => {
+      // The host and its players are frozen. Observe their calls through a frozen forwarding facade at publication.
+      const events: string[] = [];
+      (globalThis as any).__otomeMusicEvents = events;
+      const define = Object.defineProperty;
+      Object.defineProperty = ((target: object, key: PropertyKey, descriptor: PropertyDescriptor) => {
+        if (target === globalThis && key === "__MARINARA_HOST__") {
+          Object.defineProperty = define;
+          const host = descriptor.value;
+          const audio = host.services.audio;
+          descriptor = {
+            ...descriptor,
+            value: Object.freeze({
+              ...host,
+              services: Object.freeze({
+                ...host.services,
+                audio: Object.freeze({
+                  ...audio,
+                  createPlayer: () => {
+                    const player = audio.createPlayer();
+                    return Object.freeze({
+                      ...player,
+                      playMusic: (tag: string, assets: unknown) => {
+                        events.push(tag);
+                        return player.playMusic(tag, assets);
+                      },
+                      stopMusic: (...args: unknown[]) => {
+                        events.push("STOP");
+                        return player.stopMusic(...args);
+                      },
+                    });
+                  },
+                }),
+              }),
+            }),
+          };
+        }
+        return define(target, key, descriptor);
+      }) as typeof Object.defineProperty;
+    });
   await page.goto("/");
   await page.getByRole("tab", { name: "Open Otome Hearth" }).click();
   const root = page.locator("marinara-capability-otome-forge .of-root");
@@ -1749,6 +1793,165 @@ test("Otome Forge audio: a recorded track the Engine no longer lists is made aga
     .toBe(true);
   expect(calls.filter((call) => call.path.endsWith("/gone.mp3"))).toEqual([]);
   expect(pageErrors).toEqual([]);
+});
+
+/** Two stored chapters with their own track records; every provider request remains stubbed. */
+function chapterMusicFixture(audio: Json = {}) {
+  const fixture = createSceneStub({
+    images: false,
+    audio: { tts: false, generate: true, chapterThemes: true, ...audio },
+  });
+  const tracks = new Map<string, Json>();
+  const music = new Map<string, Json>();
+  const answer = (call: Call): Answer | undefined => {
+    if (call.path.endsWith("/audio/brief") && call.body?.chapterKey)
+      return {
+        status: 200,
+        json: { prompt: `A distinctive instrumental clockwork theme for ${call.body.chapterKey}.` },
+      };
+    if (call.path.endsWith("/audio/track")) {
+      const { chapterKey, timeZone: _zone, debugMode: _debug, ...track } = call.body!;
+      tracks.set(track.tag, track);
+      if (chapterKey) {
+        if (!music.has(chapterKey)) music.set(chapterKey, track);
+        return { status: 200, json: { track: music.get(chapterKey) } };
+      }
+    }
+    const reply = fixture.answer({ ...call, path: call.path.replace("/chapters/main-2", "/chapters/main-1") });
+    if (call.path === "/api/game-assets/manifest" && reply?.json) {
+      const data = reply.json as Json;
+      for (const track of tracks.values()) data.assets[track.tag] = { path: track.path };
+    }
+    if (call.path.endsWith("/story") && reply?.json) {
+      const data = reply.json as Json;
+      data.chapters.push({ ...data.chapters[0], key: "main-2", title: "The Second Hour", state: "in-progress" });
+    }
+    const key = /\/chapters\/(main-[12])(?:\/|$)/u.exec(call.path)?.[1];
+    if (key && reply?.json) {
+      const data = reply.json as Json;
+      if (data.chapter)
+        data.chapter = {
+          ...data.chapter,
+          key,
+          tags: ["threats"],
+          title: key === "main-1" ? "The Observation Room" : "The Second Hour",
+          ...(music.has(key) ? { music: { track: music.get(key) } } : {}),
+        };
+      if (data.beat) data.beat = { ...data.beat, key };
+    }
+    return reply;
+  };
+  return { ...fixture, answer, music };
+}
+
+const musicEvents = (page: Page) => page.evaluate(() => [...(globalThis as any).__otomeMusicEvents] as string[]);
+const chapterGenerations = (calls: Call[]) =>
+  posts(calls, "/api/audio/generate").filter((call) => call.body?.context?.key.includes("-chapter-"));
+
+test("Otome Hearth chapter music is optional, saved, starts after Begin and reuses its theme on replay", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = chapterMusicFixture({ generate: false, chapterThemes: false });
+  await stubRoutes(page, fixture.answer, calls);
+  let root = await openStory(page, { recordMusic: true });
+  await root.getByRole("button", { name: "Settings" }).click();
+  await root.getByRole("tab", { name: "Audio" }).click();
+  const option = root.getByRole("switch", { name: "Generate a theme for each chapter" });
+  await expect(option).toHaveCount(0);
+  await root.getByRole("switch", { name: "Generate music", exact: true }).check();
+  await expect(option).not.toBeChecked();
+  await option.check();
+  expect(chapterGenerations(calls)).toHaveLength(0);
+  await page.screenshot({ path: testInfo.outputPath("chapter-music-settings.png") });
+  await root.getByRole("button", { name: "Save changes" }).click();
+  await expect(root.getByRole("status").filter({ hasText: "Saved." })).toBeVisible();
+  await root.locator(".of-topbar").getByRole("button", { name: "Back", exact: true }).click();
+  await expect.poll(() => posts(calls, "/audio/track").filter((call) => call.body?.cue === "home").length).toBe(1);
+  await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+  await expect(root.getByRole("heading", { name: "Before you begin" })).toBeVisible();
+  expect(calls.filter((call) => call.body?.chapterKey && call.path.endsWith("/audio/brief"))).toHaveLength(0);
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect.poll(() => fixture.music.has("main-1")).toBe(true);
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-chapter-main-1:");
+  await next(root);
+  await next(root);
+  expect(chapterGenerations(calls)).toHaveLength(1);
+  await root.getByRole("button", { name: "Leave the chapter" }).click();
+  await root.getByRole("button", { name: "Continue: The Second Hour", exact: true }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect.poll(() => fixture.music.has("main-2")).toBe(true);
+  expect(chapterGenerations(calls)).toHaveLength(2);
+  expect(fixture.music.get("main-1")!.tag).not.toBe(fixture.music.get("main-2")!.tag);
+
+  root = await openStory(page, { recordMusic: true });
+  await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-chapter-main-1:");
+  expect(chapterGenerations(calls)).toHaveLength(2);
+});
+
+test("Otome Hearth keeps current music on chapter generation failure without retrying on another line", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = chapterMusicFixture();
+  await stubRoutes(
+    page,
+    (call) =>
+      call.path === "/api/audio/generate" && call.body?.context?.key.includes("-chapter-")
+        ? { status: 502, json: { error: "Fixture chapter generation failed" } }
+        : fixture.answer(call),
+    calls,
+  );
+  const root = await openStory(page, { recordMusic: true });
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-home:");
+  await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+  const before = await musicEvents(page);
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect(root).toContainText("Chapter music couldn’t be generated.");
+  await next(root);
+  await next(root);
+  expect(chapterGenerations(calls)).toHaveLength(1);
+  expect(await musicEvents(page)).toEqual(before);
+});
+
+test("Otome Hearth saves a late chapter theme without playing it over the next chapter", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = chapterMusicFixture();
+  await stubRoutes(page, fixture.answer, calls);
+  let release!: () => void;
+  const gate = new Promise<void>((done) => {
+    release = done;
+  });
+  await page.route("**/api/audio/generate", async (route) => {
+    if (route.request().postDataJSON().context.key.endsWith("-chapter-main-1")) await gate;
+    await route.fallback();
+  });
+  const root = await openStory(page, { recordMusic: true });
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-home:");
+  await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+  const before = await musicEvents(page);
+  const started = page.waitForRequest(
+    (request) =>
+      request.url().endsWith("/api/audio/generate") && request.postDataJSON().context.key.endsWith("-chapter-main-1"),
+  );
+  await root.getByRole("button", { name: "Begin" }).click();
+  await started;
+  expect(await musicEvents(page)).toEqual(before);
+  await root.getByRole("button", { name: "Leave the chapter" }).click();
+  await root.getByRole("button", { name: "Continue: The Second Hour", exact: true }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-chapter-main-2:");
+  const second = await musicEvents(page);
+  release();
+  await expect.poll(() => fixture.music.has("main-1")).toBe(true);
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+  expect(await musicEvents(page)).toEqual(second);
+  expect(chapterGenerations(calls)).toHaveLength(2);
 });
 
 test("Otome Hearth card link: a generated LI keeps their story and art while an explicit card supplies their current voice", async ({

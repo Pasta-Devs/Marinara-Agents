@@ -8,3 +8,6 @@ export function normalizeOtomeAudio(value: unknown): AudioSettings {
     chapterThemes: !!value && typeof value === "object" && "chapterThemes" in value && value.chapterThemes === true,
   };
 }
+
+/** Chapter keys are validated by the server; even the longest remains within the existing cue/context limits. */
+export const chapterMusicCue = (chapterKey: string) => `chapter-${chapterKey}`;

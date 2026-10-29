@@ -146,6 +146,12 @@ export interface SoundtrackTrack {
   path: string;
 }
 
+/** Chapter-owned music is retained independently of the world's bounded mood soundtrack. */
+export interface ChapterMusic {
+  prompt?: string;
+  track?: SoundtrackTrack;
+}
+
 /** `world.audio` (M2b): the settings, each cue's music brief (P14, English), and the generated tracks. */
 export interface WorldAudio extends AudioSettings {
   briefs: Record<string, { fingerprint: string; prompt: string }>;
@@ -756,6 +762,7 @@ export interface Chapter {
   ledger: ChapterLedger;
   plannedAt: string;
   connectionId: string;
+  music?: ChapterMusic;
   /** A Memory's Character Story (M4): the line its card voices, kept with the chapter so the item is always given it. */
   voicedLine?: string;
   /** A date's own plan (M5, SH/dates.ts); hidden from the chapter view. */
@@ -931,7 +938,8 @@ export type ChapterState = "unplanned" | "in-progress" | "done";
 export type BeatState = "unwritten" | "ready" | "read";
 
 /** A chapter as the client sees it: no guides and no ledger (the plan is the hidden story). */
-export type ChapterView = Omit<Chapter, "nodes" | "ledger" | "connectionId" | "date"> & {
+export type ChapterView = Omit<Chapter, "nodes" | "ledger" | "connectionId" | "date" | "music"> & {
+  music?: Pick<ChapterMusic, "track">;
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;
 };
 
