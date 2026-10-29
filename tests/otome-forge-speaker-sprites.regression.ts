@@ -222,6 +222,11 @@ test("speaker alpha accepts full-body silhouettes and tightly cropped busts touc
   );
   assert.equal(speakerHasCutoutAlpha(fullBody, 32, 48), true);
   assert.equal(speakerHasCutoutAlpha(bust, 32, 32), true);
+  for (const alpha of [64, 127]) {
+    const translucent = fullBody.slice();
+    for (let index = 3; index < translucent.length; index += 4) if (translucent[index] > 0) translucent[index] = alpha;
+    assert.equal(speakerHasCutoutAlpha(translucent, 32, 48), true, `alpha${alpha} preserves a real cutout`);
+  }
   // A much tighter head/shoulders crop touches every edge and retains only 60/1,024 background pixels (5.86%).
   const tightBust = alphaRaster(32, 32, (x, y) => {
     const inset = y < 12 ? Math.ceil((12 - y) / 3) : 0;

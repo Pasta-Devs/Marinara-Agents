@@ -6,18 +6,22 @@ export const speakerNameKey = (name: string) => name.trim().toLowerCase();
 
 // Tight bust crops may have little background; transparent padding alone never counts as a cutout.
 const MIN_SPEAKER_CUTOUT_SHARE = 0.05;
-const MIN_SPEAKER_BOUND_ALPHA = 128;
 // ponytail: alpha alone cannot distinguish silhouette-shaped opaque masks; trusted cutout metadata or segmentation can replace this heuristic.
 
 /** Require meaningful removed background inside the visible subject's bounds, for source and cleanup alike. */
 export function speakerHasCutoutAlpha(pixels: Uint8ClampedArray, width: number, height: number): boolean {
+  let maximumAlpha = 0;
+  for (let index = 3; index < pixels.length; index += 4) maximumAlpha = Math.max(maximumAlpha, pixels[index]);
+  if (!maximumAlpha) return false;
+  // Relative opacity ignores faint padding noise while preserving intentionally translucent subjects.
+  const minimumBoundAlpha = Math.ceil(maximumAlpha / 2);
   let left = width;
   let right = -1;
   let top = height;
   let bottom = -1;
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      if (pixels[(y * width + x) * 4 + 3] >= MIN_SPEAKER_BOUND_ALPHA) {
+      if (pixels[(y * width + x) * 4 + 3] >= minimumBoundAlpha) {
         left = Math.min(left, x);
         right = Math.max(right, x);
         top = Math.min(top, y);
