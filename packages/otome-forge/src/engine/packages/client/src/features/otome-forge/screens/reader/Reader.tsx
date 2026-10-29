@@ -52,6 +52,7 @@ import { DialogueBox } from "./DialogueBox";
 import { EaseOffDialog } from "./EaseOffDialog";
 import { FACE_LABEL_KEYS, FacePlate, QuietCg } from "./FacePlate";
 import { ReaderControls } from "./ReaderControls";
+import { SpeakerPlate } from "./SpeakerPlate";
 import { stageNameKey } from "../story/StoryHome";
 
 interface ReaderProps {
@@ -228,6 +229,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   const sceneFaces = stageLi ? reader.sceneArt?.faces?.[stageLi.id] : undefined;
   const onStageLi =
     stageLi && sceneFaces && Object.keys(sceneFaces).length ? { ...stageLi, expressions: sceneFaces } : stageLi;
+  const otherSpeaker = voice?.kind === "other" && !voice.thought ? voice.name : null;
 
   // Each new line is voiced when the settings voice its speaker; leaving the line stops it. Narration, thoughts and
   // the aftermath line never are.
@@ -365,6 +367,8 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
             busy={reader.painting}
             onPaint={canPaint ? () => void reader.paintCg() : undefined}
           />
+        ) : otherSpeaker ? (
+          <SpeakerPlate key={reader.lineKey} name={otherSpeaker} lineKey={reader.lineKey} />
         ) : (
           <FacePlate li={onStageLi} face={reader.onStage.face} speaking={reader.onStage.speaking} />
         )}

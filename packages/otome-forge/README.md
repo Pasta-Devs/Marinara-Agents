@@ -93,6 +93,7 @@ Everything works without images or sound: a place without art shows a gradient f
 - **Nothing repaints by itself:** a CG joins your Album once you have seen it, and nothing is repainted without a tap. A failed picture waits for Retry.
 - **Faces:** each love interest's five faces are painted in the background as edits of their look, about five images per look. Turning **Expressions** off in **Settings → Images** stops every face that has not started yet.
 - **Music** follows each scene's mood. It is the Engine's own music, or a track written for this world when **Generate music** is on and an audio connection makes music. Each track is made once per mood and never retried by itself.
+- **Other speakers:** when a named character outside your love-interest cast speaks, the previous character's sprite is hidden. An exact, unique matching character card can supply an existing Full Body sprite, with Neutral preferred. Without one, the scene shows no character sprite. Opaque sprites wait for free background cleanup; the card's original stays untouched. This never links cards to love interests or generates paid artwork.
 - **Voices:** with **Voice the dialogue** on in **Settings → Audio**, a love interest from a card speaks with the voice assigned to that card, the others with a default voice, and you with your persona's voice. Narration and thoughts stay silent.
 
 ## Home

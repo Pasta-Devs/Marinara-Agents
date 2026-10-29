@@ -6,12 +6,8 @@ export const speakerNameKey = (name: string) => name.normalize("NFKC").trim().re
 /** Exact full names only; a duplicate is never a reason to choose one card over another. */
 export function matchingSpeakerCards(value: unknown, name: string): Array<{ id: string; name: string }> {
   return (Array.isArray(value) ? value : []).flatMap((row) =>
-    record(row) &&
-    typeof row.id === "string" &&
-    /^[a-z0-9_-]{1,200}$/iu.test(row.id) &&
-    typeof row.name === "string" &&
-    speakerNameKey(row.name) === speakerNameKey(name)
-      ? [{ id: row.id, name: row.name }]
+    record(row) && typeof row.name === "string" && speakerNameKey(row.name) === speakerNameKey(name)
+      ? [{ id: typeof row.id === "string" ? row.id : "", name: row.name }]
       : [],
   );
 }
@@ -48,6 +44,8 @@ export async function findSpeakerSprite(
   for (let offset = 0; offset < 2000;) {
     const params = new URLSearchParams({ search: name.trim(), sort: "name-asc", limit: "100", offset: String(offset) });
     const page = await read(`/characters/catalog?${params}`);
+    if (!Array.isArray(page) && (!record(page) || !Array.isArray(page.items))) return null;
+    if (record(page) && page.hasMore !== undefined && typeof page.hasMore !== "boolean") return null;
     const rows = Array.isArray(page) ? page : record(page) && Array.isArray(page.items) ? page.items : [];
     for (const card of matchingSpeakerCards(rows, name)) matches.set(card.id, card);
     if (matches.size > 1) return null;
@@ -57,6 +55,7 @@ export async function findSpeakerSprite(
   }
   if (matches.size !== 1) return null;
   const [card] = matches.values();
+  if (!/^[a-z0-9_-]{1,200}$/iu.test(card.id)) return null;
   const sprites = await read(`/sprites/${encodeURIComponent(card.id)}`);
   const url = fullBodySpeakerSprite(card.id, sprites);
   if (!url) return null;
