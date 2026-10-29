@@ -207,6 +207,7 @@ async function itemsWorld(
   const faces: string[][] = [];
   let active = true;
   const art: OtomeArt = {
+    repaintExpressions: async () => assert.fail("wardrobe reads must not repaint expressions"),
     queueExpressions: (_runId, beat) => void faces.push(beat.segments.map((segment) => segment.speaker)),
     queueScenePaints: async () => undefined,
     releaseBeatArt: async () => undefined,

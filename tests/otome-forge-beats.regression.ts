@@ -1003,6 +1003,7 @@ test("the art hears of every beat: faces when served, places and its CG once whe
   const at = new Date().toISOString();
   const seen: Array<[string, string, number, boolean?]> = [];
   t.deps.art = {
+    repaintExpressions: async () => assert.fail("serving a beat must not repaint expressions"),
     queueExpressions: (_runId, beat, { debugMode }) => {
       seen.push(["faces", (beat.segments[0] as { text: string }).text, beat.segments.length, debugMode]);
     },

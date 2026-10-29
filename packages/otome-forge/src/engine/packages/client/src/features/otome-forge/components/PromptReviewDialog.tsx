@@ -22,9 +22,24 @@ interface PromptReviewDialogProps {
   onSend: (prompt: ImagePrompt) => void;
   /** Skips this one image. */
   onSkip: () => void;
+  sendLabel?: string;
+  skipLabel?: string;
+  hint?: string;
+  images?: number;
 }
 
-export function PromptReviewDialog({ subject, initial, busy = false, error, onSend, onSkip }: PromptReviewDialogProps) {
+export function PromptReviewDialog({
+  subject,
+  initial,
+  busy = false,
+  error,
+  onSend,
+  onSkip,
+  sendLabel,
+  skipLabel,
+  hint,
+  images = 1,
+}: PromptReviewDialogProps) {
   const { t } = useTranslation();
   const id = useId();
   const [prompt, setPrompt] = useState(initial.prompt);
@@ -44,7 +59,7 @@ export function PromptReviewDialog({ subject, initial, busy = false, error, onSe
               if (!busy) onSkip();
             }}
           >
-            {t("ui.otomeForge.setup.reviewPromptSkip")}
+            {skipLabel ?? t("ui.otomeForge.setup.reviewPromptSkip")}
           </button>
           <button
             type="button"
@@ -55,12 +70,12 @@ export function PromptReviewDialog({ subject, initial, busy = false, error, onSe
             }}
           >
             <Paintbrush size={16} strokeWidth={2} aria-hidden="true" />
-            {t("ui.otomeForge.setup.reviewPromptSend")}
+            {sendLabel ?? t("ui.otomeForge.setup.reviewPromptSend")}
           </button>
         </>
       }
     >
-      <p className="of-hint">{t("ui.otomeForge.setup.reviewPromptHint")}</p>
+      <p className="of-hint">{hint ?? t("ui.otomeForge.setup.reviewPromptHint")}</p>
       <div className="of-field">
         <label className="of-label" htmlFor={`${id}-prompt`}>
           {t("ui.otomeForge.setup.reviewPromptPrompt")}
@@ -85,7 +100,7 @@ export function PromptReviewDialog({ subject, initial, busy = false, error, onSe
           onChange={(event) => setNegativePrompt(event.target.value)}
         />
       </div>
-      <CostHint images={1} />
+      <CostHint images={images} />
       {error ? (
         <p className="of-notice of-notice--error" role="alert">
           {error}
