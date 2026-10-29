@@ -839,7 +839,9 @@ function PlaceBackdrop({
           return { ...current, [back]: url, front: back };
         });
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (live) setLayers((current) => (current.front ? { ...current, front: null } : current));
+      })
       .finally(() => {
         if (live) onSettled(id, url);
       });

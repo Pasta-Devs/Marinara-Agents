@@ -1563,6 +1563,82 @@ test("Otome Hearth backgrounds: polling recovery keeps the opened place readable
   );
 });
 
+test("Otome Hearth backgrounds: a failed next-place image clears the previous room and opens the fallback", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = createSceneStub({ audio: false });
+  fixture.beat0.cg = null;
+  const otherPlace = {
+    name: "The second room",
+    tags: "stone lab",
+    art: { state: "ready", at: now(), url: "/api/otome-forge/failed-next-background.svg" },
+  };
+  fixture.stub.view.world.places["the-second-room"] = otherPlace;
+  fixture.beat0.places.push({ name: otherPlace.name, tags: otherPlace.tags });
+  fixture.beat0.segments = [
+    seg("", "The first lab is lit.", { place: "The Observation Room" }),
+    seg("", "The second lab is dark.", { place: otherPlace.name }),
+  ];
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Continue" }).first().click();
+  await expect(line(root)).toHaveText("The first lab is lit.");
+  await expect(root.locator('.of-place[data-on="true"]')).toHaveCSS("background-image", `url("${PLACE_ART}")`);
+  await next(root);
+  await expect(line(root)).toHaveText("The second lab is dark.");
+  expect(calls.some((call) => call.path === "/api/otome-forge/failed-next-background.svg")).toBe(true);
+  await expect(root.locator('.of-place[data-on="true"]')).toHaveCount(0);
+  await expect(root.getByText("Preparing the background…", { exact: true })).toHaveCount(0);
+  expect(calls.filter((call) => call.method === "POST" && /\/art\/(place|cg)(?:\/prompt)?$/u.test(call.path))).toEqual(
+    [],
+  );
+  expect(posts(calls, "/cancel")).toEqual([]);
+});
+
+test("Otome Hearth backgrounds: exiting a pending location saves only the last visible line", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = createSceneStub({ audio: false });
+  fixture.beat0.cg = null;
+  const firstPlace = fixture.stub.view.world.places["the-observation-room"];
+  firstPlace.art = { state: "pending", at: now() };
+  const otherPlace = { name: "The second room", tags: "stone lab", art: { state: "pending", at: now() } };
+  fixture.stub.view.world.places["the-second-room"] = otherPlace;
+  fixture.beat0.places.push({ name: otherPlace.name, tags: otherPlace.tags });
+  fixture.beat0.segments = [
+    seg("", "The first lab opens.", { place: "The Observation Room" }),
+    seg("", "You read the note beside the door."),
+    seg("", "The second lab is still unseen.", { place: otherPlace.name }),
+  ];
+  const starlight = fixture.stub.view.starlight;
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Continue" }).first().click();
+  await expect(root.getByText("Preparing the background…", { exact: true })).toBeVisible();
+  await root.getByRole("button", { name: "Leave the chapter", exact: true }).click();
+  await expect(root.getByRole("heading", { name: "Story", exact: true })).toBeVisible();
+  expect(posts(calls, "/read")).toHaveLength(0);
+  firstPlace.art = { state: "ready", at: now(), url: PLACE_ART };
+  await root.getByRole("button", { name: "Continue" }).first().click();
+  await expect(line(root)).toHaveText("The first lab opens.");
+  await next(root);
+  await expect(line(root)).toHaveText("You read the note beside the door.");
+  await next(root);
+  await expect(root.getByText("Preparing the background…", { exact: true })).toBeVisible();
+  await expect(line(root)).toHaveCount(0);
+  expect(posts(calls, "/read")).toHaveLength(0);
+  await root.getByRole("button", { name: "Leave the chapter", exact: true }).click();
+  await expect(root.getByRole("heading", { name: "Story", exact: true })).toBeVisible();
+  await expect.poll(() => posts(calls, "/read").map((call) => call.body!.segment)).toEqual([1]);
+  expect(posts(calls, "/choose")).toEqual([]);
+  expect(fixture.stub.view.starlight).toBe(starlight);
+  expect(calls.filter((call) => call.method === "POST" && /\/art\/(place|cg)(?:\/prompt)?$/u.test(call.path))).toEqual(
+    [],
+  );
+});
+
 /** Records every line the Engine's voice service is asked to speak (the Engine's own instance, not a copy). */
 async function recordSpeech(page: Page) {
   await page.evaluate(() => {

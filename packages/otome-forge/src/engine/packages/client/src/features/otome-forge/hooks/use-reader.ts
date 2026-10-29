@@ -516,7 +516,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
 
   // Leaving mid-beat keeps the place: the furthest line reached is saved on the way out.
   const leaving = useRef({ position, current, node, base });
-  leaving.current = { position, current, node, base };
+  if (!preparingBackground) leaving.current = { position, current, node, base };
   useEffect(
     () => () => {
       const { position: last, current: line, node: index, base: path } = leaving.current;

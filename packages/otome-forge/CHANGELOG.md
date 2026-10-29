@@ -1,6 +1,6 @@
 # Otome Hearth release notes
 
-## 0.1.16 — 2026-10-29
+## 0.1.16 — 2026-10-30
 
 - Automatically painted current-location backgrounds prepare before reading begins, with the existing manual-paint and failure paths retained.
 - Story generation can reuse saved location artwork for recurring settings instead of painting a new numbered visit.
