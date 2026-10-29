@@ -1,8 +1,6 @@
 import { z } from "zod";
-import { ltmNoteTypeSchema, type LtmNote } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type { LtmNote } from "../../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { readLtmDebugLog, recordLtmDebugEvent } from "../maintenance/debug-log.js";
-import type { LongTermMemoryStorage } from "../persistence/storage.js";
-import { getLtmGlobalSettings } from "../settings.js";
 
 /** The name a package gives itself when it reads memories; Memory Settings lists it. A malformed name is dropped. */
 export const ltmPackageCallerSchema = z
@@ -11,12 +9,6 @@ export const ltmPackageCallerSchema = z
   .regex(/^[a-z0-9][a-z0-9._:-]{0,63}$/iu)
   .optional()
   .catch(undefined);
-
-const listNotesFilterSchema = z.object({
-  caller: ltmPackageCallerSchema,
-  type: ltmNoteTypeSchema.optional(),
-  characterIds: z.array(z.string().trim().min(1).max(120)).min(1).max(100),
-});
 
 const PACKAGE_READ_ACTIONS = ["package_list", "package_recall"] as const;
 
@@ -69,32 +61,4 @@ export async function listLtmPackageReaders(root: string) {
     .map(([caller, reader]) => ({ caller, ...reader }))
     .sort((left, right) => right.lastReadAt.localeCompare(left.lastReadAt))
     .slice(0, 10);
-}
-
-/**
- * The `long-term-memory:storage` service any package can look up; Slurp's flavour brief reads a character's own
- * note through it. It lists only memories available to the named characters everywhere: a character-id query
- * never matches a memory limited to a chat or group, and imported sources (their text is the raw summary or
- * chat), archived and game-only memories are dropped. The vault folder, the other storage methods and the draft
- * store stay private. "Other Agents can read memories" turned off makes it list nothing.
- */
-export function createLtmStorageReadService(storage: Pick<LongTermMemoryStorage, "listNotes" | "root">) {
-  return {
-    storage: {
-      async listNotes(filter: unknown) {
-        const parsed = listNotesFilterSchema.safeParse(filter);
-        if (!parsed.success || !(await getLtmGlobalSettings(storage.root)).longTermMemoryShareWithPackages) return [];
-        // Like chat recall, a malformed file elsewhere in the vault doesn't stop the read.
-        const notes = (
-          await storage.listNotes({
-            type: parsed.data.type,
-            characterIds: parsed.data.characterIds,
-            skipInvalid: true,
-          })
-        ).filter(isLtmNoteShareable);
-        await recordLtmPackageRead(storage.root, "package_list", parsed.data.caller, notes.length);
-        return notes;
-      },
-    },
-  };
 }

@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- Long-Term Memory no longer offers the older way other Agents read memories. Slurp 0.4.8 and earlier stop adding memories to Creator posts; update Slurp to keep them.
+
 ## 1.5.8 — 2026-10-29
 
 - Other Agents that read memories, such as Slurp and Noodle, can ask for whole memories instead of the parts that fit what they are writing. The same memories are shared either way.
