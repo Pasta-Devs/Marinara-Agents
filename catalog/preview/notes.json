@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.1.2",
+          "date": "2026-10-29",
+          "notes": "- Home cleans your own generated looks and outfits as well as the love interests'. Originals stay in the Wardrobe.\n- On an Engine with corrected sprite cleanup, old cut-outs are rebuilt from the retained originals for free. The previous image stays visible until its replacement is ready.\n- Card-imported love interests use their card's Full Body → Neutral sprite as the likeness reference when available, then their painted base look, then the card avatar.\n- Every image of your persona reads their current Appearance, or the enabled Image Appearance Override, whole. Outfit changes keep that identity instead of reusing a stale generated description.\n- Empty Appearance uses your avatar and the requested clothing, with no invented body description or extra model call.\n- Otome Hearth's Home tab uses a heart icon.",
+          "highlight": true
+        },
+        {
           "version": "0.1.1",
           "date": "2026-10-29",
           "notes": "- **Begin** plays a prologue: one short scene of your protagonist's own life, just before the story opens, with no love interest in it. Chapter 1 picks up where it ends, and the Story screen offers it again.\n- **Phone** is now **Messages**, so it fits any world, and love interests write by whatever carries messages there.\n- **How it's written**, in setup and Settings → Content: your own instructions for every scene, message and note. Your persona's description reaches every story prompt whole.\n- Love interests stand without a backdrop: painted on a chroma matte, then cut out, as the Engine's sprites are.\n- The reader: fullscreen, a plain **Rewrite**, Ease off that fits, and long lines scroll as they type.",

@@ -1,8 +1,15 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { api } from "../../../lib/api-client";
+import { showConfirmDialog } from "../../../lib/app-dialogs";
+import { slpKeys } from "../../base/state/slp-query-keys";
+import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 import { Field, NumberSetting, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 import { ChoiceSetting } from "../../modules/settings/SlpSettingsInputs";
 import type { SlurpSettings } from "./slp-settings-contract";
+import { offerLtmSharing } from "./slp-ltm-sharing-offer";
 import { useSlurpCarryoverReach, useSlurpMemoryStatus } from "./slp-settings-hooks";
 
 /**
@@ -12,6 +19,24 @@ import { useSlurpCarryoverReach, useSlurpMemoryStatus } from "./slp-settings-hoo
 export function SlpEngineLinkPanel({ t, settings, update }: SlpBackstagePageProps) {
   const reach = useSlurpCarryoverReach(settings.carryoverModes.length > 0).data;
   const memoryStatus = useSlurpMemoryStatus(settings.flavourFromAgents).data?.status;
+  const queryClient = useQueryClient();
+  const offerSharing = () =>
+    offerLtmSharing({
+      read: () => api.get<{ longTermMemoryShareWithPackages?: boolean }>("/long-term-memory/settings"),
+      confirm: () =>
+        showConfirmDialog({
+          title: t("ui.slurp.settings.prompts.ltmSharingOfferTitle"),
+          message: t("ui.slurp.settings.prompts.ltmSharingOfferMessage"),
+          confirmLabel: t("ui.slurp.settings.prompts.ltmSharingOfferConfirm"),
+          cancelLabel: t("ui.slurp.settings.prompts.ltmSharingOfferCancel"),
+        }),
+      save: () => api.put("/long-term-memory/settings", { longTermMemoryShareWithPackages: true }),
+    })
+      .then((result) => {
+        // The server keeps the last recall's outcome, so a refetch would still say "off"; clear it until the next recall.
+        if (result === "enabled") queryClient.setQueryData([...slpKeys.settings(), "memory-status"], { status: null });
+      })
+      .catch((error) => toast.error(errorMessage(error)));
   return (
     <div className="space-y-4">
       <BackstagePageHeader
@@ -93,7 +118,10 @@ export function SlpEngineLinkPanel({ t, settings, update }: SlpBackstagePageProp
           label={t("ui.slurp.settings.prompts.flavourFromAgents")}
           detail={t("ui.slurp.settings.prompts.flavourFromAgentsDetail")}
           value={settings.flavourFromAgents}
-          onChange={(value) => update("flavourFromAgents", value)}
+          onChange={(value) => {
+            update("flavourFromAgents", value);
+            if (value) void offerSharing();
+          }}
         />
         {settings.flavourFromAgents && (
           <>

@@ -1,7 +1,7 @@
 import { SLURP2_LEGACY_RELEASES } from "./slp-release-archive";
 
 // The splash screen needs the shipped version and its public notes inside the client bundle.
-export const SLURP2_VERSION = "0.4.9";
+export const SLURP2_VERSION = "0.4.10";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -14,6 +14,13 @@ export interface Slurp2ReleaseEntry {
  * in-universe bullets per release (technical detail lives in CHANGELOG.md).
  */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.4.10",
+    date: "2026-10-29",
+    notes: [
+      'Turning on "What your other Agents know" now offers to turn on Long-Term Memory\'s sharing too, if it is off, so Creators can use your memories right away.',
+    ],
+  },
   {
     version: "0.4.9",
     date: "2026-10-29",

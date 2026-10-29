@@ -142,7 +142,7 @@ const CHAPTER = {
 };
 
 /** The M2a story routes, answered in memory by the server's rules (S/story/beats.ts). */
-function createStoryStub({ done = false, title = CHAPTER.title } = {}) {
+function createStoryStub({ done = false, title = CHAPTER.title, pendingCutouts = false } = {}) {
   const calls: Call[] = [];
   const now = () => new Date().toISOString();
   const limits: Json = {
@@ -207,6 +207,15 @@ function createStoryStub({ done = false, title = CHAPTER.title } = {}) {
     forge: { phase: "ready", steps: [] },
     starlight: 2000,
   };
+  const image = (colour: string) =>
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="64"><rect width="32" height="64" fill="${colour}"/></svg>`)}`;
+  const previousCutout = image("#9DB8F0");
+  const correctedCutout = image("#E7A6B8");
+  if (pendingCutouts) {
+    view.cutoutsPending = true;
+    view.lis[0].portrait = previousCutout;
+    view.lis[0].cut = [previousCutout];
+  }
   const index = {
     version: 1,
     runs: [{ runKey: RUN, title: "The Clockwork Masquerade", createdAt: now(), lastPlayedAt: null }],
@@ -359,7 +368,17 @@ function createStoryStub({ done = false, title = CHAPTER.title } = {}) {
     }
     return { status: 404, json: { error: `No stub for ${call.method} ${call.path}`, code: "not-found" } };
   };
-  return { calls, answer };
+  return {
+    calls,
+    answer,
+    previousCutout,
+    correctedCutout,
+    finishCutouts() {
+      delete view.cutoutsPending;
+      view.lis[0].portrait = correctedCutout;
+      view.lis[0].cut = [correctedCutout];
+    },
+  };
 }
 
 async function stubRoutes(page: Page, stub: ReturnType<typeof createStoryStub>) {
@@ -660,4 +679,33 @@ test("Otome Forge reader: a chapter with no title is named as untitled, never as
   await expect(root.locator("#of-story-continue")).toHaveText("Untitled chapter");
   await expect(root.getByRole("region", { name: "Untitled chapter" })).toBeVisible();
   await expect(root.getByRole("button", { name: "Continue: Untitled chapter" })).toBeVisible();
+});
+
+test("Otome Hearth polls a free cut-out replacement while keeping its previous image, stops when ready, and uses its heart tab icon", async ({
+  page,
+}, testInfo) => {
+  const stub = createStoryStub({ pendingCutouts: true });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.clock.install();
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  const avatar = root.locator(`img[src="${stub.previousCutout}"]`).first();
+  await expect(avatar).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Open Otome Hearth" }).locator("img")).toHaveAttribute(
+    "src",
+    /otome-hearth-tab-heart\.png/,
+  );
+  await page.screenshot({ path: testInfo.outputPath("heart-tab-and-pending-cutout.png") });
+  await page.clock.pauseAt(new Date(Date.now() + 60_000));
+  const reads = () =>
+    stub.calls.filter((call) => call.method === "GET" && call.path === `/api/otome-forge/runs/${RUN}`).length;
+  const before = reads();
+  stub.finishCutouts();
+  await page.clock.runFor(2500);
+  await expect(root.locator(`img[src="${stub.correctedCutout}"]`).first()).toBeVisible();
+  expect(reads()).toBeGreaterThan(before);
+  const completed = reads();
+  await page.clock.runFor(10_000);
+  expect(reads(), "ready cleanup stops polling without a model or paid image request").toBe(completed);
+  expect(stub.calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(0);
 });

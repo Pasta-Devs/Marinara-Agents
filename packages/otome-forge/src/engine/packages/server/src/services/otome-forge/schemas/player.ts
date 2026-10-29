@@ -12,6 +12,7 @@ import {
   defaultPronouns,
   field,
   isRecord,
+  normalizeCutouts,
   readFields,
   readWornOutfit,
   text,
@@ -29,6 +30,7 @@ const defaultPlayer = (): Player => ({
   goal: "",
   look: { identityLine: "", outfitLine: "" },
   outfits: [],
+  cutouts: {},
   noticed: null,
 });
 
@@ -64,6 +66,7 @@ export function normalizePlayer(data: unknown): Player {
       portraitRef: z.string().optional(),
       art: PaintSchema.optional(),
       outfits: (value) => validItems(OutfitSchema, value, OUTFITS_MAX),
+      cutouts: normalizeCutouts,
       wornOutfit: z.string().optional(),
       noticed: NoticedSchema.nullable(),
     },

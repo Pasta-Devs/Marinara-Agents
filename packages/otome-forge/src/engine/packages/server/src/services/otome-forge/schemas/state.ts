@@ -410,10 +410,10 @@ export function readyFaces(world: Pick<World, "images">, unit: Unit): Partial<Re
   return expressions as Partial<Record<Face, string>> | undefined;
 }
 
-/** The ready cut-out of `url` (art/cutout.ts: the look without its background), or undefined. */
+/** The cut-out of `url`, keeping an older derivative visible while a free replacement is pending. */
 export function readyCutout(unit: Pick<Unit, "cutouts">, url: string | undefined): string | undefined {
   const record = url ? unit.cutouts[url] : undefined;
-  return record?.state === "ready" && record.url ? record.url : undefined;
+  return record?.url;
 }
 
 /** Every image he stands on stage in (base look, worn look, ready faces): what the cut-outs are made of. */

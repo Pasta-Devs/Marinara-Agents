@@ -12,7 +12,6 @@ import type {
   Bible,
   FixedLines,
   LinePacks,
-  Paint,
   StageLines,
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -33,6 +32,7 @@ import {
   defaultPronouns,
   field,
   isRecord,
+  normalizeCutouts,
   readFields,
   readWornOutfit,
   text,
@@ -192,17 +192,6 @@ export function normalizeLinePacks(value: unknown): LinePacks | undefined {
   }
   const fixed = FixedLinesSchema.safeParse(value.fixed);
   return { stages, fixed: fixed.success ? fixed.data : null };
-}
-
-/** Stored cut-out records, keyed by the look's URL; a bad record is dropped (the cut-out is made again). */
-function normalizeCutouts(value: unknown): Record<string, Paint> {
-  const cutouts: Record<string, Paint> = {};
-  if (!isRecord(value)) return cutouts;
-  for (const [url, record] of Object.entries(value)) {
-    const parsed = PaintSchema.safeParse(record);
-    if (url && parsed.success) cutouts[url] = parsed.data;
-  }
-  return cutouts;
 }
 
 const defaultUnit = (): Unit => ({

@@ -20,13 +20,12 @@ import type {
   Presentation,
   World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import { generateJson, readOrGenerate } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { isLiId, playerId, runDocTarget, unitId, worldId } from "../ids.js";
 import { normalizePlayer } from "../schemas/player.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
-import { normalizePlayerLook, PlayerLookSchema, playerLookMessages, readPersona } from "../setup/prompts.js";
+import { readPersona } from "../setup/prompts.js";
 import type { DocTarget, Normalize, OtomeStore } from "../store.js";
 import {
   GALLERY_REF_PREFIX,
@@ -282,62 +281,36 @@ export interface LookSubject {
 }
 
 /**
- * The protagonist's look lines: saved ones, else the persona's (image) appearance, else P4 writes them. Runs in the
- * run's foreground queue and re-reads first, so two paints never write it twice.
+ * The current persona's selected appearance, including empty, with the action's separate clothing. Only an
+ * unavailable persona keeps its previously saved identity; no description is invented for a missing Appearance.
  */
-async function ensurePlayerLook(
-  deps: ArtDeps,
-  runId: string,
-  world: World,
-  player: Player,
-  debugMode: boolean,
-): Promise<Player["look"]> {
-  if (player.look.identityLine.trim()) return player.look;
-  const read = async () => {
-    const saved = await deps.store.readDoc(playerId(runId), normalizePlayer);
-    return saved?.look.identityLine.trim() ? saved.look : null;
-  };
-  return readOrGenerate(runId, read, async () => {
-    const persona = await readPersona(deps.runtime, player.personaId);
-    // ponytail: a persona appearance is used as written, even when it is not English; the upgrade path is GF's
-    // English check (server.mjs `Da`) sending a non-English one through P4 as well.
-    const look = persona?.appearance
-      ? { identityLine: persona.appearance, outfitLine: "" }
-      : (
-          await generateJson(deps, {
-            runId,
-            job: "structured",
-            label: "player-look",
-            messages: playerLookMessages({ world, player, persona }),
-            schema: PlayerLookSchema,
-            normalize: normalizePlayerLook,
-            temperature: 0.3,
-            maxTokens: 400,
-            debugMode,
-            lane: "foreground",
-          })
-        ).value;
-    const saved = await deps.store.updateDoc(runDocTarget("player", playerId(runId)), normalizePlayer, (current) => ({
-      ...current,
-      look,
-    }));
-    if (!saved) throw notFound();
+async function ensurePlayerLook(deps: ArtDeps, runId: string, player: Player): Promise<Player["look"]> {
+  const persona = await readPersona(deps.runtime, player.personaId).catch(() => null);
+  if (persona) {
+    const look = { ...player.look, identityLine: persona.appearance };
+    if (look.identityLine !== player.look.identityLine) {
+      await deps.store.updateDoc(runDocTarget("player", playerId(runId)), normalizePlayer, (current) => ({
+        ...current,
+        look: { ...current.look, identityLine: persona.appearance },
+      }));
+    }
     return look;
-  });
+  }
+  return player.look;
 }
 
-/** Whose look `owner` names, as a look prompt draws them (the protagonist's lines are written first if missing). */
+/** Whose look `owner` names, with the protagonist's current authored image appearance. */
 export async function readSubject(
   deps: ArtDeps,
   runId: string,
-  world: World,
+  _world: World,
   owner: LookOwner,
-  debugMode: boolean,
+  _debugMode: boolean,
 ): Promise<LookSubject> {
   if (owner === "player") {
     const player = await deps.store.readDoc(playerId(runId), normalizePlayer);
     if (!player) throw notFound();
-    const look = await ensurePlayerLook(deps, runId, world, player, debugMode);
+    const look = await ensurePlayerLook(deps, runId, player);
     return {
       name: player.name || "Protagonist",
       ...look,
@@ -379,7 +352,7 @@ export async function lookPromptFor(
   if (!world) throw notFound();
   const subject = await readSubject(deps, runId, world, owner, debugMode);
   const style = await worldStyle(imagesOf(deps), world.images);
-  return { ...lookPrompt({ ...subject, world, style, matte: owner !== "player" }, edited), world, subject };
+  return { ...lookPrompt({ ...subject, world, style, matte: true }, edited), world, subject };
 }
 
 // ── The record ──

@@ -25,6 +25,7 @@ import { OtomeForgeError } from "../http.js";
 import { beatId, runDocTarget, stateId } from "../ids.js";
 import { STATE_LIMITS, keepNewest, normalizeState, readRun } from "../schemas/state.js";
 import { normalizeBeat } from "../schemas/story.js";
+import { withPersonaImageAppearance } from "../setup/prompts.js";
 import { readBeat, readChapter } from "../story/canon.js";
 import { GALLERY_REF_PREFIX, worldStyle, type ImageSubject } from "./image-client.js";
 import {
@@ -155,6 +156,7 @@ export function cgSubjects(cast: readonly string[], units: readonly Unit[], play
 async function buildCg(deps: ArtDeps, runId: string, beat: Beat, edited: Partial<ImagePrompt> = {}) {
   const run = await readRun(deps.store, runId);
   if (!run) throw runNotFound();
+  run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const cg = beat.cg;
   if (!cg) throw noCg();
   const subjects = cgSubjects(cg.cast, run.units, run.player);

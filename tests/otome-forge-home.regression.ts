@@ -36,9 +36,11 @@ import { typingDelay } from "../packages/otome-forge/src/engine/packages/client/
 import {
   createCutoutClient,
   cutoutsSettled,
+  queueCutouts,
   type CutoutClient,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
 import { createBackgroundQueue } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/background-queue.ts";
+import { galleryRefIds } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
 import { COMFORT_RULE } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/content-contract.ts";
 import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import {
@@ -661,6 +663,382 @@ test("the worn look is cut out once; a failed cut-out pans and is never tried ag
   assert.equal(cuts.length, 2);
 });
 
+test("a corrected host replaces an old cut-out from its retained original, once, without deleting either image", async () => {
+  const cuts: string[] = [];
+  const deleted: string[] = [];
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const cutouts: CutoutClient = {
+    cleanupRevision: async () => 2,
+    async cutOut(url) {
+      cuts.push(url);
+      await gate;
+      return { id: "preserved", url: "/api/global-gallery/file/preserved.png", cleanupRevision: 2 };
+    },
+    async deleteGalleryImage(id) {
+      deleted.push(id);
+      return true;
+    },
+  };
+  const t = await homeWorld("r-cutupgrade-aaaaaa", {}, { cutouts });
+  const original = "/api/global-gallery/file/feathered-original.png";
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    portrait: original,
+    portraitRef: "global-gallery:original",
+    cutouts: {
+      [original]: {
+        state: "ready",
+        at: "2026-10-28T09:00:00.000Z",
+        url: "/old-cut.png",
+        ref: "global-gallery:old",
+        previousRefs: ["global-gallery:older"],
+      },
+    },
+  }));
+  const [one, two] = await Promise.all([t.call("GET", "/runs/:run/home"), t.call("GET", "/runs/:run/home")]);
+  assert.equal(one.body.look.cutoutState, "pending", "the client polls for the corrected derivative");
+  assert.equal(
+    two.body.look.cutout,
+    "/old-cut.png",
+    "the previous derivative stays visible while its replacement is pending",
+  );
+  await settle(t.runId, () => cuts.length === 1);
+  const pending = await t.unit(KAI);
+  assert.equal(pending.portrait, original, "the paid original stays untouched");
+  assert.equal(pending.cutouts[original]!.cleanupRevision, undefined, "a revision is not advanced before success");
+  release();
+  await cutoutsSettled();
+  const ready = (await t.call("GET", "/runs/:run/home")).body.look;
+  assert.equal(ready.cutout, "/api/global-gallery/file/preserved.png");
+  assert.equal((await t.unit(KAI)).cutouts[original]!.cleanupRevision, 2);
+  const stored = await t.unit(KAI);
+  assert.deepEqual(stored.cutouts[original]!.previousRefs, ["global-gallery:older", "global-gallery:old"]);
+  assert.deepEqual(
+    new Set(galleryRefIds(stored)),
+    new Set(["original", "preserved", "older", "old"]),
+    "existing run deletion still finds every retained gallery image",
+  );
+  await cutoutsSettled();
+  assert.deepEqual(cuts, [original], "cleanup reads the retained original once, never the damaged derivative");
+  assert.deepEqual(deleted, [], "original and previous derivative bytes are retained");
+});
+
+test("an older host keeps a cached cut-out; a failed refresh keeps it visible without persisting a success revision", async () => {
+  const host: { revision?: number } = {};
+  const cuts: string[] = [];
+  const cutouts: CutoutClient = {
+    cleanupRevision: async () => host.revision,
+    async cutOut(url) {
+      cuts.push(url);
+      throw new Error("temporary cleanup failure");
+    },
+    deleteGalleryImage: async () => assert.fail("no image may be deleted"),
+  };
+  const t = await homeWorld("r-cutfallback-bbbbbb", {}, { cutouts });
+  const original = "/api/global-gallery/file/original.png";
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    portrait: original,
+    cutouts: { [original]: { state: "ready", at: "old", url: "/old-cut.png", ref: "global-gallery:old" } },
+  }));
+  assert.equal((await t.call("GET", "/runs/:run/home")).body.look.cutout, "/old-cut.png");
+  await cutoutsSettled();
+  assert.deepEqual(cuts, [], "absence of the new host revision never invalidates the cache");
+  host.revision = 2;
+  assert.equal((await t.call("GET", "/runs/:run/home")).body.look.cutoutState, "pending");
+  await cutoutsSettled();
+  assert.equal((await t.call("GET", "/runs/:run/home")).body.look.cutout, "/old-cut.png");
+  await cutoutsSettled();
+  assert.deepEqual(cuts, [original], "a failed refresh is not retried by every Home poll");
+  const saved = (await t.unit(KAI)).cutouts[original]!;
+  assert.equal(saved.state, "ready");
+  assert.equal(
+    saved.cleanupRevision,
+    undefined,
+    "a restart can retry; no failed-attempt revision locks old art forever",
+  );
+});
+
+test("the loopback client requests repaired built-in keying only when the host advertises it", async () => {
+  for (const revision of [undefined, 2]) {
+    const bodies: Array<Record<string, unknown>> = [];
+    let statusReads = 0;
+    const client = createCutoutClient({
+      baseUrl: "http://127.0.0.1:9",
+      fetch: (async (url, init) => {
+        const path = String(url).replace("http://127.0.0.1:9", "");
+        if (path === "/api/sprites/cleanup/status") {
+          statusReads += 1;
+          return Response.json({ cleanupRevision: revision });
+        }
+        if (path === "/original.png")
+          return new Response("original bytes", { headers: { "content-type": "image/png" } });
+        if (path === "/api/sprites/cleanup") {
+          bodies.push(JSON.parse(String(init?.body)));
+          return Response.json({
+            cells: [{ base64: Buffer.from("cut-out bytes").toString("base64") }],
+            cleanupRevision: revision,
+          });
+        }
+        if (path === "/api/global-gallery/upload") return Response.json({ id: "cut", url: "/cut.png" });
+        assert.fail(`unexpected fetch ${path}`);
+      }) as typeof globalThis.fetch,
+    });
+    const image = await client.cutOut("/original.png");
+    await client.cleanupRevision?.();
+    assert.equal(statusReads, 1, "status is cached per client/process");
+    assert.equal(bodies[0]!.engine, revision === 2 ? "builtin" : "auto");
+    assert.equal(image.cleanupRevision, revision);
+  }
+});
+
+test("Me cleans both an existing persona base look and a newly worn outfit, retaining their originals and avatar", async () => {
+  const cuts: string[] = [];
+  const t = await homeWorld(
+    "r-personacut-aaaaaa",
+    {},
+    {
+      cutouts: {
+        cleanupRevision: async () => 2,
+        async cutOut(url) {
+          cuts.push(url);
+          return { url: `${url}.cut.png`, id: `persona-cut-${cuts.length}`, cleanupRevision: 2 };
+        },
+        deleteGalleryImage: async () => assert.fail("originals must remain"),
+      },
+    },
+  );
+  const original = "/api/global-gallery/file/persona-grey-base.png";
+  const worn = "/api/global-gallery/file/persona-new-outfit.png";
+  await t.store.updateDoc(runDocTarget("player", playerId(t.runId)), normalizePlayer, (player) => ({
+    ...player,
+    portrait: original,
+    outfits: [{ id: "my-wardrobe-0-a1", name: "New look", outfitLine: "red scarf", url: worn, at: "now" }],
+  }));
+  await t.call("POST", "/runs/:run/home/set", { body: { show: "me" } });
+  assert.equal((await t.call("GET", "/runs/:run/home")).body.look.cutoutState, "pending");
+  await cutoutsSettled();
+  assert.equal((await t.call("GET", "/runs/:run/home")).body.look.cutout, `${original}.cut.png`);
+  await t.store.updateDoc(runDocTarget("player", playerId(t.runId)), normalizePlayer, (player) => ({
+    ...player,
+    wornOutfit: "my-wardrobe-0-a1",
+  }));
+  assert.equal((await t.call("GET", "/runs/:run/home")).body.look.cutoutState, "pending");
+  await cutoutsSettled();
+  assert.equal((await t.call("GET", "/runs/:run/home")).body.look.cutout, `${worn}.cut.png`);
+  const player = (await t.store.readDoc(playerId(t.runId), normalizePlayer))!;
+  assert.equal(player.portrait, original);
+  assert.equal(player.outfits[0]!.url, worn);
+  assert.equal(player.cutouts?.[original]?.cleanupRevision, 2);
+  assert.equal(player.cutouts?.[worn]?.cleanupRevision, 2);
+  assert.deepEqual(cuts, [original, worn]);
+});
+
+test("a transient cleanup-status failure can recover on the next read, while definitive older-host absence stays cached", async () => {
+  for (const failure of ["network", "timeout", "server", "json", "older"] as const) {
+    let reads = 0;
+    const client = createCutoutClient({
+      fetch: (async () => {
+        reads += 1;
+        if (reads === 1) {
+          if (failure === "network") throw new Error("connection reset");
+          if (failure === "timeout") throw new DOMException("status timed out", "TimeoutError");
+          if (failure === "server") return new Response("busy", { status: 503 });
+          if (failure === "json") return new Response("incomplete JSON");
+          return new Response("older host", { status: 404 });
+        }
+        return Response.json({ cleanupRevision: 2 });
+      }) as typeof globalThis.fetch,
+    });
+    assert.equal(await client.cleanupRevision?.(), undefined);
+    assert.equal(await client.cleanupRevision?.(), failure === "older" ? undefined : 2);
+    assert.equal(reads, failure === "older" ? 1 : 2);
+  }
+});
+
+test("concurrent status reads share one request and later Home reads recover into real built-in cleanup", async () => {
+  let reads = 0;
+  let release = (_response: Response) => {};
+  const response = new Promise<Response>((resolve) => (release = resolve));
+  const coalesced = createCutoutClient({
+    fetch: (async () => {
+      reads += 1;
+      return response;
+    }) as typeof globalThis.fetch,
+  });
+  const first = coalesced.cleanupRevision?.();
+  const second = coalesced.cleanupRevision?.();
+  assert.equal(reads, 1);
+  release(Response.json({ cleanupRevision: 2 }));
+  assert.deepEqual(await Promise.all([first, second]), [2, 2]);
+
+  const original = "/api/global-gallery/file/original-after-transient.png";
+  let statusReads = 0;
+  const cleanup: Array<{ engine: string; cells: Array<{ base64: string }> }> = [];
+  const client = createCutoutClient({
+    baseUrl: "http://127.0.0.1:9",
+    fetch: (async (url, init) => {
+      const path = String(url).replace("http://127.0.0.1:9", "");
+      if (path === "/api/sprites/cleanup/status") {
+        statusReads += 1;
+        return statusReads === 1 ? new Response("busy", { status: 503 }) : Response.json({ cleanupRevision: 2 });
+      }
+      if (path === original) return new Response("raw original", { headers: { "content-type": "image/png" } });
+      if (path === "/api/sprites/cleanup") {
+        cleanup.push(JSON.parse(String(init?.body)));
+        return Response.json({
+          cells: [{ base64: Buffer.from("preserved cut-out").toString("base64") }],
+          cleanupRevision: 2,
+        });
+      }
+      if (path === "/api/global-gallery/upload") return Response.json({ id: "new-cut", url: "/new-cut.png" });
+      assert.fail(`unexpected fetch ${path}`);
+    }) as typeof globalThis.fetch,
+  });
+  const t = await homeWorld("r-cutretry-cccccc", {}, { cutouts: client });
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    portrait: original,
+    cutouts: { [original]: { state: "ready", at: "old", url: "/previous-cut.png" } },
+  }));
+  assert.equal((await t.call("GET", "/runs/:run/home")).body.look.cutout, "/previous-cut.png");
+  assert.equal(cleanup.length, 0, "the failed status probe preserves the old cache");
+  assert.equal((await t.call("GET", "/runs/:run/home")).body.look.cutoutState, "pending");
+  await cutoutsSettled();
+  assert.equal((await t.call("GET", "/runs/:run/home")).body.look.cutout, "/new-cut.png");
+  assert.equal(statusReads, 2);
+  assert.equal(cleanup.length, 1);
+  assert.equal(cleanup[0]!.engine, "builtin");
+  assert.equal(Buffer.from(cleanup[0]!.cells[0]!.base64.split(",")[1]!, "base64").toString(), "raw original");
+  assert.equal((await t.unit(KAI)).cutouts[original]!.cleanupRevision, 2);
+});
+
+test("an auto AI cut-out after two failed status reads remains eligible for repaired built-in cleanup", async () => {
+  const original = "/api/global-gallery/file/original-after-two-failures.png";
+  let statusReads = 0;
+  const cleanup: Array<{ engine: string; cells: Array<{ base64: string }> }> = [];
+  const client = createCutoutClient({
+    baseUrl: "http://127.0.0.1:9",
+    fetch: (async (url, init) => {
+      const path = String(url).replace("http://127.0.0.1:9", "");
+      if (path === "/api/sprites/cleanup/status") {
+        statusReads += 1;
+        return statusReads <= 2 ? new Response("busy", { status: 503 }) : Response.json({ cleanupRevision: 2 });
+      }
+      if (path === original) return new Response("raw original", { headers: { "content-type": "image/png" } });
+      if (path === "/api/sprites/cleanup") {
+        const body = JSON.parse(String(init?.body));
+        cleanup.push(body);
+        return Response.json({
+          cells: [{ base64: Buffer.from("cut-out bytes").toString("base64") }],
+          engine: body.engine,
+          backgroundRemoverProcessed: body.engine === "auto" ? 1 : 0,
+          builtinProcessed: body.engine === "builtin" ? 1 : 0,
+          cleanupRevision: 2,
+        });
+      }
+      if (path === "/api/global-gallery/upload") {
+        const id = cleanup.at(-1)!.engine === "auto" ? "ai-cut" : "builtin-cut";
+        return Response.json({ id, url: `/api/global-gallery/file/${id}.png` });
+      }
+      assert.fail(`unexpected fetch ${path}`);
+    }) as typeof globalThis.fetch,
+  });
+  const t = await storyWorld({ runKey: "r-cutautoretry-aaaaaa" });
+  const deps = { ...t.deps, cutouts: client };
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    portrait: original,
+    cutouts: {},
+  }));
+  const read = async () => (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!;
+  await queueCutouts(deps, t.runId, await read(), [original]);
+  await cutoutsSettled();
+  const auto = (await read()).cutouts[original]!;
+  assert.equal(statusReads, 2, "both the queue and actual cleanup status probes failed");
+  assert.deepEqual(
+    cleanup.map((body) => body.engine),
+    ["auto"],
+  );
+  assert.equal(auto.state, "ready");
+  assert.equal(auto.url, "/api/global-gallery/file/ai-cut.png");
+  assert.equal(auto.cleanupRevision, undefined, "available revision metadata cannot certify an AI derivative");
+
+  const pending = await queueCutouts(deps, t.runId, await read(), [original]);
+  assert.equal(pending.cutouts[original]!.state, "pending");
+  assert.equal(pending.cutouts[original]!.url, auto.url, "the AI derivative stays visible during the repair");
+  await cutoutsSettled();
+  const repaired = await read();
+  assert.equal(statusReads, 3, "the recovered revision is cached for the explicit built-in request");
+  assert.deepEqual(
+    cleanup.map((body) => body.engine),
+    ["auto", "builtin"],
+  );
+  assert.ok(
+    cleanup.every((body) => Buffer.from(body.cells[0]!.base64.split(",")[1]!, "base64").toString() === "raw original"),
+  );
+  assert.equal(repaired.portrait, original);
+  assert.equal(repaired.cutouts[original]!.url, "/api/global-gallery/file/builtin-cut.png");
+  assert.equal(repaired.cutouts[original]!.cleanupRevision, 2);
+  assert.deepEqual(repaired.cutouts[original]!.previousRefs, ["global-gallery:ai-cut"]);
+  await queueCutouts(deps, t.runId, repaired, [original]);
+  await cutoutsSettled();
+  assert.equal(cleanup.length, 2, "the successfully repaired derivative stays cached");
+  assert.equal(t.calls.length, 0, "free cleanup never invokes a model");
+});
+
+test("a refresh left pending by a restart keeps its retained derivative if resumed cleanup fails, for both people", async () => {
+  for (const show of ["him", "me"] as const) {
+    const t = await homeWorld(
+      `r-resumecut-${show === "him" ? "aaaaaa" : "bbbbbb"}`,
+      {},
+      {
+        cutouts: {
+          cleanupRevision: async () => 2,
+          cutOut: async () => {
+            throw new Error("temporary cleanup failure");
+          },
+          deleteGalleryImage: async () => assert.fail("retained art must remain"),
+        },
+      },
+    );
+    const original = `/api/global-gallery/file/${show}-original.png`;
+    const previous = {
+      state: "pending" as const,
+      at: "before-restart",
+      url: "/previous-cut.png",
+      ref: "global-gallery:previous",
+      cleanupRevision: 1,
+    };
+    if (show === "him") {
+      await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+        ...unit,
+        portrait: original,
+        cutouts: { [original]: previous },
+      }));
+    } else {
+      await t.store.updateDoc(runDocTarget("player", playerId(t.runId)), normalizePlayer, (player) => ({
+        ...player,
+        portrait: original,
+        cutouts: { [original]: previous },
+      }));
+      await t.call("POST", "/runs/:run/home/set", { body: { show } });
+    }
+    await t.call("GET", "/runs/:run/home");
+    await cutoutsSettled();
+    assert.equal((await t.call("GET", "/runs/:run/home")).body.look.cutout, previous.url);
+    const person = show === "him" ? await t.unit(KAI) : (await t.store.readDoc(playerId(t.runId), normalizePlayer))!;
+    assert.equal(person.cutouts?.[original]?.state, "ready");
+    assert.equal(
+      person.cutouts?.[original]?.cleanupRevision,
+      1,
+      "failure never marks the new implementation as successful",
+    );
+    assert.equal(person.portrait, original);
+  }
+});
+
 test("Home's faces are the ready set on his worn look, read through the kit, each cut out in turn", async () => {
   const cuts: string[] = [];
   const cutouts: CutoutClient = {
@@ -797,7 +1175,9 @@ test("Home shows the chosen love interest or the protagonist, and counts unread 
   }));
   const me = (await t.call("GET", "/runs/:run/home")).body;
   assert.equal(me.li, MIR);
-  assert.deepEqual(me.look, { url: "/api/global-gallery/file/ines.png", source: "look", cutoutState: "uncut" });
+  assert.deepEqual(me.look, { url: "/api/global-gallery/file/ines.png", source: "look", cutoutState: "pending" });
+  await cutoutsSettled();
+  assert.equal((await t.call("GET", "/runs/:run/home")).body.look.cutout, "/x.png");
 
   await t.store.mutateDoc(runDocTarget("chat", chatId(t.runId, KAI)), normalizeThread, () => ({
     version: 1,

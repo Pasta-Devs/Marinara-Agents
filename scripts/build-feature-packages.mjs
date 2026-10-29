@@ -494,7 +494,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.4.9",
+    version: "0.4.10",
     minEngineVersion: "2.4.6",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
@@ -865,7 +865,7 @@ const features = [
   },
   {
     id: "otome-forge",
-    version: "0.1.1",
+    version: "0.1.2",
     minEngineVersion: "2.5.1",
     // The browser tab's openConnection prop and the debugMode field of /generate/raw arrived in capability API 1.386.
     capabilityApi: Object.freeze({ major: 1, minor: 386 }),
@@ -884,14 +884,14 @@ const features = [
     packageSourceRoot: otomeForgeSourceRoot,
     ownedSourcePaths: otomeForgeOwnedSourcePaths,
     // The fonts are embedded in client.js as data: URIs; their licence ships beside them.
-    assetPaths: ["otome-hearth-icon.png", "fonts/OFL.txt"],
+    assetPaths: ["otome-hearth-icon.png", "otome-hearth-tab-heart.png", "fonts/OFL.txt"],
     libraryHidden: true,
     contributions: {
       slots: ["home-browser-tab"],
       homeBrowserTab: {
         label: "Otome Hearth",
         ariaLabel: "Open Otome Hearth",
-        iconPaths: ["otome-hearth-icon.png"],
+        iconPaths: ["otome-hearth-tab-heart.png"],
       },
     },
   },

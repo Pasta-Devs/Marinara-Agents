@@ -332,6 +332,66 @@ async function main() {
     "the brief's tracker lines no longer read Long-Term Memory's storage",
   );
 
+  // Turning on "What your other Agents know" offers to turn on Long-Term Memory's sharing (#1853).
+  const { offerLtmSharing } = await import(
+    pathToFileURL(join(root, "client/src/slp/features/settings/slp-ltm-sharing-offer.ts")).href
+  );
+  const offer = (read: () => Promise<unknown>, answer: boolean) => {
+    const log = { confirm: 0, save: 0 };
+    const result = offerLtmSharing({
+      read,
+      confirm: async () => (log.confirm++, answer),
+      save: async () => void log.save++,
+    });
+    return result.then((outcome: string) => ({ outcome, ...log }));
+  };
+  assert.deepEqual(await offer(async () => ({ longTermMemoryShareWithPackages: false }), true), {
+    outcome: "enabled",
+    confirm: 1,
+    save: 1,
+  });
+  assert.deepEqual(await offer(async () => ({ longTermMemoryShareWithPackages: false }), false), {
+    outcome: "declined",
+    confirm: 1,
+    save: 0,
+  });
+  assert.deepEqual(await offer(async () => ({ longTermMemoryShareWithPackages: true }), true), {
+    outcome: "skipped",
+    confirm: 0,
+    save: 0,
+  });
+  assert.deepEqual(
+    await offer(async () => {
+      throw new Error("Long-Term Memory is not installed");
+    }, true),
+    { outcome: "skipped", confirm: 0, save: 0 },
+    "a missing Long-Term Memory asks nothing",
+  );
+  await assert.rejects(
+    offerLtmSharing({
+      read: async () => ({ longTermMemoryShareWithPackages: false }),
+      confirm: async () => true,
+      save: async () => {
+        throw new Error("save failed");
+      },
+    }),
+    /save failed/u,
+    "a failed save reaches the panel",
+  );
+  const panel = client("features/settings/SlpEngineLinkPanel.tsx");
+  assert.match(
+    panel,
+    /update\("flavourFromAgents", value\);\s*if \(value\) void offerSharing\(\);/u,
+    "the offer runs only when the switch goes on",
+  );
+  assert.match(
+    panel,
+    /setQueryData\(\[\.\.\.slpKeys\.settings\(\), "memory-status"\], \{ status: null \}\)/u,
+    "a stale off line goes once sharing is on",
+  );
+  assert.match(panel, /cancelLabel: t\("ui\.slurp\.settings\.prompts\.ltmSharingOfferCancel"\)/u);
+  assert.match(panel, /api\.put\("\/long-term-memory\/settings", \{ longTermMemoryShareWithPackages: true \}\)/u);
+
   rmSync(storeDir, { recursive: true, force: true });
   console.log("slurp2 ltm recall regression OK");
 }
