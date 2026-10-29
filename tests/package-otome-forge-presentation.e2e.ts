@@ -274,8 +274,7 @@ const posts = (calls: Call[], suffix: string) =>
 
 /** Goes on once the line has typed itself out (waiting, never racing the typing: see the reader spec's next). */
 async function next(root: Locator) {
-  const more = root.getByRole("button", { name: "More reader controls" });
-  if ((await more.isVisible()) && (await more.getAttribute("aria-expanded")) === "true") await more.click();
+  await setReaderControlsExpanded(root, false);
   const button = root.locator(".of-next");
   await expect(button).toHaveAttribute("data-done", "true");
   await button.click();
@@ -283,9 +282,9 @@ async function next(root: Locator) {
 
 const line = (root: Locator) => root.locator(".of-dialogue .of-line");
 
-async function revealReaderControls(root: Locator) {
+async function setReaderControlsExpanded(root: Locator, expanded = true) {
   const more = root.getByRole("button", { name: "More reader controls" });
-  if ((await more.isVisible()) && (await more.getAttribute("aria-expanded")) === "false") await more.click();
+  if ((await more.isVisible()) && (await more.getAttribute("aria-expanded")) !== String(expanded)) await more.click();
 }
 
 /** The cues music was generated for, in order of their names; a cue made twice shows twice. */
@@ -575,7 +574,7 @@ for (const refused of ["Rewrite", "Ease off"] as const) {
     await root.getByRole("button", { name: "Begin Cassian’s next chapter" }).click();
     await expect(line(root)).toContainText("The workshop smells of oil and rain.");
 
-    await revealReaderControls(root);
+    await setReaderControlsExpanded(root);
     if (refused === "Rewrite") await root.getByRole("button", { name: /Rewrite/u }).click();
     else {
       await root.getByRole("button", { name: "Ease off" }).click();
@@ -599,6 +598,7 @@ for (const refused of ["Rewrite", "Ease off"] as const) {
     await expect(root.getByRole("button", { name: /Rewrite/u })).toHaveCount(0);
     await expect(root.getByRole("button", { name: "Ease off" })).toHaveCount(0);
     // Back on the story screen, the rupture's banner offers Make it right with him.
+    await setReaderControlsExpanded(root, false);
     await held.getByRole("button", { name: "Back to the story" }).click();
     const rupture = root.getByRole("region", { name: "Cassian is keeping his distance" });
     await expect(rupture.getByRole("button", { name: "Make it right with Cassian" })).toBeVisible();
@@ -1353,7 +1353,7 @@ test("Otome Forge reader: a CG unlocks once seen, faces swap, lines are voiced, 
   // Her thought is silent; the backlog replays his line with its cache key.
   await next(root);
   await expect(root.locator(".of-line--thought")).toContainText("I should have stayed away.");
-  await revealReaderControls(root);
+  await setReaderControlsExpanded(root);
   await root.getByRole("button", { name: "Backlog" }).click();
   const backlog = page.getByRole("dialog", { name: "Backlog" });
   await expect(backlog.getByRole("button", { name: /Play .*line/u })).toHaveCount(1);
@@ -1516,14 +1516,22 @@ test("Otome Forge reader: a reviewed key-image prompt stops Auto and paints the 
   await expect(line(root)).toContainText("Stay, then.");
 
   // The review is a dialog, so it stops Auto as the Backlog does: the line waits while the prompt is read.
-  await revealReaderControls(root);
+  await setReaderControlsExpanded(root);
   const auto = root.getByRole("button", { name: "Auto", exact: true });
   await auto.click();
   await expect(auto).toHaveAttribute("aria-pressed", "true");
+  await setReaderControlsExpanded(root, false);
   await root.getByRole("button", { name: "Paint this moment" }).click();
   const review = page.getByRole("dialog", { name: "Paint: A moment to keep" });
   await expect(review).toBeVisible();
-  await expect(auto).toHaveAttribute("aria-pressed", "false");
+  // Both responsive copies reflect the same stopped Auto state, including the now-collapsed phone disclosure.
+  await expect
+    .poll(() =>
+      root
+        .locator('button[aria-label="Auto"]')
+        .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-pressed"))),
+    )
+    .toEqual(["false", "false"]);
   // Longer than Auto's pause on this line (lib/reader-state.ts autoDelay: 1.6 s and 48 ms a character).
   await page.waitForTimeout(3_600);
   await expect(line(root)).toContainText("Stay, then.");

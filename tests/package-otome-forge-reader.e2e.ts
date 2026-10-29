@@ -447,8 +447,7 @@ async function hold(page: Page, url: string) {
  * too far (CI's real-Engine runner).
  */
 async function next(root: Locator) {
-  const more = root.getByRole("button", { name: "More reader controls" });
-  if ((await more.isVisible()) && (await more.getAttribute("aria-expanded")) === "true") await more.click();
+  await setReaderControlsExpanded(root, false);
   const button = root.locator(".of-next");
   await expect(button).toHaveAttribute("data-done", "true");
   await button.click();
@@ -456,9 +455,9 @@ async function next(root: Locator) {
 
 const line = (root: Locator) => root.locator(".of-dialogue .of-line");
 
-async function revealReaderControls(root: Locator) {
+async function setReaderControlsExpanded(root: Locator, expanded = true) {
   const more = root.getByRole("button", { name: "More reader controls" });
-  if ((await more.isVisible()) && (await more.getAttribute("aria-expanded")) === "false") await more.click();
+  if ((await more.isVisible()) && (await more.getAttribute("aria-expanded")) !== String(expanded)) await more.click();
 }
 
 /** The same with the keyboard (→), from the focused Next button (or wherever focus is). */
@@ -540,7 +539,7 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   await page.waitForTimeout(300);
   expect(endReports()).toBe(1);
   await expect(line(root)).toContainText("Stay, then.");
-  await revealReaderControls(root);
+  await setReaderControlsExpanded(root);
   await expect(root.getByRole("button", { name: "Ease off" }), "the scene is not counted as read yet").toBeVisible();
 
   // The backlog keeps a favourite line.
@@ -571,7 +570,7 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   // reading and Not now leave the dialog open.
   const writes = posts(stub, "/beats/1").length;
   const easing = await hold(page, "**/beats/1/ease-off");
-  await revealReaderControls(root);
+  await setReaderControlsExpanded(root);
   await root.getByRole("button", { name: "Ease off" }).click();
   const ease = page.getByRole("dialog", { name: "Ease off?" });
   await ease.getByRole("button", { name: "Ease off" }).click();
@@ -602,13 +601,15 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   const big = root.getByRole("group", { name: "A choice that lasts" });
   await expect(big).toContainText("It can’t be undone.");
   // A choice waiting at the last line keeps Ease off; once the scene's end is saved, the server would refuse it.
-  await revealReaderControls(root);
+  await setReaderControlsExpanded(root);
   const easeOff = root.getByRole("button", { name: "Ease off" });
   await expect(easeOff).toBeVisible();
+  await setReaderControlsExpanded(root, false);
   await big.getByRole("button", { name: "Stay with him." }).click();
   await expect(line(root)).toContainText("I’m still here.");
   await expect.poll(() => posts(stub, "/beats/2/read").length).toBeGreaterThan(0);
   await expect(easeOff).toHaveCount(0);
+  await expect(root.getByRole("button", { name: "Ease off", includeHidden: true })).toHaveCount(0);
   await next(root);
   await expect(root.getByRole("heading", { name: "Chapter complete" })).toBeFocused();
   await expect(root.getByText("+160 Starlight")).toBeVisible();
@@ -647,10 +648,11 @@ test("Otome Forge reader: a replay at reduced motion offers the first choice aga
       .first()
       .evaluate((element) => getComputedStyle(element).transitionDuration),
   ).toBe("0s");
-  await revealReaderControls(root);
+  await setReaderControlsExpanded(root);
   await root.getByRole("button", { name: "Skip what you’ve read" }).click();
   const choice = root.getByRole("group", { name: "What do you do?" });
   await expect(choice).toContainText("Your first choice");
+  await setReaderControlsExpanded(root, false);
   await choice.getByRole("button", { name: /Shrug it off/ }).click();
   await expect(line(root)).toContainText("You lift one shoulder");
   expect(posts(stub, "/choose")).toHaveLength(0);
@@ -659,12 +661,12 @@ test("Otome Forge reader: a replay at reduced motion offers the first choice aga
 
   // Eased off on the pick's line, the scene jumps to its aftermath: the backlog has the lines read, never the rest of
   // the branch the jump skipped.
-  await revealReaderControls(root);
+  await setReaderControlsExpanded(root);
   await root.getByRole("button", { name: "Ease off" }).click();
   await page.getByRole("dialog", { name: "Ease off?" }).getByRole("button", { name: "Ease off" }).click();
   await page.getByRole("dialog", { name: "Veil this from now on?" }).getByRole("button", { name: "Not now" }).click();
   await expect(line(root)).toContainText("The moment passes.");
-  await revealReaderControls(root);
+  await setReaderControlsExpanded(root);
   await root.getByRole("button", { name: "Backlog" }).click();
   const backlog = page.getByRole("dialog", { name: "Backlog" });
   await expect(backlog).toContainText("You lift one shoulder");
