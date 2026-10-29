@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.1.12 — 2026-10-29
+
+- Desktop settings use the available stage space, with every settings section reachable and long pages scrollable.
+- Text generation can recover when an endpoint rejects the optional JSON-format hint, while retaining reply validation and output budgets.
+
 ## 0.1.11 — 2026-10-29
 
 - Named speakers outside your love-interest cast clear the previous character's sprite. An exact, unique matching character card can supply an existing Full Body sprite, with Neutral preferred; opaque art waits for free cleanup before appearing.
