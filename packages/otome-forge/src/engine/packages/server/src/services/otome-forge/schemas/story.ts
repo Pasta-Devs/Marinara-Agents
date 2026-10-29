@@ -35,6 +35,7 @@ import {
 import { FACES, MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { isChapterKey } from "../ids.js";
 import { PaintSchema, isRecord, readFields, validItems } from "./common.js";
+import { TrackSchema } from "./world.js";
 
 const short = (max = 600) => z.string().max(max);
 
@@ -186,6 +187,7 @@ export function normalizeChapter(data: unknown): Chapter | null {
       ledger: (value) => (LedgerSchema.safeParse(value).success ? (value as ChapterLedger) : emptyLedger()),
       plannedAt: z.string(),
       connectionId: z.string(),
+      music: z.object({ prompt: z.string().min(1).max(1000).optional(), track: TrackSchema.optional() }).optional(),
       voicedLine: short().optional(),
       date: (value) => {
         const parsed = DatePlanSchema.safeParse(value);
@@ -276,9 +278,18 @@ export function normalizeBeat(data: unknown): Beat | null {
  * (GET .../dates shows a date).
  */
 export function toChapterView(chapter: Chapter): ChapterView {
-  const { nodes, ledger: _ledger, connectionId: _connection, grievance: _grievance, date: _date, ...rest } = chapter;
+  const {
+    nodes,
+    ledger: _ledger,
+    connectionId: _connection,
+    grievance: _grievance,
+    date: _date,
+    music,
+    ...rest
+  } = chapter;
   return {
     ...rest,
+    ...(music?.track ? { music: { track: music.track } } : {}),
     nodes: nodes.map(({ i, kind, moment, cg, gate }) => ({
       i,
       kind,

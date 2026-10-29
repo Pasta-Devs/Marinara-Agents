@@ -127,6 +127,8 @@ export interface AudioSettings {
   /** Kept for the kit's shape; Otome has no combat. */
   combatVoices: boolean;
   generate: boolean;
+  /** Generate and retain one theme for each chapter, instead of changing music with every mood. */
+  chapterThemes: boolean;
   homeMusic: string;
   audioConnectionId: string;
   muted: boolean;
@@ -142,6 +144,12 @@ export interface SoundtrackTrack {
   connectionId: string;
   tag: string;
   path: string;
+}
+
+/** Chapter-owned music is retained independently of the world's bounded mood soundtrack. */
+export interface ChapterMusic {
+  prompt?: string;
+  track?: SoundtrackTrack;
 }
 
 /** `world.audio` (M2b): the settings, each cue's music brief (P14, English), and the generated tracks. */
@@ -754,6 +762,7 @@ export interface Chapter {
   ledger: ChapterLedger;
   plannedAt: string;
   connectionId: string;
+  music?: ChapterMusic;
   /** A Memory's Character Story (M4): the line its card voices, kept with the chapter so the item is always given it. */
   voicedLine?: string;
   /** A date's own plan (M5, SH/dates.ts); hidden from the chapter view. */
@@ -929,7 +938,8 @@ export type ChapterState = "unplanned" | "in-progress" | "done";
 export type BeatState = "unwritten" | "ready" | "read";
 
 /** A chapter as the client sees it: no guides and no ledger (the plan is the hidden story). */
-export type ChapterView = Omit<Chapter, "nodes" | "ledger" | "connectionId" | "date"> & {
+export type ChapterView = Omit<Chapter, "nodes" | "ledger" | "connectionId" | "date" | "music"> & {
+  music?: Pick<ChapterMusic, "track">;
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;
 };
 
@@ -945,9 +955,9 @@ export interface SceneArt {
   places: PlaceArt[];
   /** The beat's key image with its paint, or null. */
   cg: NonNullable<BeatView["cg"]> | null;
-  /** Each love interest's faces for the look worn now, once the set is ready and expressions are on. */
+  /** Cleaned faces for the look worn now; originals awaiting or failing cleanup are never stage art. */
   faces: Record<LiId, Partial<Record<Face, string>>>;
-  /** The love interests whose faces are still being painted (a failed or stopped set never arrives on its own). */
+  /** Faces are still painting or being freely cleaned; failed/stopped work never keeps polling. */
   facesComing: LiId[];
 }
 

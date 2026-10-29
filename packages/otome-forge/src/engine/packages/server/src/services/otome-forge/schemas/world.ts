@@ -4,7 +4,7 @@
 // The mystery's truth and pieces and the web's secrets are the hidden story: toWorldView strips them before anything
 // reaches the client. `audio` and `places` (M2b) are read here so every normalized write keeps them; S/art and
 // S/audio write them.
-import { normalizeForgeAudio } from "@forge-kit/audio-settings.mjs";
+import { normalizeOtomeAudio } from "../../../../../client/src/features/otome-forge/shared/audio.js";
 import { z, type ZodType } from "zod";
 import type {
   Connections,
@@ -123,7 +123,7 @@ export const TRACKS_MAX = 120;
 export const PLACES_MAX = 400;
 
 const BriefSchema = z.object({ fingerprint: z.string().max(200), prompt: z.string().min(1).max(1000) });
-const TrackSchema: ZodType<SoundtrackTrack> = z.object({
+export const TrackSchema: ZodType<SoundtrackTrack> = z.object({
   cue: z.string().max(80),
   connectionId: z.string().max(200),
   tag: z.string().max(1000),
@@ -144,7 +144,7 @@ export function normalizeWorldAudio(data: unknown): WorldAudio {
     if (parsed.success) briefs[cue] = parsed.data;
   }
   return {
-    ...normalizeForgeAudio(data),
+    ...normalizeOtomeAudio(data),
     briefs,
     tracks: validItems(TrackSchema, field(data, "tracks"), TRACKS_MAX),
   };

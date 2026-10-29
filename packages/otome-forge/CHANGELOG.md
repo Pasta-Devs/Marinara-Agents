@@ -1,5 +1,13 @@
 # Otome Hearth release notes
 
+## 0.1.8 — 2026-10-29
+
+- Music settings can give every chapter its own saved theme. Enable chapter themes with music generation on; each theme is generated when reading starts and reused on replay.
+
+## 0.1.7 — 2026-10-29
+
+- Chapter and Home expressions keep the clean neutral sprite visible until free background cleanup is ready, instead of showing a green original. Saved and newly painted expressions share the repair, with their originals, outfits and story progress retained.
+
 ## 0.1.6 — 2026-10-29
 
 - Mobile reader controls now show mute, fullscreen, then More, with centered icons and the secondary controls aligned directly below More.

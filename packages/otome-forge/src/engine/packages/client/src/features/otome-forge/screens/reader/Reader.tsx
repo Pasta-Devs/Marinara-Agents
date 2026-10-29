@@ -82,6 +82,8 @@ export function Reader(props: ReaderProps) {
 
 const AUDIO_NOTICE_KEYS = {
   musicFailed: "ui.otomeForge.audio.musicFailed",
+  chapterMusicFailed: "ui.otomeForge.audio.chapterMusicFailed",
+  chapterMusicUnavailable: "ui.otomeForge.audio.chapterMusicUnavailable",
   voiceFailed: "ui.otomeForge.audio.voiceFailed",
 } as const;
 
@@ -186,7 +188,11 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   // playing (Home's cue) plays on, and a mood the player never hears is never generated.
   if (beat?.musicMood) lastMood.current = beat.musicMood;
   const mood = beat?.musicMood ?? lastMood.current;
-  useMusicCue(mood);
+  useMusicCue(
+    chapter && mood && view.world.audio.generate && view.world.audio.chapterThemes
+      ? { chapterKey: chapter.key, mood, track: chapter.music?.track }
+      : mood,
+  );
   const lines = reader.timeline?.lines ?? [];
   const place = lines
     .slice(0, reader.lineIndex + 1)
@@ -223,11 +229,16 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   // Whom a Confrontation faces: the opponent the server set (not whoever spoke last), else the chapter's own.
   const facingId = reader.confrontation?.li ?? chapter?.li ?? chapter?.lead;
   const facing = view.lis.find((li) => li.id === facingId) ?? null;
-  // His faces as the scene's art last reported them (they may arrive while the beat is read).
+  // Phone stickers may use uncut originals. The stage accepts only faces authorized by the run's cutout metadata.
   const stageLi = reader.onStage.li;
-  const sceneFaces = stageLi ? reader.sceneArt?.faces?.[stageLi.id] : undefined;
-  const onStageLi =
-    stageLi && sceneFaces && Object.keys(sceneFaces).length ? { ...stageLi, expressions: sceneFaces } : stageLi;
+  const onStageLi = stageLi
+    ? {
+        ...stageLi,
+        expressions: Object.fromEntries(
+          Object.entries(stageLi.expressions ?? {}).filter(([, url]) => !!url && stageLi.cut?.includes(url)),
+        ),
+      }
+    : null;
 
   // Each new line is voiced when the settings voice its speaker; leaving the line stops it. Narration, thoughts and
   // the aftermath line never are.
