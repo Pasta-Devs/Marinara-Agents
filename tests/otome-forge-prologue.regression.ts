@@ -190,6 +190,15 @@ test("the prologue refuses a love interest by name in any line", () => {
     /민 is a love interest/,
   );
   assert.equal(prologueProblem({ segments: [{ speaker: "", text: "시민이 모였다." }] }, [{ name: "민" }]), null);
+  // A Latin-spelled name written straight against kana or Han is still a whole word there.
+  assert.match(
+    String(prologueProblem({ segments: [{ speaker: "", text: "あなたはKaiの店の前を通る。" }] }, [{ name: "Kai" }])),
+    /Kai is a love interest/,
+  );
+  assert.match(
+    String(prologueProblem({ segments: [{ speaker: "", text: "Kai가 웃었다." }] }, [{ name: "Kai" }])),
+    /Kai is a love interest/,
+  );
 });
 
 test("the prologue waits for the forge", async () => {

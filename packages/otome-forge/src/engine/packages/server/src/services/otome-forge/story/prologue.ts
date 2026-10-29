@@ -71,6 +71,10 @@ export async function ensurePrologue(deps: { store: OtomeStore }, runId: string)
 const UNSPACED = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u;
 /** Korean spaces its words but attaches particles to a name (민이, 민은): a word start, then any ending. */
 const HANGUL = /\p{Script=Hangul}/u;
+/** Letters of scripts that use no spaces: a Latin-spelled name written against them still ends there. */
+const UNSPACED_LETTER = "\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Thai}";
+/** What ends a word around a name: anything but a letter or digit, or an unspaced letter (Hangul too, unless Korean). */
+const edge = (korean: boolean) => `(?:[^\\p{L}\\p{N}]|[${UNSPACED_LETTER}${korean ? "" : "\\p{Script=Hangul}"}])`;
 
 /**
  * A love interest's name in `text`, any case: as a whole word; in Korean, at a word's start with its particle; in a
@@ -83,8 +87,8 @@ function namedIn(text: string, name: string): boolean {
   if (!trimmed) return false;
   if (UNSPACED.test(trimmed)) return text.includes(trimmed);
   const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const end = HANGUL.test(trimmed) ? "" : "($|[^\\p{L}\\p{N}])";
-  return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}${end}`, "iu").test(text);
+  const korean = HANGUL.test(trimmed);
+  return new RegExp(`(^|${edge(korean)})${escaped}${korean ? "" : `($|${edge(false)})`}`, "iu").test(text);
 }
 
 /**

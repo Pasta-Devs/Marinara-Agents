@@ -1,9 +1,10 @@
 // ──────────────────────────────────────────────
 // Otome Forge: image prompts, built in code with no model call (plan §1.8, M1 "Image prompts")
 // ──────────────────────────────────────────────
-// A look is the identity line and the outfit line, full body on a flat backdrop the cut-out keys out (art/cutout.ts):
-// a love interest's on a chroma matte, as the Engine's sprites are; the protagonist's on mid-grey, since nothing cuts
-// hers out yet and her uncut look must not glare. Plus the world's image rating and "adult <presentation>" from the content contract. The prompt goes
+// A look is the identity line and the outfit line, full body on a flat backdrop that the cut-out keys out
+// (art/cutout.ts). A love interest's backdrop is a chroma matte, as the Engine's sprites have.
+// The protagonist's is mid-grey: nothing cuts hers out yet, and her uncut look must not glare.
+// The prompt also carries the world's image rating and "adult <presentation>" from the content contract. The prompt goes
 // to the Engine as a prompt override, which replaces the Engine's own prompt and style, so the chosen style profile's
 // text and tags are added here. A prompt the player edited in the review dialog keeps every rating and adult tag:
 // the missing ones are appended again. Image prompts are always English. GF's buildImagePromptsMessages (server.mjs,
