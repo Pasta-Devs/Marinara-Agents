@@ -8,9 +8,8 @@ import { runRegressionToCompletion } from "./regression-helpers.ts";
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
-  const { compileEvidenceUnitExtraction, runLongTermMemoryEvidenceUnitExtraction } = await import(
-    `${source}/extraction/evidence-unit-extraction.ts`
-  );
+  const { compileEvidenceUnitExtraction, parseEvidenceUnitPayload, runLongTermMemoryEvidenceUnitExtraction } =
+    await import(`${source}/extraction/evidence-unit-extraction.ts`);
   const { readLtmDebugLog } = await import(`${source}/maintenance/debug-log.ts`);
   const { sourceHashForLtmSourceNote } = await import(`${source}/extraction/source-hash.ts`);
   const root = await mkdtemp(join(tmpdir(), "marinara-ltm-extraction-reliability-"));
@@ -169,6 +168,53 @@ async function main() {
         assert.equal(calls.length, 1, testCase.message);
       }
     }
+
+    // A quoted score is read as its number; anything that is not a finite 0..1 number still fails.
+    const quoted = parseEvidenceUnitPayload(
+      { summary: "Quoted.", units: [{ ...validUnit, salience: "0.5", confidence: " 0.8 " }] },
+      sourceHash,
+    );
+    assert.equal(quoted.response.units.length, 1);
+    assert.equal(quoted.response.units[0]?.salience, 0.5);
+    assert.equal(quoted.response.units[0]?.confidence, 0.8);
+    for (const score of ["high", "", "1.5", null]) {
+      const rejected = parseEvidenceUnitPayload(
+        {
+          summary: "Bad.",
+          units: [
+            { ...validUnit, salience: score },
+            { ...validUnit, confidence: score },
+          ],
+        },
+        sourceHash,
+      );
+      assert.equal(rejected.response.units.length, 0, `score ${JSON.stringify(score)} must stay invalid`);
+      assert.equal(rejected.droppedCandidates[0]?.reason, "invalid_format");
+    }
+
+    // A complete answer whose candidates are all malformed fails the piece; empty and partly valid answers do not.
+    const malformedUnit = { ...validUnit, salience: "high" };
+    calls.length = 0;
+    response = {
+      content: JSON.stringify({ summary: "All bad.", units: [malformedUnit, malformedUnit] }),
+      finishReason: "stop",
+    };
+    await assert.rejects(
+      () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
+      (error: any) =>
+        error.code === "ltm_model_output_unusable" && /every extraction candidate was malformed/.test(error.message),
+    );
+    assert.equal(calls.length, 1, "all-malformed output must not trigger a repair call");
+    response = { content: JSON.stringify({ summary: "Nothing durable.", units: [] }), finishReason: "stop" };
+    const emptyRun = await runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() });
+    assert.equal(emptyRun.response.units.length, 0);
+    response = {
+      content: JSON.stringify({ summary: "Mixed.", units: [validUnit, malformedUnit] }),
+      finishReason: "stop",
+    };
+    const mixedRun = await runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() });
+    assert.equal(mixedRun.response.units.length, 1);
+    assert.equal(mixedRun.parserRejections, 1);
 
     calls.length = 0;
     response = {
