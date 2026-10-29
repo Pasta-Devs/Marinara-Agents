@@ -63,6 +63,7 @@ test("an existing run sends all current persona fields to chapter and scene gene
   for (const call of [plan, scene]) {
     const prompt = body(call.messages);
     assertFields(prompt, fields);
+    assert.ok(prompt.includes("Treat these authored fields as the protagonist's canon"));
     assert.ok(!prompt.includes("OLD-SAVED-DESCRIPTION"));
   }
 });
