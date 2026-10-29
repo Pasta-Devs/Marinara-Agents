@@ -199,6 +199,12 @@ test("the prologue refuses a love interest by name in any line", () => {
     String(prologueProblem({ segments: [{ speaker: "", text: "Kai가 웃었다." }] }, [{ name: "Kai" }])),
     /Kai is a love interest/,
   );
+  for (const text of ["スーパーKaiー", "ーKaiの話"]) {
+    assert.match(
+      String(prologueProblem({ segments: [{ speaker: "", text }] }, [{ name: "Kai" }])),
+      /Kai is a love interest/,
+    );
+  }
 });
 
 test("the prologue waits for the forge", async () => {

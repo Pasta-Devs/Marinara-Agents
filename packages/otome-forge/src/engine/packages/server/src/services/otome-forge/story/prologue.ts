@@ -71,8 +71,11 @@ export async function ensurePrologue(deps: { store: OtomeStore }, runId: string)
 const UNSPACED = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u;
 /** Korean spaces its words but attaches particles to a name (민이, 민은): a word start, then any ending. */
 const HANGUL = /\p{Script=Hangul}/u;
-/** Letters of scripts that use no spaces: a Latin-spelled name written against them still ends there. */
-const UNSPACED_LETTER = "\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Thai}";
+/**
+ * Letters of scripts that use no spaces, with kana's long-vowel mark ー (a letter of no script of its own): a
+ * Latin-spelled name written against them still ends there.
+ */
+const UNSPACED_LETTER = "\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Thai}\\u30FC";
 /** What ends a word around a name: anything but a letter or digit, or an unspaced letter (Hangul too, unless Korean). */
 const edge = (korean: boolean) => `(?:[^\\p{L}\\p{N}]|[${UNSPACED_LETTER}${korean ? "" : "\\p{Script=Hangul}"}])`;
 
