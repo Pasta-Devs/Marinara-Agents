@@ -4,6 +4,7 @@
 // call) and Ease off, which is always in reach. A place that waits for "Ask before painting" (or failed) offers its
 // paint beside its name, with its cost.
 // ──────────────────────────────────────────────
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ChevronLeft,
@@ -11,16 +12,20 @@ import {
   FastForward,
   Feather,
   MapPin,
+  MoreHorizontal,
   Paintbrush,
   Pause,
   Play,
   RefreshCw,
   Repeat,
   ScrollText,
+  Volume2,
+  VolumeX,
   type LucideIcon,
 } from "lucide-react";
 import type { ChapterKind, ChapterView, MomentKind, NodeKind } from "../../shared/api-types";
 import { FullscreenButton } from "../../components/Stage";
+import { useAudioSnapshot, useOtomeAudio } from "../../hooks/use-otome-audio";
 import { tagLabelKey } from "./ContentTagsCard";
 
 const KIND_KEYS: Record<Exclude<ChapterKind, "main">, string> = {
@@ -58,13 +63,14 @@ interface ToolProps {
   onClick: () => void;
   pressed?: boolean;
   disabled?: boolean;
+  className?: string;
 }
 
-function Tool({ label, Icon, onClick, pressed, disabled }: ToolProps) {
+function Tool({ label, Icon, onClick, pressed, disabled, className = "" }: ToolProps) {
   return (
     <button
       type="button"
-      className="of-icon-button of-glass of-reader-tool"
+      className={`of-icon-button of-glass of-reader-tool ${className}`}
       aria-label={label}
       title={label}
       aria-pressed={pressed}
@@ -110,6 +116,26 @@ interface ReaderControlsProps {
 
 export function ReaderControls(props: ReaderControlsProps) {
   const { t } = useTranslation();
+  const audio = useOtomeAudio();
+  useAudioSnapshot();
+  const [expanded, setExpanded] = useState(false);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const secondaryId = useId();
+  // The first tap outside the disclosure only dismisses it, including a tap on the story beneath it.
+  useEffect(() => {
+    if (!expanded) return;
+    const dismiss = (event: MouseEvent) => {
+      const target = event.target as Element | null;
+      if (target?.closest(".of-reader-primary, [role='dialog']")) return;
+      if (target?.closest(".of-reader-stage, .of-dialogue-wrap")) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      setExpanded(false);
+    };
+    document.addEventListener("click", dismiss, true);
+    return () => document.removeEventListener("click", dismiss, true);
+  }, [expanded]);
   const { chapter, node, nodeCount, replay, place, tags, reading } = props;
   const [eyebrowKey, eyebrowValues] = chapter ? chapterEyebrowKey(chapter) : ["ui.otomeForge.common.screenStory", {}];
   const frameKey = frameLabelKey(chapter && node !== null ? chapter.nodes[node] : null);
@@ -118,8 +144,62 @@ export function ReaderControls(props: ReaderControlsProps) {
   const rewriteLabel = props.rewritePaints
     ? t("ui.otomeForge.reader.rewritePaintsLabel")
     : t("ui.otomeForge.reader.rewriteLabel");
+  const auto = (
+    <Tool
+      label={t("ui.otomeForge.reader.auto")}
+      Icon={props.auto ? Pause : Play}
+      pressed={props.auto}
+      disabled={!reading}
+      onClick={props.onAuto}
+    />
+  );
+  const skip = (
+    <Tool
+      label={t("ui.otomeForge.reader.skip")}
+      Icon={FastForward}
+      disabled={!reading || !props.canSkip}
+      onClick={props.onSkip}
+    />
+  );
+  const log = <Tool label={t("ui.otomeForge.reader.backlog")} Icon={ScrollText} onClick={props.onLog} />;
+  const hide = <Tool label={t("ui.otomeForge.reader.hide")} Icon={EyeOff} disabled={!reading} onClick={props.onHide} />;
+  const rewrite = props.canRewrite ? (
+    <button
+      type="button"
+      className="of-reader-pill of-glass"
+      aria-label={rewriteLabel}
+      title={rewriteLabel}
+      onClick={props.onRewrite}
+    >
+      <RefreshCw size={14} strokeWidth={2.1} aria-hidden="true" />
+      <span>{t("ui.otomeForge.reader.rewrite")}</span>
+    </button>
+  ) : null;
+  const ease = props.canEaseOff ? (
+    <button
+      type="button"
+      className="of-reader-pill of-reader-pill--ease of-glass"
+      aria-label={t("ui.otomeForge.reader.easeOff")}
+      title={t("ui.otomeForge.reader.easeOff")}
+      onClick={props.onEaseOff}
+    >
+      <Feather size={14} strokeWidth={2.1} aria-hidden="true" />
+      <span>{t("ui.otomeForge.reader.easeOff")}</span>
+    </button>
+  ) : null;
   return (
-    <header className="of-reader-head" inert={props.inert} onClick={(event) => event.stopPropagation()}>
+    <header
+      className="of-reader-head"
+      inert={props.inert}
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || !expanded) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setExpanded(false);
+        moreRef.current?.focus();
+      }}
+    >
       <div className="of-reader-row">
         <button
           type="button"
@@ -144,22 +224,40 @@ export function ReaderControls(props: ReaderControlsProps) {
             {chapter ? chapter.title || t("ui.otomeForge.story.untitled") : t("ui.otomeForge.common.loading")}
           </span>
         </h1>
-        <div className="of-reader-tools">
+        <div className="of-reader-tools of-reader-primary">
+          <button
+            ref={moreRef}
+            type="button"
+            className="of-icon-button of-glass of-reader-tool of-reader-mobile"
+            aria-label={t("ui.otomeForge.reader.moreControls")}
+            title={t("ui.otomeForge.reader.moreControls")}
+            aria-expanded={expanded}
+            aria-controls={secondaryId}
+            onClick={() => setExpanded(!expanded)}
+          >
+            <MoreHorizontal size={17} strokeWidth={2} aria-hidden="true" />
+          </button>
           <Tool
-            label={t("ui.otomeForge.reader.auto")}
-            Icon={props.auto ? Pause : Play}
-            pressed={props.auto}
-            disabled={!reading}
-            onClick={props.onAuto}
+            className="of-reader-mobile"
+            label={t(audio?.audioSettings.muted ? "ui.otomeForge.reader.unmute" : "ui.otomeForge.reader.mute")}
+            Icon={audio?.audioSettings.muted ? VolumeX : Volume2}
+            disabled={!audio}
+            onClick={() => audio?.setMuted(!audio.audioSettings.muted)}
           />
-          <Tool
-            label={t("ui.otomeForge.reader.skip")}
-            Icon={FastForward}
-            disabled={!reading || !props.canSkip}
-            onClick={props.onSkip}
-          />
-          <Tool label={t("ui.otomeForge.reader.backlog")} Icon={ScrollText} onClick={props.onLog} />
+          <div className="of-reader-tools of-reader-desktop">
+            {auto}
+            {skip}
+            {log}
+          </div>
           <FullscreenButton className="of-reader-tool" />
+          <div id={secondaryId} className="of-reader-secondary" data-expanded={expanded}>
+            {auto}
+            {skip}
+            {hide}
+            {log}
+            {rewrite}
+            {ease}
+          </div>
         </div>
       </div>
       <div className="of-reader-row of-reader-row--sub">
@@ -205,26 +303,10 @@ export function ReaderControls(props: ReaderControlsProps) {
             </li>
           ))}
         </ul>
-        <div className="of-reader-tools">
-          <Tool label={t("ui.otomeForge.reader.hide")} Icon={EyeOff} disabled={!reading} onClick={props.onHide} />
-          {props.canRewrite ? (
-            <button
-              type="button"
-              className="of-reader-pill of-glass"
-              aria-label={rewriteLabel}
-              title={rewriteLabel}
-              onClick={props.onRewrite}
-            >
-              <RefreshCw size={14} strokeWidth={2.1} aria-hidden="true" />
-              {t("ui.otomeForge.reader.rewrite")}
-            </button>
-          ) : null}
-          {props.canEaseOff ? (
-            <button type="button" className="of-reader-pill of-reader-pill--ease of-glass" onClick={props.onEaseOff}>
-              <Feather size={14} strokeWidth={2.1} aria-hidden="true" />
-              {t("ui.otomeForge.reader.easeOff")}
-            </button>
-          ) : null}
+        <div className="of-reader-tools of-reader-desktop">
+          {hide}
+          {rewrite}
+          {ease}
         </div>
       </div>
     </header>
