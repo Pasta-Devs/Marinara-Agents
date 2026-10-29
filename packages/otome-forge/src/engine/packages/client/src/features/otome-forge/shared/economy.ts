@@ -51,7 +51,7 @@ export const AFFECTION_EARNINGS = {
 /** Affection from outside the story, per love interest per local day (proposal: the design's cap read as per LI). */
 export const OUTSIDE_AFFECTION_DAILY_CAP = 300;
 
-/** Affection level 1–10 from points. It only rises, because points only rise. */
+/** Affection level 1–10 from points. Choice losses stop at the current level's floor. */
 export function levelOf(points: number): number {
   const safe = Number.isFinite(points) ? Math.max(0, points) : 0;
   return Math.min(MAX_LEVEL, MIN_LEVEL + Math.floor(safe / POINTS_PER_LEVEL));

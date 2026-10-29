@@ -723,6 +723,56 @@ async function speakerRoutes(
   };
 }
 
+test("Otome Hearth narration does not preview a love interest before his first reached turn", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const opening = [
+    seg("", "You wrench your left wrist against Maukie's brass tension pick."),
+    seg("", "Three tumblers click. The pick has sheared."),
+    seg("Maukie Escher", "Scratch one Fontainian lockpick. Did the Doctor wire my pulse?", { thought: true }),
+    seg("", "Overhead klaxons sound as a fire-bulkhead closes in front of Dottore's outstretched glass."),
+    seg("", "Beneath satin slippers, the platform rises up the shaft."),
+    seg("", "Cold axle grease streaks the platform as it passes the lower wards."),
+    seg("", "With a heavy clang, the platform locks into a stone bay. Amber lamps. Sweet clove smoke through a grate."),
+    seg("", "Beyond the bars, Pantalone waits beside black-liveried guards and an armored sleigh, cigarette in hand."),
+    seg("", "The gate slides back, and you pitch into his coat."),
+    seg("", "Pantalone's gloved hands catch you."),
+  ];
+  const fixture = namedSpeakerStub([
+    ...opening,
+    seg("Pantalone", "There you are. Let me see your wrist."),
+    seg("", "He keeps his coat around your shoulders."),
+  ]);
+  await stubRoutes(page, {
+    ...fixture,
+    answer(call: Call) {
+      const reply = fixture.answer(call);
+      if (call.path === `/api/otome-forge/runs/${RUN}`) {
+        const data = reply.json as Json;
+        data.view.player.name = "Maukie Escher";
+        data.view.lis[0].name = "Pantalone";
+        data.view.lis[1].name = "Dottore";
+      }
+      return reply;
+    },
+  });
+  const assets = await speakerRoutes(page);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  for (const [index, segment] of opening.entries()) {
+    if (index) await next(root);
+    await expect(line(root)).toContainText(segment.text);
+    await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+  }
+  await next(root);
+  await expect(root.getByRole("img", { name: "Pantalone", exact: true })).toBeVisible();
+  await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
+  await next(root);
+  await expect(line(root)).toContainText("He keeps his coat around your shoulders.");
+  await expect(root.getByRole("img", { name: "Pantalone", exact: true })).toBeVisible();
+  expect(assets.paid).toEqual([]);
+});
+
 test("Otome Hearth named speakers hide unrelated sprites, require unique cards and preserve narration, persona and thoughts", async ({
   page,
 }, testInfo) => {

@@ -6,8 +6,8 @@
 // and repair chapters are read alongside a main one. Grievances run both ways: one never closes in the beat that
 // opened it, and closes only on a node whose plan lists it in `resolves`. A grievance of severity `rupture` opens a
 // rupture, which shuts his gates until a scene forgives or addresses it; while another rupture-severity grievance is
-// still owed, the rupture moves to it instead of closing. Nothing unlocked is ever taken back: nothing here touches
-// points, levels or stages.
+// still owed, the rupture moves to it instead of closing. A hostile pick costs 15 affection once per love interest,
+// stopping at the floor of the level already reached. Nothing here lowers a level or stage.
 //
 // Every function is pure. The choose route applies a pick inside one revision-checked write of `${R}:state`, and the
 // pick's `${i}/${choiceId}` in `chapters[key].applied` makes a replay, or a request that lost a race, change nothing.
@@ -24,10 +24,13 @@ import type {
 import {
   BEAT_SHIFT_MAX,
   CHAPTER_SHIFT_MAX,
+  MIN_LEVEL,
+  POINTS_PER_LEVEL,
   TENSION_MAX,
   TENSION_MIN,
   TRUST_MAX,
   TRUST_MIN,
+  levelOf,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { isChapterKey } from "../ids.js";
 
@@ -87,8 +90,8 @@ export interface ChoiceContext {
 export interface ChoiceOutcome {
   state: RunState;
   /**
-   * True when the pick changed something between them: trust or tension moved, a grievance opened or closed, or the
-   * protagonist told him something. The reader then shows "{name} will remember that." (or "They'll remember that.").
+   * True when the pick changed something between them: trust, tension or affection moved, a grievance opened or
+   * closed, or the protagonist told him something. The reader then shows "{name} will remember that.".
    */
   remembered: boolean;
   /** The love interests that pick changed something with, in the order of its effects (the toast names a lone one). */
@@ -147,7 +150,7 @@ function boundGrievances(grievances: Grievance[]): Grievance[] {
 /**
  * Applies the effects of a first-play pick, clamped, in one pure step, and records the pick in `chapters[key].applied`.
  * Effects for a love interest the state does not have are skipped. A pick already in `applied` changes nothing.
- * Points, levels and stages are never touched (nothing unlocked is taken back).
+ * A hostile pick loses affection once per love interest, without losing a level or stage.
  */
 export function applyChoiceEffects(state: RunState, effects: readonly Effect[], context: ChoiceContext): ChoiceOutcome {
   const { key, i, choice, at } = context;
@@ -163,12 +166,14 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
     0,
   );
   const rememberedBy = new Set<LiId>();
+  const harmed = new Set<LiId>();
 
   for (const effect of effects) {
     const current = lis[effect.li];
     if (!current) continue;
     const delta = deltaFor(current, key, i);
     const li: LiState = { ...current, grievances: [...current.grievances], disclosures: [...current.disclosures] };
+    if (effect.trust === -1) harmed.add(effect.li);
 
     const trust = shift(effect.trust ?? 0, li.trust, delta.trust, delta.beat.trust, TRUST_MIN, TRUST_MAX);
     const tension = shift(effect.tension ?? 0, li.tension, delta.tension, delta.beat.tension, TENSION_MIN, TENSION_MAX);
@@ -191,6 +196,11 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
         opened: here,
         status: "open",
       };
+      if (
+        grievance.by === "li" &&
+        !current.grievances.some((item) => item.by === "li" && isUnresolved(item) && item.text === grievance.text)
+      )
+        harmed.add(effect.li);
       opened += 1;
       li.grievances.push(grievance);
       if (grievance.severity === "rupture" && !li.rupture) li.rupture = { grievanceId: grievance.id, since: at };
@@ -219,6 +229,16 @@ export function applyChoiceEffects(state: RunState, effects: readonly Effect[], 
 
     li.grievances = boundGrievances(li.grievances);
     lis[effect.li] = li;
+  }
+
+  for (const id of harmed) {
+    const li = lis[id]!;
+    const floor = (levelOf(li.points) - MIN_LEVEL) * POINTS_PER_LEVEL;
+    const points = Math.max(floor, li.points - 15);
+    if (points !== li.points) {
+      lis[id] = { ...li, points };
+      rememberedBy.add(id);
+    }
   }
 
   return {

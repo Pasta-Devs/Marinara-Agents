@@ -217,8 +217,8 @@ test("a `locked` refusal of a route chapter's scene is its love interest's ruptu
 
 test("the face on stage is his latest line's; narration keeps it; a first name finds him", () => {
   const timeline = buildTimeline(beat({ choices: [] }), {}, "Mira");
-  // Before anyone speaks, the first love interest who speaks in this beat stands there, never one who is not in it.
-  assert.deepEqual(onStageAt(timeline.lines, 0, LIS), { li: ILVAR, face: "", speaking: false });
+  // A future love interest's turn must not reveal him during the opening narration.
+  assert.deepEqual(onStageAt(timeline.lines, 0, LIS), { li: null, face: "", speaking: false });
   const alone = buildTimeline(
     beat({
       choices: [],

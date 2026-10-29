@@ -6,6 +6,14 @@
 - Story generation can reuse saved location artwork for recurring settings instead of painting a new numbered visit.
 - Protagonist dialogue, thoughts and performed choices explicitly follow the selected persona’s authored identity and the player’s writing instructions.
 
+## 0.1.15 — 2026-10-29
+
+- Opening narration no longer previews the portrait of a love interest whose speaking turn has not been reached. Established speakers can still stay visible during later narration.
+
+- The pre-chapter warning places its Ease off feather after the guidance sentence.
+
+- Harmful story/date choices and Confrontation outcomes can reduce Affection progress within the current level. Unlocked levels stay permanent, and replaying never repeats the deduction or refunds daily earning limits.
+
 ## 0.1.14 — 2026-10-29
 
 - Album Memories can be filtered by 3★, 4★ or 5★, with unplayed content listed first.
