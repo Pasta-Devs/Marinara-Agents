@@ -12,7 +12,9 @@ import {
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
 import { registerAudioRoutes } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/routes/audio.ts";
 import {
+  normalizeBeat,
   normalizeChapter,
+  toBeatView,
   toChapterView,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
@@ -32,6 +34,9 @@ async function fixture(runKey: string, replies: Parameters<typeof storyWorld>[0]
 test("chapter themes default off, preserve the saved preference, and never pay while off, muted or silent", async () => {
   assert.equal(normalizeOtomeAudio(undefined).chapterThemes, false);
   assert.equal(normalizeOtomeAudio({ chapterThemes: "true" }).chapterThemes, false);
+  const legacy = normalizeBeat({ key: "main-1", i: 0, segments: [{ speaker: "", text: "The harbour is quiet." }] });
+  assert.ok(legacy);
+  assert.equal(toBeatView(legacy).musicMood, "tender", "legacy stored beats supply a mood before chapter playback");
   const t = await fixture("r-chapmusic1-aaaaaa");
   for (const audio of [
     { generate: true, chapterThemes: false },
