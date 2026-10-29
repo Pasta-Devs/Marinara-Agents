@@ -10,10 +10,10 @@ Thank you for helping improve the official downloadable packages for [Marinara E
 
 ## Branches
 
-| Branch | Role |
-| --- | --- |
+| Branch    | Role                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `staging` | Active development and Agent testing. This is the only target for package, catalog, documentation, and CI pull requests. |
-| `main` | Stable published catalog. Only `SpicyMarinara` may promote tested work from `staging`. |
+| `main`    | Stable published catalog. Only `SpicyMarinara` may promote tested work from `staging`.                                   |
 
 Create a focused feature branch from current staging:
 
@@ -91,7 +91,6 @@ Since capability API 1.341, Marinara Engine hands every package the code it alre
   `MARINARA_HOST_MODULE_IMPORTS` from the Engine contract, so legacy builds probe the alias, not the primary 14
   dependency. Engine-backed strict package typechecks apply the same mapping through TypeScript paths. Keep each animation tree on one slot: their presence, config and layout contexts are distinct.
 
-
 ## Building Packages
 
 Rebuild ordinary agent-only packages with:
@@ -144,10 +143,12 @@ A package documents its own releases in `packages/<id>/CHANGELOG.md`, newest fir
 
 ```markdown
 ## 1.3.0 — 2026-09-01
+
 - Scene detection now handles flashbacks.
 - Fixed the tracker losing state after a summary.
 
 ## 1.2.1 — 2026-08-20 [highlight]
+
 - Fixed the agent silently failing on long chats.
 ```
 
@@ -166,18 +167,28 @@ Rules:
 
 `validate-catalog.mjs` re-derives every sidecar from the committed changelogs and rejects a mismatch, so a hand-edited `notes.json` cannot drift from the repository.
 
+### Store data
+
+The Engine's Agent Organizer reads a second sidecar, `store.json`, beside every `catalog.json`. Its source is `store/store.json`: for each package a `section` (`apps`, `games`, `writing`, `memory`, `trackers`, `adventure`, `media` or `alive`), a `tagline` of at most 60 characters and an optional `featured` position on the Home page. Images follow a fixed layout:
+
+- `store/banners/<id>.webp` — the banner, 2400 × 900 WebP. Every package needs one.
+- `store/icons/src/<id>.svg` — the icon source. Apps leave it out: the Organizer uses their Home tab icon.
+- `store/previews/<id>-1.webp` to `-4.webp` — optional real screenshots, numbered without gaps.
+
+Run `node scripts/build-store.mjs` after a change. It renders the 1200 px banners and 256 px WebP icons (the Engine accepts no SVG) and rewrites the sidecars. Their paths are relative to each sidecar (`../../store/...`), so a reader resolves them as URLs against the `store.json` URL it fetched, not through the portable-path checks that refuse `..`. `validate-catalog.mjs` fails when a published package has no store entry, banner or icon, or when a committed `store.json` does not match a rebuild. A new package therefore needs its store entry and banner before it can publish; a dev build with `MARINARA_CATALOG_INCLUDE_INCOMPLETE=1` leaves out a package that has none yet.
+
 ### Packages that are not ready for everyone
 
 `scripts/catalog-incomplete.mjs` holds two sets, because "not finished" and "not promoted" are different states. Both keep the package building normally — payload, manifest, artifact, and locales stay committed so development and testing continue — and both are enforced at the single catalog chokepoint (`writeCatalogFamily`), so every builder inherits them and whichever builder runs next relocates or drops a stale committed entry for a newly-marked id.
 
-| Set | Stable (`main`) users | Staging users |
-| --- | --- | --- |
-| `INCOMPLETE_PACKAGE_IDS` | hidden | hidden |
-| `STAGING_ONLY_PACKAGE_IDS` | hidden | visible and installable |
+| Set                        | Stable (`main`) users | Staging users           |
+| -------------------------- | --------------------- | ----------------------- |
+| `INCOMPLETE_PACKAGE_IDS`   | hidden                | hidden                  |
+| `STAGING_ONLY_PACKAGE_IDS` | hidden                | visible and installable |
 
 Use `INCOMPLETE_PACKAGE_IDS` while a package is still being built and is not ready for anyone. Use `STAGING_ONLY_PACKAGE_IDS` once it is ready for testers but not for the stable channel. A package graduates `INCOMPLETE_PACKAGE_IDS` → `STAGING_ONLY_PACKAGE_IDS` → neither; an id may not sit in both.
 
-**Why the staging tier needs an overlay.** Promotion is a wholesale `staging` → `main` merge, so both branches end up with byte-identical catalogs. A package therefore cannot be shown on one branch and hidden on the other by catalog *content* — only the Engine knows which channel it is on. So a staging-only package is cut from the published lanes (which stable users read, and which promotion copies verbatim) and written to a **preview overlay** under `catalog/preview/`, mirroring the normal lane layout. The overlay rides along on `main` inertly: a stable Engine never requests it. A staging Engine fetches it and merges it over the published lanes.
+**Why the staging tier needs an overlay.** Promotion is a wholesale `staging` → `main` merge, so both branches end up with byte-identical catalogs. A package therefore cannot be shown on one branch and hidden on the other by catalog _content_ — only the Engine knows which channel it is on. So a staging-only package is cut from the published lanes (which stable users read, and which promotion copies verbatim) and written to a **preview overlay** under `catalog/preview/`, mirroring the normal lane layout. The overlay rides along on `main` inertly: a stable Engine never requests it. A staging Engine fetches it and merges it over the published lanes.
 
 This is fail-hidden, never fail-leak: an Engine that predates preview-overlay support simply never sees a staging-only package, and no Engine can reveal one to stable users by being out of date.
 

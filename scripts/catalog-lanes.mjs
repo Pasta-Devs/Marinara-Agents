@@ -1,5 +1,7 @@
+import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
+import { buildStoreDocument } from "./catalog-store.mjs";
 import { INCOMPLETE_PACKAGE_IDS, STAGING_ONLY_PACKAGE_IDS } from "./catalog-incomplete.mjs";
 import { assertReleaseNotesForFeatureBumps, buildReleaseNotesDocument } from "./catalog-release-notes.mjs";
 
@@ -277,11 +279,27 @@ async function writeNotesSidecar(directory, notes) {
 async function writeLaneNotes(repoRoot, directory, lanes) {
   for (const [major, lane] of lanes) {
     await writeNotesSidecar(join(directory, `v${major}`), await buildReleaseNotesDocument(repoRoot, lane.packages));
+    await writeStoreSidecar(repoRoot, join(directory, `v${major}`), lane.packages);
   }
   const legacyLane = lanes.get(LEGACY_CATALOG_MAJOR);
   if (legacyLane) {
     await writeNotesSidecar(directory, await buildReleaseNotesDocument(repoRoot, legacyLane.packages));
+    await writeStoreSidecar(repoRoot, directory, legacyLane.packages);
   }
+}
+
+/** Write (or remove) the Agent Organizer store sidecar beside one catalog.json. */
+async function writeStoreSidecar(repoRoot, directory, packages) {
+  const path = join(directory, "store.json");
+  // Fixture repos in tests have no store source; validate-catalog.mjs still requires it here.
+  if (packages.length === 0 || !existsSync(join(repoRoot, "store/store.json"))) {
+    await rm(path, { force: true });
+    return;
+  }
+  const store = await buildStoreDocument(repoRoot, relative(repoRoot, directory), packages, {
+    lenient: process.env.MARINARA_CATALOG_INCLUDE_INCOMPLETE === "1",
+  });
+  await writeFile(path, `${JSON.stringify(store, null, 2)}\n`);
 }
 
 export async function writeCatalogFamily(repoRoot, catalog) {
