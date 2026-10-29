@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.1.13",
+          "date": "2026-10-29",
+          "notes": "- Suggestive is an image-content ceiling: neutral portraits and facial expression edits no longer receive mandatory suggestive or sensitive-content tags. Image briefs follow the actual moment, with non-explicit adult intimacy allowed when appropriate.\n- Wish and Wardrobe display cleaned love-interest and persona outfits while retaining the original paintings. Wardrobe banner art is centered and shown whole, and tapping a ready banner image opens a full-image view without making a wish.",
+          "highlight": false
+        },
+        {
           "version": "0.1.12",
           "date": "2026-10-29",
           "notes": "- Desktop settings use the available stage space, with every settings section reachable and long pages scrollable.\n- Text generation can recover when an endpoint rejects the optional JSON-format hint, while retaining reply validation and output budgets.",
@@ -183,12 +189,6 @@
           "version": "0.0.4",
           "date": "2026-10-28",
           "notes": "- Each love interest now has a route: six stages from Mask to Bond, each opened by a free route chapter at an affection level and moved only by its last scene. The fourth reveals a secret; the fifth holds a confrontation and a choice that cannot be undone.\n- Every main chapter builds to a confrontation: three rounds of Press, Hold, Yield or Reveal, ending in the truth, a walkout or a standoff. A walkout can open a rift that shuts their route until you Make it right.\n- With an image connection, places and key moments are painted (or wait for your tap with Ask before painting), CGs join the Album once seen, and faces are painted in the background. Music follows each scene's mood, and dialogue can be voiced.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.3",
-          "date": "2026-10-28",
-          "notes": "- Now offered to Engine `staging` testers. The story begins: pick who leads each main chapter from two love interests, the one you have seen least and the one with the most unresolved between you, and play six to nine scenes that build to a confrontation.\n- Scenes mark each love interest's face line by line (a later build paints the faces), set thoughts apart, and offer choices. Your first choice is canon; replays show the other branches and change nothing, and a choice that matters names who will remember it.\n- Trust, tension and grievances move only through your choices and are never shown. Each love interest remembers only what they saw or were told.\n- Rewrite a scene before choosing (one model call), or Ease off to end it at once with no model call, also when your model declines a scene. Settings → Debug shows the story memory.\n- Reading earns Starlight and affection. Every prompt that writes the story keeps your content settings and the 18+ gate.",
           "highlight": false
         }
       ]

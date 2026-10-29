@@ -786,6 +786,7 @@ ${R} .of-item-art {
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
 }
 ${R} .of-item-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 18%; }
+${R} .of-item-art[data-look="true"] img { object-fit: contain; object-position: center; }
 ${R} .of-item-initials {
   font-family: var(--of-font-display); font-weight: 600; font-size: 1.6rem; color: rgb(255 250 244 / 0.92);
   text-shadow: 0 2px 14px rgb(0 0 0 / 0.3);
@@ -822,13 +823,18 @@ ${R} .of-banner-img {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 22%;
   animation: of-banner-drift 24s ease-in-out infinite alternate;
 }
+${R} .of-banner-img[data-look="true"] { object-fit: contain; object-position: center; animation: none; }
+${R} .of-banner-art { position: absolute; inset: 0; padding: 0; border: 0; background: none; cursor: zoom-in; }
+${R} .of-banner-art:focus-visible { outline-offset: -4px; border-radius: inherit; }
+${R} .of-banner-art:disabled { cursor: default; }
 ${R} .of-banner-quiet { position: absolute; inset: 0; display: grid; place-items: center; padding-bottom: 30%; }
 ${R} .of-banner-quiet .of-item-initials { font-size: 4.2rem; opacity: 0.85; }
 ${R} .of-banner-shade {
-  position: absolute; inset: 0;
+  position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(to top, rgb(12 8 26 / 0.92) 0%, rgb(12 8 26 / 0.55) 34%, transparent 62%);
 }
 ${R} .of-banner-caption {
+  pointer-events: none;
   position: absolute; inset-inline: 0; bottom: 0; z-index: 2; display: flex; flex-direction: column; gap: 4px;
   padding: 16px 16px 14px; color: #fff8f1; text-shadow: 0 1px 10px rgb(0 0 0 / 0.45);
 }
@@ -1013,6 +1019,7 @@ ${R} .of-reveal-art {
   transition: opacity 900ms var(--of-ease);
 }
 ${R} .of-reveal-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
+${R} .of-reveal-art[data-look="true"] img { object-fit: contain; object-position: center; }
 ${R} .of-reveal-quiet {
   position: absolute; inset: 0; display: grid; place-items: center; padding-bottom: 36%;
   background: radial-gradient(70% 50% at 50% 34%, color-mix(in srgb, var(--of-li-accent, var(--of-rose)) 70%, transparent), transparent 72%),
@@ -1020,7 +1027,7 @@ ${R} .of-reveal-quiet {
 }
 ${R} .of-reveal-quiet .of-item-initials { font-size: 5rem; }
 ${R} .of-reveal[data-shown="true"] .of-reveal-art { opacity: 1; }
-${R} .of-reveal[data-shown="true"][data-motion="true"] .of-reveal-art img {
+${R} .of-reveal[data-shown="true"][data-motion="true"] .of-reveal-art:not([data-look="true"]) img {
   animation: of-cg-pan 6s cubic-bezier(0.32, 0.06, 0.3, 1) both;
 }
 ${R} .of-reveal-glow {
@@ -1186,7 +1193,7 @@ ${R} .of-ward-frame {
   background: radial-gradient(80% 60% at 50% 30%, color-mix(in srgb, var(--of-li-accent, var(--of-rarity-violet)) 55%, transparent), transparent 72%),
     linear-gradient(180deg, #8a8494, #5e5869);
 }
-${R} .of-ward-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 8%; }
+${R} .of-ward-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center; }
 ${R} .of-ward-frame--small { width: 64px; border-radius: 10px; }
 ${R} .of-ward-frame--small .of-item-initials { font-size: 1rem; }
 ${R} .of-ward-worn {

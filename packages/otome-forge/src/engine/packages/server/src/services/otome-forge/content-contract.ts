@@ -206,8 +206,8 @@ export function effectiveImageRating({
 }
 
 /**
- * The rating and adult tags an image prompt always carries (an edit gets every one back). Positive wording only: tag
- * and CLIP models do not read "no …", so what a rating rules out goes to the negative prompt (art/prompts.ts). At SFW
+ * The content limits and adult tags an image prompt always carries (an edit gets every one back). Positive wording
+ * only: tag and CLIP models do not read "no …", so what a rating rules out goes to the negative prompt (art/prompts.ts). At SFW
  * every image gets what it got before 0.0.6. ponytail: Pony's rating_* tokens are left to the player's style profile;
  * ceiling: a Pony profile without them weighs the rating less; upgrade path: a rating-token map per model family once
  * the Engine's style profile names it.
@@ -219,16 +219,18 @@ export function otomeImageTags(input: ImageTagsInput): string {
   if (world.images.rating === "sfw") return ["safe for work, fully clothed", ...people].join(", ");
   // Above SFW a place is scenery only: "adults only" or a rating tag would put people or nudity into it.
   if (use === "place") return "";
+  // A higher ceiling does not change an otherwise neutral image.
   const rating =
     effectiveImageRating(input) === "explicit"
       ? [tagged ? "nsfw, explicit" : "explicit adult scene"]
-      : ["suggestive, tasteful", tagged ? "sensitive" : "", use === "clothed" ? "clothed" : ""];
+      : [use === "clothed" ? "clothed" : ""];
   return [...rating, ...people, tagged ? "" : ADULT_SENTENCE].filter(Boolean).join(", ");
 }
 
 const BRIEF_RATING: Record<ImageRating, string> = {
   sfw: "everyone clothed; intimacy shown through faces, hands and closeness",
-  suggestive: "allure, embraces, bare shoulders, implied intimacy; never exposed nipples, genitals or a sex act",
+  suggestive:
+    "follow the actual scene; neutral moments stay neutral; allure, embraces, bare shoulders and implied intimacy are permitted only when the scene calls for them; never exposed nipples, genitals or a sex act",
   explicit:
     'when the moment shown is sex or nudity on the page, say plainly who is undressed and how the bodies are posed and touching, and set "explicit": true',
 };

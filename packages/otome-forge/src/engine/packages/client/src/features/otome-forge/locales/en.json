@@ -1284,6 +1284,7 @@
   "ui.otomeForge.wardrobe.worn": "Worn at home",
   "ui.otomeForge.wish.allEchoes": "All Echoes",
   "ui.otomeForge.wish.backToResults": "Back to your wishes",
+  "ui.otomeForge.wish.viewImage": "View full image: {{title}}",
   "ui.otomeForge.wish.claim": "Keep this Memory",
   "ui.otomeForge.wish.claiming": "Keeping it…",
   "ui.otomeForge.wish.contents": "What’s inside",
