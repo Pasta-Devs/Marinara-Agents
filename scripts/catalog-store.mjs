@@ -19,9 +19,6 @@ export const storeBanner = (id, width = STORE_BANNER_WIDTHS[0]) =>
   width === STORE_BANNER_WIDTHS[0] ? `store/banners/${id}.webp` : `store/banners/${id}-${width}.webp`;
 // Real screenshots, numbered from 1 with no gaps.
 export const storePreview = (id, index) => `store/previews/${id}-${index}.webp`;
-// How-to step pictures, one set per package type, shown on every agent page of that type.
-export const STORE_HOW_TO = { agent: 3, app: 3, game: 3 };
-export const storeHowTo = (type, step) => `store/howto/${type}-${step}.webp`;
 
 export async function readStoreSource(repoRoot) {
   const source = JSON.parse(await readFile(join(repoRoot, "store/store.json"), "utf8"));
@@ -91,9 +88,8 @@ export async function buildStoreDocument(repoRoot, directory, entries, { lenient
         missing(`${storeBanner(id, width)} is missing — run node scripts/build-store.mjs`);
         continue packageLoop;
       }
-    // Apps show the Home tab icon from their own manifest instead.
     const hasIcon = await exists(join(repoRoot, storeIcon(id)));
-    if (!hasIcon && record.section !== "apps") {
+    if (!hasIcon) {
       missing(`${storeIcon(id)} is missing — add ${storeIconSource(id)} and run node scripts/build-store.mjs`);
       continue;
     }
@@ -106,7 +102,7 @@ export async function buildStoreDocument(repoRoot, directory, entries, { lenient
       section: record.section,
       tagline: record.tagline.trim(),
       ...(record.featured ? { featured: record.featured } : {}),
-      ...(hasIcon ? { iconPath: link(storeIcon(id)) } : {}),
+      iconPath: link(storeIcon(id)),
       bannerPath: link(storeBanner(id)),
       bannerSmallPath: link(storeBanner(id, STORE_BANNER_WIDTHS[1])),
       ...(previews.length ? { previews } : {}),
@@ -117,18 +113,10 @@ export async function buildStoreDocument(repoRoot, directory, entries, { lenient
   const kits = (source.kits ?? [])
     .map((kit) => ({ ...kit, packages: kit.packages.filter((id) => packages[id]) }))
     .filter((kit) => kit.packages.length > 0);
-  const howTo = {};
-  for (const [type, steps] of Object.entries(STORE_HOW_TO)) {
-    const paths = Array.from({ length: steps }, (_, index) => storeHowTo(type, index + 1));
-    const found = await Promise.all(paths.map((path) => exists(join(repoRoot, path))));
-    // A type gets pictures only as a full set, so steps never show a mix.
-    if (found.every(Boolean)) howTo[type] = paths.map(link);
-  }
   return {
     schemaVersion: 1,
     packages,
-    // The Engine reads kits and how-to pictures from the published lane only.
+    // The Engine reads kits from the published lane only.
     ...(kits.length && !preview ? { kits } : {}),
-    ...(Object.keys(howTo).length && !preview ? { howTo } : {}),
   };
 }

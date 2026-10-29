@@ -117,6 +117,7 @@
     "gacha-forge": {
       "section": "apps",
       "tagline": "Turn any world into a gacha game.",
+      "iconPath": "../store/icons/gacha-forge.webp",
       "bannerPath": "../store/banners/gacha-forge.webp",
       "bannerSmallPath": "../store/banners/gacha-forge-1200.webp"
     },
@@ -196,6 +197,7 @@
       "section": "apps",
       "tagline": "A pretend social network for your characters.",
       "featured": 1,
+      "iconPath": "../store/icons/noodle.webp",
       "bannerPath": "../store/banners/noodle.webp",
       "bannerSmallPath": "../store/banners/noodle-1200.webp",
       "previews": [
@@ -257,6 +259,7 @@
       "section": "apps",
       "tagline": "A private creator app for your characters.",
       "featured": 2,
+      "iconPath": "../store/icons/slurp2.webp",
       "bannerPath": "../store/banners/slurp2.webp",
       "bannerSmallPath": "../store/banners/slurp2-1200.webp",
       "previews": [
@@ -276,6 +279,7 @@
       "section": "apps",
       "tagline": "Co-write a book with your characters.",
       "featured": 3,
+      "iconPath": "../store/icons/story-writer.webp",
       "bannerPath": "../store/banners/story-writer.webp",
       "bannerSmallPath": "../store/banners/story-writer-1200.webp",
       "previews": [
@@ -347,22 +351,5 @@
         "uno"
       ]
     }
-  ],
-  "howTo": {
-    "agent": [
-      "../store/howto/agent-1.webp",
-      "../store/howto/agent-2.webp",
-      "../store/howto/agent-3.webp"
-    ],
-    "app": [
-      "../store/howto/app-1.webp",
-      "../store/howto/app-2.webp",
-      "../store/howto/app-3.webp"
-    ],
-    "game": [
-      "../store/howto/game-1.webp",
-      "../store/howto/game-2.webp",
-      "../store/howto/game-3.webp"
-    ]
-  }
+  ]
 }

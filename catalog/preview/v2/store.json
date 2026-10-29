@@ -11,12 +11,14 @@
     "modern-life-sim": {
       "section": "apps",
       "tagline": "A town, a job and rent with your cast.",
+      "iconPath": "../../../store/icons/modern-life-sim.webp",
       "bannerPath": "../../../store/banners/modern-life-sim.webp",
       "bannerSmallPath": "../../../store/banners/modern-life-sim-1200.webp"
     },
     "otome-forge": {
       "section": "apps",
       "tagline": "An otome game made from your characters.",
+      "iconPath": "../../../store/icons/otome-forge.webp",
       "bannerPath": "../../../store/banners/otome-forge.webp",
       "bannerSmallPath": "../../../store/banners/otome-forge-1200.webp"
     },
@@ -30,6 +32,7 @@
     "saucelings": {
       "section": "apps",
       "tagline": "A little pet that your characters raise.",
+      "iconPath": "../../../store/icons/saucelings.webp",
       "bannerPath": "../../../store/banners/saucelings.webp",
       "bannerSmallPath": "../../../store/banners/saucelings-1200.webp"
     }
