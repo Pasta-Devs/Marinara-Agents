@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.1.13 — 2026-10-29
+
+- Suggestive is an image-content ceiling: neutral portraits and facial expression edits no longer receive mandatory suggestive or sensitive-content tags. Image briefs follow the actual moment, with non-explicit adult intimacy allowed when appropriate.
+- Wish and Wardrobe display cleaned love-interest and persona outfits while retaining the original paintings. Wardrobe banner art is centered and shown whole, and tapping a ready banner image opens a full-image view without making a wish.
+
 ## 0.1.12 — 2026-10-29
 
 - Desktop settings use the available stage space, with every settings section reachable and long pages scrollable.

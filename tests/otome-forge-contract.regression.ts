@@ -112,14 +112,13 @@ test("every text contract keeps the fixed rules, and the reminder points back at
   assert.equal(otomeContractReminder("image"), "");
 });
 
-test("image prompts carry the image rating and an adult tag for every person, whatever the Heat", () => {
+test("image prompts carry clothing limits and an adult tag without requiring the rating's maximum content", () => {
   assert.equal(
     contract("image", { heat: "explicit", darkness: "dark" }),
     "safe for work, fully clothed, adult man, adult woman",
   );
-  // The `image` contract is a clothed portrait's (P20's looks and Memory art): at most Suggestive, said in words too.
-  const clothed =
-    "suggestive, tasteful, clothed, adult man, adult woman, Everyone shown is an adult over 18 with an adult face and body";
+  // The `image` contract is a clothed portrait's (P20's looks and Memory art): at most Suggestive, never required.
+  const clothed = "clothed, adult man, adult woman, Everyone shown is an adult over 18 with an adult face and body";
   assert.equal(contract("image", {}, "suggestive"), clothed);
   assert.equal(contract("image", { heat: "explicit" }, "explicit"), clothed);
   const protagonist = otomeContentContract({ world: world(), lis: [{ name: "Her" }, ...LIS], kind: "image" });

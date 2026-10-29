@@ -312,7 +312,12 @@ test("the cg brief learns what the rating lets it show; only Explicit Heat with 
     // Fade Heat keeps the sex off the page, so its key image stays suggestive even at the Explicit rating.
     const fade = beatPrompt(stored("fade", "dark"), "explicit", kind);
     assert.doesNotMatch(fade, /"explicit"/, kind);
-    assert.match(fade, /implied intimacy; never exposed nipples, genitals or a sex act/, kind);
+    assert.match(fade, /neutral moments stay neutral/, kind);
+    assert.match(
+      fade,
+      /implied intimacy are permitted only when the scene calls for them; never exposed nipples, genitals or a sex act/,
+      kind,
+    );
     const sfwImages = beatPrompt(stored("explicit", "dark"), "sfw", kind);
     assert.match(sfwImages, /everyone clothed; intimacy shown through faces, hands and closeness/, kind);
     assert.doesNotMatch(sfwImages, /"explicit"/, kind);
@@ -333,16 +338,17 @@ test("P20: Memory art stays at most Suggestive and every look a complete clothed
   const banner = (kind: "memories" | "his-wardrobe") =>
     systemOf(bannerPlanMessages({ kind, ...input, featured: input.units[0]!, earlierTitles: [], memory: "" }));
   const memories = banner("memories");
-  assert.match(memories, /The key image at this rating: allure, embraces, bare shoulders, implied intimacy/);
+  assert.match(memories, /The key image at this rating: follow the actual scene; neutral moments stay neutral/);
+  assert.match(
+    memories,
+    /allure, embraces, bare shoulders and implied intimacy are permitted only when the scene calls for them/,
+  );
   assert.doesNotMatch(memories, /set "explicit"/, "Memory art is painted before its story exists");
   assert.match(
     memories,
     /Every look stays a complete clothed look: it may be revealing \(lingerie, swimwear\), never nude\./,
   );
-  assert.match(
-    memories,
-    /IMAGE TAGS every outfit line and key image brief must fit: suggestive, tasteful, clothed, adult/,
-  );
+  assert.match(memories, /IMAGE TAGS every outfit line and key image brief must fit: clothed, adult/);
   assert.doesNotMatch(banner("his-wardrobe"), /The key image at this rating/, "a wardrobe banner has no key image");
 });
 
@@ -393,6 +399,41 @@ const FACE_UNIT = {
   outfitLine: "keeper's coat",
   bible: bible({ look: { identityLine: "tall man", outfitLine: "keeper's coat", presentation: "man" } }),
 };
+
+test("a Suggestive ceiling leaves neutral looks and expression edits neutral in prose and tags", () => {
+  const world = worldOf(stored("sfw", "gentle"), "suggestive");
+  const neutralEdit = { prompt: "Neutral expression, blue coat", negativePrompt: "blurry" };
+  for (const style of [PLAIN, TAGGED]) {
+    for (const edited of [undefined, neutralEdit]) {
+      const images = [
+        lookPrompt({ ...KAI_LOOK, world, style }, edited),
+        expressionPrompt({ unit: FACE_UNIT, base: "/kai.png", face: "cold", world, style, edited }),
+      ];
+      for (const image of images) {
+        assert.doesNotMatch(image.prompt, /\b(?:suggestive|tasteful|sensitive|nsfw|explicit)\b/i);
+        assert.match(image.prompt, /clothed, adult man/);
+        assert.match(image.negativePrompt, /child, childlike, minor, underage, school uniform/);
+        assert.match(image.negativePrompt, /loli, shota, teenager/);
+        assert.match(image.negativePrompt, /nude, nudity, nipples, genitals, sex, explicit/);
+        if (edited) assert.ok(image.prompt.includes(neutralEdit.prompt), "the reviewed neutral words stay whole");
+      }
+    }
+  }
+  const authored = "suggestive, tasteful, sensitive blue light";
+  assert.ok(lookPrompt({ ...KAI_LOOK, world, style: { ...PLAIN, styleText: authored } }).prompt.includes(authored));
+  assert.ok(
+    expressionPrompt({
+      unit: FACE_UNIT,
+      base: "/kai.png",
+      face: "cold",
+      world,
+      style: PLAIN,
+      edited: { prompt: authored },
+    }).prompt.includes(authored),
+    "authored wording stays intact; only the app's mandatory words are removed",
+  );
+});
+
 const BUILDERS: Builder[] = [
   { name: "look", clothed: true, build: (world, style, edited) => lookPrompt({ ...KAI_LOOK, world, style }, edited) },
   {
@@ -576,7 +617,7 @@ test("a stored CG is painted explicit only while Heat and the rating are both Ex
   assert.match(bare.negativePrompt, /child, childlike, minor, underage, school uniform/);
   await setHeat("fade");
   const lowered = await cgPromptFor(t.deps, t.runId, KEY, 1);
-  assert.match(lowered.prompt, /suggestive, tasteful/);
+  assert.doesNotMatch(lowered.prompt, /\b(?:suggestive|tasteful|sensitive|explicit|nsfw)\b/);
   assert.match(lowered.prompt, /keeper's coat/);
   assert.match(lowered.negativePrompt, /explicit, nude, nudity, nipples, genitals, sex/);
 });

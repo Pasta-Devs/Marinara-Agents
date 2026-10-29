@@ -132,8 +132,9 @@ Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is 
   - The 5★ is always the featured item, with no 50/50.
   - Pity is kept per kind of banner and carries over, Echoes included.
 - **Paying:** a wish charges and rolls in one save, so it is never paid twice, and it never calls a model. A duplicate refunds 400, 60 or 10 Starlight by rarity.
-- **Art:** a banner's art is its featured item's picture, painted when the banner is created, or held for your tap. Other items are painted, and their stories written, the first time you open them, and only once.
+- **Art:** a banner's art is its featured item's picture, painted when the banner is created, or held for your tap. Tap a ready banner image to see the whole picture without making a wish. Wardrobe banner artwork is centered and shown whole, with its chroma backdrop removed for display. Other items are painted, and their stories written, the first time you open them, and only once.
 - **The Wardrobe:**
+  - Looks, theirs and yours, are displayed with their chroma backdrop removed. The original paintings stay saved.
   - **Wear at home** puts a look, theirs or yours, on Home.
   - **Show them** shows them one of your looks.
   - Your featured look and theirs from the same two weeks make a couple set.
@@ -238,6 +239,7 @@ Each story has its own content settings:
 
 **Images** follow their own rating.
 
+- Suggestive is a ceiling, not an instruction to make every image suggestive. Neutral portraits and expression edits stay neutral; romantic image briefs follow the actual moment.
 - Looks, faces, outfits, couple portraits and Memory art always stay clothed (at most Suggestive), and places never show people.
 - Only a story CG of an explicit scene, under NSFW: Explicit Heat and the Explicit image rating, may show nudity or sex.
 - Every image prompt says everyone is an adult, and its negative prompt keeps the child terms whatever you edit. Above SFW, any part of a prompt that names a minor is dropped.
