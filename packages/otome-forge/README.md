@@ -56,7 +56,7 @@ With **Expressions** on, **Repaint expressions** beside a love interest's repain
 
 **Begin** plays the **prologue** first: one short scene of your protagonist's own life, just before the story opens. No love interest is in it; you meet them in chapter 1, which picks up where the prologue ends. It is written once, and the Story screen offers it again. **Skip** goes straight Home.
 
-You can keep several stories. **Your stories** lists them, and deleting one asks you to type its title. **Settings** changes a story's content, connections, images and audio later.
+You can keep several stories. **Your stories** lists them, and deleting one asks you to type its title. **Settings** changes a story's content, connections, images and audio later. On desktop, Settings uses the available stage space, with every section reachable and long pages scrollable.
 
 In **Your cast**, open a love interest and choose their **Character card** to link an Engine card explicitly. Its assigned voice and image references apply without replacing the love interest's story, progress or saved pictures. **No linked card** removes the association. Future paints prefer the card's **Full Body → Neutral** sprite, then its current avatar, then the retained Otome look; linking never paints automatically.
 
@@ -249,6 +249,8 @@ Each story has its own content settings:
 ## What costs what
 
 Anything that costs money to generate is labelled where you start it, and almost nothing paid is retried by itself. Text gets at most one automatic repair turn when a reply comes back in the wrong format, and a love interest's lines written ahead that failed are tried again on a Home visit at least 10 minutes later. Images, music and voices never retry without a tap. "Call" means one request to a text connection.
+
+If a text endpoint rejects the optional JSON-format parameter, Otome Hearth can make one additional request without that parameter. The reply still has to pass the same validation, and any content repair keeps that compatible request format. Authentication, rate-limit, server and network failures do not trigger this compatibility retry.
 
 | What you do                  | Text model                                                                                                                                                                        | Images                                                                                                                     | Music                                 | Voices                                                     |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------- |
