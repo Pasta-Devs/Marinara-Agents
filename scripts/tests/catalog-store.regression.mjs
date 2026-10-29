@@ -47,6 +47,12 @@ try {
   assert.deepEqual(store.kits, [
     { id: "starter", name: "Starter", tagline: "Two to try.", packages: ["chess", "noodle"] },
   ]);
+  assert.equal(store.howTo, undefined, "No how-to pictures, no howTo field");
+  for (const step of [1, 2, 3]) await touch(`store/howto/game-${step}.webp`);
+  await touch("store/howto/app-1.webp"); // a partial set is not published
+  assert.deepEqual((await buildStoreDocument(root, "catalog/v3", entries("chess"))).howTo, {
+    game: [1, 2, 3].map((step) => `../../store/howto/game-${step}.webp`),
+  });
   // A kit lists only the packages the lane publishes.
   assert.deepEqual((await buildStoreDocument(root, "catalog", entries("chess"))).kits[0].packages, ["chess"]);
   assert.deepEqual(store.packages.noodle.previews, ["../../store/previews/noodle-1.webp"]);

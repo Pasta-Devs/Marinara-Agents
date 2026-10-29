@@ -43,5 +43,22 @@
         "blackjack"
       ]
     }
-  ]
+  ],
+  "howTo": {
+    "agent": [
+      "../../store/howto/agent-1.webp",
+      "../../store/howto/agent-2.webp",
+      "../../store/howto/agent-3.webp"
+    ],
+    "app": [
+      "../../store/howto/app-1.webp",
+      "../../store/howto/app-2.webp",
+      "../../store/howto/app-3.webp"
+    ],
+    "game": [
+      "../../store/howto/game-1.webp",
+      "../../store/howto/game-2.webp",
+      "../../store/howto/game-3.webp"
+    ]
+  }
 }
