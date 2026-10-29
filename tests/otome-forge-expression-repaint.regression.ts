@@ -91,7 +91,21 @@ async function repaintWorld(
   await seedChapter(t.store, t.runId);
   await saveBeat(t.store, t.runId, beat(0, { readThrough: 1, choiceCanon: { kept: "accepted" } }));
   const art = createOtomeArt(t.deps);
-  const call = routesOf(registerSetupRoutes, { ...t.deps, art }, runKey);
+  const submitted: Array<Parameters<typeof art.repaintExpressions>[2]> = [];
+  const call = routesOf(
+    registerSetupRoutes,
+    {
+      ...t.deps,
+      art: {
+        ...art,
+        repaintExpressions(...args: Parameters<typeof art.repaintExpressions>) {
+          submitted.push(structuredClone(args[2]));
+          return art.repaintExpressions(...args);
+        },
+      },
+    },
+    runKey,
+  );
   const unit = async (li = KAI) => (await t.store.readDoc(unitId(t.runId, li), normalizeUnit))!;
   const world = async () => (await t.store.readDoc(`${t.runId}:world`, normalizeWorld))!;
   const shown = async () => readyFaces(await world(), await unit());
@@ -107,7 +121,7 @@ async function repaintWorld(
     for (const id of ids)
       assert.ok(refs.includes(id) || t.deleted.includes(id), `gallery image ${id} remains tracked or is deleted`);
   };
-  return { ...t, art, call, unit, world, shown, retained, accounted, references };
+  return { ...t, art, call, unit, world, shown, retained, accounted, references, submitted };
 }
 
 async function flush() {
@@ -136,11 +150,31 @@ test("expression preview and paid edits retain the complete configured style, pr
       assert.ok(prompt.negativePrompt.includes(NEGATIVE));
       assert.ok(prompt.prompt.includes(FACE_LOOKS[face][tagged ? 1 : 0]));
     }
-    preview.body.prompts.tender.prompt += " USER REVIEWED THE TENDER FACE.";
-    preview.body.prompts.tender.negativePrompt += ", USER REVIEW NEGATIVE";
+    const reviewedPositive = ` \t${preview.body.prompts.tender.prompt} USER REVIEWED THE TENDER FACE.\n `;
+    const reviewedNegative = ` \n${preview.body.prompts.tender.negativePrompt}, USER REVIEW NEGATIVE\t `;
+    preview.body.prompts.tender.prompt = reviewedPositive;
+    preview.body.prompts.tender.negativePrompt = reviewedNegative;
+    preview.body.prompts.flustered.negativePrompt = "";
+    preview.body.prompts.cold.negativePrompt = " \t\n ";
     const painted = await t.call("POST", REPAINT, { li: KAI, ...preview.body });
     assert.equal(painted.status, 200, JSON.stringify(painted.body));
     assert.equal(painted.body.paint.state, "ready");
+    assert.equal(
+      t.submitted[0]!.prompts!.tender!.prompt,
+      reviewedPositive,
+      "route validation does not trim reviewed positives",
+    );
+    assert.equal(
+      t.submitted[0]!.prompts!.tender!.negativePrompt,
+      reviewedNegative,
+      "route validation does not trim reviewed negatives",
+    );
+    assert.equal(t.submitted[0]!.prompts!.flustered!.negativePrompt, "", "an empty reviewed negative remains allowed");
+    assert.equal(
+      t.submitted[0]!.prompts!.cold!.negativePrompt,
+      " \t\n ",
+      "a whitespace-only reviewed negative remains allowed",
+    );
     assert.equal(t.paid.length, FACES.length);
     for (const { request } of t.paid) {
       assert.equal(request.connectionId, "conn-image");
@@ -326,6 +360,16 @@ test("stale reviewed references and unavailable targets are rejected before any 
   context.after(() => t.art.dispose());
   const reviewed = await t.call("POST", PROMPT, { li: KAI });
   assert.equal(reviewed.status, 200, JSON.stringify(reviewed.body));
+  const before = t.retained();
+  const originalArt = await t.unit();
+  const blank = structuredClone(reviewed.body.prompts);
+  blank.hurt.prompt = " \t\n ";
+  blank.hurt.negativePrompt = "";
+  const rejected = await t.call("POST", REPAINT, { li: KAI, base: reviewed.body.base, prompts: blank });
+  assert.equal(rejected.status, 400, "a whitespace-only reviewed positive is rejected before paid work");
+  assert.deepEqual(t.paid, []);
+  assert.deepEqual(await t.unit(), originalArt, "invalid reviewed text cannot change retained artwork");
+  assert.deepEqual(t.retained(), before, "invalid reviewed text cannot change story or progress");
   const unbound = await t.call("POST", REPAINT, { li: KAI, prompts: reviewed.body.prompts });
   assert.equal(unbound.status, 400, "reviewed prompts require the look they were reviewed against");
   assert.deepEqual(t.paid, [], "missing reference binding is rejected before paid work");
