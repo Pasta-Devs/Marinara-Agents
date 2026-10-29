@@ -39,6 +39,8 @@ export function useSlurpMemoryStatus(enabled: boolean) {
       }),
     enabled,
     staleTime: 30_000,
+    // Long-Term Memory's own settings can turn sharing on without telling Slurp, so ask again on every open.
+    refetchOnMount: "always",
   });
 }
 export function useSlurpSettingsDefaults() {

@@ -412,6 +412,11 @@ async function main() {
       reads: 0,
     });
   }
+  assert.match(
+    client("features/settings/slp-settings-hooks.ts"),
+    /"memory-status"\] as const,[\s\S]*?refetchOnMount: "always"/u,
+    "reopening the panel re-asks Long-Term Memory, so a switch turned on in its own settings clears the off line",
+  );
   const panel = client("features/settings/SlpEngineLinkPanel.tsx");
   assert.match(
     panel,
