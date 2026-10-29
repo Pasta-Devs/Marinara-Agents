@@ -531,6 +531,7 @@ test("Otome Hearth look art: Wish cleans and contains outfits, opens the full im
   const calls: Call[] = [];
   const { stub, answer } = wishStub();
   const banner = stub.wish.banners[1];
+  banner.title = "";
   banner.art = ready(RAW_LOOK);
   banner.five.art = ready(RAW_LOOK);
   const cleanup = await stubLookCleanup(page);
@@ -540,6 +541,7 @@ test("Otome Hearth look art: Wish cleans and contains outfits, opens the full im
   await expect(root.locator('.of-banner[data-kind="memories"] .of-banner-img')).toHaveAttribute("src", CG);
   expect(cleanup).toHaveLength(0);
   await root.getByRole("tab", { name: "Cassian’s Wardrobe" }).click();
+  await expect(root.locator(".of-banner-title")).toHaveText("Gilded Hours");
   const image = root.locator(".of-banner-img");
   await expect(image).toHaveAttribute("src", CLEAN_LOOK);
   expect(cleanup).toHaveLength(1);
@@ -553,6 +555,7 @@ test("Otome Hearth look art: Wish cleans and contains outfits, opens the full im
   await open.press("Enter");
   const dialog = root.getByRole("dialog", { name: "Gilded Hours" });
   await expect(dialog.locator(".of-viewer-img")).toHaveAttribute("src", CLEAN_LOOK);
+  await expect(dialog.locator(".of-viewer-img")).toHaveAttribute("alt", "Gilded Hours");
   await expect(dialog.getByRole("button", { name: "Close", exact: true })).toBeFocused();
   await expect(dialog.locator(".of-viewer-img")).toHaveCSS("object-fit", "contain");
   await dialog.getByRole("button", { name: "Close", exact: true }).press("Escape");
@@ -567,7 +570,7 @@ test("Otome Hearth look art: Wish cleans and contains outfits, opens the full im
     starlight: 1900,
     pity: PITY["his-wardrobe"],
   };
-  await root.getByRole("button", { name: "Wish ×1", exact: true }).click();
+  await root.getByRole("button", { name: "Wish ×1, 100 Starlight", exact: true }).click();
   const takeover = page.getByRole("dialog", { name: "Your wish" });
   await takeover.getByRole("button", { name: "Break the seal" }).click();
   await expect(takeover.locator(".of-reveal-art img")).toHaveAttribute("src", CLEAN_LOOK);

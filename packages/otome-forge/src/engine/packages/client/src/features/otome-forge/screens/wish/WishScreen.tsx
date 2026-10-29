@@ -452,6 +452,7 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
   const { locale } = useOtomeProps().localization;
   const number = new Intl.NumberFormat(locale);
   const li = view.lis.find((item) => item.id === banner.featuredLi) ?? null;
+  const bannerTitle = banner.title || banner.five.title;
   const look = banner.kind !== "memories";
   const art = useSpriteDisplay(readyArt(banner.art) ?? readyArt(banner.five.art), look);
   const [expanded, setExpanded] = useState(false);
@@ -524,7 +525,7 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
           <button
             type="button"
             className="of-banner-art"
-            aria-label={t("ui.otomeForge.wish.viewImage", { title: banner.title })}
+            aria-label={t("ui.otomeForge.wish.viewImage", { title: bannerTitle })}
             disabled={viewerBlocked}
             onClick={() => setExpanded(true)}
           >
@@ -546,7 +547,7 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
               : t("ui.otomeForge.wish.until", { date: formatDay(banner.endsDay, locale) })}
           </p>
           <h2 id={titleId} className="of-banner-title" tabIndex={-1}>
-            {banner.title || banner.five.title}
+            {bannerTitle}
           </h2>
           <p className="of-banner-featured">
             <RarityStars rarity={5} />
@@ -623,7 +624,7 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
       {expanded && art && !viewerBlocked ? (
         <Dialog
           wide
-          title={banner.title}
+          title={bannerTitle}
           onClose={() => setExpanded(false)}
           initialFocus={closeRef}
           actions={
@@ -639,7 +640,7 @@ function BannerPanel({ view, banner, wish, actions, pulling, error, onPull, onBa
           }
         >
           <figure className="of-viewer-figure">
-            <img className="of-viewer-img" src={art} alt={banner.title} decoding="async" />
+            <img className="of-viewer-img" src={art} alt={bannerTitle} decoding="async" />
           </figure>
         </Dialog>
       ) : null}
