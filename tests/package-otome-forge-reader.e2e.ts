@@ -819,3 +819,109 @@ test("Otome Hearth polls a free cut-out replacement while keeping its previous i
   expect(reads(), "ready cleanup stops polling without a model or paid image request").toBe(completed);
   expect(stub.calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(0);
 });
+
+for (const outcome of ["ready", "uncut"] as const) {
+  test(`Otome Hearth stage expressions keep the clean neutral until cleanup is ${outcome}`, async ({
+    page,
+  }, testInfo) => {
+    const sprite = (colour: string, green = false) =>
+      `data:image/svg+xml,${encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="320">${green ? '<rect width="160" height="320" fill="#00ff00"/>' : ""}<circle cx="80" cy="40" r="26" fill="${colour}"/><path d="M52 72H108L120 190H100V310H85V190H75V310H60V190H40Z" fill="${colour}"/></svg>`,
+      )}`;
+    const neutral = sprite("#9db8f0");
+    const raw = sprite("#e7a6b8", true);
+    const clean = sprite("#e7a6b8");
+    let phase: "pending" | "ready" | "uncut" = "pending";
+    const stub = createStoryStub({
+      done: true,
+      storyBeats: [
+        {
+          ...BEATS[0],
+          segments: [seg("Ilvar Thorne", "The same person, a different expression.", { expression: "cold" })],
+          choices: [],
+        },
+        ...BEATS.slice(1),
+      ],
+    });
+    const answer = stub.answer;
+    stub.answer = (call) => {
+      const response = answer(call);
+      if (call.path === `/api/otome-forge/runs/${RUN}`) {
+        const view = (response.json as Json).view;
+        view.world.images.connectionId = "conn-image";
+        view.cutoutsPending = phase === "pending";
+        Object.assign(view.lis[0], {
+          portrait: neutral,
+          // Stickers still receive the original while cleanup waits or fails; the reader must filter it by `cut`.
+          expressions: { cold: phase === "ready" ? clean : raw },
+          cut: phase === "ready" ? [neutral, clean] : [neutral],
+        });
+      }
+      if (call.path.endsWith("/art/scene")) {
+        // The offending scene response stays raw in every phase; only RunView may authorize its cleaned face.
+        return {
+          status: 200,
+          json: { faces: { [ILVAR]: { cold: raw } }, facesComing: phase === "pending" ? [ILVAR] : [], places: [] },
+        };
+      }
+      return response;
+    };
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+    await page.clock.install();
+    await stubRoutes(page, stub);
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+    const scene = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/art/scene"));
+    await root.getByRole("button", { name: "Begin" }).click();
+    await (await scene).finished();
+    const front = root.locator('.of-face-img[data-front="true"]');
+    await expect(front).toHaveAttribute("src", neutral);
+    await expect(front).toHaveAttribute("data-cut", "true");
+    await expect(root.locator(`.of-face-img[src="${raw}"]`)).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath("expression-pending-neutral.png") });
+    // Replay opens its stored beat with the normal POST; cleanup must add no mutation or regeneration request.
+    const packagePosts = () =>
+      stub.calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"));
+    const opened = packagePosts();
+    expect(opened).toHaveLength(1);
+    expect(opened[0]!.path).toBe(`/api/otome-forge/runs/${RUN}/chapters/main-1/beats/0`);
+    expect(Object.keys(opened[0]!.body!).sort()).toEqual(["debugMode", "timeZone"]);
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 60_000));
+    const reads = () =>
+      stub.calls.filter(
+        (call) =>
+          call.method === "GET" && (call.path === `/api/otome-forge/runs/${RUN}` || call.path.endsWith("/art/scene")),
+      ).length;
+    const before = reads();
+    const viewReady = page.waitForResponse(async (response) => {
+      if (new URL(response.url()).pathname !== `/api/otome-forge/runs/${RUN}` || response.status() !== 200)
+        return false;
+      return !(await response.json()).view.cutoutsPending;
+    });
+    const sceneReady = page.waitForResponse(async (response) => {
+      if (!new URL(response.url()).pathname.endsWith("/art/scene") || response.status() !== 200) return false;
+      return !(await response.json()).facesComing.length;
+    });
+    phase = outcome;
+    await page.clock.runFor(5500);
+    await Promise.all([(await viewReady).finished(), (await sceneReady).finished()]);
+    let drained = 0;
+    await expect
+      .poll(
+        async () => {
+          if (drained++ < 100) await page.clock.runFor(1);
+          return front.getAttribute("src");
+        },
+        { intervals: [100], timeout: 10_000 },
+      )
+      .toBe(outcome === "ready" ? clean : neutral);
+    await expect(front).toHaveAttribute("data-cut", "true");
+    await expect(root.locator(`.of-face-img[src="${raw}"]`)).toHaveCount(0);
+    expect(reads()).toBeGreaterThan(before);
+    await page.screenshot({ path: testInfo.outputPath(`expression-${outcome}.png`) });
+    const completed = reads();
+    await page.clock.runFor(10_000);
+    expect(reads(), "completed or failed free cleanup stops both polls").toBe(completed);
+    expect(packagePosts(), "cleanup adds no POST beyond the single stored-beat open").toEqual(opened);
+  });
+}
