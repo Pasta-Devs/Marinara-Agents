@@ -828,6 +828,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.4.11",
+          "date": "2026-10-29",
+          "notes": "- Backstage (Engine link) no longer says Long-Term Memory isn't sharing after its \"Other Agents can read memories\" switch is turned on. The line clears at once after Slurp's offer, and the next time the panel loads after Long-Term Memory's offer or Memory Settings.",
+          "highlight": false
+        },
+        {
           "version": "0.4.10",
           "date": "2026-10-29",
           "notes": "- Turning on \"What your other Agents know\" now asks whether to turn on Long-Term Memory's \"Other Agents can read memories\" when that switch is off. \"Turn it on\" changes only that switch; \"Not now\" leaves it alone.",
@@ -939,12 +945,6 @@
           "version": "0.3.46",
           "date": "2026-10-15",
           "notes": "- Added: Creators react to each other. Each hour a character Creator may like or comment on another Creator's public post (about two a day), persona Creators' posts included. Free canned copy; no messages, tips or subscriptions between Creators.\n- Fixed: the browsing persona was saved per browser, so one install could show an empty Inbox on one device and 87 unread on another. The pick is now a Slurp setting shared by every device; an older per-browser pick is saved once.\n- Fixed: the custom tag field greyed out with no reason when a draft had filled all eight tags. It now says so.\n- Fixed: Hinted profiles checked tags joined with the bio, so words from separate fields could add up to a copied source detail. Tags are checked one at a time, and the save error names the tag that leaks.",
-          "highlight": false
-        },
-        {
-          "version": "0.3.45",
-          "date": "2026-10-15",
-          "notes": "- Fixed: picture prompts carried the style profile's tags twice. The prompt writer now gets the bare draft; the style is compiled onto its result once.\n- Fixed: the gallery fallback picked the first gallery image every time. It now picks the image this Creator showed least recently.\n- Added: \"Draw missing avatars and banners\" in Settings › Images. Off stops background drawing; Open Creators still copy their card's pictures. On for existing installs; first-run setup sets it from its images choice.\n- Added: \"Caption instructions\" in Settings › Images. Blank uses a Slurp default that describes people, clothes, pose, place and text, and leaves out the art style.\n- Added: \"Always in their pictures\" per Creator. The text opens the Creator's part of every picture prompt, after the style tags, in place of the card name.\n- Fixed: the post writer no longer dresses Creators in worn-out, faded or shabby clothes unless the card or caption asks for it.",
           "highlight": false
         }
       ]
