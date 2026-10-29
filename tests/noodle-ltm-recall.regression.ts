@@ -220,6 +220,43 @@ async function main() {
     ),
     /app\.get\("\/memory-status"/,
   );
+
+  // The recorded "off" outlives the switch that caused it, so the status the screen shows is checked
+  // against Long-Term Memory's current setting. Only "off" costs that read; a read that fails keeps "off".
+  const clientDir = "../packages/noodle/src/engine/packages/client/src";
+  const readClient = (path: string) => readFileSync(new URL(`${clientDir}/${path}`, import.meta.url), "utf8");
+  const sharing = runInNewContext(
+    `${stripTypeScriptTypes(readClient("components/noodle/noodle-ltm-sharing.ts").replace(/^export /gm, ""))}\n({ currentMemoryStatus });`,
+  ) as {
+    currentMemoryStatus: (deps: {
+      read: () => Promise<{ status: Status }>;
+      readLtm: () => Promise<{ longTermMemoryShareWithPackages?: boolean }>;
+    }) => Promise<{ status: Status }>;
+  };
+  const statusFor = async (status: Status, ltm: { longTermMemoryShareWithPackages?: boolean } | Error) => {
+    let ltmReads = 0;
+    const result = await sharing.currentMemoryStatus({
+      read: async () => ({ status }),
+      readLtm: async () => {
+        ltmReads += 1;
+        if (ltm instanceof Error) throw ltm;
+        return ltm;
+      },
+    });
+    return { status: result.status, ltmReads };
+  };
+  assert.deepEqual(await statusFor("off", { longTermMemoryShareWithPackages: true }), { status: null, ltmReads: 1 });
+  assert.deepEqual(await statusFor("off", {}), { status: null, ltmReads: 1 }, "an unset switch is on");
+  assert.deepEqual(await statusFor("off", { longTermMemoryShareWithPackages: false }), { status: "off", ltmReads: 1 });
+  assert.deepEqual(await statusFor("off", new Error("unreadable")), { status: "off", ltmReads: 1 });
+  for (const status of ["ok", "missing", "error", null] as const) {
+    assert.deepEqual(await statusFor(status, { longTermMemoryShareWithPackages: false }), { status, ltmReads: 0 });
+  }
+  const hookSource = readClient("hooks/use-noodle.ts");
+  assert.match(hookSource, /queryFn: \(\) =>\s+currentMemoryStatus\(\{[\s\S]*?"\/noodle\/memory-status"/);
+  assert.match(hookSource, /"\/long-term-memory\/settings"/);
+  assert.match(hookSource, /refetchOnMount: "always"/);
+
   console.log("noodle-ltm-recall regression: OK");
 }
 
