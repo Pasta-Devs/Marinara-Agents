@@ -113,7 +113,7 @@ export function careCard(unit: Pick<Unit, "name" | "pronouns" | "bible">): strin
 }
 
 export interface CareNoteInput {
-  world: Pick<World, "content" | "images" | "language" | "setting" | "premise">;
+  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle">;
   player: Pick<Player, "name" | "pronouns" | "about">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   /** One of allowedCareLines(player), exactly. The caller redacts it from the logged prompt. */
@@ -139,6 +139,10 @@ export function careNoteMessages({ world, player, unit, careLine }: CareNoteInpu
     "- A note, not a scene: nothing happens in the story because of it.",
     BANNED_PHRASES_RULE,
     `- Write the note in ${world.language}.`,
+    // The player's own instructions, as every other prompt that writes carries them; the rules above still hold.
+    ...(world.writingStyle?.trim()
+      ? [`- How the player wants it written (follow it; these rules still hold): ${world.writingStyle.trim()}`]
+      : []),
     "",
     forgeKnowledgeBoundary,
     "",

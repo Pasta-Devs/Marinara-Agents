@@ -8,6 +8,7 @@ import test from "node:test";
 import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
 import { cutoutsSettled } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
 import { lookMatte } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/prompts.ts";
+import { careNoteMessages } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/care/prompts.ts";
 import {
   playerId,
   runDocTarget,
@@ -71,6 +72,19 @@ test("the persona's whole description and the player's writing style reach the s
     scene,
     /HOW THE PLAYER WANTS IT WRITTEN \(follow it in every line you write; the content contract still holds\):\nSTYLE-MARK: present tense, second person\. Show, don't tell\./,
   );
+
+  // The Caring message builds its own rules, and carries the style and the persona there too.
+  const world = (await t.store.readDoc(worldId(t.runId), normalizeWorld))!;
+  const care = text(
+    careNoteMessages({
+      world,
+      player: { name: "Ines", pronouns: { subject: "she", object: "her", possessive: "her" }, about: LONG },
+      unit: { name: "Kai", pronouns: { subject: "he", object: "him", possessive: "his" }, bible: null },
+      careLine: "Ines has told you: today is day 2 of her period.",
+    }),
+  );
+  assert.match(care, /How the player wants it written \(follow it; these rules still hold\): STYLE-MARK/);
+  assert.ok(care.includes(`Who they are (their persona): ${LONG}`));
 });
 
 test("a love interest is painted on the matte his colours name least; the run view shows his cut-outs", async () => {
