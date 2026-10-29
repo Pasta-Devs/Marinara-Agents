@@ -1283,6 +1283,25 @@ test.describe("Otome Forge reader mobile", () => {
 test.describe("Otome Forge reader desktop", () => {
   test.use({ hasTouch: false, isMobile: false, viewport: { width: 1280, height: 900 } });
 
+  test("a hidden mobile disclosure does not consume the next desktop story action", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const calls: Call[] = [];
+    const { answer } = readerCutoutStub();
+    await stubRoutes(page, answer, calls);
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Continue" }).first().click();
+    await next(root);
+    await expect(line(root)).toContainText("You came back. How inefficient of you.");
+    const more = root.getByRole("button", { name: "More reader controls" });
+    await more.click();
+    await expect(more).toHaveAttribute("aria-expanded", "true");
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect(more).toBeHidden();
+    await next(root);
+    await expect(line(root)).toContainText("I should have stayed away.");
+  });
+
   test("keeps the existing controls and full cut-out framing", async ({ page }, testInfo) => {
     test.setTimeout(120_000);
     await page.emulateMedia({ reducedMotion: "reduce" });
