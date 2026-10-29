@@ -312,5 +312,57 @@
       "bannerPath": "../../store/banners/world-state.webp",
       "bannerSmallPath": "../../store/banners/world-state-1200.webp"
     }
+  },
+  "kits": [
+    {
+      "id": "roleplay-starter",
+      "name": "Roleplay starter",
+      "tagline": "World, people, faces and lore for a roleplay.",
+      "packages": [
+        "world-state",
+        "character-tracker",
+        "expression",
+        "background",
+        "lorebook-keeper"
+      ]
+    },
+    {
+      "id": "story-writer",
+      "name": "Story writer",
+      "tagline": "Cleaner prose and a story that stays on track.",
+      "packages": [
+        "prose-guardian",
+        "continuity",
+        "director",
+        "long-term-memory"
+      ]
+    },
+    {
+      "id": "game-night",
+      "name": "Game night",
+      "tagline": "Card and board games to play in chat.",
+      "packages": [
+        "chess",
+        "poker",
+        "uno"
+      ]
+    }
+  ],
+  "howTo": {
+    "agent": [
+      "../../store/howto/agent-1.webp",
+      "../../store/howto/agent-2.webp",
+      "../../store/howto/agent-3.webp"
+    ],
+    "app": [
+      "../../store/howto/app-1.webp",
+      "../../store/howto/app-2.webp",
+      "../../store/howto/app-3.webp"
+    ],
+    "game": [
+      "../../store/howto/game-1.webp",
+      "../../store/howto/game-2.webp",
+      "../../store/howto/game-3.webp"
+    ]
   }
 }

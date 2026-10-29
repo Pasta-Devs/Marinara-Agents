@@ -19,6 +19,9 @@ export const storeBanner = (id, width = STORE_BANNER_WIDTHS[0]) =>
   width === STORE_BANNER_WIDTHS[0] ? `store/banners/${id}.webp` : `store/banners/${id}-${width}.webp`;
 // Real screenshots, numbered from 1 with no gaps.
 export const storePreview = (id, index) => `store/previews/${id}-${index}.webp`;
+// How-to step pictures, one set per package type, shown on every agent page of that type.
+export const STORE_HOW_TO = { agent: 3, app: 3, game: 3 };
+export const storeHowTo = (type, step) => `store/howto/${type}-${step}.webp`;
 
 export async function readStoreSource(repoRoot) {
   const source = JSON.parse(await readFile(join(repoRoot, "store/store.json"), "utf8"));
@@ -30,6 +33,29 @@ export async function readStoreSource(repoRoot) {
       throw new Error(`store/store.json: ${id} needs a tagline of 1-${MAX_STORE_TAGLINE_CHARACTERS} characters`);
     if (entry.featured !== undefined && !(Number.isInteger(entry.featured) && entry.featured > 0))
       throw new Error(`store/store.json: ${id} featured must be a positive integer`);
+  }
+  // The Engine drops all kits past 20, and any kit with more than 20 packages.
+  const kitIds = new Set();
+  if ((source.kits ?? []).length > 20) throw new Error("store/store.json: at most 20 kits");
+  for (const kit of source.kits ?? []) {
+    if (kitIds.has(kit.id)) throw new Error(`store/store.json: kit ${kit.id} is listed twice`);
+    kitIds.add(kit.id);
+    if ((kit.packages ?? []).length > 20) throw new Error(`store/store.json: kit ${kit.id} has more than 20 packages`);
+    const name = kit.name?.trim() ?? "";
+    if (!kit.id || !name || name.length > MAX_STORE_TAGLINE_CHARACTERS) {
+      throw new Error(
+        `store/store.json: kit ${kit.id} needs an id and a name of 1-${MAX_STORE_TAGLINE_CHARACTERS} characters`,
+      );
+    }
+    if ((kit.tagline?.length ?? 0) > MAX_STORE_TAGLINE_CHARACTERS) {
+      throw new Error(
+        `store/store.json: kit ${kit.id} tagline is longer than ${MAX_STORE_TAGLINE_CHARACTERS} characters`,
+      );
+    }
+    const unknown = (kit.packages ?? []).filter((id) => !Object.hasOwn(source.packages, id));
+    if (!kit.packages?.length || unknown.length) {
+      throw new Error(`store/store.json: kit ${kit.id} needs packages from the store (unknown: ${unknown.join(", ")})`);
+    }
   }
   return source;
 }
@@ -86,5 +112,23 @@ export async function buildStoreDocument(repoRoot, directory, entries, { lenient
       ...(previews.length ? { previews } : {}),
     };
   }
-  return { schemaVersion: 1, packages };
+  const preview = directory.split(/[\\/]/).includes("preview");
+  // A lane lists a kit only with the packages it publishes.
+  const kits = (source.kits ?? [])
+    .map((kit) => ({ ...kit, packages: kit.packages.filter((id) => packages[id]) }))
+    .filter((kit) => kit.packages.length > 0);
+  const howTo = {};
+  for (const [type, steps] of Object.entries(STORE_HOW_TO)) {
+    const paths = Array.from({ length: steps }, (_, index) => storeHowTo(type, index + 1));
+    const found = await Promise.all(paths.map((path) => exists(join(repoRoot, path))));
+    // A type gets pictures only as a full set, so steps never show a mix.
+    if (found.every(Boolean)) howTo[type] = paths.map(link);
+  }
+  return {
+    schemaVersion: 1,
+    packages,
+    // The Engine reads kits and how-to pictures from the published lane only.
+    ...(kits.length && !preview ? { kits } : {}),
+    ...(Object.keys(howTo).length && !preview ? { howTo } : {}),
+  };
 }
