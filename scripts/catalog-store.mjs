@@ -34,7 +34,13 @@ export async function readStoreSource(repoRoot) {
     if (entry.featured !== undefined && !(Number.isInteger(entry.featured) && entry.featured > 0))
       throw new Error(`store/store.json: ${id} featured must be a positive integer`);
   }
+  // The Engine drops all kits past 20, and any kit with more than 20 packages.
+  const kitIds = new Set();
+  if ((source.kits ?? []).length > 20) throw new Error("store/store.json: at most 20 kits");
   for (const kit of source.kits ?? []) {
+    if (kitIds.has(kit.id)) throw new Error(`store/store.json: kit ${kit.id} is listed twice`);
+    kitIds.add(kit.id);
+    if ((kit.packages ?? []).length > 20) throw new Error(`store/store.json: kit ${kit.id} has more than 20 packages`);
     const name = kit.name?.trim() ?? "";
     if (!kit.id || !name || name.length > MAX_STORE_TAGLINE_CHARACTERS) {
       throw new Error(
@@ -106,6 +112,7 @@ export async function buildStoreDocument(repoRoot, directory, entries, { lenient
       ...(previews.length ? { previews } : {}),
     };
   }
+  const preview = directory.split(/[\\/]/).includes("preview");
   // A lane lists a kit only with the packages it publishes.
   const kits = (source.kits ?? [])
     .map((kit) => ({ ...kit, packages: kit.packages.filter((id) => packages[id]) }))
@@ -120,7 +127,8 @@ export async function buildStoreDocument(repoRoot, directory, entries, { lenient
   return {
     schemaVersion: 1,
     packages,
-    ...(kits.length ? { kits } : {}),
-    ...(Object.keys(howTo).length ? { howTo } : {}),
+    // The Engine reads kits and how-to pictures from the published lane only.
+    ...(kits.length && !preview ? { kits } : {}),
+    ...(Object.keys(howTo).length && !preview ? { howTo } : {}),
   };
 }

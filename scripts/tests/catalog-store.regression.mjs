@@ -55,6 +55,8 @@ try {
   });
   // A kit lists only the packages the lane publishes.
   assert.deepEqual((await buildStoreDocument(root, "catalog", entries("chess"))).kits[0].packages, ["chess"]);
+  // The Engine reads kits from the published lane only.
+  assert.equal((await buildStoreDocument(root, "catalog/preview/v2", entries("chess"))).kits, undefined);
   assert.deepEqual(store.packages.noodle.previews, ["../../store/previews/noodle-1.webp"]);
   assert.equal(
     (await buildStoreDocument(root, "catalog", entries("chess"))).packages.chess.bannerPath,
