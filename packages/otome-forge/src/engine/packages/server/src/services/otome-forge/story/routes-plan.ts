@@ -35,6 +35,7 @@ import { chapterId, mainChapterNumber, runDocTarget, stateId } from "../ids.js";
 import { defaultLiState, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeChapter } from "../schemas/story.js";
 import { repairOffers } from "../state/stages.js";
+import { withPersonaStoryAbout } from "../setup/prompts.js";
 import { recallText } from "./canon.js";
 import {
   clean,
@@ -160,7 +161,7 @@ async function readyRun(deps: ChapterDeps, runId: string, li: LiId) {
   const units = castOf(run);
   const unit = units.find((item) => item.id === li);
   if (!unit) throw notFound("love interest");
-  return { run, units, unit };
+  return { run: { ...run, player: await withPersonaStoryAbout(deps.runtime, run.player) }, units, unit };
 }
 
 /** Saves the planned chapter (a chapter another request saved first wins) and starts its reading progress. */

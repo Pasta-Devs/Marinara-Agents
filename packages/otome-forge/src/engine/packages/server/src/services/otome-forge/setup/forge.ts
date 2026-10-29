@@ -35,6 +35,7 @@ import {
   bibleMessages,
   castOf,
   normalizeWorldPlan,
+  withPersonaStoryAbout,
   worldPlanMessages,
   WorldPlanSchema,
   type WorldPlan,
@@ -244,7 +245,7 @@ async function readCast(deps: ForgeDeps, runId: string) {
   if (!run) throw runNotFound();
   const order = run.world.forge.steps.filter((step) => step.id.startsWith("bible:")).map((step) => step.id.slice(6));
   const units = order.flatMap((li) => run.units.filter((unit) => unit.id === li));
-  return { ...run, units };
+  return { ...run, player: await withPersonaStoryAbout(deps.runtime, run.player), units };
 }
 
 async function writeWorldPlan(deps: ForgeDeps, runId: string, debugMode: boolean): Promise<void> {

@@ -84,6 +84,10 @@ export async function readCard(
 export interface PersonaFields {
   name: string;
   description: string;
+  personality: string;
+  backstory: string;
+  /** Authored story appearance, independent of the optional image-only override. */
+  authoredAppearance: string;
   /** The image appearance only while its override is enabled, otherwise the authored Appearance. */
   appearance: string;
 }
@@ -101,8 +105,36 @@ export async function readPersona(
   return {
     name: str(data.name),
     description: str(data.description),
+    personality: str(data.personality),
+    backstory: str(data.backstory),
+    authoredAppearance: str(data.appearance),
     appearance: (imageFirst && imageAppearance) || str(data.appearance),
   };
+}
+
+/** Only the persona's four authored story fields; roleplay scenarios and sample dialogue are not story canon. */
+export function personaStoryAbout(persona: PersonaFields): string {
+  return [
+    persona.description,
+    persona.personality ? `Personality: ${persona.personality}` : "",
+    persona.backstory ? `Backstory: ${persona.backstory}` : "",
+    persona.authoredAppearance ? `Appearance: ${persona.authoredAppearance}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Read current authored persona fields for a prompt; an unavailable persona keeps this protagonist's saved copy. */
+export async function withPersonaStoryAbout(
+  runtime: Pick<CapabilityRuntimeHost, "resources">,
+  player: Player,
+): Promise<Player> {
+  try {
+    const persona = await readPersona(runtime, player.personaId);
+    return persona ? { ...player, about: personaStoryAbout(persona) } : player;
+  } catch {
+    return player;
+  }
 }
 
 /** Current persona appearance is authoritative for every image; retain the action's separate outfit line. */

@@ -11,6 +11,7 @@
 // an off-screen line for each absent one, no tag for a Line, and conflict seeds that never repeat that love interest's
 // last two kinds of angst, counting the seeds planted earlier in the same plan (at most one open misunderstanding
 // each, resolved within two chapters). A failed check is the generation core's one repair turn.
+import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type {
   Chapter,
   ChapterDetail,
@@ -33,6 +34,7 @@ import { defaultLiState, normalizeState, readRun } from "../schemas/state.js";
 import { normalizeBeat, normalizeChapter, toChapterView } from "../schemas/story.js";
 import { repairOffers, routeEntries } from "../state/stages.js";
 import type { OtomeStore } from "../store.js";
+import { withPersonaStoryAbout } from "../setup/prompts.js";
 import { recallText, type StoryMemory } from "./canon.js";
 import {
   ANGST_TYPES,
@@ -46,6 +48,7 @@ import {
 } from "./prompts.js";
 
 export interface ChapterDeps extends GenerationDeps {
+  runtime: GenerationDeps["runtime"] & Pick<CapabilityRuntimeHost, "resources">;
   store: OtomeStore;
   memory?: StoryMemory;
 }
@@ -313,7 +316,7 @@ export async function planNextChapter(
       label: `chapter-plan/${key}`,
       messages: chapterPlanMessages({
         world: run.world,
-        player: run.player,
+        player: await withPersonaStoryAbout(deps.runtime, run.player),
         units,
         state: run.state,
         number,
