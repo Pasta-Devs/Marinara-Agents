@@ -1349,6 +1349,7 @@ test("Otome Hearth card link: a generated LI keeps their story and art while an 
   };
   let cards: Json[] = [];
   let revision = 0;
+  const configReadAt: number[] = [];
   const cardPath = `/api/otome-forge/runs/${RUN}/lis/${ILVAR}/card`;
   await stubRoutes(
     page,
@@ -1377,6 +1378,7 @@ test("Otome Hearth card link: a generated LI keeps their story and art while an 
         };
       }
       if (call.path === "/api/tts/config") {
+        configReadAt.push(Date.now());
         return {
           status: 200,
           json: {
@@ -1457,6 +1459,10 @@ test("Otome Hearth card link: a generated LI keeps their story and art while an 
   // The same controller has a cached config from the unlinked voice: linking must fetch the new assignment now.
   await playNote("Maukie card voice", cardId);
   expect(configReads()).toBe(2);
+  expect(
+    configReadAt[1]! - configReadAt[0]!,
+    "the previous config is still inside its 30-second cache window",
+  ).toBeLessThan(30_000);
   expect(posts(calls, "/api/tts/speak").some((call) => call.body?.voice === "Maukie card voice")).toBe(true);
   await page.reload();
   await page.getByRole("tab", { name: "Open Otome Hearth" }).click();
@@ -1485,6 +1491,7 @@ test("Otome Hearth card link: a generated LI keeps their story and art while an 
   await expect(form.getByRole("combobox", { name: "Character card" })).toHaveValue("");
   await playNote("Unlinked pool voice", null);
   expect(configReads()).toBe(4);
+  expect(configReadAt[3]! - configReadAt[2]!, "unlink refreshes the still-cached linked config").toBeLessThan(30_000);
   form = await openLink();
   await expect(form.getByRole("combobox", { name: "Character card" })).toHaveValue("");
   await root.getByRole("button", { name: "Show spoilers" }).click();
