@@ -1482,7 +1482,8 @@ ${R} .of-reader-tool { width: 44px; height: 44px; }
 ${R} .of-reader-secondary[data-expanded="true"] {
   position: absolute; top: calc(100% + 6px); inset-inline-end: 0;
   display: flex; flex-direction: column; gap: 6px; padding: 4px;
-  max-height: max(44px, calc(100cqh - 90px)); overflow-y: auto; overscroll-behavior: contain;
+  max-height: max(44px, calc(100cqh - 120px - max(12px, env(safe-area-inset-top)) - max(10px, env(safe-area-inset-bottom))));
+  overflow-y: auto; overscroll-behavior: contain;
   scrollbar-width: none;
 }
 ${R} .of-reader-secondary > button { flex: none; }

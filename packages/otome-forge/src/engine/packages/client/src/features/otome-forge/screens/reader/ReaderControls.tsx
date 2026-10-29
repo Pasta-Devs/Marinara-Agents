@@ -233,7 +233,10 @@ export function ReaderControls(props: ReaderControlsProps) {
             title={t("ui.otomeForge.reader.moreControls")}
             aria-expanded={expanded}
             aria-controls={secondaryId}
-            onClick={() => setExpanded(!expanded)}
+            onClick={(event) => {
+              event.currentTarget.focus();
+              setExpanded(!expanded);
+            }}
           >
             <MoreHorizontal size={17} strokeWidth={2} aria-hidden="true" />
           </button>
