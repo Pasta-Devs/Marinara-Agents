@@ -963,6 +963,8 @@
   "ui.otomeForge.setup.forgeRetryStep": "Try {{step}} again",
   "ui.otomeForge.setup.forgeRepaintStep": "Repaint {{step}}",
   "ui.otomeForge.setup.repaint": "Repaint",
+  "ui.otomeForge.setup.repaintExpressions": "Repaint expressions",
+  "ui.otomeForge.setup.repaintExpressionsLabel": "Repaint expressions for {{name}}",
   "ui.otomeForge.setup.repainting": "Painting…",
   "ui.otomeForge.setup.forgeStateDone": "Done",
   "ui.otomeForge.setup.forgeStateFailed": "Didn’t finish",
