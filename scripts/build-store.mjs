@@ -56,7 +56,10 @@ for (const id of await ids("store/icons/src", ".svg")) {
 }
 // Apps use their Home tab icon as the store logo, so the store and Home look the same.
 for (const dir of await readdir(join(repoRoot, "packages"))) {
-  const manifest = await readFile(join(repoRoot, "packages", dir, "manifest.json"), "utf8").then(JSON.parse, () => null);
+  const manifest = await readFile(join(repoRoot, "packages", dir, "manifest.json"), "utf8").then(
+    JSON.parse,
+    () => null,
+  );
   const tabIcon = manifest?.contributions?.homeBrowserTab?.iconPaths?.[0];
   if (tabIcon) await render(join("packages", dir, tabIcon), storeIcon(manifest.id), STORE_ICON_SIZE, STORE_ICON_SIZE);
 }
