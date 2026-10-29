@@ -2,6 +2,8 @@
 // Otome Forge: the story routes (plan M2a "Routes")
 // ──────────────────────────────────────────────
 // GET  /runs/:run/story                                        → StoryView
+// POST /runs/:run/prologue                                     → {chapter: ChapterView}: the prologue, made once
+//                                                                 with no model call (its scene is a beat like any)
 // POST /runs/:run/chapters/next {lead}                         → {chapter: ChapterView}
 // GET  /runs/:run/chapters/:key                                → ChapterDetail
 // POST /runs/:run/chapters/:key/beats/:i {rewrite?, reviewImagePrompts?} → {beat, confrontation?: ConfrontationView};
@@ -40,6 +42,7 @@ import { toConfrontationView } from "../story/confrontation.js";
 import { normalizeWorld, toWorldView } from "../schemas/world.js";
 import { cancellable, chooseOption, easeOff, readTo, serveBeat } from "../story/beats.js";
 import { chapterDetail, planNextChapter, storyView } from "../story/chapters.js";
+import { ensurePrologue } from "../story/prologue.js";
 
 const NextBody = z.object({ lead: z.string().min(1).max(80) });
 const BeatBody = z.object({ rewrite: z.boolean().optional() });
@@ -83,6 +86,15 @@ export const registerStoryRoutes: RegisterRoutes = (router, deps) => {
   router.get(
     "/runs/:run/story",
     handle(async (request) => storyView(deps, runParam(request).runId)),
+  );
+
+  router.post(
+    "/runs/:run/prologue",
+    handle(async (request) => {
+      parseBody(NoFields, request.body);
+      const { runId } = runParam(request);
+      return { chapter: toChapterView(await ensurePrologue(deps, runId)) };
+    }),
   );
 
   router.post(

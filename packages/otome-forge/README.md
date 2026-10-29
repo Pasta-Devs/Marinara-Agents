@@ -1,12 +1,12 @@
 # Otome Hearth
 
-Otome Hearth is a single-player otome game made from your own characters. Its love interests remember what you chose and change because of it, wait for you at Home, text you on your phone and go on dates with you. Wishes bring you their side stories and looks, paid for only with Starlight you earn by playing. There is no real money in it, banners never expire, and nothing runs on stamina.
+Otome Hearth is a single-player otome game made from your own characters. Its love interests remember what you chose and change because of it, wait for you at Home, send you messages and go on dates with you. Wishes bring you their side stories and looks, paid for only with Starlight you earn by playing. There is no real money in it, banners never expire, and nothing runs on stamina.
 
 Release 1, **0.1.0 "First Date"**, holds the whole first loop:
 
 - story setup with hidden character bibles;
 - main chapters and a route for each love interest, with confrontations and rifts;
-- Home and the phone;
+- Home and Messages;
 - Wish, the Wardrobe and the Album;
 - three games in Dates;
 - Remind Me with an opt-in period tracker;
@@ -35,7 +35,7 @@ Choose **Begin a new story**. Setup has six steps, and an unfinished setup is ke
 5. **Connections:**
    - **Story** writes the scenes, and does every job you leave on **Same as Story**;
    - **Planning** plans the world, the bibles and each chapter;
-   - **Phone** writes replies in the phone threads;
+   - **Messages** writes replies in the message threads;
    - **Memory** summarizes what happened, so the cast remembers it;
    - an optional image connection, **Ask before painting**, and **Expressions** (on by default).
 6. **Review:** what forging will cost, then **Forge our story**.
@@ -50,7 +50,9 @@ Forging writes the world and its central mystery: each love interest holds one p
 - how they stand with each of the others;
 - secrets that come out stage by stage.
 
-Bibles sit behind a spoiler gate, and you can edit them. A step that fails or is stopped waits for you to try it again. Base looks are painted only when you tap **Paint the cast**. Then choose **Begin**.
+Bibles sit behind a spoiler gate, and you can edit them. A step that fails or is stopped waits for you to try it again. Base looks are painted only when you tap **Paint the cast**. To paint one again later, open **Your cast** from Home's **Who's home** and choose **Repaint**. Then choose **Begin**.
+
+**Begin** plays the **prologue** first: one short scene of your protagonist's own life, just before the story opens. No love interest is in it; you meet them in chapter 1, which picks up where the prologue ends. It is written once, and the Story screen offers it again. **Skip** goes straight Home.
 
 You can keep several stories. **Your stories** lists them, and deleting one asks you to type its title. **Settings** changes a story's content, connections, images and audio later.
 
@@ -60,7 +62,7 @@ Each main chapter is led by one love interest. Otome Hearth offers two to choose
 
 - **Who speaks:** every line names its speaker. Each love interest's line shows one of five faces: tender, flustered, cold, hurt or angry. Your thoughts are set apart, and from the second stage of a love interest's story you may hear one of their thoughts too.
 - **Choices:** your first choice in a scene is canon. Replaying a chapter shows the other branches without changing anything. A choice that changes things between you names who will remember it, and the last scene may end on one lasting choice.
-- **Private memory:** each love interest remembers only what they saw, did or were told. A private moment is recalled only in scenes that love interest is in, and on their own Home and phone, never in the shared story summary. Private moments are their route and repair chapters, dates and phone threads.
+- **Private memory:** each love interest remembers only what they saw, did or were told. A private moment is recalled only in scenes that love interest is in, and on their own Home and in their messages, never in the shared story summary. Private moments are their route and repair chapters, dates and message threads.
 - **Story memory:** finished chapters are summarized in the background. **Settings → Debug** shows the story memory's status, with Retry when a summary failed.
 - **Rewrite** writes the scene you are reading again, before you make any of its choices.
 - **Ease off** ends a scene at once, with no model call, and can veil that kind of content from then on.
@@ -102,9 +104,9 @@ Home shows the love interest you pick, or you when you switch from their name to
 - **Voices on Home:** **Play** reads the note aloud, and taps and **Rough day?** are spoken in the voice the story gives them. Home plays the story's home music.
 - **Reduced motion** turns off the parallax and the breathing.
 
-## The phone
+## Messages
 
-Each love interest has one private thread, in their own colour, with suggested replies and their faces as stickers. Only one reply is written at a time. **Close and remember** saves the conversation as a memory that only that love interest recalls, and earns 20 affection (within the daily cap for everything outside the story).
+Each love interest has one private thread, written in whatever carries messages in your world, in their own colour, with suggested replies and their faces as stickers. Only one reply is written at a time. **Close and remember** saves the conversation as a memory that only that love interest recalls, and earns 20 affection (within the daily cap for everything outside the story).
 
 ## Wish, the Wardrobe and the Album
 
@@ -174,7 +176,7 @@ The Claw Machine makes no model calls and paints no images. You get six drops, a
 - **Sound:** with voices on and the machine's sound on, their lines are read aloud.
 - **Controls:** it plays by keyboard (arrows to move; Space to drop, or held down to cheer). Under reduced motion it resolves each drop at once. Its sounds and vibration can be turned off, and **Mute everything** in **Settings → Audio** silences them too.
 
-Each love interest alone remembers the games you played together, as they remember a phone conversation. These memories are never in the shared story summary, and no love interest is told what another one's own chapters left behind.
+Each love interest alone remembers the games you played together, as they remember an exchange of messages. These memories are never in the shared story summary, and no love interest is told what another one's own chapters left behind.
 
 ## Remind Me and the period tracker
 
@@ -218,7 +220,7 @@ Each story has its own content settings:
 - you can add limits of your own;
 - changing Darkness keeps the levels you set yourself.
 
-**NSFW mode:** NSFW Heat or Dark romance turns it on for the story, its chapters and the phone.
+**NSFW mode:** NSFW Heat or Dark romance turns it on for the story, its chapters and Messages.
 
 - Romance escalates without stopping to ask, love interests may make the first move, and language is not sanitized.
 - NSFW: Fade writes the build-up and cuts at the threshold; NSFW: Explicit writes sex on the page in full.
@@ -245,6 +247,7 @@ Anything that costs money to generate is labelled where you start it, and almost
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------- |
 | **Surprise me** in setup     | 1 call                                                                                                                                                                            | —                                                                                                                          | —                                     | —                                                          |
 | **Forge our story**          | 1 call for the world, 1 per love interest's bible                                                                                                                                 | —                                                                                                                          | —                                     | —                                                          |
+| **Begin** (the prologue)     | 1 call, once                                                                                                                                                                      | —                                                                                                                          | —                                     | —                                                          |
 | **Paint the cast**           | 1 call to describe your look, only when your persona has no appearance text                                                                                                       | 1 per love interest and 1 for you                                                                                          | —                                     | —                                                          |
 | Faces (**Expressions** on)   | —                                                                                                                                                                                 | about 5 per look, in the background                                                                                        | —                                     | —                                                          |
 | Start a main chapter         | 1 call to plan it                                                                                                                                                                 | —                                                                                                                          | —                                     | —                                                          |
@@ -256,7 +259,7 @@ Anything that costs money to generate is labelled where you start it, and almost
 | **Generate music** on        | 1 call per mood, for its brief                                                                                                                                                    | —                                                                                                                          | 1 track per mood (up to 6), made once | —                                                          |
 | Home's message of the day    | 1 call per love interest you see, per day (again when a rift opens or closes)                                                                                                     | —                                                                                                                          | —                                     | **Play**: once                                             |
 | Home's lines written ahead   | in the background: 1 call per love interest per stage (the first also writes their comfort and Claw Machine lines), and again on a Home visit at least 10 minutes after a failure | —                                                                                                                          | —                                     | each tap line once; comfort lines every time, never cached |
-| A phone reply                | 1 call                                                                                                                                                                            | —                                                                                                                          | —                                     | —                                                          |
+| A Messages reply             | 1 call                                                                                                                                                                            | —                                                                                                                          | —                                     | —                                                          |
 | **Close and remember**       | 1 call                                                                                                                                                                            | —                                                                                                                          | —                                     | —                                                          |
 | Open Wish in a new fortnight | 1 call per banner (3)                                                                                                                                                             | up to 3, for banner art                                                                                                    | —                                     | —                                                          |
 | First open of a Memory       | 1 call to plan it, then 1 per scene as you read                                                                                                                                   | 1, unless it was the banner art                                                                                            | —                                     | its voiced line, once                                      |
@@ -285,7 +288,7 @@ These never call a model or paint anything. With voices on, their lines are voic
 
 ### Where your stories live
 
-- **Package documents:** stories are kept in Marinara Engine's own database, on the computer that runs it, as documents whose ids start with `otome-forge:`. This covers the world, the cast and their bibles, chapters and scenes, progress, messages of the day, phone threads, lines written ahead, banners, the items you win, the plush shelf and your latest Claw Machine rounds.
+- **Package documents:** stories are kept in Marinara Engine's own database, on the computer that runs it, as documents whose ids start with `otome-forge:`. This covers the world, the cast and their bibles, chapters and scenes, progress, messages of the day, message threads, lines written ahead, banners, the items you win, the plush shelf and your latest Claw Machine rounds.
   - They travel with Engine backups and profile exports.
   - Package documents aren't isolated per package, so other installed packages could read them.
 - **The Global Gallery:** painted looks, places, faces, CGs, banner art and Home cut-outs are saved there, and deleting a story deletes them too.
@@ -315,7 +318,7 @@ These never call a model or paint anything. With voices on, their lines are voic
    - **Delete all cycle data**, in **Settings → Tracker** or **Privacy & data**, removes it and today's caring messages in one click.
    - An export file moves it to another device. If Safari clears browser storage, the export is your copy.
 3. **Only today reaches a prompt, never the history.** The browser works out one line about today: a period predicted in up to three days, one predicted around today, day N of a logged period, or nothing. "Late" is never computed.
-4. **What a Caring message sends:** one line about today goes to the model provider of the story's Phone connection, and nothing else. An example is "Mira has told you: today is day 2 of her period.", with your protagonist's own pronoun ("their" by default). Pressing **Play** also sends the note to your voice provider, with no audio cache.
+4. **What a Caring message sends:** one line about today goes to the model provider of the story's Messages connection, and nothing else. An example is "Mira has told you: today is day 2 of her period.", with your protagonist's own pronoun ("their" by default). Pressing **Play** also sends the note to your voice provider, with no audio cache.
 5. **Where the note stays:** the note is kept in this browser for that day only. It is never stored on the server, never enters story memory or another prompt, and is never quoted into a reply.
 6. **When nothing is sent:** with **Keep it off the model**, or whenever a debug condition is on, a comfort line written in advance answers instead. The debug conditions are the Engine's debug mode, `DEBUG_AGENTS` and a debug log level; the Engine's providers log whole requests under each of them.
 7. **What the logs can show:** Otome Hearth redacts the line from its own prompt log, and the server stores nothing about it. The Engine writes no request line for a Caring message. One limit remains: a provider warning during its model call (a rate limit, a retry, a fallback) names the request's route and time, never the line or the note. So a server log can show that a Caring message was asked for that day.

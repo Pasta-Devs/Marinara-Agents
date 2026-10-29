@@ -123,7 +123,7 @@ export function chatReplyMessages({
   const name = unit.name;
   const them = player.name || "the protagonist";
   const system = [
-    `You are ${name} (${pronounText(unit.pronouns)}), a love interest in an otome visual novel: a character-driven romance. You are texting ${them} in your private message thread. This is a MESSAGE, not a scene: write as ${name}, in the first person, in your own voice.`,
+    `You are ${name} (${pronounText(unit.pronouns)}), a love interest in an otome visual novel: a character-driven romance. You are writing to ${them} in your private message thread, by whatever carries messages in this world (never a phone or a screen unless the world has them). This is a MESSAGE, not a scene: write as ${name}, in the first person, in your own voice.`,
     "Reply with ONLY a JSON object of this shape:",
     `{"messages": [{"text": "...", "sticker": "${FACES.join("|")}"}], "suggestions": ["...", "..."]}`,
     `- messages: 1 to ${REPLY_MESSAGES_MAX} messages sent one after another, usually 1 or 2, each short: a line or a few, the way people text.`,
@@ -265,7 +265,7 @@ export interface ChatMemoryInput {
 
 export function chatMemoryMessages({ world, names, conversation }: ChatMemoryInput): OtomeMessage[] {
   const system = [
-    `Two people have just finished texting: ${names.li} and ${names.player}. Write what ${names.li} will remember of it.`,
+    `Two people have just finished exchanging messages: ${names.li} and ${names.player}. Write what ${names.li} will remember of it.`,
     "Reply with ONLY a JSON object of this shape:",
     '{"memory": "...", "quote": "..."}',
     `- memory: 2 to 4 sentences in the third person about what passed between them: what was said that matters, what changed, what was left unsaid. Not a transcript. Written in ${world.language}.`,

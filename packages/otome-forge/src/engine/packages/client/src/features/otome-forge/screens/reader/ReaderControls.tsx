@@ -23,6 +23,7 @@ import type { ChapterKind, ChapterView, MomentKind, NodeKind } from "../../share
 import { tagLabelKey } from "./ContentTagsCard";
 
 const KIND_KEYS: Record<Exclude<ChapterKind, "main">, string> = {
+  prologue: "ui.otomeForge.prologue.title",
   route: "ui.otomeForge.story.kindRoute",
   repair: "ui.otomeForge.story.kindRepair",
   story: "ui.otomeForge.story.kindStory",

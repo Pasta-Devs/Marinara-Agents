@@ -684,7 +684,7 @@ export interface WishPullRecord {
 // ── Story (M2a): chapters, beats, choices. Chapter keys: `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`,
 // `story-<itemId>`, `date-<n>`. ──
 
-export type ChapterKind = "main" | "route" | "repair" | "story" | "date";
+export type ChapterKind = "prologue" | "main" | "route" | "repair" | "story" | "date";
 export type NodeKind = "beat" | "moment" | "confrontation";
 /** A moment node's framing: reading his face, a phone call, a date gone wrong. Written as a beat until M2b/M5. */
 export type MomentKind = "read-him" | "call" | "date";
@@ -1050,6 +1050,13 @@ export interface RunView {
   lis: RunLiView[];
   forge: ForgeStatus;
   starlight: number;
+  /** GET /runs/:run: the prologue has been written (Begin then goes straight Home). */
+  prologue?: boolean;
+}
+
+/** POST /runs/:run/prologue. */
+export interface PrologueView {
+  segments: Segment[];
 }
 
 export type SetupLi =

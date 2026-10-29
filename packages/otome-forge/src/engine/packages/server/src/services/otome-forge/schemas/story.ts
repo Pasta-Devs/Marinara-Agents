@@ -172,7 +172,7 @@ export function normalizeChapter(data: unknown): Chapter | null {
   const read = readFields<Chapter>(
     {
       key: z.string(),
-      kind: z.enum(["main", "route", "repair", "story", "date"]),
+      kind: z.enum(["prologue", "main", "route", "repair", "story", "date"]),
       number: z.number().int().min(1).optional(),
       li: z.string().optional(),
       stage: z.number().int().min(FIRST_STAGE).max(LAST_STAGE).optional(),

@@ -596,7 +596,7 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   await home.evaluate((element, phase) => {
     (element as HTMLElement).dataset.sky = phase;
   }, sky ?? "night");
-  await expect(root.getByRole("button", { name: /Phone/ })).toContainText("1");
+  await expect(root.getByRole("button", { name: /Messages/ })).toContainText("1");
   await page.screenshot({ path: testInfo.outputPath("01-home.png") });
   expect(posts(stub, "/home/note")).toHaveLength(1);
 
@@ -718,9 +718,9 @@ test("Otome Forge phone: a thread with typing, his sticker, suggestions, her sti
   await stubRoutes(page, stub, []);
   const root = await openHome(page);
 
-  // The Phone button opens the threads: one per love interest, his with its unread message.
-  await root.getByRole("button", { name: /Phone/ }).click();
-  await expect(root.getByRole("heading", { level: 1, name: "Phone" })).toBeFocused();
+  // The Messages button opens the threads: one per love interest, his with its unread message.
+  await root.getByRole("button", { name: /Messages/ }).click();
+  await expect(root.getByRole("heading", { level: 1, name: "Messages" })).toBeFocused();
   const threads = root.locator(".of-threads");
   const row = threads.getByRole("button", { name: /Ilvar Thorne/ });
   await expect(row).toContainText("The light was on again.");
@@ -825,7 +825,7 @@ test("Otome Forge phone: a reply that lands after the player left his thread is 
   await stubRoutes(page, stub, []);
   const root = await openHome(page);
   await engineStaleTime(page);
-  await root.getByRole("button", { name: /Phone/ }).click();
+  await root.getByRole("button", { name: /Messages/ }).click();
   const row = root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/ });
   await expect(row).toContainText("The light was on again.");
   await row.click();

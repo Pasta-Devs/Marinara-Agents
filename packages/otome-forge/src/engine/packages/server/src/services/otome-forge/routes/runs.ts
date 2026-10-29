@@ -32,6 +32,7 @@ import { imagesOf, paintView, updateIfChanged } from "../art/paint.js";
 import { withPlaceViews } from "../art/places.js";
 import { OtomeForgeError, debugModeOf, liParam, parseBody, runParam, type RegisterRoutes } from "../http.js";
 import {
+  PROLOGUE_KEY,
   INDEX_ID,
   INDEX_TARGET,
   RUN_DOC_KINDS,
@@ -275,7 +276,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       await settleForge(deps, runId);
       const run = await readRun(store, runId);
       if (!run) throw runNotFound();
-      return { view: runView(runKey, runId, run) };
+      return { view: { ...runView(runKey, runId, run), prologue: !!run.state.chapters[PROLOGUE_KEY]?.completed } };
     }),
   );
 

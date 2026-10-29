@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.1.1 — 2026-10-29
+
+- **Begin** plays a prologue: one short scene of your protagonist's own life, just before the story opens, with no love interest in it. Chapter 1 picks up where it ends, and the Story screen offers it again.
+- **Phone** is now **Messages**, so it fits any world, and love interests write by whatever carries messages there.
+
 ## 0.1.0 — 2026-10-28
 
 - First Date: release 1 of Otome Hearth, an otome game made from your own characters, for Engine staging testers.

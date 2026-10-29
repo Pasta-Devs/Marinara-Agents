@@ -69,7 +69,7 @@ import { generateJson, readOrGenerate, runForeground } from "../generation.js";
 import type { OtomeArt } from "../art/expressions.js";
 import { explicitCgAllowed } from "../content-contract.js";
 import { OtomeForgeError } from "../http.js";
-import { beatId, runDocTarget, stateId, unitId, worldId } from "../ids.js";
+import { PROLOGUE_KEY, beatId, mainChapterKey, runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeBeat } from "../schemas/story.js";
 import { normalizeUnit } from "../schemas/unit.js";
@@ -79,6 +79,7 @@ import { readBeatToEnd } from "../state/rewards.js";
 import { countedNow, gateShut, healRupture, passGate } from "../state/stages.js";
 import type { ChapterDeps } from "./chapters.js";
 import { chapterSoFar, readBeat, readChapter, recallText } from "./canon.js";
+import { prologueEnding, prologueProblem } from "./prologue.js";
 import {
   afterRound,
   applyConfrontation,
@@ -514,7 +515,22 @@ async function generateBeat(
     ...(chapter.kind === "date" ? { date: { goesWrong: chapter.date?.goesWrong ?? false } } : {}),
   };
   const opponent = confrontationOpponent(chapter, node, units);
-  const input = { world: run.world, player: run.player, units, state: run.state, chapter, node, storySoFar, memory };
+  // Chapter 1 opens where the prologue ended, with the choices taken in it.
+  const prologue =
+    key === mainChapterKey(1) && i === 0
+      ? prologueEnding(await chapterSoFar(deps.store, runId, PROLOGUE_KEY, 1, run.player.name))
+      : "";
+  const input = {
+    world: run.world,
+    player: run.player,
+    units,
+    state: run.state,
+    chapter,
+    node,
+    storySoFar,
+    memory,
+    prologue,
+  };
   let body: Omit<Beat, "key" | "i" | "kind" | "choiceCanon" | "applied" | "readThrough" | "written" | "rewrites">;
   let written: { connectionId: string; model: string };
   if (opponent) {
@@ -561,7 +577,8 @@ async function generateBeat(
       schema: BeatReplySchema,
       normalize: (reply) => {
         const beat = normalizeBeatReply(reply, context);
-        return typeof beat === "string" ? beat : reply;
+        if (typeof beat === "string") return beat;
+        return (chapter.kind === "prologue" && prologueProblem(beat.segments, units)) || reply;
       },
       temperature: 0.9,
       maxTokens: 6000,

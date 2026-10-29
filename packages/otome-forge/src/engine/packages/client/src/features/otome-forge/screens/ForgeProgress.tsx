@@ -357,6 +357,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
             <Heart size={16} strokeWidth={2} aria-hidden="true" />
             {t("ui.otomeForge.setup.forgeBegin")}
           </button>
+          {view.prologue ? null : <p className="of-hint">{t("ui.otomeForge.setup.beginPrologueCost")}</p>}
         </div>
       ) : null}
 
