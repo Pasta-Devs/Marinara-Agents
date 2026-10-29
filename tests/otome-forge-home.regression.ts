@@ -36,6 +36,7 @@ import { typingDelay } from "../packages/otome-forge/src/engine/packages/client/
 import {
   createCutoutClient,
   cutoutsSettled,
+  queueCutouts,
   type CutoutClient,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
 import { createBackgroundQueue } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/background-queue.ts";
@@ -911,6 +912,80 @@ test("concurrent status reads share one request and later Home reads recover int
   assert.equal(cleanup[0]!.engine, "builtin");
   assert.equal(Buffer.from(cleanup[0]!.cells[0]!.base64.split(",")[1]!, "base64").toString(), "raw original");
   assert.equal((await t.unit(KAI)).cutouts[original]!.cleanupRevision, 2);
+});
+
+test("an auto AI cut-out after two failed status reads remains eligible for repaired built-in cleanup", async () => {
+  const original = "/api/global-gallery/file/original-after-two-failures.png";
+  let statusReads = 0;
+  const cleanup: Array<{ engine: string; cells: Array<{ base64: string }> }> = [];
+  const client = createCutoutClient({
+    baseUrl: "http://127.0.0.1:9",
+    fetch: (async (url, init) => {
+      const path = String(url).replace("http://127.0.0.1:9", "");
+      if (path === "/api/sprites/cleanup/status") {
+        statusReads += 1;
+        return statusReads <= 2 ? new Response("busy", { status: 503 }) : Response.json({ cleanupRevision: 2 });
+      }
+      if (path === original) return new Response("raw original", { headers: { "content-type": "image/png" } });
+      if (path === "/api/sprites/cleanup") {
+        const body = JSON.parse(String(init?.body));
+        cleanup.push(body);
+        return Response.json({
+          cells: [{ base64: Buffer.from("cut-out bytes").toString("base64") }],
+          engine: body.engine,
+          backgroundRemoverProcessed: body.engine === "auto" ? 1 : 0,
+          builtinProcessed: body.engine === "builtin" ? 1 : 0,
+          cleanupRevision: 2,
+        });
+      }
+      if (path === "/api/global-gallery/upload") {
+        const id = cleanup.at(-1)!.engine === "auto" ? "ai-cut" : "builtin-cut";
+        return Response.json({ id, url: `/api/global-gallery/file/${id}.png` });
+      }
+      assert.fail(`unexpected fetch ${path}`);
+    }) as typeof globalThis.fetch,
+  });
+  const t = await storyWorld({ runKey: "r-cutautoretry-aaaaaa" });
+  const deps = { ...t.deps, cutouts: client };
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    portrait: original,
+    cutouts: {},
+  }));
+  const read = async () => (await t.store.readDoc(unitId(t.runId, KAI), normalizeUnit))!;
+  await queueCutouts(deps, t.runId, await read(), [original]);
+  await cutoutsSettled();
+  const auto = (await read()).cutouts[original]!;
+  assert.equal(statusReads, 2, "both the queue and actual cleanup status probes failed");
+  assert.deepEqual(
+    cleanup.map((body) => body.engine),
+    ["auto"],
+  );
+  assert.equal(auto.state, "ready");
+  assert.equal(auto.url, "/api/global-gallery/file/ai-cut.png");
+  assert.equal(auto.cleanupRevision, undefined, "available revision metadata cannot certify an AI derivative");
+
+  const pending = await queueCutouts(deps, t.runId, await read(), [original]);
+  assert.equal(pending.cutouts[original]!.state, "pending");
+  assert.equal(pending.cutouts[original]!.url, auto.url, "the AI derivative stays visible during the repair");
+  await cutoutsSettled();
+  const repaired = await read();
+  assert.equal(statusReads, 3, "the recovered revision is cached for the explicit built-in request");
+  assert.deepEqual(
+    cleanup.map((body) => body.engine),
+    ["auto", "builtin"],
+  );
+  assert.ok(
+    cleanup.every((body) => Buffer.from(body.cells[0]!.base64.split(",")[1]!, "base64").toString() === "raw original"),
+  );
+  assert.equal(repaired.portrait, original);
+  assert.equal(repaired.cutouts[original]!.url, "/api/global-gallery/file/builtin-cut.png");
+  assert.equal(repaired.cutouts[original]!.cleanupRevision, 2);
+  assert.deepEqual(repaired.cutouts[original]!.previousRefs, ["global-gallery:ai-cut"]);
+  await queueCutouts(deps, t.runId, repaired, [original]);
+  await cutoutsSettled();
+  assert.equal(cleanup.length, 2, "the successfully repaired derivative stays cached");
+  assert.equal(t.calls.length, 0, "free cleanup never invokes a model");
 });
 
 test("a refresh left pending by a restart keeps its retained derivative if resumed cleanup fails, for both people", async () => {

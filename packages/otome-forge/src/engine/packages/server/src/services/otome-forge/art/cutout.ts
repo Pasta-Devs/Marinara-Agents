@@ -125,7 +125,8 @@ export function createCutoutClient({
       const id = typeof saved?.id === "string" ? saved.id : "";
       const savedUrl = typeof saved?.url === "string" ? saved.url : "";
       if (!id || !savedUrl) throw new Error("gallery upload returned no image");
-      const cleanupRevision = readRevision(cleaned?.cleanupRevision);
+      // The response advertises the host's revision even when auto used AI segmentation.
+      const cleanupRevision = engine === "builtin" ? readRevision(cleaned?.cleanupRevision) : undefined;
       return { id, url: savedUrl, ...(cleanupRevision ? { cleanupRevision } : {}) };
     },
 
