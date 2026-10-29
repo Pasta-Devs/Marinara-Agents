@@ -74,6 +74,7 @@ import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js"
 import { normalizeBeat } from "../schemas/story.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
+import { withPersonaStoryAbout } from "../setup/prompts.js";
 import { applyChoiceEffects } from "../state/relationship.js";
 import { readBeatToEnd } from "../state/rewards.js";
 import { countedNow, gateShut, healRupture, passGate } from "../state/stages.js";
@@ -427,7 +428,7 @@ async function load(deps: BeatDeps, runId: string, key: string): Promise<Loaded>
   const [run, chapter] = await Promise.all([readRun(deps.store, runId), readChapter(deps.store, runId, key)]);
   if (!run) throw runNotFound();
   if (!chapter) throw chapterNotFound();
-  return { run, chapter };
+  return { run: { ...run, player: await withPersonaStoryAbout(deps.runtime, run.player) }, chapter };
 }
 
 const castUnits = (run: RunDocuments) =>

@@ -211,8 +211,8 @@ export interface Player {
   traits: string[];
   goal: string;
   /**
-   * The persona's own description, whole, as it read when the story was made (or first opened since 0.1.1); every
-   * story prompt's protagonist block carries it. Absent until it has been read.
+   * The persona's full authored story fields, retained as this protagonist's fallback. Chapter and scene generation
+   * refreshes them from the selected persona; image-only appearance overrides are not story facts.
    */
   about?: string;
   /** English, visual-only tags. */

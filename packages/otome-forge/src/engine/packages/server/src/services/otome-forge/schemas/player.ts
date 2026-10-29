@@ -42,7 +42,7 @@ const NoticedSchema = z.object({
   at: z.string(),
 });
 
-/** The persona's own description, as every protagonist block carries it (whole), or "" without one. */
+/** The persona's full authored story fields, as every protagonist block carries them, or "" without them. */
 export function aboutLine(player: Pick<Player, "about">): string {
   const about = player.about?.trim();
   return about ? `Who they are (their persona): ${about}` : "";
