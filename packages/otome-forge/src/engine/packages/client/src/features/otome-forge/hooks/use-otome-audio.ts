@@ -509,6 +509,7 @@ export class OtomeAudioController {
           },
         );
         if (chapterKey && saved?.track) {
+          this.fresh.add(saved.track.tag);
           this.chapterTracks.set(chapterKey, saved.track);
           return saved.track;
         }

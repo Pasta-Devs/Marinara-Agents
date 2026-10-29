@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   DEFAULT_LTM_EXTRACTION_MAX_TOKENS,
   DEFAULT_LTM_EXTRACTION_REASONING_EFFORT,
@@ -164,9 +165,19 @@ type ParsedEvidenceUnitPayload = {
   droppedCandidates: LtmExtractionDroppedCandidate[];
 };
 
-const ltmProviderEvidenceUnitSchema = ltmEvidenceUnitSchema
-  .omit({ id: true, sourceHash: true })
-  .extend({ evidence: ltmEvidenceUnitSchema.shape.evidence.optional() });
+// Models sometimes quote a score ("0.5"). Read a numeric string as its number; z.coerce would turn "" and null into 0.
+const quotedScore = (score: typeof ltmEvidenceUnitSchema.shape.confidence) =>
+  z.preprocess((value) => {
+    if (typeof value !== "string" || !value.trim()) return value;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : value;
+  }, score);
+
+const ltmProviderEvidenceUnitSchema = ltmEvidenceUnitSchema.omit({ id: true, sourceHash: true }).extend({
+  evidence: ltmEvidenceUnitSchema.shape.evidence.optional(),
+  confidence: quotedScore(ltmEvidenceUnitSchema.shape.confidence),
+  salience: quotedScore(ltmEvidenceUnitSchema.shape.salience),
+});
 
 type LanguageModelMessage = Parameters<PackageLanguageModel["chatComplete"]>[0][number];
 type LanguageModelChatOptions = NonNullable<Parameters<PackageLanguageModel["chatComplete"]>[1]>;
@@ -1595,6 +1606,13 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
           "truncated_output: extraction response reached the model output limit",
           400,
           "ltm_model_output_truncated",
+        );
+      }
+      if (parsed.totalCandidates > 0 && parsed.response.units.length === 0) {
+        throw new LtmServiceError(
+          "unusable_output: every extraction candidate was malformed; the source remains retryable",
+          400,
+          "ltm_model_output_unusable",
         );
       }
       parsed.response.incomplete = incomplete;
