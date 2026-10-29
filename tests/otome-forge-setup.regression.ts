@@ -518,18 +518,16 @@ test("paint steps wait for consent, paint once, and a failed paint is repainted 
   assert.match(kaiArt.error ?? "", /provider down/);
   assert.equal((await t.step("paint:player"))?.state, "done");
   const player = await t.player();
-  assert.equal(
-    player.look.identityLine,
-    "dark curls, brown skin, ink-stained fingers",
-    "P4 wrote the protagonist's look",
-  );
+  assert.equal(player.look.identityLine, "", "an empty current Appearance invents no description");
+  assert.equal(t.calls.length, 3, "painting the persona adds no P4 model call");
   assert.equal(player.portrait, "/api/global-gallery/file/look-2.png");
   assert.equal(player.portraitRef, "global-gallery:img2");
   assert.deepEqual(t.paid[1].unit, { kind: "character", personaId: "persona-ines" });
   assert.match(
     t.paid[1].prompt,
-    /dark curls.*full body, standing, neutral pose, plain flat mid-grey background.*safe for work/,
+    /full body, standing, neutral pose, plain flat solid chroma green #00FF00 background.*safe for work/,
   );
+  assert.doesNotMatch(t.paid[1].prompt, /dark curls|brown skin|ink-stained fingers|travel coat/);
   assert.match(t.paid[1].prompt, /adult person/);
 
   // The look prompt: identity, outfit, framing, the SFW rating and "adult man"; negatives keep the adult guard.

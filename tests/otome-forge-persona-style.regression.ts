@@ -121,3 +121,51 @@ test("a love interest is painted on the matte his colours name least; the run vi
   await cutoutsSettled();
   assert.equal(cuts.length, 1, "never cut twice");
 });
+
+test("the run used by the reader polls free cut-out refreshes, keeps old art while pending, and stops after success or failure", async () => {
+  const runKey = "r-cutrefresh-bbbbbb";
+  const t = await storyWorld({ runKey });
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  let fail = false;
+  const cuts: string[] = [];
+  t.deps.cutouts = {
+    cleanupRevision: async () => 2,
+    async cutOut(url) {
+      cuts.push(url);
+      await gate;
+      if (fail) throw new Error("temporary cleanup failure");
+      return { id: "new-cut", url: "/new-cut.png", cleanupRevision: 2 };
+    },
+    deleteGalleryImage: async () => assert.fail("retained art is not deleted"),
+  };
+  const source = "/api/global-gallery/file/old-feather-look.png";
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    portrait: source,
+    cutouts: { [source]: { state: "ready", at: "old", url: "/old-cut.png" } },
+  }));
+  const view = runRoutes(t);
+  const pending = await view(runKey);
+  assert.equal(pending.cutoutsPending, true);
+  assert.equal(pending.lis.find((li: { id: string }) => li.id === KAI).portrait, "/old-cut.png");
+  release();
+  await cutoutsSettled();
+  const ready = await view(runKey);
+  assert.equal(ready.cutoutsPending, undefined);
+  assert.equal(ready.lis.find((li: { id: string }) => li.id === KAI).portrait, "/new-cut.png");
+  fail = true;
+  const secondSource = "/api/global-gallery/file/second-look.png";
+  await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+    ...unit,
+    portrait: secondSource,
+    cutouts: { ...unit.cutouts, [secondSource]: { state: "ready", at: "old", url: "/second-old-cut.png" } },
+  }));
+  assert.equal((await view(runKey)).cutoutsPending, true);
+  await cutoutsSettled();
+  const fallback = await view(runKey);
+  assert.equal(fallback.cutoutsPending, undefined, "a failed free refresh stops polling");
+  assert.equal(fallback.lis.find((li: { id: string }) => li.id === KAI).portrait, "/second-old-cut.png");
+  assert.deepEqual(cuts, [source, secondSource]);
+  assert.equal(t.calls.length, 0, "free cleanup never regenerates text or image prompts");
+});

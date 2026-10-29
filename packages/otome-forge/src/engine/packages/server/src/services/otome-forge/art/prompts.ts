@@ -2,8 +2,7 @@
 // Otome Forge: image prompts, built in code with no model call (plan §1.8, M1 "Image prompts")
 // ──────────────────────────────────────────────
 // A look is the identity line and the outfit line, full body on a flat backdrop that the cut-out keys out
-// (art/cutout.ts). A love interest's backdrop is a chroma matte, as the Engine's sprites have.
-// The protagonist's is mid-grey: nothing cuts hers out yet, and her uncut look must not glare.
+// (art/cutout.ts). Generated love-interest and protagonist looks use a chroma matte, as the Engine's sprites have.
 // The prompt also carries the world's image rating and "adult <presentation>" from the content contract. The prompt goes
 // to the Engine as a prompt override, which replaces the Engine's own prompt and style, so the chosen style profile's
 // text and tags are added here. A prompt the player edited in the review dialog keeps every rating and adult tag:
@@ -55,7 +54,7 @@ export function lookMatte(look: string): string {
   return best.name;
 }
 
-/** A love interest's look on a chroma matte to cut out; the protagonist's on mid-grey. */
+/** A generated look on its selected chroma matte; callers can retain legacy mid-grey framing by omitting matte. */
 export function lookFraming(input: Pick<LookInput, "identityLine" | "outfitLine" | "matte">): string {
   if (!input.matte) return LOOK_FRAMING;
   const matte = lookMatte(`${input.identityLine} ${input.outfitLine}`);
@@ -113,7 +112,7 @@ export interface LookInput {
   presentation: Presentation;
   world: Pick<World, "content" | "images">;
   style: StyleProfile;
-  /** A love interest's look, painted on a chroma matte for its cut-out (lookFraming). */
+  /** A generated look, painted on a chroma matte for its cut-out (lookFraming). */
   matte?: boolean;
 }
 
@@ -168,7 +167,9 @@ export function lookPrompt(input: LookInput, edited: Partial<ImagePrompt> = {}):
     ? withTags(edited.prompt, required)
     : [
         style.styleText,
-        mergeTags(input.identityLine, input.outfitLine, lookFraming(input), required, style.positiveTags),
+        // Appearance may be the player's own prose: keep it whole, including repeated details, instead of tag deduplication.
+        input.identityLine.trim(),
+        mergeTags(input.outfitLine, lookFraming(input), required, style.positiveTags),
       ]
         .filter(Boolean)
         .join(", ");

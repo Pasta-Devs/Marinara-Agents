@@ -68,6 +68,7 @@ import { normalizeState, readRun, type RunDocuments } from "../schemas/state.js"
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeBanner, normalizeItem } from "../schemas/wish.js";
 import { normalizeWorld } from "../schemas/world.js";
+import { withPersonaImageAppearance } from "../setup/prompts.js";
 import type { OtomeStore } from "../store.js";
 import { cancellable } from "../story/beats.js";
 import { recallText } from "../story/canon.js";
@@ -526,6 +527,7 @@ export async function openWish(
 async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edited: Partial<ImagePrompt> = {}) {
   const run = await readRun(deps.store, runId);
   if (!run) throw runNotFound();
+  run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const five = await readItem(deps.store, runId, banner.items.five[0] ?? "");
   if (!five) throw bannerNotFound();
   const images = imagesOf(deps);
@@ -584,7 +586,7 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
         ...(run.player.portrait ? { portrait: run.player.portrait } : {}),
       };
   const prompt = lookPrompt(
-    { ...person, outfitLine: five.look?.outfitLine ?? "", world: run.world, style, matte: !!unit },
+    { ...person, outfitLine: five.look?.outfitLine ?? "", world: run.world, style, matte: true },
     edited,
   );
   return {

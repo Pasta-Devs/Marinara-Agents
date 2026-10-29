@@ -10,7 +10,11 @@
 // wrapper also needs characterCard, personaAvatar and cardAvatarImage. generateImage is one paid image with exactly the
 // references it is given (a place has none; an expression edit has its base) and saves nothing: uploadToGallery keeps
 // it, in the shape the kit's expressions module calls.
-import { forgeWrapImageReferenceClient } from "@forge-kit/image-avatar-references.mjs";
+import {
+  forgeLocalAvatarPath,
+  forgeSubjectReference,
+  forgeWrapImageReferenceClient,
+} from "@forge-kit/image-avatar-references.mjs";
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 
 /** Whose likeness a look keeps: the fields forgeWrapImageReferenceClient reads to find a reference image. */
@@ -401,7 +405,38 @@ export function createImageClient({
       }
     },
   };
-  return forgeWrapImageReferenceClient(client, logger, { logPrefix: "[otome-forge]" });
+  return forgeWrapImageReferenceClient(client, logger, {
+    logPrefix: "[otome-forge]",
+    async subjectReference(client, subject) {
+      const cardId = str(subject.cardId);
+      if (cardId && !cardId.includes("..") && !/[\\/]/u.test(cardId)) {
+        try {
+          const sprites: unknown = await request(`/api/sprites/${encodeURIComponent(cardId)}`);
+          // Only the selected card's exact neutral full-body raster is an identity reference. Never fetch a URL
+          // returned in metadata: derive its local file route from the selected id and a verified filename.
+          const neutral = Array.isArray(sprites)
+            ? sprites.find(
+                (sprite) =>
+                  str(sprite?.expression).toLowerCase() === "full_neutral" &&
+                  /^full_neutral\.(?:png|jpe?g|gif|webp|avif)$/iu.test(str(sprite?.filename)),
+              )
+            : undefined;
+          if (neutral) {
+            const image = await client.cardAvatarImage(
+              `/api/sprites/${encodeURIComponent(cardId)}/file/${encodeURIComponent(str(neutral.filename))}`,
+            );
+            if (image) return `data:${image.mime};base64,${image.base64}`;
+          }
+        } catch {
+          // A missing card or sprite does not prevent a paint with this love interest's other retained likenesses.
+        }
+        const portrait = forgeLocalAvatarPath(subject.portrait);
+        const image = portrait ? await client.cardAvatarImage(portrait) : null;
+        if (image) return `data:${image.mime};base64,${image.base64}`;
+      }
+      return forgeSubjectReference(client, subject);
+    },
+  });
 }
 
 const clients = new WeakMap<object, ImageClient>();

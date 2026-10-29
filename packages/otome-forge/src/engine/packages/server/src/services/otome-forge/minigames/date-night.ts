@@ -85,6 +85,7 @@ import { OtomeForgeError } from "../http.js";
 import { chapterId, runDocTarget, stateId } from "../ids.js";
 import { defaultLiState, keepTimeline, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeChapter } from "../schemas/story.js";
+import { withPersonaImageAppearance } from "../setup/prompts.js";
 import { applyChoiceEffects } from "../state/relationship.js";
 import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
@@ -711,6 +712,7 @@ export async function finishDate(deps: DateDeps, runId: string, key: string): Pr
 async function keepsakeSubject(deps: DateDeps, runId: string, key: string) {
   const [run, chapter] = await Promise.all([readRun(deps.store, runId), readChapter(deps.store, runId, key)]);
   if (!run) throw runNotFound();
+  run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   if (!chapter || chapter.kind !== "date" || !chapter.date) throw dateNotFound();
   if (!isFinished(run.state, chapter)) throw conflict("A keepsake is painted once the date is over.");
   const unit = partnerOf(run, chapter.date.li);

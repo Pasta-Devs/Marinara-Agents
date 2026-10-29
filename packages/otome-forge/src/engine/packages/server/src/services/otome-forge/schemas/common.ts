@@ -5,7 +5,12 @@
 // there is no .default() or .catch(): readFields gives each field that is missing or fails its schema the default,
 // and a document from an older test build or a hand edit keeps every other field.
 import { z, type ZodType } from "zod";
-import type { Outfit, Paint, Pronouns } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import type {
+  Cutout,
+  Outfit,
+  Paint,
+  Pronouns,
+} from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 
 /** A field's schema, or a function that reads the raw value into its full shape (and supplies its own default). */
 export type Reader<V> = ZodType<V> | ((value: unknown) => V);
@@ -68,6 +73,24 @@ export const PaintSchema: ZodType<Paint> = z.object({
   ref: z.string().optional(),
   error: z.string().optional(),
 });
+
+const CutoutSchema = PaintSchema.and(
+  z.object({
+    cleanupRevision: z.number().int().positive().optional(),
+    previousRefs: z.array(z.string()).optional(),
+  }),
+);
+
+/** Cut-outs are keyed by their retained source URL; preserve only valid records and optional host revisions. */
+export function normalizeCutouts(value: unknown): Record<string, Cutout> {
+  const cutouts: Record<string, Cutout> = {};
+  if (!isRecord(value)) return cutouts;
+  for (const [url, record] of Object.entries(value)) {
+    const parsed = CutoutSchema.safeParse(record);
+    if (url && parsed.success) cutouts[url] = parsed.data;
+  }
+  return cutouts;
+}
 
 /** A look won on Wish (M4), in the kit's outfit shape. */
 export const OutfitSchema: ZodType<Outfit> = z.object({
