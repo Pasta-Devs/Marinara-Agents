@@ -42,11 +42,15 @@ export async function findSpeakerSprite(
   read: (path: string) => Promise<unknown>,
 ): Promise<string | null> {
   const matches = new Map<string, { id: string; name: string }>();
+  let generation: unknown;
   for (let offset = 0; offset < 2000;) {
     const params = new URLSearchParams({ search: name.trim(), sort: "name-asc", limit: "100", offset: String(offset) });
     const page = await read(`/characters/catalog?${params}`);
     if (!Array.isArray(page) && (!record(page) || !Array.isArray(page.items))) return null;
     if (record(page) && page.hasMore !== undefined && typeof page.hasMore !== "boolean") return null;
+    const nextGeneration = record(page) ? page.catalogGeneration : undefined;
+    if (offset === 0) generation = nextGeneration;
+    else if (nextGeneration !== generation) return null;
     const rows = Array.isArray(page) ? page : record(page) && Array.isArray(page.items) ? page.items : [];
     for (const card of matchingSpeakerCards(rows, name)) matches.set(card.id, card);
     if (matches.size > 1) return null;

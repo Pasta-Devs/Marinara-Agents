@@ -89,6 +89,16 @@ test("duplicate, malformed and truncated character lists never select an arbitra
   };
   assert.equal(await findSpeakerSprite("Arin Vale", read), null, "duplicates on another page remain ambiguous");
   assert.equal(
+    await findSpeakerSprite("Arin Vale", async (path) => {
+      assert.match(path, /catalog/);
+      return new URL(path, "http://local").searchParams.get("offset") === "0"
+        ? { items: [{ id: "card-a", name: "Arin Vale" }], hasMore: true, catalogGeneration: 1 }
+        : { items: [], hasMore: false, catalogGeneration: 2 };
+    }),
+    null,
+    "an edited catalog cannot establish uniqueness across different page snapshots",
+  );
+  assert.equal(
     await findSpeakerSprite("Arin Vale", async () => ({
       items: [{ id: "card-a", name: "Arin Vale" }, { name: "Arin Vale" }],
     })),

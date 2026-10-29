@@ -731,11 +731,20 @@ test("Otome Hearth named speakers hide unrelated sprites, require unique cards a
   ]);
   await stubRoutes(page, fixture);
   const assets = await speakerRoutes(page);
+  const catalogFinished = (name: string) =>
+    page
+      .waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.pathname === "/api/characters/catalog" && url.searchParams.get("search") === name;
+      })
+      .then((response) => response.finished());
   const root = await openStory(page);
   await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
   await root.getByRole("button", { name: "Begin" }).click();
   await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
+  const stranger = catalogFinished("No Matching Card");
   await next(root);
+  await stranger;
   await expect(line(root)).toContainText("A stranger speaks.");
   await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
   await next(root);
@@ -746,7 +755,9 @@ test("Otome Hearth named speakers hide unrelated sprites, require unique cards a
   );
   await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("data-cut", "true");
   await page.screenshot({ path: testInfo.outputPath("named-speaker.png") });
+  const duplicate = catalogFinished("Duplicated Name");
   await next(root);
+  await duplicate;
   await expect(line(root)).toContainText("A duplicate name speaks.");
   await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
   for (const text of [
@@ -760,7 +771,11 @@ test("Otome Hearth named speakers hide unrelated sprites, require unique cards a
     await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
   }
   assets.removeCard();
+  const deleted = page
+    .waitForResponse((response) => response.url().endsWith("/api/characters/card-arin") && response.status() === 404)
+    .then((response) => response.finished());
   await next(root);
+  await deleted;
   await expect(line(root)).toContainText("The same card was deleted meanwhile.");
   await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
   expect(assets.cleanup).toEqual([], "already transparent card sprites stay untouched");
