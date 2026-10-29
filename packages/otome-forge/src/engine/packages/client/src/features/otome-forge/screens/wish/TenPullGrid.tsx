@@ -6,6 +6,7 @@
 // ──────────────────────────────────────────────
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
+import { useSpriteDisplay } from "../../hooks/use-sprite-display";
 import { BookOpen, ChevronLeft, Feather, Paintbrush, RotateCcw, Shirt, Sparkle, Star } from "lucide-react";
 import { CostHint } from "../../components/CostHint";
 import { PromptReviewDialog } from "../../components/PromptReviewDialog";
@@ -23,7 +24,7 @@ import { useOtomeAudio, useAudioSnapshot } from "../../hooks/use-otome-audio";
 import { accentOf, initialsOf } from "../../lib/accent";
 import { useOtomeProps } from "../../props";
 import type { RunLiView, RunView } from "../../shared/api-types";
-import type { ItemKind, ItemView, PullResult, Rarity } from "../../shared/wish";
+import { isLookKind, type ItemKind, type ItemView, type PullResult, type Rarity } from "../../shared/wish";
 import { RARITY_NAMES } from "./SealedLetter";
 
 const KIND_KEYS: Record<ItemKind, string> = {
@@ -71,12 +72,14 @@ export function RarityStars({ rarity }: { rarity: Rarity }) {
 export function ItemArt({ item, view, fallbackUrl }: { item: ItemView; view: RunView; fallbackUrl?: string | null }) {
   const li = itemPerson(item, view);
   const name = li?.name ?? view.player.name;
-  const url = readyArt(item.art) ?? fallbackUrl ?? null;
+  const look = isLookKind(item.kind);
+  const url = useSpriteDisplay(readyArt(item.art) ?? fallbackUrl ?? null, look);
   const accent = li ? accentOf(li) : undefined;
   return (
     <span
       className="of-item-art"
       data-rarity={RARITY_NAMES[item.rarity]}
+      data-look={look}
       data-painting={item.art?.state === "pending"}
       style={accent ? ({ "--of-li-accent": accent } as CSSProperties) : undefined}
       aria-hidden="true"
