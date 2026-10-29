@@ -21,11 +21,14 @@ const helperCode = stripTypeScriptTypes(
   helperSource.replace(/^import .*capability-service-registry.*$/m, "").replace(/^export /gm, ""),
 );
 
-function loadHelper(service: unknown) {
+function loadHelper(service: unknown, registryThrows = false) {
   const helper = runInNewContext(
     `${helperCode}\n({ recallNoodleMemories, noodleMemoryQueryText, getNoodleMemoryStatus });`,
     {
-      getCapabilityService: (key: string) => (key === "long-term-memory:recall" ? service : null),
+      getCapabilityService: (key: string) => {
+        if (registryThrows) throw new Error("registry unavailable");
+        return key === "long-term-memory:recall" ? service : null;
+      },
     },
   ) as {
     recallNoodleMemories: (input: Record<string, unknown>) => Promise<Recall>;
@@ -39,11 +42,15 @@ function loadHelper(service: unknown) {
       JSON.parse(JSON.stringify(await helper.recallNoodleMemories(input))) as Recall,
   };
 }
-const fake = (answer: unknown, calls: Calls) => async (input: Record<string, unknown>) => {
-  calls.push(JSON.parse(JSON.stringify(input)));
-  if (answer instanceof Error) throw answer;
-  return answer;
-};
+// The registered service is an object with a `recall` method, as `createLtmRecallService` returns it.
+const fake = (answer: unknown, calls: Calls) => ({
+  version: 1,
+  recall: async (input: Record<string, unknown>) => {
+    calls.push(JSON.parse(JSON.stringify(input)));
+    if (answer instanceof Error) throw answer;
+    return answer;
+  },
+});
 const base = { characterIds: ["alice", "bob"], queryText: "Alice posted about the festival" };
 
 async function main() {
@@ -90,6 +97,7 @@ async function main() {
   // Missing, refusing and failing recall: no memories, a status, and no throw.
   for (const [service, status] of [
     [null, "missing"],
+    [{ version: 1 }, "missing"],
     [fake(null, []), "off"],
     [fake(new Error("boom"), []), "error"],
   ] as const) {
@@ -97,6 +105,13 @@ async function main() {
     const result = await helper.recallNoodleMemories({ ...base, settings: { useLtmMemories: true } });
     assert.deepEqual(result, { lines: [], status });
     assert.equal(helper.getNoodleMemoryStatus(), status);
+  }
+
+  // A registry that throws is an error status, not an unhandled rejection in the refresh.
+  {
+    const helper = loadHelper(null, true);
+    const result = await helper.recallNoodleMemories({ ...base, settings: { useLtmMemories: true } });
+    assert.deepEqual(result, { lines: [], status: "error" });
   }
 
   // A stale status never outlives the setting: turning it off clears what the last read said.

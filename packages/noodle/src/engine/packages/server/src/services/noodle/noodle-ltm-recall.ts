@@ -4,7 +4,9 @@ import { getCapabilityService } from "../capability-packages/capability-service-
 export type NoodleMemoryStatus = "ok" | "missing" | "off" | "error";
 
 type RecallSection = { title?: string; text?: string };
-type RecallService = (input: Record<string, unknown>) => Promise<{ sections?: RecallSection[] } | null>;
+type RecallService = {
+  recall?: (input: Record<string, unknown>) => Promise<{ sections?: RecallSection[] } | null>;
+};
 
 const QUERY_TEXT_MAX = 8_000;
 const RECALL_CHARACTER_MAX = 20;
@@ -38,10 +40,10 @@ export async function recallNoodleMemories(input: {
     lastStatus = null;
     return { lines: [], status: null };
   }
-  const recall = getCapabilityService<RecallService>("long-term-memory:recall");
-  if (!recall) return { lines: [], status: (lastStatus = "missing") };
   try {
-    const answer = await recall({
+    const service = getCapabilityService<RecallService>("long-term-memory:recall");
+    if (typeof service?.recall !== "function") return { lines: [], status: (lastStatus = "missing") };
+    const answer = await service.recall({
       caller: "noodle",
       queryText: queryText.slice(0, QUERY_TEXT_MAX),
       characterIds: input.characterIds.slice(0, RECALL_CHARACTER_MAX),
