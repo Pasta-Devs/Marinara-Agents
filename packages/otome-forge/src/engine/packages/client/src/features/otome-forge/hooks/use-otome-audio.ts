@@ -105,7 +105,7 @@ const PROBE_MS = 60_000;
 const TTS_CONFIG_MS = 30_000;
 
 export type SpeakOutcome = "spoken" | "silent" | "failed" | "stopped";
-export type AudioNoticeKind = "musicFailed" | "chapterMusicFailed" | "voiceFailed";
+export type AudioNoticeKind = "musicFailed" | "chapterMusicFailed" | "chapterMusicUnavailable" | "voiceFailed";
 
 interface AudioSnapshot {
   /** The newest notice; `id` changes with each one. */
@@ -154,6 +154,7 @@ export class OtomeAudioController {
   private claimId = 0;
   private currentCue: string | null = null;
   private readonly chapterTracks = new Map<string, SoundtrackTrack>();
+  private readonly unavailableChapterTracks = new Set<string>();
   private currentTag: string | null = null;
   private revision = 0;
   private readiness: { at: number; connection: string; promise: Promise<AudioReadiness | null> } | null = null;
@@ -376,6 +377,14 @@ export class OtomeAudioController {
       if (!this.currentTag && manifest) {
         const stock = this.audio?.selectDefaultMusic(ENGINE_MUSIC_CUE[cue], manifest);
         if (stock) this.play(stock, manifest.assets);
+      }
+      // A saved theme is never paid for again, even if its Engine file was deleted. Fresh tracks pass listed above.
+      if (track) {
+        if (!this.unavailableChapterTracks.has(track.tag)) {
+          this.unavailableChapterTracks.add(track.tag);
+          this.notify("chapterMusicUnavailable");
+        }
+        return;
       }
       if (!this.canGenerate()) return;
       const made = await this.generate(cue, chapter);

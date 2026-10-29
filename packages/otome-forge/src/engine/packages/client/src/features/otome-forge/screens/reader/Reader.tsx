@@ -83,6 +83,7 @@ export function Reader(props: ReaderProps) {
 const AUDIO_NOTICE_KEYS = {
   musicFailed: "ui.otomeForge.audio.musicFailed",
   chapterMusicFailed: "ui.otomeForge.audio.chapterMusicFailed",
+  chapterMusicUnavailable: "ui.otomeForge.audio.chapterMusicUnavailable",
   voiceFailed: "ui.otomeForge.audio.voiceFailed",
 } as const;
 

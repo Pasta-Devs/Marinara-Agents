@@ -1918,6 +1918,41 @@ test("Otome Hearth keeps current music on chapter generation failure without ret
   expect(await musicEvents(page)).toEqual(before);
 });
 
+test("Otome Hearth keeps current music when a saved chapter theme is missing without paying again on replay or reload", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = chapterMusicFixture();
+  fixture.music.set("main-1", {
+    cue: "chapter-main-1",
+    connectionId: "conn-audio",
+    tag: "music:contexts:otome-forge:world-0-chapter-main-1:gone",
+    path: "music/contexts/otome-forge/world-0-chapter-main-1/gone.mp3",
+  });
+  await stubRoutes(page, fixture.answer, calls);
+  for (let visit = 0; visit < 2; visit += 1) {
+    const root = await openStory(page, { recordMusic: true });
+    await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-home:");
+    await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+    const before = await musicEvents(page);
+    await root.getByRole("button", { name: "Begin" }).click();
+    await expect(root).toContainText("The saved chapter theme isn’t available. Any current music keeps playing.");
+    await next(root);
+    await next(root);
+    expect(chapterGenerations(calls)).toHaveLength(0);
+    expect(calls.filter((call) => call.path.endsWith("/audio/brief") && call.body?.chapterKey)).toHaveLength(0);
+    expect(await musicEvents(page)).toEqual(before);
+    await root.getByRole("button", { name: "Leave the chapter" }).click();
+    await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+    await root.getByRole("button", { name: "Begin" }).click();
+    await expect(line(root)).toContainText("Rain needles the glass dome.");
+    expect(chapterGenerations(calls)).toHaveLength(0);
+    expect(calls.filter((call) => call.path.endsWith("/audio/brief") && call.body?.chapterKey)).toHaveLength(0);
+  }
+  expect(calls.filter((call) => call.path.endsWith("/gone.mp3"))).toHaveLength(0);
+});
+
 test("Otome Hearth saves a late chapter theme without playing it over the next chapter", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const calls: Call[] = [];
