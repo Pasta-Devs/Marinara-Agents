@@ -51,7 +51,7 @@ export function ContentTagsCard({ tags, onBegin, onLeave }: ContentTagsCardProps
         ))}
       </ul>
       <p className="of-hint">
-        <Feather size={13} strokeWidth={2} aria-hidden="true" /> {t("ui.otomeForge.reader.tagsEaseOff")}
+        {t("ui.otomeForge.reader.tagsEaseOff")} <Feather size={13} strokeWidth={2} aria-hidden="true" />
       </p>
       <div className="of-inline-actions">
         <button type="button" className="of-button of-button--quiet of-glass of-button--small" onClick={onLeave}>

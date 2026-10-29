@@ -338,7 +338,8 @@ test("the truth earns trust; Reveal records her disclosure once; the ending is c
 });
 
 test("a walkout opens a major grievance, or a rupture at low trust; a standoff charges tension within the caps", async () => {
-  const walkout = await fightWorld("r-walk-aaaaaa");
+  const walkout = await fightWorld("r-walk-aaaaaa", { kai: { points: 945, stage: 2 } });
+  assert.equal((await walkout.state()).lis[KAI]!.points, 945, "reading an argument never costs affection");
   const [, , last] = await play(walkout, ["press", "press", "hold"]);
   assert.equal(last!.body.ending.kind, "walkout", "2 → 3 → 4 → 4");
   let kai = (await walkout.state()).lis[KAI]!;
@@ -347,6 +348,13 @@ test("a walkout opens a major grievance, or a rupture at low trust; a standoff c
     [{ by: "li", severity: "major", status: "open", opened: "main-1/5" }],
   );
   assert.equal(kai.rupture, null);
+  assert.deepEqual([kai.points, kai.stage], [930, 2], "the walkout costs 15 points without losing a level or stage");
+  const afterWalkout = await walkout.state();
+  await play(walkout, ["press", "press", "hold"]);
+  assert.deepEqual(await walkout.state(), afterWalkout, "replaying the canonical walkout never costs points again");
+  const read = await walkout.call("POST", `${beatPath}/read`, { segment: 99 }, node(5));
+  assert.deepEqual(read.body.grants, [{ source: "beat", starlight: 30 }]);
+  assert.equal((await walkout.state()).lis[KAI]!.points, 930, "the argument's read keeps its normal reward only");
 
   const cold = await fightWorld("r-cold-aaaaaa", { kai: { trust: -2, points: 900, stage: 2 } });
   await play(cold, ["press", "press", "press"]);
@@ -354,14 +362,15 @@ test("a walkout opens a major grievance, or a rupture at low trust; a standoff c
   assert.equal(kai.grievances[0]!.severity, "rupture");
   assert.equal(kai.rupture?.grievanceId, kai.grievances[0]!.id);
   assert.equal(kai.stage, 2, "nothing unlocked is taken back");
-  assert.equal(kai.points >= 900, true);
+  assert.equal(kai.points, 900, "the reached level's floor survives a rupture");
   const story = await cold.call("GET", "/runs/:run/story");
   assert.equal(story.body.routes[0].next.blockedBy, "rupture");
   assert.equal(story.body.repairs[0].li, KAI);
 
-  const standoff = await fightWorld("r-stnd-aaaaaa");
+  const standoff = await fightWorld("r-stnd-aaaaaa", { kai: { points: 945 } });
   await play(standoff, ["hold", "hold", "hold"]);
   assert.equal((await standoff.state()).lis[KAI]!.tension, 1);
+  assert.equal((await standoff.state()).lis[KAI]!.points, 945, "tension alone never costs affection");
   // Tension already moved twice this chapter: the chapter's cap holds it.
   const capped = await fightWorld("r-capd-aaaaaa", {
     kai: { tension: 2, chapterDelta: { "main-1": { trust: 0, tension: 2 } } },

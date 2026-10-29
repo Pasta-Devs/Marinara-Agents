@@ -81,7 +81,7 @@ Each love interest moves through six stages, from Mask to Bond.
 
 - **Route chapters are free.** The next one opens at an affection level (3, 5, 7, 8, then 10). It takes one model call to plan.
 - **The gate:** only a route chapter's last scene moves a love interest on a stage. The fourth stage's gate reveals one of their secrets. The fifth stage's chapter holds a confrontation, and its gate ends on a choice that cannot be undone.
-- **Rewards:** a route chapter earns 300 Starlight and 150 affection. Affection only rises.
+- **Rewards:** a route chapter earns 300 Starlight and 150 affection. A hostile first-play choice in the story or on a date, or a Confrontation walkout, can cost 15 affection points once per love interest. Points never fall below the start of the highest level you have reached, with a new level every 300 points. Replaying costs nothing, and losses never refund the daily earning cap.
 - **Confrontations:** every main chapter builds to one: three rounds in which you Press, Hold, Yield or Reveal. It ends in the truth, a walkout or a standoff, and what you reveal is something they know from then on. The whole confrontation is written in one model call, and your first play of it is canon.
 - **Rifts:** a walkout can leave a rift. While it stands, that love interest's route chapters stay shut (you can still finish the scene on screen), and **Make it right** offers a short repair chapter. Reading its last scene closes the rift.
 - **Nothing is taken back:** a rift never removes anything you have unlocked.
