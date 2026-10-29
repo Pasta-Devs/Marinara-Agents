@@ -191,6 +191,7 @@ const EXPECTED = [
   "GET /settings/audience-characters",
   "GET /settings/audience-characters/groups",
   "GET /settings/carryover-reach",
+  "GET /settings/memory-status",
   "GET /settings/defaults",
   "GET /settings/prompt-blocks",
   "POST /settings/prompt-blocks/generate-preview",
@@ -506,6 +507,8 @@ const ADDED_ROUTES = new Set([
   "GET /engine-avatars/:fileName",
   // 0.3.42: carryover settings count the Creator chats that let Slurp activity in.
   "GET /settings/carryover-reach",
+  // The last outcome of asking Long-Term Memory, for the Engine link page (#1841).
+  "GET /settings/memory-status",
   // 0.3.43: edit, delete and write again a DM; copy and sum up a thread (docs/FEEDBACK-2026-10.md R9, R10).
   "GET /messages/threads/:threadId/export",
   "POST /messages/threads/:threadId/messages/:messageId/delete",
@@ -556,7 +559,7 @@ const EXPECTED_HANDLER_COUNTS = {
   "features/notifications": 4,
   "features/onboarding": 7,
   "features/projects": 31,
-  "features/settings": 10,
+  "features/settings": 11,
   "features/storylines": 2,
   "features/world": 16,
 } as const;
@@ -564,8 +567,8 @@ const EXPECTED_HANDLER_COUNTS = {
 // 0.3.4: +1 POST, +1 PUT (Creator Pages). 0.3.5: +1 GET, +3 POST (Support desk). 0.3.7: +1 POST (rewrite all).
 // 0.3.8: +1 GET, +5 POST (Drama: bonds, drama view, choice, start, end). 0.3.11: +1 POST (fan notes).
 // DM edit tools and thread export: +1 GET, +4 POST. 0.3.28: +1 GET (Deep details for a chat reply). 0.3.42: +1 GET (carryover reach). Story state (Life panel): +1 GET, +1 POST.
-// 0.3.63: +1 POST (sexting session). 0.4.12: +2 GET, +2 POST (Live v3).
-const EXPECTED_METHOD_COUNTS = { DELETE: 20, GET: 94, PATCH: 20, POST: 171, PUT: 7 } as const;
+// 0.3.63: +1 POST (sexting session). 0.4.12: +2 GET, +2 POST (Live v3). Long-Term Memory recall: +1 GET (memory status).
+const EXPECTED_METHOD_COUNTS = { DELETE: 20, GET: 95, PATCH: 20, POST: 171, PUT: 7 } as const;
 
 const root = join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/slp");
 const registration = /\bapp\.(get|post|put|patch|delete|addContentTypeParser)(?:<[^()]*?>)?\(\s*["'`]([^"'`]+)["'`]/gu;
@@ -624,7 +627,7 @@ assert.deepEqual(methodCounts, EXPECTED_METHOD_COUNTS, "HTTP method multiset cha
 // 0.3.41: +1 (Engine avatar copies).
 // DM edit tools, thread export: +5. Story state (Life panel): +2. Remove an imported pack: +1.
 // 0.3.63: +1 (the sexting session).
-assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 312);
+assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 313);
 assert.deepEqual(handlerCounts, EXPECTED_HANDLER_COUNTS, "handler count changed in a feature");
 assert.ok(foundRoutes.includes("POST /slurp/posts/:id/media"), "the renamed POST media route must remain registered");
 assert.ok(
