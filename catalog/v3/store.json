@@ -312,5 +312,40 @@
       "bannerPath": "../../store/banners/world-state.webp",
       "bannerSmallPath": "../../store/banners/world-state-1200.webp"
     }
-  }
+  },
+  "kits": [
+    {
+      "id": "roleplay-starter",
+      "name": "Roleplay starter",
+      "tagline": "World, people, faces and lore for a roleplay.",
+      "packages": [
+        "world-state",
+        "character-tracker",
+        "expression",
+        "background",
+        "lorebook-keeper"
+      ]
+    },
+    {
+      "id": "story-writer",
+      "name": "Story writer",
+      "tagline": "Cleaner prose and a story that stays on track.",
+      "packages": [
+        "prose-guardian",
+        "continuity",
+        "director",
+        "long-term-memory"
+      ]
+    },
+    {
+      "id": "game-night",
+      "name": "Game night",
+      "tagline": "Card and board games to play in chat.",
+      "packages": [
+        "chess",
+        "poker",
+        "uno"
+      ]
+    }
+  ]
 }

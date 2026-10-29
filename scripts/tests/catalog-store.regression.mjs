@@ -21,6 +21,7 @@ try {
         chess: { section: "games", tagline: " Play chess. ", featured: 2 },
         noodle: { section: "apps", tagline: "A social feed." },
       },
+      kits: [{ id: "starter", name: "Starter", tagline: "Two to try.", packages: ["chess", "noodle"] }],
     }),
   );
   for (const id of ["chess", "noodle"]) {
@@ -43,6 +44,11 @@ try {
   });
   // Apps use their Home tab icon, so no iconPath; previews stop at the first gap.
   assert.equal(store.packages.noodle.iconPath, undefined);
+  assert.deepEqual(store.kits, [
+    { id: "starter", name: "Starter", tagline: "Two to try.", packages: ["chess", "noodle"] },
+  ]);
+  // A kit lists only the packages the lane publishes.
+  assert.deepEqual((await buildStoreDocument(root, "catalog", entries("chess"))).kits[0].packages, ["chess"]);
   assert.deepEqual(store.packages.noodle.previews, ["../../store/previews/noodle-1.webp"]);
   assert.equal(
     (await buildStoreDocument(root, "catalog", entries("chess"))).packages.chess.bannerPath,

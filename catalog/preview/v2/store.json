@@ -33,5 +33,15 @@
       "bannerPath": "../../../store/banners/saucelings.webp",
       "bannerSmallPath": "../../../store/banners/saucelings-1200.webp"
     }
-  }
+  },
+  "kits": [
+    {
+      "id": "game-night",
+      "name": "Game night",
+      "tagline": "Card and board games to play in chat.",
+      "packages": [
+        "blackjack"
+      ]
+    }
+  ]
 }

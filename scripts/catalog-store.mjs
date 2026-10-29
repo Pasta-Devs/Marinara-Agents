@@ -31,6 +31,23 @@ export async function readStoreSource(repoRoot) {
     if (entry.featured !== undefined && !(Number.isInteger(entry.featured) && entry.featured > 0))
       throw new Error(`store/store.json: ${id} featured must be a positive integer`);
   }
+  for (const kit of source.kits ?? []) {
+    const name = kit.name?.trim() ?? "";
+    if (!kit.id || !name || name.length > MAX_STORE_TAGLINE_CHARACTERS) {
+      throw new Error(
+        `store/store.json: kit ${kit.id} needs an id and a name of 1-${MAX_STORE_TAGLINE_CHARACTERS} characters`,
+      );
+    }
+    if ((kit.tagline?.length ?? 0) > MAX_STORE_TAGLINE_CHARACTERS) {
+      throw new Error(
+        `store/store.json: kit ${kit.id} tagline is longer than ${MAX_STORE_TAGLINE_CHARACTERS} characters`,
+      );
+    }
+    const unknown = (kit.packages ?? []).filter((id) => !source.packages[id]);
+    if (!kit.packages?.length || unknown.length) {
+      throw new Error(`store/store.json: kit ${kit.id} needs packages from the store (unknown: ${unknown.join(", ")})`);
+    }
+  }
   return source;
 }
 
@@ -86,5 +103,9 @@ export async function buildStoreDocument(repoRoot, directory, entries, { lenient
       ...(previews.length ? { previews } : {}),
     };
   }
-  return { schemaVersion: 1, packages };
+  // A lane lists a kit only with the packages it publishes.
+  const kits = (source.kits ?? [])
+    .map((kit) => ({ ...kit, packages: kit.packages.filter((id) => packages[id]) }))
+    .filter((kit) => kit.packages.length > 0);
+  return { schemaVersion: 1, packages, ...(kits.length ? { kits } : {}) };
 }
