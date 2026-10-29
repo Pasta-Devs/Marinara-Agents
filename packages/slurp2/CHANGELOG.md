@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 0.4.10 — 2026-10-29
+
+- Turning on "What your other Agents know" now asks whether to turn on Long-Term Memory's "Other Agents can read memories" when that switch is off. "Turn it on" changes only that switch; "Not now" leaves it alone.
+
 ## 0.4.9 — 2026-10-29
 
 - Creators' posts and DM replies now use what Long-Term Memory remembers about them, through its recall service. A new "Long-term memory" choice in Backstage (Engine link) sets whether they get whole memories (the default) or only the parts that fit the post or message. It shows while "What your other Agents know" is on.

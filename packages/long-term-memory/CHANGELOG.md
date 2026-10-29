@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.5.9 — 2026-10-29
 
 - After you turn on "Other Agents can read memories" and save, Memory Settings offers to turn on Slurp's "What your other Agents know" switch too, since Slurp's Creators need both before they use memories.
 
