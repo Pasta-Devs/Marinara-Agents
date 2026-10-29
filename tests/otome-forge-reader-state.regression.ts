@@ -397,6 +397,9 @@ test("a place's picture is found by its name, and only a ready paint has one", (
     { name: "The Lab", tags: "glass", art: { state: "waiting-consent" as const, at: "" } },
   ];
   assert.equal(readyUrl(placeEntry(places, "the observation  room")?.art), "/gallery/1.png");
+  assert.equal(readyUrl(placeEntry(places, "THE-observation-room")?.art), "/gallery/1.png");
+  assert.equal(placeEntry([{ name: "Dottore’s wing 4", tags: "lab" }], "dottore's wing 4")?.name, "Dottore’s wing 4");
+  assert.equal(placeEntry([{ name: "Dottore’s wing 4", tags: "lab" }], "Dottore’s wing 5"), null);
   assert.equal(readyUrl(placeEntry(places, "The Lab")?.art), null);
   assert.equal(placeEntry(places, "Elsewhere"), null);
   assert.equal(placeEntry(null, "The Lab"), null);

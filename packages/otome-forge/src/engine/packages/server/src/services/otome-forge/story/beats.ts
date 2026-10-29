@@ -55,6 +55,7 @@ import type {
   Segment,
   StanceResult,
   Unit,
+  World,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { stageRow, type Stance } from "../../../../../client/src/features/otome-forge/shared/arcs.js";
 import type { DateScore } from "../../../../../client/src/features/otome-forge/shared/dates.js";
@@ -140,6 +141,8 @@ export interface BeatContext {
   cgExplicit?: boolean;
   /** Every love interest, so a speaker's name can be matched to his stage. */
   units: ReadonlyArray<Pick<Unit, "id" | "name">>;
+  /** Existing backgrounds a raw reply may explicitly reuse; never inferred from numbered names or tags. */
+  places?: World["places"];
   state: RunState;
   last: boolean;
   /** The beat must end on one big choice (a stage-5 route chapter's gate). */
@@ -159,6 +162,34 @@ interface BeatBody {
   places: Array<{ name: string; tags: string }>;
   musicMood: MusicMood;
   cg?: Beat["cg"];
+}
+
+/** Validate raw reuse references, then normalize them away instead of saving another identity field. */
+function declaredPlaces(raw: unknown, known: World["places"] = {}) {
+  const declared = new Map<string, { name: string; tags: string }>();
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    if (!entry || typeof entry !== "object") continue;
+    const place = entry as Record<string, unknown>;
+    const name = str(place.name, NAME_MAX);
+    let target = { name, tags: str(place.tags, 600) };
+    if (Object.hasOwn(place, "reuse")) {
+      if (typeof place.reuse !== "string" || !Object.hasOwn(known, place.reuse))
+        return "place reuse must name an existing saved place key from SAVED BACKGROUNDS";
+      if (!name) return "a reused place needs its scene name";
+      const existing = known[place.reuse]!;
+      target = { name: existing.name, tags: existing.tags.trim() ? existing.tags : target.tags };
+    }
+    const key = nameKey(name);
+    const previous = declared.get(key);
+    if (previous && previous.name !== target.name) return "the same place name has conflicting reuse references";
+    if (name && !previous) {
+      declared.set(key, target);
+      // Choice branches inherit the canonical mainline place rather than the raw alias.
+      if (Object.hasOwn(place, "reuse") && !declared.has(nameKey(target.name)))
+        declared.set(nameKey(target.name), target);
+    }
+  }
+  return declared;
 }
 
 /**
@@ -197,22 +228,18 @@ export function normalizeBeatBody(raw: unknown, options: NormalizeOptions): Beat
   if (!raw || typeof raw !== "object") return null;
   const reply = raw as Record<string, unknown>;
   if (!Array.isArray(reply.segments) || !reply.segments.length) return null;
-  const declared = new Map<string, { name: string; tags: string }>();
-  for (const place of Array.isArray(reply.places) ? reply.places : []) {
-    const name = str((place as Record<string, unknown> | null)?.name, NAME_MAX);
-    if (name && !declared.has(nameKey(name))) {
-      declared.set(nameKey(name), { name, tags: str((place as Record<string, unknown>).tags, 600) });
-    }
-  }
+  const declared = declaredPlaces(reply.places, options.context.places);
+  if (typeof declared === "string") return null;
   const used = new Map<string, { name: string; tags: string }>();
   const resolve = (value: unknown) => {
     const key = nameKey(value);
     if (!key) return "";
-    const known = used.get(key);
+    const place = declared.get(key) ?? { name: str(value, NAME_MAX), tags: "" };
+    const canonical = nameKey(place.name);
+    const known = used.get(canonical);
     if (known) return known.name;
     if (used.size >= BEAT_PLACES_MAX) return "";
-    const place = declared.get(key) ?? { name: str(value, NAME_MAX), tags: "" };
-    used.set(key, place);
+    used.set(canonical, place);
     return place.name;
   };
   // The place it opens in counts only once a line falls back to it: a scene that names its own place first never lists
@@ -264,6 +291,8 @@ type NormalizedBeat = BeatBody & { choices: ForgeChoice[] };
 
 /** The reply as a beat body with its choices, or the reason it is refused (the repair turn names it). */
 export function normalizeBeatReply(reply: BeatReply, context: BeatContext): NormalizedBeat | string {
+  const places = declaredPlaces(reply.places, context.places);
+  if (typeof places === "string") return places;
   // One thought per love interest on the path with the most of them: the mainline, then in each choice (every one
   // is played) the option that holds the most.
   let counts = new Map<string, number>();
@@ -509,6 +538,7 @@ async function generateBeat(
   const context: BeatContext = {
     node,
     units,
+    places: run.world.places,
     state: run.state,
     last,
     mustChoose,
@@ -818,6 +848,11 @@ export async function serveBeat(
       (await deps.store.updateDoc(runDocTarget("beat", beatId(runId, key, i)), normalizeBeat, (current) =>
         current && !current.shown ? { ...current, shown: true as const } : current,
       )) ?? beat;
+  }
+  if (!run.state.chapters[key]?.completed && i >= (run.state.chapters[key]?.beatsRead ?? 0)) {
+    // generateBeat may itself run inside the foreground queue. Await its place registration only after that lock
+    // has been released; the reader's first art response must distinguish pending from no image/description.
+    await deps.art?.prepareScenePlaces?.(runId, beat, { debugMode, review });
   }
   queueFaces(deps, runId, beat, debugMode);
   if (!run.state.chapters[key]?.completed) queueLookahead(deps, runId, chapter, beat, { debugMode, review });

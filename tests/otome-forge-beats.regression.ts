@@ -33,7 +33,11 @@ import {
   normalizeChapter,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/story.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
-import { normalizeBeatReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/beats.ts";
+import {
+  normalizeBeatReply,
+  segmentLists,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/beats.ts";
+import { normalizeConfrontationReply } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/story/confrontation.ts";
 import {
   DECISIONS_HEADING,
   EASE_OFF_MARKER,
@@ -414,6 +418,86 @@ test("a love interest's thought under his first name alone keeps the stage and o
     /at most one thought line/,
   );
   assert.equal(check(scene([], [choice(0, [thought("Kai")], [thought("Kai Arden")])])), "[object Object]");
+});
+
+test("an explicit saved-place reference canonicalizes mainline and every branch without merging numbered rooms", () => {
+  const canonical = "Dottore’s wing4";
+  const context = {
+    node: { i: 0, kind: "beat", guide: "The same laboratory.", cast: [KAI] } as ChapterNode,
+    units: [{ id: KAI, name: "Kai" }],
+    state: normalizeState({ lis: { [KAI]: {} } }),
+    last: false,
+    places: {
+      "dottore-s-wing4": {
+        name: canonical,
+        tags: "laboratory, green glass, no humans",
+        art: { state: "ready" as const, at: "old", url: "/saved-lab.png" },
+      },
+    },
+  };
+  const reply = twoChoices();
+  reply.places = [{ name: "dottore’s wing5", tags: "obsolete new tags", reuse: "dottore-s-wing4" }];
+  for (const segment of reply.segments) segment.place = "dottore’s wing5";
+  for (const choice of reply.choices)
+    for (const option of choice.options) for (const segment of option.segments) delete segment.place;
+  const result = normalizeBeatReply(reply, context);
+  assert.equal(typeof result, "object", String(result));
+  if (typeof result === "string") return;
+  assert.deepEqual(result.places, [{ name: canonical, tags: "laboratory, green glass, no humans" }]);
+  for (const segment of [
+    ...result.segments,
+    ...result.choices.flatMap((choice) => choice.options.flatMap((option) => option.segments)),
+  ])
+    assert.equal(segment.place, canonical);
+  assert.equal(JSON.stringify(result).includes('"reuse"'), false, "references are not new saved identity fields");
+  const rawGame = confrontationReply({
+    places: reply.places,
+    opening: [{ speaker: "", text: "The argument begins.", place: "dottore’s wing5" }],
+  });
+  const game = normalizeConfrontationReply(
+    rawGame,
+    { li: KAI, node: context.node, cgOpen: false },
+    segmentLists(context),
+  );
+  assert.equal(typeof game, "object", String(game));
+  if (typeof game !== "string") {
+    assert.deepEqual(game.places, result.places);
+    const lines = [
+      ...game.segments,
+      ...game.confrontation.rounds.flatMap((round) => [
+        ...round.his,
+        ...Object.values(round.options).flatMap((option) => option.segments),
+      ]),
+      ...Object.values(game.confrontation.endings).flat(),
+    ];
+    for (const line of lines)
+      assert.equal(line.place, canonical, "every unchosen Confrontation branch retains the same canonical background");
+  }
+  const untagged = normalizeBeatReply(reply, {
+    ...context,
+    places: { "dottore-s-wing4": { name: canonical, tags: "" } },
+  });
+  assert.equal(typeof untagged, "object");
+  if (typeof untagged !== "string")
+    assert.equal(
+      untagged.places[0]!.tags,
+      "obsolete new tags",
+      "a location without a description can still take its first tags",
+    );
+  const different = normalizeBeatReply(
+    beatReply({
+      places: [{ name: "Room 5", tags: "laboratory, no humans" }],
+      segments: [{ speaker: "", text: "Another room.", place: "Room 5" }],
+    }),
+    { ...context, places: { "room-4": { name: "Room 4", tags: "laboratory, no humans" } } },
+  );
+  assert.equal(typeof different, "object");
+  if (typeof different !== "string") assert.equal(different.places[0]!.name, "Room 5");
+  const unknown = normalizeBeatReply(
+    beatReply({ places: [{ name: "The lab", tags: "laboratory", reuse: "missing-key" }] }),
+    context,
+  );
+  assert.match(String(unknown), /reuse.*existing|unknown.*place/i, "unknown references enter the existing repair path");
 });
 
 test("a declined scene can be eased off from the declined panel: no call, read, and the story goes on without it", async () => {
