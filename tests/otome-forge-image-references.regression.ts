@@ -6,7 +6,18 @@ import {
   createImageClient,
   type ImageSubject,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
-import { PNG } from "./fixtures/otome-forge-art.ts";
+import { paintPairNow } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/outfits.ts";
+import {
+  itemId,
+  runDocTarget,
+  stateId,
+  unitId,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
+import { normalizeState } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
+import { normalizeUnit } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
+import { normalizeItem } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
+import { artWorld, PNG } from "./fixtures/otome-forge-art.ts";
+import { KAI } from "./fixtures/otome-forge-story.ts";
 
 const data = (value: string) => `data:image/png;base64,${Buffer.from(value).toString("base64")}`;
 const portrait = "/api/global-gallery/file/otome-neutral.png";
@@ -51,6 +62,7 @@ function engine({
       }
       if (/^\/api\/characters\/[^/]+$/u.test(path)) return Response.json({ avatarPath: "/api/avatars/file/card.png" });
       if (path === "/api/global-gallery/upload") return Response.json({ id: "painted", url: "/painted.png" });
+      if (path === "/api/app-settings/ui") return Response.json({ value: {} });
       assert.fail(`unexpected fetch ${path}`);
     }) as typeof globalThis.fetch,
   });
@@ -141,4 +153,55 @@ test("Otome's reference opt-in preserves persona identity, scene outfit ordering
     t.generations[1]!.referenceImages,
     ["a", "b", "c", "d"].map((id) => data(`/api/sprites/card-${id}/file/full_neutral.png`)),
   );
+});
+
+test("a real couple-portrait paint sends the LI neutral, the persona's painted look, and that exact LI outfit; fallbacks retain both looks", async () => {
+  for (const [i, scenario] of ["neutral", "missing", "no-card"].entries()) {
+    const t = await artWorld({ runKey: `r-pairrefs${i}-aaaaaa` });
+    const host = engine(scenario === "missing" ? { sprites: [] } : {});
+    t.deps.images = host.client;
+    await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
+      ...unit,
+      source: scenario === "no-card" ? "archetype" : "card",
+      cardId: scenario === "no-card" ? undefined : "card-dottore",
+    }));
+    const hisLook = "/api/global-gallery/file/his-pair-look.png";
+    const herLook = "/api/global-gallery/file/her-pair-look.png";
+    const his = normalizeItem({
+      id: "his-wardrobe-0-f",
+      kind: "his-look5",
+      li: KAI,
+      banner: "his-wardrobe-0",
+      look: { name: "His pair look", outfitLine: "blue coat" },
+      art: { state: "ready", at: "now", url: hisLook },
+    });
+    const her = normalizeItem({
+      id: "my-wardrobe-0-f",
+      kind: "her-look5",
+      banner: "my-wardrobe-0",
+      coupleWith: his.id,
+      look: { name: "Her pair look", outfitLine: "amber dress" },
+      art: { state: "ready", at: "now", url: herLook },
+    });
+    for (const item of [his, her]) {
+      await t.store.mutateDoc(runDocTarget("item", itemId(t.runId, item.id)), normalizeItem, () => item);
+    }
+    await t.store.updateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+      ...state,
+      owned: { ...state.owned, items: [his.id, her.id] },
+    }));
+    assert.equal((await paintPairNow(t.deps, t.runId, her.id, { debugMode: false })).state, "ready");
+    assert.equal(host.generations.length, 1);
+    assert.deepEqual(
+      host.generations[0]!.referenceImages,
+      scenario === "neutral"
+        ? [data("/api/sprites/card-dottore/file/full_neutral.png"), data(herLook), data(hisLook)]
+        : [data(hisLook), data(herLook)],
+    );
+    assert.ok(
+      !host.reads.some((path) => path.startsWith("/api/characters/personas/")),
+      "the persona keeps its painted pair-look reference",
+    );
+    assert.equal(t.calls.length, 0);
+  }
 });

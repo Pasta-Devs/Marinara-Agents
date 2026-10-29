@@ -456,9 +456,13 @@ async function buildPair(deps: ArtDeps, runId: string, hers: string, edited: Par
   ];
   const brief = `A couple portrait of ${first(unit.name, "them")} and ${first(run.player.name, "the protagonist")} together, side by side and in full view, sharing a quiet moment, soft romantic light.`;
   const prompt = cgPrompt({ brief, people, world: run.world, style, use: "clothed" }, edited);
-  // Each painted look is the reference, so the likeness and the clothes both carry over.
+  // Keep his selected card's neutral identity and this exact pair look; her painted look stays her reference.
   const units: ImageSubject[] = [
-    { kind: "character", portrait: hisOutfit.url },
+    {
+      kind: "character",
+      ...(unit.cardId ? { cardId: unit.cardId, outfits: [hisOutfit], wornOutfit: hisOutfit.id } : {}),
+      portrait: hisOutfit.url,
+    },
     { kind: "character", portrait: herOutfit.url },
   ];
   return { ...pair, ...prompt, units, name: first(unit.name, "Couple") };
