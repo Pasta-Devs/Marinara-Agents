@@ -93,6 +93,7 @@ async function buildPrompt(settings: Record<string, unknown>, captioning: boolea
     recentInteractions,
     recalledPosts: [],
     recalledInteractions: [],
+    memoryLines: [],
     activeAccountList: "- Alice (@alice) kind=character",
     personaContext: "No user persona is active.",
     characterContext: "Alice",
