@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## Unreleased
+
+- After you turn on "Other Agents can read memories" and save, Memory Settings offers to turn on Slurp's "What your other Agents know" switch too, since Slurp's Creators need both before they use memories.
+
 ## 1.5.8 — 2026-10-29
 
 - Other Agents that read memories, such as Slurp and Noodle, can ask for whole memories instead of the parts that fit what they are writing. The same memories are shared either way.

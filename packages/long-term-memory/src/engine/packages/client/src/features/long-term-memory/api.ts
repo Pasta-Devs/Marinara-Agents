@@ -197,10 +197,16 @@ export async function request<TResponse, TBody = unknown>(
   return response.json() as Promise<TResponse>;
 }
 
-export async function requestHost<TResponse>(path: string): Promise<TResponse> {
+export async function requestHost<TResponse>(path: string, method = "GET", body?: unknown): Promise<TResponse> {
+  const headers = new Headers(getAdminSecretHeader());
+  if (method !== "GET") headers.set(CSRF_HEADER, CSRF_HEADER_VALUE);
+  if (body !== undefined) headers.set("Content-Type", "application/json");
   const response = await fetch(path, {
+    method,
+    headers,
     cache: "no-store",
     credentials: "same-origin",
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as {
