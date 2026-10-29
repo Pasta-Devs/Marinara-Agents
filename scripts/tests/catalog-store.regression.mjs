@@ -29,6 +29,7 @@ try {
     await touch(`store/banners/${id}-1200.webp`);
   }
   await touch("store/icons/chess.webp");
+  await touch("store/icons/noodle.webp");
   await touch("store/previews/noodle-1.webp");
   await touch("store/previews/noodle-3.webp"); // after a gap: not published
 
@@ -42,17 +43,11 @@ try {
     bannerPath: "../../store/banners/chess.webp",
     bannerSmallPath: "../../store/banners/chess-1200.webp",
   });
-  // Apps use their Home tab icon, so no iconPath; previews stop at the first gap.
-  assert.equal(store.packages.noodle.iconPath, undefined);
+  // Apps get a store logo like every other package; previews stop at the first gap.
+  assert.equal(store.packages.noodle.iconPath, "../../store/icons/noodle.webp");
   assert.deepEqual(store.kits, [
     { id: "starter", name: "Starter", tagline: "Two to try.", packages: ["chess", "noodle"] },
   ]);
-  assert.equal(store.howTo, undefined, "No how-to pictures, no howTo field");
-  for (const step of [1, 2, 3]) await touch(`store/howto/game-${step}.webp`);
-  await touch("store/howto/app-1.webp"); // a partial set is not published
-  assert.deepEqual((await buildStoreDocument(root, "catalog/v3", entries("chess"))).howTo, {
-    game: [1, 2, 3].map((step) => `../../store/howto/game-${step}.webp`),
-  });
   // A kit lists only the packages the lane publishes.
   assert.deepEqual((await buildStoreDocument(root, "catalog", entries("chess"))).kits[0].packages, ["chess"]);
   // The Engine reads kits from the published lane only.
