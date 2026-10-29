@@ -1,5 +1,5 @@
-// Inspect the actual loopback generation requests: selected-card full_neutral, then the retained Otome base look,
-// then existing avatar fallbacks. Metadata URLs and invalid sprite filenames never become fetch targets.
+// Inspect actual loopback requests: selected-card full_neutral, then its current avatar, then retained Otome art.
+// Metadata URLs and invalid sprite filenames never become fetch targets.
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -94,7 +94,7 @@ test("initial card looks, new outfits and scenes send the selected card's full-b
   );
 });
 
-test("missing or unreadable neutral art falls back to the saved full-body look, then the selected card avatar", async () => {
+test("missing or unreadable neutral art uses the current card avatar before retained art; unreadable avatars retain the look", async () => {
   for (const options of [
     { sprites: [] },
     { missing: ["/api/sprites/card-dottore/file/full_neutral.png"] },
@@ -103,11 +103,12 @@ test("missing or unreadable neutral art falls back to the saved full-body look, 
   ]) {
     const t = engine(options);
     await t.client.generateOutfit({ ...request, unit: { kind: "character", cardId: "card-dottore", portrait } });
-    assert.deepEqual(t.generations[0]!.referenceImages, [data(portrait)]);
+    assert.deepEqual(t.generations[0]!.referenceImages, [data("/api/avatars/file/card.png")]);
+    assert.ok(!t.reads.includes(portrait), "the current selected avatar takes priority over the generated look");
   }
-  const t = engine({ sprites: [], missing: [portrait] });
+  const t = engine({ sprites: [], missing: ["/api/avatars/file/card.png"] });
   await t.client.generateOutfit({ ...request, unit: { kind: "character", cardId: "card-dottore", portrait } });
-  assert.deepEqual(t.generations[0]!.referenceImages, [data("/api/avatars/file/card.png")]);
+  assert.deepEqual(t.generations[0]!.referenceImages, [data(portrait)]);
 });
 
 test("only the exact neutral raster belonging to the selected card is read; unsafe metadata and IDs add no sprite reference", async () => {
@@ -121,7 +122,7 @@ test("only the exact neutral raster belonging to the selected card is read; unsa
     ],
   });
   await t.client.generateOutfit({ ...request, unit: { kind: "character", cardId: "card-dottore", portrait } });
-  assert.deepEqual(t.generations[0]!.referenceImages, [data(portrait)]);
+  assert.deepEqual(t.generations[0]!.referenceImages, [data("/api/avatars/file/card.png")]);
   assert.ok(!t.reads.some((path) => path.includes("/file/full_") || path.includes("/sprites/other/")));
   const unsafe = engine({ sprites: [] });
   await unsafe.client.generateOutfit({ ...request, unit: { kind: "character", cardId: "../other", portrait } });
@@ -196,7 +197,9 @@ test("a real couple-portrait paint sends the LI neutral, the persona's painted l
       host.generations[0]!.referenceImages,
       scenario === "neutral"
         ? [data("/api/sprites/card-dottore/file/full_neutral.png"), data(herLook), data(hisLook)]
-        : [data(hisLook), data(herLook)],
+        : scenario === "missing"
+          ? [data("/api/avatars/file/card.png"), data(herLook), data(hisLook)]
+          : [data(hisLook), data(herLook)],
     );
     assert.ok(
       !host.reads.some((path) => path.startsWith("/api/characters/personas/")),

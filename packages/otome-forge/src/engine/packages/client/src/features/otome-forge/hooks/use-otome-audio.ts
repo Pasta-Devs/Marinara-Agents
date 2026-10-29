@@ -197,6 +197,12 @@ export class OtomeAudioController {
   // ── Settings ──
 
   setDeps(deps: ControllerDeps) {
+    if (
+      this.deps &&
+      deps.lis.some((li) => this.deps?.lis.find((before) => before.id === li.id)?.cardId !== li.cardId)
+    ) {
+      this.ttsConfig = null;
+    }
     this.deps = deps;
   }
 

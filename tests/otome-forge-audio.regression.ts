@@ -165,6 +165,7 @@ test("voices: a card's own Engine voice, the pool for an archetype love interest
       "tts-1": {
         voiceAssignments: [
           { characterId: "card-kai", voice: "kai-voice" },
+          { characterId: "card-mireille", voice: "mireille-card-voice" },
           { characterId: "persona-ines", voice: "ines-voice" },
         ],
         npcDefaultMaleVoices: ["m1", "m2", "m3"],
@@ -210,6 +211,15 @@ test("voices: a card's own Engine voice, the pool for an archetype love interest
   const mireille = await voice("Mireille");
   assert.ok(["f1", "f2"].includes(mireille!), "an archetype love interest gets the pool for her voice");
   assert.equal(await voice("Mireille"), mireille, "and always the same one");
+  lis[1]!.cardId = "card-mireille";
+  assert.equal(
+    await voice("Mireille"),
+    "mireille-card-voice",
+    "a linked generated love interest uses the selected card",
+  );
+  assert.equal(lis[1]!.source, "archetype", "linking retains the love interest's creation source");
+  delete lis[1]!.cardId;
+  assert.equal(await voice("Mireille"), mireille, "unlinking restores the same generated voice fallback");
   assert.equal(await voice("Ines"), "ines-voice", "the protagonist uses her persona's voice");
   assert.equal(await voice("you"), "ines-voice");
   assert.equal(

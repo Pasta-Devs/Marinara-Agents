@@ -1,8 +1,7 @@
 // ──────────────────────────────────────────────
-// Otome Forge: the reader's header. The way out, the chapter's title (the screen's heading) and scene count; Auto,
-// Skip-read and the Backlog; then the scene's frame label and content tags, Hide UI, Rewrite beat (it says it costs a
-// call) and Ease off, which is always in reach. A place that waits for "Ask before painting" (or failed) offers its
-// paint beside its name, with its cost.
+// Otome Forge: the reader's title, scene count, place and content tags. Desktop shows its tools inline; mobile keeps
+// the disclosure, mute and fullscreen visible, with the secondary tools stacked below. Rewrite names its call cost.
+// A place waiting for "Ask before painting" (or failed) offers its paint beside its name, with its cost.
 // ──────────────────────────────────────────────
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -124,7 +123,12 @@ export function ReaderControls(props: ReaderControlsProps) {
   // The first tap outside the disclosure only dismisses it, including a tap on the story beneath it.
   useEffect(() => {
     if (!expanded) return;
+    const disclosureVisible = () => !!moreRef.current?.getClientRects().length;
     const dismiss = (event: MouseEvent) => {
+      if (!disclosureVisible()) {
+        setExpanded(false);
+        return;
+      }
       const target = event.target as Element | null;
       if (target?.closest(".of-reader-primary, [role='dialog']")) return;
       if (target?.closest(".of-reader-stage, .of-reader-bottom")) {
@@ -134,7 +138,12 @@ export function ReaderControls(props: ReaderControlsProps) {
       setExpanded(false);
     };
     const escape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || (event.target as Element | null)?.closest("[role='dialog']")) return;
+      if (
+        event.key !== "Escape" ||
+        !disclosureVisible() ||
+        (event.target as Element | null)?.closest("[role='dialog']")
+      )
+        return;
       event.preventDefault();
       event.stopPropagation();
       setExpanded(false);
@@ -247,6 +256,7 @@ export function ReaderControls(props: ReaderControlsProps) {
             disabled={!audio}
             onClick={() => audio?.setMuted(!audio.audioSettings.muted)}
           />
+          {/* Shared definitions keep the CSS-switched desktop and mobile copies in sync. */}
           <div className="of-reader-tools of-reader-desktop">
             {auto}
             {skip}
