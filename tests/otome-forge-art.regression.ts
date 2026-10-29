@@ -161,7 +161,7 @@ test("the writer reuses an explicitly selected saved background without another 
     replies: [
       json(
         beatReply({
-          places: [{ name: "dottore’s wing5", tags: "unused replacement tags", reuse: key }],
+          places: [{ name: "dottore’s wing5", tags: "unused replacement tags", reuse: `  ${key}\t ` }],
           segments: [{ speaker: "", text: "The same lab.", place: "dottore’s wing5" }],
         }),
       ),

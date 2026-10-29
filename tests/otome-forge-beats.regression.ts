@@ -500,6 +500,37 @@ test("an explicit saved-place reference canonicalizes mainline and every branch 
   assert.match(String(unknown), /reuse.*existing|unknown.*place/i, "unknown references enter the existing repair path");
 });
 
+test("optional background reuse treats blank values as omission, trims keys and rejects invalid supplied references", () => {
+  const context = {
+    node: { i: 0, kind: "beat", guide: "A new room.", cast: [] } as ChapterNode,
+    units: [],
+    state: normalizeState({ lis: {} }),
+    last: false,
+    places: { "saved-lab": { name: "The saved laboratory", tags: "laboratory, no humans" } },
+  };
+  const place = { name: "Room 5", tags: "glass room, no humans" };
+  const reply = beatReply({ places: [place], segments: [{ speaker: "", text: "A new room.", place: place.name }] });
+  const baseline = normalizeBeatReply(reply, context);
+  assert.equal(typeof baseline, "object");
+  for (const reuse of [undefined, null, "", " \t\n"]) {
+    assert.deepEqual(
+      normalizeBeatReply({ ...reply, places: [{ ...place, reuse }] }, context),
+      baseline,
+      `omission: ${JSON.stringify(reuse)}`,
+    );
+  }
+  const trimmed = normalizeBeatReply({ ...reply, places: [{ ...place, reuse: "  saved-lab\t " }] }, context);
+  assert.equal(typeof trimmed, "object", String(trimmed));
+  if (typeof trimmed !== "string") assert.deepEqual(trimmed.places, [context.places["saved-lab"]]);
+  for (const reuse of [false, 0, {}, [], "missing-key", "  missing-key  "]) {
+    assert.match(
+      String(normalizeBeatReply({ ...reply, places: [{ ...place, reuse }] }, context)),
+      /reuse.*existing saved place key/,
+      `invalid: ${JSON.stringify(reuse)}`,
+    );
+  }
+});
+
 test("a declined scene can be eased off from the declined panel: no call, read, and the story goes on without it", async () => {
   const t = await storyWorld({
     runKey: "r-decl-bbbbbb",

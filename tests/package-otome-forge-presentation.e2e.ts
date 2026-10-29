@@ -248,6 +248,15 @@ async function openOtome(
   page: Page,
   { reviewPrompts = false, recordMusic = false }: { reviewPrompts?: boolean; recordMusic?: boolean } = {},
 ): Promise<Locator> {
+  // Engine's calendar greeting can appear after startup. Keep its theme through the normal, specific dialog action.
+  await page.addLocatorHandler(
+    page
+      .getByRole("dialog", { name: "Happy Halloween!", exact: true })
+      .filter({ has: page.getByRole("button", { name: "Keep it", exact: true }) }),
+    async (dialog) => {
+      await dialog.getByRole("button", { name: "Keep it", exact: true }).click();
+    },
+  );
   await page.addInitScript(
     ({ version, review }) => {
       localStorage.setItem("marinara:whats-new:seen-version", version);
@@ -334,6 +343,8 @@ async function next(root: Locator) {
 }
 
 const line = (root: Locator) => root.locator(".of-dialogue .of-line");
+/** DialogueBox keeps a full accessible copy beside this visible, typed copy. */
+const displayedLine = (root: Locator) => line(root).locator(':scope > span[aria-hidden="true"]');
 
 async function setReaderControlsExpanded(root: Locator, expanded = true) {
   const more = root.getByRole("button", { name: "More reader controls" });
@@ -1270,7 +1281,8 @@ test("Otome Hearth backgrounds: reading waits for the current place paint and im
   await expect(line(root)).toHaveCount(0);
   expect(posts(calls, "/read")).toHaveLength(0);
   releaseImage();
-  await expect(line(root)).toHaveText("Stay inside the lab until its lights settle.");
+  await expect(displayedLine(root)).toHaveText("Stay inside the lab until its lights settle.");
+  await expect(line(root).locator(".of-visually-hidden")).toHaveText("Stay inside the lab until its lights settle.");
   await expect(root.locator('.of-place[data-on="true"]')).toHaveCSS(
     "background-image",
     new RegExp("background-preparation\\.svg"),
@@ -1330,7 +1342,7 @@ for (const scenario of [
     );
     const root = await openStory(page, { reviewPrompts: scenario === "review" });
     await root.getByRole("button", { name: "Continue" }).first().click();
-    await expect(line(root)).toHaveText("Rain needles the glass dome.");
+    await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
     await expect(root.getByText("Preparing the background…", { exact: true })).toHaveCount(0);
     if (scenario === "waiting-consent")
       await expect(root.getByRole("button", { name: /Paint.*The Observation Room/u })).toBeVisible();
@@ -1356,11 +1368,11 @@ test("Otome Hearth backgrounds: continuing without a pending background holds no
   await root.getByRole("button", { name: "Continue" }).first().click();
   await expect(line(root)).toHaveCount(0);
   await root.getByRole("button", { name: "Continue without background", exact: true }).click();
-  await expect(line(root)).toHaveText("Rain needles the glass dome.");
+  await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
   await next(root);
-  await expect(line(root)).toHaveText("You came back. How inefficient of you.");
+  await expect(displayedLine(root)).toHaveText("You came back. How inefficient of you.");
   await expect.poll(() => calls.filter((call) => call.path.endsWith("/art/scene")).length).toBeGreaterThan(1);
-  await expect(line(root)).toHaveText("You came back. How inefficient of you.");
+  await expect(displayedLine(root)).toHaveText("You came back. How inefficient of you.");
   await expect(root.getByText("Preparing the background…", { exact: true })).toHaveCount(0);
   expect(calls.filter((call) => call.method === "POST" && /\/art\/(place|cg)(?:\/prompt)?$/u.test(call.path))).toEqual(
     [],
@@ -1405,14 +1417,14 @@ test("Otome Hearth backgrounds: a manual retry does not interrupt a scene that a
   );
   const root = await openStory(page);
   await root.getByRole("button", { name: "Continue" }).first().click();
-  await expect(line(root)).toHaveText("Rain needles the glass dome.");
+  await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
   expect(posts(calls, "/art/place")).toHaveLength(0);
   await root.getByRole("button", { name: "Try painting The Observation Room again (1 image)" }).click();
   await expect.poll(() => decoding).toBe(true);
-  await expect(line(root)).toHaveText("Rain needles the glass dome.");
+  await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
   await expect(root.getByText("Preparing the background…", { exact: true })).toHaveCount(0);
   await next(root);
-  await expect(line(root)).toHaveText("You came back. How inefficient of you.");
+  await expect(displayedLine(root)).toHaveText("You came back. How inefficient of you.");
   releaseImage();
   await expect(root.locator('.of-place[data-on="true"]')).toHaveCount(1);
   expect(posts(calls, "/art/place")).toHaveLength(1);
@@ -1469,7 +1481,7 @@ test("Otome Hearth backgrounds: an old image decode cannot release a different s
   await root.getByRole("button", { name: "Continue" }).first().click();
   await expect.poll(() => decoding).toBe(true);
   await root.getByRole("button", { name: "Continue without background", exact: true }).click();
-  await expect(line(root)).toHaveText("The first room waits.");
+  await expect(displayedLine(root)).toHaveText("The first room waits.");
   await next(root);
   await expect(root.getByText("Preparing the background…", { exact: true })).toBeVisible();
   const response = page.waitForResponse((reply) => new URL(reply.url()).pathname === imageUrl);
@@ -1545,9 +1557,9 @@ test("Otome Hearth backgrounds: polling recovery keeps the opened place readable
   );
   const root = await openStory(page);
   await root.getByRole("button", { name: "Continue" }).first().click();
-  await expect(line(root)).toHaveText("The first lab stays open.");
+  await expect(displayedLine(root)).toHaveText("The first lab stays open.");
   await expect(root.locator('.of-place[data-on="true"]')).toHaveCount(1);
-  await expect(line(root)).toHaveText("The first lab stays open.");
+  await expect(displayedLine(root)).toHaveText("The first lab stays open.");
   await next(root);
   await expect(root.getByText("Preparing the background…", { exact: true })).toBeVisible();
   await expect(line(root)).toHaveCount(0);
@@ -1556,7 +1568,7 @@ test("Otome Hearth backgrounds: polling recovery keeps the opened place readable
   await expect.poll(() => decoding).toBe(true);
   await expect(line(root)).toHaveCount(0);
   releaseImage();
-  await expect(line(root)).toHaveText("The next lab waits.");
+  await expect(displayedLine(root)).toHaveText("The next lab waits.");
   await expect.poll(() => posts(calls, "/read").length).toBe(1);
   expect(calls.filter((call) => call.method === "POST" && /\/art\/(place|cg)(?:\/prompt)?$/u.test(call.path))).toEqual(
     [],
@@ -1584,10 +1596,10 @@ test("Otome Hearth backgrounds: a failed next-place image clears the previous ro
   await stubRoutes(page, fixture.answer, calls);
   const root = await openStory(page);
   await root.getByRole("button", { name: "Continue" }).first().click();
-  await expect(line(root)).toHaveText("The first lab is lit.");
+  await expect(displayedLine(root)).toHaveText("The first lab is lit.");
   await expect(root.locator('.of-place[data-on="true"]')).toHaveCSS("background-image", `url("${PLACE_ART}")`);
   await next(root);
-  await expect(line(root)).toHaveText("The second lab is dark.");
+  await expect(displayedLine(root)).toHaveText("The second lab is dark.");
   expect(calls.some((call) => call.path === "/api/otome-forge/failed-next-background.svg")).toBe(true);
   await expect(root.locator('.of-place[data-on="true"]')).toHaveCount(0);
   await expect(root.getByText("Preparing the background…", { exact: true })).toHaveCount(0);
@@ -1622,9 +1634,9 @@ test("Otome Hearth backgrounds: exiting a pending location saves only the last v
   expect(posts(calls, "/read")).toHaveLength(0);
   firstPlace.art = { state: "ready", at: now(), url: PLACE_ART };
   await root.getByRole("button", { name: "Continue" }).first().click();
-  await expect(line(root)).toHaveText("The first lab opens.");
+  await expect(displayedLine(root)).toHaveText("The first lab opens.");
   await next(root);
-  await expect(line(root)).toHaveText("You read the note beside the door.");
+  await expect(displayedLine(root)).toHaveText("You read the note beside the door.");
   await next(root);
   await expect(root.getByText("Preparing the background…", { exact: true })).toBeVisible();
   await expect(line(root)).toHaveCount(0);

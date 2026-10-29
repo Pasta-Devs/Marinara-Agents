@@ -171,12 +171,14 @@ function declaredPlaces(raw: unknown, known: World["places"] = {}) {
     if (!entry || typeof entry !== "object") continue;
     const place = entry as Record<string, unknown>;
     const name = str(place.name, NAME_MAX);
+    const reuse = typeof place.reuse === "string" ? place.reuse.trim() : place.reuse;
+    const hasReuse = Object.hasOwn(place, "reuse") && reuse !== undefined && reuse !== null && reuse !== "";
     let target = { name, tags: str(place.tags, 600) };
-    if (Object.hasOwn(place, "reuse")) {
-      if (typeof place.reuse !== "string" || !Object.hasOwn(known, place.reuse))
+    if (hasReuse) {
+      if (typeof reuse !== "string" || !Object.hasOwn(known, reuse))
         return "place reuse must name an existing saved place key from SAVED BACKGROUNDS";
       if (!name) return "a reused place needs its scene name";
-      const existing = known[place.reuse]!;
+      const existing = known[reuse]!;
       target = { name: existing.name, tags: existing.tags.trim() ? existing.tags : target.tags };
     }
     const key = nameKey(name);
@@ -185,8 +187,7 @@ function declaredPlaces(raw: unknown, known: World["places"] = {}) {
     if (name && !previous) {
       declared.set(key, target);
       // Choice branches inherit the canonical mainline place rather than the raw alias.
-      if (Object.hasOwn(place, "reuse") && !declared.has(nameKey(target.name)))
-        declared.set(nameKey(target.name), target);
+      if (hasReuse && !declared.has(nameKey(target.name))) declared.set(nameKey(target.name), target);
     }
   }
   return declared;
