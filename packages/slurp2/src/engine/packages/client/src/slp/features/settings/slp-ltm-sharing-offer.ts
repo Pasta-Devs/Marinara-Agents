@@ -22,3 +22,23 @@ export async function offerLtmSharing(deps: {
   await deps.save();
   return "enabled";
 }
+
+export type SlurpMemoryStatus = "ok" | "missing" | "off" | "error" | null;
+
+/**
+ * The server keeps the outcome of the last recall, so an "off" can outlive the switch that caused it.
+ * Only "off" is checked against Long-Term Memory's current setting; every other status is returned as is.
+ */
+export async function currentMemoryStatus(deps: {
+  read: () => Promise<{ status: SlurpMemoryStatus }>;
+  readLtm: () => Promise<{ longTermMemoryShareWithPackages?: boolean }>;
+}): Promise<{ status: SlurpMemoryStatus }> {
+  const result = await deps.read();
+  if (result.status !== "off") return result;
+  try {
+    if ((await deps.readLtm()).longTermMemoryShareWithPackages !== false) return { status: null };
+  } catch {
+    // Unreadable: keep the recorded "off".
+  }
+  return result;
+}
