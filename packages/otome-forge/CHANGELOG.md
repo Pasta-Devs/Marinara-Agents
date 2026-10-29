@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.1.9 — 2026-10-29
+
+- Chapter, scene, route and date writers now receive the selected persona’s full Description, Personality, Backstory and authored Appearance, including on existing runs. Their authored facts stay distinct from image-only appearance overrides; roleplay scenarios and dialogue examples are excluded.
+
 ## 0.1.8 — 2026-10-29
 
 - Music settings can give every chapter its own saved theme. Enable chapter themes with music generation on; each theme is generated when reading starts and reused on replay.
