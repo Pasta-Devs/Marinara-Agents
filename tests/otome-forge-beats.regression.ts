@@ -500,6 +500,43 @@ test("an explicit saved-place reference canonicalizes mainline and every branch 
   assert.match(String(unknown), /reuse.*existing|unknown.*place/i, "unknown references enter the existing repair path");
 });
 
+test("Confrontation place references retain their specific repair reason without changing segment-list null handling", () => {
+  const context = {
+    node: { i: 0, kind: "confrontation", guide: "The lab.", cast: [KAI] } as ChapterNode,
+    units: [{ id: KAI, name: "Kai" }],
+    state: normalizeState({ lis: { [KAI]: {} } }),
+    last: false,
+    places: {
+      "saved-a": { name: "Laboratory A", tags: "laboratory, no humans" },
+      "saved-b": { name: "Laboratory B", tags: "laboratory, no humans" },
+    },
+  };
+  for (const [places, reason] of [
+    [[{ name: "The lab", reuse: "missing-key" }], /reuse.*existing saved place key/],
+    [[{ name: "", reuse: "saved-a" }], /reused place needs its scene name/],
+    [
+      [
+        { name: "The lab", reuse: "saved-a" },
+        { name: "The lab", reuse: "saved-b" },
+      ],
+      /conflicting reuse references/,
+    ],
+  ] as const) {
+    const reply = confrontationReply({ places });
+    const result = normalizeConfrontationReply(
+      reply,
+      { li: KAI, node: context.node, cgOpen: false },
+      segmentLists(context),
+    );
+    assert.match(String(result), reason);
+    assert.equal(
+      segmentLists(context).list({ segments: reply.opening, places }, ""),
+      null,
+      "the segment-list null contract remains intact",
+    );
+  }
+});
+
 test("optional background reuse treats blank values as omission, trims keys and rejects invalid supplied references", () => {
   const context = {
     node: { i: 0, kind: "beat", guide: "A new room.", cast: [] } as ChapterNode,

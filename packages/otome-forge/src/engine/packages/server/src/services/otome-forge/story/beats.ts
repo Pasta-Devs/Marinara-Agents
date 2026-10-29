@@ -332,6 +332,10 @@ export function normalizeBeatReply(reply: BeatReply, context: BeatContext): Norm
 /** P6's segment rules, lent to P12 (S/story/confrontation.ts normalizes each of its lists with them). */
 export function segmentLists(context: BeatContext): SegmentLists {
   return {
+    placesProblem: (raw) => {
+      const places = declaredPlaces(raw, context.places);
+      return typeof places === "string" ? places : "";
+    },
     list: (raw, start) => normalizeBeatBody(raw, { start, context }),
     thoughts: (raw, counts) => thoughtProblem(context, raw, counts),
   };

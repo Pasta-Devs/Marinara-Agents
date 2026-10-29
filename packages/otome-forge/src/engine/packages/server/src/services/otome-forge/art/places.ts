@@ -131,6 +131,17 @@ export async function paintBeatPlaces(
   let claimed: string[] = [];
   let connectionId = "";
   try {
+    if (options.registrationOnly) {
+      const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
+      if (
+        world &&
+        [...wanted].every(([key, place]) => {
+          const { existing, retag, action } = step(world, key, place, true);
+          return !!existing && !retag && action === "keep";
+        })
+      )
+        return;
+    }
     // The writer starts this without awaiting it inside its run queue. A served beat can then await registration
     // outside that queue, including an earlier pass, without waiting for either pass's paid image.
     await runForeground(runId, async () => {
