@@ -318,6 +318,7 @@ function itemsOf(
   const three = plan.snapshots.map((entry, index): Item => ({
     ...base(`s${index + 1}` as ItemSlot, kinds.three, entry.li, entry.title),
     text: entry.text,
+    ...(entry.cg ? { cg: entry.cg } : {}),
   }));
   return { five, four, three };
 }
@@ -394,7 +395,7 @@ async function createBanner(
     const title = earlierItems.get(banner.items.five[0]!)?.title;
     if (title) earlierTitles.push(title);
   }
-  const context = { kind, units: cast, featured };
+  const context = { kind, units: cast, featured, playerName: run.player.name };
   const { value, connectionId, model } = await generateJson(deps, {
     runId,
     job: "structured",

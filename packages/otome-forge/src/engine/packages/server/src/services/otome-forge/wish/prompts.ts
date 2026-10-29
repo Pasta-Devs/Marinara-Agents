@@ -54,10 +54,11 @@ const KIND_TEXT: Record<BannerKind, string> = {
 };
 
 const LOOK_SHAPE = `{"name": "<look name>", "outfitLine": "<English outfit tags>"}`;
+const SNAPSHOT_SHAPE = `{"li": "<love interest id>", "title": "<2–5 words>", "text": "<2–3 sentences>", "cgBrief": "<English illustration of this vignette, 1–2 sentences>", "cgCast": ["<this love interest's name; the protagonist only if present>"]}`;
 const SHAPES: Record<BannerKind, string> = {
-  memories: `{"featured": {"title": "<title>", "premise": "<2–3 sentences>", "cgBrief": "<English, 1–2 sentences>", "cgCast": ["<names in the key image, the featured love interest first; the protagonist only if present>"]}, "four": [{"li": "<love interest id>", "title": "<title>", "premise": "<1–2 sentences>"} ×3], "snapshots": [{"li": "<love interest id>", "title": "<2–5 words>", "text": "<2–3 sentences>"} ×6]}`,
-  "his-wardrobe": `{"featured": {"title": "<title>", "look": ${LOOK_SHAPE}}, "four": [{"li": "<another love interest's id>", "title": "<title>", "look": ${LOOK_SHAPE}} ×3], "snapshots": [{"li": "<love interest id>", "title": "<2–5 words>", "text": "<2–3 sentences>"} ×6]}`,
-  "my-wardrobe": `{"featured": {"title": "<title>", "look": ${LOOK_SHAPE}}, "four": [{"title": "<title>", "look": ${LOOK_SHAPE}} ×3], "snapshots": [{"li": "<love interest id>", "title": "<2–5 words>", "text": "<2–3 sentences>"} ×6]}`,
+  memories: `{"featured": {"title": "<title>", "premise": "<2–3 sentences>", "cgBrief": "<English, 1–2 sentences>", "cgCast": ["<names in the key image, the featured love interest first; the protagonist only if present>"]}, "four": [{"li": "<love interest id>", "title": "<title>", "premise": "<1–2 sentences>"} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`,
+  "his-wardrobe": `{"featured": {"title": "<title>", "look": ${LOOK_SHAPE}}, "four": [{"li": "<another love interest's id>", "title": "<title>", "look": ${LOOK_SHAPE}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`,
+  "my-wardrobe": `{"featured": {"title": "<title>", "look": ${LOOK_SHAPE}}, "four": [{"title": "<title>", "look": ${LOOK_SHAPE}} ×3], "snapshots": [${SNAPSHOT_SHAPE} ×6]}`,
 };
 
 const pronounText = (pronouns: Unit["pronouns"]) => `${pronouns.subject}/${pronouns.object}/${pronouns.possessive}`;
@@ -131,6 +132,7 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
       briefRule ? `- ${briefRule}` : "",
       `- Exactly ${BANNER_SIZES.four} entries in "four" and ${BANNER_SIZES.three} in "snapshots". Use the love interest ids given below for "li".`,
       `- Snapshots: 2–3 sentences each, a small everyday moment between one love interest and the protagonist, in the third person. Spread them across the cast, at least two with ${featured.name}. Each one stays within what that love interest has seen or been told.`,
+      "- Each Snapshot's cgBrief illustrates its saved vignette: the actual place, light and action, never an invented plot turn or anyone's looks. Write the brief in English; cgCast names only that love interest and, when shown, the protagonist. Its picture stays clothed and within the Snapshot's SFW contract.",
       "- Every love interest keeps their own voice, wants and mask; tenderness before stage 4 costs them something.",
       "- New ideas only: never repeat an earlier banner's title or situation.",
     ]
@@ -196,7 +198,15 @@ export const BannerPlanSchema = z.object({
       look: Look.optional(),
     }),
   ),
-  snapshots: z.array(z.object({ li: z.string().min(1), title: z.string().optional(), text: z.string().min(1) })),
+  snapshots: z.array(
+    z.object({
+      li: z.string().min(1),
+      title: z.string().optional(),
+      text: z.string().min(1),
+      cgBrief: z.string().optional(),
+      cgCast: z.array(z.string()).optional(),
+    }),
+  ),
 });
 export type BannerPlanReply = z.infer<typeof BannerPlanSchema>;
 
@@ -204,7 +214,7 @@ export type BannerPlanReply = z.infer<typeof BannerPlanSchema>;
 export interface BannerPlan {
   featured: { title: string; premise?: string; look?: ItemLook; cg?: { brief: string; cast: string[] } };
   four: Array<{ li: string | null; title: string; premise?: string; look?: ItemLook }>;
-  snapshots: Array<{ li: string; title: string; text: string }>;
+  snapshots: Array<{ li: string; title: string; text: string; cg?: { brief: string; cast: string[] } }>;
 }
 
 const clip = (value: string, max: number) => {
@@ -228,7 +238,12 @@ const cleanLook = (look: { name: string; outfitLine: string }): ItemLook => ({
  */
 export function normalizeBannerPlan(
   reply: BannerPlanReply,
-  { kind, units, featured }: { kind: BannerKind; units: readonly Unit[]; featured: Unit },
+  {
+    kind,
+    units,
+    featured,
+    playerName,
+  }: { kind: BannerKind; units: readonly Unit[]; featured: Unit; playerName?: string },
 ): BannerPlan | string {
   const liOf = (value: string | undefined) => {
     const named = (value ?? "").trim();
@@ -286,7 +301,22 @@ export function normalizeBannerPlan(
     const title =
       entry.title?.trim() ||
       `${/\s/.test(text) ? text.split(/\s+/).slice(0, 5).join(" ") : [...text].slice(0, 12).join("")}…`;
-    plan.snapshots.push({ li: li.id, title: clip(title, ITEM_LIMITS.title), text });
+    plan.snapshots.push({
+      li: li.id,
+      title: clip(title, ITEM_LIMITS.title),
+      text,
+      ...(entry.cgBrief?.trim()
+        ? {
+            cg: {
+              brief: entry.cgBrief.trim(),
+              cast: [
+                li.name,
+                ...(playerName && entry.cgCast?.some((name) => sameName(name, playerName)) ? [playerName] : []),
+              ],
+            },
+          }
+        : {}),
+    });
   }
   return plan;
 }

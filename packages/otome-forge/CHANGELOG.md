@@ -2,7 +2,20 @@
 
 ## 0.1.15 — 2026-10-29
 
+- The pre-chapter warning places its Ease off feather after the guidance sentence.
+
 - Harmful story/date choices and Confrontation outcomes can reduce Affection progress within the current level. Unlocked levels stay permanent, and replaying never repeats the deduction or refunds daily earning limits.
+
+## 0.1.14 — 2026-10-29
+
+- Album Memories can be filtered by 3★, 4★ or 5★, with unplayed content listed first.
+
+- Owned 3★ Snapshots can be illustrated on first opening through the existing image connection, confirmation and prompt review flow. Paintings are saved and reused; old vignettes and story progress stay intact.
+
+## 0.1.13 — 2026-10-29
+
+- Suggestive is an image-content ceiling: neutral portraits and facial expression edits no longer receive mandatory suggestive or sensitive-content tags. Image briefs follow the actual moment, with non-explicit adult intimacy allowed when appropriate.
+- Wish and Wardrobe display cleaned love-interest and persona outfits while retaining the original paintings. Wardrobe banner art is centered and shown whole, and tapping a ready banner image opens a full-image view without making a wish.
 
 ## 0.1.12 — 2026-10-29
 
