@@ -1476,11 +1476,12 @@ const moodRules = (look: Look) =>
 
 // The reader: the scene, the face on stage, the dialogue box in the bottom third, choices, panels and the backlog.
 const MOBILE_READER_RULES = `
-${R} .of-reader-mobile { display: inline-flex; }
+${R} .of-reader-mobile { display: inline-grid; }
 ${R} .of-reader-desktop { display: none; }
 ${R} .of-reader-tool { width: 44px; height: 44px; }
 ${R} .of-reader-secondary[data-expanded="true"] {
-  position: absolute; top: calc(100% + 6px); inset-inline-end: 0;
+  /* Keep the focus padding outside the More button's column. */
+  position: absolute; top: calc(100% + 6px); inset-inline-end: -4px;
   display: flex; flex-direction: column; gap: 6px; padding: 4px;
   max-height: max(44px, calc(100cqh - 120px - max(12px, env(safe-area-inset-top)) - max(10px, env(safe-area-inset-bottom))));
   overflow-y: auto; overscroll-behavior: contain;
@@ -1726,6 +1727,7 @@ ${R} .of-line-rest { visibility: hidden; }
 ${R} .of-line--thought { font-style: italic; color: var(--of-text-soft); }
 ${R} .of-line--thought > [aria-hidden="true"]::before { content: "("; }
 ${R} .of-line--thought > [aria-hidden="true"]::after { content: ")"; }
+${R} .of-line--thought > [aria-hidden="true"][data-done="false"]::after { visibility: hidden; }
 ${R} .of-line--his-thought {
   font-family: var(--of-font-display); font-style: italic; font-weight: 600; font-size: 1.2rem; line-height: 1.45;
   color: color-mix(in srgb, var(--of-li-accent) 45%, var(--of-text));

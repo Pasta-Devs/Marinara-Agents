@@ -1014,6 +1014,34 @@ test.describe("Otome Forge reader mobile", () => {
       await expect(primary.getByRole("button", { name: /fullscreen/iu })).toBeVisible();
       await expect(more).toHaveAttribute("aria-expanded", "false");
       await expect(secondary).toBeHidden();
+      expect
+        .soft(
+          await primary.getByRole("button").evaluateAll((buttons) =>
+            buttons
+              .map((button) => ({ label: button.getAttribute("aria-label"), x: button.getBoundingClientRect().x }))
+              .sort((a, b) => a.x - b.x)
+              .map((button) => button.label),
+          ),
+        )
+        .toEqual(["Mute audio", expect.stringMatching(/fullscreen/iu), "More reader controls"]);
+      const centeredIcon = async (button: Locator) => {
+        const geometry = await button.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          const icon = element.querySelector("svg")!.getBoundingClientRect();
+          return {
+            label: element.getAttribute("aria-label"),
+            centerX: box.x + box.width / 2,
+            dx: icon.x + icon.width / 2 - (box.x + box.width / 2),
+            dy: icon.y + icon.height / 2 - (box.y + box.height / 2),
+          };
+        });
+        expect.soft(Math.abs(geometry.dx), `${geometry.label}: icon horizontal center`).toBeLessThanOrEqual(1);
+        expect.soft(Math.abs(geometry.dy), `${geometry.label}: icon vertical center`).toBeLessThanOrEqual(1);
+        return geometry.centerX;
+      };
+      for (const button of await primary.getByRole("button").all()) await centeredIcon(button);
+      const moreBox = (await more.boundingBox())!;
+      const moreCenter = moreBox.x + moreBox.width / 2;
 
       const openTools = async () => {
         if ((await more.getAttribute("aria-expanded")) === "false") await more.click();
@@ -1060,6 +1088,8 @@ test.describe("Otome Forge reader mobile", () => {
         const box = (await tool.boundingBox())!;
         expect(box.y).toBeGreaterThanOrEqual(0);
         expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+        const center = await centeredIcon(tool);
+        expect.soft(Math.abs(center - moreCenter), "secondary button directly below More").toBeLessThanOrEqual(1);
       }
       await tools.first().scrollIntoViewIfNeeded();
       if (viewport.width > viewport.height) {

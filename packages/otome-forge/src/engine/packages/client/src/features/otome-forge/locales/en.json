@@ -1175,7 +1175,6 @@
   "ui.otomeForge.tracker.careComfort": "One of {{name}}’s comfort lines, written in advance.",
   "ui.otomeForge.tracker.careDebug": "Debug mode is on, so Otome Hearth sent nothing about your day: this is one of {{name}}’s comfort lines, written in advance.",
   "ui.otomeForge.tracker.careFailed": "The caring message could not be written.",
-  "ui.otomeForge.tracker.careFromModel": "Written for today from one line about it, and kept only in this browser for today: it goes once Otome Hearth sees the day has changed.",
   "ui.otomeForge.tracker.careKeptOff": "Kept off the model: one of {{name}}’s comfort lines, written in advance.",
   "ui.otomeForge.tracker.carePlayLabel": "Hear {{name}} say it",
   "ui.otomeForge.tracker.careTitle": "A caring message",
