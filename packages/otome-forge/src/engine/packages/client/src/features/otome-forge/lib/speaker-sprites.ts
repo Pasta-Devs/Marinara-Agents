@@ -1,8 +1,8 @@
 const record = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 
-// Match the host catalog's literal search, which folds case without Unicode or internal-whitespace aliases.
-export const speakerNameKey = (name: string) => name.trim().toLocaleLowerCase();
+// Stable exact names have no Unicode-normalization or internal-whitespace aliases.
+export const speakerNameKey = (name: string) => name.trim().toLowerCase();
 
 /** Exact full names only; a duplicate is never a reason to choose one card over another. */
 export function matchingSpeakerCards(value: unknown, name: string): Array<{ id: string; name: string }> {
@@ -36,7 +36,10 @@ export function fullBodySpeakerSprite(cardId: string, value: unknown): string | 
   return `/api/sprites/${encodeURIComponent(cardId)}/file/${encodeURIComponent(selected.filename)}${version ? `?v=${version}` : ""}`;
 }
 
-/** Search is paged and fails closed if it cannot establish uniqueness within the existing catalog ceiling. */
+/**
+ * Host search uses its server locale, so exact identity requires the unfiltered catalog.
+ * ponytail: full scans stop at 2,000 rows; a future host normalized exact-name key can replace this bounded scan.
+ */
 export async function findSpeakerSprite(
   name: string,
   read: (path: string) => Promise<unknown>,
@@ -44,7 +47,7 @@ export async function findSpeakerSprite(
   const matches = new Map<string, { id: string; name: string }>();
   let generation: unknown;
   for (let offset = 0; offset < 2000;) {
-    const params = new URLSearchParams({ search: name.trim(), sort: "name-asc", limit: "100", offset: String(offset) });
+    const params = new URLSearchParams({ sort: "name-asc", limit: "200", offset: String(offset) });
     const page = await read(`/characters/catalog?${params}`);
     if (!Array.isArray(page) && (!record(page) || !Array.isArray(page.items))) return null;
     if (record(page) && page.hasMore !== undefined && typeof page.hasMore !== "boolean") return null;
@@ -52,6 +55,7 @@ export async function findSpeakerSprite(
     if (offset === 0) generation = nextGeneration;
     else if (nextGeneration !== generation) return null;
     const rows = Array.isArray(page) ? page : record(page) && Array.isArray(page.items) ? page.items : [];
+    if (offset + rows.length > 2000) return null;
     for (const card of matchingSpeakerCards(rows, name)) matches.set(card.id, card);
     if (matches.size > 1) return null;
     if (!record(page) || page.hasMore !== true) break;

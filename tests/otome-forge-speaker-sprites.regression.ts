@@ -61,7 +61,8 @@ test("speaker lookup pages exact matches, ignores partial names and revalidates 
     throw new Error(`Unexpected read ${path}`);
   };
   assert.equal(await findSpeakerSprite("Arin Vale", read), "/api/sprites/card-a/file/full_neutral.png?v=12345");
-  assert.match(calls[0]!, /search=Arin\+Vale/);
+  assert.equal(new URL(calls[0]!, "http://local").searchParams.has("search"), false);
+  assert.equal(new URL(calls[0]!, "http://local").searchParams.get("limit"), "200");
   assert.ok(!calls.some((path) => path.startsWith("http")));
   assert.equal(await findSpeakerSprite("Arin", read), null, "a first name cannot borrow a card");
   assert.equal(
@@ -108,6 +109,29 @@ test("speaker revalidation reads verified raw card data and refuses spoofed, mal
     assert.equal(await lookup(row), null);
 });
 
+test("speaker lookup cannot hide a case-equivalent duplicate behind the host's Turkish search", async () => {
+  const cards = [
+    { id: "card-upper", name: "ARIN VALE" },
+    { id: "card-title", name: "Arin Vale" },
+  ];
+  const selected = await findSpeakerSprite("Arin Vale", async (path) => {
+    if (path.includes("catalog")) {
+      const search = new URL(path, "http://local").searchParams.get("search");
+      return {
+        items: search
+          ? cards.filter((card) => card.name.toLocaleLowerCase("tr").includes(search.toLocaleLowerCase("tr")))
+          : cards,
+        hasMore: false,
+        catalogGeneration: 1,
+      };
+    }
+    if (path === "/sprites/card-title") return sprites;
+    if (path === "/characters/card-title") return { id: "card-title", data: JSON.stringify({ name: "Arin Vale" }) };
+    throw new Error(`Unexpected read ${path}`);
+  });
+  assert.equal(selected, null, "both case-equivalent cards must be seen before uniqueness can be trusted");
+});
+
 test("duplicate, malformed and truncated character lists never select an arbitrary sprite", async () => {
   const read = async (path: string) => {
     assert.match(path, /catalog/);
@@ -142,16 +166,24 @@ test("duplicate, malformed and truncated character lists never select an arbitra
     null,
   );
   assert.equal(await findSpeakerSprite("Arin Vale", async () => ({ items: [], hasMore: true })), null);
+  assert.equal(
+    await findSpeakerSprite("Arin Vale", async (path) => {
+      assert.match(path, /catalog/);
+      return [{ id: "card-a", name: "Arin Vale" }, ...Array.from({ length: 2000 }, () => ({ name: "Another person" }))];
+    }),
+    null,
+    "an oversized legacy catalog also fails closed at the same row ceiling",
+  );
   let pages = 0;
   assert.equal(
     await findSpeakerSprite("Arin Vale", async () => {
       pages += 1;
       return {
-        items: Array.from({ length: 100 }, (_, i) => ({ id: `card-${i}`, name: "Another person" })),
+        items: Array.from({ length: 200 }, (_, i) => ({ id: `card-${i}`, name: "Another person" })),
         hasMore: true,
       };
     }),
     null,
   );
-  assert.equal(pages, 20, "the existing catalog ceiling fails closed instead of trusting a partial library");
+  assert.equal(pages, 10, "the existing catalog ceiling fails closed instead of trusting a partial library");
 });

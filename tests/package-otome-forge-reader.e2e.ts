@@ -664,16 +664,11 @@ async function speakerRoutes(page: Page, { opaque = false, revision = 2, broken 
       paid.push(request.url());
   });
   await page.route("**/api/characters/catalog?**", (route) => {
-    const name = new URL(route.request().url()).searchParams.get("search");
-    const items =
-      name === "Arin Vale"
-        ? [{ id: "card-arin", name }]
-        : name === "Duplicated Name"
-          ? [
-              { id: "card-one", name },
-              { id: "card-two", name },
-            ]
-          : [];
+    const items = [
+      { id: "card-arin", name: "Arin Vale" },
+      { id: "card-one", name: "Duplicated Name" },
+      { id: "card-two", name: "Duplicated Name" },
+    ];
     return route.fulfill({ json: { items, hasMore: false } });
   });
   await page.route("**/api/characters/card-arin", (route) =>
@@ -733,18 +728,18 @@ test("Otome Hearth named speakers hide unrelated sprites, require unique cards a
   ]);
   await stubRoutes(page, fixture);
   const assets = await speakerRoutes(page);
-  const catalogFinished = (name: string) =>
+  const catalogFinished = () =>
     page
       .waitForResponse((response) => {
         const url = new URL(response.url());
-        return url.pathname === "/api/characters/catalog" && url.searchParams.get("search") === name;
+        return url.pathname === "/api/characters/catalog" && url.searchParams.get("limit") === "200";
       })
       .then((response) => response.finished());
   const root = await openStory(page);
   await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
   await root.getByRole("button", { name: "Begin" }).click();
   await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
-  const stranger = catalogFinished("No Matching Card");
+  const stranger = catalogFinished();
   await next(root);
   await stranger;
   await expect(line(root)).toContainText("A stranger speaks.");
@@ -757,7 +752,7 @@ test("Otome Hearth named speakers hide unrelated sprites, require unique cards a
   );
   await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("data-cut", "true");
   await page.screenshot({ path: testInfo.outputPath("named-speaker.png") });
-  const duplicate = catalogFinished("Duplicated Name");
+  const duplicate = catalogFinished();
   await next(root);
   await duplicate;
   await expect(line(root)).toContainText("A duplicate name speaks.");
@@ -867,6 +862,17 @@ test("Otome Hearth discards a slow speaker asset after the line changes and hide
   await page.route("**/api/sprites/card-arin/file/*", (route) =>
     route.fulfill({ status: 404, body: "Missing sprite" }),
   );
+  await page.route("**/api/sprites/card-arin", (route) =>
+    route.fulfill({
+      json: [
+        {
+          expression: "full_neutral",
+          filename: "full_neutral.png",
+          url: "/api/sprites/card-arin/file/full_neutral.png?v=2",
+        },
+      ],
+    }),
+  );
   const missing = page.waitForResponse(
     (response) => response.url().includes("/sprites/card-arin/file/") && response.status() === 404,
   );
@@ -932,7 +938,7 @@ test("Otome Hearth real Engine card supplies its existing neutral speaker sprite
     await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
     const catalog = page.waitForResponse((response) => {
       const url = new URL(response.url());
-      return url.pathname === "/api/characters/catalog" && url.searchParams.get("search") === name;
+      return url.pathname === "/api/characters/catalog" && url.searchParams.get("limit") === "200";
     });
     const currentCard = page.waitForResponse(
       (response) => new URL(response.url()).pathname === `/api/characters/${id}`,
