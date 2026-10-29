@@ -349,7 +349,11 @@ const generatedCues = (calls: Call[]) =>
 const REPAINT_FACES = ["tender", "flustered", "cold", "hurt", "angry"];
 const REPAINT_ERROR = "The new expressions didn’t finish. Your current artwork stays. Try Repaint expressions again.";
 
-function expressionRepaintFixture({ failFirst = false, wait }: { failFirst?: boolean; wait?: Promise<void> } = {}) {
+function expressionRepaintFixture({
+  failFirst = false,
+  conflictFirst = false,
+  wait,
+}: { failFirst?: boolean; conflictFirst?: boolean; wait?: Promise<void> } = {}) {
   const fixture = createSceneStub({ audio: false });
   const { view } = fixture.stub;
   const forge = { phase: "ready", steps: [{ id: `paint:${ILVAR}`, state: "done" }] };
@@ -391,6 +395,11 @@ function expressionRepaintFixture({ failFirst = false, wait }: { failFirst?: boo
     if (call.path.endsWith("/art/expressions/prompt")) return { status: 200, json: { base: FACE_COLD, prompts } };
     if (call.path.endsWith("/art/expressions")) {
       attempts += 1;
+      if (conflictFirst && attempts === 1)
+        return {
+          status: 409,
+          json: { error: "This character's expressions are already being painted.", code: "conflict" },
+        };
       return {
         status: 200,
         json: { paint: { state: failFirst && attempts === 1 ? "failed" : "ready", at: now() } },
@@ -505,6 +514,38 @@ test("Otome Hearth expression repaint reviews five prompts before paying, cancel
   expect(posts(calls, "/art/paint")).toEqual([]);
   expect(posts(calls, "/api/audio/generate")).toEqual([]);
   expect(errors).toEqual([]);
+});
+
+test("Otome Hearth expression repaint keeps reviewed edits after a concurrent request conflict", async ({
+  page,
+}, testInfo) => {
+  const fixture = expressionRepaintFixture({ conflictFirst: true });
+  const calls: Call[] = [];
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openRepaintCast(page, true);
+  await root.getByRole("button", { name: "Repaint expressions for Ilvar Thorne", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  for (const [index, face] of REPAINT_FACES.entries()) {
+    await expect(dialog.getByRole("heading")).toContainText(`${face} (${index + 1} of 5)`);
+    if (index < REPAINT_FACES.length - 1) await dialog.getByRole("button", { name: "Review next expression" }).click();
+  }
+  const edited = "Keep this separately reviewed angry expression.";
+  const negative = "Keep this separate reviewed negative.";
+  await dialog.getByLabel("Prompt", { exact: true }).fill(edited);
+  await dialog.getByLabel("Negative prompt", { exact: true }).fill(negative);
+  await dialog.getByRole("button", { name: "Repaint 5 expressions", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("That changed somewhere else. Try again.");
+  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(edited);
+  await expect(dialog.getByLabel("Negative prompt", { exact: true })).toHaveValue(negative);
+  const first = posts(calls, "/art/expressions")[0]!.body!;
+  expect(first.prompts.angry).toEqual({ prompt: edited, negativePrompt: negative });
+  await page.screenshot({ path: testInfo.outputPath("expression-repaint-conflict-edits.png") });
+  await dialog.getByRole("button", { name: "Repaint 5 expressions", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(posts(calls, "/art/expressions")).toHaveLength(2);
+  expect(posts(calls, "/art/expressions")[1]!.body).toEqual(first);
+  expect(posts(calls, "/art/paint")).toEqual([]);
+  expect(posts(calls, "/api/audio/generate")).toEqual([]);
 });
 
 // ── Arcs ──
