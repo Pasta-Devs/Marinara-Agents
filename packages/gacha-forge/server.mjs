@@ -1473,7 +1473,11 @@ async function forgeSubjectReference(client, unit) {
   return forgeReferenceImage(client, [...paths, unit.portrait, unit.avatarPath]);
 }
 
-function forgeWrapImageReferenceClient(client, logger, { logPrefix = "[gacha-forge]" } = {}) {
+function forgeWrapImageReferenceClient(
+  client,
+  logger,
+  { logPrefix = "[gacha-forge]", subjectReference = forgeSubjectReference } = {},
+) {
   for (const method of ["generateBannerArt", "generatePortrait", "generateOutfit"]) {
     const generate = client[method];
     // Only a scene or banner shows the subject in the outfit they have on; a base look or a new outfit paints them anew.
@@ -1485,7 +1489,7 @@ function forgeWrapImageReferenceClient(client, logger, { logPrefix = "[gacha-for
       const identities = [],
         outfits = [];
       for (const subject of subjects) {
-        const identity = await forgeSubjectReference(client, subject);
+        const identity = await subjectReference(client, subject);
         if (identity) identities.push(identity);
         const outfit = scene && forgeWornOutfitPath(subject);
         if (outfit) {

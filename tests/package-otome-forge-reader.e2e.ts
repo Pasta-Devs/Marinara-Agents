@@ -706,6 +706,6 @@ test("Otome Hearth polls a free cut-out replacement while keeping its previous i
   expect(reads()).toBeGreaterThan(before);
   const completed = reads();
   await page.clock.runFor(10_000);
-  expect(reads()).toBe(completed, "ready cleanup stops polling without a model or paid image request");
+  expect(reads(), "ready cleanup stops polling without a model or paid image request").toBe(completed);
   expect(stub.calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(0);
 });

@@ -217,6 +217,7 @@ async function cutOne(deps: CutoutDeps, runId: string, li: CutoutOwner, url: str
     // Keep the replaced derivative referenced until a successful replacement; a failed attempt keeps it for run deletion.
     if (now?.url) pending.url = now.url;
     if (now?.ref) pending.ref = now.ref;
+    if (now?.previousRefs) pending.previousRefs = now.previousRefs;
     if (now?.cleanupRevision) pending.cleanupRevision = now.cleanupRevision;
     return true;
   });
@@ -247,6 +248,10 @@ async function cutOne(deps: CutoutDeps, runId: string, li: CutoutOwner, url: str
     ...(image.id ? { ref: galleryRef(image.id) } : {}),
     ...(cleanupRevision ? { cleanupRevision } : {}),
   };
+  const previousRefs = [
+    ...new Set([...(previous?.previousRefs ?? []), ...(previous?.ref ? [previous.ref] : [])]),
+  ].filter((ref) => ref !== ready.ref);
+  if (previousRefs.length) ready.previousRefs = previousRefs;
   let kept = false;
   try {
     kept = await save(deps, runId, li, url, ready, isOurs);

@@ -74,7 +74,12 @@ export const PaintSchema: ZodType<Paint> = z.object({
   error: z.string().optional(),
 });
 
-const CutoutSchema = PaintSchema.and(z.object({ cleanupRevision: z.number().int().positive().optional() }));
+const CutoutSchema = PaintSchema.and(
+  z.object({
+    cleanupRevision: z.number().int().positive().optional(),
+    previousRefs: z.array(z.string()).optional(),
+  }),
+);
 
 /** Cut-outs are keyed by their retained source URL; preserve only valid records and optional host revisions. */
 export function normalizeCutouts(value: unknown): Record<string, Cutout> {

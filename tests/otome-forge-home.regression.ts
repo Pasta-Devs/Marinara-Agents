@@ -39,6 +39,7 @@ import {
   type CutoutClient,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/cutout.ts";
 import { createBackgroundQueue } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/background-queue.ts";
+import { galleryRefIds } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/art/image-client.ts";
 import { COMFORT_RULE } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/content-contract.ts";
 import { runForeground } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/generation.ts";
 import {
@@ -685,7 +686,13 @@ test("a corrected host replaces an old cut-out from its retained original, once,
     portrait: original,
     portraitRef: "global-gallery:original",
     cutouts: {
-      [original]: { state: "ready", at: "2026-10-28T09:00:00.000Z", url: "/old-cut.png", ref: "global-gallery:old" },
+      [original]: {
+        state: "ready",
+        at: "2026-10-28T09:00:00.000Z",
+        url: "/old-cut.png",
+        ref: "global-gallery:old",
+        previousRefs: ["global-gallery:older"],
+      },
     },
   }));
   const [one, two] = await Promise.all([t.call("GET", "/runs/:run/home"), t.call("GET", "/runs/:run/home")]);
@@ -704,6 +711,13 @@ test("a corrected host replaces an old cut-out from its retained original, once,
   const ready = (await t.call("GET", "/runs/:run/home")).body.look;
   assert.equal(ready.cutout, "/api/global-gallery/file/preserved.png");
   assert.equal((await t.unit(KAI)).cutouts[original]!.cleanupRevision, 2);
+  const stored = await t.unit(KAI);
+  assert.deepEqual(stored.cutouts[original]!.previousRefs, ["global-gallery:older", "global-gallery:old"]);
+  assert.deepEqual(
+    new Set(galleryRefIds(stored)),
+    new Set(["original", "preserved", "older", "old"]),
+    "existing run deletion still finds every retained gallery image",
+  );
   await cutoutsSettled();
   assert.deepEqual(cuts, [original], "cleanup reads the retained original once, never the damaged derivative");
   assert.deepEqual(deleted, [], "original and previous derivative bytes are retained");

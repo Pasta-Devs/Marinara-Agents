@@ -70,6 +70,8 @@ export interface Paint {
 /** A free derivative of a retained look, tagged with the Engine cleanup that produced it. */
 export interface Cutout extends Paint {
   cleanupRevision?: number;
+  /** Retain older derivatives for existing run deletion without deleting an image a live view may still show. */
+  previousRefs?: string[];
 }
 
 /** The model jobs a world names a connection for; a job without its own uses `narration`. */
