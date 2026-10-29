@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.1.5 — 2026-10-29
+
+- The downloadable package now includes the merged reader resize repair: switching from a phone-sized reader to desktop no longer leaves a hidden mobile menu consuming the next story action.
+- Linking a generated love interest to a card keeps their existing story bible, without showing the imported-card canon notice.
+
 ## 0.1.4 — 2026-10-29
 
 - Link an existing love interest to a character card in Your cast. Its assigned voice and image references apply while their story, progress and pictures stay; unlinking restores their own fallback.

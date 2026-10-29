@@ -715,9 +715,42 @@ test("Otome Hearth polls a free cut-out replacement while keeping its previous i
   const reads = () =>
     stub.calls.filter((call) => call.method === "GET" && call.path === `/api/otome-forge/runs/${RUN}`).length;
   const before = reads();
+  const deadline = Date.now() + 10_000;
+  const remaining = () => Math.max(1, deadline - Date.now());
+  const correctedResponse = page.waitForResponse(
+    async (response) => {
+      if (
+        response.request().method() !== "GET" ||
+        new URL(response.url()).pathname !== `/api/otome-forge/runs/${RUN}` ||
+        response.status() !== 200
+      )
+        return false;
+      const { view } = await response.json();
+      return !view?.cutoutsPending && view?.lis?.some((li: Json) => li.portrait === stub.correctedCutout);
+    },
+    { timeout: remaining() },
+  );
   stub.finishCutouts();
   await page.clock.runFor(2500);
-  await expect(root.locator(`img[src="${stub.correctedCutout}"]`).first()).toBeVisible();
+  await (await correctedResponse).finished();
+  const readyReads = reads();
+  const corrected = root.locator(`img[src="${stub.correctedCutout}"]`).first();
+  let drained = 0;
+  // The response can finish after runFor has paused again. Drain its queued query notification without another poll.
+  await expect
+    .poll(
+      async () => {
+        if (drained < 100) {
+          await page.clock.runFor(1);
+          drained += 1;
+        }
+        return corrected.isVisible();
+      },
+      { intervals: [100], timeout: remaining() },
+    )
+    .toBe(true);
+  await expect(corrected).toBeVisible({ timeout: remaining() });
+  expect(reads(), "flushing the ready response does not start another run read").toBe(readyReads);
   expect(reads()).toBeGreaterThan(before);
   const completed = reads();
   await page.clock.runFor(10_000);

@@ -1771,7 +1771,7 @@ test("Otome Hearth card link: a generated LI keeps their story and art while an 
         return { status: 200, json: { cardId: li.cardId ?? null } };
       }
       if (call.path.endsWith(`/lis/${ILVAR}/bible`)) return { status: 200, json: { bible } };
-      if (call.path.endsWith("/home")) return { status: 200, json: { home } };
+      if (call.path.endsWith("/home")) return { status: 200, json: home };
       if (call.path.endsWith(`/lis/${ILVAR}/lines`)) {
         return {
           status: 200,
@@ -1813,21 +1813,29 @@ test("Otome Hearth card link: a generated LI keeps their story and art while an 
   page.on("pageerror", (error) => pageErrors.push(error.message));
   const root = await openOtome(page);
   await recordSpeech(page);
-  const playNote = async (voice: string, expectedCard: string | null) => {
-    await root
-      .getByRole("navigation", { name: "Game menu" })
-      .getByRole("button", { name: "Home", exact: true })
-      .click();
+  const configReads = () => calls.filter((call) => call.path === "/api/tts/config").length;
+  const playNote = async (voice: string, expectedCard: string | null, fromBible = false) => {
+    if (fromBible) {
+      await expect(root.getByRole("heading", { name: `${name}’s bible` })).toBeVisible();
+      await root.locator(".of-topbar").getByRole("button", { name: "Back", exact: true }).click();
+      await expect(root.getByRole("heading", { name: "Your story is ready", exact: true })).toBeVisible();
+      await root.locator(".of-topbar").getByRole("button", { name: "Back", exact: true }).click();
+    }
+    await root.getByRole("button", { name: `Home with ${name}`, exact: true }).click();
     await expect(root.getByRole("heading", { name, exact: true })).toBeVisible();
     const count = (await spoken(page)).length;
+    // The host also reads its own config on startup; isolate this note action's Otome fetch.
+    const configsBefore = configReads();
     await root.getByRole("button", { name: `Hear ${name} read the note` }).click();
     await expect.poll(async () => (await spoken(page)).length).toBe(count + 1);
+    expect(configReads()).toBe(configsBefore + 1);
     const request = (await spoken(page))[count]!.requests[0]!;
     expect(request).toMatchObject({ speaker: name, text: note.text, voice });
     expect(request.characterId ?? null).toBe(expectedCard);
     await expect
       .poll(() => page.evaluate(() => (globalThis as any).__MARINARA_HOST__.services.tts.ttsService.getState()))
       .toBe("idle");
+    return configReadAt.at(-1)!;
   };
   const openLink = async () => {
     await root.getByRole("button", { name: "Who’s home" }).click();
@@ -1839,11 +1847,9 @@ test("Otome Hearth card link: a generated LI keeps their story and art while an 
     await expect(root.locator(".of-page-head .of-avatar img")).toHaveAttribute("src", FACE_COLD);
     return root.getByRole("form", { name: "Character card", exact: true });
   };
-  const configReads = () => calls.filter((call) => call.path === "/api/tts/config").length;
 
   // A same-name card cannot silently attach itself: the generated LI starts with its own pool voice and no link.
-  await playNote("Original pool voice", null);
-  expect(configReads()).toBe(1);
+  const originalConfigAt = await playNote("Original pool voice", null);
   let form = await openLink();
   const select = form.getByRole("combobox", { name: "Character card", exact: true });
   await expect(select).toHaveValue("");
@@ -1867,10 +1873,9 @@ test("Otome Hearth card link: a generated LI keeps their story and art while an 
   await expect(root).toHaveAttribute("data-look", "pearl");
 
   // The same controller has a cached config from the unlinked voice: linking must fetch the new assignment now.
-  await playNote("Maukie card voice", cardId);
-  expect(configReads()).toBe(2);
+  const linkedConfigAt = await playNote("Maukie card voice", cardId, true);
   expect(
-    configReadAt[1]! - configReadAt[0]!,
+    linkedConfigAt - originalConfigAt,
     "the previous config is still inside its 30-second cache window",
   ).toBeLessThan(30_000);
   expect(posts(calls, "/api/tts/speak").some((call) => call.body?.voice === "Maukie card voice")).toBe(true);
@@ -1891,17 +1896,17 @@ test("Otome Hearth card link: a generated LI keeps their story and art while an 
   await expect(form.getByRole("option", { name, exact: true })).toHaveCount(1);
   await root.getByRole("button", { name: "Show spoilers" }).click();
   await expect(root.getByText(bible.publicFace, { exact: true })).toBeVisible();
-  await expect(root.getByText("Card canon wins.", { exact: true })).toBeVisible();
-  await playNote("Maukie card voice", cardId);
-  expect(configReads()).toBe(3);
+  await expect(root.getByText("Card canon wins.", { exact: true })).toHaveCount(0);
+  const reloadedLinkedConfigAt = await playNote("Maukie card voice", cardId, true);
   form = await openLink();
   await form.getByRole("combobox", { name: "Character card" }).selectOption("");
   await form.getByRole("button", { name: "Save card link" }).click();
   await expect(form.getByRole("status")).toHaveText("Saved.");
   await expect(form.getByRole("combobox", { name: "Character card" })).toHaveValue("");
-  await playNote("Unlinked pool voice", null);
-  expect(configReads()).toBe(4);
-  expect(configReadAt[3]! - configReadAt[2]!, "unlink refreshes the still-cached linked config").toBeLessThan(30_000);
+  const unlinkedConfigAt = await playNote("Unlinked pool voice", null, true);
+  expect(unlinkedConfigAt - reloadedLinkedConfigAt, "unlink refreshes the still-cached linked config").toBeLessThan(
+    30_000,
+  );
   form = await openLink();
   await expect(form.getByRole("combobox", { name: "Character card" })).toHaveValue("");
   await root.getByRole("button", { name: "Show spoilers" }).click();
