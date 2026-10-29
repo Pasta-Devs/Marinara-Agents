@@ -56,6 +56,8 @@ Bibles sit behind a spoiler gate, and you can edit them. A step that fails or is
 
 You can keep several stories. **Your stories** lists them, and deleting one asks you to type its title. **Settings** changes a story's content, connections, images and audio later.
 
+In **Your cast**, open a love interest and choose their **Character card** to link an Engine card explicitly. Its assigned voice and image references apply without replacing the love interest's story, progress or saved pictures. **No linked card** removes the association. Future paints prefer the card's **Full Body → Neutral** sprite, then its current avatar, then the retained Otome look; linking never paints automatically.
+
 ## The story
 
 Each main chapter is led by one love interest. Otome Hearth offers two to choose from: the one you have spent the least time with, and the one with the most unresolved between you. The chapter planner adds a second love interest whose goals get in the way, and writes six to nine scenes that build to a confrontation. Each scene is written when you reach it, and the next one is written ahead while you read.
