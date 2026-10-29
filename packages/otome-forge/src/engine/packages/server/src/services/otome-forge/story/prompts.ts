@@ -50,6 +50,7 @@ import { otomeSceneCard } from "../scene-card.js";
 import { defaultLiState } from "../schemas/state.js";
 import { otomeWritingRules } from "../writing-rules.js";
 import { prologueFraming } from "./prologue.js";
+import { aboutLine } from "../schemas/player.js";
 
 /** The sentence forgeChoiceMessages replaces when choices are on; P6's system text must contain it exactly. */
 export const NO_CHOICES_SENTENCE =
@@ -185,6 +186,7 @@ export function protagonistBlock(player: Player): string {
     `${player.name || "The protagonist"} (${pronounText(player.pronouns)}). Never assume a gender the pronouns do not state.`,
     player.traits.length ? `Traits: ${player.traits.join("; ")}` : "",
     player.goal.trim() ? `Their own goal: ${player.goal.trim()}` : "",
+    aboutLine(player),
   ]
     .filter(Boolean)
     .join("\n");
@@ -364,7 +366,7 @@ export function chapterPlanMessages({
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: units.map((unit) => ({ name: unit.name })), kind: "planner" }),
   ].join("\n");
@@ -534,7 +536,7 @@ export function beatMessages({
     "- Stay within this node's guide; do not skip ahead to later nodes.",
     `- Write every segment's text and every place name in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: present.map((unit) => ({ name: unit.name })), kind: "scene" }),
   ].join("\n");
@@ -816,7 +818,7 @@ export function routePlanMessages(input: RoutePlanInput): OtomeMessage[] {
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: units.map((item) => ({ name: item.name })), kind: "planner" }),
   ]
@@ -865,7 +867,7 @@ export function repairPlanMessages(input: RepairPlanInput): OtomeMessage[] {
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: units.map((item) => ({ name: item.name })), kind: "planner" }),
   ].join("\n");
@@ -959,7 +961,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     "- Honour the story so far; never contradict it or undo a choice already made. Stay within this node's guide.",
     `- Write every segment's text, label, selection, grievance and disclosure in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: present.map((unit) => ({ name: unit.name })), kind: "scene" }),
   ]

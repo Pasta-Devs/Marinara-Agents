@@ -26,6 +26,7 @@ import type { OtomeMessage } from "../generation.js";
 import { otomeSceneCard } from "../scene-card.js";
 import { betweenYou } from "../story/prompts.js";
 import { otomeWritingRules } from "../writing-rules.js";
+import { aboutLine } from "../schemas/player.js";
 
 /** A message's text, the player's or his (the route's body limit, and the cut on his). */
 export const MESSAGE_TEXT_MAX = 1000;
@@ -96,8 +97,8 @@ const RUPTURE_LINE =
   "A rupture stands between you. Answer curt and cold, at a distance, within your red lines. Do not pretend it is fine, and do not mend it here.";
 
 export interface ChatReplyInput {
-  world: Pick<World, "language" | "content" | "images">;
-  player: Pick<Player, "name" | "pronouns" | "traits">;
+  world: Pick<World, "language" | "content" | "images" | "writingStyle">;
+  player: Pick<Player, "name" | "pronouns" | "traits" | "about">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   liState: LiState;
   /** The open conversation's newest messages, oldest first; the last is the protagonist's. */
@@ -144,7 +145,7 @@ export function chatReplyMessages({
     `- If ${them} says they feel unwell or had a hard day, answer with comfort only. ${COMFORT_RULE}`,
     "- Never repeat a line you already sent in this thread.",
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "chat" }),
   ]
@@ -161,6 +162,7 @@ export function chatReplyMessages({
     "THE PROTAGONIST",
     `${them} (${pronounText(player.pronouns)}). Never assume a gender the pronouns do not state.`,
     player.traits.length ? `Traits: ${player.traits.join("; ")}` : "",
+    aboutLine(player),
     "",
     story.trim()
       ? `WHAT YOU KNOW OF THE STORY\nYou remember what you were there for or were told; anything else you know only as news that reached you, so never claim you were there.\n${story.trim()}`
@@ -257,7 +259,7 @@ export function normalizeChatReply(raw: ChatReplyRaw, names: ThreadNames): ChatR
 // ── P18: chat memory (compress, summary contract) ──
 
 export interface ChatMemoryInput {
-  world: Pick<World, "language" | "content" | "images">;
+  world: Pick<World, "language" | "content" | "images" | "writingStyle">;
   names: ThreadNames;
   /** The closed conversation, rendered for the summarizer (renderThread with `"told"`). */
   conversation: string;

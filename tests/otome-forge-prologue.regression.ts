@@ -20,11 +20,29 @@ const isPlanner = (messages: CapabilityLanguageModelMessage[]) => messages[0]!.c
 const isPrologue = (messages: CapabilityLanguageModelMessage[]) => text(messages).includes("This is the PROLOGUE");
 const beatPath = "/runs/:run/chapters/:key/beats/:i";
 
+const CHOICE = (branch: string) => ({
+  kind: "small",
+  at: 1,
+  options: [
+    {
+      text: "Finish the chart tonight",
+      selection: { kind: "action", text: "PROLOGUE-CHOICE: you light another candle." },
+      segments: [{ speaker: "", text: branch }],
+    },
+    {
+      text: "Go to bed",
+      selection: { kind: "action", text: "You blow out the candle." },
+      segments: [{ speaker: "", text: "Sleep comes quickly." }],
+    },
+  ],
+});
+/** Kai is only in a choice's branch: the check reads what the player reads, not only the mainline. */
 const NAMES_KAI = beatReply({
   segments: [
     { speaker: "", text: "The quay is quiet.", place: "The Quay" },
-    { speaker: "Kai", text: "You're late again." },
+    { speaker: "Ines", text: "Third night this week.", thought: true },
   ],
+  choices: [CHOICE("Kai would laugh at you for this.")],
 });
 const PROLOGUE = beatReply({
   places: [{ name: "The Quay", tags: "harbour quay at dawn, lanterns, no humans" }],
@@ -34,6 +52,7 @@ const PROLOGUE = beatReply({
     { speaker: "Old Bren", text: "Map's not going to finish itself, girl." },
     { speaker: "", text: "PROLOGUE-END: down the quay, the first lantern gutters." },
   ],
+  choices: [CHOICE("The chart grows by a street.")],
 });
 
 async function getView(t: Awaited<ReturnType<typeof storyWorld>>, runKey: string) {
@@ -93,6 +112,16 @@ test("Begin's prologue is a scene of the protagonist's own, and chapter 1 opens 
     ["The Quay"],
   );
 
+  // Its choice is canon, as in any scene.
+  const pick = served.body.beat.choices[0];
+  const chosen = await t.call(
+    "POST",
+    `${beatPath}/choose`,
+    { choice: pick.id, option: pick.options[0].id },
+    { key: "prologue", i: "0" },
+  );
+  assert.equal(chosen.status, 200, JSON.stringify(chosen.body));
+
   // Read to its end: Starlight for the scene, no affection for anyone, and Begin now goes straight Home.
   const before = (await t.state()).lis;
   const read = await t.call("POST", `${beatPath}/read`, { segment: 99 }, { key: "prologue", i: "0" });
@@ -126,6 +155,11 @@ test("Begin's prologue is a scene of the protagonist's own, and chapter 1 opens 
   assert.match(opening, /The story opens here: The lanterns along the quay go dark one by one\./);
   assert.match(opening, /The prologue, the protagonist alone before they meet anyone in this story, ended like this/);
   assert.match(opening, /PROLOGUE-END: down the quay, the first lantern gutters\./);
+  // The choice taken leads, so a long prologue's ending can't lose it.
+  assert.match(
+    opening,
+    /What the protagonist chose in it \(who they are from now on\):\n- Finish the chart tonight\. PROLOGUE-CHOICE: you light another candle\./,
+  );
   assert.ok(scene(2), "the lookahead wrote node 2");
   assert.doesNotMatch(text(scene(2)!.messages), /PROLOGUE-END/);
 });
@@ -133,11 +167,11 @@ test("Begin's prologue is a scene of the protagonist's own, and chapter 1 opens 
 test("the prologue refuses a love interest by name in any line", () => {
   const units = [{ name: "Kai" }, { name: "Mireille" }];
   assert.match(
-    String(prologueProblem([{ speaker: "", text: "You think of mireille's ledger." }], units)),
+    String(prologueProblem({ segments: [{ speaker: "", text: "You think of mireille's ledger." }] }, units)),
     /Mireille is a love interest/,
   );
   assert.equal(
-    prologueProblem([{ speaker: "", text: "Kaimana Street is quiet." }], units),
+    prologueProblem({ segments: [{ speaker: "", text: "Kaimana Street is quiet." }] }, units),
     null,
     "a name inside a word",
   );

@@ -518,7 +518,10 @@ async function generateBeat(
   // Chapter 1 opens where the prologue ended, with the choices taken in it.
   const prologue =
     key === mainChapterKey(1) && i === 0
-      ? prologueEnding(await chapterSoFar(deps.store, runId, PROLOGUE_KEY, 1, run.player.name))
+      ? prologueEnding(
+          await readBeat(deps.store, runId, PROLOGUE_KEY, 0),
+          await chapterSoFar(deps.store, runId, PROLOGUE_KEY, 1, run.player.name),
+        )
       : "";
   const input = {
     world: run.world,
@@ -578,7 +581,7 @@ async function generateBeat(
       normalize: (reply) => {
         const beat = normalizeBeatReply(reply, context);
         if (typeof beat === "string") return beat;
-        return (chapter.kind === "prologue" && prologueProblem(beat.segments, units)) || reply;
+        return (chapter.kind === "prologue" && prologueProblem(beat, units)) || reply;
       },
       temperature: 0.9,
       maxTokens: 6000,

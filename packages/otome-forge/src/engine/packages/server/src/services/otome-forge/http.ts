@@ -14,6 +14,7 @@ import type { BackgroundQueue } from "./background-queue.js";
 import type { OtomeMemory } from "./memory/memory.js";
 import { isLiId, isRunKey, runIdOf } from "./ids.js";
 import type { OtomeStore } from "./store.js";
+import type { CutoutClient } from "./art/cutout.js";
 
 export class OtomeForgeError extends Error {
   constructor(
@@ -98,6 +99,8 @@ export interface RouteDeps {
   handle: Handle;
   /** The loopback image client by default (art/paint.ts imagesOf); tests pass a fake. */
   images?: ImageClient;
+  /** The loopback cut-out client by default (art/cutout.ts); tests pass a fake. */
+  cutouts?: CutoutClient;
   /** Private story memory (S/memory/memory.ts); without it prompts carry no recall. */
   memory?: OtomeMemory;
   /** The run-scoped Cancel for story writes (forge-kit story-cancel-server). */

@@ -78,7 +78,7 @@ export function FacePlate({ li, face, speaking }: FacePlateProps) {
       aria-label={label}
     >
       {shown.art ? (
-        <FaceLayers url={shown.art} />
+        <FaceLayers url={shown.art} cut={li.cut} />
       ) : (
         <div className="of-face-medallion" aria-hidden="true">
           <span className="of-face-aura" />
@@ -96,8 +96,11 @@ export function FacePlate({ li, face, speaking }: FacePlateProps) {
   );
 }
 
-/** Two image layers: a new face decodes in the hidden one, then the two crossfade (instantly under reduced motion). */
-function FaceLayers({ url }: { url: string }) {
+/**
+ * Two image layers: a new face decodes in the hidden one, then the two crossfade (instantly under reduced motion). A
+ * cut-out (`cut`, no backdrop) stands whole on the stage's floor; an uncut look is cropped and faded at its edges.
+ */
+function FaceLayers({ url, cut = [] }: { url: string; cut?: readonly string[] }) {
   const [layers, setLayers] = useState<{ a: string; b: string; front: "a" | "b" }>({ a: url, b: "", front: "a" });
   useEffect(() => {
     if (url === layers[layers.front]) return;
@@ -124,7 +127,14 @@ function FaceLayers({ url }: { url: string }) {
     <div className="of-face-art" aria-hidden="true">
       {(["a", "b"] as const).map((layer) =>
         layers[layer] ? (
-          <img key={layer} className="of-face-img" src={layers[layer]} alt="" data-front={layers.front === layer} />
+          <img
+            key={layer}
+            className="of-face-img"
+            src={layers[layer]}
+            alt=""
+            data-front={layers.front === layer}
+            data-cut={cut.includes(layers[layer])}
+          />
         ) : null,
       )}
     </div>

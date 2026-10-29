@@ -297,14 +297,15 @@ function createLoopStub({ seeded = false } = {}) {
     if (i !== state.read || state.done) return { grants: [], starlight: view!.starlight, chapterDone: state.done };
     state.read += 1;
     const grants: Json[] = [];
-    if (chapter.kind === "main") {
+    // A main or prologue beat pays 30 (rewards.ts PAYS_BEATS); a date's beats are paid with the date.
+    if (chapter.kind === "main" || chapter.kind === "prologue") {
       grants.push({ source: "beat", starlight: 30 });
       view!.starlight += 30;
     }
     if (state.read === chapter.nodes.length) {
       state.done = true;
       if (chapter.kind === "prologue") view!.prologue = true;
-      if (chapter.kind === "main") {
+      else if (chapter.kind === "main") {
         grants.push(
           { source: "chapter", starlight: 160 },
           { source: "lead", li: chapter.lead, affection: 150 },
@@ -319,7 +320,7 @@ function createLoopStub({ seeded = false } = {}) {
           kind: "first-meeting",
           text: "The night Ilvar first said your name.",
         });
-      } else dateDone = true;
+      } else if (chapter.kind === "date") dateDone = true;
     }
     return { grants, starlight: view!.starlight, chapterDone: state.done };
   };
@@ -1270,6 +1271,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await expect(line(root)).toContainText("The gears can't wait, and neither can you.");
     await next(root);
     await expect(root.getByRole("heading", { name: "Prologue complete" })).toBeFocused();
+    await expect(root.getByText("+30 Starlight")).toBeVisible();
     await root.getByRole("button", { name: "Back to Home" }).click();
     await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
   });
@@ -1322,7 +1324,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await expect(root.getByText("Ilvar Thorne · +150 affection")).toBeVisible();
     await auditScreen(page, root, "chapter end", root.getByRole("heading", { name: "Chapter complete" }));
     await root.getByRole("button", { name: "Back to the story" }).click();
-    await expect(starlight(root)).toContainText(amount(2220));
+    await expect(starlight(root)).toContainText(amount(2250));
   });
 
   await test.step("Home: his note, a tap by keyboard, Reply into his thread", async () => {
@@ -1385,7 +1387,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await page.keyboard.press("Escape");
     await expect(takeover).toBeHidden();
     await expect(one).toBeFocused();
-    await expect(starlight(root)).toContainText(amount(2120));
+    await expect(starlight(root)).toContainText(amount(2150));
     expect(posts(stub, "/wish/pull")).toHaveLength(1);
   });
 
@@ -1450,7 +1452,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await shot("08-read-them");
     await root.getByRole("button", { name: "Back" }).first().click();
     await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
-    await expect(starlight(root)).toContainText(amount(2160));
+    await expect(starlight(root)).toContainText(amount(2190));
   });
 
   await test.step("Date Night: a place, the looks, three scenes and how it went", async () => {
@@ -1485,7 +1487,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await shot("09-date-night");
     await root.getByRole("button", { name: "Back to Dates" }).first().click();
     await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
-    await expect(starlight(root)).toContainText(amount(2280));
+    await expect(starlight(root)).toContainText(amount(2310));
   });
 
   await test.step("Claw Machine: his turn cheered on, my drops, the shelf", async () => {
@@ -1521,7 +1523,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await shot("10-claw");
     await root.getByRole("button", { name: "Back" }).first().click();
     await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
-    await expect(starlight(root)).toContainText(amount(2280 + 20 + 30 * caught));
+    await expect(starlight(root)).toContainText(amount(2310 + 20 + 30 * caught));
   });
 
   await test.step("Remind Me, the tracker, and a Caring message", async () => {

@@ -583,7 +583,10 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
         personaId: run.player.personaId,
         ...(run.player.portrait ? { portrait: run.player.portrait } : {}),
       };
-  const prompt = lookPrompt({ ...person, outfitLine: five.look?.outfitLine ?? "", world: run.world, style }, edited);
+  const prompt = lookPrompt(
+    { ...person, outfitLine: five.look?.outfitLine ?? "", world: run.world, style, matte: !!unit },
+    edited,
+  );
   return {
     ...prompt,
     paint: (connectionId: string, debugMode: boolean): Promise<PaintedImage> =>

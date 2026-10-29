@@ -31,10 +31,10 @@ import type { OtomeMessage } from "../generation.js";
 import { MIN_AGE } from "../../../../../client/src/features/otome-forge/shared/bible.js";
 import { text } from "../schemas/common.js";
 import { BANNED_PHRASES_RULE, otomeWritingRules } from "../writing-rules.js";
+import { aboutLine } from "../schemas/player.js";
 
 const PREMISE_MAX = 2000;
 const LOOK_LINE_MAX = 600;
-const PERSONA_TEXT_MAX = 1200;
 
 // ── Engine cards and personas, read through api.runtime.resources ──
 
@@ -151,6 +151,7 @@ function protagonistEntry(player: Player): string {
     `${player.name || "The protagonist"} (${pronounText(player.pronouns)})`,
     player.traits.length ? `Traits: ${player.traits.join("; ")}` : "",
     player.goal.trim() ? `Their own goal: ${player.goal.trim()}` : "",
+    aboutLine(player),
   ]
     .filter(Boolean)
     .join("\n");
@@ -387,7 +388,7 @@ export function bibleMessages({
     `- Write every text field except look in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
-    otomeWritingRules({ story: false }),
+    otomeWritingRules({ story: false, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: [{ name: unit.name }], kind: "planner" }),
   ].join("\n");
@@ -452,7 +453,8 @@ export function playerLookMessages({
   player: Player;
   persona: PersonaFields | null;
 }): OtomeMessage[] {
-  const description = persona?.description.slice(0, PERSONA_TEXT_MAX) ?? "";
+  // The player wrote it: it goes whole.
+  const description = persona?.description ?? "";
   return [
     {
       role: "system",

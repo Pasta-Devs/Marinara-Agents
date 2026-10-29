@@ -57,7 +57,8 @@ function paintOwner(stepId: string): string {
 interface ForgeProgressProps {
   runKey: string;
   onOpenBible: (li: string) => void;
-  onBegin: () => void;
+  /** Opens the story (the prologue first); a rejection is shown beside Begin. */
+  onBegin: () => Promise<void> | void;
 }
 
 export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressProps) {
@@ -70,7 +71,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Where the last action was started, so its failure shows beside that control: the paint offer or the steps.
-  const [errorAt, setErrorAt] = useState<"offer" | "steps">("steps");
+  const [errorAt, setErrorAt] = useState<"offer" | "steps" | "begin">("steps");
   // Prompt review: the paint steps still to show, and the prompt for the first one.
   const [reviewQueue, setReviewQueue] = useState<string[]>([]);
   const [reviewPrompt, setReviewPrompt] = useState<ImagePrompt | null>(null);
@@ -235,8 +236,22 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
     ? nameOfStep(steps.find((step) => step.id === reviewing) ?? { id: reviewing, state: "waiting-consent" })
     : "";
 
+  const begin = async () => {
+    if (busy) return;
+    setErrorAt("begin");
+    setError(null);
+    setBusy("begin");
+    try {
+      await onBegin();
+    } catch (failure) {
+      setError(otome.errorMessage(failure));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // Always in the page (a live region that appears with its message is often not read); filled only at `at`.
-  const errorAlert = (at: "offer" | "steps") => (
+  const errorAlert = (at: "offer" | "steps" | "begin") => (
     <div role="alert" className="of-live">
       {error && errorAt === at ? <p className="of-notice of-notice--error">{error}</p> : null}
     </div>
@@ -353,11 +368,17 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
 
       {ready ? (
         <div className="of-actions">
-          <button type="button" className="of-button of-button--primary" onClick={onBegin}>
+          <button
+            type="button"
+            className="of-button of-button--primary"
+            aria-disabled={busy === "begin" || undefined}
+            onClick={() => void begin()}
+          >
             <Heart size={16} strokeWidth={2} aria-hidden="true" />
             {t("ui.otomeForge.setup.forgeBegin")}
           </button>
           {view.prologue ? null : <p className="of-hint">{t("ui.otomeForge.setup.beginPrologueCost")}</p>}
+          {errorAlert("begin")}
         </div>
       ) : null}
 

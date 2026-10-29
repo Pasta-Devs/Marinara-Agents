@@ -235,7 +235,7 @@ export function datePlanMessages({
     `- Write the title, the place and every guide in ${world.language}; the keepsake brief in English.`,
     "- Omit an optional field rather than writing null.",
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "planner" }),
   ].join("\n");

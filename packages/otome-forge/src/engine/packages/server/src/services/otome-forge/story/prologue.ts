@@ -9,7 +9,13 @@
 //   - no love interest may know it (canon.ts audienceOf gives it the empty Lead), as none of them was there;
 //   - chapter 1's first scene is given its canon, the choices taken included, to pick up from (beats.ts).
 // POST /runs/:run/prologue makes the chapter without a model call; its scene is written when the reader asks for it.
-import type { Chapter, Segment, Unit } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import type {
+  Beat,
+  Chapter,
+  ForgeChoice,
+  Segment,
+  Unit,
+} from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { readOrGenerate } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { PROLOGUE_KEY, chapterId, runDocTarget, stateId } from "../ids.js";
@@ -67,13 +73,26 @@ function namedIn(text: string, name: string): boolean {
   return !!escaped && new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, "iu").test(text);
 }
 
-/** What to send back when the prologue's scene shows or names a love interest, or null. */
+/**
+ * What to send back when the prologue's scene shows or names a love interest anywhere the player reads it (its lines,
+ * and each choice's label, selection and branch), or null.
+ */
 export function prologueProblem(
-  segments: readonly Pick<Segment, "speaker" | "text">[],
+  { segments, choices = [] }: { segments: readonly Segment[]; choices?: readonly ForgeChoice[] },
   units: readonly Pick<Unit, "name">[],
 ): string | null {
+  const read = [
+    ...segments.flatMap((segment) => [segment.speaker, segment.text]),
+    ...choices.flatMap((choice) =>
+      choice.options.flatMap((option) => [
+        option.text,
+        option.selection.text,
+        ...option.segments.flatMap((segment) => [segment.speaker, segment.text]),
+      ]),
+    ),
+  ];
   for (const unit of units) {
-    if (segments.some((segment) => namedIn(segment.speaker, unit.name) || namedIn(segment.text, unit.name))) {
+    if (read.some((text) => namedIn(text, unit.name))) {
       return `${unit.name} is a love interest: the prologue is the protagonist's alone, so never show or name them`;
     }
   }
@@ -93,8 +112,19 @@ export function prologueFraming(openingSituation: string, units: readonly Pick<U
   ];
 }
 
-/** The prologue's canon as chapter 1's first scene is given it, or "" without a written one. */
-export function prologueEnding(canon: string | null): string {
+/**
+ * The prologue as chapter 1's first scene is given it, or "" without a written one: every choice taken in it (canon,
+ * which a long scene's ending alone could lose), then its canon's last part.
+ */
+export function prologueEnding(beat: Pick<Beat, "choices" | "choiceCanon"> | null, canon: string | null): string {
   const text = (canon ?? "").trim();
-  return text.length > ENDING_CHARS ? `…${text.slice(-ENDING_CHARS)}` : text;
+  if (!beat || !text) return "";
+  const chosen = beat.choices.flatMap((choice) => {
+    const option = choice.options.find((candidate) => candidate.id === beat.choiceCanon[choice.id]);
+    return option ? [`- ${option.text} ${option.selection.text}`] : [];
+  });
+  return [
+    ...(chosen.length ? ["What the protagonist chose in it (who they are from now on):", ...chosen, ""] : []),
+    text.length > ENDING_CHARS ? `…${text.slice(-ENDING_CHARS)}` : text,
+  ].join("\n");
 }

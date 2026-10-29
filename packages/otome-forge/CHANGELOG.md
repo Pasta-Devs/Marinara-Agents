@@ -4,6 +4,9 @@
 
 - **Begin** plays a prologue: one short scene of your protagonist's own life, just before the story opens, with no love interest in it. Chapter 1 picks up where it ends, and the Story screen offers it again.
 - **Phone** is now **Messages**, so it fits any world, and love interests write by whatever carries messages there.
+- **How it's written**, in setup and Settings → Content: your own instructions for every scene, message and note. Your persona's description reaches every story prompt whole.
+- Love interests stand without a backdrop: painted on a chroma matte, then cut out, as the Engine's sprites are.
+- The reader: fullscreen, a plain **Rewrite**, Ease off that fits, and long lines scroll as they type.
 
 ## 0.1.0 — 2026-10-28
 

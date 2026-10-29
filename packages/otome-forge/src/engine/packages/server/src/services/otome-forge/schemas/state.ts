@@ -410,6 +410,18 @@ export function readyFaces(world: Pick<World, "images">, unit: Unit): Partial<Re
   return expressions as Partial<Record<Face, string>> | undefined;
 }
 
+/** The ready cut-out of `url` (art/cutout.ts: the look without its background), or undefined. */
+export function readyCutout(unit: Pick<Unit, "cutouts">, url: string | undefined): string | undefined {
+  const record = url ? unit.cutouts[url] : undefined;
+  return record?.state === "ready" && record.url ? record.url : undefined;
+}
+
+/** Every image he stands on stage in (base look, worn look, ready faces): what the cut-outs are made of. */
+export function stageArtUrls(world: Pick<World, "images">, unit: Unit): string[] {
+  const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit)?.url : undefined;
+  return [unit.portrait, worn, ...Object.values(readyFaces(world, unit) ?? {})].filter((url): url is string => !!url);
+}
+
 /**
  * True while the faces for the look worn now may still arrive: expressions are on, there is a look, and its set is
  * neither ready nor given up. The kit never repaints a failed or stopped set by itself, so its faces never come.
@@ -468,8 +480,23 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
       .sort((a, b) => rank(a) - rank(b))
       .map((unit) => {
         const progress = state.lis[unit.id] ?? defaultLiState();
-        const expressions = readyFaces(world, unit);
+        // Each image as its cut-out once one is ready, so he stands on every screen without a backdrop; `cut` lists the
+        // cut-outs, which the client frames whole instead of cropping and fading.
+        const cut: string[] = [];
+        const shown = (url: string) => {
+          const cutout = readyCutout(unit, url);
+          if (cutout) cut.push(cutout);
+          return cutout ?? url;
+        };
+        const faces = readyFaces(world, unit);
+        const expressions = faces
+          ? (Object.fromEntries(
+              Object.entries(faces).map(([face, url]) => [face, url ? shown(url) : url]),
+            ) as typeof faces)
+          : undefined;
         const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
+        const portrait = unit.portrait ? shown(unit.portrait) : undefined;
+        const wornUrl = worn ? shown(worn.url) : undefined;
         return {
           id: unit.id,
           name: unit.name,
@@ -478,12 +505,13 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
           ...(unit.cardId ? { cardId: unit.cardId } : {}),
           voiceGender: unit.voiceGender,
           accent: unit.accent,
-          ...(unit.portrait ? { portrait: unit.portrait } : {}),
+          ...(portrait ? { portrait } : {}),
           ...(unit.art ? { art: unit.art } : {}),
           level: levelOf(progress.points),
           stage: progress.stage,
           ...(expressions ? { expressions } : {}),
-          ...(worn ? { worn: { id: worn.id, url: worn.url } } : {}),
+          ...(worn && wornUrl ? { worn: { id: worn.id, url: wornUrl } } : {}),
+          ...(cut.length ? { cut } : {}),
         };
       }),
     forge: world.forge,

@@ -21,6 +21,7 @@ import { COMFORT_RULE, otomeContentContract, otomeContractReminder } from "../co
 import type { OtomeMessage } from "../generation.js";
 import { NO_ABSENCE_RULE } from "../home/prompts.js";
 import { BANNED_PHRASES_RULE } from "../writing-rules.js";
+import { aboutLine } from "../schemas/player.js";
 
 // ── The care line ──
 
@@ -113,7 +114,7 @@ export function careCard(unit: Pick<Unit, "name" | "pronouns" | "bible">): strin
 
 export interface CareNoteInput {
   world: Pick<World, "content" | "images" | "language" | "setting" | "premise">;
-  player: Pick<Player, "name" | "pronouns">;
+  player: Pick<Player, "name" | "pronouns" | "about">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   /** One of allowedCareLines(player), exactly. The caller redacts it from the logged prompt. */
   careLine: string;
@@ -149,6 +150,7 @@ export function careNoteMessages({ world, player, unit, careLine }: CareNoteInpu
     "",
     "PROTAGONIST",
     `${protagonist} (${player.pronouns.subject}/${player.pronouns.object}/${player.pronouns.possessive}), addressed as "you". Never assume a gender the pronouns do not state.`,
+    aboutLine(player),
     "",
     "LOVE INTEREST",
     careCard(unit),

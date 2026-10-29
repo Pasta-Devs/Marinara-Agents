@@ -28,8 +28,8 @@ It needs Marinara Engine 2.5.1 or later with Capability API 1.386, and at least 
 
 Choose **Begin a new story**. Setup has six steps, and an unfinished setup is kept in this browser until the story is made.
 
-1. **Story:** a premise, or **Surprise me** to have your model write one. Then the language the story is written in, and an optional title.
-2. **You:** the persona you play, your pronouns, up to five traits, and a goal of your own that isn't romance.
+1. **Story:** a premise, or **Surprise me** to have your model write one. Then the language the story is written in, **How it's written** (tense, point of view, pacing: anything you want every scene, message and note to follow; also in **Settings → Content**), and an optional title.
+2. **You:** the persona you play, your pronouns, up to five traits, and a goal of your own that isn't romance. Your persona's description goes to every story prompt whole, so the story knows who you are.
 3. **Cast:** two to five love interests. Pick them from your character cards or from six original archetypes: Brilliant Monster, Gilded Tyrant, Gentle Liar, Loyal Blade, Ruined Saint and Laughing Stranger. Love interests can be any gender and use the pronouns you pick. A card stays canon: the story never contradicts it.
 4. **Content:** Heat, Darkness, Lines & Veils and the image rating (see [Content settings](#content-settings-nsfw-mode-and-lines--veils)).
 5. **Connections:**
@@ -37,7 +37,7 @@ Choose **Begin a new story**. Setup has six steps, and an unfinished setup is ke
    - **Planning** plans the world, the bibles and each chapter;
    - **Messages** writes replies in the message threads;
    - **Memory** summarizes what happened, so the cast remembers it;
-   - an optional image connection, **Ask before painting**, and **Expressions** (on by default).
+   - an optional image connection, its **Image style**, **Ask before painting**, and **Expressions** (on by default). Love interests are painted on a bright chroma backdrop that the Engine's sprite cleanup then removes, so they stand on every screen without one.
 6. **Review:** what forging will cost, then **Forge our story**.
 
 Forging writes the world and its central mystery: each love interest holds one piece of it and has their own reason to hide it. It then writes a hidden bible for each love interest:
@@ -282,7 +282,7 @@ These never call a model or paint anything. With voices on, their lines are voic
 - **Keep it off the model**;
 - browsing the Album, Echoes and the Wardrobe;
 - claiming with a Memory Selector (opening the Memory afterwards costs what any first open does);
-- Home's cut-outs, which are the Engine's own sprite cleanup.
+- cut-outs (a love interest without the backdrop), which are the Engine's own sprite cleanup.
 
 ## Privacy & data
 
@@ -307,7 +307,7 @@ These never call a model or paint anything. With voices on, their lines are voic
 
 ### What leaves your device
 
-- **Prompts:** every prompt goes to the model provider of the connection that writes it. With a cloud provider, it leaves your device.
+- **Prompts:** every prompt goes to the model provider of the connection that writes it, with your persona's description and your writing style in it. With a cloud provider, it leaves your device.
 - **Other providers:** image prompts go to your image connection, with the reference images that keep likenesses: your persona's and your cards' avatars, and looks already painted. Music briefs go to your audio connection, and voiced lines to your voice provider.
 - **Debug mode:** with the Engine's Debug mode or `DEBUG_AGENTS` on, every prompt Otome Hearth sends is written to the Engine's server log as `[debug/otome-forge/…]`, and the Engine logs image prompts too. In debug mode, and at a debug log level, the Engine's model providers also log whole requests.
 

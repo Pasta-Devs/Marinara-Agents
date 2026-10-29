@@ -106,6 +106,8 @@ export interface SetupDraft {
   /** The furthest step the player has opened; the stepper marks only steps up to it as done. */
   reached: SetupStep;
   title: string;
+  /** How the player wants the story written (tense, voice, pacing…): theirs, so never clipped. */
+  writingStyle: string;
   premise: string;
   language: string;
   protagonist: { personaId: string; name: string; pronouns: PronounChoice; traits: string[]; goal: string };
@@ -123,6 +125,7 @@ export function emptyDraft(): SetupDraft {
     step: "premise",
     reached: "premise",
     title: "",
+    writingStyle: "",
     premise: "",
     language: "English",
     protagonist: { personaId: "", name: "", pronouns: emptyPronouns(), traits: [], goal: "" },
@@ -193,6 +196,7 @@ export function readDraft(value: unknown): SetupDraft {
     reached:
       SETUP_STEPS[Math.max(SETUP_STEPS.indexOf(step), SETUP_STEPS.indexOf(oneOf(SETUP_STEPS, value.reached, step)))]!,
     title: str(value.title, TITLE_MAX),
+    writingStyle: typeof value.writingStyle === "string" ? value.writingStyle : "",
     premise: str(value.premise, PREMISE_MAX),
     language: str(value.language, LANGUAGE_MAX, draft.language),
     protagonist: {
@@ -351,6 +355,7 @@ export function toSetupInput(draft: SetupDraft): SetupInput {
   const optional = (id: string) => (id && id !== draft.connections.narration ? id : undefined);
   return {
     ...(draft.title.trim() ? { title: draft.title.trim() } : {}),
+    ...(draft.writingStyle.trim() ? { writingStyle: draft.writingStyle.trim() } : {}),
     premise: draft.premise.trim(),
     language: draft.language.trim(),
     protagonist: {

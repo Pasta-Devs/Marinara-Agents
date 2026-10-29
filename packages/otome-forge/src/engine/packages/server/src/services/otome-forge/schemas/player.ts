@@ -40,6 +40,12 @@ const NoticedSchema = z.object({
   at: z.string(),
 });
 
+/** The persona's own description, as every protagonist block carries it (whole), or "" without one. */
+export function aboutLine(player: Pick<Player, "about">): string {
+  const about = player.about?.trim();
+  return about ? `Who they are (their persona): ${about}` : "";
+}
+
 export function normalizePlayer(data: unknown): Player {
   const player = readFields<Player>(
     {
@@ -51,7 +57,9 @@ export function normalizePlayer(data: unknown): Player {
           .filter((trait): trait is string => typeof trait === "string")
           .slice(0, PLAYER_TRAITS_MAX),
       goal: z.string(),
-      look: z.object({ identityLine: text(), outfitLine: text() }),
+      about: z.string().optional(),
+      // A persona's own appearance is kept whole as the identity line (the player wrote it).
+      look: z.object({ identityLine: z.string(), outfitLine: text() }),
       portrait: z.string().optional(),
       portraitRef: z.string().optional(),
       art: PaintSchema.optional(),
