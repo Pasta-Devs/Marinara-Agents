@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.1.15 — 2026-10-29
+
+- Harmful story/date choices and Confrontation outcomes can reduce Affection progress within the current level. Unlocked levels stay permanent, and replaying never repeats the deduction or refunds daily earning limits.
+
 ## 0.1.12 — 2026-10-29
 
 - Desktop settings use the available stage space, with every settings section reachable and long pages scrollable.
