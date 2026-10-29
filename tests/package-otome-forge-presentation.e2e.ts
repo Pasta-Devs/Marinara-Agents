@@ -1408,7 +1408,9 @@ test("Otome Forge reader: a CG unlocks once seen, faces swap, lines are voiced, 
 }, testInfo) => {
   test.setTimeout(180_000);
   const calls: Call[] = [];
-  const { answer } = createSceneStub();
+  const { answer, stub } = createSceneStub();
+  // This positive presentation fixture represents faces whose cleanup is already complete.
+  stub.view.lis[0].cut = [FACE_COLD, FACE_TENDER, FACE_ANGRY, FACE_HURT];
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await stubRoutes(page, answer, calls);
