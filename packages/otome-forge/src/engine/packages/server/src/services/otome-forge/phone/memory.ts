@@ -177,7 +177,7 @@ export async function phoneMemorySources(
       sources.push({
         id: sessionSourceId(li, session),
         kind: "chat",
-        title: `${session.name ? `${who}'s` : "A"} phone conversation (private: only ${who} and the protagonist know what was said)`,
+        title: `${session.name ? `${who}'s` : "A"} message exchange (private: only ${who} and the protagonist know what was said)`,
         content: [session.memory.text, session.memory.quote ? `"${session.memory.quote}"` : ""]
           .filter(Boolean)
           .join("\n"),

@@ -26,6 +26,7 @@ import type { OtomeMessage } from "../generation.js";
 import { otomeSceneCard } from "../scene-card.js";
 import { betweenYou } from "../story/prompts.js";
 import { otomeWritingRules } from "../writing-rules.js";
+import { aboutLine } from "../schemas/player.js";
 
 /** A message's text, the player's or his (the route's body limit, and the cut on his). */
 export const MESSAGE_TEXT_MAX = 1000;
@@ -96,8 +97,8 @@ const RUPTURE_LINE =
   "A rupture stands between you. Answer curt and cold, at a distance, within your red lines. Do not pretend it is fine, and do not mend it here.";
 
 export interface ChatReplyInput {
-  world: Pick<World, "language" | "content" | "images">;
-  player: Pick<Player, "name" | "pronouns" | "traits">;
+  world: Pick<World, "language" | "content" | "images" | "writingStyle">;
+  player: Pick<Player, "name" | "pronouns" | "traits" | "about">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   liState: LiState;
   /** The open conversation's newest messages, oldest first; the last is the protagonist's. */
@@ -123,7 +124,7 @@ export function chatReplyMessages({
   const name = unit.name;
   const them = player.name || "the protagonist";
   const system = [
-    `You are ${name} (${pronounText(unit.pronouns)}), a love interest in an otome visual novel: a character-driven romance. You are texting ${them} in your private message thread. This is a MESSAGE, not a scene: write as ${name}, in the first person, in your own voice.`,
+    `You are ${name} (${pronounText(unit.pronouns)}), a love interest in an otome visual novel: a character-driven romance. You are writing to ${them} in your private message thread, by whatever carries messages in this world (never a phone or a screen unless the world has them). This is a MESSAGE, not a scene: write as ${name}, in the first person, in your own voice.`,
     "Reply with ONLY a JSON object of this shape:",
     `{"messages": [{"text": "...", "sticker": "${FACES.join("|")}"}], "suggestions": ["...", "..."]}`,
     `- messages: 1 to ${REPLY_MESSAGES_MAX} messages sent one after another, usually 1 or 2, each short: a line or a few, the way people text.`,
@@ -144,7 +145,7 @@ export function chatReplyMessages({
     `- If ${them} says they feel unwell or had a hard day, answer with comfort only. ${COMFORT_RULE}`,
     "- Never repeat a line you already sent in this thread.",
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "chat" }),
   ]
@@ -161,6 +162,7 @@ export function chatReplyMessages({
     "THE PROTAGONIST",
     `${them} (${pronounText(player.pronouns)}). Never assume a gender the pronouns do not state.`,
     player.traits.length ? `Traits: ${player.traits.join("; ")}` : "",
+    aboutLine(player),
     "",
     story.trim()
       ? `WHAT YOU KNOW OF THE STORY\nYou remember what you were there for or were told; anything else you know only as news that reached you, so never claim you were there.\n${story.trim()}`
@@ -257,7 +259,7 @@ export function normalizeChatReply(raw: ChatReplyRaw, names: ThreadNames): ChatR
 // ── P18: chat memory (compress, summary contract) ──
 
 export interface ChatMemoryInput {
-  world: Pick<World, "language" | "content" | "images">;
+  world: Pick<World, "language" | "content" | "images" | "writingStyle">;
   names: ThreadNames;
   /** The closed conversation, rendered for the summarizer (renderThread with `"told"`). */
   conversation: string;
@@ -265,7 +267,7 @@ export interface ChatMemoryInput {
 
 export function chatMemoryMessages({ world, names, conversation }: ChatMemoryInput): OtomeMessage[] {
   const system = [
-    `Two people have just finished texting: ${names.li} and ${names.player}. Write what ${names.li} will remember of it.`,
+    `Two people have just finished exchanging messages: ${names.li} and ${names.player}. Write what ${names.li} will remember of it.`,
     "Reply with ONLY a JSON object of this shape:",
     '{"memory": "...", "quote": "..."}',
     `- memory: 2 to 4 sentences in the third person about what passed between them: what was said that matters, what changed, what was left unsaid. Not a transcript. Written in ${world.language}.`,

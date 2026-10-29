@@ -20,9 +20,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { ChapterKind, ChapterView, MomentKind, NodeKind } from "../../shared/api-types";
+import { FullscreenButton } from "../../components/Stage";
 import { tagLabelKey } from "./ContentTagsCard";
 
 const KIND_KEYS: Record<Exclude<ChapterKind, "main">, string> = {
+  prologue: "ui.otomeForge.prologue.title",
   route: "ui.otomeForge.story.kindRoute",
   repair: "ui.otomeForge.story.kindRepair",
   story: "ui.otomeForge.story.kindStory",
@@ -96,6 +98,8 @@ interface ReaderControlsProps {
   onLog: () => void;
   onHide: () => void;
   canRewrite: boolean;
+  /** A rewrite paints the scene's key moment again by itself (its old image is let go). */
+  rewritePaints?: boolean;
   onRewrite: () => void;
   canEaseOff: boolean;
   onEaseOff: () => void;
@@ -111,7 +115,9 @@ export function ReaderControls(props: ReaderControlsProps) {
   const frameKey = frameLabelKey(chapter && node !== null ? chapter.nodes[node] : null);
   const tagKeys = tags.flatMap((tag) => tagLabelKey(tag) ?? []);
   const exitLabel = t("ui.otomeForge.reader.exit");
-  const rewriteLabel = t("ui.otomeForge.reader.rewriteLabel");
+  const rewriteLabel = props.rewritePaints
+    ? t("ui.otomeForge.reader.rewritePaintsLabel")
+    : t("ui.otomeForge.reader.rewriteLabel");
   return (
     <header className="of-reader-head" inert={props.inert} onClick={(event) => event.stopPropagation()}>
       <div className="of-reader-row">
@@ -153,6 +159,7 @@ export function ReaderControls(props: ReaderControlsProps) {
             onClick={props.onSkip}
           />
           <Tool label={t("ui.otomeForge.reader.backlog")} Icon={ScrollText} onClick={props.onLog} />
+          <FullscreenButton className="of-reader-tool" />
         </div>
       </div>
       <div className="of-reader-row of-reader-row--sub">

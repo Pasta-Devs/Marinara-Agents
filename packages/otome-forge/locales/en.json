@@ -6,12 +6,12 @@
   },
   "package": {
     "name": "Otome Hearth",
-    "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. An early test build. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth."
+    "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their messages to you, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. Install it, restart Marinara Engine when prompted, then open Home → Otome Hearth."
   },
   "agents": {
     "otome-forge": {
       "name": "Otome Hearth",
-      "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. An early test build."
+      "description": "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their messages to you, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn."
     }
   }
 }

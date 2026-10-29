@@ -233,7 +233,8 @@ const storyWriterOwnedSourcePaths = [
 // The reader's artwork and textures, fetched by URL from the package asset route.
 const storyWriterServedAssetPaths = ["story-writer-mari.webp", "wood-desk.webp", "paper-light.webp", "paper-dark.webp"];
 // Otome Forge is written here in Story Writer's layout and keeps its saves through api.runtime.persistence, so it
-// needs no host runtime overlay. Listed in no catalog while it is being built (scripts/catalog-incomplete.mjs).
+// needs no host runtime overlay. Offered to staging testers only until the maintainer promotes it
+// (STAGING_ONLY_PACKAGE_IDS in scripts/catalog-incomplete.mjs).
 const otomeForgeSourceRoot = join(packagesDir, "otome-forge/src/engine");
 const otomeForgeOwnedSourcePaths = [
   "packages/client/src/features/otome-forge",
@@ -567,7 +568,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.5.8",
+    version: "1.5.7",
     minEngineVersion: "2.5.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -863,7 +864,7 @@ const features = [
   },
   {
     id: "otome-forge",
-    version: "0.0.9",
+    version: "0.1.1",
     minEngineVersion: "2.5.1",
     // The browser tab's openConnection prop and the debugMode field of /generate/raw arrived in capability API 1.386.
     capabilityApi: Object.freeze({ major: 1, minor: 386 }),
@@ -871,7 +872,7 @@ const features = [
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Otome Hearth",
     description:
-      "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their texts on your phone, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn. An early test build.",
+      "An otome game in its own Home tab, made from your own characters: love interests who remember what you chose, their messages to you, dates and mini-games, and wishes for outfits and memories paid for only with Starlight you earn.",
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],

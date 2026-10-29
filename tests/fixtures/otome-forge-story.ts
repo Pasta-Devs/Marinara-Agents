@@ -81,16 +81,18 @@ export async function storyWorld({
   lis = {},
   content = defaultContent(),
   cancellation = false,
+  personas = [],
 }: {
   runKey: string;
   replies?: FakeReply[];
   lis?: Record<string, Partial<LiState>>;
   content?: ReturnType<typeof defaultContent>;
   cancellation?: boolean;
+  personas?: Array<{ id: string; data: unknown }>;
 }) {
   const fake = createFakeDocuments();
   const store = createOtomeStore(fake.documents);
-  const { runtime, logs, calls } = createFakeRuntime({ documents: fake.documents, replies });
+  const { runtime, logs, calls } = createFakeRuntime({ documents: fake.documents, replies, personas });
   const runId = runIdOf(runKey);
   await store.mutateDoc(INDEX_TARGET, normalizeIndex, (index) => ({
     ...index,

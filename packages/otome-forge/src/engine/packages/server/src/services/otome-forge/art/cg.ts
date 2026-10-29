@@ -26,7 +26,7 @@ import { beatId, runDocTarget, stateId } from "../ids.js";
 import { STATE_LIMITS, keepNewest, normalizeState, readRun } from "../schemas/state.js";
 import { normalizeBeat } from "../schemas/story.js";
 import { readBeat, readChapter } from "../story/canon.js";
-import { GALLERY_REF_PREFIX, type ImageSubject } from "./image-client.js";
+import { GALLERY_REF_PREFIX, worldStyle, type ImageSubject } from "./image-client.js";
 import {
   imagesOf,
   paintRecord,
@@ -158,7 +158,7 @@ async function buildCg(deps: ArtDeps, runId: string, beat: Beat, edited: Partial
   const cg = beat.cg;
   if (!cg) throw noCg();
   const subjects = cgSubjects(cg.cast, run.units, run.player);
-  const style = await imagesOf(deps).styleProfile(run.world.images.styleProfileId);
+  const style = await worldStyle(imagesOf(deps), run.world.images);
   const prompt = cgPrompt(
     {
       brief: cg.brief,

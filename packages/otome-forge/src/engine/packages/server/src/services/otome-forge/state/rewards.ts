@@ -109,8 +109,8 @@ const COMPLETION: Partial<Record<ChapterKind, { source: RewardSource; starlight:
   repair: { source: "chapter", starlight: STARLIGHT_EARNINGS.chapter },
   route: { source: "route-chapter", starlight: STARLIGHT_EARNINGS.routeChapter },
 };
-/** A date's beats are part of the date, which is paid as a capped activity. */
-const PAYS_BEATS: ReadonlySet<ChapterKind> = new Set<ChapterKind>(["main", "route", "repair", "story"]);
+/** A date's beats are part of the date, which is paid as a capped activity. The prologue pays its beat, and no affection. */
+const PAYS_BEATS: ReadonlySet<ChapterKind> = new Set<ChapterKind>(["prologue", "main", "route", "repair", "story"]);
 
 /** The newest main chapter number the state has finished, or 0 (a conflict planted outside a main chapter). */
 function latestMain(state: RunState): number {

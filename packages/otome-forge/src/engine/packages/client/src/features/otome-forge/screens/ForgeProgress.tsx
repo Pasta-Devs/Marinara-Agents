@@ -57,7 +57,8 @@ function paintOwner(stepId: string): string {
 interface ForgeProgressProps {
   runKey: string;
   onOpenBible: (li: string) => void;
-  onBegin: () => void;
+  /** Opens the story (the prologue first); a rejection is shown beside Begin. */
+  onBegin: () => Promise<void> | void;
 }
 
 export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressProps) {
@@ -70,7 +71,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Where the last action was started, so its failure shows beside that control: the paint offer or the steps.
-  const [errorAt, setErrorAt] = useState<"offer" | "steps">("steps");
+  const [errorAt, setErrorAt] = useState<"offer" | "steps" | "begin">("steps");
   // Prompt review: the paint steps still to show, and the prompt for the first one.
   const [reviewQueue, setReviewQueue] = useState<string[]>([]);
   const [reviewPrompt, setReviewPrompt] = useState<ImagePrompt | null>(null);
@@ -99,6 +100,9 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
   const base = `/runs/${encodeURIComponent(runKey)}`;
   const steps = view.forge.steps;
   const ready = view.forge.phase === "ready";
+  // The look a paint step paints: its record carries the image connection's reason for a failure.
+  const paintOf = (step: ForgeStep): Paint | undefined =>
+    step.id === "paint:player" ? view.player.art : view.lis.find((li) => `paint:${li.id}` === step.id)?.art;
   const nameOfStep = (step: ForgeStep): string => {
     if (step.id === "world-plan") return t("ui.otomeForge.setup.forgeStepWorld");
     if (step.id === "paint:player") return t("ui.otomeForge.setup.forgeStepPaintPlayer");
@@ -167,6 +171,32 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
     else void send(step.id, "/forge/retry", { step: step.id });
   };
 
+  // Repaint: a look already painted, painted anew. The old look stays until the new one is saved.
+  const repaint = async (step: ForgeStep) => {
+    if (busy || reviewOpen) return;
+    setErrorAt("steps");
+    if (reviewImagePromptsBeforeSend) {
+      reviewStep([step.id]);
+      return;
+    }
+    setBusy(step.id);
+    setError(null);
+    try {
+      const { paint } = await otome.post<{ paint: Paint }>(`${base}/art/paint`, {
+        target: { kind: "look", owner: paintOwner(step.id) },
+      });
+      if (paint.state === "failed") {
+        const message = t("ui.otomeForge.setup.repaintFailed");
+        setError(debugMode && paint.error ? `${message} (${paint.error})` : message);
+      }
+    } catch (failure) {
+      setError(otome.errorMessage(failure));
+    } finally {
+      setBusy(null);
+      void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+    }
+  };
+
   const nextReview = () => {
     const rest = reviewQueue.slice(1);
     setReviewQueue(rest);
@@ -206,8 +236,22 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
     ? nameOfStep(steps.find((step) => step.id === reviewing) ?? { id: reviewing, state: "waiting-consent" })
     : "";
 
+  const begin = async () => {
+    if (busy) return;
+    setErrorAt("begin");
+    setError(null);
+    setBusy("begin");
+    try {
+      await onBegin();
+    } catch (failure) {
+      setError(otome.errorMessage(failure));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // Always in the page (a live region that appears with its message is often not read); filled only at `at`.
-  const errorAlert = (at: "offer" | "steps") => (
+  const errorAlert = (at: "offer" | "steps" | "begin") => (
     <div role="alert" className="of-live">
       {error && errorAt === at ? <p className="of-notice of-notice--error">{error}</p> : null}
     </div>
@@ -237,8 +281,8 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
                 {step.state === "failed" ? (
                   <span className="of-forge-why">{t(forgeStepErrorKey(step.error))}</span>
                 ) : null}
-                {step.state === "failed" && debugMode && step.error ? (
-                  <span className="of-forge-error">{step.error}</span>
+                {step.state === "failed" && debugMode && (paintOf(step)?.error || step.error) ? (
+                  <span className="of-forge-error">{paintOf(step)?.error || step.error}</span>
                 ) : null}
               </span>
               {step.state === "failed" ? (
@@ -254,6 +298,20 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
                     {t("ui.otomeForge.common.retry")}
                   </button>
                   {isPaint(step) ? <CostHint images={1} /> : null}
+                </span>
+              ) : step.state === "done" && isPaint(step) && hasImages ? (
+                <span className="of-forge-retry">
+                  <button
+                    type="button"
+                    className="of-button of-button--quiet of-glass of-button--small"
+                    aria-disabled={!!busy || reviewOpen}
+                    aria-label={t("ui.otomeForge.setup.forgeRepaintStep", { step: name })}
+                    onClick={() => void repaint(step)}
+                  >
+                    <Paintbrush size={14} strokeWidth={2.2} aria-hidden="true" />
+                    {busy === step.id ? t("ui.otomeForge.setup.repainting") : t("ui.otomeForge.setup.repaint")}
+                  </button>
+                  <CostHint images={1} />
                 </span>
               ) : null}
             </li>
@@ -310,10 +368,17 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
 
       {ready ? (
         <div className="of-actions">
-          <button type="button" className="of-button of-button--primary" onClick={onBegin}>
+          <button
+            type="button"
+            className="of-button of-button--primary"
+            aria-disabled={busy === "begin" || undefined}
+            onClick={() => void begin()}
+          >
             <Heart size={16} strokeWidth={2} aria-hidden="true" />
             {t("ui.otomeForge.setup.forgeBegin")}
           </button>
+          {view.prologue ? null : <p className="of-hint">{t("ui.otomeForge.setup.beginPrologueCost")}</p>}
+          {errorAlert("begin")}
         </div>
       ) : null}
 

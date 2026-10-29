@@ -669,7 +669,7 @@ test("Otome Forge Wardrobe: the toggle moves between their looks and mine, wears
   ]);
   // He is noticing the gown, then his line takes the hint's place in the same live region, so it is announced.
   const status = root.getByRole("status").filter({ hasText: /noticed|noticing/i });
-  await expect(status).toContainText("Your new look is being noticed");
+  await expect(status).toContainText("They’re noticing your new look");
   await expect(status).toContainText(GOWN_NOTICED, { timeout: 15_000 });
   await expect(status.getByText("Ilvar Thorne noticed")).toBeVisible();
 

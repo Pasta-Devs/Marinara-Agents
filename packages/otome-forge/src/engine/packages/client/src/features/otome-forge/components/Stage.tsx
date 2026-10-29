@@ -56,7 +56,7 @@ export function Stage({ background, children }: StageProps) {
 }
 
 /** Enters or leaves the Home browser's fullscreen; nothing on a host without the control. */
-export function FullscreenButton() {
+export function FullscreenButton({ className }: { className?: string } = {}) {
   const { t } = useTranslation();
   const fullscreen = useOtomeProps().browserFullscreen;
   if (!fullscreen) return null;
@@ -67,7 +67,7 @@ export function FullscreenButton() {
   return (
     <button
       type="button"
-      className="of-icon-button of-glass"
+      className={className ? `of-icon-button of-glass ${className}` : "of-icon-button of-glass"}
       aria-label={label}
       title={label}
       onClick={() => fullscreen.setActive(!fullscreen.active)}

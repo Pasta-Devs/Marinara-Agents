@@ -187,7 +187,8 @@ async function completedChapters(
   const chapters: Completed[] = [];
   for (const { key, completed } of done) {
     const chapter = await readChapter(store, runId, key);
-    if (!chapter) continue;
+    // The prologue is no memory source: no love interest was there, and chapter 1's first scene is given it directly.
+    if (!chapter || chapter.kind === "prologue") continue;
     const audience = audienceOf(chapter);
     chapters.push({
       chapter,

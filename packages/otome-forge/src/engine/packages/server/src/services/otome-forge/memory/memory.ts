@@ -52,10 +52,10 @@ export type MemoryRuntime = Pick<
 
 export interface OtomeMemoryDeps {
   runtime: MemoryRuntime;
-  store: Pick<OtomeStore, "readDoc" | "listRun">;
+  store: Pick<OtomeStore, "readDoc" | "listRun" | "version">;
   /** The package's background lane; without one the memory makes its own (and disposes it). */
   background?: BackgroundQueue;
-  /** Every canonical source of a run; S/memory/sources.ts by default (tests pass their own). */
+  /** Every canonical source of a run; S/memory/sources.ts by default, kept until the store writes (tests pass their own). */
   readSources?: (runId: string) => Promise<ForgeMemorySource[]>;
 }
 
@@ -100,11 +100,34 @@ const withRules = (messages: readonly OtomeMessage[], rules: string): OtomeMessa
     index === 0 && message.role === "system" ? { ...message, content: `${message.content}\n\n${rules}` } : message,
   );
 
+/**
+ * readMemorySources, kept per run until the store writes anything. The kit reads every source before each paid summary
+ * piece and twice per recall; on a 20-chapter world one read is ~300 documents and 2.5 MB, and a first summary pass
+ * made ~300 of them (M7 probe). Sources come only from documents the store writes, so while its version has not moved
+ * since a read began, that read is still current.
+ * ponytail: any write drops every run's sources, and a change made around the store (a profile restore) shows after
+ * the next write; the kit's fingerprints then re-summarize what changed. Upgrade path: a version per run.
+ */
+export function keptSources(store: Pick<OtomeStore, "readDoc" | "listRun" | "version">) {
+  let kept = { version: -1, runs: new Map<string, Promise<ForgeMemorySource[]>>() };
+  return (runId: string): Promise<ForgeMemorySource[]> => {
+    const version = store.version();
+    if (kept.version !== version) kept = { version, runs: new Map() };
+    const { runs } = kept;
+    const stored = runs.get(runId);
+    if (stored) return stored;
+    const sources = readMemorySources(store, runId);
+    runs.set(runId, sources);
+    sources.catch(() => runs.get(runId) === sources && runs.delete(runId));
+    return sources;
+  };
+}
+
 export function createOtomeMemory({
   runtime,
   store,
   background,
-  readSources = (runId) => readMemorySources(store, runId),
+  readSources = keptSources(store),
 }: OtomeMemoryDeps): OtomeMemory {
   const documents = runtime.persistence.documents;
   const queue = background ?? createBackgroundQueue(runtime);

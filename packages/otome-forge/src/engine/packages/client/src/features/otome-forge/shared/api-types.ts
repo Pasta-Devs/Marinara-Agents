@@ -85,6 +85,8 @@ export interface ImageSettings {
   expressions: boolean;
   expressionsSince?: string;
   styleProfileId?: string;
+  /** The player's own words for how every picture looks (art style, medium); they lead each image prompt. */
+  style?: string;
 }
 
 export type ForgeStepState = "pending" | "running" | "done" | "failed" | "waiting-consent";
@@ -159,6 +161,8 @@ export interface World {
   mystery: { question: string; truth: string; pieces: Record<LiId, { piece: string; reasonToHide: string }> };
   web: WebRow[];
   openingSituation: string;
+  /** The player's own instructions for how the story is written (tense, voice, pacing…), whole; "" or absent: none. */
+  writingStyle?: string;
   content: ContentSettings;
   images: ImageSettings;
   connections: Connections;
@@ -199,6 +203,11 @@ export interface Player {
   pronouns: Pronouns;
   traits: string[];
   goal: string;
+  /**
+   * The persona's own description, whole, as it read when the story was made (or first opened since 0.1.1); every
+   * story prompt's protagonist block carries it. Absent until it has been read.
+   */
+  about?: string;
   /** English, visual-only tags. */
   look: { identityLine: string; outfitLine: string };
   portrait?: string;
@@ -682,7 +691,7 @@ export interface WishPullRecord {
 // ── Story (M2a): chapters, beats, choices. Chapter keys: `main-<n>`, `route-<li>-<stage>`, `repair-<li>-<n>`,
 // `story-<itemId>`, `date-<n>`. ──
 
-export type ChapterKind = "main" | "route" | "repair" | "story" | "date";
+export type ChapterKind = "prologue" | "main" | "route" | "repair" | "story" | "date";
 export type NodeKind = "beat" | "moment" | "confrontation";
 /** A moment node's framing: reading his face, a phone call, a date gone wrong. Written as a beat until M2b/M5. */
 export type MomentKind = "read-him" | "call" | "date";
@@ -1030,6 +1039,10 @@ export interface RunLiView {
   voiceGender: Unit["voiceGender"];
   accent: string;
   portrait?: string;
+  /** His look's paint record (the forge screen shows a failed paint's reason in debug mode). */
+  art?: Paint;
+  /** Which of this view's images are cut-outs (no backdrop): shown whole rather than cropped and faded. */
+  cut?: string[];
   level: number;
   stage: number;
   /** M2b: his painted faces for the current look, once the whole set is ready and expressions are on. */
@@ -1046,6 +1059,8 @@ export interface RunView {
   lis: RunLiView[];
   forge: ForgeStatus;
   starlight: number;
+  /** GET /runs/:run: the prologue has been read to its end (Begin then goes straight Home). */
+  prologue?: boolean;
 }
 
 export type SetupLi =
@@ -1057,17 +1072,19 @@ export interface SetupInput {
   title?: string;
   premise: string;
   language: string;
+  writingStyle?: string;
   protagonist: { personaId: string; pronouns: Pronouns; traits: string[]; goal: string };
   lis: SetupLi[];
   content: ContentSettings;
-  images: Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions">;
+  images: Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "style">;
   connections: Connections;
 }
 
 /** POST /runs/:run/settings. Raising a gated setting needs the 18+ gate; lowering one never does. */
 export interface SettingsInput {
   content?: ContentSettings;
-  images?: Partial<Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "styleProfileId">>;
+  images?: Partial<Pick<ImageSettings, "connectionId" | "rating" | "ask" | "expressions" | "styleProfileId" | "style">>;
   connections?: Connections;
   language?: string;
+  writingStyle?: string;
 }
