@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.1.3 — 2026-10-29
+
+- Mobile chapter cutouts continue behind the dialogue panel for a closer view. A three-dot button opens the secondary reader controls vertically, beside working mute and fullscreen buttons.
+
 ## 0.1.2 — 2026-10-29 [highlight]
 
 - Home cleans your own generated looks and outfits as well as the love interests'. Originals stay in the Wardrobe.

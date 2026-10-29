@@ -204,6 +204,11 @@ export class OtomeAudioController {
     return this.settings;
   }
 
+  /** The reader's quick mute shares Settings → Audio's live preview, without changing saved generation settings. */
+  setMuted(muted: boolean) {
+    this.configure({ ...this.settings, muted }, this.saved);
+  }
+
   /** `next` plays now; `saved` is the story's (Settings → Audio passes both while it previews Mute and the volumes). */
   configure(next: AudioSettings, saved: AudioSettings = next) {
     const previous = this.settings;
