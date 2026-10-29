@@ -1,5 +1,23 @@
 # Otome Hearth release notes
 
+## 0.1.1 — 2026-10-29
+
+- **Begin** plays a prologue: one short scene of your protagonist's own life, just before the story opens, with no love interest in it. Chapter 1 picks up where it ends, and the Story screen offers it again.
+- **Phone** is now **Messages**, so it fits any world, and love interests write by whatever carries messages there.
+- **How it's written**, in setup and Settings → Content: your own instructions for every scene, message and note. Your persona's description reaches every story prompt whole.
+- Love interests stand without a backdrop: painted on a chroma matte, then cut out, as the Engine's sprites are.
+- The reader: fullscreen, a plain **Rewrite**, Ease off that fits, and long lines scroll as they type.
+
+## 0.1.0 — 2026-10-28
+
+- First Date: release 1 of Otome Hearth, an otome game made from your own characters, for Engine staging testers.
+- Set up a story from a premise, your persona and two to five love interests of any gender, from your cards or six archetypes. Each gets a hidden bible, a route from Mask to Bond, and memories of only what they saw.
+- Main chapters build to a confrontation. Your first choice is canon, and a rift lasts until you make it right.
+- Home brings a note a day, and each love interest has a phone thread. Wish for Memories and looks with Starlight you earn (no real money; banners never expire).
+- Dates: Read Them, Date Night and the Claw Machine. Remind Me keeps their days, with an opt-in period tracker kept in this browser.
+- Your limits hold: Heat, Darkness, Lines & Veils and an 18+ gate. Paid work is labelled where you start it.
+- An **Image style** for every picture, **Repaint** for a painted look, and archetype love interests now paint on xAI.
+
 ## 0.0.9 — 2026-10-28
 
 - Every prompt that writes the story or a character's words asks the model to read each character's mind more carefully: what they know, want and feel.

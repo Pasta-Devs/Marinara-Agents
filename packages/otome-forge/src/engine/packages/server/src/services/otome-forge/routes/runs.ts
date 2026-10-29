@@ -21,6 +21,7 @@ import { ARCHETYPE_IDS } from "../../../../../client/src/features/otome-forge/sh
 import {
   DEFAULT_IMAGE_RATING,
   IMAGE_RATINGS,
+  IMAGE_STYLE_MAX,
   contentNeedsAgeGate,
   enforceContent,
   imageRatingNeedsAgeGate,
@@ -31,6 +32,7 @@ import { imagesOf, paintView, updateIfChanged } from "../art/paint.js";
 import { withPlaceViews } from "../art/places.js";
 import { OtomeForgeError, debugModeOf, liParam, parseBody, runParam, type RegisterRoutes } from "../http.js";
 import {
+  PROLOGUE_KEY,
   INDEX_ID,
   INDEX_TARGET,
   RUN_DOC_KINDS,
@@ -53,6 +55,7 @@ import {
   remapLearnedTells,
   toRunView,
   type RunDocuments,
+  stageArtUrls,
 } from "../schemas/state.js";
 import { ACCENT_PATTERN, BibleSchema, LI_NOTES_MAX, normalizeUnit } from "../schemas/unit.js";
 import {
@@ -68,6 +71,7 @@ import { checkBible } from "../setup/bible.js";
 import { initialForge, settleForge, startForge, withPaintSteps } from "../setup/forge.js";
 import { readCard, readPersona } from "../setup/prompts.js";
 import type { OtomeStore } from "../store.js";
+import { queueCutouts } from "../art/cutout.js";
 
 const NoFields = z.object({});
 const LIS_MIN = 2;
@@ -83,11 +87,17 @@ const SetupLiSchema = z.union([
     notes: z.string().max(LI_NOTES_MAX).optional(),
   }),
 ]);
+const ImageStyleSchema = z
+  .string()
+  .max(IMAGE_STYLE_MAX)
+  .transform((style) => style.trim());
 const SetupBody = z.object({
   setup: z.object({
     title: z.string().max(200).optional(),
     premise: z.string().max(2000),
     language: z.string().min(1).max(LANGUAGE_MAX),
+    // The player wrote it: no cap.
+    writingStyle: z.string().optional(),
     protagonist: z.object({
       personaId: z.string().min(1).max(ID_MAX),
       pronouns: PronounsSchema,
@@ -101,6 +111,7 @@ const SetupBody = z.object({
       rating: z.enum(IMAGE_RATINGS),
       ask: z.boolean(),
       expressions: z.boolean(),
+      style: ImageStyleSchema.optional(),
     }),
     connections: ConnectionsSchema,
   }),
@@ -116,10 +127,12 @@ const SettingsBody = z.object({
       ask: z.boolean().optional(),
       expressions: z.boolean().optional(),
       styleProfileId: z.string().max(200).optional(),
+      style: ImageStyleSchema.optional(),
     })
     .optional(),
   connections: ConnectionsSchema.optional(),
   language: z.string().min(1).max(LANGUAGE_MAX).optional(),
+  writingStyle: z.string().optional(),
 });
 const BibleBody = z.object({ bible: BibleSchema });
 const AccentBody = z.object({ accent: z.string().regex(ACCENT_PATTERN) });
@@ -132,14 +145,28 @@ const ageGateNeeded = () => new OtomeForgeError(403, "Confirm the 18+ gate befor
 const readIndex = async (store: Pick<OtomeStore, "readDoc">) =>
   (await store.readDoc(INDEX_ID, normalizeIndex)) ?? normalizeIndex(undefined);
 
-/** The run as the client sees it: the protagonist's or a place's paint left pending by a restart reads as `stopped`. */
+/** The run as the client sees it: a look's or a place's paint left pending by a restart reads as `stopped`. */
 function runView(runKey: string, runId: string, { world, player, units, state }: RunDocuments) {
   const shown = player.art ? { ...player, art: paintView(runId, "player", player.art) } : player;
-  return toRunView(runKey, withPlaceViews(runId, world), shown, units, state);
+  const lis = units.map((unit) => (unit.art ? { ...unit, art: paintView(runId, `li:${unit.id}`, unit.art) } : unit));
+  return toRunView(runKey, withPlaceViews(runId, world), shown, lis, state);
 }
 
 export const registerRunRoutes: RegisterRoutes = (router, deps) => {
   const { runtime, store, handle } = deps;
+
+  /**
+   * A story made before 0.1.1 has no copy of its persona's description: the first open reads it (whole) and keeps it,
+   * so every prompt from then on carries it. "" marks a persona with none, or one that is gone.
+   */
+  const withPersonaAbout = async (run: RunDocuments, runId: string): Promise<RunDocuments> => {
+    if (run.player.about !== undefined) return run;
+    const about = (await readPersona(runtime, run.player.personaId))?.description ?? "";
+    const player = await store.updateDoc(runDocTarget("player", playerId(runId)), normalizePlayer, (current) =>
+      current.about === undefined ? { ...current, about } : current,
+    );
+    return player ? { ...run, player } : run;
+  };
 
   router.post(
     "/runs",
@@ -188,6 +215,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         ...player,
         personaId: protagonist.personaId,
         name: persona.name,
+        about: persona.description,
         pronouns: protagonist.pronouns,
         traits: protagonist.traits.map((trait) => trait.trim()).filter(Boolean),
         goal: protagonist.goal.trim(),
@@ -201,6 +229,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         title: setup.title?.trim() ?? "",
         premise,
         language: setup.language.trim() || DEFAULT_LANGUAGE,
+        ...(setup.writingStyle?.trim() ? { writingStyle: setup.writingStyle.trim() } : {}),
         createdAt: at,
         content: enforceContent(setup.content, ageGate),
         images: { ...current.images, ...setup.images },
@@ -265,9 +294,13 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const { runKey, runId } = runParam(request);
       // A forge step left running or pending by a restart reads as failed, with Retry.
       await settleForge(deps, runId);
-      const run = await readRun(store, runId);
-      if (!run) throw runNotFound();
-      return { view: runView(runKey, runId, run) };
+      const read = await readRun(store, runId);
+      if (!read) throw runNotFound();
+      const run = await withPersonaAbout(read, runId);
+      // Each image he stands on stage in is cut out of its backdrop in the background, once (free: the Engine's
+      // sprite cleanup); the view shows the cut-out from the read after it is ready.
+      for (const unit of run.units) queueCutouts(deps, runId, unit, stageArtUrls(run.world, unit));
+      return { view: { ...runView(runKey, runId, run), prologue: !!run.state.chapters[PROLOGUE_KEY]?.completed } };
     }),
   );
 
@@ -349,6 +382,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         return {
           ...current,
           language: body.language?.trim() || current.language,
+          writingStyle: body.writingStyle !== undefined ? body.writingStyle.trim() : current.writingStyle,
           connections: body.connections ? normalizeConnections(body.connections) : current.connections,
           content: enforceContent(content, ageGate),
           images: { ...images, rating: ageGate ? images.rating : DEFAULT_IMAGE_RATING },

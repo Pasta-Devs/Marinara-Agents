@@ -421,6 +421,48 @@ async function main() {
         );
         assert.deepEqual(await recalled({ characterIds: ["char-nobody"] }), [], "no memories must give no sections");
         assert.deepEqual(await recalled({ characterIds: ["char-a"], mode: "conversation" }), []);
+        const forW = { scope: { characterIds: ["char-w"] } };
+        const bigText = `world_w_big keeps the cobalt archive. ${"The vault door stays shut until dusk. ".repeat(10)}`;
+        for (const [id, text, overrides] of [
+          ["world_w_old", `world_w_old keeps the cobalt archive`, { ...forW, updatedAt: "2026-07-18T00:00:00.000Z" }],
+          ["world_w_new", `world_w_new keeps the cobalt archive`, { ...forW, updatedAt: "2026-07-20T00:00:00.000Z" }],
+          ["world_w_big", bigText, { ...forW, updatedAt: "2026-07-21T00:00:00.000Z" }],
+          ["thread_w", `thread_w keeps the cobalt archive`, { ...forW, type: "thread" }],
+          ["char_w_other", `char_w_other keeps the cobalt archive`, { ...forW, type: "character", ...about("char-z") }],
+          ["char_w_nobody", `char_w_nobody keeps the cobalt archive`, { ...forW, type: "character" }],
+        ] as const)
+          await recallStorage.createNote(note(id, "chat-r", text, overrides));
+        const wholeSections = async (input: Record<string, unknown> = {}) =>
+          (
+            (await recall.recall({ queryText: "cobalt archive", characterIds: ["char-w"], whole: true, ...input })) as {
+              version: number;
+              sections: Array<{ noteId: string; text: string }>;
+            }
+          ).sections;
+        const rankedIds = await recalled({ characterIds: ["char-w"] });
+        const wholeAll = await wholeSections();
+        assert.deepEqual(
+          wholeAll.map((section) => section.noteId),
+          ["thread_w", "world_w_big", "world_w_new", "world_w_old"],
+          "whole recall must apply the subject rule, order by type and then newest first",
+        );
+        assert.deepEqual(
+          [...(rankedIds ?? [])].sort(),
+          wholeAll.map((section) => section.noteId).sort(),
+          "whole recall must share the same memories as ranked recall",
+        );
+        assert.equal(wholeAll.find((section) => section.noteId === "world_w_big")?.text, bigText.trim());
+        const wholeTight = await wholeSections({ maxTokens: 50 });
+        assert.deepEqual(
+          wholeTight.map((section) => section.noteId),
+          ["thread_w", "world_w_new", "world_w_old"],
+          "a whole recall must skip a memory that does not fit, never cut it, and still fit later ones",
+        );
+        assert.equal(
+          wholeTight.find((section) => section.noteId === "world_w_new")?.text,
+          "world_w_new keeps the cobalt archive",
+        );
+        assert.deepEqual(await wholeSections({ mode: "conversation" }), []);
         assert.equal(
           await recall.recall({ queryText: "cobalt archive" }),
           null,
@@ -507,6 +549,11 @@ async function main() {
           await recall.recall({ queryText: "cobalt archive", characterIds: ["char-a"] }),
           null,
           "turning off Other Agents can read memories must stop recall for other packages",
+        );
+        assert.equal(
+          await recall.recall({ queryText: "cobalt archive", characterIds: ["char-w"], whole: true }),
+          null,
+          "turning off Other Agents can read memories must stop whole recall too",
         );
         assert.deepEqual(
           await createLtmStorageReadService(recallStorage).storage.listNotes({ characterIds: ["char-a"] }),

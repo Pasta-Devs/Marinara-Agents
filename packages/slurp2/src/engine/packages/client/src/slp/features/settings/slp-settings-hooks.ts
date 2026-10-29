@@ -27,6 +27,15 @@ export function useSlurpCarryoverReach(enabled: boolean) {
     staleTime: 30_000,
   });
 }
+/** How the last read of Long-Term Memory went, while Creators are allowed to read it. */
+export function useSlurpMemoryStatus(enabled: boolean) {
+  return useQuery({
+    queryKey: [...slpKeys.settings(), "memory-status"] as const,
+    queryFn: () => api.get<{ status: "ok" | "missing" | "off" | "error" | null }>("/slurp2/settings/memory-status"),
+    enabled,
+    staleTime: 30_000,
+  });
+}
 export function useSlurpSettingsDefaults() {
   return useQuery({
     queryKey: [...slpKeys.settings(), "defaults"] as const,

@@ -40,7 +40,7 @@ import { normalizeBanner, normalizeItem } from "../schemas/wish.js";
 import { normalizeWorld } from "../schemas/world.js";
 import type { OtomeArt } from "./expressions.js";
 import { cgSubjects } from "./cg.js";
-import { galleryRef, type ImageSubject, type PaintedImage } from "./image-client.js";
+import { galleryRef, worldStyle, type ImageSubject, type PaintedImage } from "./image-client.js";
 import {
   imagesOf,
   paintIsLive,
@@ -184,7 +184,7 @@ async function buildItemArt(
   const run = await readRun(deps.store, runId);
   if (!run) throw notFound("Otome Forge run");
   const images = imagesOf(deps);
-  const style = await images.styleProfile(run.world.images.styleProfileId);
+  const style = await worldStyle(images, run.world.images);
   if (item.kind === "memory5") {
     const subjects = cgSubjects(item.cg!.cast, run.units, run.player);
     // Memory art is painted before its Character Story exists, so it stays clothed (at most Suggestive).
@@ -217,7 +217,10 @@ async function buildItemArt(
   const wearer = lookWearer(item);
   if (!wearer) throw notFound("love interest");
   const subject = await readSubject(deps, runId, run.world, wearer, debugMode);
-  const prompt = lookPrompt({ ...subject, outfitLine: item.look!.outfitLine, world: run.world, style }, edited);
+  const prompt = lookPrompt(
+    { ...subject, outfitLine: item.look!.outfitLine, world: run.world, style, matte: wearer !== "player" },
+    edited,
+  );
   return {
     ...prompt,
     world: run.world,
@@ -432,7 +435,7 @@ async function readPair(deps: ArtDeps, runId: string, hers: string) {
 async function buildPair(deps: ArtDeps, runId: string, hers: string, edited: Partial<ImagePrompt>) {
   const pair = await readPair(deps, runId, hers);
   const { run, unit, herOutfit, hisOutfit } = pair;
-  const style = await imagesOf(deps).styleProfile(run.world.images.styleProfileId);
+  const style = await worldStyle(imagesOf(deps), run.world.images);
   const first = (name: string, fallback: string) => name.trim().split(/\s+/)[0] || fallback;
   const people: CgPerson[] = [
     {

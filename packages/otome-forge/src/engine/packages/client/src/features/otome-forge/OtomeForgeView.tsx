@@ -118,14 +118,17 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     setChosen(next);
   };
 
+  const loading = (
+    <div className="of-center" role="status">
+      <Heart className="of-pulse" size={30} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
+      <p className="of-body">{t("ui.otomeForge.common.loading")}</p>
+    </div>
+  );
   if (waiting) {
     return (
       <>
         <TopBar />
-        <div className="of-center" role="status">
-          <Heart className="of-pulse" size={30} strokeWidth={1.6} fill="currentColor" aria-hidden="true" />
-          <p className="of-body">{t("ui.otomeForge.common.loading")}</p>
-        </div>
+        {loading}
       </>
     );
   }
@@ -210,6 +213,13 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     setReaderReturn(from);
     setChosen("reader");
   };
+  // Begin opens the prologue in the reader (its chapter is made at once, its scene written as it opens), then Home;
+  // once the prologue is read, Begin goes straight Home. A failure stays on the forge (ForgeProgress shows it).
+  const begin = async () => {
+    if (!activeRun || view?.prologue) return go("home");
+    await otome.post(`/runs/${encodeURIComponent(activeRun)}/prologue`);
+    openReader("home")("prologue");
+  };
   const bibleOf = view?.lis.find((li) => li.id === bibleLi) ?? null;
   const datesOf = view?.lis.find((li) => li.id === (datesLi ?? homeLi?.id)) ?? view?.lis[0] ?? null;
 
@@ -243,7 +253,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     ) : screen === "forge" && activeRun ? (
       <ForgeProgress
         runKey={activeRun}
-        onBegin={() => go("home")}
+        onBegin={begin}
         onOpenBible={(li) => {
           navigated.current = true;
           setBibleLi(li);
@@ -324,8 +334,11 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
       />
     ) : screen === "claw" && activeRun && view && datesOf ? (
       <ClawMachine runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
+    ) : activeRun && run.isPending ? (
+      // A screen of the story whose view is still on its way (the active story changed beneath it).
+      loading
     ) : (
-      <Placeholder screen={screen} />
+      <Placeholder screen={screen} onStories={() => go("picker")} />
     );
 
   return (

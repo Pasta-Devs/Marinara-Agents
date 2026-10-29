@@ -1,8 +1,10 @@
 // ──────────────────────────────────────────────
 // Otome Forge: image prompts, built in code with no model call (plan §1.8, M1 "Image prompts")
 // ──────────────────────────────────────────────
-// A look is the identity line and the outfit line, full body on a flat mid-grey background (so the Home cut-out has
-// an easy matte), plus the world's image rating and "adult <presentation>" from the content contract. The prompt goes
+// A look is the identity line and the outfit line, full body on a flat backdrop that the cut-out keys out
+// (art/cutout.ts). A love interest's backdrop is a chroma matte, as the Engine's sprites have.
+// The protagonist's is mid-grey: nothing cuts hers out yet, and her uncut look must not glare.
+// The prompt also carries the world's image rating and "adult <presentation>" from the content contract. The prompt goes
 // to the Engine as a prompt override, which replaces the Engine's own prompt and style, so the chosen style profile's
 // text and tags are added here. A prompt the player edited in the review dialog keeps every rating and adult tag:
 // the missing ones are appended again. Image prompts are always English. GF's buildImagePromptsMessages (server.mjs,
@@ -29,7 +31,39 @@ export const LOOK_SIZE = { width: 832, height: 1216 } as const;
 /** CGs and places (M2b). */
 export const SCENE_SIZE = { width: 768, height: 1344 } as const;
 
-export const LOOK_FRAMING = "full body, standing, neutral pose, plain flat mid-grey background";
+const LOOK_POSE = "full body, standing, neutral pose";
+export const LOOK_FRAMING = `${LOOK_POSE}, plain flat mid-grey background`;
+
+/**
+ * The Engine's sprite mattes (sprite-background.service.ts selectSpriteChromaMatte): the one whose colour the look
+ * names least, so the cut-out keys it out without eating the look; a tie keeps green.
+ * ponytail: mirrors the Engine's list; the upgrade path is the Engine giving packages its matte choice.
+ */
+const MATTES = [
+  { name: "chroma green #00FF00", colours: /\b(?:green|lime|emerald|olive|mint|chartreuse|teal|turquoise)\b/giu },
+  { name: "chroma magenta #FF00FF", colours: /\b(?:pink|magenta|fuchsia|purple|violet|lavender|rose|mauve)\b/giu },
+  { name: "chroma cyan #00FFFF", colours: /\b(?:blue|cyan|aqua|turquoise|teal|navy|azure|cobalt|indigo)\b/giu },
+];
+
+export function lookMatte(look: string): string {
+  let best = MATTES[0]!;
+  let fewest = Infinity;
+  for (const matte of MATTES) {
+    const named = look.toLowerCase().match(matte.colours)?.length ?? 0;
+    if (named < fewest) [best, fewest] = [matte, named];
+  }
+  return best.name;
+}
+
+/** A love interest's look on a chroma matte to cut out; the protagonist's on mid-grey. */
+export function lookFraming(input: Pick<LookInput, "identityLine" | "outfitLine" | "matte">): string {
+  if (!input.matte) return LOOK_FRAMING;
+  const matte = lookMatte(`${input.identityLine} ${input.outfitLine}`);
+  return `${LOOK_POSE}, plain flat solid ${matte} background`;
+}
+
+/** What would spoil a matte's key: kept out through the negative prompt. */
+const MATTE_NEGATIVE = "cast shadow, floor shadow, gradient background, colour spill";
 const LOOK_NEGATIVE =
   "text, captions, logos, watermarks, borders, UI, collage layouts, duplicate faces, extra people, cropped-off heads, cropped feet, busy background, scenery";
 /** Kept on every image, whatever the settings or the player's edits. */
@@ -79,6 +113,8 @@ export interface LookInput {
   presentation: Presentation;
   world: Pick<World, "content" | "images">;
   style: StyleProfile;
+  /** A love interest's look, painted on a chroma matte for its cut-out (lookFraming). */
+  matte?: boolean;
 }
 
 export interface ImagePrompt {
@@ -130,12 +166,15 @@ export function lookPrompt(input: LookInput, edited: Partial<ImagePrompt> = {}):
   const negative = requiredNegative(world, "clothed");
   const prompt = edited.prompt?.trim()
     ? withTags(edited.prompt, required)
-    : [style.styleText, mergeTags(input.identityLine, input.outfitLine, LOOK_FRAMING, required, style.positiveTags)]
+    : [
+        style.styleText,
+        mergeTags(input.identityLine, input.outfitLine, lookFraming(input), required, style.positiveTags),
+      ]
         .filter(Boolean)
         .join(", ");
   const negativePrompt = edited.negativePrompt?.trim()
     ? withTags(edited.negativePrompt, negative)
-    : mergeTags(LOOK_NEGATIVE, negative, style.negativeTags);
+    : mergeTags(LOOK_NEGATIVE, input.matte ? MATTE_NEGATIVE : "", negative, style.negativeTags);
   return { prompt: adultsOnly(world, prompt), negativePrompt };
 }
 

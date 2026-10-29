@@ -117,6 +117,14 @@ export function PremiseStep({ draft, update, connectionId }: PremiseStepProps) {
         ))}
       </datalist>
       <TextField
+        label={t("ui.otomeForge.setup.writingStyleLabel")}
+        hint={t("ui.otomeForge.setup.writingStyleHint")}
+        placeholder={t("ui.otomeForge.setup.writingStylePlaceholder")}
+        rows={3}
+        value={draft.writingStyle}
+        onChange={(writingStyle) => update((current) => ({ ...current, writingStyle }))}
+      />
+      <TextField
         label={t("ui.otomeForge.setup.titleLabel")}
         hint={t("ui.otomeForge.setup.titleHint")}
         max={TITLE_MAX}

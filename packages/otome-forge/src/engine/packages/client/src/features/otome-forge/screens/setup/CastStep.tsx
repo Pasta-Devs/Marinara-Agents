@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Avatar } from "../../components/Avatar";
+import { RetryNotice } from "../../components/RetryNotice";
 import { useCharacterOptions, type PickerItem } from "../../hooks/use-engine-resources";
 import { nameAccent } from "../../lib/accent";
 import { ARCHETYPE_IDS, type ArchetypeId } from "../../shared/archetypes";
@@ -158,9 +159,11 @@ function CardPicker({
   }
   if (characters.isError) {
     return (
-      <p className="of-notice of-notice--error" role="alert">
-        {t("ui.otomeForge.setup.cardsFailed")}
-      </p>
+      <RetryNotice
+        message={t("ui.otomeForge.setup.cardsFailed")}
+        onRetry={() => void characters.refetch()}
+        retrying={characters.retrying}
+      />
     );
   }
   if (characters.items.length === 0) return <p className="of-hint">{t("ui.otomeForge.setup.noCards")}</p>;
@@ -192,7 +195,7 @@ function CardPicker({
                   if (picked || !full) onToggle(item);
                 }}
               >
-                <Avatar name={item.name} url={item.avatarUrl} accent={nameAccent(item.name)} />
+                <Avatar name={item.name} url={item.avatarUrl} crop={item.avatarCrop} accent={nameAccent(item.name)} />
                 <span className="of-tile-name">{item.name}</span>
                 {picked ? (
                   <span className="of-tile-check" aria-hidden="true">

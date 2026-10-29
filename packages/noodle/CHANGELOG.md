@@ -1,6 +1,6 @@
 # Noodle release notes
 
-## Unreleased
+## 1.5.11 — 2026-10-29
 
 - New, off by default: Advanced → "Use memories from Long-Term Memory". Posts can draw on what Long-Term Memory remembers about each account's character, as whole memories or only the parts that fit the posts. Turning it on asks first, and a note appears if Long-Term Memory isn't installed or isn't sharing memories.
 

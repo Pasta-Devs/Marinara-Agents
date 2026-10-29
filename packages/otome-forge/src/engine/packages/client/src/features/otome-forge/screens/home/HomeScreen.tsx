@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, HandHeart, HeartHandshake, RotateCcw, Smartphone, UsersRound } from "lucide-react";
+import { CalendarDays, HandHeart, HeartHandshake, MessageCircleHeart, RotateCcw, UsersRound } from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { CaringMessage } from "../../components/CaringMessage";
 import { HeNoticed } from "../../components/HeNoticed";
@@ -553,7 +553,7 @@ export function HomeScreen({ runKey, view, onOpenPhone, onOpenCast, onOpenStorie
 
       <div className="of-home-rail">
         <button type="button" className="of-home-action of-glass" onClick={() => onOpenPhone(null)}>
-          <Smartphone size={17} strokeWidth={1.9} aria-hidden="true" />
+          <MessageCircleHeart size={17} strokeWidth={1.9} aria-hidden="true" />
           <span>{t("ui.otomeForge.common.screenPhone")}</span>
           {unread > 0 ? (
             <span className="of-home-badge">

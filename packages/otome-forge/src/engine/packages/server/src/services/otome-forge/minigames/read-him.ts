@@ -60,13 +60,14 @@ import { OtomeForgeError } from "../http.js";
 import { runDocTarget, stateId, unitId, worldId } from "../ids.js";
 import type { OtomeMemory } from "../memory/memory.js";
 import { otomeSceneCard } from "../scene-card.js";
-import { STATE_LIMITS, clipText, keepNewest, normalizeState, readRun } from "../schemas/state.js";
+import { STATE_LIMITS, clipText, keepNewest, keepTimeline, normalizeState, readRun } from "../schemas/state.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeWorld } from "../schemas/world.js";
 import { grant } from "../state/rewards.js";
 import type { OtomeStore } from "../store.js";
 import { betweenYou, ownView } from "../story/prompts.js";
 import { otomeWritingRules } from "../writing-rules.js";
+import { aboutLine } from "../schemas/player.js";
 
 export const READ_HIM_TEMPERATURE = 0.9;
 export const READ_HIM_MAX_TOKENS = 2400;
@@ -332,8 +333,8 @@ export function shuffleRound(round: ReadHimReplyRound, random: (below: number) =
 }
 
 export interface ReadHimPromptInput {
-  world: Pick<World, "content" | "images" | "language" | "setting" | "premise">;
-  player: Pick<Player, "name" | "pronouns">;
+  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle">;
+  player: Pick<Player, "name" | "pronouns" | "about">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   /** His state as his own reader may know it (ownView). */
   liState: LiState;
@@ -381,7 +382,7 @@ export function readHimMessages({
     `- ${NO_ABSENCE_RULE}`,
     `- Write every field in ${world.language}.`,
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "home" }),
   ].join("\n");
@@ -391,6 +392,7 @@ export function readHimMessages({
     "",
     "PROTAGONIST",
     `${player.name || "The protagonist"} (${pronounText(player.pronouns)}), addressed as "you". Never assume a gender the pronouns do not state.`,
+    aboutLine(player),
     "",
     "LOVE INTEREST",
     otomeSceneCard(unit, liState),
@@ -608,19 +610,16 @@ export function applyReadHim(
         },
       },
       timeline: first
-        ? keepNewest(
-            [
-              ...next.timeline,
-              {
-                at,
-                li: set.li,
-                kind: FIRST_READ_HIM_TIMELINE,
-                text: clipText(shown?.thought ?? "", STATE_LIMITS.text),
-                ref: set.setId,
-              },
-            ],
-            STATE_LIMITS.timeline,
-          )
+        ? keepTimeline([
+            ...next.timeline,
+            {
+              at,
+              li: set.li,
+              kind: FIRST_READ_HIM_TIMELINE,
+              text: clipText(shown?.thought ?? "", STATE_LIMITS.text),
+              ref: set.setId,
+            },
+          ])
         : next.timeline,
     },
   };

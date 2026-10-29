@@ -5,6 +5,7 @@
 // wizard still works, the draft just isn't kept. A stored draft is read field by field, so a damaged or older one
 // keeps what it can. Nothing here is trusted by the server, which checks every limit again.
 import {
+  IMAGE_STYLE_MAX,
   enforceContent,
   normalizeContent,
   normalizeImageRating,
@@ -87,6 +88,8 @@ export interface DraftImages {
   rating: ImageRating;
   ask: boolean;
   expressions: boolean;
+  /** The player's own image style ("" uses the Engine's style profile). */
+  style: string;
 }
 
 /** "" means "the same as the story connection" for every job but narration. */
@@ -103,6 +106,8 @@ export interface SetupDraft {
   /** The furthest step the player has opened; the stepper marks only steps up to it as done. */
   reached: SetupStep;
   title: string;
+  /** How the player wants the story written (tense, voice, pacing…): theirs, so never clipped. */
+  writingStyle: string;
   premise: string;
   language: string;
   protagonist: { personaId: string; name: string; pronouns: PronounChoice; traits: string[]; goal: string };
@@ -120,12 +125,13 @@ export function emptyDraft(): SetupDraft {
     step: "premise",
     reached: "premise",
     title: "",
+    writingStyle: "",
     premise: "",
     language: "English",
     protagonist: { personaId: "", name: "", pronouns: emptyPronouns(), traits: [], goal: "" },
     lis: [],
     content: normalizeContent(undefined),
-    images: { connectionId: null, rating: normalizeImageRating(undefined), ask: false, expressions: true },
+    images: { connectionId: null, rating: normalizeImageRating(undefined), ask: false, expressions: true, style: "" },
     connections: { narration: "", structured: "", chat: "", compress: "" },
   };
 }
@@ -190,6 +196,7 @@ export function readDraft(value: unknown): SetupDraft {
     reached:
       SETUP_STEPS[Math.max(SETUP_STEPS.indexOf(step), SETUP_STEPS.indexOf(oneOf(SETUP_STEPS, value.reached, step)))]!,
     title: str(value.title, TITLE_MAX),
+    writingStyle: typeof value.writingStyle === "string" ? value.writingStyle : "",
     premise: str(value.premise, PREMISE_MAX),
     language: str(value.language, LANGUAGE_MAX, draft.language),
     protagonist: {
@@ -209,6 +216,7 @@ export function readDraft(value: unknown): SetupDraft {
       rating: normalizeImageRating(images.rating),
       ask: bool(images.ask, draft.images.ask),
       expressions: bool(images.expressions, draft.images.expressions),
+      style: str(images.style, IMAGE_STYLE_MAX),
     },
     connections: {
       narration: str(connections.narration, 200),
@@ -347,6 +355,7 @@ export function toSetupInput(draft: SetupDraft): SetupInput {
   const optional = (id: string) => (id && id !== draft.connections.narration ? id : undefined);
   return {
     ...(draft.title.trim() ? { title: draft.title.trim() } : {}),
+    ...(draft.writingStyle.trim() ? { writingStyle: draft.writingStyle.trim() } : {}),
     premise: draft.premise.trim(),
     language: draft.language.trim(),
     protagonist: {

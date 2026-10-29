@@ -47,7 +47,7 @@ import {
   type WishView,
 } from "../../../../../client/src/features/otome-forge/shared/wish.js";
 import { cgSubjects } from "../art/cg.js";
-import type { ImageSubject, PaintedImage } from "../art/image-client.js";
+import { worldStyle, type ImageSubject, type PaintedImage } from "../art/image-client.js";
 import { bannerArtOwner, itemArtOwner } from "../art/outfits.js";
 import {
   imagesOf,
@@ -529,7 +529,7 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
   const five = await readItem(deps.store, runId, banner.items.five[0] ?? "");
   if (!five) throw bannerNotFound();
   const images = imagesOf(deps);
-  const style = await images.styleProfile(run.world.images.styleProfileId);
+  const style = await worldStyle(images, run.world.images);
   if (banner.kind === "memories") {
     const subjects = cgSubjects(five.cg?.cast ?? [], run.units, run.player);
     const prompt = cgPrompt(
@@ -583,7 +583,10 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
         personaId: run.player.personaId,
         ...(run.player.portrait ? { portrait: run.player.portrait } : {}),
       };
-  const prompt = lookPrompt({ ...person, outfitLine: five.look?.outfitLine ?? "", world: run.world, style }, edited);
+  const prompt = lookPrompt(
+    { ...person, outfitLine: five.look?.outfitLine ?? "", world: run.world, style, matte: !!unit },
+    edited,
+  );
   return {
     ...prompt,
     paint: (connectionId: string, debugMode: boolean): Promise<PaintedImage> =>

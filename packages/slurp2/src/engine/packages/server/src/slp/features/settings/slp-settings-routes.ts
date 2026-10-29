@@ -4,6 +4,7 @@ import {
   slurpPromptDescriptions,
   slurpPromptEditableDefaults,
 } from "../../base/prompting/slp-prompt-blocks.js";
+import { lastSlurpMemoryStatus } from "../../data/creators/slp-ltm-recall.js";
 import { slpIsAdmissionFailure } from "../../base/host/slp-admission.js";
 import { normalizeSlurpSettings, slurpSettingsPatchSchema } from "../../modules/settings/slp-settings.js";
 import {
@@ -57,6 +58,8 @@ const slurpPromptResultPreviewSchema = slurpPromptPreviewSchema.extend({
 export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { noodle } = deps;
   app.get("/settings", async () => noodle.getSlurpSettings());
+  // How the last read of Long-Term Memory's recall went, so the panel can say why no memories arrive.
+  app.get("/settings/memory-status", async () => ({ status: lastSlurpMemoryStatus() }));
 
   // `classicPreset` is a layout the builder can load into its draft. Loading it changes prompt
   // text only; nothing is saved until the player saves.

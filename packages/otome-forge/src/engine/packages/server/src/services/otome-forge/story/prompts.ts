@@ -49,6 +49,8 @@ import { chapterOwner, mainChapterNumber } from "../ids.js";
 import { otomeSceneCard } from "../scene-card.js";
 import { defaultLiState } from "../schemas/state.js";
 import { otomeWritingRules } from "../writing-rules.js";
+import { prologueFraming } from "./prologue.js";
+import { aboutLine } from "../schemas/player.js";
 
 /** The sentence forgeChoiceMessages replaces when choices are on; P6's system text must contain it exactly. */
 export const NO_CHOICES_SENTENCE =
@@ -184,6 +186,7 @@ export function protagonistBlock(player: Player): string {
     `${player.name || "The protagonist"} (${pronounText(player.pronouns)}). Never assume a gender the pronouns do not state.`,
     player.traits.length ? `Traits: ${player.traits.join("; ")}` : "",
     player.goal.trim() ? `Their own goal: ${player.goal.trim()}` : "",
+    aboutLine(player),
   ]
     .filter(Boolean)
     .join("\n");
@@ -345,7 +348,7 @@ export function chapterPlanMessages({
     "FIELDS",
     "- title: the chapter's name, 2 to 6 words. summary: one or two lines on what the chapter is about, without giving away its turns (the player reads it).",
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the chapter really holds; [] when none apply.`,
-    "- nodes: kind beat is an ordinary scene. kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads one love interest's face to see what they really feel), call (a phone call), date (a date that goes wrong). kind confrontation is the climax: an argument in which something true comes out.",
+    "- nodes: kind beat is an ordinary scene. kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads one love interest's face to see what they really feel), call (a call from afar, only voices), date (a date that goes wrong). kind confrontation is the climax: an argument in which something true comes out.",
     `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: the ids of the love interests present. place: where it opens (optional). cg: true only for a node holding a story-defining image (a confession, a revelation, a rescue${firstNightCg(world) ? ", or under this Heat a first night together" : ""}). resolves: ids of open grievances this node may resolve.`,
     "- ledger.relationship: one line per love interest present on what moved between them and the protagonist. ledger.conflict: conflict seeds: plant a new one (type from: " +
       ANGST_TYPES.join(", ") +
@@ -363,7 +366,7 @@ export function chapterPlanMessages({
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: units.map((unit) => ({ name: unit.name })), kind: "planner" }),
   ].join("\n");
@@ -434,7 +437,7 @@ export const BeatReplySchema: ZodType<BeatReply> = z.object({
 const MOMENT_FRAMING: Record<NonNullable<ChapterNode["moment"]>, string> = {
   "read-him":
     "This node is a READ HIM moment: the protagonist studies one love interest's face and body to work out what they really feel. Linger on their tells; let their face contradict their words; leave the truth readable but unsaid.",
-  call: "This node is a PHONE CALL: only voices. Narrate what the protagonist hears and imagines; nobody else is in the room with the caller.",
+  call: "This node is a CALL FROM AFAR: only voices, carried by a phone where the world has them and otherwise by whatever carries voices there. Narrate what the protagonist hears and imagines; nobody else is in the room with the caller.",
   date: "This node is a DATE THAT GOES WRONG: it starts as time together and turns on something real between them.",
 };
 
@@ -486,6 +489,8 @@ export interface BeatMessagesInput {
   node: ChapterNode;
   /** The canonical story so far in this chapter, rendered (earlier beats), or "" for its first node. */
   storySoFar: string;
+  /** Chapter 1's first node only: the prologue's last lines (S/story/prologue.ts), or "" without one. */
+  prologue?: string;
   /** Recalled memory (the kit's text), or "". */
   memory: string;
 }
@@ -499,6 +504,7 @@ export function beatMessages({
   node,
   storySoFar,
   memory,
+  prologue = "",
 }: BeatMessagesInput): OtomeMessage[] {
   const present = units.filter((unit) => node.cast.includes(unit.id));
   const thinkers = present.filter((unit) => stageOf(state, unit.id) >= 2).map((unit) => unit.name);
@@ -530,7 +536,7 @@ export function beatMessages({
     "- Stay within this node's guide; do not skip ahead to later nodes.",
     `- Write every segment's text and every place name in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: present.map((unit) => ({ name: unit.name })), kind: "scene" }),
   ].join("\n");
@@ -540,7 +546,10 @@ export function beatMessages({
       : node.kind === "moment" && node.moment
         ? MOMENT_FRAMING[node.moment]
         : "";
-  const arc = arcFraming({ chapter, node, units, state });
+  const arc =
+    chapter.kind === "prologue"
+      ? prologueFraming(world.openingSituation, units)
+      : arcFraming({ chapter, node, units, state });
   const dateFraming = date && partner ? dateFramingText(date, partner, state) : "";
   const user = [
     "WORLD",
@@ -560,6 +569,11 @@ export function beatMessages({
       : chapter.number === 1 && world.openingSituation
         ? `The story opens here: ${world.openingSituation}`
         : "(This is the chapter's first node.)",
+    ...(prologue.trim()
+      ? [
+          `The prologue, the protagonist alone before they meet anyone in this story, ended like this. Pick up from it; never tell it again:\n${prologue.trim()}`,
+        ]
+      : []),
     "",
     `Narrate node ${node.i + 1} of ${chapter.nodes.length}${last ? ", the chapter's last" : ""}:`,
     `What happens: ${node.guide}`,
@@ -640,6 +654,7 @@ const secretsOf = (unit: Unit | undefined, ids: readonly string[] = []) =>
 
 function chapterLabel(chapter: BeatMessagesInput["chapter"], units: readonly Unit[]): string {
   const owner = units.find((unit) => unit.id === (chapter.li ?? chapter.lead))?.name ?? "";
+  if (chapter.kind === "prologue") return "the prologue, before chapter 1";
   if (chapter.kind === "main") return `main chapter ${chapter.number ?? ""}`.trim();
   if (chapter.kind === "route" && chapter.stage) {
     return `${owner}'s route chapter, toward stage ${chapter.stage} (${stageTitle(chapter.stage)})`;
@@ -721,7 +736,7 @@ function arcPlanFields(world: Pick<World, "content">): string[] {
     "FIELDS",
     "- title: the chapter's name, 2 to 6 words. summary: one or two lines on what the chapter is about, without giving away its turns (the player reads it).",
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the chapter really holds; [] when none apply.`,
-    "- nodes: kind beat is an ordinary scene. kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a phone call), date (a date that goes wrong). kind confrontation is an argument that comes to a head, played as three rounds of stances.",
+    "- nodes: kind beat is an ordinary scene. kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a call from afar, only voices), date (a date that goes wrong). kind confrontation is an argument that comes to a head, played as three rounds of stances.",
     `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: the ids of the love interests present. place: where it opens (optional). cg: true only for a node holding a story-defining image${firstNightCg(world) ? " (under this Heat, a first night together counts)" : ""}. resolves: ids of open grievances this node may resolve.`,
     `- ledger.relationship: one line on what moved between them and the protagonist. ledger.conflict: plant a new conflict seed (type from: ${ANGST_TYPES.join(", ")}), or escalate, complicate or resolve an open one by its id. ledger.offscreen: optional lines for love interests not in this chapter.`,
   ];
@@ -803,7 +818,7 @@ export function routePlanMessages(input: RoutePlanInput): OtomeMessage[] {
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: units.map((item) => ({ name: item.name })), kind: "planner" }),
   ]
@@ -852,7 +867,7 @@ export function repairPlanMessages(input: RepairPlanInput): OtomeMessage[] {
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: units.map((item) => ({ name: item.name })), kind: "planner" }),
   ].join("\n");
@@ -946,7 +961,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     "- Honour the story so far; never contradict it or undo a choice already made. Stay within this node's guide.",
     `- Write every segment's text, label, selection, grievance and disclosure in ${world.language}; tags${node.cg ? " and the cg brief" : ""} in English.`,
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: present.map((unit) => ({ name: unit.name })), kind: "scene" }),
   ]

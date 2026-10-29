@@ -514,6 +514,7 @@ const addedCalls = [
   "post /slurp2/slurp/accounts/${encodeURIComponent(accountId)}/strategy/suggest",
   "upload /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/image-upload",
   "get /slurp2/settings/carryover-reach",
+  "get /slurp2/settings/memory-status",
 ];
 const removedCalls = [
   // The staging ads-pool GET went with the removed useSlurpAdPool hook (0.3.9).
@@ -578,8 +579,8 @@ assert.deepEqual(
     useMutation: 231,
     // 0.3.28: +2 (the import and the one query of SlpMessageDeepDetails). 0.3.42: +1 (carryover reach).
     // 0.3.44: +2 (the import and the trends row query).
-    // 0.3.63: +1 (its useQueryClient).
-    useQuery: 309,
+    // 0.3.63: +1 (its useQueryClient). Long-Term Memory recall: +1 (useSlurpMemoryStatus).
+    useQuery: 310,
     useInfiniteQuery: 9,
     // 0.3.35: +2 (adding a Creator refreshes the settings, which now hold the image name choice).
     // Configurator: +1 (an extension switch drops the cached feed, trend and Stir reads).

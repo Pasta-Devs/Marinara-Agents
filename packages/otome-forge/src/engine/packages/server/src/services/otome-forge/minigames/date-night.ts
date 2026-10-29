@@ -76,21 +76,14 @@ import {
   STARLIGHT_EARNINGS,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
 import { sameName } from "../../../../../client/src/features/otome-forge/shared/faces.js";
-import { galleryRef, type ImageClient, type ImageSubject } from "../art/image-client.js";
+import { galleryRef, worldStyle, type ImageClient, type ImageSubject } from "../art/image-client.js";
 import { imagesOf, type ArtDeps } from "../art/paint.js";
 import { SCENE_SIZE, keepsakePrompt, type ImagePrompt, type KeepsakePerson } from "../art/prompts.js";
 import { otomeContentContract, otomeContractReminder } from "../content-contract.js";
 import { generateJson, runForeground, type OtomeMessage } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
 import { chapterId, runDocTarget, stateId } from "../ids.js";
-import {
-  STATE_LIMITS,
-  defaultLiState,
-  keepNewest,
-  normalizeState,
-  readRun,
-  type RunDocuments,
-} from "../schemas/state.js";
+import { defaultLiState, keepTimeline, normalizeState, readRun, type RunDocuments } from "../schemas/state.js";
 import { normalizeChapter } from "../schemas/story.js";
 import { applyChoiceEffects } from "../state/relationship.js";
 import { grant } from "../state/rewards.js";
@@ -242,7 +235,7 @@ export function datePlanMessages({
     `- Write the title, the place and every guide in ${world.language}; the keepsake brief in English.`,
     "- Omit an optional field rather than writing null.",
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "planner" }),
   ].join("\n");
@@ -640,10 +633,10 @@ function withFirstDate(state: RunState, li: LiId, chapter: Chapter, at: string):
   return {
     ...state,
     lis: { ...state.lis, [li]: { ...current, firsts: { ...current.firsts, date: at } } },
-    timeline: keepNewest(
-      [...state.timeline, { at, li, kind: "first-date", text: chapter.title.slice(0, 600), ref: chapter.key }],
-      STATE_LIMITS.timeline,
-    ),
+    timeline: keepTimeline([
+      ...state.timeline,
+      { at, li, kind: "first-date", text: chapter.title.slice(0, 600), ref: chapter.key },
+    ]),
   };
 }
 
@@ -754,7 +747,7 @@ export async function keepsakePromptFor(
   edited: Partial<ImagePrompt> = {},
 ): Promise<ImagePrompt> {
   const { run, plan, people } = await keepsakeSubject(deps, runId, key);
-  const style = await imagesOf(deps).styleProfile(run.world.images.styleProfileId);
+  const style = await worldStyle(imagesOf(deps), run.world.images);
   return keepsakePrompt({ brief: plan.keepsake.brief, people, world: run.world, style }, edited);
 }
 
@@ -788,7 +781,7 @@ export async function paintKeepsake(
     const latest = (await readChapter(deps.store, runId, key))?.date?.keepsake.art;
     if (latest?.state === "ready") return latest;
     const images = imagesOf(deps);
-    const style = await images.styleProfile(run.world.images.styleProfileId);
+    const style = await worldStyle(images, run.world.images);
     const built = keepsakePrompt(
       { brief: plan.keepsake.brief, people, world: run.world, style },
       { prompt, negativePrompt },
