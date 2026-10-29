@@ -131,6 +131,7 @@ async function wardrobeHome(
   }));
   const faces: string[] = [];
   const art: OtomeArt = {
+    repaintExpressions: async () => assert.fail("Home reads must not repaint expressions"),
     queueExpressions: (_runId, beat) => void faces.push(...beat.segments.map((segment) => segment.speaker)),
     queueScenePaints: async () => undefined,
     releaseBeatArt: async () => undefined,

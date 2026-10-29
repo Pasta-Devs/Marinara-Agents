@@ -29,6 +29,21 @@ import { patchRun, runQueryKey, useRun, useSampledAccents } from "../hooks/use-r
 import { accentOf } from "../lib/accent";
 import { useOtomeProps } from "../props";
 import type { ForgeStatus, ForgeStep, ForgeStepState, Paint, RunView } from "../shared/api-types";
+import { FACES, type Face } from "../shared/faces";
+
+const FACE_LABELS: Record<Face, string> = {
+  tender: "ui.otomeForge.reader.faceTender",
+  flustered: "ui.otomeForge.reader.faceFlustered",
+  cold: "ui.otomeForge.reader.faceCold",
+  hurt: "ui.otomeForge.reader.faceHurt",
+  angry: "ui.otomeForge.reader.faceAngry",
+};
+interface ExpressionReview {
+  li: string;
+  base: string;
+  prompts: Record<Face, ImagePrompt>;
+  index: number;
+}
 
 const STATE_ICONS: Record<ForgeStepState, LucideIcon> = {
   pending: Hourglass,
@@ -76,6 +91,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
   const [reviewQueue, setReviewQueue] = useState<string[]>([]);
   const [reviewPrompt, setReviewPrompt] = useState<ImagePrompt | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [expressionReview, setExpressionReview] = useState<ExpressionReview | null>(null);
 
   const view = run.data;
   if (!view) {
@@ -155,7 +171,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
     void loadReview(stepIds[0]!);
   };
 
-  const reviewOpen = reviewQueue.length > 0;
+  const reviewOpen = reviewQueue.length > 0 || expressionReview !== null;
   const startPainting = () => {
     if (!waiting.length || busy || reviewOpen) return;
     setErrorAt("offer");
@@ -195,6 +211,60 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
       setBusy(null);
       void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
     }
+  };
+
+  const sendExpressions = async (li: string, reviewed?: ExpressionReview) => {
+    setBusy(`expressions:${li}`);
+    setError(null);
+    setReviewError(null);
+    try {
+      const { paint } = await otome.post<{ paint: Paint }>(`${base}/art/expressions`, {
+        li,
+        ...(reviewed ? { base: reviewed.base, prompts: reviewed.prompts } : {}),
+      });
+      if (paint.state !== "ready") {
+        const message = t("ui.otomeForge.setup.repaintFailed");
+        const detail = debugMode && paint.error ? `${message} (${paint.error})` : message;
+        if (reviewed) setReviewError(detail);
+        else setError(detail);
+      } else setExpressionReview(null);
+    } catch (failure) {
+      if (reviewed) setReviewError(otome.errorMessage(failure));
+      else setError(otome.errorMessage(failure));
+    } finally {
+      setBusy(null);
+      void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) });
+    }
+  };
+
+  const repaintExpressions = async (li: string) => {
+    if (busy || reviewOpen) return;
+    setErrorAt("steps");
+    setError(null);
+    if (!reviewImagePromptsBeforeSend) return sendExpressions(li);
+    setBusy("review");
+    setReviewError(null);
+    try {
+      const preview = await otome.post<Omit<ExpressionReview, "li" | "index">>(`${base}/art/expressions/prompt`, {
+        li,
+      });
+      setExpressionReview({ ...preview, li, index: 0 });
+    } catch (failure) {
+      setError(otome.errorMessage(failure));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const reviewExpression = (prompt: ImagePrompt) => {
+    if (!expressionReview || busy) return;
+    const updated = {
+      ...expressionReview,
+      prompts: { ...expressionReview.prompts, [FACES[expressionReview.index]!]: prompt },
+    };
+    setExpressionReview(updated);
+    if (updated.index < FACES.length - 1) setExpressionReview({ ...updated, index: updated.index + 1 });
+    else void sendExpressions(updated.li, updated);
   };
 
   const nextReview = () => {
@@ -270,6 +340,9 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
         {steps.map((step) => {
           const Icon = STATE_ICONS[step.state];
           const name = nameOfStep(step);
+          const expressionLi = view.world.images.expressions
+            ? view.lis.find((li) => `paint:${li.id}` === step.id && (li.worn || li.portrait))
+            : undefined;
           return (
             <li key={step.id} className="of-forge-step" data-state={step.state}>
               <span className="of-forge-icon" aria-hidden="true">
@@ -300,18 +373,39 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
                   {isPaint(step) ? <CostHint images={1} /> : null}
                 </span>
               ) : step.state === "done" && isPaint(step) && hasImages ? (
-                <span className="of-forge-retry">
-                  <button
-                    type="button"
-                    className="of-button of-button--quiet of-glass of-button--small"
-                    aria-disabled={!!busy || reviewOpen}
-                    aria-label={t("ui.otomeForge.setup.forgeRepaintStep", { step: name })}
-                    onClick={() => void repaint(step)}
-                  >
-                    <Paintbrush size={14} strokeWidth={2.2} aria-hidden="true" />
-                    {busy === step.id ? t("ui.otomeForge.setup.repainting") : t("ui.otomeForge.setup.repaint")}
-                  </button>
-                  <CostHint images={1} />
+                <span className={`of-forge-retry${expressionLi ? " of-forge-retry--paints" : ""}`}>
+                  <span className="of-forge-retry">
+                    <button
+                      type="button"
+                      className="of-button of-button--quiet of-glass of-button--small"
+                      aria-disabled={!!busy || reviewOpen}
+                      aria-label={t("ui.otomeForge.setup.forgeRepaintStep", { step: name })}
+                      onClick={() => void repaint(step)}
+                    >
+                      <Paintbrush size={14} strokeWidth={2.2} aria-hidden="true" />
+                      {busy === step.id ? t("ui.otomeForge.setup.repainting") : t("ui.otomeForge.setup.repaint")}
+                    </button>
+                    <CostHint images={1} />
+                  </span>
+                  {expressionLi ? (
+                    <span className="of-forge-retry">
+                      <button
+                        type="button"
+                        className="of-button of-button--quiet of-glass of-button--small"
+                        aria-disabled={!!busy || reviewOpen}
+                        aria-label={t("ui.otomeForge.setup.repaintExpressionsLabel", {
+                          name: expressionLi.name,
+                        })}
+                        onClick={() => void repaintExpressions(expressionLi.id)}
+                      >
+                        <Paintbrush size={14} strokeWidth={2.2} aria-hidden="true" />
+                        {busy === `expressions:${expressionLi.id}`
+                          ? t("ui.otomeForge.setup.repainting")
+                          : t("ui.otomeForge.setup.repaintExpressions")}
+                      </button>
+                      <CostHint images={FACES.length} />
+                    </span>
+                  ) : null}
                 </span>
               ) : null}
             </li>
@@ -393,6 +487,30 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
           error={reviewError}
           onSend={(prompt) => void sendReviewed(prompt)}
           onSkip={nextReview}
+        />
+      ) : null}
+      {expressionReview ? (
+        <PromptReviewDialog
+          key={`${expressionReview.li}:${expressionReview.index}`}
+          subject={t("ui.otomeForge.setup.reviewExpressionSubject", {
+            name: view.lis.find((li) => li.id === expressionReview.li)?.name,
+            face: t(FACE_LABELS[FACES[expressionReview.index]!]),
+            index: expressionReview.index + 1,
+            total: FACES.length,
+          })}
+          initial={expressionReview.prompts[FACES[expressionReview.index]!]}
+          busy={busy !== null}
+          error={reviewError}
+          onSend={reviewExpression}
+          onSkip={() => setExpressionReview(null)}
+          sendLabel={t(
+            expressionReview.index < FACES.length - 1
+              ? "ui.otomeForge.setup.reviewExpressionsNext"
+              : "ui.otomeForge.setup.reviewExpressionsSend",
+          )}
+          skipLabel={t("ui.otomeForge.setup.reviewExpressionsCancel")}
+          hint={t("ui.otomeForge.setup.reviewExpressionsHint")}
+          images={FACES.length}
         />
       ) : null}
     </div>
