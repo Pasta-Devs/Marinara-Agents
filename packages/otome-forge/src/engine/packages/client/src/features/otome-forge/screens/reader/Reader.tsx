@@ -223,8 +223,16 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   // Whom a Confrontation faces: the opponent the server set (not whoever spoke last), else the chapter's own.
   const facingId = reader.confrontation?.li ?? chapter?.li ?? chapter?.lead;
   const facing = view.lis.find((li) => li.id === facingId) ?? null;
-  // The refreshed run view keeps cleaned faces and their whole-sprite framing metadata together.
-  const onStageLi = reader.onStage.li;
+  // Phone stickers may use uncut originals. The stage accepts only faces authorized by the run's cutout metadata.
+  const stageLi = reader.onStage.li;
+  const onStageLi = stageLi
+    ? {
+        ...stageLi,
+        expressions: Object.fromEntries(
+          Object.entries(stageLi.expressions ?? {}).filter(([, url]) => !!url && stageLi.cut?.includes(url)),
+        ),
+      }
+    : null;
 
   // Each new line is voiced when the settings voice its speaker; leaving the line stops it. Narration, thoughts and
   // the aftermath line never are.

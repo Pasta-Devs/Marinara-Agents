@@ -129,7 +129,8 @@ test("a newly cached expression is queued once and enters the stage map only aft
   assert.deepEqual(cuts.calls, [FACE], "repeated scene polls share the same cleanup");
   const pendingRun = await t.run();
   const li = pendingRun.lis.find((entry: { id: string }) => entry.id === KAI);
-  assert.equal(li.expressions?.cold, undefined, "run refresh cannot leak the raw face either");
+  assert.equal(li.expressions?.cold, FACE, "phone stickers retain the painted face while free cleanup is pending");
+  assert.ok(!li.cut.includes(FACE), "an opaque original is never authorized as a stage cutout");
   assert.equal(li.worn.url, clean(WORN), "the clean neutral look remains the fallback");
   cuts.release();
   await cutoutsSettled();
@@ -164,7 +165,8 @@ test("failed free cleanup keeps the clean neutral fallback and stops expression 
     assert.ok(!scene.facesComing.includes(KAI), "a failed cleanup is terminal for this revision");
     const view = await t.run();
     const li = view.lis.find((entry: { id: string }) => entry.id === KAI);
-    assert.equal(li.expressions?.cold, undefined);
+    assert.equal(li.expressions?.cold, FACE, "phone stickers retain the painted face after cleanup fails");
+    assert.ok(!li.cut.includes(FACE), "failed cleanup never authorizes the original as a stage cutout");
     assert.equal(li.worn.url, clean(WORN));
     assert.equal(view.cutoutsPending, undefined);
   }

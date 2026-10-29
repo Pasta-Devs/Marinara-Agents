@@ -1074,6 +1074,62 @@ for (const images of [true, false]) {
   }
 }
 
+for (const cleanup of ["pending", "failed"] as const) {
+  test(`Otome Hearth phone stickers keep their original face when cleanup is ${cleanup}`, async ({
+    page,
+  }, testInfo) => {
+    const stub = createHomeStub({ faceCutouts: true });
+    stub.notes.set(ILVAR, {
+      li: ILVAR,
+      dayKey: new Date().toISOString().slice(0, 10),
+      text: NOTE,
+      face: "tender",
+      mood: { word: "fond", reason: "You came back" },
+      curt: false,
+      at: new Date().toISOString(),
+    });
+    const answer = stub.answer;
+    stub.answer = async (call) => {
+      const response = await answer(call);
+      if (call.path === `/api/otome-forge/runs/${RUN}`) {
+        const view = (response.json as Json).view;
+        Object.assign(view.lis[0], { portrait: PORTRAIT_CUT, expressions: { tender: TENDER }, cut: [PORTRAIT_CUT] });
+        view.cutoutsPending = cleanup === "pending";
+      }
+      if (call.path.endsWith("/home")) {
+        (response.json as Json).faces = {
+          tender: { url: TENDER, cutoutState: cleanup === "pending" ? "pending" : "uncut" },
+        };
+      }
+      if (call.path === `/api/otome-forge/runs/${RUN}/phone/${ILVAR}`) {
+        const messages = (response.json as Json).messages;
+        Object.assign(messages.at(-1), { text: "", sticker: "tender" });
+      }
+      return response;
+    };
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+    await stubRoutes(page, stub, []);
+    const root = await openHome(page);
+    await expect(root.locator(".of-figure-img").last()).toHaveAttribute("src", PORTRAIT_CUT);
+    await expect(root.locator(`.of-figure-img[src="${TENDER}"]`)).toHaveCount(0);
+    await root.getByRole("button", { name: /Messages/ }).click();
+    await root
+      .locator(".of-threads")
+      .getByRole("button", { name: /Ilvar Thorne/ })
+      .click();
+    const log = root.getByRole("list", { name: "Messages with Ilvar Thorne" });
+    await expect(log.getByRole("img", { name: "Sticker: Tender" })).toHaveAttribute("src", TENDER);
+    await expect(log.getByRole("img", { name: "Sticker: Tender" })).toBeVisible();
+    await root.getByRole("button", { name: "Stickers" }).click();
+    const choice = root.getByRole("button", { name: "Send the Tender sticker" });
+    await expect(choice).toBeVisible();
+    await expect(choice.locator("img")).toHaveAttribute("src", TENDER);
+    await page.screenshot({ path: testInfo.outputPath(`phone-original-sticker-${cleanup}.png`) });
+    expect(posts(stub, "/send")).toHaveLength(0);
+    expect(stub.calls.filter((call) => call.method === "POST" && call.path.includes("/art/"))).toHaveLength(0);
+  });
+}
+
 for (const outcome of ["ready", "uncut", "load-error"] as const) {
   test(`Otome Hearth Home expressions retain a clean neutral when cleanup is ${outcome}`, async ({
     page,
@@ -1097,7 +1153,7 @@ for (const outcome of ["ready", "uncut", "load-error"] as const) {
       const response = await answer(call);
       if (call.path === `/api/otome-forge/runs/${RUN}`) {
         const view = (response.json as Json).view;
-        view.lis[0].expressions = {};
+        view.lis[0].expressions = { tender: TENDER };
         view.lis[0].cut = [PORTRAIT_CUT];
       }
       if (call.path.endsWith("/home")) {

@@ -501,8 +501,13 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
           if (cutout) cut.push(cutout);
           return cutout ?? url;
         };
-        const expressions = cleanedFaces(world, unit);
-        if (expressions) cut.push(...Object.values(expressions));
+        // Phone stickers keep the original while cleanup waits or fails; only URLs in `cut` may stand on stage.
+        const faces = readyFaces(world, unit);
+        const expressions = faces
+          ? (Object.fromEntries(
+              Object.entries(faces).map(([face, url]) => [face, url ? shown(url) : url]),
+            ) as typeof faces)
+          : undefined;
         const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
         const portrait = unit.portrait ? shown(unit.portrait) : undefined;
         const wornUrl = worn ? shown(worn.url) : undefined;

@@ -852,7 +852,8 @@ for (const outcome of ["ready", "uncut"] as const) {
         view.cutoutsPending = phase === "pending";
         Object.assign(view.lis[0], {
           portrait: neutral,
-          expressions: phase === "ready" ? { cold: clean } : {},
+          // Stickers still receive the original while cleanup waits or fails; the reader must filter it by `cut`.
+          expressions: { cold: phase === "ready" ? clean : raw },
           cut: phase === "ready" ? [neutral, clean] : [neutral],
         });
       }
