@@ -72,6 +72,30 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.1.10",
+          "date": "2026-10-29",
+          "notes": "- Repaint a love interest’s five expressions for their current look from Your cast, with a five-image cost and all prompts reviewed before painting when prompt review is enabled. Existing artwork stays available during replacement or after a failure.\n- Expression generation preserves the configured image style for both prose and tag-based profiles. Reviewed prompts stay bound to the look they were written for, with their full text and required safety wording retained.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.9",
+          "date": "2026-10-29",
+          "notes": "- Chapter, scene, route and date writers now receive the selected persona’s full Description, Personality, Backstory and authored Appearance, including on existing runs. Their authored facts stay distinct from image-only appearance overrides; roleplay scenarios and dialogue examples are excluded.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.8",
+          "date": "2026-10-29",
+          "notes": "- Music settings can give every chapter its own saved theme. Enable chapter themes with music generation on; each theme is generated when reading starts and reused on replay.",
+          "highlight": false
+        },
+        {
+          "version": "0.1.7",
+          "date": "2026-10-29",
+          "notes": "- Chapter and Home expressions keep the clean neutral sprite visible until free background cleanup is ready, instead of showing a green original. Saved and newly painted expressions share the repair, with their originals, outfits and story progress retained.",
+          "highlight": false
+        },
+        {
           "version": "0.1.6",
           "date": "2026-10-29",
           "notes": "- Mobile reader controls now show mute, fullscreen, then More, with centered icons and the secondary controls aligned directly below More.\n- A thought's closing parenthesis now appears when the line finishes typing.\n- Removed the daily-storage caption beneath a generated period-day caring message.",

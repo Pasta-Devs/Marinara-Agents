@@ -213,7 +213,7 @@ const SAFE = "child, childlike, minor, underage, school uniform, nudity, nsfw, s
 const FACE =
   "Edit the reference image of Kai: change ONLY the facial expression, to a tender expression: softened eyes, a faint warm smile. Keep everything else exactly as in the reference: the same character, face, hair, body, outfit, pose, framing, background, lighting and art style. Permanent features: tall man, grey eyes.";
 
-test("SFW images: looks, places, CGs and faces send the prompts and negatives they sent before", () => {
+test("SFW images keep their safety prompts and negatives, and tagged faces retain the configured style", () => {
   const { world } = inputs(defaultContent());
   const plain = { styleText: "", positiveTags: "", negativeTags: "" };
   const tagged = { styleText: "anime screencap", positiveTags: "masterpiece", negativeTags: "lowres", tagged: true };
@@ -289,7 +289,7 @@ test("SFW images: looks, places, CGs and faces send the prompts and negatives th
       face: { prompt: `${FACE} safe for work, fully clothed, adult man.`, negativePrompt: SAFE },
       faceTagged: {
         prompt:
-          "masterpiece, tall man, grey eyes, gentle smile, soft eyes, same character, same outfit, same pose, same framing, same background, same lighting, safe for work, fully clothed, adult man",
+          "anime screencap, masterpiece, tall man, grey eyes, gentle smile, soft eyes, same character, same outfit, same pose, same framing, same background, same lighting, safe for work, fully clothed, adult man",
         negativePrompt: `${SAFE}, lowres`,
       },
     },

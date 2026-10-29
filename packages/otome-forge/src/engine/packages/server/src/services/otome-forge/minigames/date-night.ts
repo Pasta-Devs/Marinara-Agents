@@ -92,6 +92,7 @@ import type { OtomeStore } from "../store.js";
 import { canonPicks, type BeatDeps } from "../story/beats.js";
 import { canonicalSegments, readBeat, readChapter, recallText } from "../story/canon.js";
 import { ANGST_TYPES, CHAPTER_TAGS, bibleBlock, ownView, protagonistBlock } from "../story/prompts.js";
+import { withPersonaStoryAbout } from "../setup/prompts.js";
 import { otomeWritingRules } from "../writing-rules.js";
 
 export type DateDeps = BeatDeps & {
@@ -533,7 +534,7 @@ export async function startDate(
       label: `date-plan/${key}`,
       messages: datePlanMessages({
         world: run.world,
-        player: run.player,
+        player: await withPersonaStoryAbout(deps.runtime, run.player),
         unit,
         state: run.state,
         place: input.place,

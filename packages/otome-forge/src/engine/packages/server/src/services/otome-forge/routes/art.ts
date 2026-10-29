@@ -16,11 +16,12 @@
 // The looks' own art routes are M1's (routes/setup.ts).
 import { z } from "zod";
 import type { SceneArt } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
+import { cutoutsPending, queueCutouts } from "../art/cutout.js";
 import { cgPromptFor, cgView, markCgSeen, paintCgNow } from "../art/cg.js";
 import { paintPlaceNow, placePromptFor, readPlace, withPlaceViews } from "../art/places.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type OtomeRequest, type RegisterRoutes } from "../http.js";
 import { isChapterKey } from "../ids.js";
-import { facesComing, readRun, readyFaces } from "../schemas/state.js";
+import { cleanedFaces, facesComing, readRun, stageArtUrls } from "../schemas/state.js";
 import { toWorldView } from "../schemas/world.js";
 import { readBeat } from "../story/canon.js";
 
@@ -64,16 +65,21 @@ export const registerArtRoutes: RegisterRoutes = (router, deps) => {
       const [run, beat] = await Promise.all([readRun(store, runId), readBeat(store, runId, key, i)]);
       if (!run) throw runNotFound();
       if (!beat) throw new OtomeForgeError(404, "No such beat.", "not-found");
+      const units = await Promise.all(
+        run.units.map((unit) => queueCutouts(deps, runId, unit, stageArtUrls(run.world, unit))),
+      );
       const faces: SceneArt["faces"] = {};
-      for (const unit of run.units) {
-        const ready = readyFaces(run.world, unit);
+      for (const unit of units) {
+        const ready = cleanedFaces(run.world, unit);
         if (ready) faces[unit.id] = ready;
       }
       const scene: SceneArt = {
         places: beat.places.map((place) => readPlace(run.world, runId, place.name) ?? place),
         cg: cgView(runId, beat),
         faces,
-        facesComing: run.units.filter((unit) => facesComing(run.world, unit)).map((unit) => unit.id),
+        facesComing: units
+          .filter((unit) => facesComing(run.world, unit) || cutoutsPending(runId, [unit]))
+          .map((unit) => unit.id),
       };
       return scene;
     }),

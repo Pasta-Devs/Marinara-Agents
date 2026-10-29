@@ -675,6 +675,7 @@ ${R} .of-forge-step[data-state="failed"] .of-forge-state { color: var(--of-dange
 ${R} .of-forge-why { font-size: 0.78rem; color: var(--of-text-soft); }
 ${R} .of-forge-error { font-family: ui-monospace, Menlo, monospace; font-size: 0.7rem; color: var(--of-text-faint); overflow-wrap: anywhere; }
 ${R} .of-forge-retry { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+${R} .of-forge-retry--paints { grid-column: 2 / -1; flex-direction: row; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: 10px; }
 ${R} .of-paint-offer { align-items: center; text-align: center; }
 ${R} .of-paint-offer > .of-button { align-self: center; }
 ${R} .of-cast {

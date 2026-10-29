@@ -23,9 +23,11 @@ import type {
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
 import { MUSIC_MEDIUM, MUSIC_SCENES } from "../../../../../client/src/features/otome-forge/shared/cues.js";
 import { MUSIC_MOODS, type MusicMood } from "../../../../../client/src/features/otome-forge/shared/faces.js";
-import { generateJson, type GenerationDeps } from "../generation.js";
+import { chapterMusicCue } from "../../../../../client/src/features/otome-forge/shared/audio.js";
+import { generateJson, readOrGenerate, type GenerationDeps } from "../generation.js";
 import { OtomeForgeError } from "../http.js";
-import { OTOME_FORGE_PACKAGE_ID, runDocTarget, worldId } from "../ids.js";
+import { OTOME_FORGE_PACKAGE_ID, chapterId, runDocTarget, worldId } from "../ids.js";
+import { normalizeChapter } from "../schemas/story.js";
 import { keepNewest } from "../schemas/state.js";
 import { TRACKS_MAX, normalizeWorld } from "../schemas/world.js";
 import type { OtomeStore } from "../store.js";
@@ -137,4 +139,78 @@ export function recordTrack(audio: WorldAudio, runId: string, track: SoundtrackT
 export function audioView(audio: WorldAudio): Omit<WorldAudio, "briefs"> {
   const { briefs: _briefs, ...rest } = audio;
   return { ...rest, tracks: playableTracks(audio) };
+}
+
+/** A chapter's brief uses only the same public metadata shown before reading, never its hidden plan. */
+export async function chapterMusicBrief(
+  deps: MusicDeps,
+  runId: string,
+  key: string,
+  debugMode: boolean,
+): Promise<string> {
+  const allowedWorld = async () => {
+    const world = await deps.store.readDoc(worldId(runId), normalizeWorld);
+    if (!world) throw new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
+    if (!world.audio.generate || !world.audio.chapterThemes || world.audio.muted || world.audio.musicVolume <= 0)
+      throw new OtomeForgeError(409, "Chapter music generation is off or muted.", "conflict");
+    return world;
+  };
+  await allowedWorld();
+  const target = runDocTarget("chapter", chapterId(runId, key));
+  const readChapter = () => deps.store.readDoc(target.id, normalizeChapter);
+  if (!(await readChapter())) throw new OtomeForgeError(404, "No such chapter.", "not-found");
+  return readOrGenerate(
+    runId,
+    async () => (await readChapter())?.music?.prompt ?? null,
+    async () => {
+      const world = await allowedWorld();
+      const chapter = await readChapter();
+      if (!chapter) throw new OtomeForgeError(404, "No such chapter.", "not-found");
+      const scenario = `${musicScenario(world)}\n\n${JSON.stringify({
+        chapter: chapter.title,
+        kind: chapter.kind,
+        summary: chapter.summary,
+        tags: chapter.tags,
+      })}`;
+      const { value } = await generateJson(deps, {
+        runId,
+        job: "structured",
+        label: `chapter-music-brief/${key}`,
+        messages: forgeMusicBriefMessages({ scenario }, "chapter", null, {
+          scenes: {
+            chapter:
+              "a distinctive recurring theme for this entire chapter, reflecting its public summary and emotional arc",
+          },
+          medium: MUSIC_MEDIUM,
+        }),
+        schema: BriefSchema,
+        normalize: (reply) => normalizeForgeMusicPrompt(reply) ?? "prompt must be one non-empty musical brief",
+        temperature: 0.7,
+        maxTokens: 8192,
+        debugMode,
+        lane: "foreground",
+      });
+      const saved = await deps.store.updateDoc(target, normalizeChapter, (current) =>
+        !current || current.music?.prompt
+          ? current
+          : { ...current, music: { ...current.music, prompt: value.prompt.trim() } },
+      );
+      if (!saved?.music?.prompt) throw new OtomeForgeError(404, "No such chapter.", "not-found");
+      return saved.music.prompt;
+    },
+  );
+}
+
+/** Keep the first chapter-owned track; replay and later audio settings never evict it with the mood cache. */
+export async function recordChapterTrack(deps: MusicDeps, runId: string, key: string, track: SoundtrackTrack) {
+  const soundtrack = { audioTracks: [] as SoundtrackTrack[] };
+  if (!recordForgeSoundtrack(soundtrack, runId, track, { scope: OTOME_FORGE_PACKAGE_ID, cues: [chapterMusicCue(key)] }))
+    throw new OtomeForgeError(400, "That track was not generated for this chapter.", "bad-request");
+  const saved = await deps.store.updateDoc(
+    runDocTarget("chapter", chapterId(runId, key)),
+    normalizeChapter,
+    (current) => (!current || current.music?.track ? current : { ...current, music: { ...current.music, track } }),
+  );
+  if (!saved?.music?.track) throw new OtomeForgeError(404, "No such chapter.", "not-found");
+  return saved.music.track;
 }

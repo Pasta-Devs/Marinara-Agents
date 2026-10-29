@@ -71,7 +71,7 @@ import {
 } from "../schemas/world.js";
 import { checkBible } from "../setup/bible.js";
 import { initialForge, settleForge, startForge, withPaintSteps } from "../setup/forge.js";
-import { readCard, readPersona } from "../setup/prompts.js";
+import { personaStoryAbout, readCard, readPersona, withPersonaStoryAbout } from "../setup/prompts.js";
 import type { OtomeStore } from "../store.js";
 import { cutoutsPending, queueCutouts } from "../art/cutout.js";
 
@@ -159,14 +159,14 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
   const { runtime, store, handle } = deps;
 
   /**
-   * A story made before 0.1.1 has no copy of its persona's description: the first open reads it (whole) and keeps it,
-   * so every prompt from then on carries it. "" marks a persona with none, or one that is gone.
+   * Keep the selected persona's four authored story fields current, including saves which only kept Description.
+   * A missing persona retains this protagonist's last saved copy; no other persona is substituted.
    */
   const withPersonaAbout = async (run: RunDocuments, runId: string): Promise<RunDocuments> => {
-    if (run.player.about !== undefined) return run;
-    const about = (await readPersona(runtime, run.player.personaId))?.description ?? "";
+    const about = (await withPersonaStoryAbout(runtime, run.player)).about ?? "";
+    if (run.player.about === about) return run;
     const player = await store.updateDoc(runDocTarget("player", playerId(runId)), normalizePlayer, (current) =>
-      current.about === undefined ? { ...current, about } : current,
+      current.personaId === run.player.personaId ? { ...current, about } : current,
     );
     return player ? { ...run, player } : run;
   };
@@ -218,7 +218,7 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
         ...player,
         personaId: protagonist.personaId,
         name: persona.name,
-        about: persona.description,
+        about: personaStoryAbout(persona),
         pronouns: protagonist.pronouns,
         traits: protagonist.traits.map((trait) => trait.trim()).filter(Boolean),
         goal: protagonist.goal.trim(),

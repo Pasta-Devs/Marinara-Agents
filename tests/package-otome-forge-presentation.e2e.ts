@@ -187,7 +187,14 @@ function readResult(stub: { view: Json }, grants: Json[] = [], extra: Json = {})
   return { grants, starlight: stub.view.starlight, chapterDone: false, ...extra };
 }
 
-type Answer = { status: number; json?: unknown; body?: Buffer; contentType?: string; delay?: number };
+type Answer = {
+  status: number;
+  json?: unknown;
+  body?: Buffer;
+  contentType?: string;
+  delay?: number;
+  wait?: Promise<void>;
+};
 
 async function stubRoutes(page: Page, answer: (call: Call) => Answer | undefined, calls: Call[]) {
   await page.route("**/api/app-settings/ui", (route) =>
@@ -226,6 +233,7 @@ async function stubRoutes(page: Page, answer: (call: Call) => Answer | undefined
       status: 404,
       json: { error: `No stub for ${call.method} ${call.path}`, code: "not-found" },
     };
+    if (reply.wait) await reply.wait;
     if (reply.delay) await new Promise((done) => setTimeout(done, reply.delay));
     if (reply.body) await route.fulfill({ status: reply.status, body: reply.body, contentType: reply.contentType });
     else await route.fulfill({ status: reply.status, json: reply.json });
@@ -236,7 +244,10 @@ async function stubRoutes(page: Page, answer: (call: Call) => Answer | undefined
 }
 
 /** `reviewPrompts`: the Engine's "Review image prompts before sending" is on. */
-async function openOtome(page: Page, { reviewPrompts = false }: { reviewPrompts?: boolean } = {}): Promise<Locator> {
+async function openOtome(
+  page: Page,
+  { reviewPrompts = false, recordMusic = false }: { reviewPrompts?: boolean; recordMusic?: boolean } = {},
+): Promise<Locator> {
   await page.addInitScript(
     ({ version, review }) => {
       localStorage.setItem("marinara:whats-new:seen-version", version);
@@ -256,6 +267,47 @@ async function openOtome(page: Page, { reviewPrompts = false }: { reviewPrompts?
     },
     { version: appVersion, review: reviewPrompts },
   );
+  if (recordMusic)
+    await page.addInitScript(() => {
+      // The host and its players are frozen. Observe their calls through a frozen forwarding facade at publication.
+      const events: string[] = [];
+      (globalThis as any).__otomeMusicEvents = events;
+      const define = Object.defineProperty;
+      Object.defineProperty = ((target: object, key: PropertyKey, descriptor: PropertyDescriptor) => {
+        if (target === globalThis && key === "__MARINARA_HOST__") {
+          Object.defineProperty = define;
+          const host = descriptor.value;
+          const audio = host.services.audio;
+          descriptor = {
+            ...descriptor,
+            value: Object.freeze({
+              ...host,
+              services: Object.freeze({
+                ...host.services,
+                audio: Object.freeze({
+                  ...audio,
+                  createPlayer: () => {
+                    const player = audio.createPlayer();
+                    return Object.freeze({
+                      ...player,
+                      playMusic: (tag: string, assets: unknown) => {
+                        events.push(tag);
+                        return player.playMusic(tag, assets);
+                      },
+                      stopMusic: (...args: unknown[]) => {
+                        events.push("STOP");
+                        return player.stopMusic(...args);
+                      },
+                    });
+                  },
+                }),
+              }),
+            }),
+          };
+        }
+        return define(target, key, descriptor);
+      }) as typeof Object.defineProperty;
+    });
   await page.goto("/");
   await page.getByRole("tab", { name: "Open Otome Hearth" }).click();
   const root = page.locator("marinara-capability-otome-forge .of-root");
@@ -293,6 +345,167 @@ const generatedCues = (calls: Call[]) =>
   posts(calls, "/api/audio/generate")
     .map((call) => /-([a-z]+)$/u.exec(call.body!.context.key)?.[1] ?? "")
     .sort();
+
+const REPAINT_FACES = ["tender", "flustered", "cold", "hurt", "angry"];
+const REPAINT_ERROR = "The new expressions didn’t finish. Your current artwork stays. Try Repaint expressions again.";
+
+function expressionRepaintFixture({ failFirst = false, wait }: { failFirst?: boolean; wait?: Promise<void> } = {}) {
+  const fixture = createSceneStub({ audio: false });
+  const { view } = fixture.stub;
+  const forge = { phase: "ready", steps: [{ id: `paint:${ILVAR}`, state: "done" }] };
+  view.forge = forge;
+  view.world.forge = forge;
+  Object.assign(view.lis[0], { portrait: FACE_COLD, cut: [FACE_COLD] });
+  const prompts = Object.fromEntries(
+    REPAINT_FACES.map((face) => [
+      face,
+      {
+        prompt: `Edit only the ${face} expression. Configured copper etching style.`,
+        negativePrompt: "lowres, child, underage",
+      },
+    ]),
+  );
+  const home = {
+    li: ILVAR,
+    show: "him",
+    note: {
+      li: ILVAR,
+      dayKey: now().slice(0, 10),
+      text: "Come inside.",
+      face: "",
+      mood: { word: "Fond", reason: "You came back" },
+      curt: false,
+      at: now(),
+    },
+    look: { url: FACE_COLD, source: "look", cutout: FACE_COLD, cutoutState: "ready" },
+    faces: {},
+    backdrop: null,
+    lines: { ready: false },
+    rupture: false,
+    unread: 0,
+    noticed: null,
+    noticing: false,
+  };
+  let attempts = 0;
+  const answer = (call: Call): Answer | undefined => {
+    if (call.path.endsWith("/art/expressions/prompt")) return { status: 200, json: { base: FACE_COLD, prompts } };
+    if (call.path.endsWith("/art/expressions")) {
+      attempts += 1;
+      return {
+        status: 200,
+        json: { paint: { state: failFirst && attempts === 1 ? "failed" : "ready", at: now() } },
+        wait,
+      };
+    }
+    if (call.path.endsWith("/home")) return { status: 200, json: home };
+    if (call.path.endsWith(`/lis/${ILVAR}/lines`))
+      return {
+        status: 200,
+        json: { ready: false, stage: 1, rupture: false, tap: null, annoyed: [], cold: [], comfort: [], claw: null },
+      };
+    return fixture.answer(call);
+  };
+  return { answer, view, prompts };
+}
+
+async function openRepaintCast(page: Page, reviewPrompts = false) {
+  const root = await openOtome(page, { reviewPrompts });
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  await page.getByRole("dialog", { name: "Who’s home" }).getByRole("button", { name: "Your cast" }).click();
+  await expect(root.getByRole("heading", { name: "Your story is ready", exact: true })).toBeVisible();
+  return root;
+}
+
+test("Otome Hearth expression repaint labels five images, shares busy controls and preserves the current look", async ({
+  page,
+}, testInfo) => {
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => (release = resolve));
+  const fixture = expressionRepaintFixture({ wait });
+  const calls: Call[] = [];
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  await stubRoutes(page, fixture.answer, calls);
+  try {
+    const root = await openRepaintCast(page);
+    const button = root.getByRole("button", { name: "Repaint expressions for Ilvar Thorne", exact: true });
+    const look = root.getByRole("button", { name: "Repaint Ilvar Thorne’s look", exact: true });
+    const actions = root.locator(".of-forge-retry--paints");
+    await expect(button).toBeVisible();
+    await expect(look).toBeVisible();
+    await expect(actions.getByText("Paints 1 image", { exact: true })).toBeVisible();
+    await expect(actions.getByText("Paints 5 images", { exact: true })).toBeVisible();
+    const original = await root.locator(".of-cast-card").first().locator("img").getAttribute("src");
+    const done = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/art/expressions"));
+    await button.click();
+    await expect(button).toBeDisabled();
+    await expect(look).toBeDisabled();
+    await expect.poll(() => posts(calls, "/art/expressions").length).toBe(1);
+    expect(posts(calls, "/art/expressions")[0]!.body).toMatchObject({ li: ILVAR });
+    expect(posts(calls, "/art/paint")).toEqual([]);
+    expect(posts(calls, "/art/expressions/prompt")).toEqual([]);
+    await expect(root.locator(".of-cast-card").first().locator("img")).toHaveAttribute("src", original!);
+    await page.screenshot({ path: testInfo.outputPath("expression-repaint-busy-midnight.png") });
+    release();
+    await (await done).finished();
+    await expect(button).toBeEnabled();
+    await expect(root.locator(".of-cast-card").first().locator("img")).toHaveAttribute("src", original!);
+    expect(posts(calls, "/art/expressions")).toHaveLength(1);
+    expect(errors).toEqual([]);
+  } finally {
+    release();
+  }
+});
+
+test("Otome Hearth expression repaint reviews five prompts before paying, cancels cleanly and retains edits after failure", async ({
+  page,
+}, testInfo) => {
+  const fixture = expressionRepaintFixture({ failFirst: true });
+  const calls: Call[] = [];
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openRepaintCast(page, true);
+  const repaint = root.getByRole("button", { name: "Repaint expressions for Ilvar Thorne", exact: true });
+  await repaint.click();
+  let dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading")).toContainText("tender (1 of 5)");
+  await dialog.getByRole("button", { name: "Cancel repaint", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(posts(calls, "/art/expressions")).toEqual([]);
+  await repaint.click();
+  const edited = `${"Keep the copper etching. ".repeat(200)}FINAL REVIEW WORDS`;
+  for (const [index, face] of REPAINT_FACES.entries()) {
+    dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading")).toContainText(`${face} (${index + 1} of 5)`);
+    await expect(dialog.getByText("Paints 5 images", { exact: true })).toBeVisible();
+    if (index === 0) {
+      await dialog.getByLabel("Prompt", { exact: true }).fill(edited);
+      await dialog.getByLabel("Negative prompt", { exact: true }).fill("Keep the edited negative whole.");
+    }
+    expect(posts(calls, "/art/expressions")).toEqual([]);
+    if (index < REPAINT_FACES.length - 1) await dialog.getByRole("button", { name: "Review next expression" }).click();
+  }
+  await page.screenshot({ path: testInfo.outputPath("expression-repaint-last-review-pearl.png") });
+  await dialog.getByRole("button", { name: "Repaint 5 expressions", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText(REPAINT_ERROR);
+  const first = posts(calls, "/art/expressions")[0]!.body!;
+  expect(first).toMatchObject({ li: ILVAR, base: FACE_COLD });
+  expect(Object.keys(first.prompts).sort()).toEqual([...REPAINT_FACES].sort());
+  expect(first.prompts.tender).toEqual({ prompt: edited, negativePrompt: "Keep the edited negative whole." });
+  expect(first.prompts.angry).toEqual(fixture.prompts.angry);
+  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(fixture.prompts.angry.prompt);
+  await page.screenshot({ path: testInfo.outputPath("expression-repaint-failure-pearl.png") });
+  await dialog.getByRole("button", { name: "Repaint 5 expressions", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(posts(calls, "/art/expressions")).toHaveLength(2);
+  expect(posts(calls, "/art/expressions")[1]!.body).toEqual(first);
+  expect(posts(calls, "/art/paint")).toEqual([]);
+  expect(posts(calls, "/api/audio/generate")).toEqual([]);
+  expect(errors).toEqual([]);
+});
 
 // ── Arcs ──
 
@@ -1364,7 +1577,9 @@ test("Otome Forge reader: a CG unlocks once seen, faces swap, lines are voiced, 
 }, testInfo) => {
   test.setTimeout(180_000);
   const calls: Call[] = [];
-  const { answer } = createSceneStub();
+  const { answer, stub } = createSceneStub();
+  // This positive presentation fixture represents faces whose cleanup is already complete.
+  stub.view.lis[0].cut = [FACE_COLD, FACE_TENDER, FACE_ANGRY, FACE_HURT];
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await stubRoutes(page, answer, calls);
@@ -1749,6 +1964,242 @@ test("Otome Forge audio: a recorded track the Engine no longer lists is made aga
     .toBe(true);
   expect(calls.filter((call) => call.path.endsWith("/gone.mp3"))).toEqual([]);
   expect(pageErrors).toEqual([]);
+});
+
+/** Two stored chapters with their own track records; every provider request remains stubbed. */
+function chapterMusicFixture(audio: Json = {}) {
+  const fixture = createSceneStub({
+    images: false,
+    audio: { tts: false, generate: true, chapterThemes: true, ...audio },
+  });
+  const tracks = new Map<string, Json>();
+  const music = new Map<string, Json>();
+  const answer = (call: Call): Answer | undefined => {
+    if (call.path.endsWith("/audio/brief") && call.body?.chapterKey)
+      return {
+        status: 200,
+        json: { prompt: `A distinctive instrumental clockwork theme for ${call.body.chapterKey}.` },
+      };
+    if (call.path.endsWith("/audio/track")) {
+      const { chapterKey, timeZone: _zone, debugMode: _debug, ...track } = call.body!;
+      tracks.set(track.tag, track);
+      if (chapterKey) {
+        if (!music.has(chapterKey)) music.set(chapterKey, track);
+        return { status: 200, json: { track: music.get(chapterKey) } };
+      }
+    }
+    const reply = fixture.answer({ ...call, path: call.path.replace("/chapters/main-2", "/chapters/main-1") });
+    if (call.path === "/api/game-assets/manifest" && reply?.json) {
+      const data = reply.json as Json;
+      for (const track of tracks.values()) data.assets[track.tag] = { path: track.path };
+    }
+    if (call.path.endsWith("/story") && reply?.json) {
+      const data = reply.json as Json;
+      data.chapters.push({ ...data.chapters[0], key: "main-2", title: "The Second Hour", state: "in-progress" });
+    }
+    const key = /\/chapters\/(main-[12])(?:\/|$)/u.exec(call.path)?.[1];
+    if (key && reply?.json) {
+      const data = reply.json as Json;
+      if (data.chapter)
+        data.chapter = {
+          ...data.chapter,
+          key,
+          tags: ["threats"],
+          title: key === "main-1" ? "The Observation Room" : "The Second Hour",
+          ...(music.has(key) ? { music: { track: music.get(key) } } : {}),
+        };
+      if (data.beat) data.beat = { ...data.beat, key };
+    }
+    return reply;
+  };
+  return { ...fixture, answer, music };
+}
+
+const musicEvents = (page: Page) => page.evaluate(() => [...(globalThis as any).__otomeMusicEvents] as string[]);
+const chapterGenerations = (calls: Call[]) =>
+  posts(calls, "/api/audio/generate").filter((call) => call.body?.context?.key.includes("-chapter-"));
+
+test("Otome Hearth chapter music is optional, saved, starts after Begin and reuses its theme on replay", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = chapterMusicFixture({ generate: false, chapterThemes: false });
+  await stubRoutes(page, fixture.answer, calls);
+  let root = await openStory(page, { recordMusic: true });
+  await root.getByRole("button", { name: "Settings" }).click();
+  await root.getByRole("tab", { name: "Audio" }).click();
+  const option = root.getByRole("switch", { name: "Generate a theme for each chapter" });
+  await expect(option).toHaveCount(0);
+  await root.getByRole("switch", { name: "Generate music", exact: true }).check();
+  await expect(option).not.toBeChecked();
+  await option.check();
+  expect(chapterGenerations(calls)).toHaveLength(0);
+  await page.screenshot({ path: testInfo.outputPath("chapter-music-settings.png") });
+  await root.getByRole("button", { name: "Save changes" }).click();
+  await expect(root.getByRole("status").filter({ hasText: "Saved." })).toBeVisible();
+  await root.locator(".of-topbar").getByRole("button", { name: "Back", exact: true }).click();
+  await expect.poll(() => posts(calls, "/audio/track").filter((call) => call.body?.cue === "home").length).toBe(1);
+  await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+  await expect(root.getByRole("heading", { name: "Before you begin" })).toBeVisible();
+  expect(calls.filter((call) => call.body?.chapterKey && call.path.endsWith("/audio/brief"))).toHaveLength(0);
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect.poll(() => fixture.music.has("main-1")).toBe(true);
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-chapter-main-1:");
+  await next(root);
+  await next(root);
+  expect(chapterGenerations(calls)).toHaveLength(1);
+  await root.getByRole("button", { name: "Leave the chapter" }).click();
+  await root.getByRole("button", { name: "Continue: The Second Hour", exact: true }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect.poll(() => fixture.music.has("main-2")).toBe(true);
+  expect(chapterGenerations(calls)).toHaveLength(2);
+  expect(fixture.music.get("main-1")!.tag).not.toBe(fixture.music.get("main-2")!.tag);
+
+  root = await openStory(page, { recordMusic: true });
+  await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-chapter-main-1:");
+  expect(chapterGenerations(calls)).toHaveLength(2);
+});
+
+test("Otome Hearth keeps current music on chapter generation failure without retrying on another line", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = chapterMusicFixture();
+  await stubRoutes(
+    page,
+    (call) =>
+      call.path === "/api/audio/generate" && call.body?.context?.key.includes("-chapter-")
+        ? { status: 502, json: { error: "Fixture chapter generation failed" } }
+        : fixture.answer(call),
+    calls,
+  );
+  const root = await openStory(page, { recordMusic: true });
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-home:");
+  await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+  const before = await musicEvents(page);
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect(root).toContainText("Chapter music couldn’t be generated.");
+  await next(root);
+  await next(root);
+  expect(chapterGenerations(calls)).toHaveLength(1);
+  expect(await musicEvents(page)).toEqual(before);
+});
+
+test("Otome Hearth keeps current music when a saved chapter theme is missing without paying again on replay or reload", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = chapterMusicFixture();
+  fixture.music.set("main-1", {
+    cue: "chapter-main-1",
+    connectionId: "conn-audio",
+    tag: "music:contexts:otome-forge:world-0-chapter-main-1:gone",
+    path: "music/contexts/otome-forge/world-0-chapter-main-1/gone.mp3",
+  });
+  await stubRoutes(page, fixture.answer, calls);
+  for (let visit = 0; visit < 2; visit += 1) {
+    const root = await openStory(page, { recordMusic: true });
+    await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-home:");
+    await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+    const before = await musicEvents(page);
+    await root.getByRole("button", { name: "Begin" }).click();
+    await expect(root).toContainText("The saved chapter theme isn’t available. Any current music keeps playing.");
+    if (visit === 0) {
+      await next(root);
+      await next(root);
+    }
+    expect(chapterGenerations(calls)).toHaveLength(0);
+    expect(calls.filter((call) => call.path.endsWith("/audio/brief") && call.body?.chapterKey)).toHaveLength(0);
+    expect(await musicEvents(page)).toEqual(before);
+    await root.getByRole("button", { name: "Leave the chapter" }).click();
+    await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+    await root.getByRole("button", { name: "Begin" }).click();
+    await expect(line(root)).toContainText("I should have stayed away. I didn’t.");
+    expect(chapterGenerations(calls)).toHaveLength(0);
+    expect(calls.filter((call) => call.path.endsWith("/audio/brief") && call.body?.chapterKey)).toHaveLength(0);
+  }
+  expect(calls.filter((call) => call.path.endsWith("/gone.mp3"))).toHaveLength(0);
+});
+
+test("Otome Hearth keeps the server's first chapter theme fresh when the chapter cue returns", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = chapterMusicFixture();
+  await stubRoutes(
+    page,
+    (call) => {
+      const reply = fixture.answer(call);
+      if (call.path.endsWith("/audio/track") && call.body?.chapterKey && reply?.json) {
+        const { timeZone: _zone, debugMode: _debug, chapterKey, ...track } = call.body;
+        const kept = {
+          ...track,
+          tag: track.tag.replace(/:[^:]+$/u, ":other-first"),
+          path: track.path.replace(/[^/]+$/u, "other-first.mp3"),
+        };
+        fixture.music.set(chapterKey, kept);
+        reply.json = { track: kept };
+      }
+      return reply;
+    },
+    calls,
+  );
+  const root = await openStory(page, { recordMusic: true });
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-home:");
+  await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain(":other-first");
+  await next(root);
+  await next(root);
+  await expect(root).not.toContainText("The saved chapter theme isn’t available.");
+  await root.getByRole("button", { name: "Leave the chapter" }).click();
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-home:");
+  await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain(":other-first");
+  await expect(root).not.toContainText("The saved chapter theme isn’t available.");
+  expect(chapterGenerations(calls)).toHaveLength(1);
+  expect(calls.filter((call) => call.path.endsWith("/audio/brief") && call.body?.chapterKey)).toHaveLength(1);
+});
+
+test("Otome Hearth saves a late chapter theme without playing it over the next chapter", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = chapterMusicFixture();
+  await stubRoutes(page, fixture.answer, calls);
+  let release!: () => void;
+  const gate = new Promise<void>((done) => {
+    release = done;
+  });
+  await page.route("**/api/audio/generate", async (route) => {
+    if (route.request().postDataJSON().context.key.endsWith("-chapter-main-1")) await gate;
+    await route.fallback();
+  });
+  const root = await openStory(page, { recordMusic: true });
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-home:");
+  await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
+  const before = await musicEvents(page);
+  const started = page.waitForRequest(
+    (request) =>
+      request.url().endsWith("/api/audio/generate") && request.postDataJSON().context.key.endsWith("-chapter-main-1"),
+  );
+  await root.getByRole("button", { name: "Begin" }).click();
+  await started;
+  expect(await musicEvents(page)).toEqual(before);
+  await root.getByRole("button", { name: "Leave the chapter" }).click();
+  await root.getByRole("button", { name: "Continue: The Second Hour", exact: true }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect.poll(async () => (await musicEvents(page)).at(-1)).toContain("-chapter-main-2:");
+  const second = await musicEvents(page);
+  release();
+  await expect.poll(() => fixture.music.has("main-1")).toBe(true);
+  await expect(line(root)).toContainText("Rain needles the glass dome.");
+  expect(await musicEvents(page)).toEqual(second);
+  expect(chapterGenerations(calls)).toHaveLength(2);
 });
 
 test("Otome Hearth card link: a generated LI keeps their story and art while an explicit card supplies their current voice", async ({

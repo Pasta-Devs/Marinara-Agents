@@ -82,6 +82,10 @@
   "ui.otomeForge.arcs.stageReckoning": "Reckoning",
   "ui.otomeForge.arcs.stageUp": "{{name}} · stage {{stage}}, {{stageName}}",
   "ui.otomeForge.arcs.stageWound": "Wound",
+  "ui.otomeForge.audio.chapterThemes": "Generate a theme for each chapter",
+  "ui.otomeForge.audio.chapterThemesHint": "One text call and one music track when you begin each chapter. The saved theme plays again on replay.",
+  "ui.otomeForge.audio.chapterMusicFailed": "Chapter music couldn’t be generated. Any current music keeps playing.",
+  "ui.otomeForge.audio.chapterMusicUnavailable": "The saved chapter theme isn’t available. Any current music keeps playing.",
   "ui.otomeForge.audio.connection": "Audio connection",
   "ui.otomeForge.audio.connectionDefault": "The Engine’s default",
   "ui.otomeForge.audio.connectionHint": "This list shows only connections that make music.",
@@ -963,6 +967,9 @@
   "ui.otomeForge.setup.forgeRetryStep": "Try {{step}} again",
   "ui.otomeForge.setup.forgeRepaintStep": "Repaint {{step}}",
   "ui.otomeForge.setup.repaint": "Repaint",
+  "ui.otomeForge.setup.repaintExpressions": "Repaint expressions",
+  "ui.otomeForge.setup.repaintExpressionsLabel": "Repaint expressions for {{name}}",
+  "ui.otomeForge.setup.repaintExpressionsFailed": "The new expressions didn’t finish. Your current artwork stays. Try Repaint expressions again.",
   "ui.otomeForge.setup.repainting": "Painting…",
   "ui.otomeForge.setup.forgeStateDone": "Done",
   "ui.otomeForge.setup.forgeStateFailed": "Didn’t finish",
@@ -1361,5 +1368,10 @@
   "ui.otomeForge.wish.wishing": "Wishing…",
   "ui.otomeForge.wish.with": "with {{name}}",
   "ui.otomeForge.wish.writing": "Writing this fortnight’s Memories, looks and Snapshots…",
-  "ui.otomeForge.wish.writingTitle": "Writing new wishes"
+  "ui.otomeForge.wish.writingTitle": "Writing new wishes",
+  "ui.otomeForge.setup.reviewExpressionSubject": "{{name}}: {{face}} ({{index}} of {{total}})",
+  "ui.otomeForge.setup.reviewExpressionsCancel": "Cancel repaint",
+  "ui.otomeForge.setup.reviewExpressionsHint": "Review all five expressions. Painting starts after you confirm the last prompt.",
+  "ui.otomeForge.setup.reviewExpressionsNext": "Review next expression",
+  "ui.otomeForge.setup.reviewExpressionsSend": "Repaint 5 expressions"
 }
