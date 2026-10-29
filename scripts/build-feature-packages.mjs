@@ -569,7 +569,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.5.9",
+    version: "1.5.10",
     minEngineVersion: "2.5.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -865,7 +865,7 @@ const features = [
   },
   {
     id: "otome-forge",
-    version: "0.1.2",
+    version: "0.1.3",
     minEngineVersion: "2.5.1",
     // The browser tab's openConnection prop and the debugMode field of /generate/raw arrived in capability API 1.386.
     capabilityApi: Object.freeze({ major: 1, minor: 386 }),

@@ -71,6 +71,7 @@ Each main chapter is led by one love interest. Otome Hearth offers two to choose
 - **When your model declines a scene,** Otome Hearth says so and saves nothing. You can ease off past it, try again, or switch the connection.
 - **Rewards:** reading pays 30 Starlight for each scene read to its end and 160 for a chapter. Affection is 150 for the chapter's lead and 60 for the second love interest. Story earnings are never capped.
 - **Reader controls:** Auto, Skip what you've read, the Backlog (which can play a line again), Hide the text and Cancel.
+- **On mobile:** the three-dot button opens the secondary controls in a vertical list. The audio button mutes or unmutes music and voices, and the fullscreen button stays beside it. Chapter cutouts continue behind the dialogue panel.
 
 ## Routes, confrontations and rifts
 

@@ -1641,6 +1641,8 @@ test("Otome Hearth's screens around the loop, by keyboard: the cast, a bible, ev
     await expect(line(root)).toContainText("The gears above the gallery tick past midnight.");
     await next(root);
     await expect(root.getByRole("group", { name: "What do you do?" })).toBeVisible();
+    const more = root.getByRole("button", { name: "More reader controls" });
+    if ((await more.isVisible()) && (await more.getAttribute("aria-expanded")) === "false") await more.click();
     const backlogButton = root.getByRole("button", { name: "Backlog" });
     await backlogButton.click();
     const backlog = page.getByRole("dialog", { name: "Backlog" });
