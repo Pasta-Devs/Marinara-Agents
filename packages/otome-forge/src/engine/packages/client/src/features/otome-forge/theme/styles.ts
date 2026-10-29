@@ -1826,8 +1826,8 @@ ${R} .of-reader-show { position: absolute; bottom: max(14px, env(safe-area-inset
 @container of-frame (max-width: 560px) { ${MOBILE_READER_RULES} }
 /* A phone turned sideways still uses the mobile controls, even with a wide viewport. */
 @media (pointer: coarse) and (max-height: 560px) {
-  ${R} .of-stage { width: 100cqw; height: 100cqh; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
-  ${R} .of-stage::after { display: none; }
+  ${R} .of-stage:has(.of-reader) { width: 100cqw; height: 100cqh; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
+  ${R} .of-stage:has(.of-reader)::after { display: none; }
   ${MOBILE_READER_RULES}
 }
 /* The backlog. */
