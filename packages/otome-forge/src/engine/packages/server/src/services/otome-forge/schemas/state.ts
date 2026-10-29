@@ -416,6 +416,19 @@ export function readyCutout(unit: Pick<Unit, "cutouts">, url: string | undefined
   return record?.url;
 }
 
+/** Stage faces use only cleaned derivatives; missing or failed cleanup keeps the neutral look on stage. */
+export function cleanedFaces(world: Pick<World, "images">, unit: Unit): Partial<Record<Face, string>> | undefined {
+  const faces = readyFaces(world, unit);
+  return faces
+    ? (Object.fromEntries(
+        Object.entries(faces).flatMap(([face, url]) => {
+          const cutout = readyCutout(unit, url);
+          return cutout ? [[face, cutout]] : [];
+        }),
+      ) as Partial<Record<Face, string>>)
+    : undefined;
+}
+
 /** Every image he stands on stage in (base look, worn look, ready faces): what the cut-outs are made of. */
 export function stageArtUrls(world: Pick<World, "images">, unit: Unit): string[] {
   const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit)?.url : undefined;
@@ -488,12 +501,8 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
           if (cutout) cut.push(cutout);
           return cutout ?? url;
         };
-        const faces = readyFaces(world, unit);
-        const expressions = faces
-          ? (Object.fromEntries(
-              Object.entries(faces).map(([face, url]) => [face, url ? shown(url) : url]),
-            ) as typeof faces)
-          : undefined;
+        const expressions = cleanedFaces(world, unit);
+        if (expressions) cut.push(...Object.values(expressions));
         const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit) : undefined;
         const portrait = unit.portrait ? shown(unit.portrait) : undefined;
         const wornUrl = worn ? shown(worn.url) : undefined;

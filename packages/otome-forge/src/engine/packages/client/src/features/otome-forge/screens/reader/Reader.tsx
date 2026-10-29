@@ -223,11 +223,8 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   // Whom a Confrontation faces: the opponent the server set (not whoever spoke last), else the chapter's own.
   const facingId = reader.confrontation?.li ?? chapter?.li ?? chapter?.lead;
   const facing = view.lis.find((li) => li.id === facingId) ?? null;
-  // His faces as the scene's art last reported them (they may arrive while the beat is read).
-  const stageLi = reader.onStage.li;
-  const sceneFaces = stageLi ? reader.sceneArt?.faces?.[stageLi.id] : undefined;
-  const onStageLi =
-    stageLi && sceneFaces && Object.keys(sceneFaces).length ? { ...stageLi, expressions: sceneFaces } : stageLi;
+  // The refreshed run view keeps cleaned faces and their whole-sprite framing metadata together.
+  const onStageLi = reader.onStage.li;
 
   // Each new line is voiced when the settings voice its speaker; leaving the line stops it. Narration, thoughts and
   // the aftermath line never are.

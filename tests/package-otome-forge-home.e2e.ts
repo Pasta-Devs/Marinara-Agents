@@ -1074,20 +1074,84 @@ for (const images of [true, false]) {
   }
 }
 
-test("Otome Forge Home asks again while his faces' cut-outs are on their way, and shows the cut-out once it lands", async ({
-  page,
-}) => {
-  test.setTimeout(120_000);
-  // His look was cut out on an earlier visit; his tender face (the note's) is painted, its cut-out still on its way.
-  const stub = createHomeStub({ faceCutouts: true });
-  await stubRoutes(page, stub, []);
-  const root = await openHome(page);
-  const figure = root.getByRole("img", { name: "Ilvar Thorne, tender" });
-  await expect(figure).toHaveAttribute("src", TENDER);
-  // Home reads itself again (every 10 s while a cut-out is coming) and the clean cut-out replaces the uncut face.
-  await expect(figure).toHaveAttribute("src", TENDER_CUT, { timeout: 25_000 });
-  await expect(root.locator('.of-figure[data-cut="true"]')).toHaveCount(1);
-});
+for (const outcome of ["ready", "uncut", "load-error"] as const) {
+  test(`Otome Hearth Home expressions retain a clean neutral when cleanup is ${outcome}`, async ({
+    page,
+  }, testInfo) => {
+    // His earlier neutral cut-out stays available; the offending raw expression is never removed from its descriptor.
+    const stub = createHomeStub({ faceCutouts: true });
+    stub.notes.set(ILVAR, {
+      li: ILVAR,
+      dayKey: new Date().toISOString().slice(0, 10),
+      text: NOTE,
+      face: "tender",
+      mood: { word: "fond", reason: "You came back" },
+      curt: false,
+      at: new Date().toISOString(),
+    });
+    let phase: "pending" | "ready" | "uncut" = "pending";
+    const broken = "/api/avatars/file/missing-clean-expression.png";
+    await page.route(`**${broken}`, (route) => route.fulfill({ status: 404, body: "Missing cut-out" }));
+    const answer = stub.answer;
+    stub.answer = async (call) => {
+      const response = await answer(call);
+      if (call.path === `/api/otome-forge/runs/${RUN}`) {
+        const view = (response.json as Json).view;
+        view.lis[0].expressions = {};
+        view.lis[0].cut = [PORTRAIT_CUT];
+      }
+      if (call.path.endsWith("/home")) {
+        (response.json as Json).faces = {
+          tender: {
+            url: TENDER,
+            cutoutState: phase,
+            ...(phase === "ready" ? { cutout: outcome === "load-error" ? broken : TENDER_CUT } : {}),
+          },
+        };
+      }
+      return response;
+    };
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+    await page.clock.install();
+    const spoken: string[] = [];
+    await stubRoutes(page, stub, spoken);
+    const root = await openHome(page);
+    const figure = root.getByRole("img", { name: "Ilvar Thorne, tender" });
+    await expect(figure).toHaveAttribute("src", PORTRAIT_CUT);
+    await expect(root.locator('.of-figure[data-cut="true"]')).toHaveCount(1);
+    await expect(root.locator(`.of-figure-img[src="${TENDER}"]`)).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath("home-expression-pending-neutral.png") });
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 60_000));
+    const reads = () => stub.calls.filter((call) => call.method === "GET" && call.path.endsWith("/home")).length;
+    const before = reads();
+    const completedResponse = page.waitForResponse(async (response) => {
+      if (!new URL(response.url()).pathname.endsWith("/home") || response.status() !== 200) return false;
+      return (await response.json()).faces.tender.cutoutState !== "pending";
+    });
+    phase = outcome === "uncut" ? "uncut" : "ready";
+    await page.clock.runFor(10_500);
+    await (await completedResponse).finished();
+    let drained = 0;
+    await expect
+      .poll(
+        async () => {
+          if (drained++ < 100) await page.clock.runFor(1);
+          return figure.getAttribute("src");
+        },
+        { intervals: [100], timeout: 10_000 },
+      )
+      .toBe(outcome === "ready" ? TENDER_CUT : PORTRAIT_CUT);
+    await expect(root.locator('.of-figure[data-cut="true"]')).toHaveCount(1);
+    await expect(root.locator(`.of-figure-img[src="${TENDER}"]`)).toHaveCount(0);
+    expect(reads()).toBeGreaterThan(before);
+    await page.screenshot({ path: testInfo.outputPath(`home-expression-${outcome}.png`) });
+    const completed = reads();
+    await page.clock.runFor(20_000);
+    expect(reads(), "ready or unavailable cleanup stops Home polling").toBe(completed);
+    expect(stub.calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(0);
+    expect(spoken).toEqual([]);
+  });
+}
 
 test("Otome Forge Home wears what the Wardrobe put on: his look cut out, hers on Me with the line he noticed", async ({
   page,

@@ -91,7 +91,7 @@ Everything works without images or sound: a place without art shows a gradient f
 - **Places and key moments:** with an image connection, a scene's places and a chapter's key moments (CGs) are painted when the scene is written.
 - **Waiting for your tap:** with **Ask before painting** on, or the Engine's **Review image prompts before sending**, each picture waits for your tap instead, and the button says what it costs. The review opens the prompt for editing first.
 - **Nothing repaints by itself:** a CG joins your Album once you have seen it, and nothing is repainted without a tap. A failed picture waits for Retry.
-- **Faces:** each love interest's five faces are painted in the background as edits of their look, about five images per look. Turning **Expressions** off in **Settings → Images** stops every face that has not started yet.
+- **Faces:** each love interest's five faces are painted in the background as edits of their look, about five images per look. The previous clean look stays visible while a face is cut out; failed cleanup keeps that look. Turning **Expressions** off in **Settings → Images** stops every face that has not started yet.
 - **Music** follows each scene's mood. It is the Engine's own music, or a track written for this world when **Generate music** is on and an audio connection makes music. Each track is made once per mood and never retried by itself.
 - **Voices:** with **Voice the dialogue** on in **Settings → Audio**, a love interest from a card speaks with the voice assigned to that card, the others with a default voice, and you with your persona's voice. Narration and thoughts stay silent.
 

@@ -499,17 +499,25 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
     let live = true;
     let tries = 0;
     let timer = 0;
+    let lastFaces = JSON.stringify(speakers.map(() => ({})));
+    const waitingForFaces = (art: SceneArt) => wantsFaces && speakers.some((li) => art.facesComing?.includes(li));
     const waiting = (art: SceneArt) =>
       art.cg?.art?.state === "pending" ||
       (Array.isArray(art.places) && art.places.some((place) => place.art?.state === "pending")) ||
-      // Only faces still being painted: a speaker with no look, or a failed or stopped set, is never waited for.
-      (wantsFaces && speakers.some((li) => art.facesComing?.includes(li)));
+      // Painting and free cleanup both settle; failed or stopped work is never waited for.
+      waitingForFaces(art);
     const look = async () => {
       tries += 1;
       try {
         const art = await otome.get<SceneArt>(`${runPath(runKey)}/art/scene`, { key: chapterKey, i: node });
         if (!live) return;
         setScene({ id: sceneId, art });
+        const nextFaces = JSON.stringify(speakers.map((li) => art.faces?.[li] ?? {}));
+        if (wantsFaces && (waitingForFaces(art) || nextFaces !== lastFaces)) {
+          // The run owns both the clean expression URLs and their cut/framing metadata.
+          void queryClient.invalidateQueries({ queryKey: runQueryKey(runKey) }, { cancelRefetch: false });
+        }
+        lastFaces = nextFaces;
         if (waiting(art) && tries < PAINT_POLL_TRIES) timer = window.setTimeout(look, PAINT_POLL_MS);
       } catch {
         if (live && tries < PAINT_POLL_TRIES) timer = window.setTimeout(look, PAINT_POLL_MS);
@@ -521,7 +529,7 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
       window.clearTimeout(timer);
     };
     // The speakers belong to the scene id; a tap (sceneTick) looks again.
-  }, [chapterKey, images.connectionId, node, otome, runKey, sceneId, sceneTick, wantsFaces]);
+  }, [chapterKey, images.connectionId, node, otome, queryClient, runKey, sceneId, sceneTick, wantsFaces]);
 
   const seenCgs = useRef(new Set<string>());
 
