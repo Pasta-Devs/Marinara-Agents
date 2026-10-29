@@ -1142,7 +1142,7 @@
   "ui.otomeForge.setup.withoutImages": "Playing without images: the cast appears as initials in their own colours. Add an image connection any time in Settings → Images.",
   "ui.otomeForge.setup.yourCast": "Your cast",
   "ui.otomeForge.setup.yourPronouns": "Your pronouns",
-  "ui.otomeForge.story.affectionHint": "Affection only rises. Leading a chapter brings the most.",
+  "ui.otomeForge.story.affectionHint": "Hostile choices can lower affection points, but never a level you've reached. Leading a chapter brings the most.",
   "ui.otomeForge.story.affectionTitle": "Between you",
   "ui.otomeForge.story.chapterNumber": "Chapter {{number}}",
   "ui.otomeForge.story.chaptersTitle": "Chapters",

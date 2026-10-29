@@ -1810,7 +1810,8 @@ ${R} .of-tags-card {
   display: flex; flex-direction: column; gap: 10px; padding: 18px 16px; border-radius: 22px;
   border-color: rgb(230 201 138 / 0.55);
 }
-${R} .of-tags-card .of-hint { display: flex; align-items: center; gap: 6px; }
+${R} .of-tags-card .of-hint { display: block; }
+${R} .of-tags-card .of-hint > svg { display: inline-block; width: 13px; height: 13px; margin-inline-start: 6px; vertical-align: middle; }
 ${R} .of-tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 ${R} .of-tag {
   padding: 4px 11px; border-radius: 999px; font-size: 0.8rem; font-weight: 800; color: var(--of-accent-text);
