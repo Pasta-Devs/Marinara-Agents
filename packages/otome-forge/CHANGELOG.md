@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.1.11 — 2026-10-29
+
+- Named speakers outside your love-interest cast clear the previous character's sprite. An exact, unique matching character card can supply an existing Full Body sprite, with Neutral preferred; opaque art waits for free cleanup before appearing.
+
 ## 0.1.10 — 2026-10-29
 
 - Repaint a love interest’s five expressions for their current look from Your cast, with a five-image cost and all prompts reviewed before painting when prompt review is enabled. Existing artwork stays available during replacement or after a failure.

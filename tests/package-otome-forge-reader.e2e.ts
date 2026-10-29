@@ -10,6 +10,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { normalizeForgeAudio } from "../sources/forge-kit/audio-settings.mjs";
 
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engine checkout");
@@ -175,6 +176,7 @@ function createStoryStub({ done = false, title = CHAPTER.title, pendingCutouts =
       images: { connectionId: null, rating: "sfw", ask: false, expressions: true },
       connections: { narration: "conn-text" },
       forge: { phase: "ready", steps: [] },
+      audio: { ...normalizeForgeAudio({}), chapterThemes: false, tracks: [] },
     },
     player: {
       personaId: "persona-mira",
@@ -626,6 +628,438 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   await root.getByRole("button", { name: "Back to the story" }).click();
   await expect(root.getByText("2,250")).toBeVisible();
   expect(pageErrors).toEqual([]);
+});
+
+// Meaningful alpha silhouettes replace the old 2x2 any-transparent-pixel fixture.
+const SPEAKER_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAACAAAAAwCAYAAABwrHhvAAAAdElEQVR4nO3UwQ3AIAxDUYZlWLaiE5DGoVGg+gefkOwnhGij91aZ0vGvALMCMI2kA6xxGZExLiEAZI27EVfdAAAF4e6LAN4QUlcUsELIPQCOBkR+PvlxAgAAAAAAABZgF+TqBQBgF+A5AwAAAID/AFJSDngAseuGfqFuDUUAAAAASUVORK5CYII=";
+const BUST_SPEAKER_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAARElEQVR4nO3OsQkAIAwAQUdzGId1LMFCSKxDmiu+/ht7rZGaxYVfngNUzz8EQMc8IAC65g8B0Dm/AQAAAAAAAAAAtAMO2xYxamYZDbgAAAAASUVORK5CYII=";
+const CORNER_SPEAKER_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAOElEQVR4nO3XsREAIBACQYr9Yu1KHZvAYIOL2ZSsmdx2qTTHXwAAAAAAAAAAAAAAAAAAXwCq9/wAQGM4m/KQm6AAAAAASUVORK5CYII=";
+const MARGIN_SPEAKER_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAOUlEQVR4nO3OwQkAIAwEwRSbYu1KWxAkHMI89r1Tq7uSRecAAAC3gP0YAAAAAAAAwP+A0QAAAOKAA55OP2qkAtg9AAAAAElFTkSuQmCC";
+const FAINT_MARGIN_SPEAKER_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAO0lEQVR4nO3OwQkAIAwAsbprh3UrdYUiUoQ87n2JmTlO0VXbGAAAoAJYlwEAAAAAAAD8D3gaAABAO2ADrmo/axi39IwAAAAASUVORK5CYII=";
+const OPAQUE_SPEAKER_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAADklEQVR4nGNg+A+FMAYAQ84H+fei4u8AAAAASUVORK5CYII=";
+const LI_SPEAKER_PORTRAIT = `data:image/png;base64,${SPEAKER_PNG}`;
+
+function namedSpeakerStub(segments: Json[]) {
+  const fixture = createStoryStub({
+    done: true,
+    storyBeats: [{ ...BEATS[0], segments, choices: [] }, ...BEATS.slice(1)],
+  });
+  return {
+    ...fixture,
+    answer(call: Call) {
+      const reply = fixture.answer(call);
+      if (call.path === `/api/otome-forge/runs/${RUN}`) {
+        const data = reply.json as Json;
+        data.view.lis[0].portrait = LI_SPEAKER_PORTRAIT;
+        data.view.lis[0].cut = [LI_SPEAKER_PORTRAIT];
+      }
+      return reply;
+    },
+  };
+}
+
+async function speakerRoutes(
+  page: Page,
+  { opaque = false, revision = 2, broken = false, source = opaque ? OPAQUE_SPEAKER_PNG : SPEAKER_PNG } = {},
+) {
+  const cleanup: Json[] = [];
+  const paid: string[] = [];
+  let deleted = false;
+  page.on("request", (request) => {
+    if (/\/api\/(?:characters\/avatar-generation|audio\/generate|generate\/raw)/u.test(request.url()))
+      paid.push(request.url());
+  });
+  await page.route("**/api/characters/catalog?**", (route) => {
+    const items = [
+      { id: "card-arin", name: "Arin Vale" },
+      { id: "card-one", name: "Duplicated Name" },
+      { id: "card-two", name: "Duplicated Name" },
+    ];
+    return route.fulfill({ json: { items, hasMore: false } });
+  });
+  await page.route("**/api/characters/card-arin", (route) =>
+    route.fulfill({
+      status: deleted ? 404 : 200,
+      json: deleted ? { error: "Deleted card" } : { id: "card-arin", data: JSON.stringify({ name: "Arin Vale" }) },
+    }),
+  );
+  await page.route("**/api/sprites/card-arin", (route) =>
+    route.fulfill({
+      json: [
+        { expression: "neutral", filename: "neutral.png" },
+        { expression: "full_angry", filename: "full_angry.png", url: "https://untrusted.test/ignored" },
+        {
+          expression: "full_neutral",
+          filename: "full_neutral.png",
+          url: "/api/sprites/card-arin/file/full_neutral.png?v=1",
+        },
+      ],
+    }),
+  );
+  await page.route("**/api/sprites/card-arin/file/*", (route) =>
+    route.fulfill({
+      status: broken ? 404 : 200,
+      contentType: "image/png",
+      body: broken ? "Missing sprite" : Buffer.from(source, "base64"),
+    }),
+  );
+  await page.route("**/api/sprites/cleanup/status", (route) => route.fulfill({ json: { cleanupRevision: revision } }));
+  await page.route("**/api/sprites/cleanup", (route) => {
+    cleanup.push(route.request().postDataJSON());
+    return route.fulfill({ json: { cells: [{ base64: SPEAKER_PNG }] } });
+  });
+  return {
+    cleanup,
+    paid,
+    removeCard: () => {
+      deleted = true;
+    },
+  };
+}
+
+test("Otome Hearth named speakers hide unrelated sprites, require unique cards and preserve narration, persona and thoughts", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const fixture = namedSpeakerStub([
+    seg("Ilvar Thorne", "The love interest speaks."),
+    seg("No Matching Card", "A stranger speaks."),
+    seg("Arin Vale", "An existing character speaks."),
+    seg("Duplicated Name", "A duplicate name speaks."),
+    seg("", "The narrator continues."),
+    seg("Mira Vale", "The protagonist answers."),
+    seg("No Matching Card", "A private thought.", { thought: true }),
+    seg("Ilvar Thorne", "The love interest speaks again."),
+    seg("Arin Vale", "The same card was deleted meanwhile."),
+  ]);
+  await stubRoutes(page, fixture);
+  const assets = await speakerRoutes(page);
+  const catalogFinished = () =>
+    page
+      .waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.pathname === "/api/characters/catalog" && url.searchParams.get("limit") === "200";
+      })
+      .then((response) => response.finished());
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
+  const stranger = catalogFinished();
+  await next(root);
+  await stranger;
+  await expect(line(root)).toContainText("A stranger speaks.");
+  await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+  await next(root);
+  await expect(root.getByRole("img", { name: "Arin Vale", exact: true })).toBeVisible();
+  await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute(
+    "src",
+    "/api/sprites/card-arin/file/full_neutral.png?v=1",
+  );
+  await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("data-cut", "true");
+  await page.screenshot({ path: testInfo.outputPath("named-speaker.png") });
+  const duplicate = catalogFinished();
+  await next(root);
+  await duplicate;
+  await expect(line(root)).toContainText("A duplicate name speaks.");
+  await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+  for (const text of [
+    "The narrator continues.",
+    "The protagonist answers.",
+    "A private thought.",
+    "The love interest speaks again.",
+  ]) {
+    await next(root);
+    await expect(line(root)).toContainText(text);
+    await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
+  }
+  assets.removeCard();
+  const deleted = page
+    .waitForResponse((response) => response.url().endsWith("/api/characters/card-arin") && response.status() === 404)
+    .then((response) => response.finished());
+  await next(root);
+  await deleted;
+  await expect(line(root)).toContainText("The same card was deleted meanwhile.");
+  await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+  expect(assets.cleanup, "already transparent card sprites stay untouched").toEqual([]);
+  expect(assets.paid).toEqual([]);
+});
+
+for (const revision of [2, 0]) {
+  test(`Otome Hearth opaque speaker sprites wait for free cleanup and reuse it (revision ${revision})`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const fixture = namedSpeakerStub([
+      seg("Ilvar Thorne", "Known speaker."),
+      seg("Arin Vale", "Clean my sprite."),
+      seg("Ilvar Thorne", "Known speaker again."),
+      seg("Arin Vale", "Reuse my cleaned sprite."),
+    ]);
+    await stubRoutes(page, fixture);
+    const assets = await speakerRoutes(page, { opaque: true, revision });
+    let release!: () => void;
+    const gate = new Promise<void>((done) => {
+      release = done;
+    });
+    await page.route("**/api/sprites/cleanup", async (route) => {
+      await gate;
+      await route.fallback();
+    });
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+    await root.getByRole("button", { name: "Begin" }).click();
+    const started = page.waitForRequest((request) => request.url().endsWith("/api/sprites/cleanup"));
+    await next(root);
+    const request = await started;
+    await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+    expect(request.postDataJSON()).toMatchObject({ cleanupStrength: 35, engine: revision >= 2 ? "builtin" : "auto" });
+    release();
+    await expect(root.getByRole("img", { name: "Arin Vale", exact: true })).toBeVisible();
+    await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute(
+      "src",
+      `data:image/png;base64,${SPEAKER_PNG}`,
+    );
+    await next(root);
+    await next(root);
+    await expect(root.getByRole("img", { name: "Arin Vale", exact: true })).toBeVisible();
+    expect(assets.cleanup).toHaveLength(1);
+    expect(assets.paid).toEqual([]);
+  });
+}
+
+test("Otome Hearth discards a slow speaker asset after the line changes and hides missing images", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const fixture = namedSpeakerStub([
+    seg("Ilvar Thorne", "Known speaker."),
+    seg("Arin Vale", "A slow image."),
+    seg("Ilvar Thorne", "Still the current speaker."),
+    seg("Arin Vale", "Now the image is missing."),
+  ]);
+  await stubRoutes(page, fixture);
+  const assets = await speakerRoutes(page, { broken: true });
+  let release!: () => void;
+  const gate = new Promise<void>((done) => {
+    release = done;
+  });
+  let settle!: () => void;
+  const settled = new Promise<void>((done) => {
+    settle = done;
+  });
+  await page.route("**/api/sprites/card-arin/file/*", async (route) => {
+    await gate;
+    // A browser may finish the held response after the component has already discarded it.
+    await route.fulfill({ contentType: "image/png", body: Buffer.from(SPEAKER_PNG, "base64") }).catch(() => undefined);
+    settle();
+  });
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  const started = page.waitForRequest((request) => request.url().includes("/sprites/card-arin/file/"));
+  await next(root);
+  await started;
+  await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+  await next(root);
+  await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
+  release();
+  await settled;
+  await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
+  await page.unroute("**/api/sprites/card-arin/file/*");
+  await page.route("**/api/sprites/card-arin/file/*", (route) =>
+    route.fulfill({ status: 404, body: "Missing sprite" }),
+  );
+  await page.route("**/api/sprites/card-arin", (route) =>
+    route.fulfill({
+      json: [
+        {
+          expression: "full_neutral",
+          filename: "full_neutral.png",
+          url: "/api/sprites/card-arin/file/full_neutral.png?v=2",
+        },
+      ],
+    }),
+  );
+  const missing = page.waitForResponse(
+    (response) => response.url().includes("/sprites/card-arin/file/") && response.status() === 404,
+  );
+  await next(root);
+  await (await missing).finished();
+  await expect(line(root)).toContainText("Now the image is missing.");
+  await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+  expect(assets.paid).toEqual([]);
+});
+
+test("Otome Hearth never displays an opaque speaker original when free cleanup fails", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const fixture = namedSpeakerStub([seg("Ilvar Thorne", "Known speaker."), seg("Arin Vale", "Cleanup fails here.")]);
+  await stubRoutes(page, fixture);
+  const assets = await speakerRoutes(page, { opaque: true });
+  await page.route("**/api/sprites/cleanup", (route) =>
+    route.fulfill({ status: 502, json: { error: "Fixture cleanup failed" } }),
+  );
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  const failed = page.waitForResponse(
+    (response) => response.url().endsWith("/api/sprites/cleanup") && response.status() === 502,
+  );
+  await next(root);
+  await (await failed).finished();
+  await expect(line(root)).toContainText("Cleanup fails here.");
+  await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+  expect(assets.paid).toEqual([]);
+});
+
+for (const [kind, source] of [
+  ["corners", CORNER_SPEAKER_PNG],
+  ["margin", MARGIN_SPEAKER_PNG],
+  ["faint margin", FAINT_MARGIN_SPEAKER_PNG],
+] as const) {
+  test(`Otome Hearth partial transparency waits for cleanup (${kind})`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await stubRoutes(
+      page,
+      namedSpeakerStub([seg("Ilvar Thorne", "Known speaker."), seg("Arin Vale", "A partial mask.")]),
+    );
+    const assets = await speakerRoutes(page, { source });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/api/sprites/cleanup", async (route) => {
+      await gate;
+      await route.fallback();
+    });
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+    await root.getByRole("button", { name: "Begin" }).click();
+    const started = page.waitForRequest((request) => request.url().endsWith("/api/sprites/cleanup"));
+    await next(root);
+    await started;
+    await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+    release();
+    await expect(root.getByRole("img", { name: "Arin Vale", exact: true })).toBeVisible();
+    await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute(
+      "src",
+      `data:image/png;base64,${SPEAKER_PNG}`,
+    );
+    expect(assets.cleanup).toHaveLength(1);
+    expect(assets.paid).toEqual([]);
+  });
+}
+
+test("Otome Hearth a genuine edge-touching bust displays without cleanup", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await stubRoutes(
+    page,
+    namedSpeakerStub([seg("Ilvar Thorne", "Known speaker."), seg("Arin Vale", "A genuine bust.")]),
+  );
+  const assets = await speakerRoutes(page, { source: BUST_SPEAKER_PNG });
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  await next(root);
+  await expect(root.getByRole("img", { name: "Arin Vale", exact: true })).toBeVisible();
+  await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute(
+    "src",
+    "/api/sprites/card-arin/file/full_neutral.png?v=1",
+  );
+  expect(assets.cleanup).toEqual([]);
+  expect(assets.paid).toEqual([]);
+});
+
+test("Otome Hearth rejects cleanup that only clears corner pixels", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await stubRoutes(
+    page,
+    namedSpeakerStub([seg("Ilvar Thorne", "Known speaker."), seg("Arin Vale", "An incomplete cleanup.")]),
+  );
+  const assets = await speakerRoutes(page, { opaque: true });
+  await page.route("**/api/sprites/cleanup", (route) =>
+    route.fulfill({ json: { cells: [{ base64: CORNER_SPEAKER_PNG }] } }),
+  );
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  await root.getByRole("button", { name: "Begin" }).click();
+  const reply = page.waitForResponse((response) => response.url().endsWith("/api/sprites/cleanup"));
+  await next(root);
+  await (await reply).finished();
+  // Decode the returned bytes and allow the app's matching detached image and React commit to settle.
+  await page.evaluate(async (png) => {
+    const image = new Image();
+    image.src = `data:image/png;base64,${png}`;
+    await image.decode();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  }, CORNER_SPEAKER_PNG);
+  await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+  expect(assets.paid).toEqual([]);
+});
+
+test("Otome Hearth real Engine card supplies its existing neutral speaker sprite", async ({
+  page,
+  request,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const name = `Otome Contract NPC ${testInfo.project.name}`;
+  const created = await request.post("/api/characters", { data: { data: { name, creator: "Otome package E2E" } } });
+  await expect(created).toBeOK();
+  const card = await created.json();
+  expect(card.id).toMatch(/^[a-z0-9_-]{1,200}$/iu);
+  const id = encodeURIComponent(card.id);
+  try {
+    const uploaded = await request.post(`/api/sprites/${id}`, {
+      data: { expression: "full_neutral", image: `data:image/png;base64,${SPEAKER_PNG}` },
+    });
+    await expect(uploaded).toBeOK();
+    const sprite = await uploaded.json();
+    const paid: string[] = [];
+    const cleanup: string[] = [];
+    page.on("request", (call) => {
+      if (/\/api\/(?:characters\/avatar-generation|audio\/generate|generate\/raw)/u.test(call.url()))
+        paid.push(call.url());
+      if (new URL(call.url()).pathname === "/api/sprites/cleanup") cleanup.push(call.url());
+    });
+    await stubRoutes(
+      page,
+      namedSpeakerStub([seg("Ilvar Thorne", "Known speaker."), seg(name, "The actual card speaks.")]),
+    );
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+    await root.getByRole("button", { name: "Begin" }).click();
+    await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
+    const catalog = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === "/api/characters/catalog" && url.searchParams.get("limit") === "200";
+    });
+    const currentCard = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === `/api/characters/${id}`,
+    );
+    const image = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === `/api/sprites/${id}/file/full_neutral.png`,
+    );
+    await next(root);
+    const rows = await (await catalog).json();
+    expect(rows.items.some((row: Json) => row.id === card.id && row.name === name)).toBe(true);
+    const live = await (await currentCard).json();
+    expect(live.id).toBe(card.id);
+    expect(JSON.parse(live.data).name).toBe(name);
+    expect(await (await image).body()).toEqual(Buffer.from(SPEAKER_PNG, "base64"));
+    await expect(root.getByRole("img", { name, exact: true })).toBeVisible();
+    await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", sprite.url);
+    await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("data-cut", "true");
+    await page.screenshot({ path: testInfo.outputPath("real-engine-npc.png") });
+    expect(cleanup).toEqual([]);
+    expect(paid).toEqual([]);
+  } finally {
+    await request.delete(`/api/sprites/${id}/full_neutral`);
+    await expect(await request.delete(`/api/characters/${id}`)).toBeOK();
+  }
 });
 
 test("Otome Hearth thoughts close only after typing, finishing the line, or reduced motion", async ({
