@@ -989,7 +989,19 @@ test.describe("Otome Forge reader mobile", () => {
       page.on("pageerror", (error) => pageErrors.push(error.message));
       await stubRoutes(page, answer, calls);
       const root = await openStory(page);
+      if (viewport.width > viewport.height) {
+        const frame = (await root.locator(".of-frame").boundingBox())!;
+        const stage = (await root.locator(".of-stage").boundingBox())!;
+        expect(stage.height).toBeGreaterThan(stage.width);
+        expect(stage.width).toBeLessThan(frame.width - 1);
+      }
       await root.getByRole("button", { name: "Continue" }).first().click();
+      await expect(root.locator(".of-reader")).toBeVisible();
+      if (viewport.width > viewport.height) {
+        const frame = (await root.locator(".of-frame").boundingBox())!;
+        const stage = (await root.locator(".of-stage").boundingBox())!;
+        expect(stage.width).toBeCloseTo(frame.width, 0);
+      }
       await next(root);
       await expect(line(root)).toContainText("You came back. How inefficient of you.");
       const originalLine = (await line(root).textContent())!;
