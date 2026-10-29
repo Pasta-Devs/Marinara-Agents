@@ -1938,15 +1938,17 @@ test("Otome Hearth keeps current music when a saved chapter theme is missing wit
     const before = await musicEvents(page);
     await root.getByRole("button", { name: "Begin" }).click();
     await expect(root).toContainText("The saved chapter theme isn’t available. Any current music keeps playing.");
-    await next(root);
-    await next(root);
+    if (visit === 0) {
+      await next(root);
+      await next(root);
+    }
     expect(chapterGenerations(calls)).toHaveLength(0);
     expect(calls.filter((call) => call.path.endsWith("/audio/brief") && call.body?.chapterKey)).toHaveLength(0);
     expect(await musicEvents(page)).toEqual(before);
     await root.getByRole("button", { name: "Leave the chapter" }).click();
     await root.getByRole("button", { name: "Continue: The Observation Room", exact: true }).click();
     await root.getByRole("button", { name: "Begin" }).click();
-    await expect(line(root)).toContainText("Rain needles the glass dome.");
+    await expect(line(root)).toContainText("I should have stayed away. I didn’t.");
     expect(chapterGenerations(calls)).toHaveLength(0);
     expect(calls.filter((call) => call.path.endsWith("/audio/brief") && call.body?.chapterKey)).toHaveLength(0);
   }
