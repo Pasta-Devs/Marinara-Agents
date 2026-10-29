@@ -145,7 +145,7 @@ const pronounText = (pronouns: Pronouns) => `${pronouns.subject}/${pronouns.obje
 /** How the prompts introduce one love interest: id, name and pronouns, then the card or the archetype seed. */
 function castEntry({ unit, canon }: CastMember): string {
   const head = `id ${unit.id}: ${unit.name} (${pronounText(unit.pronouns)})`;
-  if (unit.source === "card") {
+  if (unit.cardId) {
     return canon
       ? `${head}\n${forgeFormatCharacterCardReference(canon, unit.name)}`
       : `${head}\n(The linked character card could not be read; keep to the name and pronouns.)`;
@@ -374,7 +374,7 @@ export function bibleMessages({
   others: readonly CastMember[];
 }): OtomeMessage[] {
   const { unit } = member;
-  const fromCard = unit.source === "card";
+  const fromCard = !!unit.cardId;
   const system = [
     "You write the hidden character bible of one love interest in an otome game. It stays behind a spoiler gate; every scene with this character is written from it.",
     "Reply with ONLY a JSON object of this shape:",

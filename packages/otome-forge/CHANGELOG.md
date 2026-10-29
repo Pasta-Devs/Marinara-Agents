@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.1.4 — 2026-10-29
+
+- Link an existing love interest to a character card in Your cast. Its assigned voice and image references apply while their story, progress and pictures stay; unlinking restores their own fallback.
+- Future paints prefer the linked card's Full Body → Neutral sprite, then its current avatar, then the retained Otome look. Linking never paints automatically.
+
 ## 0.1.3 — 2026-10-29
 
 - Mobile chapter cutouts continue behind the dialogue panel for a closer view. A three-dot button opens the secondary reader controls vertically, beside working mute and fullscreen buttons.

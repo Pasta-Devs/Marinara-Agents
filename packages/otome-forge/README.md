@@ -56,6 +56,8 @@ Bibles sit behind a spoiler gate, and you can edit them. A step that fails or is
 
 You can keep several stories. **Your stories** lists them, and deleting one asks you to type its title. **Settings** changes a story's content, connections, images and audio later.
 
+In **Your cast**, open a love interest and choose their **Character card** to link an Engine card explicitly. Its assigned voice and image references apply without replacing the love interest's story, progress or saved pictures. **No linked card** removes the association. Future paints prefer the card's **Full Body → Neutral** sprite, then its current avatar, then the retained Otome look; linking never paints automatically.
+
 ## The story
 
 Each main chapter is led by one love interest. Otome Hearth offers two to choose from: the one you have spent the least time with, and the one with the most unresolved between you. The chapter planner adds a second love interest whose goals get in the way, and writes six to nine scenes that build to a confrontation. Each scene is written when you reach it, and the next one is written ahead while you read.
@@ -309,7 +311,7 @@ These never call a model or paint anything. With voices on, their lines are voic
 ### What leaves your device
 
 - **Prompts:** every prompt goes to the model provider of the connection that writes it, with your persona's description and your writing style in it. With a cloud provider, it leaves your device.
-- **Other providers:** image prompts go to your image connection. Every image of your persona uses their current **Appearance**, whole, or **Image Appearance Override** while you have it enabled; an outfit's clothing changes are added to it. An empty Appearance uses your avatar reference and the requested clothing without an invented body description or extra model call. An unavailable persona keeps its own saved look as a fallback. A card-imported love interest's likeness reference is their card's **Full Body → Neutral** sprite when available, then their painted base look, then the card avatar. Your persona keeps their avatar reference. Scenes add the outfits people wear after their identity references, within the Engine's four-image limit. Music briefs go to your audio connection, and voiced lines to your voice provider.
+- **Other providers:** image prompts go to your image connection. Every image of your persona uses their current **Appearance**, whole, or **Image Appearance Override** while you have it enabled; an outfit's clothing changes are added to it. An empty Appearance uses your avatar reference and the requested clothing without an invented body description or extra model call. An unavailable persona keeps its own saved look as a fallback. A linked love interest's likeness reference is their card's **Full Body → Neutral** sprite when available, then the current card avatar, then their retained Otome look. Your persona keeps their avatar reference. Scenes add the outfits people wear after their identity references, within the Engine's four-image limit. Music briefs go to your audio connection, and voiced lines to your voice provider.
 - **Debug mode:** with the Engine's Debug mode or `DEBUG_AGENTS` on, every prompt Otome Hearth sends is written to the Engine's server log as `[debug/otome-forge/…]`, and the Engine logs image prompts too. In debug mode, and at a debug log level, the Engine's model providers also log whole requests.
 
 ### The period tracker's rules

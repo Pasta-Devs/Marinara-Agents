@@ -12,6 +12,7 @@
 // GET  /runs/:run/lis/:li/bible?spoilers=1 → {bible}
 // POST /runs/:run/lis/:li/bible {bible}    → {bible}
 // POST /runs/:run/lis/:li/accent {accent}  → {accent}
+// POST /runs/:run/lis/:li/card {cardId}    → {cardId}; null unlinks, keeping the same love interest
 //
 // The server never trusts the client with content. The gate is read from the index on each write: raising Heat or the
 // image rating, or picking Dark romance, needs it (403 `age-gate`), lowering never does, and every stored content goes
@@ -30,6 +31,7 @@ import {
 import { galleryRefIds } from "../art/image-client.js";
 import { imagesOf, paintView, updateIfChanged } from "../art/paint.js";
 import { withPlaceViews } from "../art/places.js";
+import { runForeground } from "../generation.js";
 import { OtomeForgeError, debugModeOf, liParam, parseBody, runParam, type RegisterRoutes } from "../http.js";
 import {
   PROLOGUE_KEY,
@@ -136,6 +138,7 @@ const SettingsBody = z.object({
 });
 const BibleBody = z.object({ bible: BibleSchema });
 const AccentBody = z.object({ accent: z.string().regex(ACCENT_PATTERN) });
+const CardLinkBody = z.object({ cardId: z.string().trim().min(1).max(ID_MAX).nullable() });
 
 const runNotFound = () => new OtomeForgeError(404, "No such Otome Forge run.", "not-found");
 const liNotFound = () => new OtomeForgeError(404, "No such love interest.", "not-found");
@@ -409,6 +412,41 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       });
       if (!world) throw runNotFound();
       return { world: toWorldView(withPlaceViews(runId, world)) };
+    }),
+  );
+
+  router.post(
+    "/runs/:run/lis/:li/card",
+    handle(async (request) => {
+      const { cardId } = parseBody(CardLinkBody, request.body);
+      const { runId } = runParam(request);
+      const li = liParam(request);
+      // The shared run lane keeps two simultaneous links from claiming the same card.
+      return runForeground(runId, async () => {
+        const run = await readRun(store, runId);
+        if (!run) throw runNotFound();
+        if (!run.units.some((unit) => unit.id === li)) throw liNotFound();
+        if (cardId) {
+          if (
+            /[\\/\u0000-\u001f\u007f]/u.test(cardId) ||
+            cardId.includes("..") ||
+            !(await readCard(runtime, cardId))?.name.trim()
+          ) {
+            throw badRequest("That character card is not available.");
+          }
+          if (run.units.some((unit) => unit.id !== li && unit.cardId === cardId)) {
+            throw new OtomeForgeError(409, "That card is linked to another love interest.", "conflict");
+          }
+        }
+        const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => {
+          const next = { ...current };
+          if (cardId) next.cardId = cardId;
+          else delete next.cardId;
+          return next;
+        });
+        if (!unit) throw liNotFound();
+        return { cardId: unit.cardId ?? null };
+      });
     }),
   );
 

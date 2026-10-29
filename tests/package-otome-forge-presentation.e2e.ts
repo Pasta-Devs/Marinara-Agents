@@ -14,6 +14,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { normalizeBible } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit";
 
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engine checkout");
@@ -1717,5 +1718,209 @@ test("Otome Forge audio: a recorded track the Engine no longer lists is made aga
     )
     .toBe(true);
   expect(calls.filter((call) => call.path.endsWith("/gone.mp3"))).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth card link: a generated LI keeps their story and art while an explicit card supplies their current voice", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(150_000);
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+  const name = "Maukie Escher";
+  const cardId = "card-maukie-escher";
+  const calls: Call[] = [];
+  const fixture = createSceneStub({ images: false, audio: { generate: false } });
+  const li = fixture.stub.view.lis[0];
+  Object.assign(li, { name, source: "archetype", portrait: FACE_COLD, expressions: {} });
+  delete li.cardId;
+  fixture.stub.view.lis[1].cardId = "card-cassian";
+  const bible = normalizeBible({ age: 29, pronouns: HE, publicFace: "The generated story still belongs to Maukie." })!;
+  const note = {
+    li: ILVAR,
+    dayKey: "2026-10-29",
+    text: "The light is still on. Come inside.",
+    face: "",
+    mood: { word: "Fond", reason: "You came back" },
+    curt: false,
+    at: written.at,
+  };
+  const home = {
+    li: ILVAR,
+    show: "him",
+    note,
+    look: { url: FACE_COLD, source: "look", cutoutState: "uncut" },
+    faces: {},
+    backdrop: null,
+    lines: { ready: false },
+    rupture: false,
+    unread: 0,
+    noticed: null,
+    noticing: false,
+  };
+  let cards: Json[] = [];
+  let revision = 0;
+  const configReadAt: number[] = [];
+  const cardPath = `/api/otome-forge/runs/${RUN}/lis/${ILVAR}/card`;
+  await stubRoutes(
+    page,
+    (call) => {
+      if (call.path === cardPath && call.method === "POST") {
+        revision += 1;
+        if (call.body!.cardId) li.cardId = call.body!.cardId;
+        else delete li.cardId;
+        return { status: 200, json: { cardId: li.cardId ?? null } };
+      }
+      if (call.path.endsWith(`/lis/${ILVAR}/bible`)) return { status: 200, json: { bible } };
+      if (call.path.endsWith("/home")) return { status: 200, json: { home } };
+      if (call.path.endsWith(`/lis/${ILVAR}/lines`)) {
+        return {
+          status: 200,
+          json: {
+            ready: false,
+            stage: li.stage,
+            rupture: false,
+            tap: null,
+            annoyed: [],
+            cold: [],
+            comfort: [],
+            claw: null,
+          },
+        };
+      }
+      if (call.path === "/api/tts/config") {
+        configReadAt.push(Date.now());
+        return {
+          status: 200,
+          json: {
+            enabled: true,
+            connectionId: "conn-tts",
+            connectionProfiles: {
+              "conn-tts": {
+                voiceAssignments: li.cardId ? [{ characterId: cardId, voice: "Maukie card voice" }] : [],
+                npcDefaultMaleVoices: [revision ? "Unlinked pool voice" : "Original pool voice"],
+                npcDefaultFemaleVoices: ["Pool Female"],
+              },
+            },
+          },
+        };
+      }
+      return fixture.answer(call);
+    },
+    calls,
+  );
+  await page.route("**/api/characters/catalog?*", (route) => route.fulfill({ json: { items: cards, hasMore: false } }));
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  const root = await openOtome(page);
+  await recordSpeech(page);
+  const playNote = async (voice: string, expectedCard: string | null) => {
+    await root
+      .getByRole("navigation", { name: "Game menu" })
+      .getByRole("button", { name: "Home", exact: true })
+      .click();
+    await expect(root.getByRole("heading", { name, exact: true })).toBeVisible();
+    const count = (await spoken(page)).length;
+    await root.getByRole("button", { name: `Hear ${name} read the note` }).click();
+    await expect.poll(async () => (await spoken(page)).length).toBe(count + 1);
+    const request = (await spoken(page))[count]!.requests[0]!;
+    expect(request).toMatchObject({ speaker: name, text: note.text, voice });
+    expect(request.characterId ?? null).toBe(expectedCard);
+    await expect
+      .poll(() => page.evaluate(() => (globalThis as any).__MARINARA_HOST__.services.tts.ttsService.getState()))
+      .toBe("idle");
+  };
+  const openLink = async () => {
+    await root.getByRole("button", { name: "Who’s home" }).click();
+    const picker = page.getByRole("dialog", { name: "Who’s home" });
+    await expect(picker.getByText("Affection 2", { exact: true })).toBeVisible();
+    await picker.getByRole("button", { name: "Your cast" }).click();
+    await root.getByRole("button", { name: `Open ${name}’s bible (spoilers)` }).click();
+    await expect(root.getByRole("heading", { name: `${name}’s bible` })).toBeVisible();
+    await expect(root.locator(".of-page-head .of-avatar img")).toHaveAttribute("src", FACE_COLD);
+    return root.getByRole("form", { name: "Character card", exact: true });
+  };
+  const configReads = () => calls.filter((call) => call.path === "/api/tts/config").length;
+
+  // A same-name card cannot silently attach itself: the generated LI starts with its own pool voice and no link.
+  await playNote("Original pool voice", null);
+  expect(configReads()).toBe(1);
+  let form = await openLink();
+  const select = form.getByRole("combobox", { name: "Character card", exact: true });
+  await expect(select).toHaveValue("");
+  await expect(root.getByRole("button", { name: "Show spoilers" })).toBeVisible();
+  cards = [
+    { id: cardId, name, avatarPath: "/api/avatars/file/maukie.png" },
+    { id: "card-cassian", name: "Cassian card", avatarPath: null },
+  ];
+  await form.getByRole("button", { name: "Refresh cards" }).click();
+  await expect(select.getByRole("option", { name, exact: true })).toHaveCount(1);
+  await expect(select.getByRole("option", { name: "Cassian card", exact: true })).toBeDisabled();
+  await select.selectOption(cardId);
+  await form.getByRole("button", { name: "Save card link" }).click();
+  await expect(form.getByRole("status")).toHaveText("Saved.");
+  expect(posts(calls, "/card").map((call) => call.body!.cardId)).toEqual([cardId]);
+  await page.screenshot({ path: testInfo.outputPath("card-link-saved.png") });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  await expect(root).toHaveAttribute("data-look", "midnight");
+  await page.screenshot({ path: testInfo.outputPath("card-link-saved-midnight.png") });
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+  await expect(root).toHaveAttribute("data-look", "pearl");
+
+  // The same controller has a cached config from the unlinked voice: linking must fetch the new assignment now.
+  await playNote("Maukie card voice", cardId);
+  expect(configReads()).toBe(2);
+  expect(
+    configReadAt[1]! - configReadAt[0]!,
+    "the previous config is still inside its 30-second cache window",
+  ).toBeLessThan(30_000);
+  expect(posts(calls, "/api/tts/speak").some((call) => call.body?.voice === "Maukie card voice")).toBe(true);
+  await page.reload();
+  await page.getByRole("tab", { name: "Open Otome Hearth" }).click();
+  await expect(root.getByRole("heading", { name, exact: true })).toBeVisible();
+  await recordSpeech(page);
+  form = await openLink();
+  await expect(form.getByRole("combobox", { name: "Character card" })).toHaveValue(cardId);
+  // Removing a library card does not silently reassign or unlink this LI when the catalogue is refreshed.
+  const available = cards;
+  cards = [];
+  await form.getByRole("button", { name: "Refresh cards" }).click();
+  await expect(form.getByRole("option", { name: "Linked card unavailable" })).toHaveCount(1);
+  await expect(form.getByRole("combobox", { name: "Character card" })).toHaveValue(cardId);
+  cards = available;
+  await form.getByRole("button", { name: "Refresh cards" }).click();
+  await expect(form.getByRole("option", { name, exact: true })).toHaveCount(1);
+  await root.getByRole("button", { name: "Show spoilers" }).click();
+  await expect(root.getByText(bible.publicFace, { exact: true })).toBeVisible();
+  await expect(root.getByText("Card canon wins.", { exact: true })).toBeVisible();
+  await playNote("Maukie card voice", cardId);
+  expect(configReads()).toBe(3);
+  form = await openLink();
+  await form.getByRole("combobox", { name: "Character card" }).selectOption("");
+  await form.getByRole("button", { name: "Save card link" }).click();
+  await expect(form.getByRole("status")).toHaveText("Saved.");
+  await expect(form.getByRole("combobox", { name: "Character card" })).toHaveValue("");
+  await playNote("Unlinked pool voice", null);
+  expect(configReads()).toBe(4);
+  expect(configReadAt[3]! - configReadAt[2]!, "unlink refreshes the still-cached linked config").toBeLessThan(30_000);
+  form = await openLink();
+  await expect(form.getByRole("combobox", { name: "Character card" })).toHaveValue("");
+  await root.getByRole("button", { name: "Show spoilers" }).click();
+  await expect(root.getByText(bible.publicFace, { exact: true })).toBeVisible();
+  await expect(root.getByText("Card canon wins.", { exact: true })).toHaveCount(0);
+  expect(posts(calls, "/card").map((call) => call.body!.cardId)).toEqual([cardId, null]);
+  for (const call of posts(calls, "/card")) {
+    expect(Object.keys(call.body!).sort()).toEqual(["cardId", "debugMode", "timeZone"]);
+    expect(call.path).toBe(cardPath);
+  }
+  expect(
+    calls.filter(
+      (call) =>
+        call.method === "POST" &&
+        call.path.startsWith("/api/otome-forge/") &&
+        !call.path.endsWith("/index/opened") &&
+        call.path !== cardPath,
+    ),
+  ).toEqual([]);
+  expect(posts(calls, "/api/audio/generate")).toEqual([]);
   expect(pageErrors).toEqual([]);
 });

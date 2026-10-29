@@ -10,11 +10,7 @@
 // wrapper also needs characterCard, personaAvatar and cardAvatarImage. generateImage is one paid image with exactly the
 // references it is given (a place has none; an expression edit has its base) and saves nothing: uploadToGallery keeps
 // it, in the shape the kit's expressions module calls.
-import {
-  forgeLocalAvatarPath,
-  forgeSubjectReference,
-  forgeWrapImageReferenceClient,
-} from "@forge-kit/image-avatar-references.mjs";
+import { forgeSubjectReference, forgeWrapImageReferenceClient } from "@forge-kit/image-avatar-references.mjs";
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 
 /** Whose likeness a look keeps: the fields forgeWrapImageReferenceClient reads to find a reference image. */
@@ -430,9 +426,6 @@ export function createImageClient({
         } catch {
           // A missing card or sprite does not prevent a paint with this love interest's other retained likenesses.
         }
-        const portrait = forgeLocalAvatarPath(subject.portrait);
-        const image = portrait ? await client.cardAvatarImage(portrait) : null;
-        if (image) return `data:${image.mime};base64,${image.base64}`;
       }
       return forgeSubjectReference(client, subject);
     },
