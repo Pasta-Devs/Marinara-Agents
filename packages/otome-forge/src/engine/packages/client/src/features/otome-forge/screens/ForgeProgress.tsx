@@ -223,7 +223,7 @@ export function ForgeProgress({ runKey, onOpenBible, onBegin }: ForgeProgressPro
         ...(reviewed ? { base: reviewed.base, prompts: reviewed.prompts } : {}),
       });
       if (paint.state !== "ready") {
-        const message = t("ui.otomeForge.setup.repaintFailed");
+        const message = t("ui.otomeForge.setup.repaintExpressionsFailed");
         const detail = debugMode && paint.error ? `${message} (${paint.error})` : message;
         if (reviewed) setReviewError(detail);
         else setError(detail);

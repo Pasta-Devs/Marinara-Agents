@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.1.10 — 2026-10-29
+
+- Repaint a love interest’s five expressions for their current look from Your cast, with a five-image cost and all prompts reviewed before painting when prompt review is enabled. Existing artwork stays available during replacement or after a failure.
+- Expression generation preserves the configured image style for both prose and tag-based profiles. Reviewed prompts stay bound to the look they were written for, with their full text and required safety wording retained.
+
 ## 0.1.9 — 2026-10-29
 
 - Chapter, scene, route and date writers now receive the selected persona’s full Description, Personality, Backstory and authored Appearance, including on existing runs. Their authored facts stay distinct from image-only appearance overrides; roleplay scenarios and dialogue examples are excluded.

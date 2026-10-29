@@ -187,7 +187,14 @@ function readResult(stub: { view: Json }, grants: Json[] = [], extra: Json = {})
   return { grants, starlight: stub.view.starlight, chapterDone: false, ...extra };
 }
 
-type Answer = { status: number; json?: unknown; body?: Buffer; contentType?: string; delay?: number };
+type Answer = {
+  status: number;
+  json?: unknown;
+  body?: Buffer;
+  contentType?: string;
+  delay?: number;
+  wait?: Promise<void>;
+};
 
 async function stubRoutes(page: Page, answer: (call: Call) => Answer | undefined, calls: Call[]) {
   await page.route("**/api/app-settings/ui", (route) =>
@@ -226,6 +233,7 @@ async function stubRoutes(page: Page, answer: (call: Call) => Answer | undefined
       status: 404,
       json: { error: `No stub for ${call.method} ${call.path}`, code: "not-found" },
     };
+    if (reply.wait) await reply.wait;
     if (reply.delay) await new Promise((done) => setTimeout(done, reply.delay));
     if (reply.body) await route.fulfill({ status: reply.status, body: reply.body, contentType: reply.contentType });
     else await route.fulfill({ status: reply.status, json: reply.json });
@@ -337,6 +345,167 @@ const generatedCues = (calls: Call[]) =>
   posts(calls, "/api/audio/generate")
     .map((call) => /-([a-z]+)$/u.exec(call.body!.context.key)?.[1] ?? "")
     .sort();
+
+const REPAINT_FACES = ["tender", "flustered", "cold", "hurt", "angry"];
+const REPAINT_ERROR = "The new expressions didn’t finish. Your current artwork stays. Try Repaint expressions again.";
+
+function expressionRepaintFixture({ failFirst = false, wait }: { failFirst?: boolean; wait?: Promise<void> } = {}) {
+  const fixture = createSceneStub({ audio: false });
+  const { view } = fixture.stub;
+  const forge = { phase: "ready", steps: [{ id: `paint:${ILVAR}`, state: "done" }] };
+  view.forge = forge;
+  view.world.forge = forge;
+  Object.assign(view.lis[0], { portrait: FACE_COLD, cut: [FACE_COLD] });
+  const prompts = Object.fromEntries(
+    REPAINT_FACES.map((face) => [
+      face,
+      {
+        prompt: `Edit only the ${face} expression. Configured copper etching style.`,
+        negativePrompt: "lowres, child, underage",
+      },
+    ]),
+  );
+  const home = {
+    li: ILVAR,
+    show: "him",
+    note: {
+      li: ILVAR,
+      dayKey: now().slice(0, 10),
+      text: "Come inside.",
+      face: "",
+      mood: { word: "Fond", reason: "You came back" },
+      curt: false,
+      at: now(),
+    },
+    look: { url: FACE_COLD, source: "look", cutout: FACE_COLD, cutoutState: "ready" },
+    faces: {},
+    backdrop: null,
+    lines: { ready: false },
+    rupture: false,
+    unread: 0,
+    noticed: null,
+    noticing: false,
+  };
+  let attempts = 0;
+  const answer = (call: Call): Answer | undefined => {
+    if (call.path.endsWith("/art/expressions/prompt")) return { status: 200, json: { base: FACE_COLD, prompts } };
+    if (call.path.endsWith("/art/expressions")) {
+      attempts += 1;
+      return {
+        status: 200,
+        json: { paint: { state: failFirst && attempts === 1 ? "failed" : "ready", at: now() } },
+        wait,
+      };
+    }
+    if (call.path.endsWith("/home")) return { status: 200, json: home };
+    if (call.path.endsWith(`/lis/${ILVAR}/lines`))
+      return {
+        status: 200,
+        json: { ready: false, stage: 1, rupture: false, tap: null, annoyed: [], cold: [], comfort: [], claw: null },
+      };
+    return fixture.answer(call);
+  };
+  return { answer, view, prompts };
+}
+
+async function openRepaintCast(page: Page, reviewPrompts = false) {
+  const root = await openOtome(page, { reviewPrompts });
+  await root.getByRole("button", { name: "Who’s home" }).click();
+  await page.getByRole("dialog", { name: "Who’s home" }).getByRole("button", { name: "Your cast" }).click();
+  await expect(root.getByRole("heading", { name: "Your story is ready", exact: true })).toBeVisible();
+  return root;
+}
+
+test("Otome Hearth expression repaint labels five images, shares busy controls and preserves the current look", async ({
+  page,
+}, testInfo) => {
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => (release = resolve));
+  const fixture = expressionRepaintFixture({ wait });
+  const calls: Call[] = [];
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  await stubRoutes(page, fixture.answer, calls);
+  try {
+    const root = await openRepaintCast(page);
+    const button = root.getByRole("button", { name: "Repaint expressions for Ilvar Thorne", exact: true });
+    const look = root.getByRole("button", { name: "Repaint Ilvar Thorne’s look", exact: true });
+    const actions = root.locator(".of-forge-retry--paints");
+    await expect(button).toBeVisible();
+    await expect(look).toBeVisible();
+    await expect(actions.getByText("Paints 1 image", { exact: true })).toBeVisible();
+    await expect(actions.getByText("Paints 5 images", { exact: true })).toBeVisible();
+    const original = await root.locator(".of-cast-card").first().locator("img").getAttribute("src");
+    const done = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/art/expressions"));
+    await button.click();
+    await expect(button).toBeDisabled();
+    await expect(look).toBeDisabled();
+    await expect.poll(() => posts(calls, "/art/expressions").length).toBe(1);
+    expect(posts(calls, "/art/expressions")[0]!.body).toMatchObject({ li: ILVAR });
+    expect(posts(calls, "/art/paint")).toEqual([]);
+    expect(posts(calls, "/art/expressions/prompt")).toEqual([]);
+    await expect(root.locator(".of-cast-card").first().locator("img")).toHaveAttribute("src", original!);
+    await page.screenshot({ path: testInfo.outputPath("expression-repaint-busy-midnight.png") });
+    release();
+    await (await done).finished();
+    await expect(button).toBeEnabled();
+    await expect(root.locator(".of-cast-card").first().locator("img")).toHaveAttribute("src", original!);
+    expect(posts(calls, "/art/expressions")).toHaveLength(1);
+    expect(errors).toEqual([]);
+  } finally {
+    release();
+  }
+});
+
+test("Otome Hearth expression repaint reviews five prompts before paying, cancels cleanly and retains edits after failure", async ({
+  page,
+}, testInfo) => {
+  const fixture = expressionRepaintFixture({ failFirst: true });
+  const calls: Call[] = [];
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openRepaintCast(page, true);
+  const repaint = root.getByRole("button", { name: "Repaint expressions for Ilvar Thorne", exact: true });
+  await repaint.click();
+  let dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading")).toContainText("tender (1 of 5)");
+  await dialog.getByRole("button", { name: "Cancel repaint", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(posts(calls, "/art/expressions")).toEqual([]);
+  await repaint.click();
+  const edited = `${"Keep the copper etching. ".repeat(200)}FINAL REVIEW WORDS`;
+  for (const [index, face] of REPAINT_FACES.entries()) {
+    dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading")).toContainText(`${face} (${index + 1} of 5)`);
+    await expect(dialog.getByText("Paints 5 images", { exact: true })).toBeVisible();
+    if (index === 0) {
+      await dialog.getByLabel("Prompt", { exact: true }).fill(edited);
+      await dialog.getByLabel("Negative prompt", { exact: true }).fill("Keep the edited negative whole.");
+    }
+    expect(posts(calls, "/art/expressions")).toEqual([]);
+    if (index < REPAINT_FACES.length - 1) await dialog.getByRole("button", { name: "Review next expression" }).click();
+  }
+  await page.screenshot({ path: testInfo.outputPath("expression-repaint-last-review-pearl.png") });
+  await dialog.getByRole("button", { name: "Repaint 5 expressions", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText(REPAINT_ERROR);
+  const first = posts(calls, "/art/expressions")[0]!.body!;
+  expect(first).toMatchObject({ li: ILVAR, base: FACE_COLD });
+  expect(Object.keys(first.prompts).sort()).toEqual([...REPAINT_FACES].sort());
+  expect(first.prompts.tender).toEqual({ prompt: edited, negativePrompt: "Keep the edited negative whole." });
+  expect(first.prompts.angry).toEqual(fixture.prompts.angry);
+  await expect(dialog.getByLabel("Prompt", { exact: true })).toHaveValue(fixture.prompts.angry.prompt);
+  await page.screenshot({ path: testInfo.outputPath("expression-repaint-failure-pearl.png") });
+  await dialog.getByRole("button", { name: "Repaint 5 expressions", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(posts(calls, "/art/expressions")).toHaveLength(2);
+  expect(posts(calls, "/art/expressions")[1]!.body).toEqual(first);
+  expect(posts(calls, "/art/paint")).toEqual([]);
+  expect(posts(calls, "/api/audio/generate")).toEqual([]);
+  expect(errors).toEqual([]);
+});
 
 // ── Arcs ──
 
