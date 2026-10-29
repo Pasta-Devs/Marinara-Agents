@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.1.3",
+          "date": "2026-10-29",
+          "notes": "- Mobile chapter cutouts continue behind the dialogue panel for a closer view. A three-dot button opens the secondary reader controls vertically, beside working mute and fullscreen buttons.",
+          "highlight": false
+        },
+        {
           "version": "0.1.2",
           "date": "2026-10-29",
           "notes": "- Home cleans your own generated looks and outfits as well as the love interests'. Originals stay in the Wardrobe.\n- On an Engine with corrected sprite cleanup, old cut-outs are rebuilt from the retained originals for free. The previous image stays visible until its replacement is ready.\n- Card-imported love interests use their card's Full Body → Neutral sprite as the likeness reference when available, then their painted base look, then the card avatar.\n- Every image of your persona reads their current Appearance, or the enabled Image Appearance Override, whole. Outfit changes keep that identity instead of reusing a stale generated description.\n- Empty Appearance uses your avatar and the requested clothing, with no invented body description or extra model call.\n- Otome Hearth's Home tab uses a heart icon.",

@@ -274,12 +274,18 @@ const posts = (calls: Call[], suffix: string) =>
 
 /** Goes on once the line has typed itself out (waiting, never racing the typing: see the reader spec's next). */
 async function next(root: Locator) {
+  await setReaderControlsExpanded(root, false);
   const button = root.locator(".of-next");
   await expect(button).toHaveAttribute("data-done", "true");
   await button.click();
 }
 
 const line = (root: Locator) => root.locator(".of-dialogue .of-line");
+
+async function setReaderControlsExpanded(root: Locator, expanded = true) {
+  const more = root.getByRole("button", { name: "More reader controls" });
+  if ((await more.isVisible()) && (await more.getAttribute("aria-expanded")) !== String(expanded)) await more.click();
+}
 
 /** The cues music was generated for, in order of their names; a cue made twice shows twice. */
 const generatedCues = (calls: Call[]) =>
@@ -568,6 +574,7 @@ for (const refused of ["Rewrite", "Ease off"] as const) {
     await root.getByRole("button", { name: "Begin Cassian’s next chapter" }).click();
     await expect(line(root)).toContainText("The workshop smells of oil and rain.");
 
+    await setReaderControlsExpanded(root);
     if (refused === "Rewrite") await root.getByRole("button", { name: /Rewrite/u }).click();
     else {
       await root.getByRole("button", { name: "Ease off" }).click();
@@ -591,6 +598,7 @@ for (const refused of ["Rewrite", "Ease off"] as const) {
     await expect(root.getByRole("button", { name: /Rewrite/u })).toHaveCount(0);
     await expect(root.getByRole("button", { name: "Ease off" })).toHaveCount(0);
     // Back on the story screen, the rupture's banner offers Make it right with him.
+    await setReaderControlsExpanded(root, false);
     await held.getByRole("button", { name: "Back to the story" }).click();
     const rupture = root.getByRole("region", { name: "Cassian is keeping his distance" });
     await expect(rupture.getByRole("button", { name: "Make it right with Cassian" })).toBeVisible();
@@ -928,6 +936,379 @@ async function recordSpeech(page: Page) {
 }
 const spoken = (page: Page) => page.evaluate(() => (window as any).__spoken as Array<{ requests: Json[]; id: string }>);
 
+// The reader's phone layout is selected from the available frame, including a coarse-pointer phone in landscape.
+// A full-body cut-out with recognizable head, torso, thighs and boots, rather than an opaque portrait rectangle.
+const READER_CUTOUT = `data:image/svg+xml;base64,${Buffer.from(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="800" viewBox="0 0 360 800">
+    <circle cx="180" cy="76" r="44" fill="#e6c98a"/>
+    <path d="M135 128 L225 128 L250 320 L225 380 L135 380 L110 320Z" fill="#9db8f0"/>
+    <path d="M135 380 L175 380 L170 600 L125 600Z M185 380 L225 380 L235 600 L190 600Z" fill="#b79cf2"/>
+    <path d="M125 600 L170 600 L170 770 L105 770 L105 735Z M190 600 L235 600 L255 770 L190 770Z" fill="#e7a6b8"/>
+    <g fill="#1c142e" font-family="sans-serif" font-size="18" text-anchor="middle">
+      <text x="180" y="82">HEAD</text><text x="180" y="250">TORSO</text>
+      <text x="150" y="450" transform="rotate(90 150 450)">THIGH</text>
+      <text x="210" y="450" transform="rotate(90 210 450)">THIGH</text>
+      <text x="140" y="735">BOOT</text><text x="215" y="735">BOOT</text>
+    </g>
+  </svg>`,
+).toString("base64")}`;
+
+function readerCutoutStub() {
+  const fixture = createSceneStub({ audio: false });
+  const faces = { cold: READER_CUTOUT, tender: READER_CUTOUT, angry: READER_CUTOUT, hurt: READER_CUTOUT };
+  fixture.stub.view.lis[0].expressions = faces;
+  fixture.stub.view.lis[0].cut = [READER_CUTOUT];
+  return {
+    ...fixture,
+    answer: (call: Call): Answer | undefined => {
+      const reply = fixture.answer(call);
+      if (call.path.endsWith("/art/scene") && reply?.json) {
+        const scene = reply.json as Json;
+        return { ...reply, json: { ...scene, faces: { ...scene.faces, [ILVAR]: faces } } };
+      }
+      return reply;
+    },
+  };
+}
+
+test.describe("Otome Forge reader mobile", () => {
+  test.use({ hasTouch: true, isMobile: true });
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 320, height: 700 },
+    { width: 844, height: 390 },
+  ]) {
+    test(`chapter controls and cut-out framing at ${viewport.width}×${viewport.height}`, async ({ page }, testInfo) => {
+      test.setTimeout(120_000);
+      await page.setViewportSize(viewport);
+      await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+      const calls: Call[] = [];
+      const { answer } = readerCutoutStub();
+      const pageErrors: string[] = [];
+      page.on("pageerror", (error) => pageErrors.push(error.message));
+      await stubRoutes(page, answer, calls);
+      const root = await openStory(page);
+      if (viewport.width > viewport.height) {
+        const frame = (await root.locator(".of-frame").boundingBox())!;
+        const stage = (await root.locator(".of-stage").boundingBox())!;
+        expect(stage.height).toBeGreaterThan(stage.width);
+        expect(stage.width).toBeLessThan(frame.width - 1);
+      }
+      await root.getByRole("button", { name: "Continue" }).first().click();
+      await expect(root.locator(".of-reader")).toBeVisible();
+      if (viewport.width > viewport.height) {
+        const frame = (await root.locator(".of-frame").boundingBox())!;
+        const stage = (await root.locator(".of-stage").boundingBox())!;
+        expect(stage.width).toBeCloseTo(frame.width, 0);
+      }
+      await next(root);
+      await expect(line(root)).toContainText("You came back. How inefficient of you.");
+      const originalLine = (await line(root).textContent())!;
+      const primary = root.locator(".of-reader-primary");
+      const more = primary.getByRole("button", { name: "More reader controls" });
+      const secondary = root.locator(".of-reader-secondary");
+      await expect(primary.getByRole("button")).toHaveCount(3);
+      await expect(primary.getByRole("button", { name: "Mute audio" })).toBeVisible();
+      await expect(primary.getByRole("button", { name: /fullscreen/iu })).toBeVisible();
+      await expect(more).toHaveAttribute("aria-expanded", "false");
+      await expect(secondary).toBeHidden();
+
+      const openTools = async () => {
+        if ((await more.getAttribute("aria-expanded")) === "false") await more.click();
+        await expect(secondary).toBeVisible();
+      };
+      await openTools();
+      const tools = secondary.getByRole("button");
+      await expect(tools).toHaveCount(6);
+      expect(await tools.evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label")))).toEqual([
+        "Auto",
+        "Skip what you’ve read",
+        "Hide the text",
+        "Backlog",
+        expect.stringMatching(/^Rewrite this scene/u),
+        "Ease off",
+      ]);
+      const boxes = await tools.evaluateAll((buttons) =>
+        buttons.map((button) => {
+          const box = button.getBoundingClientRect();
+          return { x: box.x, y: box.y, width: box.width, height: box.height };
+        }),
+      );
+      for (let i = 0; i < boxes.length; i++) {
+        const box = boxes[i]!;
+        expect(box.width).toBeGreaterThanOrEqual(44);
+        expect(box.height).toBeGreaterThanOrEqual(44);
+        expect(box.x).toBeCloseTo(boxes[0]!.x, 0);
+        if (i) expect(box.y).toBeGreaterThanOrEqual(boxes[i - 1]!.y + boxes[i - 1]!.height);
+      }
+      if (viewport.width > viewport.height) {
+        // A notch can move the controls lower than ordinary desktop emulation's zero safe-area inset.
+        await root.locator(".of-reader-head").evaluate((element: HTMLElement) => {
+          element.style.paddingTop = "47px";
+        });
+        const menu = await secondary.evaluate((element) => ({
+          height: element.clientHeight,
+          content: element.scrollHeight,
+        }));
+        expect(menu.content).toBeGreaterThan(menu.height);
+      }
+      // A short landscape menu scrolls: every action remains reachable without moving the whole stage.
+      for (const tool of await tools.all()) {
+        await tool.scrollIntoViewIfNeeded();
+        const box = (await tool.boundingBox())!;
+        expect(box.y).toBeGreaterThanOrEqual(0);
+        expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+      }
+      await tools.first().scrollIntoViewIfNeeded();
+      if (viewport.width > viewport.height) {
+        await page.screenshot({ path: testInfo.outputPath("mobile-landscape-safe-area-controls.png") });
+        await root.locator(".of-reader-head").evaluate((element: HTMLElement) => {
+          element.style.removeProperty("padding-top");
+        });
+      }
+      expect(await secondary.getByRole("button", { name: /^Rewrite this scene/u }).innerText()).toBe("");
+      expect(await secondary.getByRole("button", { name: "Ease off" }).innerText()).toBe("");
+      await page.screenshot({ path: testInfo.outputPath(`mobile-${viewport.width}-controls.png`) });
+      await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+      await expect(root).toHaveAttribute("data-look", "midnight");
+      await page.screenshot({ path: testInfo.outputPath(`mobile-${viewport.width}-controls-midnight.png`) });
+      await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+      await expect(root).toHaveAttribute("data-look", "pearl");
+      await page.keyboard.press("Escape");
+      await expect(secondary).toBeHidden();
+      await expect(more).toBeFocused();
+      await expect(line(root)).toHaveText(originalLine);
+
+      await primary.getByRole("button", { name: /fullscreen/iu }).click();
+      await expect(line(root)).toHaveText(originalLine);
+      await primary.getByRole("button", { name: /fullscreen/iu }).click();
+      await expect(line(root)).toHaveText(originalLine);
+      await openTools();
+      const auto = secondary.getByRole("button", { name: "Auto", exact: true });
+      await auto.click();
+      await expect(auto).toHaveAttribute("aria-pressed", "true");
+      await auto.click();
+      await expect(auto).toHaveAttribute("aria-pressed", "false");
+      await expect(line(root)).toHaveText(originalLine);
+
+      // A disabled Skip, opening/closing a dialog and hiding/showing the box never act as a tap on the stage.
+      await openTools();
+      const skip = secondary.getByRole("button", { name: "Skip what you’ve read" });
+      await expect(skip).toHaveAttribute("aria-disabled", "true");
+      // aria-disabled keeps this button focusable; a physical tap still reaches its guarded click handler.
+      const skipBox = (await skip.boundingBox())!;
+      await page.touchscreen.tap(skipBox.x + skipBox.width / 2, skipBox.y + skipBox.height / 2);
+      await expect(line(root)).toHaveText(originalLine);
+      await openTools();
+      await secondary.getByRole("button", { name: "Backlog" }).click();
+      const backlog = page.getByRole("dialog", { name: "Backlog" });
+      await expect(backlog).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(backlog).toBeHidden();
+      await expect(more).toHaveAttribute("aria-expanded", "true");
+      await expect(line(root)).toHaveText(originalLine);
+      await openTools();
+      await secondary.getByRole("button", { name: "Ease off", exact: true }).click();
+      await page.getByRole("dialog", { name: "Ease off?" }).getByRole("button", { name: "Keep reading" }).click();
+      await expect(line(root)).toHaveText(originalLine);
+      await openTools();
+      await secondary.getByRole("button", { name: "Hide the text" }).click();
+      await root.getByRole("button", { name: "Show the text" }).click();
+      await expect(line(root)).toHaveText(originalLine);
+      await openTools();
+      await root.locator(".of-reader-stage").click({ position: { x: 20, y: 20 } });
+      await expect(more).toHaveAttribute("aria-expanded", "false");
+      await expect(line(root)).toHaveText(originalLine);
+
+      // The full cut-out continues behind the dialogue, with only its upper body exposed above the box.
+      const image = root.locator('.of-face-img[data-front="true"][data-cut="true"]');
+      await expect(image).toBeVisible();
+      const sprite = (await image.boundingBox())!;
+      const dialogue = (await root.locator(".of-dialogue").boundingBox())!;
+      expect(sprite.y).toBeLessThan(dialogue.y);
+      expect(sprite.y + sprite.height).toBeGreaterThan(dialogue.y + 40);
+      expect((dialogue.y - sprite.y) / sprite.height).toBeLessThan(0.8);
+      // The SVG's marked head (y=32..120) stays visible; its boots (y=600+) are behind the dialogue.
+      await expect(image).toHaveCSS("object-fit", "cover");
+      const scale = Math.max(sprite.width / 360, sprite.height / 800);
+      expect(sprite.y + 120 * scale).toBeLessThan(dialogue.y);
+      expect(sprite.y + 600 * scale).toBeGreaterThan(dialogue.y);
+      await page.screenshot({ path: testInfo.outputPath(`mobile-${viewport.width}-sprite.png`) });
+      expect(pageErrors).toEqual([]);
+    });
+  }
+
+  test("the first outside tap closes the controls before a pending choice can be selected", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const calls: Call[] = [];
+    const fixture = createSceneStub({ images: false, audio: false });
+    fixture.beat0.choices = [
+      {
+        id: "choice-mobile",
+        kind: "small",
+        at: 1,
+        options: [
+          {
+            id: "option-stay",
+            text: "Stay with him.",
+            selection: { kind: "action", text: "You stay by the door." },
+            segments: [seg("Ilvar", "A sensible decision.")],
+          },
+        ],
+      },
+    ];
+    await stubRoutes(
+      page,
+      (call) => {
+        if (call.path.endsWith("/choose")) {
+          fixture.beat0.choiceCanon[call.body!.choice] = call.body!.option;
+          return { status: 200, json: { beat: fixture.beat0, remembered: false, rememberedBy: [] } };
+        }
+        return fixture.answer(call);
+      },
+      calls,
+    );
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Continue" }).first().click();
+    await next(root);
+    const choice = root.getByRole("group", { name: "What do you do?" });
+    const stay = choice.getByRole("button", { name: "Stay with him." });
+    await expect(stay).toBeVisible();
+    const more = root.getByRole("button", { name: "More reader controls" });
+    await more.click();
+    await expect(more).toHaveAttribute("aria-expanded", "true");
+    // Tab can reach a choice outside the header: Escape still owns the open disclosure, without selecting anything.
+    await stay.focus();
+    await page.keyboard.press("Escape");
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await expect(more).toBeFocused();
+    expect(posts(calls, "/choose")).toHaveLength(0);
+    await more.click();
+    await stay.click();
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await expect(stay).toBeVisible();
+    expect(posts(calls, "/choose")).toHaveLength(0);
+    await expect(line(root)).toContainText("You came back. How inefficient of you.");
+    await stay.click();
+    await expect(line(root)).toContainText("You stay by the door.");
+    expect(posts(calls, "/choose")).toHaveLength(1);
+  });
+
+  test("mute silences music and aborts the current voice without advancing", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.addInitScript(() => {
+      const gains: Array<{ value: number; connected: boolean }> = [];
+      (window as any).__readerGains = gains;
+      const create = AudioContext.prototype.createGain;
+      AudioContext.prototype.createGain = function (this: AudioContext) {
+        const node = create.call(this);
+        const state = { value: node.gain.value, connected: false };
+        gains.push(state);
+        const connect = node.connect.bind(node) as (...args: any[]) => any;
+        node.connect = ((...args: any[]) => {
+          state.connected = true;
+          return connect(...args);
+        }) as typeof node.connect;
+        const disconnect = node.disconnect.bind(node) as (...args: any[]) => void;
+        node.disconnect = ((...args: any[]) => {
+          state.connected = false;
+          return disconnect(...args);
+        }) as typeof node.disconnect;
+        const set = node.gain.setValueAtTime.bind(node.gain);
+        node.gain.setValueAtTime = (value: number, time: number) => {
+          state.value = value;
+          return set(value, time);
+        };
+        return node;
+      };
+    });
+    const calls: Call[] = [];
+    const { answer } = createSceneStub({ images: false, audio: { generate: false } });
+    await stubRoutes(page, answer, calls);
+    const root = await openStory(page);
+    await page.evaluate(() => {
+      const service = (globalThis as any).__MARINARA_HOST__.services.tts.ttsService;
+      const speak = service.speakSequence.bind(service);
+      (window as any).__readerVoiceAborted = 0;
+      service.speakSequence = (requests: any[], id: string, options: any) => {
+        options.signal.addEventListener("abort", () => ((window as any).__readerVoiceAborted += 1), { once: true });
+        return speak(requests, id, options);
+      };
+    });
+    // Hold the real voice fetch so a completed 0.1-second fixture clip cannot race the mute tap.
+    let release!: () => void;
+    const heldVoice = new Promise<void>((resolveHeld) => (release = resolveHeld));
+    await page.route("**/api/tts/speak", async (route) => {
+      await heldVoice;
+      await route.fallback();
+    });
+    try {
+      await root.getByRole("button", { name: "Continue" }).first().click();
+      await next(root);
+      await expect(line(root)).toContainText("You came back. How inefficient of you.");
+      const originalLine = (await line(root).textContent())!;
+      // A stopped crossfade disconnects its gain; its historical value no longer contributes any audio.
+      const gains = () =>
+        page.evaluate(
+          () =>
+            (window as any).__readerGains
+              .filter((gain: { connected: boolean }) => gain.connected)
+              .map((gain: { value: number }) => gain.value) as number[],
+        );
+      const voiceState = () =>
+        page.evaluate(() => (globalThis as any).__MARINARA_HOST__.services.tts.ttsService.getState() as string);
+      await expect.poll(voiceState).toBe("loading");
+      await expect.poll(async () => (await gains()).some((value) => value > 0)).toBe(true);
+      await root.locator(".of-reader-primary").getByRole("button", { name: "Mute audio" }).click();
+      await expect(root.getByRole("button", { name: "Unmute audio", exact: true })).toBeVisible();
+      await expect.poll(() => page.evaluate(() => (window as any).__readerVoiceAborted as number)).toBe(1);
+      await expect.poll(voiceState).toBe("idle");
+      expect((await gains()).length).toBeGreaterThan(0);
+      await expect.poll(async () => (await gains()).every((value) => value === 0)).toBe(true);
+      await expect(line(root)).toHaveText(originalLine);
+      await root.getByRole("button", { name: "Unmute audio", exact: true }).click();
+      await expect.poll(async () => (await gains()).some((value) => value > 0)).toBe(true);
+      await expect(line(root)).toHaveText(originalLine);
+    } finally {
+      release();
+    }
+  });
+});
+
+test.describe("Otome Forge reader desktop", () => {
+  test.use({ hasTouch: false, isMobile: false, viewport: { width: 1280, height: 900 } });
+
+  test("keeps the existing controls and full cut-out framing", async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const calls: Call[] = [];
+    const { answer } = readerCutoutStub();
+    await stubRoutes(page, answer, calls);
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Continue" }).first().click();
+    await next(root);
+    await expect(root.getByRole("button", { name: "More reader controls" })).toBeHidden();
+    await expect(root.getByRole("button", { name: "Auto", exact: true })).toBeVisible();
+    await expect(root.getByRole("button", { name: "Skip what you’ve read" })).toBeVisible();
+    await expect(root.getByRole("button", { name: "Backlog" })).toBeVisible();
+    await expect(root.getByRole("button", { name: "Hide the text" })).toBeVisible();
+    await expect(root.getByRole("button", { name: /^Rewrite this scene/u })).toHaveText("Rewrite");
+    await expect(root.getByRole("button", { name: "Ease off", exact: true })).toHaveText("Ease off");
+    const sprite = (await root.locator('.of-face-img[data-front="true"]').boundingBox())!;
+    const dialogue = (await root.locator(".of-dialogue").boundingBox())!;
+    expect(sprite.y + sprite.height).toBeLessThanOrEqual(dialogue.y);
+    await page.screenshot({ path: testInfo.outputPath("desktop-reader.png") });
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+    await expect(root).toHaveAttribute("data-look", "midnight");
+    await page.screenshot({ path: testInfo.outputPath("desktop-reader-midnight.png") });
+  });
+});
+
 test("Otome Forge reader: a CG unlocks once seen, faces swap, lines are voiced, music plays, and a Confrontation plays to its ending", async ({
   page,
 }, testInfo) => {
@@ -984,6 +1365,7 @@ test("Otome Forge reader: a CG unlocks once seen, faces swap, lines are voiced, 
   // Her thought is silent; the backlog replays his line with its cache key.
   await next(root);
   await expect(root.locator(".of-line--thought")).toContainText("I should have stayed away.");
+  await setReaderControlsExpanded(root);
   await root.getByRole("button", { name: "Backlog" }).click();
   const backlog = page.getByRole("dialog", { name: "Backlog" });
   await expect(backlog.getByRole("button", { name: /Play .*line/u })).toHaveCount(1);
@@ -1146,13 +1528,22 @@ test("Otome Forge reader: a reviewed key-image prompt stops Auto and paints the 
   await expect(line(root)).toContainText("Stay, then.");
 
   // The review is a dialog, so it stops Auto as the Backlog does: the line waits while the prompt is read.
+  await setReaderControlsExpanded(root);
   const auto = root.getByRole("button", { name: "Auto", exact: true });
   await auto.click();
   await expect(auto).toHaveAttribute("aria-pressed", "true");
+  await setReaderControlsExpanded(root, false);
   await root.getByRole("button", { name: "Paint this moment" }).click();
   const review = page.getByRole("dialog", { name: "Paint: A moment to keep" });
   await expect(review).toBeVisible();
-  await expect(auto).toHaveAttribute("aria-pressed", "false");
+  // Both responsive copies reflect the same stopped Auto state, including the now-collapsed phone disclosure.
+  await expect
+    .poll(() =>
+      root
+        .locator('button[aria-label="Auto"]')
+        .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-pressed"))),
+    )
+    .toEqual(["false", "false"]);
   // Longer than Auto's pause on this line (lib/reader-state.ts autoDelay: 1.6 s and 48 ms a character).
   await page.waitForTimeout(3_600);
   await expect(line(root)).toContainText("Stay, then.");

@@ -1475,6 +1475,28 @@ const moodRules = (look: Look) =>
     .join("\n");
 
 // The reader: the scene, the face on stage, the dialogue box in the bottom third, choices, panels and the backlog.
+const MOBILE_READER_RULES = `
+${R} .of-reader-mobile { display: inline-flex; }
+${R} .of-reader-desktop { display: none; }
+${R} .of-reader-tool { width: 44px; height: 44px; }
+${R} .of-reader-secondary[data-expanded="true"] {
+  position: absolute; top: calc(100% + 6px); inset-inline-end: 0;
+  display: flex; flex-direction: column; gap: 6px; padding: 4px;
+  max-height: max(44px, calc(100cqh - 120px - max(12px, env(safe-area-inset-top)) - max(10px, env(safe-area-inset-bottom))));
+  overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+${R} .of-reader-secondary > button { flex: none; }
+${R} .of-reader-secondary .of-reader-pill { width: 44px; height: 44px; padding: 0; justify-content: center; }
+${R} .of-reader-secondary .of-reader-pill > span { display: none; }
+${R} .of-reader-bottom { margin-top: auto; }
+/* The cut-out continues behind the dialogue, rather than fitting its whole body above the panel. */
+${R} .of-reader-stage:has(.of-face-art) {
+  position: absolute; inset: clamp(100px, 18cqh, 150px) 0 0;
+}
+${R} .of-face-art { width: min(100%, 64cqh, 420px); }
+${R} .of-face-img[data-cut="true"] { object-fit: cover; object-position: 50% 0; }
+`;
 const READER_RULES = `
 ${R} .of-reader {
   position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: clip; isolation: isolate;
@@ -1533,6 +1555,8 @@ ${R} .of-reader-name {
   font-family: var(--of-font-display); font-weight: 600; font-size: 1.24rem; line-height: 1.12;
 }
 ${R} .of-reader-tools { flex: none; display: flex; align-items: center; gap: 6px; }
+${R} .of-reader-primary { position: relative; z-index: 1; }
+${R} .of-reader-mobile, ${R} .of-reader-secondary { display: none; }
 ${R} .of-reader-tool { width: 36px; height: 36px; }
 ${R} .of-reader-tool[aria-pressed="true"] {
   color: ${PALETTE.ink}; border-color: transparent;
@@ -1799,6 +1823,13 @@ ${R} .of-reader-notice { align-items: center; justify-content: space-between; fl
 ${R} .of-reader-notice > span { flex: 1 1 16rem; }
 ${R} .of-reader-notice .of-button { margin-inline-start: auto; white-space: nowrap; }
 ${R} .of-reader-show { position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); inset-inline-end: 14px; }
+@container of-frame (max-width: 560px) { ${MOBILE_READER_RULES} }
+/* A phone turned sideways still uses the mobile controls, even with a wide viewport. */
+@media (pointer: coarse) and (max-height: 560px) {
+  ${R} .of-stage:has(.of-reader) { width: 100cqw; height: 100cqh; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
+  ${R} .of-stage:has(.of-reader)::after { display: none; }
+  ${MOBILE_READER_RULES}
+}
 /* The backlog. */
 ${R} .of-log {
   display: flex; flex-direction: column; gap: 10px; max-height: 52vh; margin: 0; padding: 0 4px 0 0; overflow-y: auto;
