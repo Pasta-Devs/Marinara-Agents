@@ -52,7 +52,7 @@ export async function readStoreSource(repoRoot) {
         `store/store.json: kit ${kit.id} tagline is longer than ${MAX_STORE_TAGLINE_CHARACTERS} characters`,
       );
     }
-    const unknown = (kit.packages ?? []).filter((id) => !source.packages[id]);
+    const unknown = (kit.packages ?? []).filter((id) => !Object.hasOwn(source.packages, id));
     if (!kit.packages?.length || unknown.length) {
       throw new Error(`store/store.json: kit ${kit.id} needs packages from the store (unknown: ${unknown.join(", ")})`);
     }
