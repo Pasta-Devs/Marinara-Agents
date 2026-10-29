@@ -551,6 +551,13 @@ test("Otome Forge Home: his note once a day, taps with no request, Play, Him / M
   // Midnight here and in the phone test; Pearl in the last.
   await page.emulateMedia({ colorScheme: "dark" });
   const stub = createHomeStub();
+  const answer = stub.answer;
+  stub.answer = async (call) => {
+    const response = await answer(call);
+    // This positive presentation fixture represents faces whose cleanup is already complete.
+    if (call.path === `/api/otome-forge/runs/${RUN}`) (response.json as Json).view.lis[0].cut = [TENDER, FLUSTERED];
+    return response;
+  };
   const spoken: string[] = [];
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
