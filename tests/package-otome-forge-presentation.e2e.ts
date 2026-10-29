@@ -2531,7 +2531,7 @@ test("Otome Hearth Settings fills its frame and exposes every tab on desktop and
   await expect(fullscreen).toHaveAttribute("aria-label", initialFullscreen!);
 });
 
-test("Otome Hearth Settings retains wheel scrolling to the last control on long pages", async ({ page, isMobile }) => {
+test("Otome Hearth Settings scrolls to the last control on long pages", async ({ page, isMobile, browserName }) => {
   // Enter from a normal Story height; only Settings is under test at the short viewport.
   await page.setViewportSize({ width: isMobile ? 390 : 961, height: isMobile ? 844 : 640 });
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -2559,8 +2559,13 @@ test("Otome Hearth Settings retains wheel scrolling to the last control on long 
     }));
     const box = await settings.boundingBox();
     if (before.content > before.height + 1) {
-      await page.mouse.move(box!.x + 4, box!.y + box!.height / 2);
-      await page.mouse.wheel(0, before.content);
+      if (browserName === "webkit" && isMobile) {
+        // Mobile WebKit has no Playwright wheel API. This native CSSOM probe is not physical touch proof.
+        await settings.evaluate((element, distance) => element.scrollBy(0, distance), before.content);
+      } else {
+        await page.mouse.move(box!.x + 4, box!.y + box!.height / 2);
+        await page.mouse.wheel(0, before.content);
+      }
       await expect.poll(() => settings.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
       await expect
         .poll(() => settings.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
