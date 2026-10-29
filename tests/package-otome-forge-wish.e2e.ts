@@ -1035,7 +1035,8 @@ test("Otome Hearth Album: rarity filters keep unplayed stories first in stable a
     "Finished moment",
     "Finished memory B",
   ]);
-  await filters.getByRole("radio", { name: "5 stars", exact: true }).check();
+  await filters.getByText("5★", { exact: true }).click();
+  await expect(filters.getByRole("radio", { name: "5 stars", exact: true })).toBeChecked();
   await expect(titles).toHaveText([
     "Unopened memory",
     "Unread memory",
@@ -1043,11 +1044,14 @@ test("Otome Hearth Album: rarity filters keep unplayed stories first in stable a
     "Reading memory",
     "Finished memory B",
   ]);
-  await filters.getByRole("radio", { name: "4 stars", exact: true }).check();
+  await filters.getByText("4★", { exact: true }).click();
+  await expect(filters.getByRole("radio", { name: "4 stars", exact: true })).toBeChecked();
   await expect(titles).toHaveText(["Unread moment A", "Unread moment B", "Finished moment"]);
-  await filters.getByRole("radio", { name: "3 stars", exact: true }).check();
+  await filters.getByText("3★", { exact: true }).click();
+  await expect(filters.getByRole("radio", { name: "3 stars", exact: true })).toBeChecked();
   await expect(titles).toHaveText(["Snapshot"]);
-  await filters.getByRole("radio", { name: "All", exact: true }).check();
+  await filters.getByText("All", { exact: true }).click();
+  await expect(filters.getByRole("radio", { name: "All", exact: true })).toBeChecked();
   await expect(titles).toHaveCount(9);
   await expect(
     root.locator(".of-keepsake").filter({ hasText: "Finished memory A" }).locator(".of-keepsake-state"),
