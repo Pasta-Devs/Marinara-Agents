@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.5.9 — 2026-10-29
 
 - Long-Term Memory no longer offers the older way other Agents read memories. Slurp 0.4.8 and earlier stop adding memories to Creator posts; update Slurp to keep them.
 

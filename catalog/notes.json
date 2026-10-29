@@ -364,6 +364,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.5.9",
+          "date": "2026-10-29",
+          "notes": "- Long-Term Memory no longer offers the older way other Agents read memories. Slurp 0.4.8 and earlier stop adding memories to Creator posts; update Slurp to keep them.",
+          "highlight": false
+        },
+        {
           "version": "1.5.8",
           "date": "2026-10-29",
           "notes": "- Other Agents that read memories, such as Slurp and Noodle, can ask for whole memories instead of the parts that fit what they are writing. The same memories are shared either way.",
@@ -476,12 +482,6 @@
           "date": "2026-10-23",
           "notes": "- Keyboard focus now moves somewhere sensible after you act in Review, the Memory Vault, Sources, the setup guide, Settings and Debug, and field errors sit under their fields and are read with them.\n- Results show beside the action that made them. Sources names a failed or partial import as such, and Review and Sources say why Accept or Import is off.\n- Long-Term Memory lays out by the width of its own panel, so a narrow side panel gets the phone layout. Batch bars stay in view while you scroll, and checkboxes, toggles, links and info buttons are easier to tap.\n- Long lists stay responsive: Sources searches once you pause typing and keeps the current rows meanwhile, and place pickers show 100 places at a time with a Show more row.\n- Warning notices show a warning icon and a stronger border instead of relying on color, and error notices show their border and have room inside.",
           "highlight": false
-        },
-        {
-          "version": "1.4.85",
-          "date": "2026-10-22",
-          "notes": "- Five keyboard and focus fixes. In Sources, Tab now reaches the name of each chat or character source in the list, and Enter or Space opens it, so Re-extract, Manage, Review and Open memory work without a mouse. Accepting a change in the Review Queue no longer hides the queue while the memories it shows reload: the list, your place in it and the keyboard position stay, a small spinner shows beside \"Review Queue\", and Accept waits until the memories have reloaded. On a narrow panel, the Memory Vault's \"Rename details\" and unsaved-changes dialogs now show instead of leaving the screen frozen. Arrow keys in the place picker keep the highlighted place in view. In Memory Settings, Tab after \"Choose backup\" goes straight to \"Reset settings\", and screen readers name \"Choose backup\" once.",
-          "highlight": false
         }
       ]
     },
@@ -527,6 +527,12 @@
     },
     "noodle": {
       "versions": [
+        {
+          "version": "1.5.11",
+          "date": "2026-10-29",
+          "notes": "- New, off by default: Advanced → \"Use memories from Long-Term Memory\". Posts can draw on what Long-Term Memory remembers about each account's character, as whole memories or only the parts that fit the posts. Turning it on asks first, and a note appears if Long-Term Memory isn't installed or isn't sharing memories.",
+          "highlight": false
+        },
         {
           "version": "1.5.10",
           "date": "2026-10-25",
@@ -639,12 +645,6 @@
           "version": "1.2.21",
           "date": "2026-09-07",
           "notes": "- Fixed \"Load more\" on the timeline, which failed on every page after the first.\n- Fixed a manually chosen profile avatar being replaced by the character card image.\n- Applying a saved prompt now asks before it discards unsaved prompt changes.\n- Ambient accounts no longer post images.\n- Removed leftover NoodleR wording from the image generation settings.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.20",
-          "date": "2026-09-03",
-          "notes": "- Added independent image width and height settings to Noodle settings.",
           "highlight": false
         }
       ]
