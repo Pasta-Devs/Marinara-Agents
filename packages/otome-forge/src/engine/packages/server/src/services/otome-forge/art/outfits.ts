@@ -38,6 +38,7 @@ import { STATE_LIMITS, keepNewest, normalizeState, readRun } from "../schemas/st
 import { normalizeUnit } from "../schemas/unit.js";
 import { normalizeBanner, normalizeItem } from "../schemas/wish.js";
 import { normalizeWorld } from "../schemas/world.js";
+import { withPersonaImageAppearance } from "../setup/prompts.js";
 import type { OtomeArt } from "./expressions.js";
 import { cgSubjects } from "./cg.js";
 import { galleryRef, worldStyle, type ImageSubject, type PaintedImage } from "./image-client.js";
@@ -183,6 +184,7 @@ async function buildItemArt(
   if (!hasArt(item)) throw notFound("art for this item");
   const run = await readRun(deps.store, runId);
   if (!run) throw notFound("Otome Forge run");
+  run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const images = imagesOf(deps);
   const style = await worldStyle(images, run.world.images);
   if (item.kind === "memory5") {
@@ -218,7 +220,7 @@ async function buildItemArt(
   if (!wearer) throw notFound("love interest");
   const subject = await readSubject(deps, runId, run.world, wearer, debugMode);
   const prompt = lookPrompt(
-    { ...subject, outfitLine: item.look!.outfitLine, world: run.world, style, matte: wearer !== "player" },
+    { ...subject, outfitLine: item.look!.outfitLine, world: run.world, style, matte: true },
     edited,
   );
   return {
@@ -435,6 +437,7 @@ async function readPair(deps: ArtDeps, runId: string, hers: string) {
 async function buildPair(deps: ArtDeps, runId: string, hers: string, edited: Partial<ImagePrompt>) {
   const pair = await readPair(deps, runId, hers);
   const { run, unit, herOutfit, hisOutfit } = pair;
+  run.player = await withPersonaImageAppearance(deps.runtime, run.player);
   const style = await worldStyle(imagesOf(deps), run.world.images);
   const first = (name: string, fallback: string) => name.trim().split(/\s+/)[0] || fallback;
   const people: CgPerson[] = [

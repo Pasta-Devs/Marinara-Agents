@@ -71,7 +71,7 @@ import { checkBible } from "../setup/bible.js";
 import { initialForge, settleForge, startForge, withPaintSteps } from "../setup/forge.js";
 import { readCard, readPersona } from "../setup/prompts.js";
 import type { OtomeStore } from "../store.js";
-import { queueCutouts } from "../art/cutout.js";
+import { cutoutsPending, queueCutouts } from "../art/cutout.js";
 
 const NoFields = z.object({});
 const LIS_MIN = 2;
@@ -302,8 +302,21 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const units = await Promise.all(
         run.units.map((unit) => queueCutouts(deps, runId, unit, stageArtUrls(run.world, unit))),
       );
+      const queuedPlayer = await queueCutouts(
+        deps,
+        runId,
+        { id: "player", cutouts: run.player.cutouts ?? {} },
+        [run.player.portrait, run.player.outfits.find((outfit) => outfit.id === run.player.wornOutfit)?.url].filter(
+          (url): url is string => !!url,
+        ),
+      );
+      const player = { ...run.player, cutouts: queuedPlayer.cutouts };
       return {
-        view: { ...runView(runKey, runId, { ...run, units }), prologue: !!run.state.chapters[PROLOGUE_KEY]?.completed },
+        view: {
+          ...runView(runKey, runId, { ...run, units, player }),
+          ...(cutoutsPending(runId, [...units, queuedPlayer]) ? { cutoutsPending: true as const } : {}),
+          prologue: !!run.state.chapters[PROLOGUE_KEY]?.completed,
+        },
       };
     }),
   );

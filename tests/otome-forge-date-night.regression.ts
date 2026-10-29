@@ -823,6 +823,8 @@ test("a date can go to a place the story painted, under the name the story gave 
 
 test("the keepsake paints only when asked, once the date is over, and never twice", async () => {
   const t = await dateWorld("r-mg5date-aa0005", { images: true });
+  const appearance = `DATE-APPEARANCE-START ${"auburn braid, amber eyes, freckles, ".repeat(50)}DATE-APPEARANCE-END`;
+  t.runtime.resources.listPersonas = async () => [{ id: "persona-ines", data: { appearance } }];
   const { date } = await startDate(t);
   const key = date.key;
   const paint = (body: Record<string, unknown> = {}) => t.call("POST", "/runs/:run/art/keepsake", { key, ...body });
@@ -836,6 +838,7 @@ test("the keepsake paints only when asked, once the date is over, and never twic
 
   const prompt = await t.call("POST", "/runs/:run/art/keepsake/prompt", { key });
   assert.equal(prompt.status, 200);
+  assert.ok(prompt.body.prompt.includes(appearance), "the entire current Appearance reaches a keepsake too");
   assert.ok(prompt.body.prompt.includes("silhouette before the jellyfish tank"));
   assert.ok(prompt.body.prompt.includes("Kai: tall man, salt-white hair"));
   assert.ok(prompt.body.prompt.includes("safe for work"));
@@ -850,6 +853,7 @@ test("the keepsake paints only when asked, once the date is over, and never twic
   const failed = await paint();
   assert.equal(failed.body.paint.state, "failed");
   assert.equal(t.art.paid.length, 1);
+  assert.ok(t.art.paid[0]!.prompt.includes(appearance), "the actual image request keeps its tail as well as its start");
   t.art.control.fail = false;
 
   // An edited prompt keeps its safety tags; two taps at once paint once.

@@ -2,12 +2,11 @@
 // Otome Forge: Home cut-outs (plan M3 "Cut-outs", §1.8)
 // ──────────────────────────────────────────────
 // A look is painted full body on a chroma backdrop, so Home can lift him out of it: cutOut(url) reads the image
-// over loopback, sends it to the Engine's POST /api/sprites/cleanup (not privilege-gated; the background remover when
-// installed, else the built-in one), and keeps the result in the Global Gallery. The record lives on the unit,
+// over loopback, sends it to the Engine's POST /api/sprites/cleanup (the repaired built-in matte when advertised,
+// legacy auto otherwise), and keeps the result in the Global Gallery. The record lives on the unit or player,
 // `unit.cutouts[url]`, with the paint record's states:
 //   none      the next Home read queues it (his worn look and its ready faces, lazily)
-//   pending   saved before the cleanup call, so it is made once; one with no live owner in this process (a restart)
-//             is never made again
+//   pending   saved before cleanup; an existing derivative remains visible until the replacement succeeds
 //   ready     `url` is the cut-out, `ref` its gallery reference (a deleted run takes it along)
 //   failed    never tried again by the same cleanup revision: Home pans over the uncut look instead
 // A newer Engine cleanup revision rebuilds an obsolete derivative from the retained original, without paid painting.
@@ -17,10 +16,11 @@
 // the expressions kit's stale sets.
 import type { CapabilityRuntimeHost } from "@marinara-engine/shared";
 import type { Cutout, LiId, Unit } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
-import { runDocTarget, unitId } from "../ids.js";
+import { playerId, runDocTarget, unitId } from "../ids.js";
+import { normalizePlayer } from "../schemas/player.js";
 import { normalizeUnit } from "../schemas/unit.js";
 import type { OtomeStore } from "../store.js";
-import { GALLERY_REF_PREFIX, galleryRef, loopbackBaseUrl, type PaintedImage } from "./image-client.js";
+import { galleryRef, loopbackBaseUrl, type PaintedImage } from "./image-client.js";
 
 /** The Engine's own cleanup settings for a sprite sheet (sprites.routes.ts uses 35 for its cells). */
 export const CUTOUT_STRENGTH = 35;
@@ -67,18 +67,22 @@ export function createCutoutClient({
     cleanupRevision() {
       // The Engine restarts when its implementation changes. One small status read per process keeps older hosts
       // compatible and avoids rebuilding old cut-outs with the same implementation that damaged them.
-      return (revision ??= (async () => {
-        try {
+      if (!revision) {
+        const pending = (async () => {
           const response = await fetchImpl(`${baseUrl}/api/sprites/cleanup/status`, {
             signal: AbortSignal.timeout(Math.min(timeoutMs, 2000)),
           });
-          if (!response.ok) return undefined;
+          if (response.status === 404) return undefined;
+          if (!response.ok) throw new Error(`cleanup status -> ${response.status}`);
           const status = (await response.json()) as { cleanupRevision?: unknown } | null;
           return readRevision(status?.cleanupRevision);
-        } catch {
-          return undefined;
-        }
-      })());
+        })();
+        revision = pending;
+        void pending.catch(() => {
+          if (revision === pending) revision = undefined;
+        });
+      }
+      return revision.catch(() => undefined);
     },
     async cutOut(url) {
       if (!url.startsWith("/")) throw new Error("only an image the Engine serves can be cut out");
@@ -145,9 +149,14 @@ export interface CutoutDeps {
   cutouts?: CutoutClient;
 }
 
+/** Love interests and the protagonist share cleanup; each keeps derivatives in its own existing document. */
+type CutoutOwner = LiId | "player";
+
 // ── One at a time, each once ──
 
 const live = new Set<string>();
+// A transient refresh failure keeps the previous cut-out. Retry after an Engine restart instead of every Home poll.
+const refreshAttempts = new Set<string>();
 let chain: Promise<void> = Promise.resolve();
 const liveKey = (runId: string, li: LiId, url: string) => `${runId}|${li}|${url}`;
 
@@ -163,41 +172,52 @@ export function cutoutView(
   if (record?.state === "ready" && record.url) return { state: "ready", cutout: record.url };
   if (!record) return { state: "pending" };
   return record.state === "pending" && live.has(liveKey(runId, unit.id, url))
-    ? { state: "pending" }
-    : { state: "uncut" };
+    ? { state: "pending", ...(record.url ? { cutout: record.url } : {}) }
+    : record.url
+      ? { state: "ready", cutout: record.url }
+      : { state: "uncut" };
 }
+
+/** Free work still owned by this process, including a replacement whose old pixels remain visible meanwhile. */
+export const cutoutsPending = (runId: string, units: Array<Pick<Unit, "id" | "cutouts">>) =>
+  units.some((unit) => Object.keys(unit.cutouts).some((url) => cutoutView(runId, unit, url).state === "pending"));
 
 /** Saves `record` for `url` unless `only` says it may not replace what is there; false when nothing was saved. */
 async function save(
   deps: CutoutDeps,
   runId: string,
-  li: LiId,
+  li: CutoutOwner,
   url: string,
   record: Cutout,
   only: (current: Cutout | undefined) => boolean,
 ): Promise<boolean> {
   let saved = false;
-  const unit = await deps.store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => {
-    saved = only(current.cutouts[url]);
+  const update = <P extends { cutouts?: Record<string, Cutout> }>(current: P): P => {
+    saved = only(current.cutouts?.[url]);
     return saved ? { ...current, cutouts: { ...current.cutouts, [url]: record } } : current;
-  });
+  };
+  const unit =
+    li === "player"
+      ? await deps.store.updateDoc(runDocTarget("player", playerId(runId)), normalizePlayer, update)
+      : await deps.store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, update);
   return !!unit && saved;
 }
 
 const needsCutout = (current: Cutout | undefined, revision: number | undefined) =>
   !current || (revision !== undefined && (current.cleanupRevision ?? 0) < revision);
 
-async function cutOne(deps: CutoutDeps, runId: string, li: LiId, url: string, revision?: number): Promise<void> {
+async function cutOne(deps: CutoutDeps, runId: string, li: CutoutOwner, url: string, revision?: number): Promise<void> {
   // Claimed in the document first: a record already there (another request's, or one left by a restart) wins.
   const at = new Date().toISOString();
   let previous: Cutout | undefined;
-  const pending: Cutout = { state: "pending", at, ...(revision ? { cleanupRevision: revision } : {}) };
+  const pending: Cutout = { state: "pending", at };
   const claimed = await save(deps, runId, li, url, pending, (now) => {
     if (!needsCutout(now, revision)) return false;
     previous = now;
     // Keep the replaced derivative referenced until a successful replacement; a failed attempt keeps it for run deletion.
     if (now?.url) pending.url = now.url;
     if (now?.ref) pending.ref = now.ref;
+    if (now?.cleanupRevision) pending.cleanupRevision = now.cleanupRevision;
     return true;
   });
   if (!claimed) return;
@@ -208,11 +228,18 @@ async function cutOne(deps: CutoutDeps, runId: string, li: LiId, url: string, re
     image = await client.cutOut(url);
   } catch (error) {
     const message = (error instanceof Error ? error.message : String(error)).slice(0, ERROR_MAX);
-    deps.runtime.logger.warn("[otome-forge] a cut-out failed; the uncut look shows instead: %s", message);
-    await save(deps, runId, li, url, { ...pending, state: "failed", error: message }, isOurs);
+    deps.runtime.logger.warn("[otome-forge] a cut-out failed; keeping the previous image when available: %s", message);
+    await save(
+      deps,
+      runId,
+      li,
+      url,
+      previous?.url ? { ...previous, state: "ready", error: message } : { ...pending, state: "failed", error: message },
+      isOurs,
+    );
     return;
   }
-  const cleanupRevision = image.cleanupRevision ?? revision;
+  const cleanupRevision = image.cleanupRevision;
   const ready: Cutout = {
     state: "ready",
     at: new Date().toISOString(),
@@ -226,15 +253,6 @@ async function cutOne(deps: CutoutDeps, runId: string, li: LiId, url: string, re
   } finally {
     // A run deleted meanwhile (or a record replaced), or a save that failed, keeps nothing: the new gallery image goes.
     if (!kept && image.id) await client.deleteGalleryImage(image.id);
-  }
-  if (
-    kept &&
-    previous?.url &&
-    previous.url !== url &&
-    previous.ref?.startsWith(GALLERY_REF_PREFIX) &&
-    previous.ref !== ready.ref
-  ) {
-    await client.deleteGalleryImage(previous.ref.slice(GALLERY_REF_PREFIX.length));
   }
 }
 
@@ -254,9 +272,12 @@ export async function queueCutouts<T extends Pick<Unit, "id" | "cutouts">>(
   for (const url of new Set(urls)) {
     const key = liveKey(runId, unit.id, url);
     if (!url || !needsCutout(unit.cutouts[url], revision)) continue;
+    const refreshKey = `${key}|${revision}`;
+    if (unit.cutouts[url] && refreshAttempts.has(refreshKey) && !live.has(key)) continue;
     // The response must show pending while an obsolete cached image is replaced, so Home and the reader keep polling.
     cutouts[url] = { ...unit.cutouts[url], state: "pending", at: unit.cutouts[url]?.at ?? "" };
     if (live.has(key)) continue;
+    refreshAttempts.add(refreshKey);
     live.add(key);
     chain = chain
       .then(() => cutOne(deps, runId, unit.id, url, revision))

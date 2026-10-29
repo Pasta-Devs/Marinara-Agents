@@ -245,7 +245,7 @@ test("Me shows the look she wears, with what Home's love interest noticed, told 
   }));
   await t.call("POST", "/runs/:run/home/set", { li: MIR, show: "me" });
   const before = await t.home();
-  assert.deepEqual(before.look, { url: gallery("ines-base"), source: "look", cutoutState: "uncut" });
+  assert.deepEqual(before.look, { url: gallery("ines-base"), source: "look", cutoutState: "pending" });
   assert.equal(before.noticed, null);
   assert.equal(before.noticing, false);
 
@@ -254,7 +254,11 @@ test("Me shows the look she wears, with what Home's love interest noticed, told 
   const gate = runForeground(t.runId, () => new Promise<void>((resolve) => (release = resolve)));
   await t.wear("me", HERS.id);
   const writing = await t.home();
-  assert.deepEqual(writing.look, { url: HERS.art!.url, source: "look", cutoutState: "uncut" }, "her look, uncut");
+  assert.deepEqual(
+    writing.look,
+    { url: HERS.art!.url, source: "look", cutoutState: "pending" },
+    "her look uses the same cleanup as his",
+  );
   assert.equal(writing.noticing, true, "Home asks again while the line is written");
   assert.equal(writing.noticed, null);
   release();

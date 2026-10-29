@@ -10,7 +10,6 @@ import { z, type ZodType } from "zod";
 import type {
   ArcStageKey,
   Bible,
-  Cutout,
   FixedLines,
   LinePacks,
   StageLines,
@@ -33,6 +32,7 @@ import {
   defaultPronouns,
   field,
   isRecord,
+  normalizeCutouts,
   readFields,
   readWornOutfit,
   text,
@@ -192,19 +192,6 @@ export function normalizeLinePacks(value: unknown): LinePacks | undefined {
   }
   const fixed = FixedLinesSchema.safeParse(value.fixed);
   return { stages, fixed: fixed.success ? fixed.data : null };
-}
-
-/** Stored cut-out records, keyed by the look's URL; a bad record is dropped (the cut-out is made again). */
-const CutoutSchema = PaintSchema.and(z.object({ cleanupRevision: z.number().int().positive().optional() }));
-
-function normalizeCutouts(value: unknown): Record<string, Cutout> {
-  const cutouts: Record<string, Cutout> = {};
-  if (!isRecord(value)) return cutouts;
-  for (const [url, record] of Object.entries(value)) {
-    const parsed = CutoutSchema.safeParse(record);
-    if (url && parsed.success) cutouts[url] = parsed.data;
-  }
-  return cutouts;
 }
 
 const defaultUnit = (): Unit => ({

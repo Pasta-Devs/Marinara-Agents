@@ -220,6 +220,8 @@ export interface Player {
   art?: Paint;
   /** M4: her looks from My Wardrobe. */
   outfits: Outfit[];
+  /** Free background-cleaned derivatives of retained generated looks; absent on older stories. */
+  cutouts?: Record<string, Cutout>;
   /** M4: the look she wears at home (an outfit id); absent wears her base look. */
   wornOutfit?: string;
   /** M4: his line about the look she wears now (P19), or null. */
@@ -1063,6 +1065,8 @@ export interface RunView {
   player: Player;
   lis: RunLiView[];
   forge: ForgeStatus;
+  /** Free sprite cleanup is still running; poll the run until the retained look's derivative is ready. */
+  cutoutsPending?: true;
   starlight: number;
   /** GET /runs/:run: the prologue has been read to its end (Begin then goes straight Home). */
   prologue?: boolean;
