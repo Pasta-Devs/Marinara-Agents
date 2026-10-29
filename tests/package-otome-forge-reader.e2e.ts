@@ -10,6 +10,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { normalizeForgeAudio } from "../sources/forge-kit/audio-settings.mjs";
 
 const engineRoot = process.env.MARINARA_ENGINE_ROOT;
 if (!engineRoot) throw new Error("Set MARINARA_ENGINE_ROOT to a compatible Engine checkout");
@@ -175,6 +176,7 @@ function createStoryStub({ done = false, title = CHAPTER.title, pendingCutouts =
       images: { connectionId: null, rating: "sfw", ask: false, expressions: true },
       connections: { narration: "conn-text" },
       forge: { phase: "ready", steps: [] },
+      audio: { ...normalizeForgeAudio({}), chapterThemes: false, tracks: [] },
     },
     player: {
       personaId: "persona-mira",
