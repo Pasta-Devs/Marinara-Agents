@@ -593,6 +593,7 @@
   "ui.otomeForge.reader.cgStopped": "Painting stopped before it finished.",
   "ui.otomeForge.reader.chapterDone": "Chapter complete",
   "ui.otomeForge.reader.prologueDone": "Prologue complete",
+  "ui.otomeForge.reader.prologueDoneQuiet": "This is where your story begins.",
   "ui.otomeForge.reader.chapterDoneQuiet": "Nothing new to earn this time. Every choice stands as it was.",
   "ui.otomeForge.reader.chapterFailed": "This chapter couldn’t be opened.",
   "ui.otomeForge.reader.choiceBig": "A choice that lasts",

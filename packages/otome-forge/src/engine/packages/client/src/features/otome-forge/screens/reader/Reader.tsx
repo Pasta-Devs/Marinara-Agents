@@ -767,7 +767,9 @@ function ChapterEnd({
           })}
         </ul>
       ) : (
-        <p className="of-hint">{t("ui.otomeForge.reader.chapterDoneQuiet")}</p>
+        <p className="of-hint">
+          {prologue ? t("ui.otomeForge.reader.prologueDoneQuiet") : t("ui.otomeForge.reader.chapterDoneQuiet")}
+        </p>
       )}
       <div className="of-inline-actions">
         <button type="button" className="of-button of-button--quiet of-glass of-button--small" onClick={onHome}>

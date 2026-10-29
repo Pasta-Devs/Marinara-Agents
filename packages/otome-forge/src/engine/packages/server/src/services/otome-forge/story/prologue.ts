@@ -67,10 +67,20 @@ export async function ensurePrologue(deps: { store: OtomeStore }, runId: string)
   });
 }
 
-/** A love interest's name as a whole word, any case. */
+/** Scripts written without spaces between words, where a name is found anywhere in the running text. */
+const UNSPACED = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Thai}]/u;
+
+/**
+ * A love interest's name in `text`, any case: as a whole word, or (a name in a script without word spaces) anywhere.
+ * ponytail: an inflected form (Polish "Kaiem") is not caught, since a prefix match would also refuse "Roses" for a
+ * Rose; the upgrade path is matching the story language's own inflections.
+ */
 function namedIn(text: string, name: string): boolean {
-  const escaped = name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return !!escaped && new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, "iu").test(text);
+  const trimmed = name.trim();
+  if (!trimmed) return false;
+  if (UNSPACED.test(trimmed)) return text.includes(trimmed);
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, "iu").test(text);
 }
 
 /**

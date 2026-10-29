@@ -1059,13 +1059,8 @@ export interface RunView {
   lis: RunLiView[];
   forge: ForgeStatus;
   starlight: number;
-  /** GET /runs/:run: the prologue has been written (Begin then goes straight Home). */
+  /** GET /runs/:run: the prologue has been read to its end (Begin then goes straight Home). */
   prologue?: boolean;
-}
-
-/** POST /runs/:run/prologue. */
-export interface PrologueView {
-  segments: Segment[];
 }
 
 export type SetupLi =

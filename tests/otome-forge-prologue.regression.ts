@@ -175,6 +175,15 @@ test("the prologue refuses a love interest by name in any line", () => {
     null,
     "a name inside a word",
   );
+  // A name in a script written without word spaces is found inside the running text.
+  assert.match(
+    String(prologueProblem({ segments: [{ speaker: "", text: "あなたはカイの店の前を通る。" }] }, [{ name: "カイ" }])),
+    /カイ is a love interest/,
+  );
+  assert.match(
+    String(prologueProblem({ segments: [{ speaker: "", text: "你想起了李白的诗。" }] }, [{ name: "李白" }])),
+    /李白 is a love interest/,
+  );
 });
 
 test("the prologue waits for the forge", async () => {
