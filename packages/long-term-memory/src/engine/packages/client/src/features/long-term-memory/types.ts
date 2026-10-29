@@ -42,6 +42,7 @@ export type CapabilityProps = {
     title: string;
     message: string;
     confirmLabel?: string;
+    cancelLabel?: string;
     tone?: "destructive" | "default";
   }) => boolean | Promise<boolean>;
 };

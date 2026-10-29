@@ -10,12 +10,14 @@ export async function confirm(
   message: string,
   confirmLabel: string,
   destructive = false,
+  cancelLabel?: string,
 ) {
   if (props.confirmAction)
     return props.confirmAction({
       title,
       message,
       confirmLabel,
+      ...(cancelLabel ? { cancelLabel } : {}),
       tone: destructive ? "destructive" : "default",
     });
   return window.confirm(`${title}\n\n${message}`);
