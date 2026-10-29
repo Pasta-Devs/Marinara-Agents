@@ -236,6 +236,69 @@ test("concurrent explicit repaint requests share five edits and keep the previou
   assert.deepEqual(t.calls, []);
 });
 
+test("only identical reviewed prompts join an in-flight repaint, independent of object key order", async (context) => {
+  for (const difference of ["positive", "negative", "implicit"] as const) {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const t = await repaintWorld(`r-re${difference}-hhhhhh`, {
+      before: async (_call, n) => {
+        if (n === 1) await gate;
+      },
+    });
+    context.after(() => {
+      release();
+      t.art.dispose();
+    });
+    const before = t.retained();
+    const previous = await t.shown();
+    const preview = await t.call("POST", PROMPT, { li: KAI });
+    assert.equal(preview.status, 200, JSON.stringify(preview.body));
+    const prompts = preview.body.prompts;
+    const longPositive = `${"Reviewed A positive detail. ".repeat(180)}KEEP A FINAL POSITIVE WORDS`;
+    const longNegative = `${"Reviewed A negative detail. ".repeat(180)}KEEP A FINAL NEGATIVE WORDS`;
+    assert.ok(longPositive.length > 4000 && longNegative.length > 4000);
+    prompts.tender.prompt += ` ${longPositive}`;
+    prompts.tender.negativePrompt += `, ${longNegative}`;
+    const conflicting = structuredClone(prompts);
+    if (difference === "negative") conflicting.cold.negativePrompt += ", CONFLICTING B NEGATIVE";
+    else conflicting.cold.prompt += " CONFLICTING B POSITIVE";
+    const reordered = Object.fromEntries(
+      [...FACES]
+        .reverse()
+        .map((face) => [face, { negativePrompt: prompts[face].negativePrompt, prompt: prompts[face].prompt }]),
+    );
+    const explicit = difference !== "implicit";
+    const first = t.call("POST", REPAINT, { li: KAI, base: WORN, ...(explicit ? { prompts } : {}) });
+    await until(() => t.paid.length === 1, "the first gated reviewed repaint");
+    assert.deepEqual(await t.shown(), previous, "a conflicting request never replaces the visible old set");
+    const second = t.call("POST", REPAINT, { li: KAI, base: WORN, prompts: conflicting });
+    const duplicate = t.call("POST", REPAINT, {
+      li: KAI,
+      base: WORN,
+      ...(explicit ? { prompts: reordered } : {}),
+    });
+    await flush();
+    release();
+    const [accepted, rejected, shared] = await Promise.all([first, second, duplicate]);
+    assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
+    assert.equal(accepted.body.paint.state, "ready");
+    assert.equal(rejected.status, 409, `${difference} prompt changes must not join an existing paid job`);
+    assert.equal(shared.status, 200, JSON.stringify(shared.body));
+    assert.deepEqual(shared.body, accepted.body, "an identical request shares the same final result");
+    assert.equal(t.paid.length, FACES.length, "only the accepted five-face set is paid for");
+    for (const { request } of t.paid) {
+      assert.ok(!request.prompt.includes("CONFLICTING B POSITIVE"));
+      assert.ok(!request.negativePrompt.includes("CONFLICTING B NEGATIVE"));
+    }
+    if (explicit) {
+      assert.ok(t.paid[0]!.request.prompt.includes(longPositive), "long reviewed positives remain complete");
+      assert.ok(t.paid[0]!.request.negativePrompt.includes(longNegative), "long reviewed negatives remain complete");
+    }
+    assert.deepEqual(t.retained(), before, "concurrent requests preserve neutral art, story and progress");
+    assert.deepEqual(t.calls, []);
+  }
+});
+
 test("a failed replacement keeps the old ready faces and accounts for every paid upload without automatic retry", async (context) => {
   const t = await repaintWorld("r-refailed-cccccc", {
     before: (_call, n) => {

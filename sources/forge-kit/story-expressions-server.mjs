@@ -406,9 +406,20 @@ export function createForgeStoryExpressions({
 
   const schedule = (runId, unitId, options) => {
     const key = `${unitId}:expressions`;
+    const promptsKey =
+      options.prompts === undefined
+        ? null
+        : JSON.stringify(
+            names.map((name) => [options.prompts[name]?.prompt ?? null, options.prompts[name]?.negativePrompt ?? null]),
+          );
     const current = live.get(key);
     if (current)
-      return options.repaint && current.repaint && current.base === options.expectedBase ? current.promise : null;
+      return options.repaint &&
+        current.repaint &&
+        current.base === options.expectedBase &&
+        current.promptsKey === promptsKey
+        ? current.promise
+        : null;
     const promise = detached.runInAsyncScope(() =>
       background(() => dedupe(key, () => paintSet(runId, unitId, options)))
         .catch((error) =>
@@ -416,7 +427,7 @@ export function createForgeStoryExpressions({
         )
         .finally(() => live.delete(key)),
     );
-    live.set(key, { promise, repaint: options.repaint === true, base: options.expectedBase });
+    live.set(key, { promise, repaint: options.repaint === true, base: options.expectedBase, promptsKey });
     return promise;
   };
 
