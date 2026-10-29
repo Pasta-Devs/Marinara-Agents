@@ -66,7 +66,15 @@ export async function findSpeakerSprite(
   if (!url) return null;
   // A card can disappear or be renamed between its catalog row and sprite read; orphaned files do not identify it.
   const live = await read(`/characters/${encodeURIComponent(card.id)}`);
-  return record(live) && typeof live.name === "string" && speakerNameKey(live.name) === speakerNameKey(name)
+  if (!record(live) || live.id !== card.id) return null;
+  let data: unknown;
+  try {
+    data = typeof live.data === "string" ? JSON.parse(live.data) : live.data;
+  } catch {
+    return null;
+  }
+  if (record(data) && (data.spec === "chara_card_v2" || data.spec === "chara_card_v3")) data = data.data;
+  return record(data) && typeof data.name === "string" && speakerNameKey(data.name) === speakerNameKey(name)
     ? url
     : null;
 }

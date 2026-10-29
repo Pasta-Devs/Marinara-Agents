@@ -57,7 +57,7 @@ test("speaker lookup pages exact matches, ignores partial names and revalidates 
         hasMore: false,
       };
     if (path === "/sprites/card-a") return sprites;
-    if (path === "/characters/card-a") return { id: "card-a", name: "Arin Vale" };
+    if (path === "/characters/card-a") return { id: "card-a", data: JSON.stringify({ name: "Arin Vale" }) };
     throw new Error(`Unexpected read ${path}`);
   };
   assert.equal(await findSpeakerSprite("Arin Vale", read), "/api/sprites/card-a/file/full_neutral.png?v=12345");
@@ -66,7 +66,7 @@ test("speaker lookup pages exact matches, ignores partial names and revalidates 
   assert.equal(await findSpeakerSprite("Arin", read), null, "a first name cannot borrow a card");
   assert.equal(
     await findSpeakerSprite("Arin Vale", async (path) =>
-      path === "/characters/card-a" ? { name: "Someone Else" } : read(path),
+      path === "/characters/card-a" ? { id: "card-a", data: JSON.stringify({ name: "Someone Else" }) } : read(path),
     ),
     null,
   );
@@ -77,6 +77,35 @@ test("speaker lookup pages exact matches, ignores partial names and revalidates 
     }),
     /deleted card/,
   );
+});
+
+test("speaker revalidation reads verified raw card data and refuses spoofed, malformed or foreign rows", async () => {
+  const lookup = (row: unknown) =>
+    findSpeakerSprite("Arin Vale", async (path) => {
+      if (path.includes("catalog")) return { items: [{ id: "card-a", name: "Arin Vale" }], hasMore: false };
+      if (path === "/sprites/card-a") return sprites;
+      if (path === "/characters/card-a") return row;
+      throw new Error(`Unexpected read ${path}`);
+    });
+  for (const data of [
+    { name: "Arin Vale" },
+    { spec: "chara_card_v2", spec_version: "2.0", data: { name: "Arin Vale" } },
+    { spec: "chara_card_v3", spec_version: "3.0", data: { name: "Arin Vale" } },
+  ]) {
+    assert.equal(
+      await lookup({ id: "card-a", data: JSON.stringify(data) }),
+      "/api/sprites/card-a/file/full_neutral.png?v=12345",
+    );
+  }
+  for (const row of [
+    { id: "card-a", name: "Arin Vale" },
+    { id: "card-a", name: "Arin Vale", data: JSON.stringify({ name: "Someone Else" }) },
+    { id: "card-a", data: "{" },
+    { id: "card-a", data: "[]" },
+    { id: "card-b", data: JSON.stringify({ name: "Arin Vale" }) },
+    { id: "card-a", data: JSON.stringify({ spec: "chara_card_v2", name: "Arin Vale", data: null }) },
+  ])
+    assert.equal(await lookup(row), null);
 });
 
 test("duplicate, malformed and truncated character lists never select an arbitrary sprite", async () => {

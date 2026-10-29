@@ -679,7 +679,7 @@ async function speakerRoutes(page: Page, { opaque = false, revision = 2, broken 
   await page.route("**/api/characters/card-arin", (route) =>
     route.fulfill({
       status: deleted ? 404 : 200,
-      json: deleted ? { error: "Deleted card" } : { id: "card-arin", name: "Arin Vale" },
+      json: deleted ? { error: "Deleted card" } : { id: "card-arin", data: JSON.stringify({ name: "Arin Vale" }) },
     }),
   );
   await page.route("**/api/sprites/card-arin", (route) =>
@@ -841,10 +841,15 @@ test("Otome Hearth discards a slow speaker asset after the line changes and hide
   const gate = new Promise<void>((done) => {
     release = done;
   });
+  let settle!: () => void;
+  const settled = new Promise<void>((done) => {
+    settle = done;
+  });
   await page.route("**/api/sprites/card-arin/file/*", async (route) => {
     await gate;
-    // The component deliberately aborts this image when the line changes.
+    // A browser may finish the held response after the component has already discarded it.
     await route.fulfill({ contentType: "image/png", body: Buffer.from(SPEAKER_PNG, "base64") }).catch(() => undefined);
+    settle();
   });
   const root = await openStory(page);
   await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
@@ -853,16 +858,20 @@ test("Otome Hearth discards a slow speaker asset after the line changes and hide
   await next(root);
   await started;
   await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
-  const discarded = page.waitForEvent("requestfailed", (request) => request.url().includes("/sprites/card-arin/file/"));
   await next(root);
-  await discarded;
+  await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
   release();
+  await settled;
   await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
   await page.unroute("**/api/sprites/card-arin/file/*");
   await page.route("**/api/sprites/card-arin/file/*", (route) =>
     route.fulfill({ status: 404, body: "Missing sprite" }),
   );
+  const missing = page.waitForResponse(
+    (response) => response.url().includes("/sprites/card-arin/file/") && response.status() === 404,
+  );
   await next(root);
+  await (await missing).finished();
   await expect(line(root)).toContainText("Now the image is missing.");
   await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
   expect(assets.paid).toEqual([]);
@@ -887,6 +896,67 @@ test("Otome Hearth never displays an opaque speaker original when free cleanup f
   await expect(line(root)).toContainText("Cleanup fails here.");
   await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
   expect(assets.paid).toEqual([]);
+});
+
+test("Otome Hearth real Engine card supplies its existing neutral speaker sprite", async ({
+  page,
+  request,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const name = `Otome Contract NPC ${testInfo.project.name}`;
+  const created = await request.post("/api/characters", { data: { data: { name, creator: "Otome package E2E" } } });
+  await expect(created).toBeOK();
+  const card = await created.json();
+  expect(card.id).toMatch(/^[a-z0-9_-]{1,200}$/iu);
+  const id = encodeURIComponent(card.id);
+  try {
+    const uploaded = await request.post(`/api/sprites/${id}`, {
+      data: { expression: "full_neutral", image: `data:image/png;base64,${SPEAKER_PNG}` },
+    });
+    await expect(uploaded).toBeOK();
+    const sprite = await uploaded.json();
+    const paid: string[] = [];
+    const cleanup: string[] = [];
+    page.on("request", (call) => {
+      if (/\/api\/(?:characters\/avatar-generation|audio\/generate|generate\/raw)/u.test(call.url()))
+        paid.push(call.url());
+      if (new URL(call.url()).pathname === "/api/sprites/cleanup") cleanup.push(call.url());
+    });
+    await stubRoutes(
+      page,
+      namedSpeakerStub([seg("Ilvar Thorne", "Known speaker."), seg(name, "The actual card speaks.")]),
+    );
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+    await root.getByRole("button", { name: "Begin" }).click();
+    await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", LI_SPEAKER_PORTRAIT);
+    const catalog = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === "/api/characters/catalog" && url.searchParams.get("search") === name;
+    });
+    const currentCard = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === `/api/characters/${id}`,
+    );
+    const image = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === `/api/sprites/${id}/file/full_neutral.png`,
+    );
+    await next(root);
+    const rows = await (await catalog).json();
+    expect(rows.items.some((row: Json) => row.id === card.id && row.name === name)).toBe(true);
+    const live = await (await currentCard).json();
+    expect(live.id).toBe(card.id);
+    expect(JSON.parse(live.data).name).toBe(name);
+    expect(await (await image).body()).toEqual(Buffer.from(SPEAKER_PNG, "base64"));
+    await expect(root.getByRole("img", { name, exact: true })).toBeVisible();
+    await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("src", sprite.url);
+    await expect(root.locator('.of-face-img[data-front="true"]')).toHaveAttribute("data-cut", "true");
+    await page.screenshot({ path: testInfo.outputPath("real-engine-npc.png") });
+    expect(cleanup).toEqual([]);
+    expect(paid).toEqual([]);
+  } finally {
+    await request.delete(`/api/sprites/${id}/full_neutral`);
+    await expect(await request.delete(`/api/characters/${id}`)).toBeOK();
+  }
 });
 
 test("Otome Hearth thoughts close only after typing, finishing the line, or reduced motion", async ({
