@@ -80,6 +80,11 @@ ${R} .of-stage::after {
   ${R} .of-stage { width: 100cqw; height: 100cqh; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
   ${R} .of-stage::after { display: none; }
 }
+/* Settings uses the available host panel; the other screens retain their portrait stage. */
+${R} .of-stage:has(.of-settings) {
+  width: 100%; height: 100%; min-width: 0; min-height: 0; aspect-ratio: auto; border-radius: 0; box-shadow: none;
+}
+${R} .of-stage:has(.of-settings)::after { display: none; }
 ${R} .of-scene { position: absolute; inset: 0; z-index: 0; overflow: clip; pointer-events: none; }
 ${R} .of-scene-bg {
   position: absolute; inset: 0; background: var(--of-bg); background-size: cover; background-position: center;
@@ -723,6 +728,7 @@ ${R} .of-bible-secret, ${R} .of-bible-stage {
 ${R} .of-tabs {
   display: flex; gap: 4px; padding: 4px; border-radius: 18px; overflow-x: auto; scrollbar-width: none; flex: none;
 }
+${R} .of-settings .of-tabs { flex-wrap: wrap; overflow: visible; }
 ${R} .of-tabs::-webkit-scrollbar { display: none; }
 ${R} .of-tab {
   flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 0; border-radius: 14px;

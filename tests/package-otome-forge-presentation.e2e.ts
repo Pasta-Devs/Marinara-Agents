@@ -2451,3 +2451,136 @@ test("Otome Hearth card link: a generated LI keeps their story and art while an 
   expect(posts(calls, "/api/audio/generate")).toEqual([]);
   expect(pageErrors).toEqual([]);
 });
+
+// Check bounds before clicking: Playwright otherwise scrolls clipped horizontal tabs into view for the test.
+test("Otome Hearth Settings fills its frame and exposes every tab on desktop and phone", async ({
+  page,
+  isMobile,
+}, testInfo) => {
+  const sizes = isMobile
+    ? [
+        { width: 390, height: 844 },
+        { width: 844, height: 390 },
+      ]
+    : [
+        { width: 1280, height: 720 },
+        { width: 961, height: 640 },
+      ];
+  await page.setViewportSize(sizes[0]!);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const { answer } = createSceneStub({ images: false, audio: false });
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page);
+  const fullscreen = root.getByRole("button", { name: /fullscreen/iu });
+  const initialFullscreen = await fullscreen.getAttribute("aria-label");
+  await root.getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = root.locator(".of-settings");
+  const tabs = settings.getByRole("tablist");
+  const names = ["Look", "Content", "Connections", "Images", "Audio", "Tracker", "Privacy & data", "Debug"];
+  for (const [index, size] of sizes.entries()) {
+    await page.setViewportSize(size);
+    await settings.evaluate((element) => element.scrollTo(0, 0));
+    await tabs.getByRole("tab", { name: "Look", exact: true }).click();
+    const look = index === 0 ? "Midnight" : "Pearl";
+    await settings.getByText(look, { exact: true }).click();
+    await expect(root).toHaveAttribute("data-look", look.toLowerCase());
+    const [frame, stage] = [
+      await root.locator(".of-frame").boundingBox(),
+      await root.locator(".of-stage").boundingBox(),
+    ];
+    expect(Math.abs(stage!.x - frame!.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(stage!.y - frame!.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(stage!.width - frame!.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(stage!.height - frame!.height)).toBeLessThanOrEqual(1);
+    const bounds = await tabs.evaluate((element) => {
+      const strip = element.getBoundingClientRect();
+      return {
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+        tabs: [...element.querySelectorAll('[role="tab"]')].map((tab) => {
+          const box = tab.getBoundingClientRect();
+          return { left: box.left - strip.left, right: box.right - strip.right };
+        }),
+      };
+    });
+    expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.clientWidth + 1);
+    expect(bounds.tabs).toHaveLength(names.length);
+    for (const tab of bounds.tabs) {
+      expect(tab.left).toBeGreaterThanOrEqual(-1);
+      expect(tab.right).toBeLessThanOrEqual(1);
+    }
+    for (const name of names) {
+      const tab = tabs.getByRole("tab", { name, exact: true });
+      await tab.click();
+      await expect(tab).toHaveAttribute("aria-selected", "true");
+      await expect(settings.getByRole("tabpanel")).toBeVisible();
+    }
+    await tabs.getByRole("tab", { name: "Debug", exact: true }).focus();
+    await page.keyboard.press("Home");
+    await expect(tabs.getByRole("tab", { name: "Look", exact: true })).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(tabs.getByRole("tab", { name: "Debug", exact: true })).toBeFocused();
+    await expect(fullscreen).toHaveAttribute("aria-label", initialFullscreen!);
+    await page.screenshot({ path: testInfo.outputPath(`settings-${size.width}-${look.toLowerCase()}.png`) });
+  }
+  await root.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(root.getByRole("heading", { name: "Story", exact: true })).toBeVisible();
+  const [frame, stage] = [await root.locator(".of-frame").boundingBox(), await root.locator(".of-stage").boundingBox()];
+  expect(stage!.width).toBeLessThan(frame!.width);
+  await expect(fullscreen).toHaveAttribute("aria-label", initialFullscreen!);
+});
+
+test("Otome Hearth Settings scrolls to the last control on long pages", async ({ page, isMobile, browserName }) => {
+  // Enter from a normal Story height; only Settings is under test at the short viewport.
+  await page.setViewportSize({ width: isMobile ? 390 : 961, height: isMobile ? 844 : 640 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const { answer } = createSceneStub({ images: false, audio: false });
+  await stubRoutes(page, answer, calls);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = root.locator(".of-settings");
+  await expect(settings).toBeVisible();
+  await page.setViewportSize({ width: isMobile ? 390 : 961, height: 480 });
+  let scrolledPages = 0;
+  for (const name of ["Content", "Audio", "Privacy & data"]) {
+    await settings.getByRole("tab", { name, exact: true }).click();
+    await settings.evaluate((element) => element.scrollTo(0, 0));
+    const [frame, stage] = [
+      await root.locator(".of-frame").boundingBox(),
+      await root.locator(".of-stage").boundingBox(),
+    ];
+    expect(stage!.width).toBeLessThanOrEqual(frame!.width + 1);
+    expect(stage!.height).toBeLessThanOrEqual(frame!.height + 1);
+    const before = await settings.evaluate((element) => ({
+      height: element.clientHeight,
+      content: element.scrollHeight,
+    }));
+    const box = await settings.boundingBox();
+    if (before.content > before.height + 1) {
+      if (browserName === "webkit" && isMobile) {
+        // Mobile WebKit has no Playwright wheel API. This native CSSOM probe is not physical touch proof.
+        await settings.evaluate((element, distance) => element.scrollBy(0, distance), before.content);
+      } else {
+        await page.mouse.move(box!.x + 4, box!.y + box!.height / 2);
+        await page.mouse.wheel(0, before.content);
+      }
+      await expect.poll(() => settings.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+      await expect
+        .poll(() => settings.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+        .toBeLessThanOrEqual(1);
+      scrolledPages += 1;
+    }
+    const last = settings.getByRole("tabpanel").getByRole("button").last();
+    const control = await last.boundingBox();
+    expect(control!.y).toBeGreaterThanOrEqual(box!.y - 1);
+    expect(control!.y + control!.height).toBeLessThanOrEqual(box!.y + box!.height + 1);
+    await last.focus();
+    await expect(last).toBeFocused();
+    expect(await root.locator(".of-frame").evaluate((element) => element.scrollTop)).toBe(0);
+    expect(await root.locator(".of-stage").evaluate((element) => element.scrollTop)).toBe(0);
+  }
+  expect(scrolledPages).toBeGreaterThan(0);
+  expect(calls.filter((call) => call.method === "POST" && call.path.endsWith("/settings"))).toEqual([]);
+});

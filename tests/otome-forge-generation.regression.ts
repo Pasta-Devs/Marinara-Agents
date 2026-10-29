@@ -78,6 +78,7 @@ function request(overrides: Partial<GenerateJsonRequest<Premise>> = {}): Generat
 
 const failsWith = (status: number, code: string) => (error: unknown) =>
   error instanceof OtomeForgeError && error.statusCode === status && error.code === code;
+const httpError = (status: number, message: string) => Object.assign(new Error(message), { status });
 
 test("a reply is parsed, checked by its schema and normalize, and gets exactly one repair turn", async () => {
   const { deps, calls } = await setup(['Sure! ```json\n{"premise": 42}\n```', '{"premise":"A masked ball."}']);
@@ -114,6 +115,170 @@ test("a reply is parsed, checked by its schema and normalize, and gets exactly o
   const bad = await setup(['{"premise":""}', "not json at all"]);
   await assert.rejects(generateJson(bad.deps, request()), failsWith(502, "bad-format"));
   assert.equal(bad.calls.length, 2);
+});
+
+test("an endpoint rejecting json_object retries the same premise request once without the JSON hint", async () => {
+  const unsupported = Object.assign(
+    new Error("Custom OpenAI-compatible endpoint error 400: 'response_format.type' must be 'json_schema' or 'text'"),
+    { status: 400 },
+  );
+  const { deps, calls } = await setup([unsupported, '{"premise":"A masked ball."}'], { maxOutputTokens: null });
+  const controller = new AbortController();
+  const result = await generateJson(
+    deps,
+    request({ runId: null, connectionId: "conn-custom", signal: controller.signal, debugMode: true }),
+  );
+  assert.equal(result.value.premise, "A masked ball.");
+  assert.equal(calls.length, 2, "one rejected hint followed by one completion, without another model or connection");
+  assert.deepEqual(calls[0]!.messages, calls[1]!.messages);
+  assert.deepEqual(calls[0]!.options?.responseFormat, { type: "json_object" });
+  const { responseFormat: _hint, ...unchanged } = calls[0]!.options!;
+  assert.deepEqual(calls[1]!.options, unchanged, "only the optional JSON hint changes");
+  assert.equal(calls[1]!.connectionId, "conn-custom");
+  assert.equal(calls[1]!.options?.signal, controller.signal);
+  assert.equal(calls[1]!.options?.maxTokens, OUTPUT_FLOOR + REASONING_HEADROOM, "no arbitrary output cap is added");
+});
+
+test("explicit HTTP 422 format rejections recover while a repeated rejection is propagated without another retry", async () => {
+  for (const message of [
+    "Unsupported parameter:response_format",
+    "Invalid value for response_format.type",
+    "This endpoint does not support JSON mode",
+  ]) {
+    const t = await setup([httpError(422, message), '{"premise":"Recovered."}']);
+    assert.equal((await generateJson(t.deps, request({ label: "world-plan" }))).value.premise, "Recovered.");
+    assert.equal(t.calls.length, 2);
+    assert.equal(t.calls[1]!.options?.responseFormat, undefined);
+  }
+  const repeated = httpError(400, "response_format is not supported");
+  const t = await setup([repeated, repeated, '{"premise":"Must not be reached."}']);
+  await assert.rejects(generateJson(t.deps, request()), (error) => error === repeated);
+  assert.equal(t.calls.length, 2, "the compatibility retry is bounded even when omission cannot satisfy the endpoint");
+});
+
+test("format fallback preserves exactly one content repair and omits the hint for the rest of that generation", async () => {
+  const unsupported = httpError(400, "response_format.type must be json_schema or text");
+  for (const replies of [
+    [unsupported, "not JSON", '{"premise":"Repaired."}'],
+    ["not JSON", unsupported, '{"premise":"Repaired."}'],
+  ]) {
+    const t = await setup(replies);
+    assert.equal((await generateJson(t.deps, request())).value.premise, "Repaired.");
+    assert.equal(t.calls.length, 3, "one rejected request and at most two completed replies");
+    assert.deepEqual(t.calls.at(-1)!.options?.responseFormat, undefined);
+    const repair = t.calls.at(-1)!.messages;
+    assert.equal(repair.at(-2)!.content, "not JSON");
+    assert.match(repair.at(-1)!.content, /Reply again with ONLY the JSON object/);
+    const rejected = replies[0] === unsupported ? 0 : 1;
+    assert.deepEqual(t.calls[rejected]!.messages, t.calls[rejected + 1]!.messages);
+  }
+  const bad = await setup([unsupported, "not JSON", "still not JSON", '{"premise":"No third content turn."}']);
+  await assert.rejects(generateJson(bad.deps, request()), failsWith(502, "bad-format"));
+  assert.equal(bad.calls.length, 3);
+});
+
+test("unrelated provider, authentication, quota, network and statusless failures never authorize a format retry", async () => {
+  const formatMessage = "response_format.type must be json_schema or text";
+  const errors = [
+    ...[401, 403, 404, 408, 409, 413, 429, 500, 502, 503, 504, 529].map((status) => httpError(status, formatMessage)),
+    httpError(400, "Invalid API key; request response_format=json_object"),
+    httpError(400, "Invalid prompt content; request response_format=json_object"),
+    httpError(400, "Invalid schema in prompt; request response_format=json_object"),
+    httpError(400, "max_tokens invalid; request response_format=json_object"),
+    httpError(422, "Input too long; request response_format=json_object"),
+    new Error(`Custom endpoint error 400: ${formatMessage}`),
+    Object.assign(new Error("Connection reset"), { code: "ECONNRESET" }),
+  ];
+  for (const original of errors) {
+    const t = await setup([original, '{"premise":"Must not be reached."}']);
+    await assert.rejects(generateJson(t.deps, request()), (error) => error === original, original.message);
+    assert.equal(t.calls.length, 1, original.message);
+  }
+});
+
+test("abort and permission changes stop a format retry before another call or fallback prompt log", async () => {
+  const unsupported = httpError(400, "response_format.type must be json_schema or text");
+  const controller = new AbortController();
+  const stopped = new Error("Stopped while the endpoint rejected the hint");
+  const aborted = await setup([
+    () => {
+      controller.abort(stopped);
+      throw unsupported;
+    },
+  ]);
+  await assert.rejects(
+    generateJson(aborted.deps, request({ signal: controller.signal, debugMode: true })),
+    (error) => error === stopped,
+  );
+  assert.equal(aborted.calls.length, 1);
+  assert.equal(aborted.logs.length, 1, "only the original prompt was logged");
+
+  let allowed = true;
+  const held = await setup([
+    () => {
+      allowed = false;
+      throw unsupported;
+    },
+  ]);
+  await assert.rejects(
+    generateJson(held.deps, request({ mayCall: () => allowed, debugMode: true })),
+    (error) => error instanceof OtomeForgeError && error.statusCode === 503,
+  );
+  assert.equal(held.calls.length, 1);
+  assert.equal(held.logs.length, 1);
+
+  const alreadyAborted = await setup([]);
+  await assert.rejects(
+    generateJson(alreadyAborted.deps, request({ signal: controller.signal, debugMode: true })),
+    (error) => error === stopped,
+  );
+  assert.deepEqual(alreadyAborted.calls, []);
+  assert.deepEqual(alreadyAborted.logs, []);
+});
+
+test("format fallback logs a fixed debug notice without echoing private upstream text", async () => {
+  const secret = "PRIVATE CYCLE DETAIL";
+  const t = await setup([
+    httpError(400, `response_format.type must be json_schema or text. The provider echoed: ${secret}`),
+    '{"premise":"A masked ball."}',
+  ]);
+  await generateJson(
+    t.deps,
+    request({ messages: [{ role: "user", content: secret }], redact: [secret], debugMode: true }),
+  );
+  assert.equal(t.calls.length, 2);
+  assert.ok(t.calls.every((call) => call.messages[0]!.content === secret));
+  assert.ok(t.logs.some((entry) => entry.message.includes("Endpoint rejected response_format")));
+  assert.ok(!JSON.stringify(t.logs).includes(secret), "neither prompt logs nor the compatibility notice leak it");
+
+  // Older logger hosts omit this optional level query; the logger still decides whether to emit debug messages.
+  const olderLogger = await setup([
+    httpError(400, "response_format.type must be json_schema or text"),
+    '{"premise":"A masked ball."}',
+  ]);
+  delete olderLogger.deps.runtime.logger.isLevelEnabled;
+  await generateJson(olderLogger.deps, request());
+  assert.equal(olderLogger.calls.length, 2);
+  assert.ok(
+    olderLogger.logs.some((entry) => entry.message.includes("Endpoint rejected response_format") && !entry.override),
+  );
+});
+
+test("format-shaped errors from content normalization are not mistaken for rejected provider requests", async () => {
+  const original = httpError(400, "response_format is unsupported");
+  const t = await setup(['{"premise":"A masked ball."}']);
+  await assert.rejects(
+    generateJson(
+      t.deps,
+      request({
+        normalize: () => {
+          throw original;
+        },
+      }),
+    ),
+    (error) => error === original,
+  );
+  assert.equal(t.calls.length, 1);
 });
 
 test("a refusal on both attempts is a 422 `declined`; anything else is a 502", async () => {
