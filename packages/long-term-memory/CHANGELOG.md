@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.5.11 — 2026-10-30
+
+- A memory whose score (salience or confidence) the model writes in quotes ("0.5") is kept instead of dropped, and a chat piece whose every memory is malformed fails with Retry instead of reporting success with nothing kept.
+
 ## 1.5.10 — 2026-10-29
 
 - Long-Term Memory no longer offers the older way other Agents read memories. Slurp 0.4.8 and earlier stop adding memories to Creator posts; update Slurp to keep them.
