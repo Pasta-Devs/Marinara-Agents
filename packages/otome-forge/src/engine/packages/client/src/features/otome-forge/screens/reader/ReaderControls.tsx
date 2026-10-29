@@ -127,7 +127,7 @@ export function ReaderControls(props: ReaderControlsProps) {
     const dismiss = (event: MouseEvent) => {
       const target = event.target as Element | null;
       if (target?.closest(".of-reader-primary, [role='dialog']")) return;
-      if (target?.closest(".of-reader-stage, .of-dialogue-wrap")) {
+      if (target?.closest(".of-reader-stage, .of-reader-bottom")) {
         event.preventDefault();
         event.stopPropagation();
       }
