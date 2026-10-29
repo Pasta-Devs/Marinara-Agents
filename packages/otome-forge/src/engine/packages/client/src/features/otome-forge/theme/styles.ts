@@ -310,6 +310,7 @@ ${R} .of-segmented {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 4px;
   border-radius: 20px; min-width: 0;
 }
+${R} .of-memory-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 ${R} .of-segment {
   position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   min-width: 0; min-height: 56px; padding: 6px 6px; border-radius: 16px; cursor: pointer; color: var(--of-text-soft);

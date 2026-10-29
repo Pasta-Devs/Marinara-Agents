@@ -125,14 +125,14 @@ Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is 
   - A **Memory** (5★) is a key image, a short Character Story and a voiced line.
   - A **Moment** (4★) is one scene.
   - A **look** (5★ or 4★) is a complete outfit.
-  - A **Snapshot** is a short vignette that joins that love interest's Love Timeline, and only they remember it.
+  - A **Snapshot** (3★ on every banner, including Memories) is a short vignette with a saved illustration. The vignette joins that love interest's Love Timeline, and only they remember it.
 - **Pity:** the count is exact and shown as "5★ in 23".
   - A 5★ starts at 1.5% a wish, rises from the 46th wish without one, and the 60th is always one.
   - Every 10th wish is at least a 4★.
   - The 5★ is always the featured item, with no 50/50.
   - Pity is kept per kind of banner and carries over, Echoes included.
 - **Paying:** a wish charges and rolls in one save, so it is never paid twice, and it never calls a model. A duplicate refunds 400, 60 or 10 Starlight by rarity.
-- **Art:** a banner's art is its featured item's picture, painted when the banner is created, or held for your tap. Tap a ready banner image to see the whole picture without making a wish. Wardrobe banner artwork is centered and shown whole, with its chroma backdrop removed for display. Other items are painted, and their stories written, the first time you open them, and only once.
+- **Art:** a banner's art is its featured item's picture, painted when the banner is created, or held for your tap. Tap a ready banner image to see the whole picture without making a wish. Wardrobe banner artwork is centered and shown whole, with its chroma backdrop removed for display. Other looks, Memories and Snapshots paint once on their first open; Moments are text scenes. A Snapshot costs **1 image**, with no extra text-model call, and respects **Ask before painting** and prompt review. Existing Snapshots illustrate their saved vignette without rerolling it. Opening lists or making a wish does not paint Snapshot pictures, and later opens reuse the saved art.
 - **The Wardrobe:**
   - Looks, theirs and yours, are displayed with their chroma backdrop removed. The original paintings stay saved.
   - **Wear at home** puts a look, theirs or yours, on Home.
@@ -142,6 +142,7 @@ Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is 
   - When you wear a new look of yours, the love interest on Home notices it, and Home's **Me** shows their line beside your look while you wear it.
 - **Memory Selector:** at affection 10, each love interest gives you one. Claim any of their Memories from past banners that you do not have yet, at no cost.
 - **The Album** keeps:
+  - **Memories** offers All, 3★, 4★ and 5★ filters. Unplayed Memories and Moments appear first; partially read and completed stories keep their saved progress. Snapshots are vignettes without a playable chapter.
   - the CGs you have seen and your Memories;
   - the Love Timeline;
   - the tells you have learned;
@@ -277,6 +278,7 @@ If a text endpoint rejects the optional JSON-format parameter, Otome Hearth can 
 | Open Wish in a new fortnight | 1 call per banner (3)                                                                                                                                                             | up to 3, for banner art                                                                                                    | —                                     | —                                                          |
 | First open of a Memory       | 1 call to plan it, then 1 per scene as you read                                                                                                                                   | 1, unless it was the banner art                                                                                            | —                                     | its voiced line, once                                      |
 | First open of a Moment       | 1 call for its scene                                                                                                                                                              | —                                                                                                                          | —                                     | as any scene                                               |
+| First open of a Snapshot     | — | 1, once; held for your tap under Ask before painting or prompt review | — | — |
 | First open of a look         | 1 call for its first-wear scene, for a love interest's featured 5★ look only                                                                                                      | 1, unless it was the banner art                                                                                            | —                                     | as any scene                                               |
 | **Wear at home**             | your new look: 1 call, as they notice it                                                                                                                                          | their look: its faces, about 5                                                                                             | —                                     | —                                                          |
 | **Show them**                | 1 call each time                                                                                                                                                                  | —                                                                                                                          | —                                     | its line, every time, never cached                         |

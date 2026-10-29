@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.1.14 — 2026-10-29
+
+- Album Memories can be filtered by 3★, 4★ or 5★, with unplayed content listed first.
+
+- Owned 3★ Snapshots can be illustrated on first opening through the existing image connection, confirmation and prompt review flow. Paintings are saved and reused; old vignettes and story progress stay intact.
+
 ## 0.1.13 — 2026-10-29
 
 - Suggestive is an image-content ceiling: neutral portraits and facial expression edits no longer receive mandatory suggestive or sensitive-content tags. Image briefs follow the actual moment, with non-explicit adult intimacy allowed when appropriate.

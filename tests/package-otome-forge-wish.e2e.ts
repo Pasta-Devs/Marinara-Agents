@@ -1015,6 +1015,70 @@ test("Otome Forge Wardrobe: the toggle moves between their looks and mine, wears
   await expect(root.getByRole("button", { name: "Show off: Starlit Gown" })).toBeFocused();
 });
 
+test("Otome Hearth Album: rarity filters keep unplayed stories first in stable acquisition order", async ({ page }) => {
+  const calls: Call[] = [];
+  const { answer } = wishStub();
+  const album = albumView();
+  const memory = (id: string, kind: string, rarity: number, read: string | null, art: Json | null = null) => ({
+    ...item(id, kind, rarity, ILVAR, id),
+    owned: true,
+    story: read ? { key: `story-${id}` } : null,
+    read,
+    art,
+  });
+  album.memories = [
+    memory("Finished memory A", "memory5", 5, "done"),
+    memory("Snapshot", "snapshot3", 3, null),
+    memory("Unread moment A", "moment4", 4, "unread", ready(CG)),
+    memory("Reading memory", "memory5", 5, "in-progress", ready(CG)),
+    memory("Unopened memory", "memory5", 5, null),
+    memory("Unread moment B", "moment4", 4, "unread"),
+    memory("Finished moment", "moment4", 4, "done", ready(CG)),
+    memory("Unread memory", "memory5", 5, "unread", ready(CG)),
+    memory("Finished memory B", "memory5", 5, "done", ready(CG)),
+  ];
+  await stubRoutes(page, (call) => (call.path.endsWith("/album") ? { status: 200, json: album } : answer(call)), calls);
+  const root = await openOtome(page);
+  await openDock(root, "Album");
+  await root.getByRole("tab", { name: "Memories", exact: true }).click();
+  const filters = root.getByRole("group", { name: "Memory rarity" });
+  await expect(filters.getByRole("radio", { name: "All", exact: true })).toBeChecked();
+  const titles = root.locator(".of-keepsake-title");
+  await expect(titles).toHaveText([
+    "Unread moment A",
+    "Unopened memory",
+    "Unread moment B",
+    "Unread memory",
+    "Finished memory A",
+    "Snapshot",
+    "Reading memory",
+    "Finished moment",
+    "Finished memory B",
+  ]);
+  await filters.getByText("5★", { exact: true }).click();
+  await expect(filters.getByRole("radio", { name: "5 stars", exact: true })).toBeChecked();
+  await expect(titles).toHaveText([
+    "Unopened memory",
+    "Unread memory",
+    "Finished memory A",
+    "Reading memory",
+    "Finished memory B",
+  ]);
+  await filters.getByText("4★", { exact: true }).click();
+  await expect(filters.getByRole("radio", { name: "4 stars", exact: true })).toBeChecked();
+  await expect(titles).toHaveText(["Unread moment A", "Unread moment B", "Finished moment"]);
+  await filters.getByText("3★", { exact: true }).click();
+  await expect(filters.getByRole("radio", { name: "3 stars", exact: true })).toBeChecked();
+  await expect(titles).toHaveText(["Snapshot"]);
+  await filters.getByText("All", { exact: true }).click();
+  await expect(filters.getByRole("radio", { name: "All", exact: true })).toBeChecked();
+  await expect(titles).toHaveCount(9);
+  await expect(
+    root.locator(".of-keepsake").filter({ hasText: "Finished memory A" }).locator(".of-keepsake-state"),
+  ).toHaveText("Read");
+  expect(calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toEqual([]);
+});
+
 test("Otome Forge Album: a CG opens large and saves through the Engine; the Timeline and the Tells read without images", async ({
   page,
 }) => {
@@ -1129,4 +1193,101 @@ test("Otome Forge Wish: an open on the 5★ reveal hands focus on, and the promp
   expect(paints).toHaveLength(1);
   expect(paints[0]!.body).toMatchObject({ prompt: "The great clock at midnight" });
   await expect(takeover.getByRole("button", { name: "Read the story" })).toBeFocused();
+});
+
+test("Otome Hearth Snapshot: an owned vignette reviews one full image prompt and reuses its saved art", async ({
+  page,
+}) => {
+  const calls: Call[] = [];
+  const { stub, answer } = wishStub();
+  stub.view.world.images.ask = true;
+  const text = "Ilvar warms his hands around a cup while the canal lanterns settle into the evening.";
+  const snapshot: Json = {
+    ...item("memories-1-s1", "snapshot3", 3, ILVAR, "A Quiet Cup", { text }),
+    owned: true,
+    read: null,
+  };
+  const album = { ...albumView(), memories: [snapshot] };
+  const prompt =
+    "Illustrate this saved everyday moment. " +
+    "Warm lantern light on a blue coat and a cup. ".repeat(120) +
+    "PROMPT-END";
+  const negativePrompt = "blurry, compression artifacts, ".repeat(150) + "NEGATIVE-END";
+  expect(prompt.length).toBeGreaterThan(4000);
+  expect(negativePrompt.length).toBeGreaterThan(4000);
+  const artPath = `/items/${snapshot.id}/art`;
+  const openPath = `/items/${snapshot.id}/open`;
+  await stubRoutes(
+    page,
+    (call) => {
+      if (call.path.endsWith("/album")) return { status: 200, json: album };
+      if (call.path.endsWith(openPath) && call.method === "POST") {
+        snapshot.art = { state: "waiting-consent", at: now() };
+        return { status: 200, json: { item: snapshot, story: null, art: snapshot.art } };
+      }
+      if (call.path.endsWith(`${artPath}/prompt`) && call.method === "POST")
+        return { status: 200, json: { prompt, negativePrompt } };
+      if (call.path.endsWith(artPath) && call.method === "POST") {
+        snapshot.art = ready(CG);
+        return { status: 200, json: { art: snapshot.art } };
+      }
+      return answer(call);
+    },
+    calls,
+  );
+  const root = await openOtome(page, { review: true });
+  const balance = await starlight(root).textContent();
+  expect(balance).toBeTruthy();
+  await openDock(root, "Album");
+  await root.getByRole("tab", { name: "Memories", exact: true }).click();
+  const card = root.getByRole("button", { name: /A Quiet Cup/u });
+  await expect(card).toContainText(text);
+  await card.click();
+  const detail = root.getByRole("dialog", { name: "Memory", exact: true });
+  await expect(detail.locator(".of-item-text--snapshot")).toHaveText(text);
+  await expect(
+    detail.getByText("Paints 1 image · after you tap Paint (Ask before painting)", { exact: true }),
+  ).toBeVisible();
+  await expect(detail.getByText("Writes its story", { exact: true })).toHaveCount(0);
+  expect(calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toEqual([]);
+  await detail.getByRole("button", { name: "Open it", exact: true }).click();
+  await expect(detail.getByRole("button", { name: "Paint it", exact: true })).toBeVisible();
+  expect(posts(calls, openPath)).toHaveLength(1);
+  expect(posts(calls, artPath)).toHaveLength(0);
+  await detail.getByRole("button", { name: "Paint it", exact: true }).click();
+  const review = root.getByRole("dialog", { name: "Paint: A Quiet Cup", exact: true });
+  await expect(review).toBeVisible();
+  await expect(root.getByRole("dialog")).toHaveCount(1);
+  await expect(review.getByRole("textbox", { name: "Prompt", exact: true })).toHaveValue(prompt);
+  await expect(review.getByRole("textbox", { name: "Negative prompt", exact: true })).toHaveValue(negativePrompt);
+  await expect(review.getByText("Paints 1 image", { exact: true })).toBeVisible();
+  expect(posts(calls, artPath)).toHaveLength(0);
+  const reviewed = `${prompt} USER REVIEWED THE WHOLE PROMPT.`;
+  await review.getByRole("textbox", { name: "Prompt", exact: true }).fill(reviewed);
+  await review.getByRole("button", { name: "Paint", exact: true }).click();
+  await expect(review).toHaveCount(0);
+  await expect(detail.locator(".of-item-art img")).toHaveAttribute("src", CG);
+  await expect(detail.locator(".of-item-text--snapshot")).toHaveText(text);
+  expect(posts(calls, artPath)).toHaveLength(1);
+  expect(posts(calls, artPath)[0]!.body).toMatchObject({ prompt: reviewed, negativePrompt });
+  await detail.getByRole("button", { name: "Close", exact: true }).click();
+  await openDock(root, "Story");
+  await openDock(root, "Album");
+  await root.getByRole("tab", { name: "Memories", exact: true }).click();
+  await root.getByRole("button", { name: /A Quiet Cup/u }).click();
+  await expect(detail.locator(".of-item-art img")).toHaveAttribute("src", CG);
+  await expect(detail.locator(".of-item-text--snapshot")).toHaveText(text);
+  await expect(detail.getByRole("button", { name: "Open it", exact: true })).toHaveCount(0);
+  await expect(detail.getByRole("button", { name: "Paint it", exact: true })).toHaveCount(0);
+  await expect(starlight(root)).toHaveText(balance!);
+  expect(snapshot.story).toBeNull();
+  expect(snapshot.read).toBeNull();
+  expect(snapshot.text).toBe(text);
+  expect(
+    calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened")).map((call) => call.path),
+  ).toEqual([
+    `/api/otome-forge/runs/${RUN}${openPath}`,
+    `/api/otome-forge/runs/${RUN}${artPath}/prompt`,
+    `/api/otome-forge/runs/${RUN}${artPath}`,
+  ]);
 });

@@ -3,6 +3,7 @@
 // gate's settings, so a world that never raised one gets the same contract, story prompts and image prompts. The
 // digests were taken from the 0.0.6 builders before that change; when an SFW prompt is changed on purpose, take them
 // again from the failing assertion's "actual" and say so in the PR.
+// The banner digests deliberately include 0.1.14's English Snapshot illustration fields; story and image contracts stay pinned.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -124,9 +125,9 @@ function storyPrompts(content: ContentSettings): Record<string, string> {
 }
 
 const EXPECTED_ANGST: Record<string, string> = {
-  bannerHis: "9f88358b3085ce91",
-  bannerMemories: "0169fd58890dfe72",
-  bannerMine: "3d8c1ced038c15cb",
+  bannerHis: "1d2c8600411d2af9",
+  bannerMemories: "7a04b33eb4e2b365",
+  bannerMine: "52338d5833c88c8e",
   beat: "26ae7c03c6477077",
   beatWithCg: "e4c9fb19f55a5c0c",
   chapterPlan: "2572bb939ea6fcda",
@@ -135,9 +136,9 @@ const EXPECTED_ANGST: Record<string, string> = {
   routePlan: "1325f711ec46c669",
 };
 const EXPECTED_GENTLE: Record<string, string> = {
-  bannerHis: "774b75feb9439096",
-  bannerMemories: "c737709b895607d1",
-  bannerMine: "838a68a677d26442",
+  bannerHis: "0e140edf10682d9b",
+  bannerMemories: "f8ffc60ebb595cc8",
+  bannerMine: "59e19603aa991c55",
   beat: "7bcc1b345f2c3094",
   beatWithCg: "54c95d13ff323ecc",
   chapterPlan: "f28fb5dccb0eb467",
@@ -146,7 +147,7 @@ const EXPECTED_GENTLE: Record<string, string> = {
   routePlan: "94e8923f9c8c97d7",
 };
 
-test("the SFW defaults send the story and banner prompts they sent before NSFW mode, byte for byte", () => {
+test("the SFW defaults pin unchanged story prompts and banner prompts with Snapshot illustration planning", () => {
   const digests = (content: ContentSettings) =>
     Object.fromEntries(Object.entries(storyPrompts(content)).map(([key, value]) => [key, digest(value)]));
   assert.deepEqual(digests(defaultContent()), EXPECTED_ANGST, "Heat SFW, Darkness Angst, images SFW");
