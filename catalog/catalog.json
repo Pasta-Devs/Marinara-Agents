@@ -3631,7 +3631,7 @@
         },
         "id": "slurp2",
         "name": "Slurp",
-        "version": "0.4.10",
+        "version": "0.4.11",
         "description": "A private social app for your characters. Turn characters and personas into Creators, post public or locked photos, and watch a simulated audience follow, subscribe, unlock, comment, and message them. By default, it is tuned for an adult experience. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -3705,8 +3705,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "90866712016b238215d177e966b107827c029fc34049155f0c8192fda528b7a1",
-            "bytes": 2900294
+            "sha256": "8caa14ec2a27c55ada613d8651311a96b1af6ff3d5775ecea932915cc02e0a0c",
+            "bytes": 2900720
           },
           {
             "path": "slurp2-logo.png",
@@ -3759,9 +3759,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.10.zip",
-        "sha256": "2c08e520c481a253d60c4a35291f6d19459386de995a349f6f1a69d8eb197f59",
-        "bytes": 6016246
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.4.11.zip",
+        "sha256": "cfc45d4f0ecc6d46b6b654e77b96f906bb1ca27557760706a759e49401ed35cd",
+        "bytes": 6016672
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },
