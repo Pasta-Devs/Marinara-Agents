@@ -351,11 +351,11 @@ test("a current look changed during a paid repaint discards that face and stops 
   );
 });
 
-test("a failed explicit first set stays terminal across beat replay and a fresh service instance", async (context) => {
+test("a failed explicit first set keeps partial uploads tracked across replay, reload and re-enabled retries", async (context) => {
   const t = await repaintWorld("r-renoprior-gggggg", {
     prior: false,
     before: (_call, n) => {
-      if (n === 2) throw new Error("The image provider failed.");
+      if (n === 2 || n === 4) throw new Error("The image provider failed.");
     },
   });
   context.after(() => t.art.dispose());
@@ -376,4 +376,23 @@ test("a failed explicit first set stays terminal across beat replay and a fresh 
   assert.equal(t.paid.length, 2, "neither replay nor reload retries the failed paid request");
   assert.deepEqual(t.retained(), before);
   assert.deepEqual(t.calls, []);
+
+  // The first authorized automatic retry fails too, leaving a retired partial upload and its own active partial.
+  await setImages(t.store, t.runId, { expressions: false });
+  await setImages(t.store, t.runId, { expressions: true, expressionsSince: new Date(Date.now() + 1000).toISOString() });
+  reloaded.queueExpressions(t.runId, beat(0), { debugMode: false });
+  await until(
+    async () => t.paid.length === 4 && (await t.unit()).expressions[WORN]?.state === "failed",
+    "the re-enabled partial set",
+  );
+  await t.accounted(t.uploads.map((_upload, i) => `img${i + 1}`));
+
+  await setImages(t.store, t.runId, { expressions: false });
+  await setImages(t.store, t.runId, { expressions: true, expressionsSince: new Date(Date.now() + 2000).toISOString() });
+  const beforeRetry = t.retained();
+  reloaded.queueExpressions(t.runId, beat(0), { debugMode: false });
+  await until(async () => (await t.unit()).expressions[WORN]?.state === "ready", "the completed re-enabled set");
+  assert.equal(t.paid.length, 8, "the final retry paints only four missing faces");
+  await t.accounted(t.uploads.map((_upload, i) => `img${i + 1}`));
+  assert.deepEqual(t.retained(), beforeRetry, "only expression bookkeeping changes during a retry");
 });

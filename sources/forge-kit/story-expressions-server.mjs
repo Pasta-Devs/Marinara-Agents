@@ -263,11 +263,15 @@ export function createForgeStoryExpressions({
     const started = await update(unitId, (next) => {
       const current = next.expressions?.[base];
       if (repaint && currentBase(next) !== base) return;
+      const previousRefs = [
+        ...(repaint || !Array.isArray(current?.previousRefs) ? [] : current.previousRefs),
+        ...refsOf(current?.replacement),
+      ].filter(Boolean);
       writeAttempt(next, {
         state: "pending",
         at,
         images: repaint ? {} : { ...current?.images },
-        ...(repaint ? { previousRefs: refsOf(current?.replacement).filter(Boolean) } : {}),
+        ...(previousRefs.length ? { previousRefs: [...new Set(previousRefs)] } : {}),
       });
     });
     if (!started || !owned(attemptOf(started))) return;
