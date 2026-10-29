@@ -2,6 +2,8 @@
 
 ## 0.1.15 — 2026-10-29
 
+- Opening narration no longer previews the portrait of a love interest whose speaking turn has not been reached. Established speakers can still stay visible during later narration.
+
 - The pre-chapter warning places its Ease off feather after the guidance sentence.
 
 - Harmful story/date choices and Confrontation outcomes can reduce Affection progress within the current level. Unlocked levels stay permanent, and replaying never repeats the deduction or refunds daily earning limits.

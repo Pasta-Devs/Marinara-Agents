@@ -247,18 +247,14 @@ export interface OnStage {
 
 /**
  * Who is on stage at line `at`: the love interest who spoke last (his face from that line; an untagged line shows his
- * plain portrait). Before anyone has, the first one who speaks later in the beat, with his plain portrait: the
- * narrator voices only the love interests present, so a beat where none speaks shows nobody.
+ * plain portrait). Before a love interest's turn has been reached, show nobody: looking ahead would reveal a later
+ * arrival during the opening narration.
  */
 export function onStageAt(lines: readonly ReaderLine[], at: number, lis: readonly RunLiView[]): OnStage {
   for (let index = Math.min(at, lines.length - 1); index >= 0; index -= 1) {
     const segment = lines[index]!.segment;
     const li = speakerLi(segment, lis);
     if (li) return { li, face: isFace(segment.expression) ? segment.expression : "", speaking: index === at };
-  }
-  for (const line of lines.slice(Math.max(0, at + 1))) {
-    const li = speakerLi(line.segment, lis);
-    if (li) return { li, face: "", speaking: false };
   }
   return { li: null, face: "", speaking: false };
 }
