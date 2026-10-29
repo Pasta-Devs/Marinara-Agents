@@ -2,6 +2,8 @@
 
 ## 0.1.14 — 2026-10-29
 
+- Album Memories can be filtered by 3★, 4★ or 5★, with unplayed content listed first.
+
 - Owned 3★ Snapshots can be illustrated on first opening through the existing image connection, confirmation and prompt review flow. Paintings are saved and reused; old vignettes and story progress stay intact.
 
 ## 0.1.12 — 2026-10-29

@@ -29,6 +29,7 @@ const ArtBody = z.object({
   prompt: z.string().max(PROMPT_MAX).optional(),
   negativePrompt: z.string().max(PROMPT_MAX).optional(),
 });
+const SnapshotArtBody = z.object({ prompt: z.string().optional(), negativePrompt: z.string().optional() });
 
 /** The `:item` param, or a 404 (a malformed id names no item). */
 function itemParam(request: OtomeRequest): string {
@@ -56,10 +57,10 @@ export const registerItemRoutes: RegisterRoutes = (router, deps) => {
   router.post(
     "/runs/:run/items/:item/art",
     handle(async (request) => {
-      const { prompt, negativePrompt } = parseBody(ArtBody, request.body);
       const { runId } = runParam(request);
       const id = itemParam(request);
-      await readOwnedItem(deps, runId, id);
+      const { item } = await readOwnedItem(deps, runId, id);
+      const { prompt, negativePrompt } = parseBody(item.kind === "snapshot3" ? SnapshotArtBody : ArtBody, request.body);
       const art = await paintItemNow(deps, runId, id, {
         debugMode: debugModeOf(request),
         edited: { prompt, negativePrompt },

@@ -686,6 +686,66 @@ test("Otome Forge Wardrobe: the toggle moves between their looks and mine, wears
   await expect(root.getByRole("button", { name: "Show off: Starlit Gown" })).toBeFocused();
 });
 
+test("Otome Hearth Album: rarity filters keep unplayed stories first in stable acquisition order", async ({ page }) => {
+  const calls: Call[] = [];
+  const { answer } = wishStub();
+  const album = albumView();
+  const memory = (id: string, kind: string, rarity: number, read: string | null, art: Json | null = null) => ({
+    ...item(id, kind, rarity, ILVAR, id),
+    owned: true,
+    story: read ? { key: `story-${id}` } : null,
+    read,
+    art,
+  });
+  album.memories = [
+    memory("Finished memory A", "memory5", 5, "done"),
+    memory("Snapshot", "snapshot3", 3, null),
+    memory("Unread moment A", "moment4", 4, "unread", ready(CG)),
+    memory("Reading memory", "memory5", 5, "in-progress", ready(CG)),
+    memory("Unopened memory", "memory5", 5, null),
+    memory("Unread moment B", "moment4", 4, "unread"),
+    memory("Finished moment", "moment4", 4, "done", ready(CG)),
+    memory("Unread memory", "memory5", 5, "unread", ready(CG)),
+    memory("Finished memory B", "memory5", 5, "done", ready(CG)),
+  ];
+  await stubRoutes(page, (call) => (call.path.endsWith("/album") ? { status: 200, json: album } : answer(call)), calls);
+  const root = await openOtome(page);
+  await openDock(root, "Album");
+  await root.getByRole("tab", { name: "Memories", exact: true }).click();
+  const filters = root.getByRole("group", { name: "Memory rarity" });
+  await expect(filters.getByRole("radio", { name: "All", exact: true })).toBeChecked();
+  const titles = root.locator(".of-keepsake-title");
+  await expect(titles).toHaveText([
+    "Unread moment A",
+    "Unopened memory",
+    "Unread moment B",
+    "Unread memory",
+    "Finished memory A",
+    "Snapshot",
+    "Reading memory",
+    "Finished moment",
+    "Finished memory B",
+  ]);
+  await filters.getByRole("radio", { name: "5 stars", exact: true }).check();
+  await expect(titles).toHaveText([
+    "Unopened memory",
+    "Unread memory",
+    "Finished memory A",
+    "Reading memory",
+    "Finished memory B",
+  ]);
+  await filters.getByRole("radio", { name: "4 stars", exact: true }).check();
+  await expect(titles).toHaveText(["Unread moment A", "Unread moment B", "Finished moment"]);
+  await filters.getByRole("radio", { name: "3 stars", exact: true }).check();
+  await expect(titles).toHaveText(["Snapshot"]);
+  await filters.getByRole("radio", { name: "All", exact: true }).check();
+  await expect(titles).toHaveCount(9);
+  await expect(
+    root.locator(".of-keepsake").filter({ hasText: "Finished memory A" }).locator(".of-keepsake-state"),
+  ).toHaveText("Read");
+  expect(calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toEqual([]);
+});
+
 test("Otome Forge Album: a CG opens large and saves through the Engine; the Timeline and the Tells read without images", async ({
   page,
 }) => {

@@ -137,6 +137,51 @@ test("a read creates nothing; Wish open creates the rotation's three banners onc
   assert.equal(t.calls.length, 3);
 });
 
+test("every banner stores a Snapshot's optional English illustration brief without painting unowned rewards", async () => {
+  const kinds = ["memories", "his-wardrobe", "my-wardrobe"] as const;
+  const brief = `A quiet shared cup of tea beside the lantern.\nKeep the authored spacing  here. ${"Evening light and the quiet room. ".repeat(150)}FINAL ILLUSTRATION DETAIL.`;
+  assert.ok(brief.length > 4000);
+  const replies = kinds.map((kind) => {
+    const reply = bannerReply(kind);
+    return JSON.stringify({
+      ...reply,
+      snapshots: reply.snapshots.map((snapshot) => ({
+        ...snapshot,
+        cgBrief: ` \n${brief}\n `,
+        cgCast: ["Kai", "Mireille", "Sol", "Ines"],
+      })),
+    });
+  });
+  const t = await wishWorld({ runKey: "r-snapplan-aaaaaa", images: NO_IMAGES, replies });
+  const opened = await t.call("POST", "/runs/:run/wish/open");
+  assert.equal(opened.status, 200, JSON.stringify(opened.body));
+  for (const kind of kinds) {
+    const snapshot = (await readItem(t.store, t.runId, `${kind}-0-s1`))!;
+    assert.equal(snapshot.kind, "snapshot3", "the Memories banner has the same three-star Snapshot kind");
+    assert.equal(
+      snapshot.cg?.brief,
+      brief,
+      "Snapshot planner briefs are trimmed at the edges, never shortened or rewritten",
+    );
+    assert.deepEqual(snapshot.cg?.cast, ["Kai", "Ines"], "the private picture includes only its LI and protagonist");
+    assert.equal(snapshot.art, null);
+    const banner = opened.body.wish.banners.find((entry: wish.BannerView) => entry.kind === kind);
+    assert.equal(banner.three[0].text, undefined, "unowned vignette text remains private");
+    assert.equal("cg" in banner.three[0], false, "the private image brief stays on the server");
+  }
+  assert.deepEqual(t.paid, [], "planning and listing Snapshot rewards do not paint their pictures");
+  assert.equal(t.calls.length, 3, "the existing one planner call per banner is enough");
+  await setImages(t.store, t.runId, { connectionId: "conn-image" });
+  for (const kind of kinds) {
+    const pulled = await pullWish(t.deps, t.runId, { banner: `${kind}-0`, count: 1, random: () => 0.5 });
+    assert.equal(pulled.results[0]!.item.kind, "snapshot3");
+    assert.equal(pulled.results[0]!.item.art, null);
+  }
+  await t.call("GET", "/runs/:run/wish");
+  assert.deepEqual(t.paid, [], "wishes and list reads do not paint even with image generation enabled");
+  assert.equal(t.calls.length, 3);
+});
+
 test("a Snapshot planned without a title is named by its first words, or its first characters when it has no spaces", () => {
   // The fixture plans every slot over the whole cast, so the cast it names is the one given.
   const kai = { id: KAI, name: "Kai" } as Unit;

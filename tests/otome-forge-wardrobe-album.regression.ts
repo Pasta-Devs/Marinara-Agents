@@ -293,6 +293,146 @@ test("a Memory's first open paints its CG once and writes its Character Story on
   assert.equal(t.paid.length, 1, "a later open paints nothing");
 });
 
+test("an existing owned Snapshot paints its saved vignette once without rewriting its text, history or private memory", async () => {
+  const t = await itemsWorld("r-snaplegacy-aaaaaa");
+  const original = await t.stored(ITEMS.snapshot.id);
+  const state = await t.store.readDoc(stateId(t.runId), normalizeState);
+  const memory = await readMemorySources(t.store, t.runId);
+  const [first, second] = await Promise.all([t.open(original.id), t.open(original.id)]);
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  assert.ok(first.body.art, "a legacy Snapshot's first open starts its illustration");
+  await t.painted(original.id);
+  assert.equal(t.paid.length, 1, "concurrent opens share one paid picture");
+  assert.equal(t.paid[0]!.method, "generateBannerArt");
+  assert.ok(t.paid[0]!.request.prompt.includes(original.text!), "the legacy vignette remains the scene context");
+  assert.equal(t.paid[0]!.request.units?.length, 2, "only its love interest and protagonist are references");
+  const saved = await t.stored(original.id);
+  assert.deepEqual({ ...saved, art: null }, original, "only the saved illustration changes the reward");
+  assert.deepEqual(
+    await t.store.readDoc(stateId(t.runId), normalizeState),
+    state,
+    "currency, pity, progress and timeline survive",
+  );
+  assert.deepEqual(await readMemorySources(t.store, t.runId), memory, "its private vignette memory stays unchanged");
+  assert.deepEqual(t.calls, [], "an illustration needs no new text-model call or Character Story");
+  assert.equal((await t.open(original.id)).body.art.url, saved.art!.url);
+  await t.call("GET", "/runs/:run/album");
+  await t.call("GET", "/runs/:run/wardrobe");
+  assert.equal(t.paid.length, 1, "repeat opens and list reads reuse the saved picture");
+});
+
+test("new Snapshot artwork uses its English brief and only the reward's own characters", async () => {
+  const t = await itemsWorld("r-snapbrief-dddddd", { images: { ask: true } });
+  const brief = `A shared cup of tea beside the lantern.\nKeep the authored spacing  here. ${"Evening light and the quiet room. ".repeat(150)}FINAL ILLUSTRATION DETAIL.`;
+  assert.ok(brief.length > 4000);
+  await t.store.updateDoc(runDocTarget("item", itemId(t.runId, ITEMS.snapshot.id)), normalizeItem, (current) => ({
+    ...current,
+    cg: { brief, cast: ["Kai", "Mireille", "Sol"] },
+  }));
+  await t.store.updateDoc(runDocTarget("player", playerId(t.runId)), normalizePlayer, (player) => ({
+    ...player,
+    name: "Mireille",
+  }));
+  for (const [li, portrait] of [
+    [KAI, "/kai.png"],
+    [MIR, "/mireille.png"],
+  ]) {
+    await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, li!)), normalizeUnit, (unit) => ({
+      ...unit,
+      portrait,
+    }));
+  }
+  const opened = await t.open(ITEMS.snapshot.id);
+  assert.equal(opened.body.art.state, "waiting-consent");
+  const preview = await t.call("POST", "/runs/:run/items/:item/art/prompt", {}, { item: ITEMS.snapshot.id });
+  assert.equal(preview.status, 200, JSON.stringify(preview.body));
+  assert.ok(preview.body.prompt.includes(brief), "storage and prompt review preserve the full planner brief");
+  const negative = `${"Keep the full reviewed negative. ".repeat(150)}FINAL NEGATIVE DETAIL`;
+  assert.ok(negative.length > 4000);
+  const painted = await t.call(
+    "POST",
+    "/runs/:run/items/:item/art",
+    {
+      ...preview.body,
+      negativePrompt: negative,
+    },
+    { item: ITEMS.snapshot.id },
+  );
+  assert.equal(painted.status, 200, JSON.stringify(painted.body));
+  assert.equal(painted.body.art.state, "ready");
+  const request = t.paid[0]!.request;
+  assert.ok(request.prompt.includes(brief));
+  assert.ok(request.negativePrompt.includes(negative), "reviewed Snapshot negatives are not shortened either");
+  assert.ok(!request.prompt.includes("SNAP-KAI"), "new artwork uses its planned English brief");
+  assert.equal(request.units?.length, 2);
+  assert.ok(request.units?.some((unit) => unit.portrait === "/kai.png"));
+  assert.ok(
+    request.units?.some((unit) => unit.personaId === "persona-ines"),
+    "the protagonist keeps their selected persona even when another LI shares their name",
+  );
+  assert.ok(
+    !request.units?.some((unit) => unit.portrait === "/mireille.png"),
+    "another LI is not a private Snapshot reference",
+  );
+  assert.deepEqual(t.calls, []);
+});
+
+test("Snapshot art stays unclaimed without an image connection and paints on a later explicit open", async () => {
+  const t = await itemsWorld("r-snaplater-eeeeee", { images: { connectionId: null } });
+  const original = await t.stored(ITEMS.snapshot.id);
+  const first = await t.open(original.id);
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.equal(first.body.art, null);
+  assert.deepEqual(await t.stored(original.id), original);
+  assert.deepEqual(t.paid, []);
+  await setImages(t.store, t.runId, { connectionId: "conn-image" });
+  await t.call("GET", "/runs/:run/album");
+  assert.deepEqual(t.paid, [], "enabling images does not make a list read start paid work");
+  await t.open(original.id);
+  await t.painted(original.id);
+  assert.equal(t.paid.length, 1);
+  assert.deepEqual({ ...(await t.stored(original.id)), art: null }, original);
+  assert.deepEqual(t.calls, []);
+});
+
+test("Snapshot illustrations respect consent, prompt review and explicit failed-paint retry", async () => {
+  for (const review of [false, true]) {
+    const t = await itemsWorld(`r-snapask${review ? "r" : "a"}-bbbbbb`, {
+      images: { ask: !review },
+      before: (_call, n) => {
+        if (n === 1) throw new Error("The image provider failed.");
+      },
+    });
+    const original = await t.stored(ITEMS.snapshot.id);
+    const opened = await t.open(original.id, { reviewImagePrompts: review });
+    assert.equal(opened.status, 200, JSON.stringify(opened.body));
+    assert.equal(opened.body.art?.state, "waiting-consent");
+    const preview = await t.call("POST", "/runs/:run/items/:item/art/prompt", {}, { item: original.id });
+    assert.equal(preview.status, 200, JSON.stringify(preview.body));
+    assert.ok(preview.body.prompt.includes(original.text!));
+    assert.deepEqual(t.paid, [], "opening or previewing under consent does not pay for a picture");
+    const failed = await t.call("POST", "/runs/:run/items/:item/art", preview.body, { item: original.id });
+    assert.equal(failed.status, 200, JSON.stringify(failed.body));
+    assert.equal(failed.body.art.state, "failed");
+    await t.open(original.id);
+    assert.equal(t.paid.length, 1, "opening a failed Snapshot never retries it automatically");
+    const [one, two] = await Promise.all([
+      t.call("POST", "/runs/:run/items/:item/art", preview.body, { item: original.id }),
+      t.call("POST", "/runs/:run/items/:item/art", preview.body, { item: original.id }),
+    ]);
+    assert.equal(one.body.art.state, "ready");
+    assert.deepEqual(two.body.art, one.body.art);
+    assert.equal(t.paid.length, 2, "two explicit retry taps share one new picture");
+    assert.deepEqual({ ...(await t.stored(original.id)), art: null }, original);
+    assert.deepEqual(t.calls, []);
+  }
+  const unowned = await itemsWorld("r-snaplock-cccccc", { owned: [] });
+  assert.equal((await unowned.open(ITEMS.snapshot.id)).status, 409);
+  assert.equal((await unowned.call("POST", "/runs/:run/items/:item/art", {}, { item: ITEMS.snapshot.id })).status, 409);
+  assert.deepEqual(unowned.paid, []);
+});
+
 test("a Character Story plays in the reader with its framing, pays its beats, and stays private to its love interest", async () => {
   const t = await itemsWorld("r-m4bplay-aaaaaa", { images: { connectionId: null }, replies: [json(beatReply())] });
   const opened = await t.open(ITEMS.moment.id);
