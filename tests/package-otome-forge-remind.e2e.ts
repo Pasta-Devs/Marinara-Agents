@@ -549,7 +549,7 @@ test("Otome Forge Remind Me: the calendar, the tracker off by default, hearts, a
   await root.getByRole("tab", { name: "Tracker" }).click();
   await root.getByRole("button", { name: "Delete all cycle data" }).click();
   await expect(
-    root.getByText("All cycle data was deleted from this browser, with today’s caring messages."),
+    root.getByText("You deleted all cycle data from this browser, with today’s caring messages."),
   ).toBeVisible();
   await expect(root.getByRole("switch", { name: /Period tracker/ })).not.toBeChecked();
   expect(await stored(page, CYCLE_KEY)).toBeNull();

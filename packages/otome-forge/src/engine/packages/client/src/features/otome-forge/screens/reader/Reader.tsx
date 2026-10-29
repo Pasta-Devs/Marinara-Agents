@@ -528,6 +528,7 @@ function BottomPanel(props: BottomPanelProps) {
     return (
       <ChapterEnd
         title={chapter.title}
+        prologue={chapter.kind === "prologue"}
         grants={reader.chapterGrants}
         arcNews={reader.arcNews}
         view={view}
@@ -679,6 +680,8 @@ function BottomPanel(props: BottomPanelProps) {
 
 interface ChapterEndProps {
   title: string;
+  /** The prologue ends as itself, not as a chapter. */
+  prologue?: boolean;
   grants: Grant[];
   arcNews: ReaderState["arcNews"];
   view: RunView;
@@ -689,7 +692,17 @@ interface ChapterEndProps {
 }
 
 /** The chapter's end: what it earned (Starlight, each love interest's affection, a level that rose). */
-function ChapterEnd({ title, grants, arcNews, view, levelsBefore, onStory, storyLabel, onHome }: ChapterEndProps) {
+function ChapterEnd({
+  title,
+  prologue = false,
+  grants,
+  arcNews,
+  view,
+  levelsBefore,
+  onStory,
+  storyLabel,
+  onHome,
+}: ChapterEndProps) {
   const { t } = useTranslation();
   const { locale } = useOtomeProps().localization;
   const { starlight, affection } = sumGrants(grants);
@@ -702,7 +715,7 @@ function ChapterEnd({ title, grants, arcNews, view, levelsBefore, onStory, story
         <Sparkles size={22} strokeWidth={1.6} />
       </span>
       <h2 id="of-chapter-end" className="of-chapter-end-title" tabIndex={-1} data-autofocus="">
-        {t("ui.otomeForge.reader.chapterDone")}
+        {prologue ? t("ui.otomeForge.reader.prologueDone") : t("ui.otomeForge.reader.chapterDone")}
       </h2>
       {title ? <p className="of-subtitle">{title}</p> : null}
       {raised && arcNews.stageUp ? (
@@ -754,7 +767,9 @@ function ChapterEnd({ title, grants, arcNews, view, levelsBefore, onStory, story
           })}
         </ul>
       ) : (
-        <p className="of-hint">{t("ui.otomeForge.reader.chapterDoneQuiet")}</p>
+        <p className="of-hint">
+          {prologue ? t("ui.otomeForge.reader.prologueDoneQuiet") : t("ui.otomeForge.reader.chapterDoneQuiet")}
+        </p>
       )}
       <div className="of-inline-actions">
         <button type="button" className="of-button of-button--quiet of-glass of-button--small" onClick={onHome}>

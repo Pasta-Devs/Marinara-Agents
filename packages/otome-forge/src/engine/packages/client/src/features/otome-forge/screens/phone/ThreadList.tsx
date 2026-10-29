@@ -6,7 +6,7 @@
 import { type CSSProperties, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { Heart, RotateCcw, Smartphone } from "lucide-react";
+import { Heart, MessageCircleHeart, RotateCcw } from "lucide-react";
 import { useOtomeApi } from "../../api";
 import { Avatar } from "../../components/Avatar";
 import { accentOf } from "../../lib/accent";
@@ -73,7 +73,7 @@ export function ThreadList({ runKey, view, onOpen, rowRef, headingRef }: ThreadL
     <div className="of-page of-phone">
       <div className="of-page-head">
         <div className="of-emblem of-glass" aria-hidden="true">
-          <Smartphone size={30} strokeWidth={1.6} />
+          <MessageCircleHeart size={30} strokeWidth={1.6} />
         </div>
         <h1 ref={headingRef} className="of-title" tabIndex={-1}>
           {t("ui.otomeForge.common.screenPhone")}

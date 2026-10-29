@@ -129,10 +129,10 @@ const EXPECTED_ANGST: Record<string, string> = {
   bannerMine: "3d8c1ced038c15cb",
   beat: "26ae7c03c6477077",
   beatWithCg: "e4c9fb19f55a5c0c",
-  chapterPlan: "b0b864adf6e88763",
+  chapterPlan: "2572bb939ea6fcda",
   confrontation: "e884776c61d0e05d",
-  repairPlan: "bbb961b32cd87134",
-  routePlan: "a317d3f37a10c227",
+  repairPlan: "5f1b9a89a339fa9e",
+  routePlan: "1325f711ec46c669",
 };
 const EXPECTED_GENTLE: Record<string, string> = {
   bannerHis: "774b75feb9439096",
@@ -140,10 +140,10 @@ const EXPECTED_GENTLE: Record<string, string> = {
   bannerMine: "838a68a677d26442",
   beat: "7bcc1b345f2c3094",
   beatWithCg: "54c95d13ff323ecc",
-  chapterPlan: "79f1f0c45ee46aad",
+  chapterPlan: "f28fb5dccb0eb467",
   confrontation: "39f5ad1acb0a4d09",
-  repairPlan: "cac8ded5e9b4e8d2",
-  routePlan: "d04ec65ae81cbe97",
+  repairPlan: "377005a15d1031cf",
+  routePlan: "94e8923f9c8c97d7",
 };
 
 test("the SFW defaults send the story and banner prompts they sent before NSFW mode, byte for byte", () => {

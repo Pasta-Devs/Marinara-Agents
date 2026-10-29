@@ -35,6 +35,7 @@ import type { OtomeMessage } from "../generation.js";
 import { otomeSceneCard } from "../scene-card.js";
 import { betweenYou } from "../story/prompts.js";
 import { otomeWritingRules } from "../writing-rules.js";
+import { aboutLine } from "../schemas/player.js";
 
 /** The rule both prompts carry: Home never speaks about the player's absence or life outside the story. */
 export const NO_ABSENCE_RULE =
@@ -56,8 +57,13 @@ export const QUESTION_MARK = /[?？¿؟]/u;
 
 const pronounText = (pronouns: Unit["pronouns"]) => `${pronouns.subject}/${pronouns.object}/${pronouns.possessive}`;
 
-function protagonistLine(player: Pick<Player, "name" | "pronouns">): string {
-  return `${player.name || "The protagonist"} (${pronounText(player.pronouns)}), addressed as "you". Never assume a gender the pronouns do not state.`;
+function protagonistLine(player: Pick<Player, "name" | "pronouns" | "about">): string {
+  return [
+    `${player.name || "The protagonist"} (${pronounText(player.pronouns)}), addressed as "you". Never assume a gender the pronouns do not state.`,
+    aboutLine(player),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 // ── P15: line pack (structured, 0.9, home contract, background lane) ──
@@ -93,7 +99,7 @@ const CHEAT_TEXT: Record<ClawCheat, string> = {
 };
 
 export interface LinePackInput {
-  world: Pick<World, "content" | "images" | "language" | "setting" | "premise">;
+  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle">;
   player: Pick<Player, "name" | "pronouns">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   stage: number;
@@ -131,7 +137,7 @@ export function linePackMessages({ world, player, unit, stage, withFixed }: Line
     "- No two lines alike.",
     `- Write every line in ${world.language}.`,
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "home" }),
   ].join("\n");
@@ -191,7 +197,7 @@ export interface NoteDay {
 }
 
 export interface NoteInput {
-  world: Pick<World, "content" | "images" | "language" | "setting" | "premise">;
+  world: Pick<World, "content" | "images" | "language" | "setting" | "premise" | "writingStyle">;
   player: Pick<Player, "name" | "pronouns">;
   unit: Pick<Unit, "name" | "pronouns" | "bible">;
   liState: LiState;
@@ -241,7 +247,7 @@ export function noteMessages({
     "- Never repeat or closely echo one of the recent notes listed.",
     `- Write the note and the mood in ${world.language}.`,
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "home" }),
   ].join("\n");

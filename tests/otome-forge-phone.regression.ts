@@ -63,7 +63,7 @@ import { KAI, MIR, json, storyWorld } from "./fixtures/otome-forge-story.ts";
 type Messages = CapabilityLanguageModelMessage[];
 const system = (messages: Messages) => messages[0]!.content;
 const isReplyPrompt = (messages: Messages) => system(messages).includes("in your private message thread");
-const isMemoryPrompt = (messages: Messages) => system(messages).includes("have just finished texting");
+const isMemoryPrompt = (messages: Messages) => system(messages).includes("have just finished exchanging messages");
 
 const REPLY = {
   messages: [{ text: "Kai: Awake. Unfortunately." }, { text: "", sticker: "cold" }, { text: "", sticker: "tender" }],
@@ -497,11 +497,11 @@ test("a closed session is a chat source for its love interest only: recalled by 
   // A scene with Kai and Mireille in it recalls his conversation as private, so she does not know of it.
   assert.equal(
     sources[0]!.title,
-    `${KAI}'s phone conversation (private: only ${KAI} and the protagonist know what was said)`,
+    `${KAI}'s message exchange (private: only ${KAI} and the protagonist know what was said)`,
   );
   const together = await recall({ cast: [KAI, MIR] });
   assert.ok(
-    together.includes(`# Recalled chat: ${KAI}'s phone conversation (private: only ${KAI} and the protagonist know`),
+    together.includes(`# Recalled chat: ${KAI}'s message exchange (private: only ${KAI} and the protagonist know`),
     "its title marks it private in a shared scene",
   );
 

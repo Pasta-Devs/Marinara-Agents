@@ -47,7 +47,7 @@ const kindOf = (messages: Messages) =>
       ? "pack"
       : system(messages).includes("in your private message thread")
         ? "chat"
-        : system(messages).includes("have just finished texting")
+        : system(messages).includes("have just finished exchanging messages")
           ? "chat-memory"
           : "summary";
 

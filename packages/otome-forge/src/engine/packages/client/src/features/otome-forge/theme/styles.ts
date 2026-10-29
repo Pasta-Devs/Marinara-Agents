@@ -1513,6 +1513,8 @@ ${R} .of-reader-head {
 }
 ${R} .of-reader-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 ${R} .of-reader-row--sub { align-items: flex-start; }
+/* Its buttons wrap to a second line rather than run off a narrow screen. */
+${R} .of-reader-row--sub .of-reader-tools { flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
 ${R} .of-reader-title { flex: 1; min-width: 0; display: flex; flex-direction: column; text-shadow: 0 1px 12px rgb(0 0 0 / 0.3); }
 ${R}[data-look="pearl"] .of-reader-title { text-shadow: 0 1px 10px rgb(255 255 255 / 0.7); }
 ${R} .of-reader:focus, ${R} .of-reader-title:focus { outline: none; }
@@ -1596,6 +1598,10 @@ ${R} .of-face-img {
   mask-image: radial-gradient(70% 82% at 50% 40%, #000 62%, transparent 100%);
 }
 ${R} .of-face-img[data-front="true"] { opacity: 1; }
+/* A cut-out has no backdrop to hide: he stands whole on the stage's floor, unmasked. */
+${R} .of-face-img[data-cut="true"] {
+  object-fit: contain; object-position: 50% 100%; -webkit-mask-image: none; mask-image: none;
+}
 ${R} .of-face-medallion {
   --of-medallion: clamp(48px, min(210px, 54cqw, calc(100cqh - 66px)), 210px);
   position: relative; flex: none; display: grid; place-items: center; width: var(--of-medallion); aspect-ratio: 1;

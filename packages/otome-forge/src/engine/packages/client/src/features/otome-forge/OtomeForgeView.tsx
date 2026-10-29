@@ -213,6 +213,13 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     setReaderReturn(from);
     setChosen("reader");
   };
+  // Begin opens the prologue in the reader (its chapter is made at once, its scene written as it opens), then Home;
+  // once the prologue is read, Begin goes straight Home. A failure stays on the forge (ForgeProgress shows it).
+  const begin = async () => {
+    if (!activeRun || view?.prologue) return go("home");
+    await otome.post(`/runs/${encodeURIComponent(activeRun)}/prologue`);
+    openReader("home")("prologue");
+  };
   const bibleOf = view?.lis.find((li) => li.id === bibleLi) ?? null;
   const datesOf = view?.lis.find((li) => li.id === (datesLi ?? homeLi?.id)) ?? view?.lis[0] ?? null;
 
@@ -246,7 +253,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     ) : screen === "forge" && activeRun ? (
       <ForgeProgress
         runKey={activeRun}
-        onBegin={() => go("home")}
+        onBegin={begin}
         onOpenBible={(li) => {
           navigated.current = true;
           setBibleLi(li);

@@ -20,9 +20,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { ChapterKind, ChapterView, MomentKind, NodeKind } from "../../shared/api-types";
+import { FullscreenButton } from "../../components/Stage";
 import { tagLabelKey } from "./ContentTagsCard";
 
 const KIND_KEYS: Record<Exclude<ChapterKind, "main">, string> = {
+  prologue: "ui.otomeForge.prologue.title",
   route: "ui.otomeForge.story.kindRoute",
   repair: "ui.otomeForge.story.kindRepair",
   story: "ui.otomeForge.story.kindStory",
@@ -157,6 +159,7 @@ export function ReaderControls(props: ReaderControlsProps) {
             onClick={props.onSkip}
           />
           <Tool label={t("ui.otomeForge.reader.backlog")} Icon={ScrollText} onClick={props.onLog} />
+          <FullscreenButton className="of-reader-tool" />
         </div>
       </div>
       <div className="of-reader-row of-reader-row--sub">
@@ -213,7 +216,7 @@ export function ReaderControls(props: ReaderControlsProps) {
               onClick={props.onRewrite}
             >
               <RefreshCw size={14} strokeWidth={2.1} aria-hidden="true" />
-              {props.rewritePaints ? t("ui.otomeForge.reader.rewritePaints") : t("ui.otomeForge.reader.rewrite")}
+              {t("ui.otomeForge.reader.rewrite")}
             </button>
           ) : null}
           {props.canEaseOff ? (

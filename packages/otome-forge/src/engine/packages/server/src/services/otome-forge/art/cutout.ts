@@ -80,7 +80,7 @@ export function createCutoutClient({
       // ponytail: repeats image-client's gallery upload (its uploadToGallery is internal); the upgrade path is the
       // image client exposing uploadToGallery, as the plan's §1.8 lists it.
       const form = new FormData();
-      form.append("prompt", "Otome Hearth Home cut-out");
+      form.append("prompt", "Otome Hearth cut-out");
       form.append("provider", "sprite-cleanup");
       form.append("model", "auto");
       if (width && height) {
@@ -167,7 +167,7 @@ async function cutOne(deps: CutoutDeps, runId: string, li: LiId, url: string): P
     image = await client.cutOut(url);
   } catch (error) {
     const message = (error instanceof Error ? error.message : String(error)).slice(0, ERROR_MAX);
-    deps.runtime.logger.warn("[otome-forge] Home cut-out failed; the uncut look pans instead: %s", message);
+    deps.runtime.logger.warn("[otome-forge] a cut-out failed; the uncut look shows instead: %s", message);
     await save(deps, runId, li, url, { state: "failed", at: new Date().toISOString(), error: message }, isPending);
     return;
   }
@@ -199,7 +199,7 @@ export function queueCutouts(deps: CutoutDeps, runId: string, unit: Pick<Unit, "
     live.add(key);
     chain = chain
       .then(() => cutOne(deps, runId, unit.id, url))
-      .catch((error: unknown) => deps.runtime.logger.error(error, "Otome Forge could not save a Home cut-out"))
+      .catch((error: unknown) => deps.runtime.logger.error(error, "Otome Forge could not save a cut-out"))
       .finally(() => live.delete(key));
   }
 }

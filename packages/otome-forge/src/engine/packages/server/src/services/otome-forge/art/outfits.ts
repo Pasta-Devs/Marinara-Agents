@@ -217,7 +217,10 @@ async function buildItemArt(
   const wearer = lookWearer(item);
   if (!wearer) throw notFound("love interest");
   const subject = await readSubject(deps, runId, run.world, wearer, debugMode);
-  const prompt = lookPrompt({ ...subject, outfitLine: item.look!.outfitLine, world: run.world, style }, edited);
+  const prompt = lookPrompt(
+    { ...subject, outfitLine: item.look!.outfitLine, world: run.world, style, matte: wearer !== "player" },
+    edited,
+  );
   return {
     ...prompt,
     world: run.world,

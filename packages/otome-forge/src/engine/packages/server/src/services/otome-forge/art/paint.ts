@@ -53,7 +53,6 @@ export interface ArtDeps {
 }
 
 const ERROR_MAX = 300;
-const LOOK_LINE_MAX = 600;
 
 export const imagesOf = (deps: ArtDeps) => deps.images ?? imageClientFor(deps.runtime);
 
@@ -303,7 +302,7 @@ async function ensurePlayerLook(
     // ponytail: a persona appearance is used as written, even when it is not English; the upgrade path is GF's
     // English check (server.mjs `Da`) sending a non-English one through P4 as well.
     const look = persona?.appearance
-      ? { identityLine: persona.appearance.slice(0, LOOK_LINE_MAX), outfitLine: "" }
+      ? { identityLine: persona.appearance, outfitLine: "" }
       : (
           await generateJson(deps, {
             runId,
@@ -380,7 +379,7 @@ export async function lookPromptFor(
   if (!world) throw notFound();
   const subject = await readSubject(deps, runId, world, owner, debugMode);
   const style = await worldStyle(imagesOf(deps), world.images);
-  return { ...lookPrompt({ ...subject, world, style }, edited), world, subject };
+  return { ...lookPrompt({ ...subject, world, style, matte: owner !== "player" }, edited), world, subject };
 }
 
 // ── The record ──

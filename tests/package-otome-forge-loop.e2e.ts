@@ -39,6 +39,35 @@ const written = { at: "2026-10-28T10:00:00.000Z", connectionId: "conn-text", mod
 const now = () => new Date().toISOString();
 const seg = (speaker: string, text: string, extra: Json = {}) => ({ speaker, text, ...extra });
 
+/** The prologue: Mira's own evening, one scene with one choice, before anyone else in the story. */
+const PROLOGUE_BEAT: Json = {
+  places: [{ name: "The Canal Workshop", tags: "clockwork workshop, lamps" }],
+  segments: [
+    seg("", "The canal lamps hiss awake as you lock the workshop for the night.", { place: "The Canal Workshop" }),
+    seg("Mira Vale", "One more commission and the apprenticeship is mine.", { thought: true }),
+  ],
+  choices: [
+    {
+      id: "choice-p",
+      kind: "small",
+      at: 1,
+      options: [
+        {
+          id: "option-p1",
+          text: "Finish the gears tonight.",
+          selection: { kind: "action", text: "You unlock the door again." },
+          segments: [seg("", "The gears can't wait, and neither can you.")],
+        },
+        {
+          id: "option-p2",
+          text: "Go to the ball.",
+          selection: { kind: "action", text: "You take the mask from its hook." },
+          segments: [seg("", "Just one night off.")],
+        },
+      ],
+    },
+  ],
+};
 /** Main chapter 1: a beat with a small choice, then a beat with both of them. */
 const MAIN_BEATS: Json[] = [
   {
@@ -268,13 +297,15 @@ function createLoopStub({ seeded = false } = {}) {
     if (i !== state.read || state.done) return { grants: [], starlight: view!.starlight, chapterDone: state.done };
     state.read += 1;
     const grants: Json[] = [];
-    if (chapter.kind === "main") {
+    // A main or prologue beat pays 30 (rewards.ts PAYS_BEATS); a date's beats are paid with the date.
+    if (chapter.kind === "main" || chapter.kind === "prologue") {
       grants.push({ source: "beat", starlight: 30 });
       view!.starlight += 30;
     }
     if (state.read === chapter.nodes.length) {
       state.done = true;
-      if (chapter.kind === "main") {
+      if (chapter.kind === "prologue") view!.prologue = true;
+      else if (chapter.kind === "main") {
         grants.push(
           { source: "chapter", starlight: 160 },
           { source: "lead", li: chapter.lead, affection: 150 },
@@ -289,7 +320,7 @@ function createLoopStub({ seeded = false } = {}) {
           kind: "first-meeting",
           text: "The night Ilvar first said your name.",
         });
-      } else dateDone = true;
+      } else if (chapter.kind === "date") dateDone = true;
     }
     return { grants, starlight: view!.starlight, chapterDone: state.done };
   };
@@ -447,6 +478,22 @@ function createLoopStub({ seeded = false } = {}) {
     }
 
     // ── Story and reader ──
+    if (path === `${base}/prologue`) {
+      if (!chapters.has("prologue")) {
+        chapters.set("prologue", {
+          key: "prologue",
+          kind: "prologue",
+          lead: "",
+          title: view.world.title,
+          tags: [],
+          summary: "",
+          nodes: [{ i: 0, kind: "beat" }],
+          plannedAt: now(),
+        });
+        progress.set("prologue", { read: 0, done: false });
+      }
+      return { status: 200, json: { chapter: chapters.get("prologue") } };
+    }
     if (path === `${base}/story`) {
       const main = chapters.get("main-1");
       const done = !!main && progress.get("main-1")!.done;
@@ -507,7 +554,7 @@ function createLoopStub({ seeded = false } = {}) {
       const id = `${key}:${i}`;
       if (!action) {
         if (!beats.has(id)) {
-          const source = (key === "main-1" ? MAIN_BEATS : DATE_BEATS)[i]!;
+          const source = key === "prologue" ? PROLOGUE_BEAT : (key === "main-1" ? MAIN_BEATS : DATE_BEATS)[i]!;
           beats.set(id, {
             key,
             i,
@@ -1208,7 +1255,24 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     // Without an image connection the cast stays as initials, and the ready world says so.
     await expect(root.getByText(/No image connection: your cast appears as initials/u)).toBeVisible();
     await auditScreen(page, root, "forge: ready");
+    await expect(root.getByText(/Begin plays your prologue first/u)).toBeVisible();
     await root.getByRole("button", { name: "Begin" }).click();
+    // Begin plays the prologue first, in the reader: her own evening, a choice about who she is, then Home.
+    expect(posts(stub, "/prologue")).toHaveLength(1);
+    await expect(line(root)).toContainText("The canal lamps hiss awake as you lock the workshop for the night.");
+    await next(root);
+    await expect(line(root)).toContainText("One more commission and the apprenticeship is mine.");
+    const who = root.getByRole("group", { name: "What do you do?" });
+    await expect(who).toBeVisible();
+    await auditScreen(page, root, "prologue: a choice", root.locator(".of-reader"));
+    await who.getByRole("button", { name: "Finish the gears tonight." }).click();
+    await expect(line(root)).toContainText("You unlock the door again.");
+    await next(root);
+    await expect(line(root)).toContainText("The gears can't wait, and neither can you.");
+    await next(root);
+    await expect(root.getByRole("heading", { name: "Prologue complete" })).toBeFocused();
+    await expect(root.getByText("+30 Starlight")).toBeVisible();
+    await root.getByRole("button", { name: "Back to Home" }).click();
     await expect(root.getByRole("heading", { level: 1, name: "Ilvar Thorne" })).toBeFocused();
   });
 
@@ -1260,7 +1324,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await expect(root.getByText("Ilvar Thorne · +150 affection")).toBeVisible();
     await auditScreen(page, root, "chapter end", root.getByRole("heading", { name: "Chapter complete" }));
     await root.getByRole("button", { name: "Back to the story" }).click();
-    await expect(starlight(root)).toContainText(amount(2220));
+    await expect(starlight(root)).toContainText(amount(2250));
   });
 
   await test.step("Home: his note, a tap by keyboard, Reply into his thread", async () => {
@@ -1292,7 +1356,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await expect(root.locator('.of-thread > p[aria-live="polite"]')).toContainText(REPLY);
     expect(posts(stub, "/send")[0]!.body).toMatchObject({ text: "I left it on for you.", quote: NOTE });
     await root.getByRole("button", { name: "All messages" }).click();
-    await expect(root.getByRole("heading", { level: 1, name: "Phone" })).toBeVisible();
+    await expect(root.getByRole("heading", { level: 1, name: "Messages" })).toBeVisible();
     await expect(root.locator(".of-threads").getByRole("button", { name: /Ilvar Thorne/u })).toBeFocused();
     await auditScreen(page, root, "phone: threads");
     await shot("04-phone");
@@ -1323,7 +1387,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await page.keyboard.press("Escape");
     await expect(takeover).toBeHidden();
     await expect(one).toBeFocused();
-    await expect(starlight(root)).toContainText(amount(2120));
+    await expect(starlight(root)).toContainText(amount(2150));
     expect(posts(stub, "/wish/pull")).toHaveLength(1);
   });
 
@@ -1388,7 +1452,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await shot("08-read-them");
     await root.getByRole("button", { name: "Back" }).first().click();
     await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
-    await expect(starlight(root)).toContainText(amount(2160));
+    await expect(starlight(root)).toContainText(amount(2190));
   });
 
   await test.step("Date Night: a place, the looks, three scenes and how it went", async () => {
@@ -1423,7 +1487,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await shot("09-date-night");
     await root.getByRole("button", { name: "Back to Dates" }).first().click();
     await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
-    await expect(starlight(root)).toContainText(amount(2280));
+    await expect(starlight(root)).toContainText(amount(2310));
   });
 
   await test.step("Claw Machine: his turn cheered on, my drops, the shelf", async () => {
@@ -1459,7 +1523,7 @@ test("Otome Hearth's whole loop, by keyboard and pointer: setup, a chapter, Home
     await shot("10-claw");
     await root.getByRole("button", { name: "Back" }).first().click();
     await expect(root.getByRole("heading", { level: 1, name: "Dates" })).toBeFocused();
-    await expect(starlight(root)).toContainText(amount(2280 + 20 + 30 * caught));
+    await expect(starlight(root)).toContainText(amount(2310 + 20 + 30 * caught));
   });
 
   await test.step("Remind Me, the tracker, and a Caring message", async () => {

@@ -117,7 +117,7 @@ export function storyPlanMessages({ world, player, unit, state, item, memory }: 
     `- Write every text field in ${world.language}.`,
     "- Omit an optional field rather than writing null.",
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "planner" }),
   ].join("\n");
@@ -226,7 +226,7 @@ export function noticedMessages(input: LookLineInput): OtomeMessage[] {
     "RULES",
     ...lineRules(name, world, NOTICED_WORDS_MAX),
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "home" }),
   ].join("\n");
@@ -250,7 +250,7 @@ export function showMessages(input: LookLineInput): OtomeMessage[] {
     ...lineRules(name, world, SHOW_WORDS_MAX),
     `- face: the face ${name} makes, one of ${FACES.join(", ")}; it may contradict the words. Omit it for a neutral line.`,
     "",
-    otomeWritingRules({ story: true }),
+    otomeWritingRules({ story: true, style: world.writingStyle }),
     "",
     otomeContentContract({ world, lis: [{ name }], kind: "chat" }),
   ].join("\n");

@@ -470,7 +470,7 @@ test("Otome Forge arcs: a rupture's banner plans the repair, routes open, wait o
 
   // The rupture, in the pronouns his bible gives him; his route waits behind it, Sora's behind affection.
   const rupture = root.getByRole("region", { name: "Ilvar Thorne is keeping his distance" });
-  await expect(rupture).toContainText("Until it is, his route stays shut.");
+  await expect(rupture).toContainText("Until you do, his route stays shut.");
   const routes = root.getByRole("region", { name: "Routes" });
   const ilvar = routes.getByRole("listitem").filter({ hasText: "Ilvar Thorne" });
   await expect(ilvar).toContainText("Shut while Ilvar Thorne keeps his distance.");
@@ -532,7 +532,7 @@ test("Otome Forge arcs: a rupture that opens elsewhere holds a gate scene, says 
   await next(root);
   const held = root.locator(".of-reader-notice");
   await expect(held).toContainText(
-    "Something has come between you and Cassian. This scene will wait until you make it right",
+    "Something has come between you and Cassian. This scene waits until you make it right",
   );
   await expect(held).not.toContainText("That isn’t open yet.");
   await expect(held.getByRole("button")).toHaveText(["Back to the story"]);
@@ -577,7 +577,7 @@ for (const refused of ["Rewrite", "Ease off"] as const) {
     }
     const held = root.locator(".of-reader-notice");
     await expect(held).toContainText(
-      "Something has come between you and Cassian. This scene will wait until you make it right",
+      "Something has come between you and Cassian. This scene waits until you make it right",
     );
     const sent =
       refused === "Rewrite"
