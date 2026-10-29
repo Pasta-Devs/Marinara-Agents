@@ -184,6 +184,12 @@ test("the prologue refuses a love interest by name in any line", () => {
     String(prologueProblem({ segments: [{ speaker: "", text: "你想起了李白的诗。" }] }, [{ name: "李白" }])),
     /李白 is a love interest/,
   );
+  // Korean spaces its words: 민 with its particle is the name, 민 inside 시민 ("citizen") is not.
+  assert.match(
+    String(prologueProblem({ segments: [{ speaker: "", text: "민이 웃었다." }] }, [{ name: "민" }])),
+    /민 is a love interest/,
+  );
+  assert.equal(prologueProblem({ segments: [{ speaker: "", text: "시민이 모였다." }] }, [{ name: "민" }]), null);
 });
 
 test("the prologue waits for the forge", async () => {
