@@ -31,11 +31,16 @@ const PaintBody = z.object({
   prompt: z.string().max(4000).optional(),
   negativePrompt: z.string().max(4000).optional(),
 });
-const ExpressionBody = z.object({
-  li: z.string().refine(isLiId),
-  base: z.string().optional(),
-  prompts: z.record(z.enum(FACES), z.object({ prompt: z.string().min(1), negativePrompt: z.string() })).optional(),
-});
+const ExpressionBody = z
+  .object({
+    li: z.string().refine(isLiId),
+    base: z.string().optional(),
+    prompts: z.record(z.enum(FACES), z.object({ prompt: z.string().min(1), negativePrompt: z.string() })).optional(),
+  })
+  .refine((body) => body.prompts === undefined || body.base !== undefined, {
+    message: "Reviewed prompts need the look they were reviewed against.",
+    path: ["base"],
+  });
 
 function ownerOf(target: { owner: string }): LookOwner {
   const owner = parseLookOwner(target.owner);

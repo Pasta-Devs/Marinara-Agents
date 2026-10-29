@@ -163,6 +163,41 @@ test("expression preview and paid edits retain the complete configured style, pr
   }
 });
 
+test("reviewed prose prompts keep one final safety sentence and preserve long quoted wording", async (context) => {
+  const t = await repaintWorld("r-retail-aaaaaa", { tagged: false });
+  context.after(() => t.art.dispose());
+  const preview = await t.call("POST", PROMPT, { li: KAI });
+  assert.equal(preview.status, 200);
+  const tail = "safe for work, fully clothed, adult man.";
+  const unchanged = await t.call("POST", REPAINT, { li: KAI, ...preview.body });
+  assert.equal(unchanged.body.paint.state, "ready");
+  for (const [index, face] of FACES.entries()) {
+    assert.equal(
+      t.paid[index]!.request.prompt,
+      preview.body.prompts[face].prompt,
+      "reviewing unchanged prose is idempotent",
+    );
+    assert.equal(t.paid[index]!.request.prompt.split(tail).length - 1, 1);
+  }
+  const longQuoted = `Quoted reference: "${tail}" Keep the reference pose. ${"Full custom prose detail. ".repeat(200)}FINAL DETAIL.`;
+  assert.ok(longQuoted.length > 4000);
+  preview.body.prompts.tender.prompt = longQuoted;
+  const longNegative = `${"Full custom negative. ".repeat(220)}KEEP FINAL NEGATIVE WORDS`;
+  assert.ok(longNegative.length > 4000);
+  preview.body.prompts.tender.negativePrompt = longNegative;
+  const edited = await t.call("POST", REPAINT, { li: KAI, ...preview.body });
+  assert.equal(edited.status, 200, JSON.stringify(edited.body));
+  assert.equal(edited.body.paint.state, "ready");
+  const sent = t.paid[FACES.length]!.request;
+  assert.equal(
+    sent.prompt,
+    `${longQuoted} ${tail}`,
+    "a quoted earlier sentence never replaces the required final tail",
+  );
+  assert.ok(sent.negativePrompt.includes(longNegative), "reviewed negatives are not capped or truncated");
+  assert.ok(sent.prompt.includes("FINAL DETAIL."), "reviewed prose is not capped or truncated");
+});
+
 test("concurrent explicit repaint requests share five edits and keep the previous usable set until success", async (context) => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => (release = resolve));
@@ -228,6 +263,9 @@ test("stale reviewed references and unavailable targets are rejected before any 
   context.after(() => t.art.dispose());
   const reviewed = await t.call("POST", PROMPT, { li: KAI });
   assert.equal(reviewed.status, 200, JSON.stringify(reviewed.body));
+  const unbound = await t.call("POST", REPAINT, { li: KAI, prompts: reviewed.body.prompts });
+  assert.equal(unbound.status, 400, "reviewed prompts require the look they were reviewed against");
+  assert.deepEqual(t.paid, [], "missing reference binding is rejected before paid work");
   await t.store.updateDoc(runDocTarget("unit", unitId(t.runId, KAI)), normalizeUnit, (unit) => ({
     ...unit,
     wornOutfit: undefined,

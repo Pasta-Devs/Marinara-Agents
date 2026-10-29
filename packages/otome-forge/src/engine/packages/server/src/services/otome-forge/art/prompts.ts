@@ -338,13 +338,15 @@ export function expressionPrompt(input: ExpressionInput): ImagePrompt {
     ? { ...style, positiveTags: [style.styleText, style.positiveTags].filter(Boolean).join(", ") }
     : style;
   const { prompt } = forgeStoryExpressionPrompt(unit, input.base, input.face, profile, { tagged, looks: FACE_LOOKS });
+  const prose = sentence(input.edited?.prompt ?? prompt);
+  const safetyTail = sentence(required);
+  const hasSafetyTail =
+    prose === safetyTail || (prose.endsWith(safetyTail) && /[.!?…]\s+$/u.test(prose.slice(0, -safetyTail.length)));
   return {
     // A tag profile gets the tags; an edit instruction gets them as its closing sentence.
     prompt: adultsOnly(
       world,
-      tagged
-        ? withTags(input.edited?.prompt ?? prompt, required)
-        : [sentence(input.edited?.prompt ?? prompt), sentence(required)].join(" "),
+      tagged ? withTags(input.edited?.prompt ?? prompt, required) : hasSafetyTail ? prose : `${prose} ${safetyTail}`,
     ),
     negativePrompt: mergeTags(
       requiredNegative(world, "clothed"),
