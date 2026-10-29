@@ -1794,7 +1794,7 @@ ${n} .of-reader-name {
   font-family: var(--of-font-display); font-weight: 600; font-size: 1.24rem; line-height: 1.12;
 }
 ${n} .of-reader-tools { flex: none; display: flex; align-items: center; gap: 6px; }
-${n} .of-reader-primary { position: relative; }
+${n} .of-reader-primary { position: relative; z-index: 1; }
 ${n} .of-reader-mobile, ${n} .of-reader-secondary { display: none; }
 ${n} .of-reader-tool { width: 36px; height: 36px; }
 ${n} .of-reader-tool[aria-pressed="true"] {

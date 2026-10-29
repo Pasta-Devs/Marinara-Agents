@@ -1555,7 +1555,7 @@ ${R} .of-reader-name {
   font-family: var(--of-font-display); font-weight: 600; font-size: 1.24rem; line-height: 1.12;
 }
 ${R} .of-reader-tools { flex: none; display: flex; align-items: center; gap: 6px; }
-${R} .of-reader-primary { position: relative; }
+${R} .of-reader-primary { position: relative; z-index: 1; }
 ${R} .of-reader-mobile, ${R} .of-reader-secondary { display: none; }
 ${R} .of-reader-tool { width: 36px; height: 36px; }
 ${R} .of-reader-tool[aria-pressed="true"] {
