@@ -67,6 +67,11 @@ export interface Paint {
   error?: string;
 }
 
+/** A free derivative of a retained look, tagged with the Engine cleanup that produced it. */
+export interface Cutout extends Paint {
+  cleanupRevision?: number;
+}
+
 /** The model jobs a world names a connection for; a job without its own uses `narration`. */
 export type GenerationJob = "structured" | "narration" | "chat" | "compress";
 export interface Connections {
@@ -310,7 +315,7 @@ export interface Unit {
   /** His pre-written Home lines (P15), written in the background; absent until the first pack lands. */
   lines?: LinePacks;
   /** Home cut-outs, keyed by the look's URL: `ready` carries the cut-out; `failed` means pan over the uncut look. */
-  cutouts: Record<string, Paint>;
+  cutouts: Record<string, Cutout>;
 }
 
 // ── Home (M3): line packs, the message of the day, and what Home shows ──

@@ -137,9 +137,14 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
       if (!run) throw runNotFound();
       const order = Object.keys(run.state.lis);
       const li = run.state.home.li ?? order[0] ?? null;
-      const unit = (li && run.units.find((entry) => entry.id === li)) || null;
+      let unit = (li && run.units.find((entry) => entry.id === li)) || null;
       const liState = li ? run.state.lis[li] : undefined;
       const { show } = run.state.home;
+      const base = unit ? wornLookUrl(unit) : "";
+      const ready = unit && base ? (readyFaces(run.world, unit) ?? {}) : {};
+      if (show === "him" && unit && base) {
+        unit = await queueCutouts(deps, runId, unit, [base, ...Object.values(ready)]);
+      }
       // Each love interest's thread by id, as the phone list reads them: listing would load every world's threads.
       const [note, look, threads, items] = await Promise.all([
         li ? readNote(store, runId, todayKey(), li) : null,
@@ -151,14 +156,11 @@ export function registerHomeRoutes(router: OtomeRouter, deps: HomeRouteDeps): vo
       // His ready faces on his worn look (M2b paints them in the background, as the reader and the phone read them),
       // each with its cut-out once it is made, and whether one is on its way (the client asks again until it lands).
       const faces: HomeView["faces"] = {};
-      const base = unit ? wornLookUrl(unit) : "";
-      const ready = unit && base ? (readyFaces(run.world, unit) ?? {}) : {};
       if (unit && base) {
         for (const [face, url] of Object.entries(ready) as Array<[Face, string]>) {
           const { state, cutout } = cutoutView(runId, unit, url);
           faces[face] = { url, cutoutState: state, ...(cutout ? { cutout } : {}) };
         }
-        if (show === "him") queueCutouts(deps, runId, unit, [base, ...Object.values(ready)]);
       }
       // The first visit backfills every love interest's pack; later visits catch a new stage's.
       void ensureLinePacks(deps, runId, order, { debugMode: debugModeOf(request) }).catch(

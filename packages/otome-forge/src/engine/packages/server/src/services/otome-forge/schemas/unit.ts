@@ -10,9 +10,9 @@ import { z, type ZodType } from "zod";
 import type {
   ArcStageKey,
   Bible,
+  Cutout,
   FixedLines,
   LinePacks,
-  Paint,
   StageLines,
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -195,11 +195,13 @@ export function normalizeLinePacks(value: unknown): LinePacks | undefined {
 }
 
 /** Stored cut-out records, keyed by the look's URL; a bad record is dropped (the cut-out is made again). */
-function normalizeCutouts(value: unknown): Record<string, Paint> {
-  const cutouts: Record<string, Paint> = {};
+const CutoutSchema = PaintSchema.and(z.object({ cleanupRevision: z.number().int().positive().optional() }));
+
+function normalizeCutouts(value: unknown): Record<string, Cutout> {
+  const cutouts: Record<string, Cutout> = {};
   if (!isRecord(value)) return cutouts;
   for (const [url, record] of Object.entries(value)) {
-    const parsed = PaintSchema.safeParse(record);
+    const parsed = CutoutSchema.safeParse(record);
     if (url && parsed.success) cutouts[url] = parsed.data;
   }
   return cutouts;

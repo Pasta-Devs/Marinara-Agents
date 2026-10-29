@@ -299,8 +299,12 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const run = await withPersonaAbout(read, runId);
       // Each image he stands on stage in is cut out of its backdrop in the background, once (free: the Engine's
       // sprite cleanup); the view shows the cut-out from the read after it is ready.
-      for (const unit of run.units) queueCutouts(deps, runId, unit, stageArtUrls(run.world, unit));
-      return { view: { ...runView(runKey, runId, run), prologue: !!run.state.chapters[PROLOGUE_KEY]?.completed } };
+      const units = await Promise.all(
+        run.units.map((unit) => queueCutouts(deps, runId, unit, stageArtUrls(run.world, unit))),
+      );
+      return {
+        view: { ...runView(runKey, runId, { ...run, units }), prologue: !!run.state.chapters[PROLOGUE_KEY]?.completed },
+      };
     }),
   );
 
