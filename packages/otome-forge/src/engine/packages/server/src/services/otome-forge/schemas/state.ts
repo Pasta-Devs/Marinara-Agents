@@ -416,6 +416,19 @@ export function readyCutout(unit: Pick<Unit, "cutouts">, url: string | undefined
   return record?.url;
 }
 
+/** Stage faces use only cleaned derivatives; missing or failed cleanup keeps the neutral look on stage. */
+export function cleanedFaces(world: Pick<World, "images">, unit: Unit): Partial<Record<Face, string>> | undefined {
+  const faces = readyFaces(world, unit);
+  return faces
+    ? (Object.fromEntries(
+        Object.entries(faces).flatMap(([face, url]) => {
+          const cutout = readyCutout(unit, url);
+          return cutout ? [[face, cutout]] : [];
+        }),
+      ) as Partial<Record<Face, string>>)
+    : undefined;
+}
+
 /** Every image he stands on stage in (base look, worn look, ready faces): what the cut-outs are made of. */
 export function stageArtUrls(world: Pick<World, "images">, unit: Unit): string[] {
   const worn = unit.wornOutfit ? unit.outfits.find((outfit) => outfit.id === unit.wornOutfit)?.url : undefined;
@@ -488,6 +501,7 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
           if (cutout) cut.push(cutout);
           return cutout ?? url;
         };
+        // Phone stickers keep the original while cleanup waits or fails; only URLs in `cut` may stand on stage.
         const faces = readyFaces(world, unit);
         const expressions = faces
           ? (Object.fromEntries(

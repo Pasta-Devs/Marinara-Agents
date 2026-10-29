@@ -955,9 +955,9 @@ export interface SceneArt {
   places: PlaceArt[];
   /** The beat's key image with its paint, or null. */
   cg: NonNullable<BeatView["cg"]> | null;
-  /** Each love interest's faces for the look worn now, once the set is ready and expressions are on. */
+  /** Cleaned faces for the look worn now; originals awaiting or failing cleanup are never stage art. */
   faces: Record<LiId, Partial<Record<Face, string>>>;
-  /** The love interests whose faces are still being painted (a failed or stopped set never arrives on its own). */
+  /** Faces are still painting or being freely cleaned; failed/stopped work never keeps polling. */
   facesComing: LiId[];
 }
 

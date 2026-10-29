@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.1.7",
+          "date": "2026-10-29",
+          "notes": "- Chapter and Home expressions keep the clean neutral sprite visible until free background cleanup is ready, instead of showing a green original. Saved and newly painted expressions share the repair, with their originals, outfits and story progress retained.",
+          "highlight": false
+        },
+        {
           "version": "0.1.6",
           "date": "2026-10-29",
           "notes": "- Mobile reader controls now show mute, fullscreen, then More, with centered icons and the secondary controls aligned directly below More.\n- A thought's closing parenthesis now appears when the line finishes typing.\n- Removed the daily-storage caption beneath a generated period-day caring message.",
