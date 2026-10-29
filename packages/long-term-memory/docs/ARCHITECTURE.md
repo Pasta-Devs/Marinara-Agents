@@ -10,9 +10,9 @@ server  -> persistence, extraction, retrieval, routes, runtime integration
 client  -> vault, review queue, sources, settings, and injection summary
 ```
 
-The server registers `long-term-memory:recall` and `long-term-memory:storage`
-(read-only memories for other packages, from `services/`; see Services for
-Other Packages) and `long-term-memory:runtime` (chat recall, receipts and the
+The server registers `long-term-memory:recall` (read-only memories for other
+packages, from `services/`; see Services for Other Packages) and
+`long-term-memory:runtime` (chat recall, receipts and the
 vault lock for the Engine) with the Engine and mounts
 privileged routes under `/api/long-term-memory`. Registration is in
 `server-entry.ts`; `routes.ts` composes one file per area under `routes/`
@@ -76,7 +76,7 @@ folder owns one area.
 | `drafts/` | the draft store, projection and review, applying drafts to notes, rejected suggestions | `draft-store`, `draft-projector`, `draft-review`, `reconciliation`, `rejected-suggestions` |
 | `maintenance/` | integrity checks and repair, note transfer, legacy agent-settings adoption and quarantine, the debug log | `maintenance`, `note-transfer`, `legacy-adoption`, `legacy-source-quarantine`, `debug-log` |
 | `sources/` | Engine chats, summaries and messages read as sources | `interop`, `source-identity` |
-| `services/` | what other packages can look up through the Engine: recalled memories about the accounts they write as (`recall`), a character's memories available everywhere (`storage-read`), the reads switch and the reader list | `recall`, `storage-read` |
+| `services/` | what other packages can look up through the Engine: recalled memories about the accounts they write as (`recall`), the shareable-memory rule, the reads switch and the reader list | `recall`, `storage-read` |
 
 The folders are areas, not enforced layers. `persistence/` still imports from
 the areas above it: `storage.ts` uses `drafts/draft-projector`,
@@ -207,8 +207,8 @@ label.
 Other packages look these up with `api.runtime.services.get(key)`. The Engine
 does not say who asks, so `caller` is the name a package gives itself. Each read
 is a debug-log line ("Read by another Agent" in Activity), and Memory Settings
-lists the ten names that read most lately, so Clear log empties that list. Both
-services give nothing while "Other Agents can read memories" is off.
+lists the ten names that read most lately, so Clear log empties that list.
+Recall gives nothing while "Other Agents can read memories" is off.
 
 `long-term-memory:recall`, version 1:
 
@@ -246,10 +246,6 @@ recall({
   with ranked parts.
 - A new section field can be added without a version change; removing or
   renaming one raises `version`.
-
-`long-term-memory:storage` offers `storage.listNotes({ caller?, type?,
-characterIds })`: whole notes available to those characters everywhere, not
-imported sources, archived or game-only (Slurp's flavour brief).
 
 ## Scope and Safety
 

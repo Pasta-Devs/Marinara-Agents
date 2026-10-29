@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.5.10 — 2026-10-29
+
+- Long-Term Memory no longer offers the older way other Agents read memories. Slurp 0.4.8 and earlier stop adding memories to Creator posts; update Slurp to keep them.
+
 ## 1.5.9 — 2026-10-29
 
 - After you turn on "Other Agents can read memories" and save, Memory Settings offers to turn on Slurp's "What your other Agents know" switch too, since Slurp's Creators need both before they use memories.
