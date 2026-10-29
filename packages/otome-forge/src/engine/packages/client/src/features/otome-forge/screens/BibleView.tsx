@@ -524,7 +524,7 @@ export function BibleView({ runKey, li, lis }: BibleViewProps) {
         <p className="of-notice">{t("ui.otomeForge.setup.bibleNotYet")}</p>
       ) : (
         <>
-          {li.cardId ? (
+          {li.source === "card" ? (
             <p className="of-notice">
               <Info size={15} strokeWidth={2} aria-hidden="true" />
               <span>
