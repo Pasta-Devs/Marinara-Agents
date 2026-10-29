@@ -1,6 +1,6 @@
 # Slurp release notes
 
-## Unreleased
+## 0.4.10 — 2026-10-29
 
 - Turning on "What your other Agents know" now asks whether to turn on Long-Term Memory's "Other Agents can read memories" when that switch is off. "Turn it on" changes only that switch; "Not now" leaves it alone.
 
