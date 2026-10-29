@@ -127,6 +127,8 @@ export interface AudioSettings {
   /** Kept for the kit's shape; Otome has no combat. */
   combatVoices: boolean;
   generate: boolean;
+  /** Generate and retain one theme for each chapter, instead of changing music with every mood. */
+  chapterThemes: boolean;
   homeMusic: string;
   audioConnectionId: string;
   muted: boolean;

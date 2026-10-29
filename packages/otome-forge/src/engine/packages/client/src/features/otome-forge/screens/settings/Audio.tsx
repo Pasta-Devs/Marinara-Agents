@@ -9,7 +9,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { Music, Volume2 } from "lucide-react";
-import { normalizeForgeAudio } from "@forge-kit/audio-settings.mjs";
+import { normalizeOtomeAudio } from "../../shared/audio";
 import { useOtomeApi } from "../../api";
 import { RetryNotice } from "../../components/RetryNotice";
 import { useConnections } from "../../hooks/use-engine-resources";
@@ -37,7 +37,7 @@ const toForm = (audio: AudioSettings): AudioForm => ({
   dialogueVolume: audio.dialogueVolume,
 });
 
-const storedAudio = (run: RunView) => normalizeForgeAudio(run.world.audio);
+const storedAudio = (run: RunView) => normalizeOtomeAudio(run.world.audio);
 
 interface VolumeProps {
   label: string;
@@ -93,7 +93,7 @@ function useSaveAudio(runKey: string | null) {
       const result = await otome.post<{ audio: AudioSettings }>(`/runs/${encodeURIComponent(runKey)}/audio/settings`, {
         audio,
       });
-      const stored = normalizeForgeAudio(result?.audio ?? audio);
+      const stored = normalizeOtomeAudio(result?.audio ?? audio);
       patchRun(queryClient, runKey, (view) => ({
         ...view,
         world: { ...view.world, audio: { ...view.world.audio, ...stored } },

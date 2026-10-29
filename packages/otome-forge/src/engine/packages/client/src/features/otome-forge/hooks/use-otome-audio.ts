@@ -30,7 +30,8 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { forgeSoundtrackContextKey, normalizeForgeAudio } from "@forge-kit/audio-settings.mjs";
+import { forgeSoundtrackContextKey } from "@forge-kit/audio-settings.mjs";
+import { normalizeOtomeAudio } from "../shared/audio";
 import { forgeSpeakerVoice } from "@forge-kit/voice-picking.mjs";
 import { host } from "marinara:host";
 import { api } from "../../../lib/api-client";
@@ -137,7 +138,7 @@ export class OtomeAudioController {
   private readonly player: HostPlayer | null;
   private readonly manifest: Promise<AssetManifest | null>;
   private deps: ControllerDeps | null = null;
-  private settings: AudioSettings = normalizeForgeAudio({});
+  private settings: AudioSettings = normalizeOtomeAudio({});
   /** The story's saved settings: only these start or stop music generation (`settings` may be a preview). */
   private saved: AudioSettings = this.settings;
   private tracks: SoundtrackTrack[] = [];
@@ -642,7 +643,7 @@ function AudioScope({ run, cue = null, children }: ProviderProps) {
 
   // Keyed on the saved values, not the record: a track landing (or a refetch) gives world.audio a new identity, and
   // configuring again then would undo a Settings → Audio preview of Mute or the volumes.
-  const settingsKey = JSON.stringify(normalizeForgeAudio(run?.world.audio));
+  const settingsKey = JSON.stringify(normalizeOtomeAudio(run?.world.audio));
   const settings = useMemo(() => JSON.parse(settingsKey) as AudioSettings, [settingsKey]);
   useEffect(() => controller?.configure(settings), [controller, settings]);
   const world = run?.world ?? null;

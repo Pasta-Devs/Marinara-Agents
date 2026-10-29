@@ -7,7 +7,7 @@
 // The client generates music itself (POST /api/audio/generate with scope `otome-forge` and the context key
 // forgeSoundtrackContextKey(R, audioConnectionId, cue), R being `otome-forge:<run key>`), so no audio is paid for
 // here; the brief is a text call, made only while the world's "generate music" setting is on.
-import { normalizeForgeAudio } from "@forge-kit/audio-settings.mjs";
+import { normalizeOtomeAudio } from "../../../../../client/src/features/otome-forge/shared/audio.js";
 import { z } from "zod";
 import { MUSIC_MOODS } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { audioView, createMusicBriefs, playableTracks, recordTrack } from "../audio/music.js";
@@ -63,7 +63,7 @@ export const registerAudioRoutes: RegisterRoutes = (router, deps) => {
       const { runId } = runParam(request);
       const world = await store.updateDoc(runDocTarget("world", worldId(runId)), normalizeWorld, (current) => {
         const { briefs, tracks, ...settings } = current.audio;
-        return { ...current, audio: { ...normalizeForgeAudio({ ...settings, ...audio }), briefs, tracks } };
+        return { ...current, audio: { ...normalizeOtomeAudio({ ...settings, ...audio }), briefs, tracks } };
       });
       if (!world) throw runNotFound();
       return { audio: audioView(world.audio) };
