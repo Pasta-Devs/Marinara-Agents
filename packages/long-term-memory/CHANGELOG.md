@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.5.11 — 2026-10-30
 
 - A memory whose score (salience or confidence) the model writes in quotes ("0.5") is kept instead of dropped, and a chat piece whose every memory is malformed fails with Retry instead of reporting success with nothing kept.
 
