@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.1.14 — 2026-10-29
+
+- Owned 3★ Snapshots can be illustrated on first opening through the existing image connection, confirmation and prompt review flow. Paintings are saved and reused; old vignettes and story progress stay intact.
+
 ## 0.1.12 — 2026-10-29
 
 - Desktop settings use the available stage space, with every settings section reachable and long pages scrollable.
