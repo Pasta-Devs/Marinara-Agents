@@ -568,7 +568,7 @@ test("Otome Hearth look art: Wish cleans and contains outfits, opens the full im
     results: [{ item: { ...banner.five, owned: true }, rarity: 5, isNew: true, refund: 0 }],
     spent: 100,
     starlight: 1900,
-    pity: PITY["his-wardrobe"],
+    pity: PITY,
   };
   await root.getByRole("button", { name: "Wish ×1, 100 Starlight", exact: true }).click();
   const takeover = page.getByRole("dialog", { name: "Your wish" });
@@ -593,10 +593,12 @@ test("Otome Hearth look art: Wardrobe cleans LI and persona looks, faces and cou
   for (const entry of [...wardrobe.him[ILVAR], ...wardrobe.me]) {
     entry.url = RAW_LOOK;
     entry.art = ready(RAW_LOOK);
-    entry.faces = { cold: RAW_LOOK };
   }
+  for (const entry of wardrobe.him[ILVAR]) entry.faces = { cold: RAW_LOOK };
   wardrobe.couples[0].his.url = RAW_LOOK;
+  wardrobe.couples[0].his.owned = true;
   wardrobe.couples[0].hers.url = RAW_LOOK;
+  wardrobe.couples[0].complete = true;
   wardrobe.couples[0].pair = ready(CG);
   const cleanup = await stubLookCleanup(page);
   await stubRoutes(
@@ -607,9 +609,12 @@ test("Otome Hearth look art: Wardrobe cleans LI and persona looks, faces and cou
   const root = await openOtome(page);
   await openDock(root, "Wardrobe");
   await expect(root.locator(".of-ward-look .of-ward-frame img")).toHaveCount(2);
+  await expect(root.locator(".of-ward-faces img")).toHaveCount(2);
   for (const img of await root.locator(".of-ward-frame img, .of-ward-faces img").all())
     await expect(img).toHaveAttribute("src", CLEAN_LOOK);
-  await root.getByRole("radio", { name: "Me", exact: true }).check();
+  const owners = root.getByRole("group", { name: "Whose wardrobe" });
+  await owners.getByText("Me", { exact: true }).click();
+  await expect(owners.getByRole("radio", { name: "Me", exact: true })).toBeChecked();
   await expect(root.getByRole("heading", { name: "My looks" })).toBeVisible();
   for (const img of await root.locator(".of-ward-frame img, .of-ward-faces img").all())
     await expect(img).toHaveAttribute("src", CLEAN_LOOK);
@@ -662,11 +667,24 @@ test("Otome Hearth look art: pending, late, missing and failed cleanup never exp
   // An updated source URL is missing: do not reuse a cached derivative for the older source.
   stub.wish.banners[2].art = ready("/api/global-gallery/file/missing-look.png?v=2");
   await page.route("**/api/global-gallery/file/missing-look.png?v=2", (route) => route.fulfill({ status: 404 }));
+  await page.clock.install();
+  await page.clock.fastForward(31_000);
   await openDock(root, "Story");
   const missing = page.waitForResponse(
     (response) => response.url().endsWith("/missing-look.png?v=2") && response.status() === 404,
   );
   await openDock(root, "Wish");
+  // Wait for the replacement metadata before selecting its tab; the older failed URL may retry on a fresh mount.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (run) =>
+          (globalThis as any).__MARINARA_HOST__.queryClient.getQueryData(["otome-forge", "wish", run])?.banners[2].art
+            .url,
+        RUN,
+      ),
+    )
+    .toBe("/api/global-gallery/file/missing-look.png?v=2");
   await root.getByRole("tab", { name: "My Wardrobe" }).click();
   await missing;
   await expect(root.locator(".of-banner-img")).toHaveCount(0);
@@ -674,7 +692,7 @@ test("Otome Hearth look art: pending, late, missing and failed cleanup never exp
   expect(calls.filter((call) => call.method === "POST" && !call.path.endsWith("/index/opened"))).toHaveLength(0);
 });
 
-test("Otome Hearth look art: stale refresh keeps the same cleaned outfit and its viewer, but a current-source 404 hides it", async ({
+test("Otome Hearth look art: stale refresh keeps the same cleaned outfit and its viewer, but a cleanup 404 hides it", async ({
   page,
 }) => {
   const calls: Call[] = [];
@@ -710,9 +728,11 @@ test("Otome Hearth look art: stale refresh keeps the same cleaned outfit and its
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await page.clock.fastForward(31_000);
-  await page.route(`**${RAW_LOOK}`, (route) => route.fulfill({ status: 404 }));
+  await page.route("**/api/sprites/cleanup", (route) => route.fulfill({ status: 404 }));
   await openDock(root, "Story");
-  const missing = page.waitForResponse((response) => response.url().endsWith(RAW_LOOK) && response.status() === 404);
+  const missing = page.waitForResponse(
+    (response) => response.url().endsWith("/api/sprites/cleanup") && response.status() === 404,
+  );
   await openDock(root, "Wish");
   await root.getByRole("tab", { name: "Cassian’s Wardrobe" }).click();
   await missing;
