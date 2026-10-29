@@ -364,9 +364,15 @@
     "long-term-memory": {
       "versions": [
         {
-          "version": "1.5.9",
+          "version": "1.5.10",
           "date": "2026-10-29",
           "notes": "- Long-Term Memory no longer offers the older way other Agents read memories. Slurp 0.4.8 and earlier stop adding memories to Creator posts; update Slurp to keep them.",
+          "highlight": false
+        },
+        {
+          "version": "1.5.9",
+          "date": "2026-10-29",
+          "notes": "- After you turn on \"Other Agents can read memories\" and save, Memory Settings offers to turn on Slurp's \"What your other Agents know\" switch too, since Slurp's Creators need both before they use memories.",
           "highlight": false
         },
         {
@@ -475,12 +481,6 @@
           "version": "1.4.87",
           "date": "2026-10-23",
           "notes": "- The setup guide now stays on the Memory Vault and shrinks to a one-line bar elsewhere, steps out of the way when one of its buttons takes you to another screen, and lets you choose Not now, Don't show again or Done. Later steps follow the source type you picked.\n- The lexical-recall warning now has its own Reindex button you can reach by keyboard, and a failed status load offers Retry instead of a dead end.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.86",
-          "date": "2026-10-23",
-          "notes": "- Keyboard focus now moves somewhere sensible after you act in Review, the Memory Vault, Sources, the setup guide, Settings and Debug, and field errors sit under their fields and are read with them.\n- Results show beside the action that made them. Sources names a failed or partial import as such, and Review and Sources say why Accept or Import is off.\n- Long-Term Memory lays out by the width of its own panel, so a narrow side panel gets the phone layout. Batch bars stay in view while you scroll, and checkboxes, toggles, links and info buttons are easier to tap.\n- Long lists stay responsive: Sources searches once you pause typing and keeps the current rows meanwhile, and place pickers show 100 places at a time with a Show more row.\n- Warning notices show a warning icon and a stronger border instead of relying on color, and error notices show their border and have room inside.",
           "highlight": false
         }
       ]
