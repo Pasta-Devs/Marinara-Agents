@@ -90,6 +90,7 @@ import {
 import { useUploadGlobalGalleryImages } from "../../hooks/use-global-gallery";
 import type { ChatImage } from "../../hooks/use-gallery";
 import type { PackageNoodleSettings, PackageNoodleSettingsUpdateInput } from "./noodle-settings-defaults";
+import { offerLtmSharing } from "./noodle-ltm-sharing";
 import { forgetNoodleTranslations, stopNoodleAutoTranslations } from "./noodle-translation";
 import {
   mergeNoodlePromptPreset,
@@ -855,8 +856,10 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
 
   const activeNoodleView = navigation.mode === "public" ? navigation.view : navigation.mode;
   const settings = data?.settings;
-  const memoryStatus = useNoodleMemoryStatus(Boolean((settings as PackageNoodleSettings | undefined)?.useLtmMemories))
-    .data?.status;
+  const memoryStatusQuery = useNoodleMemoryStatus(
+    Boolean((settings as PackageNoodleSettings | undefined)?.useLtmMemories),
+  );
+  const memoryStatus = memoryStatusQuery.data?.status;
   const autoTranslatePosts = (settings as PackageNoodleSettings | undefined)?.autoTranslatePosts === true;
   useEffect(() => {
     if (!autoTranslatePosts) stopNoodleAutoTranslations();
@@ -1129,14 +1132,33 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
     setRefreshTimeDraft("");
   }, [editingRefreshTime, scheduler?.scheduledTimes]);
 
-  const saveSettings = (patch: PackageNoodleSettingsUpdateInput) => {
+  const saveSettings = (patch: PackageNoodleSettingsUpdateInput, onSaved?: () => void) => {
     updateSettings.mutate(patch, {
+      onSuccess: onSaved,
       onError: (error) =>
         toast.error(
           error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.couldNotUpdateNoodleSettings"),
         ),
     });
   };
+
+  // Noodle's own switch is already on and saved here; a failed read or save leaves it on.
+  const offerSharing = () =>
+    offerLtmSharing({
+      read: () => api.get<{ longTermMemoryShareWithPackages?: boolean }>("/long-term-memory/settings"),
+      confirm: () =>
+        showConfirmDialog({
+          title: localizeUi("ui.noodle.noodlehome.ltmSharingOfferTitle"),
+          message: localizeUi("ui.noodle.noodlehome.ltmSharingOfferMessage"),
+          confirmLabel: localizeUi("ui.noodle.noodlehome.ltmSharingOfferConfirm"),
+          cancelLabel: localizeUi("ui.noodle.noodlehome.ltmSharingOfferCancel"),
+        }),
+      save: () => api.put("/long-term-memory/settings", { longTermMemoryShareWithPackages: true }),
+    })
+      .then((result) => {
+        if (result === "enabled") void memoryStatusQuery.refetch();
+      })
+      .catch(() => toast.error(localizeUi("ui.noodle.noodlehome.ltmSharingOfferFailed")));
 
   const toggleLtmMemories = async (checked: boolean) => {
     const packageSettings = settings as PackageNoodleSettings;
@@ -1148,10 +1170,10 @@ export function NoodleHome({ navigation, onNavigate, focusPostId, onFocusPostHan
         cancelLabel: localizeUi("ui.noodle.noodlehome.ltmMemoriesConfirmCancel"),
       });
       if (!confirmed) return;
-      saveSettings({ useLtmMemories: true, ltmMemoriesConfirmed: true });
+      saveSettings({ useLtmMemories: true, ltmMemoriesConfirmed: true }, offerSharing);
       return;
     }
-    saveSettings({ useLtmMemories: checked });
+    saveSettings({ useLtmMemories: checked }, checked ? offerSharing : undefined);
   };
 
   const saveSettingsAsync = useCallback(
