@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
-import { findSpeakerSprite, speakerNameKey } from "../../lib/speaker-sprites";
+import { findSpeakerSprite, speakerHasCutoutAlpha, speakerNameKey } from "../../lib/speaker-sprites";
 import { FaceLayers } from "./FacePlate";
 
 const DISPLAY_KEY = ["otome-forge", "speaker-display"] as const;
@@ -31,7 +31,7 @@ function imageOf(url: string, signal: AbortSignal): Promise<HTMLImageElement> {
   });
 }
 
-/** Transparent user-supplied sprites stay intact. Opaque originals never become display fallbacks. */
+/** Classify alpha without changing supplied pixels; failed cleanup has no display fallback. */
 function rasterOf(image: HTMLImageElement) {
   const canvas = document.createElement("canvas");
   canvas.width = image.naturalWidth;
@@ -40,14 +40,7 @@ function rasterOf(image: HTMLImageElement) {
   if (!context || !canvas.width || !canvas.height) throw new Error("Speaker sprite could not be decoded");
   context.drawImage(image, 0, 0);
   const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-  let transparent = false;
-  for (let index = 3; index < pixels.length; index += 4) {
-    if (pixels[index] === 0) {
-      transparent = true;
-      break;
-    }
-  }
-  return { transparent, canvas };
+  return { transparent: speakerHasCutoutAlpha(pixels, canvas.width, canvas.height), canvas };
 }
 
 async function displaySprite(url: string, signal: AbortSignal): Promise<string> {

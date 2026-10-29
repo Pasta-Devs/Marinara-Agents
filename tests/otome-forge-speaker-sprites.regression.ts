@@ -4,6 +4,7 @@ import {
   findSpeakerSprite,
   fullBodySpeakerSprite,
   matchingSpeakerCards,
+  speakerHasCutoutAlpha,
   speakerNameKey,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/speaker-sprites.ts";
 
@@ -186,4 +187,72 @@ test("duplicate, malformed and truncated character lists never select an arbitra
     null,
   );
   assert.equal(pages, 10, "the existing catalog ceiling fails closed instead of trusting a partial library");
+});
+
+function alphaRaster(width: number, height: number, body: (x: number, y: number) => boolean): Uint8ClampedArray {
+  const pixels = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y += 1)
+    for (let x = 0; x < width; x += 1) pixels[(y * width + x) * 4 + 3] = body(x, y) ? 255 : 0;
+  return pixels;
+}
+
+test("speaker alpha accepts full-body silhouettes and tightly cropped busts touching every canvas edge", () => {
+  // Head, torso, arms and separate legs: 350 transparent pixels inside the 21×48 subject bounds (34.7%).
+  const fullBody = alphaRaster(
+    32,
+    48,
+    (x, y) =>
+      ((x - 16) / 6) ** 2 + ((y - 7) / 7) ** 2 <= 1 ||
+      (x >= 11 && x <= 21 && y >= 13 && y <= 32) ||
+      (x >= 6 && x <= 10 && y >= 17 && y <= 33) ||
+      (x >= 22 && x <= 26 && y >= 17 && y <= 33) ||
+      (x >= 11 && x <= 14 && y >= 32 && y <= 43) ||
+      (x >= 18 && x <= 21 && y >= 32 && y <= 43) ||
+      (x >= 9 && x <= 14 && y >= 43) ||
+      (x >= 18 && x <= 24 && y >= 43),
+  );
+  // A head above shoulders filling the lower edge: no outer margin, 531/1,024 transparent pixels (51.9%).
+  const bust = alphaRaster(
+    32,
+    32,
+    (x, y) =>
+      ((x - 16) / 8) ** 2 + ((y - 9) / 9) ** 2 <= 1 ||
+      (x >= 12 && x <= 20 && y >= 17 && y <= 22) ||
+      (y >= 21 && x >= 31 - y && x <= y),
+  );
+  assert.equal(speakerHasCutoutAlpha(fullBody, 32, 48), true);
+  assert.equal(speakerHasCutoutAlpha(bust, 32, 32), true);
+  // A much tighter head/shoulders crop touches every edge and retains only 60/1,024 background pixels (5.86%).
+  const tightBust = alphaRaster(32, 32, (x, y) => {
+    const inset = y < 12 ? Math.ceil((12 - y) / 3) : 0;
+    return x >= inset && x < 32 - inset;
+  });
+  assert.equal(speakerHasCutoutAlpha(tightBust, 32, 32), true, "a tight crop needs the modest share floor");
+  const softEdges = fullBody.slice();
+  softEdges[3] = 1;
+  assert.equal(speakerHasCutoutAlpha(softEdges, 32, 48), true, "faint outer pixels preserve a real silhouette");
+  assert.equal(softEdges[3], 1, "classification never rewrites the supplied pixels");
+});
+
+test("speaker alpha refuses opaque artwork with a transparent corner or outer margins, and empty images", () => {
+  const opaque = alphaRaster(32, 48, () => true);
+  const corner = opaque.slice();
+  corner[3] = 0;
+  // 960 transparent margin pixels surround a fully opaque 18×32 rectangle; none are inside its bounds.
+  const margin = alphaRaster(32, 48, (x, y) => x >= 7 && x <= 24 && y >= 8 && y <= 39);
+  assert.equal(speakerHasCutoutAlpha(opaque, 32, 48), false);
+  assert.equal(speakerHasCutoutAlpha(corner, 32, 48), false, "one transparent corner does not make a cut-out");
+  assert.equal(speakerHasCutoutAlpha(margin, 32, 48), false, "transparent outer margins do not clean opaque art");
+  const faintPadding = margin.slice();
+  faintPadding[3] = 1;
+  assert.equal(speakerHasCutoutAlpha(faintPadding, 32, 48), false, "faint padding noise cannot expand subject bounds");
+  assert.equal(
+    speakerHasCutoutAlpha(
+      alphaRaster(32, 48, () => false),
+      32,
+      48,
+    ),
+    false,
+  );
+  assert.equal(speakerHasCutoutAlpha(new Uint8ClampedArray(), 0, 0), false);
 });

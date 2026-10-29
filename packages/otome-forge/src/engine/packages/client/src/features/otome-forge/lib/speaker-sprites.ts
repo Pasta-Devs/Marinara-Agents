@@ -4,6 +4,34 @@ const record = (value: unknown): value is Record<string, unknown> =>
 // Stable exact names have no Unicode-normalization or internal-whitespace aliases.
 export const speakerNameKey = (name: string) => name.trim().toLowerCase();
 
+// Tight bust crops may have little background; transparent padding alone never counts as a cutout.
+const MIN_SPEAKER_CUTOUT_SHARE = 0.05;
+const MIN_SPEAKER_BOUND_ALPHA = 128;
+// ponytail: alpha alone cannot distinguish silhouette-shaped opaque masks; trusted cutout metadata or segmentation can replace this heuristic.
+
+/** Require meaningful removed background inside the visible subject's bounds, for source and cleanup alike. */
+export function speakerHasCutoutAlpha(pixels: Uint8ClampedArray, width: number, height: number): boolean {
+  let left = width;
+  let right = -1;
+  let top = height;
+  let bottom = -1;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (pixels[(y * width + x) * 4 + 3] >= MIN_SPEAKER_BOUND_ALPHA) {
+        left = Math.min(left, x);
+        right = Math.max(right, x);
+        top = Math.min(top, y);
+        bottom = Math.max(bottom, y);
+      }
+    }
+  }
+  if (right < left || bottom < top) return false;
+  let removed = 0;
+  for (let y = top; y <= bottom; y += 1)
+    for (let x = left; x <= right; x += 1) if (pixels[(y * width + x) * 4 + 3] === 0) removed += 1;
+  return removed / ((right - left + 1) * (bottom - top + 1)) >= MIN_SPEAKER_CUTOUT_SHARE;
+}
+
 /** Exact full names only; a duplicate is never a reason to choose one card over another. */
 export function matchingSpeakerCards(value: unknown, name: string): Array<{ id: string; name: string }> {
   return (Array.isArray(value) ? value : []).flatMap((row) =>
