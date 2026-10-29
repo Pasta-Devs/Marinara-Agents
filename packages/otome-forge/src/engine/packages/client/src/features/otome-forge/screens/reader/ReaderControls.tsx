@@ -133,8 +133,19 @@ export function ReaderControls(props: ReaderControlsProps) {
       }
       setExpanded(false);
     };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || (event.target as Element | null)?.closest("[role='dialog']")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setExpanded(false);
+      moreRef.current?.focus();
+    };
     document.addEventListener("click", dismiss, true);
-    return () => document.removeEventListener("click", dismiss, true);
+    document.addEventListener("keydown", escape, true);
+    return () => {
+      document.removeEventListener("click", dismiss, true);
+      document.removeEventListener("keydown", escape, true);
+    };
   }, [expanded]);
   const { chapter, node, nodeCount, replay, place, tags, reading } = props;
   const [eyebrowKey, eyebrowValues] = chapter ? chapterEyebrowKey(chapter) : ["ui.otomeForge.common.screenStory", {}];
@@ -188,18 +199,7 @@ export function ReaderControls(props: ReaderControlsProps) {
     </button>
   ) : null;
   return (
-    <header
-      className="of-reader-head"
-      inert={props.inert}
-      onClick={(event) => event.stopPropagation()}
-      onKeyDown={(event) => {
-        if (event.key !== "Escape" || !expanded) return;
-        event.preventDefault();
-        event.stopPropagation();
-        setExpanded(false);
-        moreRef.current?.focus();
-      }}
-    >
+    <header className="of-reader-head" inert={props.inert} onClick={(event) => event.stopPropagation()}>
       <div className="of-reader-row">
         <button
           type="button"

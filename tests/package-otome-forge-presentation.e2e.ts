@@ -982,7 +982,7 @@ test.describe("Otome Forge reader mobile", () => {
     test(`chapter controls and cut-out framing at ${viewport.width}×${viewport.height}`, async ({ page }, testInfo) => {
       test.setTimeout(120_000);
       await page.setViewportSize(viewport);
-      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
       const calls: Call[] = [];
       const { answer } = readerCutoutStub();
       const pageErrors: string[] = [];
@@ -1058,6 +1058,11 @@ test.describe("Otome Forge reader mobile", () => {
       expect(await secondary.getByRole("button", { name: /^Rewrite this scene/u }).innerText()).toBe("");
       expect(await secondary.getByRole("button", { name: "Ease off" }).innerText()).toBe("");
       await page.screenshot({ path: testInfo.outputPath(`mobile-${viewport.width}-controls.png`) });
+      await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+      await expect(root).toHaveAttribute("data-look", "midnight");
+      await page.screenshot({ path: testInfo.outputPath(`mobile-${viewport.width}-controls-midnight.png`) });
+      await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "light" });
+      await expect(root).toHaveAttribute("data-look", "pearl");
       await page.keyboard.press("Escape");
       await expect(secondary).toBeHidden();
       await expect(more).toBeFocused();
@@ -1085,7 +1090,11 @@ test.describe("Otome Forge reader mobile", () => {
       await expect(line(root)).toHaveText(originalLine);
       await openTools();
       await secondary.getByRole("button", { name: "Backlog" }).click();
-      await page.getByRole("dialog", { name: "Backlog" }).getByRole("button", { name: "Close" }).click();
+      const backlog = page.getByRole("dialog", { name: "Backlog" });
+      await expect(backlog).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(backlog).toBeHidden();
+      await expect(more).toHaveAttribute("aria-expanded", "true");
       await expect(line(root)).toHaveText(originalLine);
       await openTools();
       await secondary.getByRole("button", { name: "Ease off", exact: true }).click();
@@ -1159,6 +1168,13 @@ test.describe("Otome Forge reader mobile", () => {
     const more = root.getByRole("button", { name: "More reader controls" });
     await more.click();
     await expect(more).toHaveAttribute("aria-expanded", "true");
+    // Tab can reach a choice outside the header: Escape still owns the open disclosure, without selecting anything.
+    await stay.focus();
+    await page.keyboard.press("Escape");
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await expect(more).toBeFocused();
+    expect(posts(calls, "/choose")).toHaveLength(0);
+    await more.click();
     await stay.click();
     await expect(more).toHaveAttribute("aria-expanded", "false");
     await expect(stay).toBeVisible();
@@ -1275,6 +1291,9 @@ test.describe("Otome Forge reader desktop", () => {
     const dialogue = (await root.locator(".of-dialogue").boundingBox())!;
     expect(sprite.y + sprite.height).toBeLessThanOrEqual(dialogue.y);
     await page.screenshot({ path: testInfo.outputPath("desktop-reader.png") });
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+    await expect(root).toHaveAttribute("data-look", "midnight");
+    await page.screenshot({ path: testInfo.outputPath("desktop-reader-midnight.png") });
   });
 });
 
