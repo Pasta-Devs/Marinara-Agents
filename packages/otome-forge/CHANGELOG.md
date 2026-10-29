@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.1.6 — 2026-10-29
+
+- Mobile reader controls now show mute, fullscreen, then More, with centered icons and the secondary controls aligned directly below More.
+- A thought's closing parenthesis now appears when the line finishes typing.
+- Removed the daily-storage caption beneath a generated period-day caring message.
+
 ## 0.1.5 — 2026-10-29
 
 - The downloadable package now includes the merged reader resize repair: switching from a phone-sized reader to desktop no longer leaves a hidden mobile menu consuming the next story action.

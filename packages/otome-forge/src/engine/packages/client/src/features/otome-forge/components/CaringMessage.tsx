@@ -142,7 +142,7 @@ export function CaringMessage({ runKey, li, player, today, dayKey, lines, onClos
   const sourceHint = !entry
     ? null
     : entry.source === "model"
-      ? t("ui.otomeForge.tracker.careFromModel")
+      ? null
       : entry.reason === "kept-off"
         ? t("ui.otomeForge.tracker.careKeptOff", { name: li.name })
         : entry.reason === "debug"

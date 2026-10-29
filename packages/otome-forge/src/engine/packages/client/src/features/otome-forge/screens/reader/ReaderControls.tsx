@@ -1,6 +1,6 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the reader's title, scene count, place and content tags. Desktop shows its tools inline; mobile keeps
-// the disclosure, mute and fullscreen visible, with the secondary tools stacked below. Rewrite names its call cost.
+// mute, fullscreen and the disclosure visible, with the secondary tools stacked below. Rewrite names its call cost.
 // A place waiting for "Ask before painting" (or failed) offers its paint beside its name, with its cost.
 // ──────────────────────────────────────────────
 import { useEffect, useId, useRef, useState } from "react";
@@ -234,6 +234,20 @@ export function ReaderControls(props: ReaderControlsProps) {
           </span>
         </h1>
         <div className="of-reader-tools of-reader-primary">
+          <Tool
+            className="of-reader-mobile"
+            label={t(audio?.audioSettings.muted ? "ui.otomeForge.reader.unmute" : "ui.otomeForge.reader.mute")}
+            Icon={audio?.audioSettings.muted ? VolumeX : Volume2}
+            disabled={!audio}
+            onClick={() => audio?.setMuted(!audio.audioSettings.muted)}
+          />
+          {/* Shared definitions keep the CSS-switched desktop and mobile copies in sync. */}
+          <div className="of-reader-tools of-reader-desktop">
+            {auto}
+            {skip}
+            {log}
+          </div>
+          <FullscreenButton className="of-reader-tool" />
           <button
             ref={moreRef}
             type="button"
@@ -249,20 +263,6 @@ export function ReaderControls(props: ReaderControlsProps) {
           >
             <MoreHorizontal size={17} strokeWidth={2} aria-hidden="true" />
           </button>
-          <Tool
-            className="of-reader-mobile"
-            label={t(audio?.audioSettings.muted ? "ui.otomeForge.reader.unmute" : "ui.otomeForge.reader.mute")}
-            Icon={audio?.audioSettings.muted ? VolumeX : Volume2}
-            disabled={!audio}
-            onClick={() => audio?.setMuted(!audio.audioSettings.muted)}
-          />
-          {/* Shared definitions keep the CSS-switched desktop and mobile copies in sync. */}
-          <div className="of-reader-tools of-reader-desktop">
-            {auto}
-            {skip}
-            {log}
-          </div>
-          <FullscreenButton className="of-reader-tool" />
           <div id={secondaryId} className="of-reader-secondary" data-expanded={expanded}>
             {auto}
             {skip}

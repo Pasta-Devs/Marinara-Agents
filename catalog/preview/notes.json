@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.1.6",
+          "date": "2026-10-29",
+          "notes": "- Mobile reader controls now show mute, fullscreen, then More, with centered icons and the secondary controls aligned directly below More.\n- A thought's closing parenthesis now appears when the line finishes typing.\n- Removed the daily-storage caption beneath a generated period-day caring message.",
+          "highlight": false
+        },
+        {
           "version": "0.1.5",
           "date": "2026-10-29",
           "notes": "- The downloadable package now includes the merged reader resize repair: switching from a phone-sized reader to desktop no longer leaves a hidden mobile menu consuming the next story action.\n- Linking a generated love interest to a card keeps their existing story bible, without showing the imported-card canon notice.",

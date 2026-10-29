@@ -128,7 +128,7 @@ export const DialogueBox = forwardRef<HTMLButtonElement, DialogueBoxProps>(funct
       ) : null}
       <p ref={lineRef} className={lineClass} onTouchStart={stopFollowing} onWheel={stopFollowing}>
         <span className="of-visually-hidden">{spoken}</span>
-        <span aria-hidden="true">
+        <span aria-hidden="true" data-done={done}>
           {done ? text : chars.slice(0, visible).join("")}
           {done ? null : (
             <span ref={restRef} className="of-line-rest">

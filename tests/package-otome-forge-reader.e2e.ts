@@ -142,7 +142,7 @@ const CHAPTER = {
 };
 
 /** The M2a story routes, answered in memory by the server's rules (S/story/beats.ts). */
-function createStoryStub({ done = false, title = CHAPTER.title, pendingCutouts = false } = {}) {
+function createStoryStub({ done = false, title = CHAPTER.title, pendingCutouts = false, storyBeats = BEATS } = {}) {
   const calls: Call[] = [];
   const now = () => new Date().toISOString();
   const limits: Json = {
@@ -231,7 +231,7 @@ function createStoryStub({ done = false, title = CHAPTER.title, pendingCutouts =
   let endFails = !done;
   let favorites: Json[] = [];
   if (done) {
-    for (const stored of BEATS) {
+    for (const stored of storyBeats) {
       const copy = structuredClone(stored);
       copy.readThrough = copy.segments.length - 1;
       for (const choice of copy.choices) copy.choiceCanon[choice.id] = "option-1";
@@ -335,7 +335,7 @@ function createStoryStub({ done = false, title = CHAPTER.title, pendingCutouts =
             declined = true;
             return { status: 422, json: { error: "Refused twice.", code: "declined" } };
           }
-          beats.set(i, structuredClone(BEATS[i]!));
+          beats.set(i, structuredClone(storyBeats[i]!));
         }
         return { status: 200, json: { beat: beats.get(i) } };
       }
@@ -626,6 +626,68 @@ test("Otome Forge reader: a stubbed chapter with faces, thoughts, a remembered c
   await root.getByRole("button", { name: "Back to the story" }).click();
   await expect(root.getByText("2,250")).toBeVisible();
   expect(pageErrors).toEqual([]);
+});
+
+test("Otome Hearth thoughts close only after typing, finishing the line, or reduced motion", async ({
+  page,
+}, testInfo) => {
+  const thoughts = [
+    "They dress me up like an auction lot. " + "I keep my own counsel while the room waits for an answer. ".repeat(8),
+    "Every word is mine.",
+    "I am still here.",
+  ];
+  const stub = createStoryStub({
+    done: true,
+    storyBeats: [
+      { ...BEATS[0], segments: thoughts.map((text) => seg("Mira Vale", text, { thought: true })), choices: [] },
+      ...BEATS.slice(1),
+    ],
+  });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.clock.install();
+  await stubRoutes(page, stub);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+  await expect(root.getByRole("heading", { name: "Before you begin" })).toBeVisible();
+  // Freeze against the installed browser clock; the Node wall clock can already be behind it.
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 60_000));
+  await root.getByRole("button", { name: "Begin" }).click();
+  const thought = root.locator(".of-line--thought");
+  const visual = thought.locator(":scope > [aria-hidden='true']");
+  const closingVisibility = () => visual.evaluate((element) => getComputedStyle(element, "::after").visibility);
+  await expect(thought).toBeVisible();
+  await page.clock.runFor(120);
+  await expect(root.locator(".of-next")).toHaveAttribute("data-done", "false");
+  await expect(visual.locator(".of-line-rest")).toBeAttached();
+  expect(await closingVisibility()).toBe("hidden");
+  expect(await visual.evaluate((element) => getComputedStyle(element, "::before").visibility)).toBe("visible");
+  await expect(thought.locator(".of-visually-hidden")).toContainText(thoughts[0]!);
+  const reservedHeight = await thought.evaluate((element) => element.scrollHeight);
+  await page.screenshot({ path: testInfo.outputPath("thought-typing.png") });
+
+  // The existing Show line action completes this line without advancing or changing its reserved layout.
+  await root.getByRole("button", { name: "Show the whole line" }).click();
+  await expect(root.locator(".of-next")).toHaveAttribute("data-done", "true");
+  await expect(visual.locator(".of-line-rest")).toHaveCount(0);
+  expect(await closingVisibility()).toBe("visible");
+  expect(await thought.evaluate((element) => element.scrollHeight)).toBe(reservedHeight);
+  await expect(visual).toHaveText(thoughts[0]!);
+
+  await root.locator(".of-next").click();
+  await expect(visual).toHaveText(thoughts[1]!);
+  await expect(root.locator(".of-next")).toHaveAttribute("data-done", "false");
+  expect(await closingVisibility()).toBe("hidden");
+  await page.clock.runFor(thoughts[1]!.length * 22 + 40);
+  await expect(root.locator(".of-next")).toHaveAttribute("data-done", "true");
+  expect(await closingVisibility()).toBe("visible");
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await root.locator(".of-next").click();
+  await expect(visual).toHaveText(thoughts[2]!);
+  await expect(root.locator(".of-next")).toHaveAttribute("data-done", "true");
+  await expect(visual.locator(".of-line-rest")).toHaveCount(0);
+  expect(await closingVisibility()).toBe("visible");
+  expect(posts(stub, "/read")).toHaveLength(0);
 });
 
 test("Otome Forge reader: a replay at reduced motion offers the first choice again, changes nothing, and logs no line an Ease off skips", async ({
