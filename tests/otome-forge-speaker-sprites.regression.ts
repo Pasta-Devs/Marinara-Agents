@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   findSpeakerSprite,
   fullBodySpeakerSprite,
+  matchingSpeakerCards,
   speakerNameKey,
 } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/lib/speaker-sprites.ts";
 
@@ -16,7 +17,18 @@ const sprites = [
 ];
 
 test("speaker sprites use exact full names and safe local full-body rasters, neutral first", () => {
-  assert.equal(speakerNameKey("  ARIN\tVale  "), "arin vale");
+  assert.equal(speakerNameKey("  ARIN\tVale  "), "arin\tvale");
+  assert.deepEqual(
+    matchingSpeakerCards(
+      [
+        { id: "card-spaces", name: "Arin  Vale" },
+        { id: "card-width", name: "Ａｒｉｎ Vale" },
+      ],
+      "Arin Vale",
+    ),
+    [],
+    "literal host search cannot establish identity through internal-space or fullwidth aliases",
+  );
   assert.equal(fullBodySpeakerSprite("card-a", sprites), "/api/sprites/card-a/file/full_neutral.png?v=12345");
   assert.equal(fullBodySpeakerSprite("card-a", sprites.slice(0, 1)), "/api/sprites/card-a/file/full_angry.png");
   for (const filename of [

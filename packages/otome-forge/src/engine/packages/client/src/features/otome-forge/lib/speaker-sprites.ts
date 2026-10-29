@@ -1,7 +1,8 @@
 const record = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 
-export const speakerNameKey = (name: string) => name.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase();
+// Match the host catalog's literal search, which folds case without Unicode or internal-whitespace aliases.
+export const speakerNameKey = (name: string) => name.trim().toLocaleLowerCase();
 
 /** Exact full names only; a duplicate is never a reason to choose one card over another. */
 export function matchingSpeakerCards(value: unknown, name: string): Array<{ id: string; name: string }> {
