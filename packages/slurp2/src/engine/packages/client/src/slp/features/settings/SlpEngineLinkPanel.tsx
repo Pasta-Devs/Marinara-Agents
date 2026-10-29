@@ -33,8 +33,8 @@ export function SlpEngineLinkPanel({ t, settings, update }: SlpBackstagePageProp
       save: () => api.put("/long-term-memory/settings", { longTermMemoryShareWithPackages: true }),
     })
       .then((result) => {
-        // The server keeps the last recall's outcome, so a refetch would still say "off"; clear it until the next recall.
-        if (result === "enabled") queryClient.setQueryData([...slpKeys.settings(), "memory-status"], { status: null });
+        if (result === "enabled")
+          void queryClient.invalidateQueries({ queryKey: [...slpKeys.settings(), "memory-status"] });
       })
       .catch((error) => toast.error(errorMessage(error)));
   return (

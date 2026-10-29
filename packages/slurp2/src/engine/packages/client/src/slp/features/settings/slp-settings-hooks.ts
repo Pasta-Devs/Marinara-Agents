@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
 import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type { SlurpReusablePromptInstruction } from "../../base/state/slp-state-types.js";
+import { currentMemoryStatus, type SlurpMemoryStatus } from "./slp-ltm-sharing-offer.js";
 import type {
   SlurpPromptBlocksResponse,
   SlurpPromptPreviewResponse,
@@ -31,7 +32,11 @@ export function useSlurpCarryoverReach(enabled: boolean) {
 export function useSlurpMemoryStatus(enabled: boolean) {
   return useQuery({
     queryKey: [...slpKeys.settings(), "memory-status"] as const,
-    queryFn: () => api.get<{ status: "ok" | "missing" | "off" | "error" | null }>("/slurp2/settings/memory-status"),
+    queryFn: () =>
+      currentMemoryStatus({
+        read: () => api.get<{ status: SlurpMemoryStatus }>("/slurp2/settings/memory-status"),
+        readLtm: () => api.get<{ longTermMemoryShareWithPackages?: boolean }>("/long-term-memory/settings"),
+      }),
     enabled,
     staleTime: 30_000,
   });

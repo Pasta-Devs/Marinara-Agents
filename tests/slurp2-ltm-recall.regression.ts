@@ -378,6 +378,40 @@ async function main() {
     /save failed/u,
     "a failed save reaches the panel",
   );
+  // The recorded "off" is checked against Long-Term Memory's current switch (#1856).
+  const { currentMemoryStatus } = await import(
+    pathToFileURL(join(root, "client/src/slp/features/settings/slp-ltm-sharing-offer.ts")).href
+  );
+  const status = async (recorded: string | null, ltm: () => Promise<unknown>) => {
+    let reads = 0;
+    const result = await currentMemoryStatus({
+      read: async () => ({ status: recorded }),
+      readLtm: () => (reads++, ltm()),
+    });
+    return { ...result, reads };
+  };
+  assert.deepEqual(await status("off", async () => ({ longTermMemoryShareWithPackages: true })), {
+    status: null,
+    reads: 1,
+  });
+  assert.deepEqual(await status("off", async () => ({})), { status: null, reads: 1 }, "an unset switch counts as on");
+  assert.deepEqual(await status("off", async () => ({ longTermMemoryShareWithPackages: false })), {
+    status: "off",
+    reads: 1,
+  });
+  assert.deepEqual(
+    await status("off", async () => {
+      throw new Error("Long-Term Memory is not installed");
+    }),
+    { status: "off", reads: 1 },
+    "an unreadable switch keeps the recorded off",
+  );
+  for (const recorded of ["ok", "missing", "error", null]) {
+    assert.deepEqual(await status(recorded, async () => ({ longTermMemoryShareWithPackages: false })), {
+      status: recorded,
+      reads: 0,
+    });
+  }
   const panel = client("features/settings/SlpEngineLinkPanel.tsx");
   assert.match(
     panel,
@@ -386,8 +420,8 @@ async function main() {
   );
   assert.match(
     panel,
-    /setQueryData\(\[\.\.\.slpKeys\.settings\(\), "memory-status"\], \{ status: null \}\)/u,
-    "a stale off line goes once sharing is on",
+    /invalidateQueries\(\{ queryKey: \[\.\.\.slpKeys\.settings\(\), "memory-status"\] \}\)/u,
+    "the status is read again once sharing is on",
   );
   assert.match(panel, /cancelLabel: t\("ui\.slurp\.settings\.prompts\.ltmSharingOfferCancel"\)/u);
   assert.match(panel, /api\.put\("\/long-term-memory\/settings", \{ longTermMemoryShareWithPackages: true \}\)/u);

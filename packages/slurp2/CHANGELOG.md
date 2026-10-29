@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## Unreleased
+
+- Backstage (Engine link) no longer says Long-Term Memory isn't sharing after its "Other Agents can read memories" switch is turned on. The line clears at once after Slurp's offer, and the next time the panel loads after Long-Term Memory's offer or Memory Settings.
+
 ## 0.4.10 — 2026-10-29
 
 - Turning on "What your other Agents know" now asks whether to turn on Long-Term Memory's "Other Agents can read memories" when that switch is off. "Turn it on" changes only that switch; "Not now" leaves it alone.

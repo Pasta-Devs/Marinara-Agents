@@ -515,6 +515,8 @@ const addedCalls = [
   "upload /slurp2/messages/threads/${encodeURIComponent(input.threadId)}/image-upload",
   "get /slurp2/settings/carryover-reach",
   "get /slurp2/settings/memory-status",
+  // useSlurpMemoryStatus asks whether Long-Term Memory's sharing switch is on before it reports "off" (#1856).
+  "get /long-term-memory/settings",
 ];
 const removedCalls = [
   // The staging ads-pool GET went with the removed useSlurpAdPool hook (0.3.9).
