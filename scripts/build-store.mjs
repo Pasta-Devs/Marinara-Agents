@@ -29,7 +29,7 @@ await page.goto("about:blank");
 
 async function render(sourcePath, outputPath, width, height) {
   const source = await readFile(join(repoRoot, sourcePath));
-  const type = sourcePath.endsWith(".svg") ? "image/svg+xml" : "image/webp";
+  const type = sourcePath.endsWith(".svg") ? "image/svg+xml" : sourcePath.endsWith(".png") ? "image/png" : "image/webp";
   const dataUrl = await page.evaluate(
     async ({ base64, type, width, height, quality }) => {
       const image = new Image();
@@ -40,7 +40,10 @@ async function render(sourcePath, outputPath, width, height) {
       canvas.height = height;
       const context = canvas.getContext("2d");
       context.imageSmoothingQuality = "high";
-      context.drawImage(image, 0, 0, width, height);
+      // Fit inside the frame so non-square tab icons keep their shape.
+      const scale = Math.min(width / image.width, height / image.height);
+      const [w, h] = [image.width * scale, image.height * scale];
+      context.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
       return canvas.toDataURL("image/webp", quality);
     },
     { base64: source.toString("base64"), type, width, height, quality: QUALITY },
@@ -50,6 +53,12 @@ async function render(sourcePath, outputPath, width, height) {
 
 for (const id of await ids("store/icons/src", ".svg")) {
   await render(storeIconSource(id), storeIcon(id), STORE_ICON_SIZE, STORE_ICON_SIZE);
+}
+// Apps use their Home tab icon as the store logo, so the store and Home look the same.
+for (const dir of await readdir(join(repoRoot, "packages"))) {
+  const manifest = await readFile(join(repoRoot, "packages", dir, "manifest.json"), "utf8").then(JSON.parse, () => null);
+  const tabIcon = manifest?.contributions?.homeBrowserTab?.iconPaths?.[0];
+  if (tabIcon) await render(join("packages", dir, tabIcon), storeIcon(manifest.id), STORE_ICON_SIZE, STORE_ICON_SIZE);
 }
 const [, smallWidth] = STORE_BANNER_WIDTHS;
 const bannerIds = await ids("store/banners", ".webp");
