@@ -80,6 +80,11 @@ ${R} .of-stage::after {
   ${R} .of-stage { width: 100cqw; height: 100cqh; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
   ${R} .of-stage::after { display: none; }
 }
+/* Settings uses the available host panel; the other screens retain their portrait stage. */
+${R} .of-stage:has(.of-settings) {
+  width: 100%; height: 100%; min-width: 0; min-height: 0; aspect-ratio: auto; border-radius: 0; box-shadow: none;
+}
+${R} .of-stage:has(.of-settings)::after { display: none; }
 ${R} .of-scene { position: absolute; inset: 0; z-index: 0; overflow: clip; pointer-events: none; }
 ${R} .of-scene-bg {
   position: absolute; inset: 0; background: var(--of-bg); background-size: cover; background-position: center;
@@ -305,6 +310,7 @@ ${R} .of-segmented {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 4px;
   border-radius: 20px; min-width: 0;
 }
+${R} .of-memory-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 ${R} .of-segment {
   position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   min-width: 0; min-height: 56px; padding: 6px 6px; border-radius: 16px; cursor: pointer; color: var(--of-text-soft);
@@ -675,6 +681,7 @@ ${R} .of-forge-step[data-state="failed"] .of-forge-state { color: var(--of-dange
 ${R} .of-forge-why { font-size: 0.78rem; color: var(--of-text-soft); }
 ${R} .of-forge-error { font-family: ui-monospace, Menlo, monospace; font-size: 0.7rem; color: var(--of-text-faint); overflow-wrap: anywhere; }
 ${R} .of-forge-retry { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+${R} .of-forge-retry--paints { grid-column: 2 / -1; flex-direction: row; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: 10px; }
 ${R} .of-paint-offer { align-items: center; text-align: center; }
 ${R} .of-paint-offer > .of-button { align-self: center; }
 ${R} .of-cast {
@@ -722,6 +729,7 @@ ${R} .of-bible-secret, ${R} .of-bible-stage {
 ${R} .of-tabs {
   display: flex; gap: 4px; padding: 4px; border-radius: 18px; overflow-x: auto; scrollbar-width: none; flex: none;
 }
+${R} .of-settings .of-tabs { flex-wrap: wrap; overflow: visible; }
 ${R} .of-tabs::-webkit-scrollbar { display: none; }
 ${R} .of-tab {
   flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 0; border-radius: 14px;
@@ -778,6 +786,7 @@ ${R} .of-item-art {
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
 }
 ${R} .of-item-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 18%; }
+${R} .of-item-art[data-look="true"] img { object-fit: contain; object-position: center; }
 ${R} .of-item-initials {
   font-family: var(--of-font-display); font-weight: 600; font-size: 1.6rem; color: rgb(255 250 244 / 0.92);
   text-shadow: 0 2px 14px rgb(0 0 0 / 0.3);
@@ -814,13 +823,18 @@ ${R} .of-banner-img {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 22%;
   animation: of-banner-drift 24s ease-in-out infinite alternate;
 }
+${R} .of-banner-img[data-look="true"] { object-fit: contain; object-position: center; animation: none; }
+${R} .of-banner-art { position: absolute; inset: 0; padding: 0; border: 0; background: none; cursor: zoom-in; }
+${R} .of-banner-art:focus-visible { outline-offset: -4px; border-radius: inherit; }
+${R} .of-banner-art:disabled { cursor: default; }
 ${R} .of-banner-quiet { position: absolute; inset: 0; display: grid; place-items: center; padding-bottom: 30%; }
 ${R} .of-banner-quiet .of-item-initials { font-size: 4.2rem; opacity: 0.85; }
 ${R} .of-banner-shade {
-  position: absolute; inset: 0;
+  position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(to top, rgb(12 8 26 / 0.92) 0%, rgb(12 8 26 / 0.55) 34%, transparent 62%);
 }
 ${R} .of-banner-caption {
+  pointer-events: none;
   position: absolute; inset-inline: 0; bottom: 0; z-index: 2; display: flex; flex-direction: column; gap: 4px;
   padding: 16px 16px 14px; color: #fff8f1; text-shadow: 0 1px 10px rgb(0 0 0 / 0.45);
 }
@@ -1005,6 +1019,7 @@ ${R} .of-reveal-art {
   transition: opacity 900ms var(--of-ease);
 }
 ${R} .of-reveal-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
+${R} .of-reveal-art[data-look="true"] img { object-fit: contain; object-position: center; }
 ${R} .of-reveal-quiet {
   position: absolute; inset: 0; display: grid; place-items: center; padding-bottom: 36%;
   background: radial-gradient(70% 50% at 50% 34%, color-mix(in srgb, var(--of-li-accent, var(--of-rose)) 70%, transparent), transparent 72%),
@@ -1012,7 +1027,7 @@ ${R} .of-reveal-quiet {
 }
 ${R} .of-reveal-quiet .of-item-initials { font-size: 5rem; }
 ${R} .of-reveal[data-shown="true"] .of-reveal-art { opacity: 1; }
-${R} .of-reveal[data-shown="true"][data-motion="true"] .of-reveal-art img {
+${R} .of-reveal[data-shown="true"][data-motion="true"] .of-reveal-art:not([data-look="true"]) img {
   animation: of-cg-pan 6s cubic-bezier(0.32, 0.06, 0.3, 1) both;
 }
 ${R} .of-reveal-glow {
@@ -1178,7 +1193,7 @@ ${R} .of-ward-frame {
   background: radial-gradient(80% 60% at 50% 30%, color-mix(in srgb, var(--of-li-accent, var(--of-rarity-violet)) 55%, transparent), transparent 72%),
     linear-gradient(180deg, #8a8494, #5e5869);
 }
-${R} .of-ward-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 8%; }
+${R} .of-ward-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center; }
 ${R} .of-ward-frame--small { width: 64px; border-radius: 10px; }
 ${R} .of-ward-frame--small .of-item-initials { font-size: 1rem; }
 ${R} .of-ward-worn {
@@ -1795,7 +1810,8 @@ ${R} .of-tags-card {
   display: flex; flex-direction: column; gap: 10px; padding: 18px 16px; border-radius: 22px;
   border-color: rgb(230 201 138 / 0.55);
 }
-${R} .of-tags-card .of-hint { display: flex; align-items: center; gap: 6px; }
+${R} .of-tags-card .of-hint { display: block; }
+${R} .of-tags-card .of-hint > svg { display: inline-block; width: 13px; height: 13px; margin-inline-start: 6px; vertical-align: middle; }
 ${R} .of-tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 ${R} .of-tag {
   padding: 4px 11px; border-radius: 999px; font-size: 0.8rem; font-weight: 800; color: var(--of-accent-text);

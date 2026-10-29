@@ -127,6 +127,8 @@ export interface AudioSettings {
   /** Kept for the kit's shape; Otome has no combat. */
   combatVoices: boolean;
   generate: boolean;
+  /** Generate and retain one theme for each chapter, instead of changing music with every mood. */
+  chapterThemes: boolean;
   homeMusic: string;
   audioConnectionId: string;
   muted: boolean;
@@ -142,6 +144,12 @@ export interface SoundtrackTrack {
   connectionId: string;
   tag: string;
   path: string;
+}
+
+/** Chapter-owned music is retained independently of the world's bounded mood soundtrack. */
+export interface ChapterMusic {
+  prompt?: string;
+  track?: SoundtrackTrack;
 }
 
 /** `world.audio` (M2b): the settings, each cue's music brief (P14, English), and the generated tracks. */
@@ -211,8 +219,8 @@ export interface Player {
   traits: string[];
   goal: string;
   /**
-   * The persona's own description, whole, as it read when the story was made (or first opened since 0.1.1); every
-   * story prompt's protagonist block carries it. Absent until it has been read.
+   * The persona's full authored story fields, retained as this protagonist's fallback. Chapter and scene generation
+   * refreshes them from the selected persona; image-only appearance overrides are not story facts.
    */
   about?: string;
   /** English, visual-only tags. */
@@ -577,7 +585,7 @@ export interface ChapterShift {
 
 /** One love interest's progress and the state of things between him and the protagonist. */
 export interface LiState {
-  /** Affection points; they only rise. Level = min(10, 1 + floor(points / 300)). */
+  /** Affection points may fall within the reached level. Level = min(10, 1 + floor(points / 300)). */
   points: number;
   stage: number;
   /** −3..+3, starting at 0; moved only by first-play choices, capped per beat and per chapter. */
@@ -754,6 +762,7 @@ export interface Chapter {
   ledger: ChapterLedger;
   plannedAt: string;
   connectionId: string;
+  music?: ChapterMusic;
   /** A Memory's Character Story (M4): the line its card voices, kept with the chapter so the item is always given it. */
   voicedLine?: string;
   /** A date's own plan (M5, SH/dates.ts); hidden from the chapter view. */
@@ -929,7 +938,8 @@ export type ChapterState = "unplanned" | "in-progress" | "done";
 export type BeatState = "unwritten" | "ready" | "read";
 
 /** A chapter as the client sees it: no guides and no ledger (the plan is the hidden story). */
-export type ChapterView = Omit<Chapter, "nodes" | "ledger" | "connectionId" | "date"> & {
+export type ChapterView = Omit<Chapter, "nodes" | "ledger" | "connectionId" | "date" | "music"> & {
+  music?: Pick<ChapterMusic, "track">;
   nodes: Array<Pick<ChapterNode, "i" | "kind" | "moment" | "cg" | "gate">>;
 };
 

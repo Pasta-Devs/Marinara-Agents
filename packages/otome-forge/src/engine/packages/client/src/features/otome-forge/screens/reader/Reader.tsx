@@ -52,6 +52,7 @@ import { DialogueBox } from "./DialogueBox";
 import { EaseOffDialog } from "./EaseOffDialog";
 import { FACE_LABEL_KEYS, FacePlate, QuietCg } from "./FacePlate";
 import { ReaderControls } from "./ReaderControls";
+import { SpeakerPlate } from "./SpeakerPlate";
 import { stageNameKey } from "../story/StoryHome";
 
 interface ReaderProps {
@@ -82,6 +83,8 @@ export function Reader(props: ReaderProps) {
 
 const AUDIO_NOTICE_KEYS = {
   musicFailed: "ui.otomeForge.audio.musicFailed",
+  chapterMusicFailed: "ui.otomeForge.audio.chapterMusicFailed",
+  chapterMusicUnavailable: "ui.otomeForge.audio.chapterMusicUnavailable",
   voiceFailed: "ui.otomeForge.audio.voiceFailed",
 } as const;
 
@@ -186,7 +189,11 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
   // playing (Home's cue) plays on, and a mood the player never hears is never generated.
   if (beat?.musicMood) lastMood.current = beat.musicMood;
   const mood = beat?.musicMood ?? lastMood.current;
-  useMusicCue(mood);
+  useMusicCue(
+    chapter && mood && view.world.audio.generate && view.world.audio.chapterThemes
+      ? { chapterKey: chapter.key, mood, track: chapter.music?.track }
+      : mood,
+  );
   const lines = reader.timeline?.lines ?? [];
   const place = lines
     .slice(0, reader.lineIndex + 1)
@@ -233,6 +240,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
         ),
       }
     : null;
+  const otherSpeaker = voice?.kind === "other" && !voice.thought ? voice.name : null;
 
   // Each new line is voiced when the settings voice its speaker; leaving the line stops it. Narration, thoughts and
   // the aftermath line never are.
@@ -370,6 +378,8 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
             busy={reader.painting}
             onPaint={canPaint ? () => void reader.paintCg() : undefined}
           />
+        ) : otherSpeaker ? (
+          <SpeakerPlate key={reader.lineKey} name={otherSpeaker} lineKey={reader.lineKey} />
         ) : (
           <FacePlate li={onStageLi} face={reader.onStage.face} speaking={reader.onStage.speaking} />
         )}

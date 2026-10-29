@@ -100,7 +100,7 @@ export function FacePlate({ li, face, speaking }: FacePlateProps) {
  * Two image layers: a new face decodes in the hidden one, then the two crossfade (instantly under reduced motion). A
  * cut-out (`cut`, no backdrop) stands whole on the stage's floor; an uncut look is cropped and faded at its edges.
  */
-function FaceLayers({ url, cut = [] }: { url: string; cut?: readonly string[] }) {
+export function FaceLayers({ url, cut = [] }: { url: string; cut?: readonly string[] }) {
   const [layers, setLayers] = useState<{ a: string; b: string; front: "a" | "b" }>({ a: url, b: "", front: "a" });
   useEffect(() => {
     if (url === layers[layers.front]) return;

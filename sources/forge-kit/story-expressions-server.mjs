@@ -20,6 +20,8 @@ import { AsyncResource as ForgeStoryExpressionScope } from "node:async_hooks";
 // A set whose base stops being used mid-paint is parked as "stopped" too, so a restored base resumes it.
 // Each paid call first checks that this instance is still live (dispose() on package teardown) and that
 // the set is still the pending record this attempt wrote, so a set another instance took over is not paid.
+// Explicit repaint stages a replacement inside the record, leaving its usable images visible until all edits land.
+// Superseded and incomplete replacement refs stay in the document for run deletion; a read never restarts that work.
 // ponytail: a unit document removed by a roster merge takes its refs with it, so those gallery images
 // are orphaned like history entries past the sixth; collect them before the remove if merges grow.
 // Another game passes its own face names, their looks, avatar-path reader, log prefix and scope name;
@@ -164,7 +166,7 @@ export function createForgeStoryExpressions({
   // Created at activation, outside every request: a job never inherits a scene's Cancel scope, so a
   // story reset never waits on (or aborts the bookkeeping of) a paint that was already paid for.
   const detached = new ForgeStoryExpressionScope(scopeName);
-  const live = new Set();
+  const live = new Map();
   let disposed = false;
   const galleryId = (ref) => (typeof ref === "string" && ref.startsWith("global-gallery:") ? ref.slice(15) : "");
   const remove = async (refs) => {
@@ -173,8 +175,13 @@ export function createForgeStoryExpressions({
         logger.warn(`${logPrefix} could not delete expression image %s`, id);
     }
   };
-  const refsOf = (record) =>
-    Object.values(record?.images && typeof record.images === "object" ? record.images : {}).map((image) => image?.ref);
+  const refsOf = (record) => [
+    ...Object.values(record?.images && typeof record.images === "object" ? record.images : {}).map(
+      (image) => image?.ref,
+    ),
+    ...(Array.isArray(record?.previousRefs) ? record.previousRefs : []),
+    ...(record?.replacement ? refsOf(record.replacement) : []),
+  ];
   const retryable = (run, record) => {
     const since = Date.parse(images(run).expressionsSince || "");
     return Number.isFinite(since) && since > (Date.parse(record.at || "") || 0);
@@ -192,7 +199,7 @@ export function createForgeStoryExpressions({
     return forgeExpressionText(art) || forgeExpressionText(protagonist?.avatarPath);
   };
 
-  async function paintSet(runId, unitId, { paint, extra, personaBase }) {
+  async function paintSet(runId, unitId, { paint, extra = [], personaBase, repaint = false, expectedBase, prompts }) {
     // A torn-down instance never writes set state: the next instance may already own the set.
     if (disposed) return;
     const run = await readRun(runId);
@@ -217,11 +224,12 @@ export function createForgeStoryExpressions({
     }
     if (!paint) return;
     const base = persona ? personaBase : currentBase(unit);
+    if (repaint && expectedBase !== base) return;
     const reference = localAvatarPath(base);
     if (!reference) return;
     const record = unit.expressions?.[base];
-    if (record?.state === "ready") return;
-    if ((record?.state === "failed" || record?.state === "pending") && !retryable(run, record)) {
+    if (!repaint && record?.state === "ready") return;
+    if (!repaint && (record?.state === "failed" || record?.state === "pending") && !retryable(run, record)) {
       // The pending set may be the next instance's, written after this one was torn down.
       if (disposed) return;
       if (record.state === "pending")
@@ -244,18 +252,35 @@ export function createForgeStoryExpressions({
       return void logger.warn(`${logPrefix} expression portraits for %s: the base image could not be read`, unitId);
     const at = new Date().toISOString();
     const owned = (current) => current?.state === "pending" && current.at === at;
+    const attemptOf = (next) => (repaint ? next.expressions?.[base]?.replacement : next.expressions?.[base]);
+    const writeAttempt = (next, attempt) => {
+      next.expressions = {
+        ...next.expressions,
+        [base]: repaint ? { state: "failed", at, ...next.expressions?.[base], replacement: attempt } : attempt,
+      };
+    };
     if (disposed) return;
     const started = await update(unitId, (next) => {
       const current = next.expressions?.[base];
-      next.expressions = { ...next.expressions, [base]: { state: "pending", at, images: { ...current?.images } } };
+      if (repaint && currentBase(next) !== base) return;
+      const previousRefs = [
+        ...(repaint || !Array.isArray(current?.previousRefs) ? [] : current.previousRefs),
+        ...refsOf(current?.replacement),
+      ].filter(Boolean);
+      writeAttempt(next, {
+        state: "pending",
+        at,
+        images: repaint ? {} : { ...current?.images },
+        ...(previousRefs.length ? { previousRefs: [...new Set(previousRefs)] } : {}),
+      });
     });
-    if (!started) return;
+    if (!started || !owned(attemptOf(started))) return;
     const size = images(run);
     const width = size.portraitWidth;
     const height = persona ? size.portraitWidth : size.portraitHeight; // a persona avatar is usually square
     let error = "";
     for (const expression of names) {
-      if (started.expressions[base].images[expression]?.url) continue;
+      if (attemptOf(started).images[expression]?.url) continue;
       let result;
       try {
         result = await slot(target, async () => {
@@ -268,7 +293,8 @@ export function createForgeStoryExpressions({
           // Read last, so ownership is checked on the newest copy of the set.
           const fresh = (await documents.getById(packageId, unitId))?.data;
           if (!fresh || !forgeStoryExpressionBases(fresh, extra).has(base)) return { stale: true };
-          if (!owned(fresh.expressions?.[base])) return { stopped: true };
+          if (repaint && currentBase(fresh) !== base) return { stale: true };
+          if (!owned(attemptOf(fresh))) return { stopped: true };
           // Teardown during the awaited reads above still stops this face before it is paid for.
           if (disposed) return { stopped: true };
           const image = await client().generateExpression({
@@ -284,6 +310,7 @@ export function createForgeStoryExpressions({
             width,
             height,
             debugMode: debug(),
+            ...(prompts?.[expression] ? { edited: prompts[expression] } : {}),
           });
           if (!image.overrideTook)
             logger.warn(
@@ -316,50 +343,100 @@ export function createForgeStoryExpressions({
         break;
       }
       const inUse = !persona || (await personaArt(await readRun(runId))) === base;
-      const written = await update(unitId, (next) => {
-        const current = next.expressions?.[base];
-        if (!inUse || !owned(current) || !forgeStoryExpressionBases(next, extra).has(base)) return;
-        next.expressions = {
-          ...next.expressions,
-          [base]: { ...current, images: { ...current.images, [expression]: { url: result.url, ref: result.ref } } },
-        };
-      });
+      let written;
+      try {
+        written = await update(unitId, (next) => {
+          const current = attemptOf(next);
+          if (!inUse || !owned(current) || !forgeStoryExpressionBases(next, extra).has(base)) return;
+          if (repaint && currentBase(next) !== base) return;
+          writeAttempt(next, {
+            ...current,
+            images: { ...current.images, [expression]: { url: result.url, ref: result.ref } },
+          });
+        });
+      } finally {
+        if (!written || attemptOf(written)?.images?.[expression]?.ref !== result.ref) await remove([result.ref]);
+      }
       // The base was redrawn, the set taken over or the world deleted while this face painted: discard it.
       // Read from the written copy, so a revision retry that skipped filing never keeps an unfiled image.
-      if (written?.expressions?.[base]?.images?.[expression]?.ref !== result.ref) {
-        await remove([result.ref]);
+      if (!written || attemptOf(written)?.images?.[expression]?.ref !== result.ref) {
         error = "stale";
         break;
       }
     }
     const stopped = error === "stopped" || error === "stale";
     if (error && !stopped) logger.warn(`${logPrefix} expression portraits failed for %s: %s`, unitId, error);
-    await update(unitId, (next) => {
-      const current = next.expressions?.[base];
+    const result = {
+      state: error ? (stopped ? "stopped" : "failed") : "ready",
+      at: new Date().toISOString(),
+      ...(error && !stopped ? { error } : {}),
+    };
+    const finished = await update(unitId, (next) => {
+      const current = attemptOf(next);
       if (!owned(current)) return;
-      next.expressions = {
-        ...next.expressions,
-        [base]: error
-          ? { ...current, state: stopped ? "stopped" : "failed", ...(stopped ? {} : { error }) }
-          : { ...current, state: "ready", at: new Date().toISOString() },
-      };
+      if (repaint && !error) {
+        // ponytail: keep superseded originals until run deletion; prune them together with their cut-outs if storage
+        // pressure warrants it. Earlier incomplete replacements stay tracked too.
+        const previousRefs = [
+          ...new Set(
+            [...refsOf({ ...next.expressions[base], replacement: undefined }), ...(current.previousRefs || [])].filter(
+              Boolean,
+            ),
+          ),
+        ];
+        next.expressions = { ...next.expressions, [base]: { ...current, ...result, previousRefs } };
+      } else {
+        writeAttempt(
+          next,
+          repaint
+            ? { ...current, ...result }
+            : error
+              ? { ...current, state: stopped ? "stopped" : "failed", ...(stopped ? {} : { error }) }
+              : { ...current, state: "ready", at: result.at },
+        );
+        if (repaint && next.expressions[base].state !== "ready") {
+          next.expressions[base].state = "failed";
+          next.expressions[base].at = result.at;
+        }
+      }
     });
+    if (repaint && !error && finished?.expressions?.[base]?.at !== result.at) return { ...result, state: "stopped" };
+    return result;
   }
 
   const schedule = (runId, unitId, options) => {
     const key = `${unitId}:expressions`;
-    if (live.has(key)) return;
-    live.add(key);
-    detached.runInAsyncScope(() =>
+    const promptsKey =
+      options.prompts === undefined
+        ? null
+        : JSON.stringify(
+            names.map((name) => [options.prompts[name]?.prompt ?? null, options.prompts[name]?.negativePrompt ?? null]),
+          );
+    const current = live.get(key);
+    if (current)
+      return options.repaint &&
+        current.repaint &&
+        current.base === options.expectedBase &&
+        current.promptsKey === promptsKey
+        ? current.promise
+        : null;
+    const promise = detached.runInAsyncScope(() =>
       background(() => dedupe(key, () => paintSet(runId, unitId, options)))
         .catch((error) =>
           logger.warn(`${logPrefix} expression portraits for %s stopped: %s`, unitId, error?.message || String(error)),
         )
         .finally(() => live.delete(key)),
     );
+    live.set(key, { promise, repaint: options.repaint === true, base: options.expectedBase, promptsKey });
+    return promise;
   };
 
   return {
+    // Explicit paid replacement only; ordinary queue calls never replace an existing ready set.
+    repaint(runId, unitId, base, prompts) {
+      if (disposed) return null;
+      return schedule(runId, unitId, { paint: true, repaint: true, expectedBase: base, prompts });
+    },
     // Called with the cast a scene is served or written with. Returns that cast unchanged at once.
     queue(runId, run, cast, beat) {
       try {

@@ -1,6 +1,6 @@
 # Noodle release notes
 
-## Unreleased
+## 1.5.12 — 2026-10-30
 
 - The "Long-Term Memory isn't sharing memories" line now clears as soon as sharing is turned back on.
 - Turning on "Use memories from Long-Term Memory" now offers to turn on Long-Term Memory's sharing when it is off.

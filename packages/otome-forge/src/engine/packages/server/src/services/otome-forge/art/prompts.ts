@@ -320,6 +320,7 @@ export interface ExpressionInput {
   face: Face;
   world: Pick<World, "content" | "images">;
   style: StyleProfile;
+  edited?: Partial<ImagePrompt>;
 }
 
 /**
@@ -332,10 +333,25 @@ export function expressionPrompt(input: ExpressionInput): ImagePrompt {
   const presentation = unit.bible?.look.presentation ?? "person";
   const tagged = style.tagged === true;
   const required = otomeImageTags({ world, people: [{ name: unit.name, presentation }], use: "clothed", tagged });
-  const { prompt } = forgeStoryExpressionPrompt(unit, input.base, input.face, style, { tagged, looks: FACE_LOOKS });
+  // The shared tagged helper reads positiveTags only. Otome's configured style is prose too, so keep it whole.
+  const profile = tagged
+    ? { ...style, positiveTags: [style.styleText, style.positiveTags].filter(Boolean).join(", ") }
+    : style;
+  const { prompt } = forgeStoryExpressionPrompt(unit, input.base, input.face, profile, { tagged, looks: FACE_LOOKS });
+  const prose = sentence(input.edited?.prompt ?? prompt);
+  const safetyTail = sentence(required);
+  const hasSafetyTail =
+    prose === safetyTail || (prose.endsWith(safetyTail) && /[.!?…]\s+$/u.test(prose.slice(0, -safetyTail.length)));
   return {
     // A tag profile gets the tags; an edit instruction gets them as its closing sentence.
-    prompt: adultsOnly(world, tagged ? withTags(prompt, required) : [sentence(prompt), sentence(required)].join(" ")),
-    negativePrompt: mergeTags(requiredNegative(world, "clothed"), style.negativeTags),
+    prompt: adultsOnly(
+      world,
+      tagged ? withTags(input.edited?.prompt ?? prompt, required) : hasSafetyTail ? prose : `${prose} ${safetyTail}`,
+    ),
+    negativePrompt: mergeTags(
+      requiredNegative(world, "clothed"),
+      style.negativeTags,
+      input.edited?.negativePrompt ?? "",
+    ),
   };
 }

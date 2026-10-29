@@ -414,7 +414,7 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.5.11",
+    version: "1.5.12",
     minEngineVersion: "2.5.1",
     capabilityApi: PACKAGE_CAPABILITY_API,
     builtAgainst: { engineVersion: "2.5.1", engineCommit: "42d64368e82340a46e35c0f4489d9f41024d6032" },
@@ -865,7 +865,7 @@ const features = [
   },
   {
     id: "otome-forge",
-    version: "0.1.7",
+    version: "0.1.15",
     minEngineVersion: "2.5.1",
     // The browser tab's openConnection prop and the debugMode field of /generate/raw arrived in capability API 1.386.
     capabilityApi: Object.freeze({ major: 1, minor: 386 }),

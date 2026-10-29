@@ -1,3 +1,7 @@
+## 1.27.5 — 2026-10-29
+
+- Maintenance rebuild for the shared expression-image lifecycle. Gacha Forge keeps its existing automatic expression behavior; the explicit repaint controls belong to Otome Hearth.
+
 ## 1.27.4 — 2026-10-29
 
 - Maintenance rebuild for the shared image-reference helper. Gacha Forge keeps its existing avatar and outfit reference behavior.

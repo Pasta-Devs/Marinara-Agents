@@ -172,6 +172,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.27.5",
+          "date": "2026-10-29",
+          "notes": "- Maintenance rebuild for the shared expression-image lifecycle. Gacha Forge keeps its existing automatic expression behavior; the explicit repaint controls belong to Otome Hearth.",
+          "highlight": false
+        },
+        {
           "version": "1.27.4",
           "date": "2026-10-29",
           "notes": "- Maintenance rebuild for the shared image-reference helper. Gacha Forge keeps its existing avatar and outfit reference behavior.",
@@ -283,12 +289,6 @@
           "version": "1.24.4",
           "date": "2026-10-26",
           "notes": "- Messages you send in character chats are no longer read aloud. Your persona's assigned voice still reads its story dialogue.",
-          "highlight": false
-        },
-        {
-          "version": "1.24.3",
-          "date": "2026-10-26",
-          "notes": "- Combat Power (CP) is now called Battle Power (BP).\n- Retrying a failed Formation kit pays only for the characters that still need one. Kits you kept after cancelling a remake stay as they are, and kits already paid for in a cancelled or failed remake are never made again.\n- A Front Row fighter whose only damage was a passive that never fires (on its own attack or kill, from the Back Row, or with no power) attacks with its Normal skill again.\n- An immunity Ultimate lands on the ally you pick, and one that can no longer land waits without spending energy. Retreating a fighter and summoning into its seat works in the same turn.\n- A battle saved with an element barrier nobody in your world can meet can now be fought, and a shortened defeat order names the enemies that come first.\n- On phones, enemy names show in full and protection tags no longer cover them. An Echo's sheet describes the Echo, and keyboard focus comes back after Fight.",
           "highlight": false
         }
       ]
@@ -528,6 +528,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.5.12",
+          "date": "2026-10-30",
+          "notes": "- The \"Long-Term Memory isn't sharing memories\" line now clears as soon as sharing is turned back on.\n- Turning on \"Use memories from Long-Term Memory\" now offers to turn on Long-Term Memory's sharing when it is off.",
+          "highlight": false
+        },
+        {
           "version": "1.5.11",
           "date": "2026-10-29",
           "notes": "- New, off by default: Advanced → \"Use memories from Long-Term Memory\". Posts can draw on what Long-Term Memory remembers about each account's character, as whole memories or only the parts that fit the posts. Turning it on asks first, and a note appears if Long-Term Memory isn't installed or isn't sharing memories.",
@@ -639,12 +645,6 @@
           "version": "1.2.22",
           "date": "2026-09-13",
           "notes": "- Maintenance: simplify the inline composer's visibility checks and remove unused code.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.21",
-          "date": "2026-09-07",
-          "notes": "- Fixed \"Load more\" on the timeline, which failed on every page after the first.\n- Fixed a manually chosen profile avatar being replaced by the character card image.\n- Applying a saved prompt now asks before it discards unsaved prompt changes.\n- Ambient accounts no longer post images.\n- Removed leftover NoodleR wording from the image generation settings.",
           "highlight": false
         }
       ]

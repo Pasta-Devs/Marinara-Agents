@@ -6,12 +6,17 @@
 // POST /runs/:run/forge/consent {steps}                                → {forge}  (paint steps waiting for consent)
 // POST /runs/:run/art/prompt {target:{kind:"look", owner}}             → {prompt, negativePrompt}
 // POST /runs/:run/art/paint {target, prompt?, negativePrompt?}         → {paint}
+// POST /runs/:run/art/expressions/prompt {li}                         → {base, prompts} (five read-only previews)
+// POST /runs/:run/art/expressions {li, base?, prompts?}               → {paint} (one explicit replacement set)
 // `owner` is "player" or "li:<li id>". The paint route is the explicit tap: it paints once, waits for the result,
 // and answers with the saved record (`ready`, or `failed` with Retry); an edited prompt keeps its safety tags.
 import { z } from "zod";
+import { expressionPromptsFor } from "../art/expressions.js";
+import { FACES } from "../../../../../client/src/features/otome-forge/shared/faces.js";
 import { lookPromptFor, parseLookOwner, type LookOwner } from "../art/paint.js";
 import { generateJson } from "../generation.js";
 import { OtomeForgeError, debugModeOf, parseBody, runParam, type RegisterRoutes } from "../http.js";
+import { isLiId } from "../ids.js";
 import { consentForge, paintWithStep, retryForgeStep } from "../setup/forge.js";
 import { normalizePremise, premiseMessages, PremiseSchema } from "../setup/prompts.js";
 
@@ -26,6 +31,24 @@ const PaintBody = z.object({
   prompt: z.string().max(4000).optional(),
   negativePrompt: z.string().max(4000).optional(),
 });
+const ExpressionBody = z
+  .object({
+    li: z.string().refine(isLiId),
+    base: z.string().optional(),
+    prompts: z
+      .record(
+        z.enum(FACES),
+        z.object({
+          prompt: z.string().refine((value) => value.trim().length > 0, "A reviewed prompt cannot be blank."),
+          negativePrompt: z.string(),
+        }),
+      )
+      .optional(),
+  })
+  .refine((body) => body.prompts === undefined || body.base !== undefined, {
+    message: "Reviewed prompts need the look they were reviewed against.",
+    path: ["base"],
+  });
 
 function ownerOf(target: { owner: string }): LookOwner {
   const owner = parseLookOwner(target.owner);
@@ -35,6 +58,26 @@ function ownerOf(target: { owner: string }): LookOwner {
 
 export const registerSetupRoutes: RegisterRoutes = (router, deps) => {
   const { handle } = deps;
+
+  router.post(
+    "/runs/:run/art/expressions/prompt",
+    handle(async (request) => {
+      const { runId } = runParam(request);
+      const { li } = parseBody(ExpressionBody, request.body);
+      return expressionPromptsFor(deps, runId, li);
+    }),
+  );
+  router.post(
+    "/runs/:run/art/expressions",
+    handle(async (request) => {
+      const { runId } = runParam(request);
+      const { li, base, prompts } = parseBody(ExpressionBody, request.body);
+      if (!deps.art) throw new OtomeForgeError(503, "The art service is unavailable.", "no-connection");
+      return {
+        paint: await deps.art.repaintExpressions(runId, li, { base, prompts, debugMode: debugModeOf(request) }),
+      };
+    }),
+  );
 
   router.post(
     "/premise/suggest",

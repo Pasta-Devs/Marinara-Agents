@@ -16,6 +16,7 @@ import { useOtomeApi } from "../../api";
 import { CostHint } from "../../components/CostHint";
 import { Dialog } from "../../components/Dialog";
 import { HeNoticed } from "../../components/HeNoticed";
+import { LookImage } from "../../components/LookImage";
 import {
   imagesOn,
   invalidateCollection,
@@ -326,11 +327,13 @@ function LookCard({ view, look, person, actions, wearing, wearBusy, onWear, onSh
       style={person ? ({ "--of-li-accent": accentOf(person) } as CSSProperties) : undefined}
     >
       <span className="of-ward-frame" data-painting={look.art?.state === "pending"} aria-hidden="true">
-        {url ? (
-          <img src={url} alt="" loading="lazy" decoding="async" />
-        ) : (
-          <span className="of-item-initials">{initialsOf(who)}</span>
-        )}
+        <LookImage
+          src={url}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          fallback={<span className="of-item-initials">{initialsOf(who)}</span>}
+        />
         {look.worn ? (
           <span className="of-ward-worn">
             <House size={11} strokeWidth={2.4} />
@@ -360,7 +363,7 @@ function LookCard({ view, look, person, actions, wearing, wearBusy, onWear, onSh
               })}
             </span>
             {faces.map((face) => (
-              <img key={face} src={look.faces?.[face]} alt="" title={t(FACE_LABEL_KEYS[face])} loading="lazy" />
+              <LookImage key={face} src={look.faces?.[face]} alt="" title={t(FACE_LABEL_KEYS[face])} loading="lazy" />
             ))}
           </p>
         ) : null}
@@ -491,11 +494,12 @@ function CoupleCard({
     return (
       <span className="of-couple-half" data-owned={look.owned}>
         <span className="of-ward-frame of-ward-frame--small" aria-hidden="true">
-          {look.url ? (
-            <img src={look.url} alt="" loading="lazy" />
-          ) : (
-            <span className="of-item-initials">{initialsOf(name)}</span>
-          )}
+          <LookImage
+            src={look.url}
+            alt=""
+            loading="lazy"
+            fallback={<span className="of-item-initials">{initialsOf(name)}</span>}
+          />
         </span>
         <span className="of-couple-name">{look.name}</span>
         <span className="of-couple-state">

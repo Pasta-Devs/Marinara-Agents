@@ -1,5 +1,46 @@
 # Otome Hearth release notes
 
+## 0.1.15 — 2026-10-29
+
+- Opening narration no longer previews the portrait of a love interest whose speaking turn has not been reached. Established speakers can still stay visible during later narration.
+
+- The pre-chapter warning places its Ease off feather after the guidance sentence.
+
+- Harmful story/date choices and Confrontation outcomes can reduce Affection progress within the current level. Unlocked levels stay permanent, and replaying never repeats the deduction or refunds daily earning limits.
+
+## 0.1.14 — 2026-10-29
+
+- Album Memories can be filtered by 3★, 4★ or 5★, with unplayed content listed first.
+
+- Owned 3★ Snapshots can be illustrated on first opening through the existing image connection, confirmation and prompt review flow. Paintings are saved and reused; old vignettes and story progress stay intact.
+
+## 0.1.13 — 2026-10-29
+
+- Suggestive is an image-content ceiling: neutral portraits and facial expression edits no longer receive mandatory suggestive or sensitive-content tags. Image briefs follow the actual moment, with non-explicit adult intimacy allowed when appropriate.
+- Wish and Wardrobe display cleaned love-interest and persona outfits while retaining the original paintings. Wardrobe banner art is centered and shown whole, and tapping a ready banner image opens a full-image view without making a wish.
+
+## 0.1.12 — 2026-10-29
+
+- Desktop settings use the available stage space, with every settings section reachable and long pages scrollable.
+- Text generation can recover when an endpoint rejects the optional JSON-format hint, while retaining reply validation and output budgets.
+
+## 0.1.11 — 2026-10-29
+
+- Named speakers outside your love-interest cast clear the previous character's sprite. An exact, unique matching character card can supply an existing Full Body sprite, with Neutral preferred; opaque art waits for free cleanup before appearing.
+
+## 0.1.10 — 2026-10-29
+
+- Repaint a love interest’s five expressions for their current look from Your cast, with a five-image cost and all prompts reviewed before painting when prompt review is enabled. Existing artwork stays available during replacement or after a failure.
+- Expression generation preserves the configured image style for both prose and tag-based profiles. Reviewed prompts stay bound to the look they were written for, with their full text and required safety wording retained.
+
+## 0.1.9 — 2026-10-29
+
+- Chapter, scene, route and date writers now receive the selected persona’s full Description, Personality, Backstory and authored Appearance, including on existing runs. The same saved identity fields also ground item stories and outfit reactions, phone replies, Home notes and touch lines, Caring messages, and Read Him. Their authored facts stay distinct from image-only appearance overrides; roleplay scenarios, greetings and dialogue examples are excluded.
+
+## 0.1.8 — 2026-10-29
+
+- Music settings can give every chapter its own saved theme. Enable chapter themes with music generation on; each theme is generated when reading starts and reused on replay.
+
 ## 0.1.7 — 2026-10-29
 
 - Chapter and Home expressions keep the clean neutral sprite visible until free background cleanup is ready, instead of showing a green original. Saved and newly painted expressions share the repair, with their originals, outfits and story progress retained.
