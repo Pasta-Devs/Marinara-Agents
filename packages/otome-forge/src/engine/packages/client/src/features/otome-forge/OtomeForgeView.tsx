@@ -27,6 +27,7 @@ import { ClawMachine } from "./screens/dates/ClawMachine";
 import { DateNight } from "./screens/dates/DateNight";
 import { DatesHub, type DateActivity } from "./screens/dates/DatesHub";
 import { ReadHim } from "./screens/dates/ReadHim";
+import { ReadMe } from "./screens/dates/ReadMe";
 import { ForgeProgress } from "./screens/ForgeProgress";
 import { HomeScreen, useHomeLi } from "./screens/home/HomeScreen";
 import { PhoneScreen, type PhoneOpen } from "./screens/phone/PhoneScreen";
@@ -52,7 +53,7 @@ import type { OtomeIndex, RunView } from "./shared/api-types";
 
 const DOCKED: ReadonlySet<ScreenId> = new Set<ScreenId>(["home", ...DOCK_SCREENS]);
 /** The Dates activities this build opens (M5), each a screen taking ActivityScreenProps. */
-const ACTIVITIES: ReadonlySet<DateActivity> = new Set<DateActivity>(["read-him", "date-night", "claw"]);
+const ACTIVITIES: ReadonlySet<DateActivity> = new Set<DateActivity>(["read-him", "read-me", "date-night", "claw"]);
 
 interface ScreensProps {
   lookPreference: LookPreference;
@@ -233,6 +234,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
     phone: "home",
     remind: "home",
     "read-him": "dates",
+    "read-me": "dates",
     "date-night": "dates",
     claw: "dates",
     home: activeRun ? undefined : "picker",
@@ -323,6 +325,8 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
       />
     ) : screen === "read-him" && activeRun && view && datesOf ? (
       <ReadHim runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
+    ) : screen === "read-me" && activeRun && view && datesOf ? (
+      <ReadMe runKey={activeRun} view={view} li={datesOf} onExit={() => go("dates")} />
     ) : screen === "date-night" && activeRun && view && datesOf ? (
       <DateNight
         runKey={activeRun}
@@ -365,7 +369,7 @@ function OtomeForgeScreens({ lookPreference, onLookPreference }: ScreensProps) {
             ? `bible-${bibleLi}`
             : screen === "reader"
               ? `reader-${chapterKey}`
-              : screen === "read-him" || screen === "date-night" || screen === "claw"
+              : screen === "read-him" || screen === "read-me" || screen === "date-night" || screen === "claw"
                 ? `${screen}-${datesOf?.id ?? ""}`
                 : screen
         }
