@@ -69,7 +69,7 @@ export async function recallSlurpMemories(input: {
   try {
     const service = getCapabilityService<LtmRecall>(SERVICE);
     if (!service?.recall) return done("missing");
-    const whole = input.settings.memoryRecall !== "relevant";
+    const whole = input.settings.memoryRecall === "whole";
     const signal = input.signal ?? AbortSignal.timeout(TIMEOUT_MS);
     const answer = await service.recall({
       caller: "slurp2",

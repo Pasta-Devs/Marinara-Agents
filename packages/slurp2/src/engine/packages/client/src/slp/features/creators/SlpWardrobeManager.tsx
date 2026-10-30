@@ -364,7 +364,9 @@ export function SlpWardrobeManager({ creatorId, legacyWardrobe }: { creatorId: s
                 <option value="lorebook">{t("ui.slurp.wardrobe.sourceLorebook", { defaultValue: "Lorebooks" })}</option>
                 <option value="text">{t("ui.slurp.wardrobe.sourceText", { defaultValue: "Pasted text" })}</option>
                 <option value="legacy" disabled={!legacyWardrobe.trim()}>
-                  {t("ui.slurp.wardrobe.sourceLegacy", { defaultValue: "Legacy wardrobe note" })}
+                  {legacyWardrobe.trim()
+                    ? t("ui.slurp.wardrobe.sourceLegacy", { defaultValue: "Legacy wardrobe note" })
+                    : t("ui.slurp.wardrobe.sourceLegacyEmpty", { defaultValue: "Legacy wardrobe note (empty)" })}
                 </option>
               </select>
             </label>

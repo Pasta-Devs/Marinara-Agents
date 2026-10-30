@@ -289,7 +289,7 @@ async function main() {
   // slp-settings.ts imports the host, so its schema is pinned by source: a missing key falls back to the default.
   const settings = server("modules/settings/slp-settings.ts");
   assert.match(settings, /memoryRecall: z\.enum\(\["whole", "relevant"\]\)/u);
-  assert.match(settings, /memoryRecall: "whole"/u, "an older settings file reads as whole memories");
+  assert.match(settings, /memoryRecall: "relevant"/u, "an older settings file reads as relevant memories");
   assert.match(client("features/settings/SlpEngineLinkPanel.tsx"), /update\("memoryRecall", value\)/u);
   assert.match(
     client("features/settings/SlpEngineLinkPanel.tsx"),

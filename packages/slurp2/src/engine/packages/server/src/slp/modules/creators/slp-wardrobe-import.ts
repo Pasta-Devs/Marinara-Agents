@@ -1,4 +1,6 @@
 import {
+  SLP_WARDROBE_SUITABILITIES,
+  SLP_WARDROBE_TAG_LIMIT,
   slpWardrobeImportDraftSchema,
   type SlpWardrobeImportDraft,
   type SlpWardrobeLook,
@@ -8,6 +10,7 @@ export const SLP_WARDROBE_IMPORT_SOURCE_LIMIT = 24_000;
 
 function parseImportJson(content: string): unknown {
   const trimmed = content
+    .replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/giu, "")
     .trim()
     .replace(/^```(?:json)?\s*/iu, "")
     .replace(/\s*```$/u, "");
@@ -35,13 +38,71 @@ const key = (value: string) =>
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 
+const record = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
+/** The looks list under any name a model picks, or one bare look. */
+function importCandidates(parsed: unknown): unknown[] {
+  if (Array.isArray(parsed)) return parsed;
+  const root = record(parsed);
+  if (!root) return [];
+  const list = [root.looks, root.outfits, root.wardrobe, root.items].find(Array.isArray);
+  if (list) return list;
+  return typeof root.name === "string" || typeof root.title === "string" ? [root] : [];
+}
+
+const text = (value: unknown): string =>
+  typeof value === "string"
+    ? value.trim()
+    : Array.isArray(value)
+      ? value.filter((part) => typeof part === "string").join(" … ").trim()
+      : "";
+
+/** Cut at a word end, not mid-word. */
+const clip = (value: string, max: number) => {
+  if (value.length <= max) return value;
+  const cut = value.slice(0, max - 1);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > max / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
+};
+
+/**
+ * Bend a model's look into the draft schema: known aliases, long fields clipped, odd keys dropped.
+ * A look still needs a name, a description and evidence; nothing is invented here.
+ */
+function tidyImportLook(candidate: unknown): unknown {
+  const look = record(candidate);
+  if (!look) return candidate;
+  const description = text(look.description) || text(look.outfit) || text(look.details);
+  const summary = text(look.summary) || description.split(/(?<=[.!?])\s/u)[0] || "";
+  const rawTags = Array.isArray(look.tags) ? look.tags : typeof look.tags === "string" ? look.tags.split(",") : [];
+  const tags = [
+    ...new Set(
+      rawTags
+        .filter((tag): tag is string => typeof tag === "string")
+        .map((tag) => clip(tag.trim().toLowerCase(), 32))
+        .filter(Boolean),
+    ),
+  ].slice(0, SLP_WARDROBE_TAG_LIMIT);
+  const suitability = text(look.suitability).toLowerCase();
+  return {
+    name: clip(text(look.name) || text(look.title), 80),
+    summary: clip(summary, 180),
+    description: clip(description, 800),
+    tags,
+    suitability: (SLP_WARDROBE_SUITABILITIES as readonly string[]).includes(suitability) ? suitability : "both",
+    enabled: typeof look.enabled === "boolean" ? look.enabled : true,
+    evidence: clip(text(look.evidence) || text(look.quote) || text(look.source), 500),
+  };
+}
+
 export function parseSlpWardrobeImportDrafts(content: string, existing: readonly SlpWardrobeLook[] = []) {
   const parsed = parseImportJson(content) as { looks?: unknown } | unknown[] | null;
-  const candidates = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.looks) ? parsed.looks : [];
+  const candidates = importCandidates(parsed);
   const seen = new Set(existing.flatMap((look) => [key(look.name), key(look.description)]));
   const out: SlpWardrobeImportDraft[] = [];
   for (const candidate of candidates) {
-    const result = slpWardrobeImportDraftSchema.safeParse(candidate);
+    const result = slpWardrobeImportDraftSchema.safeParse(tidyImportLook(candidate));
     if (!result.success) continue;
     const keys = [key(result.data.name), key(result.data.description)];
     if (keys.some((entry) => seen.has(entry))) continue;
