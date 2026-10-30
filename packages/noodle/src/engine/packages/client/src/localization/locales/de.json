@@ -11,5 +11,10 @@
   "settings.notifications.customSound.actions.remove": "Entfernen",
   "settings.notifications.customSound.status.custom": "Benutzerdefiniert",
   "settings.sections.imageGeneration.title": "Bild-Generierung",
-  "settings.sections.notifications.title": "Benachrichtigungen"
+  "settings.sections.notifications.title": "Benachrichtigungen",
+  "ui.noodle.noodlehome.ltmSharingOfferCancel": "Nicht jetzt",
+  "ui.noodle.noodlehome.ltmSharingOfferConfirm": "Einschalten",
+  "ui.noodle.noodlehome.ltmSharingOfferFailed": "Das Teilen in Long-Term Memory konnte nicht aktiviert werden. Der Schalter von Noodle bleibt an; du kannst das Teilen unter Long-Term Memory → Memory Settings → Sharing einschalten.",
+  "ui.noodle.noodlehome.ltmSharingOfferMessage": "Noodle kann Erinnerungen nur nutzen, solange der Schalter „Other Agents can read memories“ in Long-Term Memory an ist. Er ist gerade aus. Soll er eingeschaltet werden?",
+  "ui.noodle.noodlehome.ltmSharingOfferTitle": "Teilen in Long-Term Memory aktivieren?"
 }

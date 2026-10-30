@@ -1,6 +1,6 @@
 # Saucelings release notes
 
-## Unreleased
+## 0.23.2 — 2026-10-30
 
 - On a wide screen, an open Background, Caretaker, Looks or New egg panel no longer stretches the stage card beside it.
 

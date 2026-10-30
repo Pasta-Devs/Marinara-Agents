@@ -414,7 +414,7 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.5.11",
+    version: "1.5.12",
     minEngineVersion: "2.5.1",
     capabilityApi: PACKAGE_CAPABILITY_API,
     builtAgainst: { engineVersion: "2.5.1", engineCommit: "42d64368e82340a46e35c0f4489d9f41024d6032" },
@@ -649,7 +649,7 @@ const features = [
   },
   {
     id: "saucelings",
-    version: "0.23.1",
+    version: "0.23.2",
     // Home widgets need capability API 1.35+, first released in Engine 2.5.0 (2.4.6 shipped 1.18).
     minEngineVersion: "2.5.0",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
