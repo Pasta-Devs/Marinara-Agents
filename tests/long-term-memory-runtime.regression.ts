@@ -110,6 +110,7 @@ async function main() {
     estimatedTokens: 1,
   });
   const services = new Map<string, any>();
+  const serviceOptions = new Map<string, { hostOnly?: boolean } | undefined>();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-runtime-"));
   const logger = { debug() {}, info() {}, warn() {}, error() {} };
   let resolvedAdapter = {
@@ -241,8 +242,9 @@ async function main() {
         },
       },
     },
-    registerService(name: string, service: unknown) {
+    registerService(name: string, service: unknown, options?: { hostOnly?: boolean }) {
       services.set(name, service);
+      serviceOptions.set(name, options);
       return () => services.delete(name);
     },
     async registerPrivilegedRoutes() {
@@ -311,6 +313,16 @@ async function main() {
         services.get("long-term-memory:recall")?.version,
         1,
         "the recall service other packages read must carry its contract version",
+      );
+      assert.equal(
+        serviceOptions.get("long-term-memory:runtime")?.hostOnly,
+        true,
+        "the runtime service gives recall for any chat and the vault lock, so only the Engine may read it",
+      );
+      assert.notEqual(
+        serviceOptions.get("long-term-memory:recall")?.hostOnly,
+        true,
+        "other packages read recall, so it must stay open to them",
       );
       const recallRoot = await mkdtemp(join(tmpdir(), "marinara-ltm-shared-recall-"));
       const recallStorage = new LongTermMemoryStorage(recallRoot);
