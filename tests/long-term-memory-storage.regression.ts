@@ -2662,6 +2662,40 @@ async function main() {
         links: [],
         sections: { status: { text: "The gate remains unresolved.", updatedAt: timestamp } },
       });
+      // createNote makes sections manual, which win over a later source update; a thread opened by an earlier
+      // piece carries a source contribution.
+      for (const [id, tags] of [
+        ["thread_section_update", []],
+        ["thread_section_anchor", ["anchor"]],
+      ] as const) {
+        await storage.createNote({
+          ...noteInput,
+          id,
+          title: id,
+          type: "thread",
+          scope: legacySource.scope,
+          tags: [...tags],
+          links: [],
+          sections: { status: { text: "The thread is open.", updatedAt: timestamp } },
+        });
+        await storage.projectNote(id, "thread", (current) => ({
+          ...current!,
+          sections: {
+            status: renderSectionContributions(
+              [
+                {
+                  owner: "source",
+                  sourceNoteId: "earlier_piece",
+                  sourceHash: "e".repeat(64),
+                  text: "The thread is open.",
+                  updatedAt: timestamp,
+                },
+              ],
+              false,
+            )!,
+          },
+        }));
+      }
       const destructiveEventId = randomUUID();
       const destructiveLinkId = randomUUID();
       const destructiveMutationId = randomUUID();
@@ -2757,6 +2791,83 @@ async function main() {
         new Set([destructiveEventId, destructiveLinkId, destructiveMutationId]),
       );
       assert.equal((await storage.getNote(destructiveTarget.id))?.status, "resolved");
+
+      // A section the compiler replaces on purpose (a thread's status) applies beside other rows; an anchor's does not.
+      const sectionUpdateDraft = async (noteId: string) => {
+        const updateId = randomUUID();
+        const linkId = randomUUID();
+        const draft = await draftStore.createDraft({
+          source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+          scope: destructiveTarget.scope,
+          modes: destructiveTarget.modes,
+          response: {
+            summary: "Continue a thread beside a link.",
+            mutations: [
+              {
+                id: updateId,
+                claimKind: "change",
+                kind: "update_section",
+                risk: "low",
+                confidence: 0.9,
+                summary: "Continue the thread",
+                evidence: [`source_note:${canonicalSourceId}`],
+                noteId,
+                sectionKey: "status",
+                section: { text: "The thread moved on.", updatedAt: timestamp },
+              },
+              {
+                id: linkId,
+                kind: "add_link",
+                risk: "low",
+                confidence: 0.9,
+                summary: "Link the thread",
+                evidence: [`source_note:${canonicalSourceId}`],
+                noteId,
+                link: { target: "timeline_destructive_gate", relation: "evidenced_by" },
+              },
+            ],
+          },
+        });
+        return { draft, mutationIds: [updateId, linkId] };
+      };
+      const threadUpdate = await sectionUpdateDraft("thread_section_update");
+      const threadUpdatePreflight = await preflightLongTermMemoryDraft(threadUpdate.draft.id, {
+        root,
+        mutationIds: threadUpdate.mutationIds,
+      });
+      assert.equal(threadUpdatePreflight.blockedMutationIds.length, 0);
+      assert.equal(
+        threadUpdatePreflight.rows.find((row) => row.mutationId === threadUpdate.mutationIds[0])?.disposition,
+        "rewrite",
+      );
+      const threadUpdateApplied = await applyLongTermMemoryDraft(threadUpdate.draft.id, {
+        root,
+        mutationIds: threadUpdate.mutationIds,
+        rebuildIndexes: false,
+      });
+      assert.deepEqual(new Set(threadUpdateApplied.appliedMutationIds), new Set(threadUpdate.mutationIds));
+      assert.equal((await storage.getNote("thread_section_update"))?.sections.status?.text, "The thread moved on.");
+
+      const anchorUpdate = await sectionUpdateDraft("thread_section_anchor");
+      const anchorUpdatePreflight = await preflightLongTermMemoryDraft(anchorUpdate.draft.id, {
+        root,
+        mutationIds: anchorUpdate.mutationIds,
+      });
+      assert.ok(
+        anchorUpdatePreflight.rows
+          .find((row) => row.mutationId === anchorUpdate.mutationIds[0])
+          ?.blockers.some((blocker) => blocker.code === "destructive_disposition_requires_explicit_review"),
+      );
+      await assert.rejects(
+        applyLongTermMemoryDraft(anchorUpdate.draft.id, {
+          root,
+          mutationIds: anchorUpdate.mutationIds,
+          rebuildIndexes: false,
+        }),
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message === "Rewrite and other destructive changes must be reviewed and applied one at a time.",
+      );
 
       const unlinkedChangeMutationId = randomUUID();
       const unlinkedChangeDraft = await draftStore.createDraft({
