@@ -47,6 +47,11 @@ const ltmInteropPreviewSampleBaseSchema = z.object({
     .strict()
     .refine((range) => range.last >= range.first)
     .optional(),
+  // Chat Summaries rows without a numbered message range; a sample sets at most one of the two fields.
+  summaryRange: z
+    .object({ chatName: z.string().min(1).max(240), label: z.string().min(1).max(80) })
+    .strict()
+    .optional(),
 });
 
 export const ltmInteropPreviewFreshnessSchema = z.enum([
