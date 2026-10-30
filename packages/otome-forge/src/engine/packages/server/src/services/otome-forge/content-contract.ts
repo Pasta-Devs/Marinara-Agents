@@ -97,7 +97,8 @@ const DARK_ADDITION =
 const NO_MINORS = "Nothing sexual or romantic ever involves anyone under 18, in the story or in anyone's past.";
 const ROMANCE =
   "Flirtation, desire, jealousy, possessiveness, seduction and messy attachment belong in this story and escalate naturally; a love interest may make the first move instead of waiting for the protagonist. Hand-holding, pinning, charged closeness, touches, kisses and holding never cause an out-of-character pause, a disclaimer or a consent check in the writing: the player has their own way to stop a scene. When a choice is about intimacy, one option lets the protagonist decline, and the story honours the pick.";
-const LANGUAGE = "Language is not sanitized: characters swear and speak crudely when it is in their voice.";
+const LANGUAGE =
+  "Language is not sanitized: crude and vulgar words are fine in dialogue and narration alike (fuck, shit, cock, pussy and the like) whenever they fit the character's voice and the moment.";
 /** Only while dubious consent or non-consent is not a Line (SH/content.ts limitIsFixed: Dark, NSFW Heat, the gate). */
 const CONSENT =
   "The player agreed to this scenario outside the story. Within the Lines and Veils, a character may hesitate, struggle, resist or fight back as their personality would; that is part of the story, never an out-of-character stop. The only real stops are the player's own: Ease off, and their Lines. The protagonist's refusal is the protagonist's own: written as a refusal, never as secret wanting, and it has consequences between them.";

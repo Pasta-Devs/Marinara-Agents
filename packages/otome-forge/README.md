@@ -245,7 +245,7 @@ Each story has its own content settings:
 
 **NSFW mode:** NSFW Heat or Dark romance turns it on for the story, its chapters and Messages.
 
-- Romance escalates without stopping to ask, love interests may make the first move, and language is not sanitized.
+- Romance escalates without stopping to ask, love interests may make the first move, and language is not sanitized: swearing, dirty talk and crude words are fine wherever they fit a character's voice.
 - NSFW: Fade writes the build-up and cuts at the threshold; NSFW: Explicit writes sex on the page in full.
 - Dark romance lets villains play dirty and aim menace at you, with graphic violence wherever your limits allow it. Its darkness has a reason, a hidden cost and lines they won't cross. Your choices always include refusing, and the story honours what you pick.
 - What you set to Allow is told to the model, and your Lines and Veils always win. Non-consent can move off Line only under Dark romance with NSFW Heat.
