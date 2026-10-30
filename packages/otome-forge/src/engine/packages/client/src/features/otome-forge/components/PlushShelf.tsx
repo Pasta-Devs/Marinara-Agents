@@ -1,24 +1,33 @@
 // ──────────────────────────────────────────────
 // Otome Forge: the plushies (drawn in SVG, never painted) and the shelf they line up on
 // ──────────────────────────────────────────────
-// Six series plushes and each love interest's own: the look he wears at home (M4's Wardrobe, else his portrait; cut out
-// of its background once Home has made the cut-out, M3; GET /play names the picture), or his initials in his colour, in
-// a round plush frame with ears and stitches. The shelf shows what the protagonist has won (with a count), a silhouette
+// Six series plushes and each love interest's own. Theirs is the animal that fits them, drawn as SVG by the model in the
+// background (#1954, S/minigames/plush.ts; GET /play's `animal`, a data URL shown as an <image>, which runs nothing).
+// Until it is drawn: the look they wear at home (M4's Wardrobe, else their portrait; cut out of its background once
+// Home has made the cut-out, M3; GET /play names the picture), or their initials in their colour, in a round plush
+// frame with ears and stitches. The shelf shows what the protagonist has won (with a count), a silhouette
 // for what is still in the machine, and a "New" ribbon on what a round just added.
 // ponytail: the shelf stands on Dates and after a round only; the upgrade path is a shelf page in M4's Album.
 import { useId, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { accentOf, initialsOf } from "../lib/accent";
 import type { RunLiView } from "../shared/api-types";
-import { PLUSH_SERIES, liPlushId, plushLi, type PlayView, type PlushSeries } from "../shared/claw";
+import { PLUSH_INK, PLUSH_SERIES, liPlushId, plushLi, type PlayView, type PlushSeries } from "../shared/claw";
 
-/** A love interest as their plush wears them: `plush` is GET /play's picture for it (their look, or its cut-out). */
-export type PlushOwner = Pick<RunLiView, "name" | "accent" | "portrait"> & { plush?: string };
+/** What GET /play gives a love interest's plush: `animal`, their own drawn plush; `plush`, the look it wears until then. */
+export type PlushPictures = { plush?: string; animal?: string };
 
-/** `li` with the picture GET /play gives their plush, when it gives one. */
-export function withPlush<T extends RunLiView>(li: T, play: Pick<PlayView, "lis"> | undefined): T & { plush?: string } {
-  const plush = play?.lis[li.id]?.plush;
-  return plush ? { ...li, plush } : li;
+/** A love interest as their plush shows them. */
+export type PlushOwner = Pick<RunLiView, "name" | "accent" | "portrait"> & PlushPictures;
+
+/** `li` with the pictures GET /play gives their plush, when it gives any. */
+export function withPlush<T extends RunLiView>(li: T, play: Pick<PlayView, "lis"> | undefined): T & PlushPictures {
+  const entry = play?.lis[li.id];
+  return {
+    ...li,
+    ...(entry?.plush ? { plush: entry.plush } : {}),
+    ...(entry?.animal ? { animal: entry.animal } : {}),
+  };
 }
 
 /** Each series plush's name (literal keys, so the locale validator sees them). */
@@ -31,7 +40,7 @@ export const PLUSH_NAME_KEYS: Record<PlushSeries, string> = {
   whale: "ui.otomeForge.claw.plushWhale",
 };
 
-const INK = "#3b2a40";
+const INK = PLUSH_INK;
 const BLUSH = "#ff8fab";
 
 /** The shared face: two dot eyes, a small smile, and blush. `y` is the eye line. */
@@ -169,6 +178,9 @@ export function PlushArt({ prize, li, className, style }: PlushArtProps) {
     >
       {series ? (
         <SeriesShape kind={series} />
+      ) : li?.animal ? (
+        // Their own drawn plush: an <image> from a data URL, so the browser runs nothing in it.
+        <image href={li.animal} x={0} y={0} width={64} height={64} />
       ) : (
         <g>
           <circle cx={17} cy={16} r={7.5} fill={accent} />
@@ -238,7 +250,7 @@ export function usePlushName() {
 interface PlushShelfProps {
   /** Prize id → how many the protagonist owns. */
   plush: Record<string, number>;
-  lis: Array<RunLiView & { plush?: string }>;
+  lis: Array<RunLiView & PlushPictures>;
   /** Prizes a round just added: they wear a "New" ribbon. */
   fresh?: readonly string[];
   /** The id of the shelf's visible heading, which names the list. */

@@ -72,6 +72,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.6.0",
+          "date": "2026-10-30",
+          "notes": "- Each love interest has their own Claw Machine plush: the animal that fits them best, in their colours (a cyan raven with red eyes, a black cat with violet eyes). Your Planning model draws it once, in the background, the first time you open Dates. Until then their plush wears their look, as before.",
+          "highlight": true
+        },
+        {
           "version": "0.5.3",
           "date": "2026-10-30",
           "notes": "- Your protagonist knows only what the story has shown them: love interests no longer talk as if you already know their past, their habits or the words of their world, and a newcomer learns this world as they go.\n- A story set in an existing world, such as Teyvat from Genshin Impact, stays that world and keeps its canon.\n- Chapters make room for other people, scenes without a love interest, and rest or sleep after a long day.",
@@ -183,12 +189,6 @@
           "version": "0.1.10",
           "date": "2026-10-29",
           "notes": "- Repaint a love interest’s five expressions for their current look from Your cast, with a five-image cost and all prompts reviewed before painting when prompt review is enabled. Existing artwork stays available during replacement or after a failure.\n- Expression generation preserves the configured image style for both prose and tag-based profiles. Reviewed prompts stay bound to the look they were written for, with their full text and required safety wording retained.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.9",
-          "date": "2026-10-29",
-          "notes": "- Chapter, scene, route and date writers now receive the selected persona’s full Description, Personality, Backstory and authored Appearance, including on existing runs. The same saved identity fields also ground item stories and outfit reactions, phone replies, Home notes and touch lines, Caring messages, and Read Him. Their authored facts stay distinct from image-only appearance overrides; roleplay scenarios, greetings and dialogue examples are excluded.",
           "highlight": false
         }
       ]

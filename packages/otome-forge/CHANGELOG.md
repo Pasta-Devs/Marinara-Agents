@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.6.0 — 2026-10-30
+
+- Each love interest has their own Claw Machine plush: the animal that fits them best, in their colours (a cyan raven with red eyes, a black cat with violet eyes). Your Planning model draws it once, in the background, the first time you open Dates. Until then their plush wears their look, as before.
+
 ## 0.5.3 — 2026-10-30
 
 - Your protagonist knows only what the story has shown them: love interests no longer talk as if you already know their past, their habits or the words of their world, and a newcomer learns this world as they go.

@@ -46,6 +46,7 @@ import {
   OUTSIDE_AFFECTION_DAILY_CAP,
   STARLIGHT_EARNINGS,
 } from "../../../../../client/src/features/otome-forge/shared/economy.js";
+import { plushSvgUrl } from "../art/plush-svg.js";
 import { linesView } from "../home/lines.js";
 import { OtomeForgeError } from "../http.js";
 import { wornLookUrl } from "../schemas/common.js";
@@ -191,7 +192,9 @@ export function plushArtOf(unit: Pick<Unit, "portrait" | "cutouts" | "outfits" |
  */
 export function playView(
   state: RunState,
-  units: ReadonlyArray<Pick<Unit, "id" | "bible" | "portrait" | "cutouts" | "outfits" | "wornOutfit" | "lines">>,
+  units: ReadonlyArray<
+    Pick<Unit, "id" | "bible" | "portrait" | "cutouts" | "outfits" | "wornOutfit" | "lines" | "plushArt">
+  >,
   dayKey: string,
   dates: Record<LiId, boolean> = {},
 ): PlayView {
@@ -202,6 +205,7 @@ export function playView(
     const play = unit?.bible?.play;
     const rupture = state.lis[id]!.rupture !== null;
     const plush = unit ? plushArtOf(unit) : undefined;
+    const animal = plushSvgUrl(unit?.plushArt?.svg);
     const { claw, cold } = unit ? linesView(unit, state.lis[id]!) : { claw: null, cold: [] };
     lis[id] = {
       cheat: cheatOf(unit),
@@ -209,6 +213,7 @@ export function playView(
       rupture,
       makeItRight: dates[id] ?? rupture,
       ...(plush ? { plush } : {}),
+      ...(animal ? { animal } : {}),
       lines: { claw, cold },
     };
   }
