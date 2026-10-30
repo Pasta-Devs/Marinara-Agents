@@ -13,6 +13,7 @@ import type {
   Bible,
   FixedLines,
   LinePacks,
+  PlushArt,
   StageLines,
   Unit,
 } from "../../../../../client/src/features/otome-forge/shared/api-types.js";
@@ -40,6 +41,10 @@ import {
   textList,
   validItems,
 } from "./common.js";
+import { sanitizePlushSvg } from "../art/plush-svg.js";
+
+/** The longest animal name kept for a plush. */
+export const PLUSH_ANIMAL_MAX = 40;
 
 export const LI_NOTES_MAX = 500;
 export const ACCENT_PATTERN = /^#[0-9a-f]{6}$/i;
@@ -206,6 +211,15 @@ export const FixedLinesSchema: ZodType<FixedLines> = z.object({
 
 const STAGE_KEYS: readonly ArcStageKey[] = ["1", "2", "3", "4", "5", "6"];
 
+/** A stored plush, its SVG checked again on every read (S/art/plush-svg.ts); a damaged one is dropped and drawn again. */
+export function normalizePlushArt(value: unknown): PlushArt | undefined {
+  if (!isRecord(value) || typeof value.svg !== "string" || typeof value.animal !== "string") return undefined;
+  const clean = sanitizePlushSvg(value.svg);
+  const animal = value.animal.trim().slice(0, PLUSH_ANIMAL_MAX);
+  if (!("svg" in clean) || !animal) return undefined;
+  return { animal, svg: clean.svg, at: typeof value.at === "string" ? value.at : "" };
+}
+
 /** Stored line packs, each stage on its own: one damaged pack is dropped (and written again), the others kept. */
 export function normalizeLinePacks(value: unknown): LinePacks | undefined {
   if (!isRecord(value)) return undefined;
@@ -263,12 +277,14 @@ export function normalizeUnit(data: unknown): Unit {
       createdAt: z.string(),
       lines: normalizeLinePacks,
       cutouts: normalizeCutouts,
+      plushArt: normalizePlushArt,
     },
     defaultUnit,
     isRecord(data) ? data : undefined,
   );
-  // An LI with no pack yet has no `lines` key at all, as before M3.
+  // An LI with no pack yet has no `lines` key at all, as before M3; one with no plush drawn, no `plushArt`.
   if (!unit.lines) delete unit.lines;
+  if (!unit.plushArt) delete unit.plushArt;
   // A worn look that is not one of theirs (a damaged document) wears the base portrait.
   const { wornOutfit: _worn, ...rest } = unit;
   const worn = readWornOutfit(unit.outfits, field(data, "wornOutfit"));
