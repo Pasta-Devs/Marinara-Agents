@@ -364,6 +364,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.5.15",
+          "date": "2026-10-30",
+          "notes": "- Settings → Extraction adds Hide imported messages from the AI, off by default. Once a Chat Messages piece is imported and extracted, its messages stop being sent to the AI, like the chat summary's Hide summarised messages, so a long chat no longer sends the same history twice. The chat's last messages stay visible, as many as its summary keeps. Turning it off, or permanently deleting a piece's source note, shows exactly the messages it hid; messages you show or hide by hand stay as you set them. A branch made while it is on keeps its copies hidden; show those by hand. It needs a Marinara version that lets packages hide chat messages, and the package now asks for the chat-write permission.",
+          "highlight": false
+        },
+        {
           "version": "1.5.14",
           "date": "2026-10-30",
           "notes": "- Settings → Extraction adds Chat import detail. Detailed imports a chat's messages in pieces half the size (12,000 characters instead of 24,000), giving finer memories for about twice the extraction cost. It applies to chats imported from now on; a chat already imported keeps its size.",
@@ -475,12 +481,6 @@
           "version": "1.4.92",
           "date": "2026-10-25",
           "notes": "- Sources tells re-importing from the source apart from reloading the list: \"Re-import from source\" and \"Reload list\".\n- The lorebook tab in Sources reads \"Entries\", and a single entry no longer says \"1 entries\".\n- When Import is blocked for lack of a destination, Sources offers a \"Choose destination\" button.\n- While an import runs, Sources keeps its locked controls focusable and says why they are locked.\n- Tabs, filters and action buttons in Sources, Memory Settings and Debug are 2.75rem tall for touch.\n- Maintenance groups Backup, Repair and Delete or reset, and offers a backup export before Delete all data.\n- Recall settings are grouped under Budget, Ranking, Text filters and Sharing, and show when edits make the style Custom.\n- Maintenance success messages are readable in the light theme and carry a check icon, unsaved Memory Settings tabs show a dot, and an identity repair says which backup it made.",
-          "highlight": false
-        },
-        {
-          "version": "1.4.91",
-          "date": "2026-10-24",
-          "notes": "- Review rows now say what each button does: \"Check\" then \"Apply\" (with a Ready or Blocked chip on narrow panels), and engine terms like preflight and source_deleted read as plain sentences.\n- Reviewing who a memory is about now says \"Skip this memory\" and lists each person by name and a distinguishing detail instead of a raw key.\n- Freshness labels, draft counts and the Change and Source lines in the Review Queue are now easier to read in both themes.\n- The Review Queue drops a redundant frame and duplicate progress line, and shows the run summary inside the workbench on narrow panels.",
           "highlight": false
         }
       ]

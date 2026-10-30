@@ -569,7 +569,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.5.14",
+    version: "1.5.15",
     minEngineVersion: "2.5.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -578,7 +578,7 @@ const features = [
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
-    permissions: ["agent-runtime", "chat-read", "routes", "storage", "ui"],
+    permissions: ["agent-runtime", "chat-read", "chat-write", "routes", "storage", "ui"],
     serverImport: "packages/server/src/services/long-term-memory/server-entry.ts",
     serverEntry: true,
     clientImport: "packages/client/src/features/long-term-memory/client-entry.tsx",

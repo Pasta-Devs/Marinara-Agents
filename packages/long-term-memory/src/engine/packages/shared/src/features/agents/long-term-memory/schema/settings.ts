@@ -34,6 +34,7 @@ const ltmGlobalSettingsShape = z
     longTermMemoryRecallPreamble: z.string().max(500).optional(),
     longTermMemoryDebug: z.boolean().optional(),
     longTermMemoryShareWithPackages: z.boolean().optional(),
+    longTermMemoryHideImportedMessages: z.boolean().optional(),
     sourcesAvailabilityModes: z.array(ltmModeSchema).min(1).max(3).optional(),
   })
   .strict();
@@ -91,6 +92,8 @@ export const ltmResolvedGlobalSettingsSchema = z
     longTermMemoryDebug: z.boolean(),
     /** Other packages (Slurp, Noodle) may read memories available everywhere through the package services. */
     longTermMemoryShareWithPackages: z.boolean(),
+    /** Imported Chat Messages pieces are hidden from the AI, except the chat's recent tail. */
+    longTermMemoryHideImportedMessages: z.boolean(),
     sourcesAvailabilityModes: z.array(ltmModeSchema).min(1).max(3).optional(),
   })
   .strict();
@@ -113,6 +116,7 @@ export const DEFAULT_LTM_GLOBAL_SETTINGS = ltmResolvedGlobalSettingsSchema.parse
   longTermMemoryRecallPreamble: DEFAULT_LTM_RECALL_PREAMBLE,
   longTermMemoryDebug: false,
   longTermMemoryShareWithPackages: true,
+  longTermMemoryHideImportedMessages: false,
 });
 
 const ltmExtractionPromptTemplateIdSchema = z.string().trim().min(1).max(64);
