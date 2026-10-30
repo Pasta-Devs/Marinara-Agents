@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.3.1 — 2026-10-30
+
+- The story's **Image description** shows only for a picture that isn't painted: a painted background or key image no longer has its description under the chapter title.
+
 ## 0.3.0 — 2026-10-30
 
 - NSFW stories give each new love interest's bible their tastes in sex and intimacy: what they're into, kinks included, and what draws them. Intimate scenes bring them in when they fit; your content settings still decide what a scene may hold.

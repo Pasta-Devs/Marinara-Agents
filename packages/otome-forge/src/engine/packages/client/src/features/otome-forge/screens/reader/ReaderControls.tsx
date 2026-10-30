@@ -92,6 +92,7 @@ interface ReaderControlsProps {
   replay: boolean;
   /** Where the current line takes place. */
   place?: string;
+  /** Text for a picture that isn't painted (the place's, or a key image's); absent once it is. */
   imageDescription?: string;
   /** The place's picture waits for a tap (consent, or a retry after a failure). */
   placePaint?: { retry: boolean; busy: boolean; onPaint: () => void };

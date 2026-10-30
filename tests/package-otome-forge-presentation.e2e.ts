@@ -1444,6 +1444,9 @@ test("Otome Hearth imageless play: old locations and key moments can be painted 
   await root.getByRole("button", { name: "Continue", exact: true }).first().click();
   await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
   expect(posts(calls, "/art/place")).toEqual([]);
+  // The description stands in for an unpainted picture, and goes once it is painted (#1941).
+  const description = root.locator(".of-reader-head .of-image-description");
+  await expect(description).toContainText("glass dome, night");
   const paintPlace = root.getByRole("button", { name: "Paint The Observation Room (1 image)", exact: true });
   await expect(paintPlace).toHaveText("Paint · 1 image");
   await paintPlace.click();
@@ -1455,10 +1458,13 @@ test("Otome Hearth imageless play: old locations and key moments can be painted 
   await expect(review).toHaveCount(0);
   await expect(paintPlace).toHaveCount(0);
   expect(posts(calls, "/art/place")).toHaveLength(1);
+  await expect(description).toHaveCount(0);
   await next(root);
   await next(root);
   await next(root);
   await expect(root.getByRole("button", { name: "Paint this moment", exact: true })).toBeVisible();
+  await expect(description).toContainText("Two figures under a glass dome");
+  await expect(description).not.toContainText("glass dome, night");
   expect(posts(calls, "/art/cg")).toEqual([]);
   await root.getByRole("button", { name: "Paint this moment", exact: true }).click();
   review = page.getByRole("dialog");
@@ -1467,6 +1473,7 @@ test("Otome Hearth imageless play: old locations and key moments can be painted 
   await review.getByRole("button", { name: "Paint", exact: true }).click();
   await expect(review).toHaveCount(0);
   await expect(root.getByRole("img", { name: "An illustration: Ilvar Thorne" })).toBeVisible();
+  await expect(description).toHaveCount(0);
   expect(posts(calls, "/art/cg")).toHaveLength(1);
   expect(posts(calls, "/art/paint")).toEqual([]);
   expect(posts(calls, "/api/audio/generate")).toEqual([]);

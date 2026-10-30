@@ -354,7 +354,11 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
           replay={!!reader.position?.replay && reading}
           place={reading ? place : undefined}
           imageDescription={
-            reading && !usesCharacterSprite ? [placeInfo?.tags, cg?.brief].filter(Boolean).join("\n") : undefined
+            // It stands in for a picture that isn't there: the place's tags without a painted background (a painted
+            // key image covers it too), a key image's brief until it is painted.
+            reading && !usesCharacterSprite
+              ? [!placeUrl && !cgUrl ? placeInfo?.tags : "", cg && !cgUrl ? cg.brief : ""].filter(Boolean).join("\n")
+              : undefined
           }
           placePaint={placePaint}
           tags={reader.tags}
