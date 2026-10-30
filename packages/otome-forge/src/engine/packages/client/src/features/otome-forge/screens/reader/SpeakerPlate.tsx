@@ -5,9 +5,9 @@ import { findSpeakerSprite, speakerNameKey } from "../../lib/speaker-sprites";
 import { useSpriteDisplay } from "../../hooks/use-sprite-display";
 import { FaceLayers } from "./FacePlate";
 
-/** The reader shares this selection so descriptions and the stage follow the same speaker. */
+/** One line owns its speaker's selection, displayed image and load failures. */
 export function useSpeakerSprite(name: string | null, lineKey: string) {
-  return useQuery({
+  const selected = useQuery({
     queryKey: ["otome-forge", "speaker-card", speakerNameKey(name ?? ""), lineKey],
     queryFn: ({ signal }) => findSpeakerSprite(name!, (path) => api.get<unknown>(path, { signal })),
     enabled: !!name,
@@ -15,13 +15,20 @@ export function useSpeakerSprite(name: string | null, lineKey: string) {
     gcTime: 0,
     retry: false,
   });
+  const source = selected.isSuccess && !selected.isFetching ? selected.data : null;
+  const url = useSpriteDisplay(source);
+  const [broken, setBroken] = useState<{ lineKey: string; url: string } | null>(null);
+  return {
+    url: broken?.lineKey === lineKey && broken.url === url ? null : url,
+    onError: () => {
+      if (url) setBroken({ lineKey, url });
+    },
+  };
 }
 
 /** A fresh named line begins empty; no state or crossfade layer belongs to the previous speaker. */
-export function SpeakerPlate({ name, source }: { name: string; source: string | null }) {
-  const url = useSpriteDisplay(source);
-  const [broken, setBroken] = useState<string | null>(null);
-  if (!url || broken === url) return null;
+export function SpeakerPlate({ name, url, onError }: { name: string; url: string | null; onError: () => void }) {
+  if (!url) return null;
   return (
     <figure
       className="of-face"
@@ -30,7 +37,7 @@ export function SpeakerPlate({ name, source }: { name: string; source: string | 
       data-art="portrait"
       role="img"
       aria-label={name}
-      onErrorCapture={() => setBroken(url)}
+      onErrorCapture={onError}
     >
       <FaceLayers url={url} cut={[url]} />
     </figure>

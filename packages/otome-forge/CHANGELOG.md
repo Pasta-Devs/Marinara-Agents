@@ -2,7 +2,7 @@
 
 ## 0.2.2 — 2026-10-30
 
-- In stories, show character image descriptions only when character sprites are not in use.
+- In stories, hide the header's Image description panel while a character sprite is shown; keep the description available without a sprite.
 - Four-star memories include artwork through the existing painting flow alongside their playable memory.
 
 ## 0.2.1 — 2026-10-30

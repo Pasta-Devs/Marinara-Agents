@@ -923,7 +923,7 @@ for (const colorScheme of ["dark", "light"] as const) {
       await next(root);
       await expect(line(root)).toContainText(segments[5]!.text);
       await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
-      await expect(description).toHaveCount(0);
+      await expect(description).toContainText("glass dome, night");
     } finally {
       release();
     }
@@ -944,6 +944,50 @@ for (const colorScheme of ["dark", "light"] as const) {
     await expect(description).toContainText("Two figures under the glass dome.");
     expect(assets.paid).toEqual([]);
     expect(assets.cleanup).toEqual([]);
+  });
+}
+
+for (const failure of ["missing sprite", "failed cleanup"] as const) {
+  test(`Otome Hearth story header restores its description when NPC display fails (${failure})`, async ({
+    page,
+  }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+    const fixture = namedSpeakerStub([
+      seg("Arin Vale", "The speaker's artwork cannot be displayed.", { place: "The Observation Room" }),
+    ]);
+    await stubRoutes(page, {
+      ...fixture,
+      answer(call: Call) {
+        const reply = fixture.answer(call);
+        if (call.path === `/api/otome-forge/runs/${RUN}`)
+          (reply.json as Json).view.world.places = {
+            "the-observation-room": { name: "The Observation Room", tags: "glass dome, night" },
+          };
+        return reply;
+      },
+    });
+    const assets = await speakerRoutes(page, {
+      broken: failure === "missing sprite",
+      opaque: failure === "failed cleanup",
+    });
+    if (failure === "failed cleanup")
+      await page.route("**/api/sprites/cleanup", (route) =>
+        route.fulfill({ status: 502, json: { error: "Free cleanup is unavailable." } }),
+      );
+    const failed = page.waitForResponse((response) =>
+      failure === "missing sprite"
+        ? response.url().includes("/sprites/card-arin/file/") && response.status() === 404
+        : response.url().endsWith("/sprites/cleanup") && response.status() === 502,
+    );
+    const root = await openStory(page);
+    await root.getByRole("button", { name: "Replay: The Observation Room" }).click();
+    await root.getByRole("button", { name: "Begin" }).click();
+    await (await failed).finished();
+    await expect(line(root)).toContainText("The speaker's artwork cannot be displayed.");
+    await expect(root.locator(".of-reader-stage .of-face")).toHaveCount(0);
+    await expect(root.locator(".of-reader-head .of-image-description")).toContainText("glass dome, night");
+    expect(assets.paid).toEqual([]);
+    await page.screenshot({ path: testInfo.outputPath(`story-header-${failure.replace(" ", "-")}.png`) });
   });
 }
 

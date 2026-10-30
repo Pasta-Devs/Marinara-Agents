@@ -238,16 +238,13 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
       }
     : null;
   const otherSpeaker = voice?.kind === "other" && !voice.thought ? voice.name : null;
-  const selectedSpeaker = useSpeakerSprite(cg ? null : otherSpeaker, reader.lineKey);
-  const speakerSource = selectedSpeaker.isSuccess && !selectedSpeaker.isFetching ? selectedSpeaker.data : null;
+  const speaker = useSpeakerSprite(cg ? null : otherSpeaker, reader.lineKey);
   const stageArt = forgeStoryExpressionArt(
     { art: onStageLi?.worn?.url ?? onStageLi?.portrait ?? "", expressions: onStageLi?.expressions ?? {} },
     { expression: reader.onStage.face },
     FACES,
   ).art;
-  // A selected sprite stays the presentation while it loads or is cleaned; only an absent sprite uses prose.
-  const usesCharacterSprite =
-    !cg && (otherSpeaker ? selectedSpeaker.isPending || selectedSpeaker.isFetching || !!speakerSource : !!stageArt);
+  const usesCharacterSprite = !cg && (otherSpeaker ? !!speaker.url : !!stageArt);
 
   // Each new line is voiced when the settings voice its speaker; leaving the line stops it. Narration, thoughts and
   // the aftermath line never are.
@@ -389,7 +386,7 @@ function ReaderScene({ runKey, chapterKey, view, startNode, onExit, exitLabel, o
             onPaint={canPaint ? () => void reader.paintCg() : undefined}
           />
         ) : otherSpeaker ? (
-          <SpeakerPlate key={reader.lineKey} name={otherSpeaker} source={speakerSource} />
+          <SpeakerPlate key={reader.lineKey} name={otherSpeaker} url={speaker.url} onError={speaker.onError} />
         ) : (
           <FacePlate li={onStageLi} face={reader.onStage.face} speaking={reader.onStage.speaking} />
         )}
