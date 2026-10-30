@@ -711,6 +711,9 @@ ${R} .of-cast-card {
   border: 1px solid var(--of-border); border-top: 3px solid var(--of-li-accent, var(--of-rose));
 }
 ${R} .of-cast-appearance { width: 100%; min-width: 0; display: flex; flex-direction: column; gap: 8px; margin-top: 8px; text-align: start; }
+/* An older bible's "Add intimacy preferences" (#1936): its action, cost and any error, stacked on the card. */
+${R} .of-intimacy-fill { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+${R} .of-intimacy-fill .of-hint { margin: 0; font-size: 0.72rem; }
 ${R} .of-cast-name { margin-top: 4px; font-family: var(--of-font-display); font-weight: 600; font-size: 1.15rem; line-height: 1.1; }
 /* The story list. */
 ${R} .of-runs { display: flex; flex-direction: column; gap: 10px; width: 100%; margin: 0; padding: 0; list-style: none; }

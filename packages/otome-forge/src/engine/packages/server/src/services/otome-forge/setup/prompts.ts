@@ -32,6 +32,7 @@ import { MIN_AGE } from "../../../../../client/src/features/otome-forge/shared/b
 import { text } from "../schemas/common.js";
 import { BANNED_PHRASES_RULE, otomeWritingRules } from "../writing-rules.js";
 import { aboutLine } from "../schemas/player.js";
+import { intimacyOpen } from "../../../../../client/src/features/otome-forge/shared/content.js";
 
 const PREMISE_MAX = 2000;
 
@@ -175,7 +176,7 @@ export async function castOf(
 const pronounText = (pronouns: Pronouns) => `${pronouns.subject}/${pronouns.object}/${pronouns.possessive}`;
 
 /** How the prompts introduce one love interest: id, name and pronouns, then the card or the archetype seed. */
-function castEntry({ unit, canon }: CastMember): string {
+export function castEntry({ unit, canon }: CastMember): string {
   const head = `id ${unit.id}: ${unit.name} (${pronounText(unit.pronouns)})`;
   if (unit.cardId) {
     return canon
@@ -192,7 +193,7 @@ function castEntry({ unit, canon }: CastMember): string {
     .join("\n");
 }
 
-function protagonistEntry(player: Player): string {
+export function protagonistEntry(player: Player): string {
   return [
     `${player.name || "The protagonist"} (${pronounText(player.pronouns)})`,
     player.traits.length ? `Traits: ${player.traits.join("; ")}` : "",
@@ -375,6 +376,13 @@ export function worldPlanMessages({
 
 // ── P3: one bible per love interest (structured, 0.8, planner contract) ──
 
+/** The intimacy block as the bible prompt's JSON shape shows it (only for a story that may have it, #1936). */
+export const INTIMACY_SHAPE = '"intimacy": {"preferences": [""], "attractions": [""]}';
+
+/** The bible prompt's line for the block. */
+export const INTIMACY_FIELD =
+  "- intimacy: this love interest's own tastes in sex and intimacy. preferences: 2 to 5 short labels for what they are into (kinks and tastes, named plainly). attractions: 2 to 4 physical traits or moments that draw them. Tastes, not a checklist: they can want other things too. Fit them to who this character is.";
+
 const BIBLE_SHAPE = `{
   "age": 0, "pronouns": {"subject": "", "object": "", "possessive": ""}, "birthday": "MM-DD",
   "role": "", "publicFace": "", "archetype": "", "subversion": "",
@@ -390,6 +398,10 @@ const BIBLE_SHAPE = `{
   "look": {"identityLine": "", "outfitLine": "", "presentation": "man|woman|person"},
   "play": {"style": "", "cheat": "steady|nudge|extra|freeze|calculate"}
 }`;
+
+/** The shape a bible is asked for: with the intimacy block only in a story that may have it (#1936). */
+const bibleShape = (intimacy: boolean) =>
+  intimacy ? BIBLE_SHAPE.replace(/\n\}$/u, `,\n  ${INTIMACY_SHAPE}\n}`) : BIBLE_SHAPE;
 
 const GENTLE_DARKNESS =
   "Darkness is Gentle: darkness.kinds are interpersonal only (pride, coldness, jealousy, old hurts, secrecy); no violence or menace.";
@@ -407,10 +419,11 @@ export function bibleMessages({
 }): OtomeMessage[] {
   const { unit } = member;
   const fromCard = !!unit.cardId;
+  const intimacy = intimacyOpen(world.content);
   const system = [
     "You write the hidden character bible of one love interest in an otome game. It stays behind a spoiler gate; every scene with this character is written from it.",
     "Reply with ONLY a JSON object of this shape:",
-    BIBLE_SHAPE,
+    bibleShape(intimacy),
     "FIELDS",
     "- publicFace: how the world sees them. archetype: their type in a few words. subversion: how they break it.",
     "- wound: the old hurt. ghost: the event behind it. lie: the false belief they live by. want: what they chase. need: what would heal them. fear: what they dread.",
@@ -422,6 +435,7 @@ export function bibleMessages({
     '- arc: one entry for each stage "1" to "6" (Mask, Crack, Pull, Wound, Reckoning, Bond): wantsFromHer is what they want from the protagonist at that stage, whatever the protagonist\'s gender; seed is a story seed for that stage.',
     "- look: English only, visual-only comma-separated tags. identityLine: face, hair, eyes, build, skin, marks, with adult features. outfitLine: their everyday clothing in this world. presentation: how to draw them, man, woman or person.",
     "- play: how they would play a claw machine. style: one sentence. cheat: steady, nudge, extra, freeze or calculate.",
+    ...(intimacy ? [INTIMACY_FIELD] : []),
     "RULES",
     fromCard
       ? "- Derive everything from the CANONICAL CHARACTER CARD and never contradict it: the card wins over the premise and the plan."

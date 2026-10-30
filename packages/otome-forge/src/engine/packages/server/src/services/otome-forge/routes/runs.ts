@@ -11,6 +11,8 @@
 //      connection, each paint step the world lacks is added, waiting for the tap
 // GET  /runs/:run/lis/:li/bible?spoilers=1 → {bible}
 // POST /runs/:run/lis/:li/bible {bible}    → {bible}
+// POST /runs/:run/lis/:li/intimacy          → {intimacy: true}; writes his missing intimacy block only (1 call;
+//                                             adult NSFW stories, #1936), keeping the rest of the bible
 // POST /runs/:run/lis/:li/appearance {identityLine} → {identityLine}; image-only, never paints
 // POST /runs/:run/lis/:li/accent {accent}  → {accent}
 // POST /runs/:run/lis/:li/card {cardId}    → {cardId}; null unlinks, keeping the same love interest
@@ -27,6 +29,7 @@ import {
   contentNeedsAgeGate,
   enforceContent,
   imageRatingNeedsAgeGate,
+  intimacyOpen,
   raisesGatedSetting,
 } from "../../../../../client/src/features/otome-forge/shared/content.js";
 import { galleryRefIds } from "../art/image-client.js";
@@ -75,6 +78,8 @@ import { initialForge, settleForge, startForge, withPaintSteps } from "../setup/
 import { personaStoryAbout, readCard, readPersona, withPersonaStoryAbout } from "../setup/prompts.js";
 import type { OtomeStore } from "../store.js";
 import { cutoutsPending, queueCutouts } from "../art/cutout.js";
+import { fillIntimacy } from "../intimacy.js";
+import { cancellable } from "../story/beats.js";
 
 const NoFields = z.object({});
 const LIS_MIN = 2;
@@ -487,6 +492,19 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
   );
 
   router.post(
+    "/runs/:run/lis/:li/intimacy",
+    handle(async (request) => {
+      parseBody(z.object({}), request.body);
+      const { runId } = runParam(request);
+      const li = liParam(request);
+      const debugMode = debugModeOf(request);
+      await cancellable(deps, runId, (signal) => fillIntimacy(deps, runId, li, { debugMode, signal }));
+      // The run view says only that the block exists; its text stays in the spoiler-gated bible.
+      return { intimacy: true };
+    }),
+  );
+
+  router.post(
     "/runs/:run/lis/:li/bible",
     handle(async (request) => {
       const body = parseBody(BibleBody, request.body);
@@ -495,9 +513,15 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
       const others = (await store.listRun("unit", runId))
         .map((record) => normalizeUnit(record.data))
         .filter((unit) => unit.id !== li);
-      // The player is the authority on an edit: no `pronouns` here, so the ones they set are kept.
-      const bible = checkBible(body.bible, { others });
+      // The player is the authority on an edit: no `pronouns` here, so the ones they set are kept. An SFW story takes no
+      // intimacy block from an edit (#1936); one written before Heat was lowered is kept below.
+      const world = await store.readDoc(worldId(runId), normalizeWorld);
+      const open = !!world && intimacyOpen(world.content);
+      const bible = checkBible(body.bible, { others, intimacy: open });
       if (typeof bible === "string") throw new OtomeForgeError(400, `Invalid bible: ${bible}`, "bad-request");
+      // In an NSFW story, an edit that sends the block with nothing left in it clears it (checkBible drops an empty
+      // one, which alone would read as an edit that never carried it).
+      const cleared = open && body.bible.intimacy !== undefined && !bible.intimacy;
       let tellsBefore: readonly string[] = [];
       const unit = await store.updateDoc(runDocTarget("unit", unitId(runId, li)), normalizeUnit, (current) => {
         if (!current.bible) throw new OtomeForgeError(409, "This bible is still being written.", "conflict");
@@ -512,7 +536,11 @@ export const registerRunRoutes: RegisterRoutes = (router, deps) => {
               ? current.identityLine
               : bible.look.identityLine,
           outfitLine: bible.look.outfitLine,
-          bible,
+          // An edit that does not carry his intimacy block (#1936), or any edit in an SFW story, keeps the one he has.
+          bible:
+            bible.intimacy || cleared || !current.bible.intimacy
+              ? bible
+              : { ...bible, intimacy: current.bible.intimacy },
           bibleEdited: true,
         };
       });

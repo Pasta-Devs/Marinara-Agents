@@ -1,5 +1,15 @@
 # Otome Hearth release notes
 
+## 0.3.0 — 2026-10-30
+
+- NSFW stories give each new love interest's bible their tastes in sex and intimacy: what they're into, kinks included, and what draws them. Intimate scenes bring them in when they fit; your content settings still decide what a scene may hold.
+- An older cast gets **Add intimacy preferences** on Your cast (1 call). Read and edit them in the bible.
+- An optional Sub, Dom or Switch preference for your protagonist sits beside Heat.
+- SFW stories never write or send any of it.
+- Story memory keeps an NSFW story as it was written: summaries no longer turn it SFW, and a Veil is remembered as having happened off the page.
+- The planners no longer call every love interest a monster: each is a human, even if inside a monster.
+- A date inside a chapter can go as hoped: it stumbles only when the story gives it a reason, like Date Night.
+
 ## 0.2.2 — 2026-10-30
 
 - In stories, hide the header's Image description panel while a character sprite is shown; keep the description available without a sprite.

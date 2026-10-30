@@ -526,6 +526,7 @@ export function toRunView(runKey: string, world: World, player: Player, units: U
           },
           ...(portrait ? { portrait } : {}),
           ...(unit.art ? { art: unit.art } : {}),
+          ...(unit.bible?.intimacy ? { intimacy: true as const } : {}),
           level: levelOf(progress.points),
           affectionProgress: affectionProgressOf(progress.points),
           stage: progress.stage,

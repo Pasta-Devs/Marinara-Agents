@@ -27,6 +27,7 @@ import {
   IMAGE_STYLE_MAX,
   LIMIT_IDS,
   LIMIT_LEVELS,
+  MC_ROLES,
   defaultContent,
   normalizeContent,
   normalizeImageRating,
@@ -53,6 +54,7 @@ export const ContentSchema: ZodType<ContentSettings> = z.object({
   custom: z
     .array(z.object({ text: z.string().max(CUSTOM_LIMIT_TEXT_MAX), level: z.enum(["veil", "line"]) }))
     .max(CUSTOM_LIMITS_MAX),
+  mcRole: z.enum(MC_ROLES).optional(),
 });
 
 /** The world's connections: narration is required; an empty job falls back to narration (normalizeConnections). */

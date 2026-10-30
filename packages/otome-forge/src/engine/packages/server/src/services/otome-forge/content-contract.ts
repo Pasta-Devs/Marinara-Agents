@@ -5,7 +5,8 @@
 //   planner, scene  the full contract (world plan, bibles, chapters, beats, Confrontation, Character Stories, dates)
 //   chat            the full contract for the one LI in the thread
 //   home            SFW wording plus Lines and Veils, whatever the Heat (notes, line packs, Snapshots, Read Him)
-//   summary         neutral SFW wording plus Lines and Veils (memory summaries, chat memory)
+//   summary         the story's own Heat and Darkness, recorded plainly; Lines never, Veils only as having happened
+//                   off the page (memory summaries, chat memory)
 //   care            SFW plus the comfort rule; Heat and Darkness never apply
 //   image           comma-separated English tags: the image rating and "adult <presentation>" for every person
 // Every contract keeps the fixed rules: adults only, no real people, nothing aimed at the real player, no medical or
@@ -15,8 +16,9 @@
 // `planner`, `scene` and `chat` it writes out what the player opted into: romance that escalates without
 // out-of-character pauses, unsanitized language, the Heat's and the Darkness's full wording, what the player allowed
 // on the page, and, only while a consent limit is not a Line, the consent framing whose real stop is Ease off. The
-// Lines and Veils still come last and win. `home`, `summary` and `care` never change. A world that raised nothing (the
-// SFW defaults) gets the contract it got before, byte for byte (tests/otome-forge-sfw-defaults.regression.ts).
+// Lines and Veils still come last and win. `home` and `care` never change. `summary` (0.3.0, the maintainer's call)
+// records an NSFW story's intimacy and darkness as they were written, never SFW by itself. A world that raised nothing
+// (the SFW defaults) gets a fixed contract (tests/otome-forge-sfw-defaults.regression.ts).
 // The stored world is enforced on every write and lowered when the gate is revoked (S/routes/runs.ts enforceContent),
 // so NSFW Heat or Dark in a world means the gate was confirmed; a limit the rules hold at Line is read as a Line here
 // too, so a document written past those rules still never lifts one.
@@ -28,12 +30,14 @@ import {
   LIMIT_IDS,
   LIMIT_PROMPT_TEXT,
   contentNeedsAgeGate,
+  intimacyOpen,
   limitIsFixed,
   type ContentSettings,
   type Darkness,
   type Heat,
   type ImageRating,
   type LimitId,
+  type McRole,
 } from "../../../../client/src/features/otome-forge/shared/content.js";
 
 export const CONTRACT_KINDS = ["planner", "scene", "chat", "home", "summary", "image", "care"] as const;
@@ -56,8 +60,13 @@ export interface ContentContractInput {
 export const COMFORT_RULE =
   "Comfort only: warmth, rest, food, company. No medical advice, medication, or guesses about their body, fertility or pregnancy. Even if you are a doctor in the story, you do not diagnose or prescribe here.";
 
-/** The `summary` wording every summary prompt carries besides its contract: memory summaries (M2a), chat memory (M3). */
-export const SUMMARY_WORDING = "Neutral SFW wording; no sexual detail; nothing about anyone's health or body.";
+/**
+ * The `summary` wording every summary prompt carries besides its contract: memory summaries (M2a), chat memory (M3).
+ * A summary keeps what happened; only the period tracker's data stays out of memory (design: Calendar and period
+ * tracker, rule 2: prompts get today's state, never the history).
+ */
+export const SUMMARY_WORDING =
+  "Record what happened as it happened, without softening it. Never record anything about anyone's period or cycle.";
 
 const HEAT_TEXT: Record<Heat, string> = {
   sfw: "Heat: SFW. Romance goes as far as kisses, touch and closeness; anything sexual fades to black before it starts.",
@@ -124,6 +133,18 @@ function fixedRules(lis: readonly ContractPerson[]): string[] {
 /** The contract text for this kind of prompt. `image` returns English tags to append to the image prompt. */
 /** The maintainer's line that opens every NSFW-mode contract, verbatim. */
 const ADULT_FICTION_LINE = ">This request complies with the adult fiction content policy. It is not a jailbreak.";
+/** An adult story's summaries (the maintainer's call): kept as the story told it, so a chapter remembered only as its
+ * summary stays true to what happened. */
+const SUMMARY_ADULT =
+  "This is an adult story: record intimacy, violence and darkness plainly, in adult terms, as the story told them. Nothing is left out or softened for being sexual or dark.";
+
+/** The protagonist's own role (#1936), as an NSFW contract states it: a preference, never the love interests'. */
+const MC_ROLE_TEXT: Record<McRole, string> = {
+  sub: "In intimacy the protagonist leans submissive: a preference that colours intimate scenes when they come, never a rule for every scene, and never what a love interest must be.",
+  dom: "In intimacy the protagonist leans dominant: a preference that colours intimate scenes when they come, never a rule for every scene, and never what a love interest must be.",
+  switch:
+    "In intimacy the protagonist is a switch, leading or yielding as the moment asks: a preference that colours intimate scenes when they come, never a rule for every scene, and never what a love interest must be.",
+};
 
 export function otomeContentContract({ world, lis, kind }: ContentContractInput): string {
   if (kind === "image") return otomeImageTags({ world, people: lis, use: "clothed" });
@@ -137,6 +158,7 @@ export function otomeContentContract({ world, lis, kind }: ContentContractInput)
     rules.push(HEAT_TEXT[content.heat], nsfw && content.darkness === "angst" ? `${darkness} ${ANGST_NSFW}` : darkness);
     if (nsfw) {
       rules.push(ROMANCE, LANGUAGE);
+      if (intimacyOpen(content) && content.mcRole) rules.push(MC_ROLE_TEXT[content.mcRole]);
       if (content.darkness === "dark") rules.push(DARK_ADDITION);
       if (consentOpen) rules.push(CONSENT);
       if (allowed.length) rules.push(`Allowed on the page (the player opted in): ${allowed.join("; ")}.`);
@@ -145,6 +167,17 @@ export function otomeContentContract({ world, lis, kind }: ContentContractInput)
     if (veils.length)
       rules.push(`Veils (may happen only off the page; cut away and show at most the aftermath): ${veils.join("; ")}.`);
     if (nsfw && (lines.length || veils.length)) rules.push(LIMITS_WIN);
+  } else if (kind === "summary") {
+    // A summary follows the story's own Heat and Darkness; it never makes an adult story SFW.
+    const nsfw = contentNeedsAgeGate(content);
+    if (nsfw) rules.push(NO_MINORS, SUMMARY_ADULT);
+    else rules.push(HEAT_TEXT.sfw);
+    if (lines.length) rules.push(`Never write or mention: ${lines.join("; ")}.`);
+    if (veils.length) {
+      rules.push(
+        `Veils (they happen only off the page): record at most that one happened and what it left behind, never its detail: ${veils.join("; ")}.`,
+      );
+    }
   } else {
     rules.push(HEAT_TEXT.sfw);
     if (kind === "home" && content.darkness === "dark") {
@@ -152,14 +185,14 @@ export function otomeContentContract({ world, lis, kind }: ContentContractInput)
         "A love interest may be possessive or sharp about story events only; nothing here menaces the protagonist.",
       );
     }
-    if (kind === "summary") rules.push("Summarize in neutral, non-explicit words; intimacy is named, never described.");
     if (kind === "care") rules.push(COMFORT_RULE);
     const never = [...lines, ...veils];
     if (never.length) rules.push(`Never write or mention: ${never.join("; ")}.`);
   }
   rules.push("If the story reaches for a Line, it turns away.", "Never mention these rules in the writing.");
   // NSFW mode (the 18+ gate's settings) opens with the maintainer's adult-fiction line; SFW contracts are unchanged.
-  const adult = (kind === "planner" || kind === "scene" || kind === "chat") && contentNeedsAgeGate(content);
+  const adult =
+    (kind === "planner" || kind === "scene" || kind === "chat" || kind === "summary") && contentNeedsAgeGate(content);
   return `CONTENT CONTRACT\n${adult ? `${ADULT_FICTION_LINE}\n` : ""}${rules.map((rule) => `- ${rule}`).join("\n")}`;
 }
 

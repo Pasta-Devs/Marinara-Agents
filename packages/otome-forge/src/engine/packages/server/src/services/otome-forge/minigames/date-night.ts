@@ -252,7 +252,7 @@ export function datePlanMessages({
     protagonistBlock(player),
     "",
     `THE DATE'S LOVE INTEREST (full bible; this date does not move the stage)`,
-    bibleBlock(unit, state, [unit.id]),
+    bibleBlock(unit, state, [unit.id], world),
     "",
     "THE PLACE",
     place === PARTNER_CHOICE
