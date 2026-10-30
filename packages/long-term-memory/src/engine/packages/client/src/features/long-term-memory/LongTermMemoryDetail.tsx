@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -398,10 +399,97 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   };
   const navigationBusyProps = lockedActionProps(navigationSaveInFlight);
 
+  const headerExtras = (
+    <>
+      {destination === "vault" ? (
+        <div ref={addMenuRef} className="relative">
+          <Button
+            ref={addTriggerRef}
+            primary
+            className="min-h-11 min-w-11"
+            onClick={() => setAddOpen((value) => !value)}
+            aria-expanded={addOpen}
+            aria-controls={addOpen ? "ltm-add-menu" : undefined}
+            aria-label={addMemoriesLabel}
+            title={addMemoriesLabel}
+          >
+            <Plus aria-hidden="true" size="0.75rem" />
+            {/* In the Engine header the panel container query cannot reach the label; use the viewport instead. */}
+            <span data-ltm-add-label className={props.engineHeader ? "hidden md:inline" : "hidden"}>
+              {addMemoriesLabel}
+            </span>
+          </Button>
+          {addOpen ? (
+            <div
+              id="ltm-add-menu"
+              role="group"
+              aria-labelledby="ltm-add-menu-title"
+              aria-describedby="ltm-add-menu-description"
+              className="mari-editor-panel absolute right-0 z-30 mt-2 w-72 p-2 text-[var(--marinara-editor-text)] shadow-lg"
+            >
+              <div className="px-2 py-1">
+                <h2 id="ltm-add-menu-title" className="text-sm font-semibold">
+                  {localizeUi("ui.longTermMemory.longtermmemorydetail.addMemories")}
+                </h2>
+                <p id="ltm-add-menu-description" className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                  {localizeUi("ui.longTermMemory.longtermmemorydetail.durableContextUsuallyStartsInAnExistingSource")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void openSources()}
+                className="mari-editor-tab mt-1 flex min-h-16 w-full items-center gap-3 rounded-md p-3 text-left"
+              >
+                <Upload aria-hidden="true" size="1rem" className="shrink-0 text-[var(--marinara-editor-accent)]" />
+                <span>
+                  <strong className="block text-sm">
+                    {localizeUi("ui.longTermMemory.longtermmemorydetail.importSources")}
+                  </strong>
+                  <span className="block text-xs text-[var(--marinara-editor-accent)]">
+                    {localizeUi("ui.longTermMemory.longtermmemorydetail.recommended")}
+                  </span>
+                  <span className="block text-xs text-[var(--muted-foreground)]">
+                    {localizeUi("ui.longTermMemory.longtermmemorydetail.charactersLorebooksAndChatSummaries")}
+                  </span>
+                </span>
+              </button>
+              <div className="my-1 border-t border-[var(--border)]" />
+              <button
+                type="button"
+                onClick={() => {
+                  setAddOpen(false);
+                  setCreateMemoryRequest(Date.now());
+                }}
+                className="mari-editor-tab flex min-h-14 w-full items-center gap-3 rounded-md p-3 text-left"
+              >
+                <Pencil aria-hidden="true" size="1rem" className="shrink-0" />
+                <span>
+                  <strong className="block text-sm">
+                    {localizeUi("ui.longTermMemory.longtermmemorydetail.createManually")}
+                  </strong>
+                  <span className="block text-xs text-[var(--muted-foreground)]">
+                    {localizeUi("ui.longTermMemory.longtermmemorydetail.oneOffDurableContext")}
+                  </span>
+                </span>
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      <IconButton
+        icon={CircleHelp}
+        label={localizeUi("ui.longTermMemory.longtermmemorydetail.showSetupGuide")}
+        onClick={() => openOnboardingRef.current?.()}
+        className="h-11 min-h-11 w-11 min-w-11"
+        data-ltm-onboarding-help
+      />
+    </>
+  );
+
   return (
     <main
       data-ltm-surface="detail"
-      aria-labelledby="ltm-detail-title"
+      aria-labelledby={props.engineHeader ? undefined : "ltm-detail-title"}
       className="mari-editor-shell mari-editor-legacy-bridge flex min-h-0 flex-1 flex-col overflow-hidden"
       style={{ containerName: "ltm-detail", containerType: "inline-size" }}
     >
@@ -641,162 +729,87 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           </section>
         </dialog>
       ) : null}
-      <header className="mari-editor-header relative z-20">
-        <div className="mari-editor-header-main">
-          <IconButton
-            icon={ArrowLeft}
-            iconSize="1.125rem"
-            label={backToAgentsLabel}
-            data-ltm-control="back"
-            onClick={() => void close()}
-          />
-          <span className="mari-editor-icon-tile">
-            <Sparkles aria-hidden="true" size="1.125rem" data-ltm-detail-icon />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h1 id="ltm-detail-title" className="mari-editor-title truncate">
-              {props.agent?.name?.trim() || localizeUi("ui.longTermMemory.longtermmemorydetail.longTermMemory")}
-            </h1>
-            <p className="mari-editor-meta mt-0.5">
-              {props.agent?.author?.trim() || "Pasta Devs"}
-              {props.package?.version ? ` · v${props.package.version}` : ""}
-            </p>
-          </div>
-        </div>
-        <div className="mari-editor-actions flex">
-          {props.chatId || props.onEnabledForChatChange ? (
-            <button
-              type="button"
-              role="switch"
-              aria-checked={props.enabledForChat === true}
-              aria-label={localizeUi(
-                props.enabledForChat === true
-                  ? "ui.longTermMemory.longtermmemorydetail.activeInValue1"
-                  : "ui.longTermMemory.longtermmemorydetail.inactiveInValue1",
-                {
-                  value1: props.chatName ?? localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat"),
-                },
-              )}
-              title={localizeUi(
-                props.enabledForChat === true
-                  ? "ui.longTermMemory.longtermmemorydetail.activeInValue1"
-                  : "ui.longTermMemory.longtermmemorydetail.inactiveInValue1",
-                {
-                  value1: props.chatName ?? localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat"),
-                },
-              )}
-              data-ltm-control="activation"
-              className="inline-flex h-11 shrink-0 items-center justify-center rounded-md"
-              disabled={!props.onEnabledForChatChange}
-              aria-disabled={activationPending || undefined}
-              onClick={() => void toggleActivation()}
-            >
-              <span data-ltm-activation-label>
-                {localizeUi(
-                  props.enabledForChat === true
-                    ? "ui.longTermMemory.longtermmemorydetail.active"
-                    : "ui.longTermMemory.longtermmemorydetail.inactive",
-                )}
-              </span>
-              <span aria-hidden="true" data-ltm-activation-track>
-                <span data-ltm-activation-knob />
-              </span>
-            </button>
-          ) : null}
-          {destination === "vault" ? (
-            <div ref={addMenuRef} className="relative">
-              <Button
-                ref={addTriggerRef}
-                primary
-                className="min-h-11 min-w-11"
-                onClick={() => setAddOpen((value) => !value)}
-                aria-expanded={addOpen}
-                aria-controls={addOpen ? "ltm-add-menu" : undefined}
-                aria-label={addMemoriesLabel}
-                title={addMemoriesLabel}
-              >
-                <Plus aria-hidden="true" size="0.75rem" />
-                <span data-ltm-add-label className="hidden">
-                  {addMemoriesLabel}
-                </span>
-              </Button>
-              {addOpen ? (
-                <div
-                  id="ltm-add-menu"
-                  role="group"
-                  aria-labelledby="ltm-add-menu-title"
-                  aria-describedby="ltm-add-menu-description"
-                  className="mari-editor-panel absolute right-0 z-30 mt-2 w-72 p-2 text-[var(--marinara-editor-text)] shadow-lg"
-                >
-                  <div className="px-2 py-1">
-                    <h2 id="ltm-add-menu-title" className="text-sm font-semibold">
-                      {localizeUi("ui.longTermMemory.longtermmemorydetail.addMemories")}
-                    </h2>
-                    <p id="ltm-add-menu-description" className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                      {localizeUi(
-                        "ui.longTermMemory.longtermmemorydetail.durableContextUsuallyStartsInAnExistingSource",
-                      )}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void openSources()}
-                    className="mari-editor-tab mt-1 flex min-h-16 w-full items-center gap-3 rounded-md p-3 text-left"
-                  >
-                    <Upload aria-hidden="true" size="1rem" className="shrink-0 text-[var(--marinara-editor-accent)]" />
-                    <span>
-                      <strong className="block text-sm">
-                        {localizeUi("ui.longTermMemory.longtermmemorydetail.importSources")}
-                      </strong>
-                      <span className="block text-xs text-[var(--marinara-editor-accent)]">
-                        {localizeUi("ui.longTermMemory.longtermmemorydetail.recommended")}
-                      </span>
-                      <span className="block text-xs text-[var(--muted-foreground)]">
-                        {localizeUi("ui.longTermMemory.longtermmemorydetail.charactersLorebooksAndChatSummaries")}
-                      </span>
-                    </span>
-                  </button>
-                  <div className="my-1 border-t border-[var(--border)]" />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAddOpen(false);
-                      setCreateMemoryRequest(Date.now());
-                    }}
-                    className="mari-editor-tab flex min-h-14 w-full items-center gap-3 rounded-md p-3 text-left"
-                  >
-                    <Pencil aria-hidden="true" size="1rem" className="shrink-0" />
-                    <span>
-                      <strong className="block text-sm">
-                        {localizeUi("ui.longTermMemory.longtermmemorydetail.createManually")}
-                      </strong>
-                      <span className="block text-xs text-[var(--muted-foreground)]">
-                        {localizeUi("ui.longTermMemory.longtermmemorydetail.oneOffDurableContext")}
-                      </span>
-                    </span>
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          <IconButton
-            icon={CircleHelp}
-            label={localizeUi("ui.longTermMemory.longtermmemorydetail.showSetupGuide")}
-            onClick={() => openOnboardingRef.current?.()}
-            className="h-11 min-h-11 w-11 min-w-11"
-            data-ltm-onboarding-help
-          />
-          {props.onManagePackage ? (
+      {/* Capability API 1.390: the Engine draws the header; put our extra buttons in its slot. */}
+      {props.engineHeader ? (
+        props.headerSlot ? (
+          createPortal(headerExtras, props.headerSlot)
+        ) : null
+      ) : (
+        <header className="mari-editor-header relative z-20">
+          <div className="mari-editor-header-main">
             <IconButton
-              icon={Settings2}
-              label={localizeUi("ui.longTermMemory.longtermmemorydetail.managePackage")}
-              data-ltm-control="manage-package"
-              onClick={props.onManagePackage}
-              className="h-11 min-h-11 w-11 min-w-11"
+              icon={ArrowLeft}
+              iconSize="1.125rem"
+              label={backToAgentsLabel}
+              data-ltm-control="back"
+              onClick={() => void close()}
             />
-          ) : null}
-        </div>
-      </header>
+            <span className="mari-editor-icon-tile">
+              <Sparkles aria-hidden="true" size="1.125rem" data-ltm-detail-icon />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h1 id="ltm-detail-title" className="mari-editor-title truncate">
+                {props.agent?.name?.trim() || localizeUi("ui.longTermMemory.longtermmemorydetail.longTermMemory")}
+              </h1>
+              <p className="mari-editor-meta mt-0.5">
+                {props.agent?.author?.trim() || "Pasta Devs"}
+                {props.package?.version ? ` · v${props.package.version}` : ""}
+              </p>
+            </div>
+          </div>
+          <div className="mari-editor-actions flex">
+            {props.chatId || props.onEnabledForChatChange ? (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={props.enabledForChat === true}
+                aria-label={localizeUi(
+                  props.enabledForChat === true
+                    ? "ui.longTermMemory.longtermmemorydetail.activeInValue1"
+                    : "ui.longTermMemory.longtermmemorydetail.inactiveInValue1",
+                  {
+                    value1: props.chatName ?? localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat"),
+                  },
+                )}
+                title={localizeUi(
+                  props.enabledForChat === true
+                    ? "ui.longTermMemory.longtermmemorydetail.activeInValue1"
+                    : "ui.longTermMemory.longtermmemorydetail.inactiveInValue1",
+                  {
+                    value1: props.chatName ?? localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat"),
+                  },
+                )}
+                data-ltm-control="activation"
+                className="inline-flex h-11 shrink-0 items-center justify-center rounded-md"
+                disabled={!props.onEnabledForChatChange}
+                aria-disabled={activationPending || undefined}
+                onClick={() => void toggleActivation()}
+              >
+                <span data-ltm-activation-label>
+                  {localizeUi(
+                    props.enabledForChat === true
+                      ? "ui.longTermMemory.longtermmemorydetail.active"
+                      : "ui.longTermMemory.longtermmemorydetail.inactive",
+                  )}
+                </span>
+                <span aria-hidden="true" data-ltm-activation-track>
+                  <span data-ltm-activation-knob />
+                </span>
+              </button>
+            ) : null}
+            {headerExtras}
+            {props.onManagePackage ? (
+              <IconButton
+                icon={Settings2}
+                label={localizeUi("ui.longTermMemory.longtermmemorydetail.managePackage")}
+                data-ltm-control="manage-package"
+                onClick={props.onManagePackage}
+                className="h-11 min-h-11 w-11 min-w-11"
+              />
+            ) : null}
+          </div>
+        </header>
+      )}
       <div className="mari-editor-content" data-ltm-detail-content>
         <div
           className="mari-editor-content-inner mari-editor-content-inner--wide space-y-5"
@@ -919,9 +932,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   }}
                   onClose={() =>
                     requestAnimationFrame(() =>
-                      document
-                        .querySelector<HTMLElement>('[data-ltm-surface="detail"] [data-ltm-onboarding-help]')
-                        ?.focus({ preventScroll: true }),
+                      document.querySelector<HTMLElement>("[data-ltm-onboarding-help]")?.focus({ preventScroll: true }),
                     )
                   }
                 />

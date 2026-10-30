@@ -4143,6 +4143,8 @@ async function main() {
         await showEvents();
         await searchBox.fill("Current Final Branch");
         await activity.locator('[data-ltm-debug-operation="recall-desktop"]').waitFor();
+        // The filter can apply a frame after the matching row appears; wait for the other row to leave.
+        await activity.locator('[data-ltm-debug-operation="recall"]').first().waitFor({ state: "detached" });
         assert.equal(await activity.locator('[data-ltm-debug-operation="recall"]').count(), 0);
         await showEvents();
         await searchBox.fill("");
