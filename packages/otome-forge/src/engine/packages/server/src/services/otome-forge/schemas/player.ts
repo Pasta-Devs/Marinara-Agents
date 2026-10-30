@@ -46,7 +46,7 @@ const NoticedSchema = z.object({
 export function aboutLine(player: Pick<Player, "about">): string {
   const about = player.about?.trim();
   return about
-    ? `Who they are (their persona): ${about}\nTreat these authored fields as the protagonist's canon; do not invent conflicting biography or permanent traits.`
+    ? `Who they are (their persona): ${about}\nTreat these authored fields as the protagonist's canon; do not invent conflicting biography or permanent traits. When authoring the protagonist's dialogue, thoughts, reactions, choice-option intents/labels or performed choice selections, ground their voice, motives and behaviour in these fields. Keep choice options meaningfully distinct and preserve the player's agency; never override or rewrite an accepted choice to fit the persona.`
     : "";
 }
 

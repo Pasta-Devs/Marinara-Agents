@@ -25,7 +25,7 @@ import { normalizeWorld } from "../schemas/world.js";
 import { queueScenePaints, releaseBeatArt } from "./cg.js";
 import { galleryRef, worldStyle, type GeneratedImage } from "./image-client.js";
 import { imagesOf, paintSlot, updateIfChanged, type ArtDeps } from "./paint.js";
-import type { PaintOptions } from "./places.js";
+import { paintBeatPlaces, type PaintOptions } from "./places.js";
 import { LOOK_SIZE, expressionPrompt, type ImagePrompt } from "./prompts.js";
 
 export type ExpressionPrompts = Partial<Record<Face, ImagePrompt>>;
@@ -70,6 +70,8 @@ export interface OtomeArt {
    * painting, or `review`). Call it once after a beat is written or rewritten; do not await it. It never rejects.
    */
   queueScenePaints(runId: string, beat: Beat, options: Omit<PaintOptions, "active">): Promise<void>;
+  /** Called outside the run queue before a fresh scene answers; only registration is awaited, never paid images. */
+  prepareScenePlaces?(runId: string, beat: Beat, options: Omit<PaintOptions, "active">): Promise<void>;
   /** A beat replaced by a rewrite or removed: deletes its CG's gallery image unless the album keeps it. */
   releaseBeatArt(runId: string, beat: Pick<Beat, "cg">): Promise<void>;
   /** False once torn down: an item's paint (M4, S/art/outfits.ts) still waiting in its lane stops before its paid call. */
@@ -228,6 +230,10 @@ export function createOtomeArt(deps: ArtDeps): OtomeArt {
     },
     queueScenePaints: (runId, beat, options) =>
       disposed ? Promise.resolve() : queueScenePaints(deps, runId, beat, { ...options, active }),
+    prepareScenePlaces: (runId, beat, options) =>
+      disposed
+        ? Promise.resolve()
+        : paintBeatPlaces(deps, runId, beat.places, { ...options, active, registrationOnly: true }),
     releaseBeatArt: (runId, beat) => releaseBeatArt(deps, runId, beat),
     active,
     dispose() {

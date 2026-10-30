@@ -97,6 +97,15 @@ const briefRule = (world: Pick<World, "content" | "images">) => {
 const cgShape = (world: Pick<World, "content" | "images">) =>
   `, "cg": {"at": 0, "brief": "...", "cast": ["..."]${explicitCgAllowed(world) ? ', "explicit": false' : ""}}`;
 
+const PLACE_REUSE_RULE =
+  '- Reuse a saved background only for the same physical location: add optional "reuse":"<saved key>" to its places entry, with the name used by this scene. Omit reuse for a new location. Never invent a key or add a scene/chapter number to a returning location. Real numbered rooms, wings and floors are distinct unless the scene explicitly establishes that they are the same place. Saved backgrounds are visual lookup records, not evidence of events or character knowledge.';
+
+/** No extra model lookup: the writer can select an existing background in its normal scene reply. */
+function savedBackgrounds(world: Pick<World, "places">): string {
+  const places = Object.entries(world.places).map(([key, place]) => ({ key, name: place.name, tags: place.tags }));
+  return places.length ? `SAVED BACKGROUNDS\n${JSON.stringify(places)}` : "";
+}
+
 const liStateOf = (state: RunState, li: LiId): LiState => state.lis[li] ?? defaultLiState();
 const stageOf = (state: RunState, li: LiId) => liStateOf(state, li).stage;
 
@@ -506,6 +515,7 @@ export function beatMessages({
   memory,
   prologue = "",
 }: BeatMessagesInput): OtomeMessage[] {
+  const backgrounds = savedBackgrounds(world);
   const present = units.filter((unit) => node.cast.includes(unit.id));
   const thinkers = present.filter((unit) => stageOf(state, unit.id) >= 2).map((unit) => unit.name);
   const last = node.i === chapter.nodes.length - 1;
@@ -526,6 +536,7 @@ export function beatMessages({
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}, when the face shows it. A face may contradict the words. Omit it for a neutral line and for narration.`,
     `- musicMood: the soundtrack cue for this node, one of ${MUSIC_MOODS.join(", ")}.`,
     `- places: every place the node happens in, in order (at most ${BEAT_PLACES_MAX}). A place is a room, a street, a garden: never the time of day or the mood. tags: the same place as 4-8 short comma-separated English tags for an image model, with "no humans". place on a segment: which place it happens in; omit it while the scene has not moved.`,
+    ...(backgrounds ? [PLACE_REUSE_RULE] : []),
     ...(node.cg
       ? [
           '- cg: this node MAY carry one key image, only when it holds a story-defining moment. at: the index of the segment it opens on. brief: one or two plain English sentences on where and how the moment is shot (place, light, framing, what the bodies do), never anyone\'s looks. cast: the exact names of at most 3 people in the frame. Omit "cg" when the node has no such moment.',
@@ -555,6 +566,7 @@ export function beatMessages({
     "WORLD",
     world.setting.trim() || world.premise.trim(),
     "",
+    ...(backgrounds ? [backgrounds, ""] : []),
     "PROTAGONIST",
     protagonistBlock(player),
     "",
@@ -927,6 +939,7 @@ const SEGMENT_SHAPE = '{"speaker": "", "text": "...", "thought": false, "express
 /** P12: the opening, three rounds of four stances each, and the three endings, in one reply. */
 export function confrontationMessages(input: ConfrontationMessagesInput): OtomeMessage[] {
   const { world, player, units, state, chapter, node, storySoFar, memory, li } = input;
+  const backgrounds = savedBackgrounds(world);
   const present = units.filter((unit) => node.cast.includes(unit.id) || unit.id === li);
   const him = units.find((unit) => unit.id === li);
   const name = him?.name ?? "the love interest";
@@ -948,6 +961,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     `- thought: true for an inner line, with "speaker" set to the thinker. The protagonist may think freely. A love interest gets at most ONE thought line in the whole confrontation, on any path a player can take through it (the opening, the rounds' lines, the answers to the stances taken and the ending together), and only ${thinkers.length ? `these, who are far enough along: ${thinkers.join(", ")}` : "none of those present: they are still behind their masks"}.`,
     `- expression: on a love interest's dialogue or thought line only: ${FACES.join(", ")}. A face may contradict the words. Omit it for a neutral line and for narration.`,
     `- places: where it happens (at most ${BEAT_PLACES_MAX}); tags: 4-8 short comma-separated English tags for an image model, with "no humans".`,
+    ...(backgrounds ? [PLACE_REUSE_RULE] : []),
     ...(node.cg
       ? [
           '- cg: one key image of the opening, only when it holds a story-defining moment. at: the index of the opening segment it opens on. brief: one or two plain English sentences on where and how the moment is shot, never anyone\'s looks. cast: the exact names of at most 3 people in the frame. Omit "cg" otherwise.',
@@ -971,6 +985,7 @@ export function confrontationMessages(input: ConfrontationMessagesInput): OtomeM
     "WORLD",
     world.setting.trim() || world.premise.trim(),
     "",
+    ...(backgrounds ? [backgrounds, ""] : []),
     "PROTAGONIST",
     protagonistBlock(player),
     "",
