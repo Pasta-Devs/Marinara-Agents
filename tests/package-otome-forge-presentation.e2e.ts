@@ -1189,7 +1189,7 @@ function createSceneStub({
 
 test("Otome Hearth imageless play: intended appearance is readable without Bible spoilers or model calls", async ({
   page,
-}) => {
+}, testInfo) => {
   const fixture = expressionRepaintFixture();
   fixture.view.world.images.connectionId = null;
   const appearance = "adult man, silver hair, amber eyes\nnavy coat, brass buttons";
@@ -1211,6 +1211,7 @@ test("Otome Hearth imageless play: intended appearance is readable without Bible
   expect(calls.filter((call) => call.method === "POST" && /\/art\/|\/api\/audio\/generate/u.test(call.path))).toEqual(
     [],
   );
+  await page.screenshot({ path: testInfo.outputPath("imageless-appearance.png"), animations: "disabled" });
 });
 
 test("Otome Hearth imageless play: old locations and key moments can be painted explicitly with prompt review", async ({
@@ -1234,6 +1235,7 @@ test("Otome Hearth imageless play: old locations and key moments can be painted 
   await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
   expect(posts(calls, "/art/place")).toEqual([]);
   const paintPlace = root.getByRole("button", { name: "Paint The Observation Room (1 image)", exact: true });
+  await expect(paintPlace).toHaveText("Paint · 1 image");
   await paintPlace.click();
   let review = page.getByRole("dialog");
   await expect(review.getByLabel("Prompt", { exact: true })).toHaveValue("Glass dome, night, rain.");
@@ -1258,6 +1260,39 @@ test("Otome Hearth imageless play: old locations and key moments can be painted 
   expect(posts(calls, "/art/cg")).toHaveLength(1);
   expect(posts(calls, "/art/paint")).toEqual([]);
   expect(posts(calls, "/api/audio/generate")).toEqual([]);
+});
+
+test("Otome Hearth imageless play: full visual descriptions keep reading controls reachable and keyboard scroll does not advance", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  const fixture = createSceneStub({ ask: true, audio: false });
+  const description = `${"marble floor,\n".repeat(30)}FINAL VISUAL DETAIL`;
+  expect(description.length).toBeLessThan(600);
+  fixture.stub.view.world.places["the-observation-room"].tags = description;
+  const calls: Call[] = [];
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Continue", exact: true }).first().click();
+  await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
+  const disclosure = root.locator(".of-reader-head .of-image-description");
+  await disclosure.locator("summary").click();
+  await expect(root.locator(".of-next")).toBeInViewport({ ratio: 0.99 });
+  const descriptionText = disclosure.getByRole("region", { name: "Image description", exact: true });
+  expect(await descriptionText.textContent()).toBe(description);
+  await descriptionText.focus();
+  await expect(descriptionText).toBeFocused();
+  await page.keyboard.press("PageDown");
+  await expect.poll(() => descriptionText.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await page.keyboard.press("End");
+  await expect
+    .poll(() => descriptionText.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+    .toBeLessThanOrEqual(1);
+  await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
+  expect(calls.filter((call) => call.method === "POST" && /\/art\/(place|cg)(?:\/prompt)?$/u.test(call.path))).toEqual(
+    [],
+  );
+  await page.screenshot({ path: testInfo.outputPath("imageless-description-midnight.png"), animations: "disabled" });
 });
 
 test("Otome Hearth backgrounds: reading waits for the current place paint and image decode", async ({ page }) => {
