@@ -11,5 +11,10 @@
   "settings.notifications.customSound.actions.remove": "Usuń",
   "settings.notifications.customSound.status.custom": "Własny",
   "settings.sections.imageGeneration.title": "Generowanie obrazów",
-  "settings.sections.notifications.title": "Powiadomienia"
+  "settings.sections.notifications.title": "Powiadomienia",
+  "ui.noodle.noodlehome.ltmSharingOfferCancel": "Nie teraz",
+  "ui.noodle.noodlehome.ltmSharingOfferConfirm": "Włącz",
+  "ui.noodle.noodlehome.ltmSharingOfferFailed": "Nie udało się włączyć udostępniania w Long-Term Memory. Przełącznik Noodle nadal jest włączony; możesz włączyć udostępnianie w Long-Term Memory → Memory Settings → Sharing.",
+  "ui.noodle.noodlehome.ltmSharingOfferMessage": "Noodle może korzystać ze wspomnień tylko wtedy, gdy w Long-Term Memory włączony jest przełącznik „Other Agents can read memories”. Teraz jest wyłączony. Włączyć go?",
+  "ui.noodle.noodlehome.ltmSharingOfferTitle": "Włączyć udostępnianie w Long-Term Memory?"
 }

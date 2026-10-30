@@ -4,8 +4,13 @@ import type { CapabilityLanguageModelMessage } from "@marinara-engine/shared";
 import {
   playerId,
   runDocTarget,
+  worldId,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/ids.ts";
-import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
+import {
+  aboutLine,
+  normalizePlayer,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
+import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import {
   readPersona,
   withPersonaImageAppearance,
@@ -36,6 +41,16 @@ function assertFields(prompt: string, fields: ReturnType<typeof authored>) {
   assert.ok(!prompt.includes("IMAGE-ONLY-OVERRIDE"), "an image override is not story appearance");
 }
 
+function assertPersonaVoice(prompt: string) {
+  assert.match(
+    prompt,
+    /When authoring the protagonist's dialogue, thoughts, reactions, choice-option intents\/labels or performed choice selections/,
+  );
+  assert.match(prompt, /ground their voice, motives and behaviour in these fields/);
+  assert.match(prompt, /Keep choice options meaningfully distinct and preserve the player's agency/);
+  assert.match(prompt, /never override or rewrite an accepted choice to fit the persona/);
+}
+
 const replies = () =>
   Array.from(
     { length: 20 },
@@ -54,6 +69,11 @@ test("an existing run sends all current persona fields to chapter and scene gene
     ...player,
     about: "OLD-SAVED-DESCRIPTION",
   }));
+  const writingStyle = `STYLE-FIRST ${"Use concrete verbs and a measured rhythm. ".repeat(180)} STYLE-LAST`;
+  await t.store.updateDoc(runDocTarget("world", worldId(t.runId)), normalizeWorld, (world) => ({
+    ...world,
+    writingStyle,
+  }));
   assert.equal((await t.call("POST", "/runs/:run/chapters/next", { lead: KAI })).status, 200);
   assert.equal((await t.call("POST", "/runs/:run/chapters/:key/beats/:i", {}, { key: "main-1", i: "0" })).status, 200);
   await t.settle();
@@ -64,8 +84,23 @@ test("an existing run sends all current persona fields to chapter and scene gene
     const prompt = body(call.messages);
     assertFields(prompt, fields);
     assert.ok(prompt.includes("Treat these authored fields as the protagonist's canon"));
+    assertPersonaVoice(prompt);
+    assert.ok(prompt.includes(writingStyle), "the complete writing instructions still reach both model calls");
+    assert.ok(prompt.includes("the content contract still holds"));
+    assert.match(prompt, /Heat: SFW\./);
+    assert.match(prompt, /Lines \(never written, not even implied\):/);
     assert.ok(!prompt.includes("OLD-SAVED-DESCRIPTION"));
   }
+  assert.match(body(plan.messages), /Every player choice explicitly recorded in the story so far is settled canon/);
+  assert.match(body(scene.messages), /Each choice has exactly 2, 3 or 4 distinct options/);
+  assert.match(body(scene.messages), /The selection text is the protagonist's performed line\/action/);
+  assert.match(body(scene.messages), /Use "action" for physical actions, decisions or nonverbal responses/);
+});
+
+test("persona voice guidance is conditional on authored protagonist content and leaves an empty persona block empty", () => {
+  assert.equal(aboutLine({}), "");
+  assert.equal(aboutLine({ about: "   " }), "");
+  assertPersonaVoice(aboutLine({ about: "She answers carefully and keeps her own counsel." }));
 });
 
 test("a scene re-reads persona facts edited after its chapter was planned", async () => {

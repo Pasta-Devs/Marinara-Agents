@@ -364,6 +364,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.5.12",
+          "date": "2026-10-30",
+          "notes": "- When a chat calls one of Long-Term Memory's own characters by part of their name (\"Preston\" for \"Preston Farraday\", or the other way round), the memory joins that character's note instead of starting a second one. If the name fits more than one character, it waits for you in review.",
+          "highlight": false
+        },
+        {
           "version": "1.5.11",
           "date": "2026-10-30",
           "notes": "- A memory whose score (salience or confidence) the model writes in quotes (\"0.5\") is kept instead of dropped, and a chat piece whose every memory is malformed fails with Retry instead of reporting success with nothing kept.",
@@ -476,12 +482,6 @@
           "date": "2026-10-24",
           "notes": "- The Memory Vault shows your memories sooner: rarer filters sit under Refine and open by themselves while in use, and changing several memories happens in one Edit selected sheet, with Archive and Delete kept apart.\n- Changing availability for several memories now says how many will change, stay the same or be blocked, explains why Apply is off, and repeats Apply under the list.\n- Saving a memory now confirms beside the Save button, and a save that waits on a recall rebuild says so as a warning instead of an error.\n- The memory you have open is now marked with an edge bar and announced to screen readers, not only by a tint.\n- The memory info panel now has one name everywhere you open it.",
           "highlight": false
-        },
-        {
-          "version": "1.4.88",
-          "date": "2026-10-24",
-          "notes": "- Switching Long-Term Memory on or off, changing a chat's recall settings and running Reindex no longer drop keyboard focus while they work.\n- The unsaved-changes prompt now says where you are going, and the Chat Settings panel is shorter, names the right button and no longer shows made-up defaults while loading.",
-          "highlight": false
         }
       ]
     },
@@ -527,6 +527,12 @@
     },
     "noodle": {
       "versions": [
+        {
+          "version": "1.5.12",
+          "date": "2026-10-30",
+          "notes": "- The \"Long-Term Memory isn't sharing memories\" line now clears as soon as sharing is turned back on.\n- Turning on \"Use memories from Long-Term Memory\" now offers to turn on Long-Term Memory's sharing when it is off.",
+          "highlight": false
+        },
         {
           "version": "1.5.11",
           "date": "2026-10-29",
@@ -639,12 +645,6 @@
           "version": "1.2.22",
           "date": "2026-09-13",
           "notes": "- Maintenance: simplify the inline composer's visibility checks and remove unused code.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.21",
-          "date": "2026-09-07",
-          "notes": "- Fixed \"Load more\" on the timeline, which failed on every page after the first.\n- Fixed a manually chosen profile avatar being replaced by the character card image.\n- Applying a saved prompt now asks before it discards unsaved prompt changes.\n- Ambient accounts no longer post images.\n- Removed leftover NoodleR wording from the image generation settings.",
           "highlight": false
         }
       ]

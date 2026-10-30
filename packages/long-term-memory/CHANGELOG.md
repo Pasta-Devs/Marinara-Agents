@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.5.12 — 2026-10-30
 
 - When a chat calls one of Long-Term Memory's own characters by part of their name ("Preston" for "Preston Farraday", or the other way round), the memory joins that character's note instead of starting a second one. If the name fits more than one character, it waits for you in review.
 

@@ -2659,7 +2659,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.5.11",
+        "version": "1.5.12",
         "description": "Remembers important things from your chats, characters, and lorebooks, and brings them back when they matter. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.5.1",
@@ -2691,8 +2691,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "b13d6ee12cb7473907f7f30f5b4b17e1a30c070f57a920695c7f80e7e93e2d7d",
-            "bytes": 495826
+            "sha256": "c607eaacd28bf136696e79ea375db0085a30d4fc7b310590c58ce9a4acf41b54",
+            "bytes": 496671
           },
           {
             "path": "client.js",
@@ -2712,9 +2712,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.5.11.zip",
-        "sha256": "028f19bfa8259f86f8373e60a1cf688b2f90dc42b232dbbbaa8c4821d58c2b41",
-        "bytes": 1405140
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.5.12.zip",
+        "sha256": "0bacecc9bc49645b65dea6fd000515fd757a8a24bd2df437c80b32b8023f4805",
+        "bytes": 1405985
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -2927,7 +2927,7 @@
         },
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.5.11",
+        "version": "1.5.12",
         "description": "A pretend social network where your characters post, share photos, and talk about your chats. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -3015,8 +3015,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "e2e53512606a697fa3674e83b8af2dad56b939cb293a8c10e6c487e4022e339c",
-            "bytes": 729305
+            "sha256": "1c3b726cdb96522d96651849aa6e5fe65fd1b4f7214558574c64040257b00348",
+            "bytes": 733315
           },
           {
             "path": "noodle-klusek.png",
@@ -3037,9 +3037,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.11.zip",
-        "sha256": "8ed93609eed2ef2914d0d7927eee86d196c72715df369236a8e79f9ecf268f67",
-        "bytes": 1307777
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.5.12.zip",
+        "sha256": "6ce0d8812d52d7e63f9a131605ada38a35421c62bc572405953b0deae112f7d6",
+        "bytes": 1311787
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },

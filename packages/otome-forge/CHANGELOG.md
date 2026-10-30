@@ -1,5 +1,11 @@
 # Otome Hearth release notes
 
+## 0.1.16 — 2026-10-30
+
+- Automatically painted current-location backgrounds prepare before reading begins, with the existing manual-paint and failure paths retained.
+- Story generation can reuse saved location artwork for recurring settings instead of painting a new numbered visit.
+- Protagonist dialogue, thoughts and performed choices explicitly follow the selected persona’s authored identity and the player’s writing instructions.
+
 ## 0.1.15 — 2026-10-29
 
 - Opening narration no longer previews the portrait of a love interest whose speaking turn has not been reached. Established speakers can still stay visible during later narration.

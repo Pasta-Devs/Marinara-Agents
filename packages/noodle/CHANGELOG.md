@@ -1,5 +1,10 @@
 # Noodle release notes
 
+## 1.5.12 — 2026-10-30
+
+- The "Long-Term Memory isn't sharing memories" line now clears as soon as sharing is turned back on.
+- Turning on "Use memories from Long-Term Memory" now offers to turn on Long-Term Memory's sharing when it is off.
+
 ## 1.5.11 — 2026-10-29
 
 - New, off by default: Advanced → "Use memories from Long-Term Memory". Posts can draw on what Long-Term Memory remembers about each account's character, as whole memories or only the parts that fit the posts. Turning it on asks first, and a note appears if Long-Term Memory isn't installed or isn't sharing memories.
