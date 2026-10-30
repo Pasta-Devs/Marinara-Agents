@@ -1,6 +1,6 @@
 # Long-Term Memory changelog
 
-## Unreleased
+## 1.5.16 — 2026-10-30
 
 - Review: a later chat piece's thread and relationship updates apply together with the rest of the draft instead of one at a time.
 
