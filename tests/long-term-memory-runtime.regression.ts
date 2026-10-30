@@ -9,11 +9,11 @@ import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-help
 async function main() {
   const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
   const packageManifest = JSON.parse(await readFile(join(repoRoot, "packages/long-term-memory/manifest.json"), "utf8"));
-  // engine.min cannot tell Engine staging from the 2.5.1 release; capability API 1.387 (E2 + E3) can.
+  // engine.min cannot tell Engine staging from the 2.5.1 release; capability API 1.390 (E2 + E3, Engine header) can.
   assert.equal(packageManifest.engine.min, "2.5.1");
   assert.deepEqual(
     packageManifest.capabilityApi,
-    { major: 1, minor: 387 },
+    { major: 1, minor: 390 },
     "Long-Term Memory is gated by its capability API",
   );
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
