@@ -74,7 +74,7 @@
         {
           "version": "0.5.2",
           "date": "2026-10-30",
-          "notes": "- Memories banners follow your Heat: under NSFW: Fade their Memories and Moments mix SFW and suggestive situations, and under NSFW: Explicit explicit ones too. Snapshots stay SFW.\n- An explicit Memory's art can now be explicit under NSFW: Explicit with the Explicit image rating. Other Memory art stays clothed, as before.",
+          "notes": "- Memories banners follow your Heat: under NSFW: Fade their Memories and Moments mix SFW and suggestive situations, and under NSFW: Explicit explicit ones too. Snapshots stay SFW.\n- An explicit Memory's art can now be explicit under NSFW: Explicit with the Explicit image rating. Lower either setting before it's painted, and it shows the same moment clothed. Other Memory art stays clothed, as before.",
           "highlight": false
         },
         {

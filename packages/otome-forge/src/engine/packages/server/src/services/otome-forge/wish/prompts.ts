@@ -247,7 +247,7 @@ export const BannerPlanSchema = z.object({
     cgBrief: z.string().optional(),
     cgCast: z.array(z.string()).optional(),
     explicit: z.boolean().nullable().optional(),
-    clothedBrief: z.string().optional(),
+    clothedBrief: z.string().nullable().optional(),
   }),
   four: z.array(
     z.object({
@@ -338,9 +338,9 @@ export function normalizeBannerPlan(
   if (kind === "memories") {
     if (!top.premise?.trim()) return "featured.premise is missing";
     if (!top.cgBrief?.trim()) return "featured.cgBrief is missing";
-    const marked = explicitArt && top.explicit === true;
-    if (marked && !top.clothedBrief?.trim())
-      return "featured.clothedBrief is missing (it is needed when explicit is true)";
+    // An explicit brief needs its clothed twin; a null or missing one is fine when the brief is not explicit.
+    const clothed = explicitArt && top.explicit === true ? (top.clothedBrief?.trim() ?? "") : null;
+    if (clothed === "") return "featured.clothedBrief is missing (it is needed when explicit is true)";
     // The featured love interest is always in the key image, first; anyone else only when the planner put them in.
     const others = (top.cgCast ?? [])
       .map((name) => name.trim())
@@ -351,7 +351,7 @@ export function normalizeBannerPlan(
       cast: [featured.name, ...new Set(others)].slice(0, 3),
       // Kept only when the plan was offered it (as a story CG's, S/story/beats.ts cgExplicit), and then painted
       // explicit only while the world still allows it (S/wish/banners.ts).
-      ...(marked ? { explicit: true as const, clothed: clip(top.clothedBrief!, ITEM_LIMITS.line) } : {}),
+      ...(clothed ? { explicit: true as const, clothed: clip(clothed, ITEM_LIMITS.line) } : {}),
     };
   } else {
     if (!top.look) return "featured.look is missing";

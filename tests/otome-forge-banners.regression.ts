@@ -30,6 +30,7 @@ import {
   normalizeItem,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/wish.ts";
 import { enforceContent } from "../packages/otome-forge/src/engine/packages/client/src/features/otome-forge/shared/content.ts";
+import { memoryArtBrief } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/content-contract.ts";
 import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 import {
   paintBannerArtNow,
@@ -37,6 +38,7 @@ import {
   readItem,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/banners.ts";
 import {
+  BannerPlanSchema,
   normalizeBannerPlan,
   type BannerPlan,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/wish/prompts.ts";
@@ -225,6 +227,26 @@ test("an explicit Memory's art is painted explicit only under Explicit Heat and 
     /featured\.clothedBrief is missing/,
     "an explicit brief without its clothed twin is repaired",
   );
+  // A null twin (the reply's natural answer when explicit is false) passes the schema; an explicit one still needs it.
+  for (const explicit of [false, null]) {
+    const unmarked = { ...marked(explicit), featured: { ...marked(explicit).featured, clothedBrief: null } };
+    assert.ok(BannerPlanSchema.safeParse(unmarked).success, `explicit ${explicit} with a null clothedBrief`);
+    const plain = normalizeBannerPlan(unmarked, { kind: "memories", units: cast, featured: kai, explicitArt: true });
+    assert.equal("explicit" in (plain as BannerPlan).featured.cg!, false);
+    assert.equal("clothed" in (plain as BannerPlan).featured.cg!, false);
+  }
+  const nullTwin = { ...marked(true), featured: { ...marked(true).featured, clothedBrief: null } };
+  assert.ok(BannerPlanSchema.safeParse(nullTwin).success);
+  assert.match(
+    String(normalizeBannerPlan(nullTwin, { kind: "memories", units: cast, featured: kai, explicitArt: true })),
+    /featured\.clothedBrief is missing/,
+  );
+  // A mark with no twin (none can be saved now) paints from the title when the world is lowered.
+  const lowered = { content: { heat: "fade" }, images: { rating: "explicit" } } as Parameters<typeof memoryArtBrief>[2];
+  assert.deepEqual(memoryArtBrief({ brief: "EXPLICIT", explicit: true }, "Lantern Vigil", lowered), {
+    brief: "Lantern Vigil",
+    explicit: false,
+  });
   assert.equal("explicit" in cgOf(false), false);
   assert.equal("explicit" in cgOf(null), false);
   const moments = (briefs: boolean, required: boolean) =>
