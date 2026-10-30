@@ -1,5 +1,22 @@
 # Otome Hearth release notes
 
+## 0.4.2 — 2026-10-30
+
+- The Love Timeline shows every 4★ Moment and 5★ Memory you've won, on the day you won it, including ones won before this update. Each Snapshot, Moment and Memory says what it is and opens in the Album.
+
+## 0.4.1 — 2026-10-30
+
+- The story's **Image description** shows only for a picture that isn't on screen: a painted background or key image no longer has its description under the chapter title, and one whose file fails to load gets it back.
+- NSFW stories now say outright that crude and vulgar words, swearing and dirty talk included, are fine wherever they fit a character's voice. In SFW stories characters may swear too, without the sexual words.
+- A 5★ reveal with a long premise fits on a phone: the card never grows past the screen, so the title shows whole and the premise scrolls inside it.
+
+## 0.4.0 — 2026-10-30
+
+- **The Closer:** a main chapter can now end on a warm climax instead of a Confrontation. Over three rounds the love interest offers something of themselves, and you answer: **Reassure**, **Tease**, **Mirror** (share something of your own) or **Ask**.
+- It ends **Opened up** (trust grows, and it's a first on your Love Timeline), **Almost** (nothing changes) or **Shut out** if it goes wrong (trust falls, and they hold it against you).
+- In NSFW stories, Opened up can turn intimate, drawing on their tastes and your role.
+- After two main chapters end the same way, the next ends with the other, so a story in progress gets its first Closer soon. Route chapters keep their Confrontations.
+
 ## 0.3.0 — 2026-10-30
 
 - NSFW stories give each new love interest's bible their tastes in sex and intimacy: what they're into, kinks included, and what draws them. Intimate scenes bring them in when they fit; your content settings still decide what a scene may hold.

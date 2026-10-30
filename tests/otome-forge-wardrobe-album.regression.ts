@@ -1001,6 +1001,33 @@ test("the Album lists only what is unlocked: owned Memories, seen and painted CG
   assert.equal(album.soundtrack.length, 6);
   assert.ok(album.soundtrack.every((entry: { track: unknown }) => entry.track === null));
   assert.ok(Array.isArray(album.timeline) && Array.isArray(album.favorites));
+  // Each owned Moment and Memory is on the Love Timeline on the day it was won (#1947), as a pull or the Memory Selector
+  // dates it (`owned.at`); nothing not won is, and nothing is stored.
+  await t.store.mutateDoc(runDocTarget("state", stateId(t.runId)), normalizeState, (state) => ({
+    ...state,
+    owned: {
+      ...state.owned,
+      at: { [ITEMS.moment.id]: "2026-10-29T09:00:00.000Z", [ITEMS.memory.id]: "2026-10-30T09:00:00.000Z" },
+    },
+  }));
+  const dated = (await t.call("GET", "/runs/:run/album")).body;
+  assert.deepEqual(
+    dated.timeline
+      .filter((entry: { kind: string }) => entry.kind === "memory" || entry.kind === "moment")
+      .map((entry: { kind: string; ref: string; at: string; text: string; li: string }) => [
+        entry.kind,
+        entry.ref,
+        entry.at,
+        entry.text,
+        entry.li,
+      ]),
+    [
+      ["moment", ITEMS.moment.id, "2026-10-29T09:00:00.000Z", ITEMS.moment.title, ITEMS.moment.li],
+      ["memory", ITEMS.memory.id, "2026-10-30T09:00:00.000Z", ITEMS.memory.title, ITEMS.memory.li],
+    ],
+  );
+  assert.ok(!JSON.stringify(dated.timeline).includes(ITEMS.unowned.id));
+  assert.equal((await t.state()).timeline.length, 0, "never stored");
 });
 
 test("an item not won does not open, paint or show its prompt, and a malformed id names no item", async () => {

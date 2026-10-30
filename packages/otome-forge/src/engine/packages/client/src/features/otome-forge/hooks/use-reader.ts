@@ -36,7 +36,7 @@ import type {
   BeatView,
   ChapterDetail,
   ChoiceOption,
-  ConfrontationEnding,
+  ClimaxEnding,
   ConfrontationView,
   Favorite,
   ForgeChoice,
@@ -318,8 +318,8 @@ export function useReader({ runKey, chapterKey, view, startNode, reducedMotion, 
   );
   /** The current line's ref (favourites, and its voice's cache key). */
   const currentRef = timeline && lineIndex >= 0 ? lineRef(timeline, lineIndex, refBase) : "";
-  // A Confrontation read to the end of its ending (not eased off) closes on the ending's card.
-  const outcomeKind: ConfrontationEnding | null =
+  // A climax game read to the end of its ending (not eased off) closes on the ending's card.
+  const outcomeKind: ClimaxEnding | null =
     confrontation?.ending && current?.kind !== "aftermath" ? confrontation.ending.kind : null;
   const showOutcome = !!outcomeKind && atEnd && !!position && outcomeFor === position.id;
   const voiceHold = !!voice && !!lineKey && voice.key === lineKey && voice.outcome === null;

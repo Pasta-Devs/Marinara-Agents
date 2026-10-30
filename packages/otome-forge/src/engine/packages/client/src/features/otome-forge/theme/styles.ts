@@ -1069,6 +1069,9 @@ ${R} .of-reveal-card {
   border: 1px solid rgb(230 201 138 / 0.4); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
   box-shadow: 0 0 40px rgb(230 201 138 / 0.25);
   opacity: 0; translate: 0 18px; transition: opacity 700ms var(--of-ease) 300ms, translate 700ms var(--of-ease) 300ms;
+  /* Never taller than the stage below Skip's row: a long premise scrolls inside it, title first (#1944). */
+  max-height: calc(100% - 64px - max(16px, env(safe-area-inset-bottom)));
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
 }
 ${R} .of-reveal[data-shown="true"] .of-reveal-card { opacity: 1; translate: 0 0; }
 ${R} .of-reveal-count { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; color: var(--of-text-faint); }
@@ -1336,6 +1339,16 @@ ${R} .of-love-dot {
 ${R} .of-love-when { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.04em; color: var(--of-champagne-text); }
 ${R} .of-love-who { color: var(--of-accent-text); }
 ${R} .of-love-text { font-family: var(--of-font-display); font-size: 1.08rem; line-height: 1.35; }
+${R} .of-love-kind {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--of-text-soft);
+}
+${R} .of-love-open {
+  display: block; padding: 0; border: 0; background: none; color: inherit; text-align: start; cursor: pointer;
+  text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--of-li-accent, currentColor) 45%, transparent);
+  text-underline-offset: 3px;
+}
+${R} .of-love-open:hover { text-decoration-color: var(--of-li-accent, currentColor); }
 ${R} .of-favorites { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
 ${R} .of-favorite {
   display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 18px;
@@ -2604,6 +2617,10 @@ ${R} .of-stance[data-stance="press"] { --of-stance: #F08AA4; }
 ${R} .of-stance[data-stance="hold"] { --of-stance: #9DB8F0; }
 ${R} .of-stance[data-stance="yield"] { --of-stance: ${PALETTE.champagne}; }
 ${R} .of-stance[data-stance="reveal"] { --of-stance: #B79CF2; }
+${R} .of-stance[data-stance="reassure"] { --of-stance: #F5B6C8; }
+${R} .of-stance[data-stance="tease"] { --of-stance: ${PALETTE.champagne}; }
+${R} .of-stance[data-stance="mirror"] { --of-stance: #B79CF2; }
+${R} .of-stance[data-stance="ask"] { --of-stance: #9DB8F0; }
 ${R} .of-stance:hover {
   transform: translateY(-1px); border-color: var(--of-stance);
   box-shadow: inset 0 1px 0 var(--of-highlight), 0 10px 26px color-mix(in srgb, var(--of-stance) 30%, transparent);
@@ -2630,6 +2647,8 @@ ${R} .of-outcome-mark {
 }
 ${R} .of-outcome[data-outcome="walkout"] .of-outcome-mark { color: var(--of-danger); }
 ${R} .of-outcome[data-outcome="standoff"] .of-outcome-mark { color: var(--of-champagne-text); }
+${R} .of-outcome[data-outcome="almost"] .of-outcome-mark { color: var(--of-champagne-text); }
+${R} .of-outcome[data-outcome="shut"] .of-outcome-mark { color: var(--of-danger); }
 ${R} .of-outcome-title {
   font-family: var(--of-font-display); font-weight: 600; font-size: 1.65rem; line-height: 1.08; padding-bottom: 0.06em;
   background: var(--of-title-ink); -webkit-background-clip: text; background-clip: text; color: transparent;

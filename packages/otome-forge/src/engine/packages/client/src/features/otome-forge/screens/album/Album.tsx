@@ -137,7 +137,7 @@ export function Album({ runKey, view, onOpenStory }: AlbumProps) {
     ) : tab === "memories" ? (
       <Memories view={view} memories={data.memories} onShow={setMemory} />
     ) : tab === "timeline" ? (
-      <Timeline view={view} entries={data.timeline} />
+      <Timeline view={view} entries={data.timeline} memories={data.memories} onShow={setMemory} />
     ) : tab === "favorites" ? (
       <Favorites view={view} favorites={data.favorites} />
     ) : tab === "soundtrack" ? (

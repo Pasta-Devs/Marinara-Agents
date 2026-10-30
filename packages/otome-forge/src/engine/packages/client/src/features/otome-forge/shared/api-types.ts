@@ -2,7 +2,7 @@
 // Otome Forge: the wire contract between the package's routes and its client (types only)
 // ──────────────────────────────────────────────
 // Imported by both bundles, so a code or field added on one side has to be handled on the other.
-import type { ConfrontationEnding, RouteEntry, Stance } from "./arcs";
+import type { ClimaxEnding, ClimaxMove, RouteEntry } from "./arcs";
 import type { ContentSettings, ImageRating, LimitId } from "./content";
 import type { DatePlan, DateScore } from "./dates";
 import type { Face, MusicMood } from "./faces";
@@ -12,7 +12,17 @@ import type { NotebookEntry, ReadMePaid } from "./read-me";
 import type { ClawLineKind, TapZone, TimeOfDay } from "./home";
 import type { BannerKind, PityCounter, Rarity } from "./wish";
 
-export type { ConfrontationEnding, RouteEntry, RouteNext, Stance } from "./arcs";
+export type {
+  ClimaxEnding,
+  ClimaxKind,
+  ClimaxMove,
+  CloserEnding,
+  CloserMove,
+  ConfrontationEnding,
+  RouteEntry,
+  RouteNext,
+  Stance,
+} from "./arcs";
 
 /** The `code` of a failed route's `{error, code?}`; the client shows ui.otomeForge.errors.<code> (plan §1.5). */
 export type OtomeErrorCode =
@@ -732,7 +742,8 @@ export interface WishPullRecord {
 // `story-<itemId>`, `date-<n>`. ──
 
 export type ChapterKind = "prologue" | "main" | "route" | "repair" | "story" | "date";
-export type NodeKind = "beat" | "moment" | "confrontation";
+/** `confrontation` and `closer` (#1938) are a chapter's climax: a main chapter has exactly one of them. */
+export type NodeKind = "beat" | "moment" | "confrontation" | "closer";
 /** A moment node's framing: reading his face, a phone call, a date gone wrong. Written as a beat until M2b/M5. */
 export type MomentKind = "read-him" | "call" | "date";
 
@@ -869,41 +880,50 @@ export interface Beat {
   rewrites: number;
   /** Set once the reader was first served it (M2b): a rupture opens no route beat that was never on screen. */
   shown?: true;
-  /** A confrontation node's stance game (M2b, P12); `segments` holds its opening. Hidden: the client gets a view. */
+  /**
+   * A climax node's game: a Confrontation's stance game (M2b, P12) or a Closer's (#1938, P12c); `segments` holds its
+   * opening. Hidden: the client gets a view.
+   */
   confrontation?: Confrontation;
 }
 
-// ── The Confrontation (M2b): three rounds of Press, Hold, Yield or Reveal, one call (P12) ──
+// ── A chapter's climax game, one call: the Confrontation (M2b, P12: three rounds of Press, Hold, Yield or Reveal) or
+// the Closer (#1938, P12c: three rounds of Reassure, Tease, Mirror or Ask). Both share these shapes; a game's moves
+// and endings are its kind's (SH/arcs.ts CLIMAX_MOVES, CLIMAX_ENDINGS). ──
 
 export interface ConfrontationOption {
   /** The pill's short label. */
   label: string;
   /** What the protagonist says or does. */
   selection: { kind: "dialogue" | "action"; text: string };
-  /** His answer to the stance (1–3 segments). */
+  /** The love interest's answer to the move (1–3 segments). */
   segments: Segment[];
-  /** How the stance moves his composure (hidden; S/story/confrontation.ts). */
+  /** How the move shifts their composure, or a Closer's guard (hidden; S/story/confrontation.ts). */
   composure: -1 | 0 | 1;
 }
 
 export interface ConfrontationRound {
-  /** His lines opening the round; they follow from any stance of the round before. */
+  /** The love interest's lines opening the round; they follow from any move of the round before. */
   his: Segment[];
-  options: Record<Stance, ConfrontationOption>;
+  /** One option per move of the game's kind. */
+  options: Partial<Record<ClimaxMove, ConfrontationOption>>;
 }
 
-/** Stored on the beat. `picks` are the first-play stances, in round order; `ending` is set with the last pick. */
+/** Stored on the beat. `picks` are the first-play moves, in round order; `ending` is set with the last pick. */
 export interface Confrontation {
-  /** Whom she confronts. */
+  /** "closer" for a Closer; absent for a Confrontation (every game stored before 0.4.0 is one). */
+  kind?: "closer";
+  /** The love interest the game is played with. */
   li: LiId;
   rounds: ConfrontationRound[];
-  endings: Record<ConfrontationEnding, Segment[]>;
-  /** What a walkout leaves between them. */
-  grievance: { text: string; severity: "major" };
-  /** What she tells him when she picks Reveal, as one third-person sentence. */
+  /** One list per ending of the game's kind. */
+  endings: Partial<Record<ClimaxEnding, Segment[]>>;
+  /** What a walkout (major) or a Shut out (minor) leaves between them. */
+  grievance: { text: string; severity: "major" | "minor" };
+  /** What the protagonist tells them with Reveal or Mirror, as one third-person sentence. */
   disclosure: string;
-  picks: Stance[];
-  ending?: ConfrontationEnding;
+  picks: ClimaxMove[];
+  ending?: ClimaxEnding;
 }
 
 export interface ConfrontationOptionView {
@@ -917,20 +937,21 @@ export interface ConfrontationRoundView {
   /** 1–3. */
   round: number;
   his: Segment[];
-  options: Record<Stance, ConfrontationOptionView>;
-  /** The first-play stance, once picked (a replay keeps it). */
-  picked?: Stance;
+  /** One option per move of the game's kind, in its order. */
+  options: Partial<Record<ClimaxMove, ConfrontationOptionView>>;
+  /** The first-play move, once picked (a replay keeps it). */
+  picked?: ClimaxMove;
 }
 
 export interface ConfrontationEndingView {
-  kind: ConfrontationEnding;
+  kind: ClimaxEnding;
   segments: Segment[];
 }
 
 /**
- * The stance game as the client sees it, with the beat's own fields: the opening, every round played and the one
- * being played, and the ending once reached. His composure is never shown, nor the answers to stances not taken, nor
- * an ending not reached. Its reading position (`readThrough`, POST .../read {segment}, an Ease off's `at`) indexes its
+ * A climax game as the client sees it, with the beat's own fields (its `kind`, the node's, says which game it is): the
+ * opening, every round played and the one being played, and the ending once reached. Composure (a Closer's guard) is
+ * never shown, nor the answers to moves not taken, nor an ending not reached. Its reading position (`readThrough`, POST .../read {segment}, an Ease off's `at`) indexes its
  * mainline: the opening, then each shown round's `his` lines (a stance's answer shares its round's last index), then
  * the ending.
  */
@@ -941,7 +962,7 @@ export type ConfrontationView = Omit<BeatView, "segments" | "choices" | "choiceC
   ending?: ConfrontationEndingView;
 };
 
-/** POST .../beats/:i/stance {round, stance}. */
+/** POST .../beats/:i/stance {round, stance}: a Confrontation's stance or a Closer's move. */
 export interface StanceResult {
   /** The round just played, with its pick and his answer. */
   round: ConfrontationRoundView;

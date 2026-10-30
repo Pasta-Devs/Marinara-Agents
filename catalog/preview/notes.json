@@ -72,6 +72,24 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.4.2",
+          "date": "2026-10-30",
+          "notes": "- The Love Timeline shows every 4★ Moment and 5★ Memory you've won, on the day you won it, including ones won before this update. Each Snapshot, Moment and Memory says what it is and opens in the Album.",
+          "highlight": false
+        },
+        {
+          "version": "0.4.1",
+          "date": "2026-10-30",
+          "notes": "- The story's **Image description** shows only for a picture that isn't on screen: a painted background or key image no longer has its description under the chapter title, and one whose file fails to load gets it back.\n- NSFW stories now say outright that crude and vulgar words, swearing and dirty talk included, are fine wherever they fit a character's voice. In SFW stories characters may swear too, without the sexual words.\n- A 5★ reveal with a long premise fits on a phone: the card never grows past the screen, so the title shows whole and the premise scrolls inside it.",
+          "highlight": false
+        },
+        {
+          "version": "0.4.0",
+          "date": "2026-10-30",
+          "notes": "- **The Closer:** a main chapter can now end on a warm climax instead of a Confrontation. Over three rounds the love interest offers something of themselves, and you answer: **Reassure**, **Tease**, **Mirror** (share something of your own) or **Ask**.\n- It ends **Opened up** (trust grows, and it's a first on your Love Timeline), **Almost** (nothing changes) or **Shut out** if it goes wrong (trust falls, and they hold it against you).\n- In NSFW stories, Opened up can turn intimate, drawing on their tastes and your role.\n- After two main chapters end the same way, the next ends with the other, so a story in progress gets its first Closer soon. Route chapters keep their Confrontations.",
+          "highlight": true
+        },
+        {
           "version": "0.3.0",
           "date": "2026-10-30",
           "notes": "- NSFW stories give each new love interest's bible their tastes in sex and intimacy: what they're into, kinks included, and what draws them. Intimate scenes bring them in when they fit; your content settings still decide what a scene may hold.\n- An older cast gets **Add intimacy preferences** on Your cast (1 call). Read and edit them in the bible.\n- An optional Sub, Dom or Switch preference for your protagonist sits beside Heat.\n- SFW stories never write or send any of it.\n- Story memory keeps an NSFW story as it was written: summaries no longer turn it SFW, and a Veil is remembered as having happened off the page.\n- The planners no longer call every love interest a monster: each is a human, even if inside a monster.\n- A date inside a chapter can go as hoped: it stumbles only when the story gives it a reason, like Date Night.",
@@ -172,24 +190,6 @@
           "date": "2026-10-29",
           "notes": "- The downloadable package now includes the merged reader resize repair: switching from a phone-sized reader to desktop no longer leaves a hidden mobile menu consuming the next story action.\n- Linking a generated love interest to a card keeps their existing story bible, without showing the imported-card canon notice.",
           "highlight": false
-        },
-        {
-          "version": "0.1.4",
-          "date": "2026-10-29",
-          "notes": "- Link an existing love interest to a character card in Your cast. Its assigned voice and image references apply while their story, progress and pictures stay; unlinking restores their own fallback.\n- Future paints prefer the linked card's Full Body → Neutral sprite, then its current avatar, then the retained Otome look. Linking never paints automatically.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.3",
-          "date": "2026-10-29",
-          "notes": "- Mobile chapter cutouts continue behind the dialogue panel for a closer view. A three-dot button opens the secondary reader controls vertically, beside working mute and fullscreen buttons.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.2",
-          "date": "2026-10-29",
-          "notes": "- Home cleans your own generated looks and outfits as well as the love interests'. Originals stay in the Wardrobe.\n- On an Engine with corrected sprite cleanup, old cut-outs are rebuilt from the retained originals for free. The previous image stays visible until its replacement is ready.\n- Card-imported love interests use their card's Full Body → Neutral sprite as the likeness reference when available, then their painted base look, then the card avatar.\n- Every image of your persona reads their current Appearance, or the enabled Image Appearance Override, whole. Outfit changes keep that identity instead of reusing a stale generated description.\n- Empty Appearance uses your avatar and the requested clothing, with no invented body description or extra model call.\n- Otome Hearth's Home tab uses a heart icon.",
-          "highlight": true
         }
       ]
     },

@@ -1088,7 +1088,8 @@ function createSceneStub({
   ask = false,
   images = true,
   audio = true,
-}: { ask?: boolean; images?: boolean; audio?: boolean | Json } = {}) {
+  climax = "confrontation",
+}: { ask?: boolean; images?: boolean; audio?: boolean | Json; climax?: "confrontation" | "closer" } = {}) {
   const placeArt = ask ? { state: "waiting-consent", at: now() } : { state: "ready", at: now(), url: PLACE_ART };
   const stub = {
     view: runView({
@@ -1122,45 +1123,87 @@ function createSceneStub({
     rewrites: 0,
   };
   const option = (label: string, text: string) => ({ label, selection: { kind: "dialogue", text } });
-  const ROUNDS: Json[] = [
+  // The Closer (#1938): the warm climax, on the same stance route with its own answers and endings.
+  const CLOSER_ROUNDS: Json[] = [
     {
       round: 1,
-      his: [seg("Ilvar Thorne", "Say it. Whatever you came to say.", { expression: "cold" })],
+      his: [seg("Ilvar Thorne", "I used to come up here alone, before the data.", { expression: "tender" })],
       options: {
-        press: option("Make him answer.", "Why did you lock me out?"),
-        hold: option("Wait him out.", "I’m not leaving until you talk."),
-        yield: option("Let it go, for now.", "We don’t have to do this tonight."),
-        reveal: option("Tell him you were scared.", "I was scared for you."),
+        reassure: option("Stay close.", "I’m right here."),
+        tease: option("Tease him.", "You? Alone with the stars? Shocking."),
+        mirror: option("Share your own.", "I had a roof like this, once."),
+        ask: option("Ask why.", "Why did you stop coming?"),
       },
-      answers: { press: [seg("Ilvar Thorne", "You want the truth? Fine.", { expression: "angry" })] },
+      answers: { reassure: [seg("Ilvar Thorne", "…I know you are.", { expression: "tender" })] },
     },
     {
       round: 2,
-      his: [seg("Ilvar Thorne", "…It was never about the data.", { expression: "hurt" })],
+      his: [seg("Ilvar Thorne", "My father counted stars. I counted him.", { expression: "hurt" })],
       options: {
-        press: option("Push harder.", "Then what was it about?"),
-        hold: option("Stay with him.", "I’m listening."),
-        yield: option("Soften.", "You don’t owe me this."),
-        reveal: option("Say what you saw.", "I saw your hands shake."),
+        reassure: option("Hold his hand.", "You’re not counting alone now."),
+        tease: option("Lighten it.", "And who won?"),
+        mirror: option("Tell him yours.", "Mine left before I could count."),
+        ask: option("Ask more.", "Did he ever look back?"),
       },
-      answers: { hold: [seg("Ilvar Thorne", "Don’t look at me like that.", { expression: "tender" })] },
+      answers: { mirror: [seg("Ilvar Thorne", "…Then we’re the same.", { expression: "flustered" })] },
     },
     {
       round: 3,
-      his: [seg("Ilvar Thorne", "Ask me. Properly.", { expression: "tender" })],
+      his: [seg("Ilvar Thorne", "Stay until the dome clears.", { expression: "tender" })],
       options: {
-        press: option("Demand it.", "Tell me everything."),
-        hold: option("Ask him.", "What are you afraid of?"),
-        yield: option("Give him room.", "Only if you want to."),
-        reveal: option("Go first.", "I’m afraid of losing you."),
+        reassure: option("Promise.", "Until morning."),
+        tease: option("Bargain.", "Only if you make coffee."),
+        mirror: option("Say it back.", "I wanted to ask you the same."),
+        ask: option("Ask him.", "Why tonight?"),
       },
-      answers: { reveal: [seg("Ilvar Thorne", "…You too?", { expression: "tender" })] },
+      answers: { reassure: [seg("Ilvar Thorne", "Good.", { expression: "tender" })] },
     },
   ];
-  const ENDING = {
-    kind: "truth",
-    segments: [seg("Ilvar Thorne", "I was afraid you’d leave. So I left first.", { expression: "hurt" })],
-  };
+  const ROUNDS: Json[] =
+    climax === "closer"
+      ? CLOSER_ROUNDS
+      : [
+          {
+            round: 1,
+            his: [seg("Ilvar Thorne", "Say it. Whatever you came to say.", { expression: "cold" })],
+            options: {
+              press: option("Make him answer.", "Why did you lock me out?"),
+              hold: option("Wait him out.", "I’m not leaving until you talk."),
+              yield: option("Let it go, for now.", "We don’t have to do this tonight."),
+              reveal: option("Tell him you were scared.", "I was scared for you."),
+            },
+            answers: { press: [seg("Ilvar Thorne", "You want the truth? Fine.", { expression: "angry" })] },
+          },
+          {
+            round: 2,
+            his: [seg("Ilvar Thorne", "…It was never about the data.", { expression: "hurt" })],
+            options: {
+              press: option("Push harder.", "Then what was it about?"),
+              hold: option("Stay with him.", "I’m listening."),
+              yield: option("Soften.", "You don’t owe me this."),
+              reveal: option("Say what you saw.", "I saw your hands shake."),
+            },
+            answers: { hold: [seg("Ilvar Thorne", "Don’t look at me like that.", { expression: "tender" })] },
+          },
+          {
+            round: 3,
+            his: [seg("Ilvar Thorne", "Ask me. Properly.", { expression: "tender" })],
+            options: {
+              press: option("Demand it.", "Tell me everything."),
+              hold: option("Ask him.", "What are you afraid of?"),
+              yield: option("Give him room.", "Only if you want to."),
+              reveal: option("Go first.", "I’m afraid of losing you."),
+            },
+            answers: { reveal: [seg("Ilvar Thorne", "…You too?", { expression: "tender" })] },
+          },
+        ];
+  const ENDING =
+    climax === "closer"
+      ? { kind: "opened", segments: [seg("Ilvar Thorne", "I’ve never shown anyone this.", { expression: "tender" })] }
+      : {
+          kind: "truth",
+          segments: [seg("Ilvar Thorne", "I was afraid you’d leave. So I left first.", { expression: "hurt" })],
+        };
   const picks: string[] = [];
   const roundView = (index: number) => {
     const round = ROUNDS[index]!;
@@ -1180,10 +1223,10 @@ function createSceneStub({
   const confrontationView = () => ({
     key: "main-1",
     i: 1,
-    kind: "confrontation",
+    kind: climax,
     li: ILVAR,
     places: [],
-    musicMood: "angst",
+    musicMood: climax === "closer" ? "confession" : "angst",
     readThrough: 0,
     written,
     rewrites: 0,
@@ -1202,7 +1245,7 @@ function createSceneStub({
     summary: "",
     nodes: [
       { i: 0, kind: "beat", cg: true },
-      { i: 1, kind: "confrontation" },
+      { i: 1, kind: climax },
     ],
     plannedAt: now(),
   };
@@ -1424,6 +1467,56 @@ test("Otome Hearth imageless play: intended appearance is readable without Bible
   await page.screenshot({ path: testInfo.outputPath("imageless-appearance.png"), animations: "disabled" });
 });
 
+test("Otome Hearth Closer: three answers on their own pills, the guard never shown, and the Opened up card (#1938)", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calls: Call[] = [];
+  const fixture = createSceneStub({ images: false, audio: false, climax: "closer" });
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Continue", exact: true }).first().click();
+  await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
+  for (let k = 0; k < 4; k += 1) await next(root);
+  await expect(line(root)).toContainText("The dome again.");
+  await expect(root.locator(".of-reader-chip--frame")).toHaveText("Closer");
+  await next(root);
+  const round1 = root.getByRole("group", { name: /Round 1 of 3/u });
+  await expect(round1.getByRole("button")).toHaveCount(4);
+  for (const name of ["Reassure", "Tease", "Mirror", "Ask"]) {
+    await expect(round1.getByRole("button", { name: new RegExp(`^${name}`, "u") })).toBeVisible();
+  }
+  await expect(round1.getByRole("button", { name: /Press|Hold|Yield|Reveal/u })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("closer-answers.png") });
+  await round1.getByRole("button", { name: /^Reassure/u }).click();
+  await expect(line(root)).toContainText("I’m right here.");
+  expect(posts(calls, "/stance")[0]!.body).toMatchObject({ round: 1, stance: "reassure" });
+  await next(root);
+  await next(root);
+  await root
+    .getByRole("group", { name: /Round 2 of 3/u })
+    .getByRole("button", { name: /^Mirror/u })
+    .click();
+  await next(root);
+  await next(root);
+  await root
+    .getByRole("group", { name: /Round 3 of 3/u })
+    .getByRole("button", { name: /^Reassure/u })
+    .click();
+  await next(root);
+  await next(root);
+  await expect(line(root)).toContainText("I’ve never shown anyone this.");
+  expect(posts(calls, "/stance").map((call) => call.body!.stance)).toEqual(["reassure", "mirror", "reassure"]);
+  // The ending's card names it in words, never numbers.
+  await next(root);
+  await expect(root.getByRole("heading", { name: "Ilvar Thorne lets you in" })).toBeFocused();
+  await expect(root.getByText("The moment passes", { exact: true })).toBeVisible();
+  await expect(root.locator(".of-outcome")).not.toContainText(/\d/u);
+  await page.screenshot({ path: testInfo.outputPath("closer-opened.png") });
+  await root.getByRole("button", { name: "Go on" }).click();
+  await expect(root.getByRole("heading", { name: "Chapter complete" })).toBeFocused();
+});
+
 test("Otome Hearth imageless play: old locations and key moments can be painted explicitly with prompt review", async ({
   page,
 }) => {
@@ -1444,6 +1537,9 @@ test("Otome Hearth imageless play: old locations and key moments can be painted 
   await root.getByRole("button", { name: "Continue", exact: true }).first().click();
   await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
   expect(posts(calls, "/art/place")).toEqual([]);
+  // The description stands in for an unpainted picture, and goes once it is painted (#1941).
+  const description = root.locator(".of-reader-head .of-image-description");
+  await expect(description).toContainText("glass dome, night");
   const paintPlace = root.getByRole("button", { name: "Paint The Observation Room (1 image)", exact: true });
   await expect(paintPlace).toHaveText("Paint · 1 image");
   await paintPlace.click();
@@ -1455,10 +1551,13 @@ test("Otome Hearth imageless play: old locations and key moments can be painted 
   await expect(review).toHaveCount(0);
   await expect(paintPlace).toHaveCount(0);
   expect(posts(calls, "/art/place")).toHaveLength(1);
+  await expect(description).toHaveCount(0);
   await next(root);
   await next(root);
   await next(root);
   await expect(root.getByRole("button", { name: "Paint this moment", exact: true })).toBeVisible();
+  await expect(description).toContainText("Two figures under a glass dome");
+  await expect(description).not.toContainText("glass dome, night");
   expect(posts(calls, "/art/cg")).toEqual([]);
   await root.getByRole("button", { name: "Paint this moment", exact: true }).click();
   review = page.getByRole("dialog");
@@ -1467,9 +1566,36 @@ test("Otome Hearth imageless play: old locations and key moments can be painted 
   await review.getByRole("button", { name: "Paint", exact: true }).click();
   await expect(review).toHaveCount(0);
   await expect(root.getByRole("img", { name: "An illustration: Ilvar Thorne" })).toBeVisible();
+  await expect(description).toHaveCount(0);
   expect(posts(calls, "/art/cg")).toHaveLength(1);
   expect(posts(calls, "/art/paint")).toEqual([]);
   expect(posts(calls, "/api/audio/generate")).toEqual([]);
+});
+
+test("Otome Hearth story header: a painted picture whose file fails to load gets its description back (#1941)", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const fixture = createSceneStub({ audio: false });
+  const broken = (name: string) => `/api/global-gallery/file/${name}.png`;
+  fixture.stub.view.world.places["the-observation-room"].art = { state: "ready", at: now(), url: broken("lost-place") };
+  fixture.beat0.cg.art = { state: "ready", at: now(), url: broken("lost-cg") };
+  await page.route("**/api/global-gallery/file/lost-*", (route) => route.fulfill({ status: 404, body: "gone" }));
+  const calls: Call[] = [];
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Continue", exact: true }).first().click();
+  await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
+  // Painted, but nothing on screen: the description stands in for the background.
+  const description = root.locator(".of-reader-head .of-image-description");
+  await expect(description).toContainText("glass dome, night");
+  // The key image's file is gone too: its brief stands in for it, as for one never painted.
+  await next(root);
+  await next(root);
+  await next(root);
+  await expect(description).toContainText("Two figures under a glass dome");
+  expect(posts(calls, "/art/place")).toEqual([]);
+  expect(posts(calls, "/art/cg")).toEqual([]);
 });
 
 test("Otome Hearth imageless play: full visual descriptions keep reading controls reachable and keyboard scroll does not advance", async ({

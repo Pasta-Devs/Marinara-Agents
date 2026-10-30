@@ -5,7 +5,7 @@ Otome Hearth is a single-player otome game made from your own characters. Its lo
 Release 1, **0.1.0 "First Date"**, holds the whole first loop:
 
 - story setup with hidden character bibles;
-- main chapters and a route for each love interest, with confrontations and rifts;
+- main chapters and a route for each love interest, with confrontations, warm Closers and rifts;
 - Home and Messages;
 - Wish, the Wardrobe and the Album;
 - three games in Dates;
@@ -64,7 +64,7 @@ In **Your cast**, open a love interest and choose their **Character card** to li
 
 ## The story
 
-Each main chapter is led by one love interest. Otome Hearth offers two to choose from: the one you have spent the least time with, and the one with the most unresolved between you. The chapter planner adds a second love interest whose goals get in the way, and writes six to nine scenes that build to a confrontation. Each scene is written when you reach it, and the next one is written ahead while you read.
+Each main chapter is led by one love interest. Otome Hearth offers two to choose from: the one you have spent the least time with, and the one with the most unresolved between you. The chapter planner adds a second love interest whose goals get in the way, and writes six to nine scenes that build to a climax: a Confrontation, or a warm Closer. After two main chapters in a row end the same way, the next one ends with the other. Each scene is written when you reach it, and the next one is written ahead while you read.
 
 - **Who speaks:** every line names its speaker. Each love interest's line shows one of five faces: tender, flustered, cold, hurt or angry. Your thoughts are set apart, and from the second stage of a love interest's story you may hear one of their thoughts too.
 - **Choices:** your first choice in a scene is canon. Replaying a chapter shows the other branches without changing anything. A choice that changes things between you names who will remember it, and the last scene may end on one lasting choice.
@@ -77,15 +77,16 @@ Each main chapter is led by one love interest. Otome Hearth offers two to choose
 - **Reader controls:** Auto, Skip what you've read, the Backlog (which can play a line again), Hide the text and Cancel.
 - **On mobile:** the three-dot button opens the secondary controls in a vertical list. The audio button mutes or unmutes music and voices, and the fullscreen button stays beside it. Chapter cutouts continue behind the dialogue panel.
 
-## Routes, confrontations and rifts
+## Routes, confrontations, Closers and rifts
 
 Each love interest moves through six stages, from Mask to Bond.
 
 - **Affection progress:** **Story → Between you** shows the points earned within the current level beneath **Level**, out of the 300 needed for the next. Level 10 is the maximum and shows a complete counter. These levels unlock route chapters; completing their gates advances the relationship's six-stage arc.
 - **Route chapters are free.** The next one opens at an affection level (3, 5, 7, 8, then 10). It takes one model call to plan.
 - **The gate:** only a route chapter's last scene moves a love interest on a stage. The fourth stage's gate reveals one of their secrets. The fifth stage's chapter holds a confrontation, and its gate ends on a choice that cannot be undone.
-- **Rewards:** a route chapter earns 300 Starlight and 150 affection. A hostile first-play choice in the story or on a date, or a Confrontation walkout, can cost 15 affection points per affected love interest for each chosen option. Points never fall below the start of the highest level you have reached, with a new level every 300 points. Replaying costs nothing, and losses never refund the daily earning cap.
-- **Confrontations:** every main chapter builds to one: three rounds in which you Press, Hold, Yield or Reveal. It ends in the truth, a walkout or a standoff, and what you reveal is something they know from then on. The whole confrontation is written in one model call, and your first play of it is canon.
+- **Rewards:** a route chapter earns 300 Starlight and 150 affection. A hostile first-play choice in the story or on a date, a Confrontation walkout, or being shut out of a Closer can cost 15 affection points per affected love interest for each chosen option. Points never fall below the start of the highest level you have reached, with a new level every 300 points. Replaying costs nothing, and losses never refund the daily earning cap.
+- **Confrontations:** a main chapter can build to one: three rounds in which you Press, Hold, Yield or Reveal. It ends in the truth, a walkout or a standoff, and what you reveal is something they know from then on. The whole confrontation is written in one model call, and your first play of it is canon. Route chapters keep theirs.
+- **Closers:** the warm climax a main chapter can end with instead. Over three rounds the Lead offers something of themselves, and you answer: Reassure, Tease, Mirror (share something of your own, which they know from then on) or Ask. They end **Opened up** (trust grows, and the first time it's a first on your Love Timeline), **Almost** (nothing changes) or **Shut out** if it goes wrong (trust falls, and they hold a minor grievance). In an NSFW story, Opened up can turn intimate, drawing on their tastes and your role, within your content settings. Like a confrontation, it is one model call, and your first play is canon.
 - **Rifts:** a walkout can leave a rift. While it stands, that love interest's route chapters stay shut (you can still finish the scene on screen), and **Make it right** offers a short repair chapter. Reading its last scene closes the rift.
 - **Nothing is taken back:** a rift never removes anything you have unlocked.
 
@@ -93,7 +94,7 @@ Each love interest moves through six stages, from Mask to Bond.
 
 Everything works without images or sound: a place without art shows a gradient for its mood, a love interest without a portrait shows their initials in their own colour, and a key moment without a painting shows a quiet card.
 
-In **Your cast**, edit **Image appearance** above each love interest’s spoiler Bible to change their image description. Saving paints nothing and leaves their story Bible unchanged; explicit future painting uses the saved description. Clear the field and save to restore the Bible’s original image description. Open **Image description** in **Who’s home** or an owned Wardrobe look to read its intended appearance without opening Bible spoilers. The reader also offers the current location’s description and a key moment’s brief once you reach it. These are the existing visual instructions, not a new generated caption; opening them makes no model calls.
+In **Your cast**, edit **Image appearance** above each love interest’s spoiler Bible to change their image description. Saving paints nothing and leaves their story Bible unchanged; explicit future painting uses the saved description. Clear the field and save to restore the Bible’s original image description. Open **Image description** in **Who’s home** or an owned Wardrobe look to read its intended appearance without opening Bible spoilers. The reader also offers the current location’s description while it has no painted background, and a key moment’s brief once you reach it, until its image is painted. These are the existing visual instructions, not a new generated caption; opening them makes no model calls.
 
 You can add an image connection later in **Settings → Images**. Saving it paints nothing. Open **Your cast** to paint missing base portraits, open owned items from **Wardrobe** or **Album** to add their missing artwork, or use **Paint** beside a reached story location or key moment. Each action shows its image cost and uses the existing prompt-review setting. Existing artwork, story text, progress and Starlight stay intact.
 
@@ -109,7 +110,7 @@ You can add an image connection later in **Settings → Images**. Saving it pain
 - **Uploaded music:** with **Generate music** off, choose **Music folder** in **Settings → Audio → Music**. Nonempty Music folders from Engine’s Assets library are listed, including subfolders. Save to use their tracks instead of generated music. Automatic music uses previously saved tracks or Engine’s mood library; a missing or empty chosen folder falls back to that library. Music keeps the same mute, volume and tap-to-start behavior on mobile.
 - **Chapter themes:** with **Generate music** enabled, **Settings → Audio → Generate a theme for each chapter** optionally gives each chapter its own instrumental theme. It starts generating after you begin reading, using the chapter's public title and summary. The saved theme is reused on replay. Current music keeps playing while a new theme is being made or if it fails. If a saved theme's file is unavailable, it is not generated or paid for again. This option starts off.
 - **Other speakers:** when a named character outside your love-interest cast speaks, the previous character's sprite is hidden. An exact, unique matching character card can supply an existing Full Body sprite, with Neutral preferred. Without one, the scene shows no character sprite. Opaque sprites wait for free background cleanup; the card's original stays untouched. This never links cards to love interests or generates paid artwork. The background check uses a transparency heuristic: clear outer padding, faint noise and isolated clear pixels are insufficient, but a silhouette-shaped opaque mask can share the same alpha pattern as a genuine cut-out.
-- **Story image descriptions:** the header's **Image description** panel is hidden while a character sprite is shown. Scenes without a sprite, including an unavailable portrait or expression, and key-moment views keep their scene description.
+- **Story image descriptions:** the header's **Image description** panel stands in for a picture that isn't there. It shows the location's description only while no painted background (or painted key image) is on screen, and a key moment's brief only until that image shows. A painted picture that fails to load counts as missing, so its description shows. The panel is hidden while a character sprite is shown, and when every picture shows.
 - **Character nameplates:** story speaker names use the same rounded shape on every corner.
 - **Voices:** with **Voice the dialogue** on in **Settings → Audio**, a love interest from a card speaks with the voice assigned to that card, the others with a default voice, and you with your persona's voice. Narration and thoughts stay silent.
 
@@ -158,7 +159,7 @@ Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is 
 - **The Album** keeps:
   - **Memories** offers All, 3★, 4★ and 5★ filters. Unplayed Memories and Moments appear first; partially read and completed stories keep their saved progress. Snapshots are vignettes without a playable chapter.
   - the CGs you have seen and your Memories;
-  - the Love Timeline;
+  - the Love Timeline: each stage and first with a love interest, each Snapshot, Moment and Memory you won with them on the day you won it, and each couple set. A Snapshot, Moment or Memory opens from there;
   - the tells you have learned;
   - your favourite lines and the soundtrack.
 
@@ -207,7 +208,7 @@ Each love interest alone remembers the games you played together, as they rememb
 
 - each love interest's birthday;
 - the day your story began;
-- the firsts of your Love Timeline, such as each stage you reach with a love interest (Snapshots and couple sets stay in the Album);
+- the firsts of your Love Timeline, such as each stage you reach with a love interest, or the first time one opens up in a Closer (Snapshots, Moments, Memories and couple sets stay in the Album);
 - the last day of each running Wish banner;
 - your own birthday, if you add it. It stays on this device and is never sent with a prompt.
 
@@ -245,12 +246,13 @@ Each story has its own content settings:
 
 **NSFW mode:** NSFW Heat or Dark romance turns it on for the story, its chapters and Messages.
 
-- Romance escalates without stopping to ask, love interests may make the first move, and language is not sanitized.
+- Romance escalates without stopping to ask, love interests may make the first move, and language is not sanitized: swearing, dirty talk and crude words are fine wherever they fit a character's voice.
 - NSFW: Fade writes the build-up and cuts at the threshold; NSFW: Explicit writes sex on the page in full.
 - Dark romance lets villains play dirty and aim menace at you, with graphic violence wherever your limits allow it. Its darkness has a reason, a hidden cost and lines they won't cross. Your choices always include refusing, and the story honours what you pick.
 - What you set to Allow is told to the model, and your Lines and Veils always win. Non-consent can move off Line only under Dark romance with NSFW Heat.
 - The model never stops a scene to ask: **Ease off** is your stop.
 - Home, notes and Snapshots always stay SFW.
+- In an SFW story, and on Home, characters may still swear when it fits their voice; the explicit sexual words are NSFW mode's.
 - Story memory follows your settings: its summaries record intimacy and darkness as the story wrote them, never a Line, and a Veil only as having happened off the page. Nothing from the period tracker is ever remembered.
 
 **Intimacy preferences** (NSFW Heat only, Fade or Explicit, never SFW):
@@ -290,7 +292,7 @@ If a text endpoint rejects the optional JSON-format parameter, Otome Hearth can 
 | **Repaint expressions**                             | —                                                                                                                                                                                 | 5, on your confirmation, for the current look                                                                              | —                                     | —                                                          |
 | Start a main chapter                                | 1 call to plan it                                                                                                                                                                 | —                                                                                                                          | —                                     | —                                                          |
 | Read a scene                                        | 1 call per scene (the next one is written ahead)                                                                                                                                  | 1 per new place and per key moment (with **Ask before painting**, on your tap)                                             | —                                     | each voiced line, once                                     |
-| A confrontation                                     | 1 call for all three rounds                                                                                                                                                       | —                                                                                                                          | —                                     | each voiced line, once                                     |
+| A confrontation or a Closer                         | 1 call for all three rounds                                                                                                                                                       | —                                                                                                                          | —                                     | each voiced line, once                                     |
 | **Rewrite**                                         | 1 call, plus 1 to write the next scene again when it was already written ahead                                                                                                    | this scene's key moment and the next scene's, painted again when they have one (with **Ask before painting**, on your tap) | —                                     | as any scene                                               |
 | A route or repair chapter                           | 1 call to plan, then 1 per scene                                                                                                                                                  | as any scene                                                                                                               | —                                     | as any scene                                               |
 | Story memory                                        | background summaries of finished chapters                                                                                                                                         | —                                                                                                                          | —                                     | —                                                          |

@@ -20,10 +20,12 @@ interface CgTakeoverProps {
   reducedMotion: boolean;
   /** The pan ended (by itself, or because the player went on). */
   onIntroEnd: () => void;
+  /** Whether its picture loaded (the reader then shows the brief in place of one that failed). */
+  onArtStatus?: (url: string, loaded: boolean) => void;
 }
 
 export const CgTakeover = forwardRef<HTMLElement, CgTakeoverProps>(function CgTakeover(
-  { url, names, intro, reducedMotion, onIntroEnd },
+  { url, names, intro, reducedMotion, onIntroEnd, onArtStatus },
   ref,
 ) {
   const { t } = useTranslation();
@@ -48,7 +50,14 @@ export const CgTakeover = forwardRef<HTMLElement, CgTakeoverProps>(function CgTa
       // The faded header and box let taps through to the picture: a tap anywhere ends the pan.
       onClick={intro ? onIntroEnd : undefined}
     >
-      <img className="of-cg-img" src={url} alt="" decoding="async" />
+      <img
+        className="of-cg-img"
+        src={url}
+        alt=""
+        decoding="async"
+        onLoad={() => onArtStatus?.(url, true)}
+        onError={() => onArtStatus?.(url, false)}
+      />
       <span className="of-cg-bar of-cg-bar--top" aria-hidden="true" />
       <span className="of-cg-bar of-cg-bar--bottom" aria-hidden="true" />
     </figure>

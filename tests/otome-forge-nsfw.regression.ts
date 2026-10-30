@@ -206,6 +206,26 @@ test("the consent framing appears only while dubious consent or non-consent is n
   assert.match(text, /When a choice is about intimacy, one option lets the protagonist decline/);
 });
 
+test("NSFW mode names the crude words it allows; an SFW story allows swearing without the sexual words", () => {
+  for (const content of [stored("fade", "angst"), stored("explicit", "dark"), stored("sfw", "dark")]) {
+    for (const kind of ["planner", "scene", "chat"] as const) {
+      assert.match(
+        contract(content, kind),
+        /crude and vulgar words are fine in dialogue and narration alike \(fuck, shit, cock, pussy and the like\)/,
+        kind,
+      );
+    }
+  }
+  // SFW (the maintainer's call): swearing where it fits, in the story and on Home; the sexual words stay NSFW's.
+  for (const kind of ["scene", "home"] as const) {
+    const sfw = contract(defaultContent(), kind);
+    assert.match(sfw, /Characters may swear \(fuck, shit, damn and the like\) when it fits their voice/, kind);
+    assert.doesNotMatch(sfw, /cock|pussy|vulgar words are fine/, kind);
+  }
+  assert.doesNotMatch(contract(stored("explicit", "dark"), "scene"), /explicit sexual words are left out/);
+  assert.doesNotMatch(contract(defaultContent(), "care"), /swear/, "comfort only");
+});
+
 test("summaries keep an adult story as it was written: never SFW by themselves (0.3.0)", () => {
   const open = stored("explicit", "dark", { "non-consent": "allow", "dubious-consent": "allow", torture: "allow" });
   const summary = contract(open, "summary");

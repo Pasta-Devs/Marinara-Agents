@@ -271,6 +271,7 @@ const NODE_ICONS: Record<string, LucideIcon> = {
   "read-him": Eye,
   date: CalendarHeart,
   confrontation: Swords,
+  closer: HeartHandshake,
   cg: Star,
   gate: KeyRound,
 };
@@ -296,8 +297,8 @@ function NodePath({
       {Array.from({ length: total }, (_, index) => {
         const node = nodes?.[index];
         const Icon =
-          node?.kind === "confrontation"
-            ? NODE_ICONS.confrontation
+          node?.kind === "confrontation" || node?.kind === "closer"
+            ? NODE_ICONS[node.kind]
             : node?.kind === "moment" && node.moment
               ? NODE_ICONS[node.moment]
               : node?.gate
