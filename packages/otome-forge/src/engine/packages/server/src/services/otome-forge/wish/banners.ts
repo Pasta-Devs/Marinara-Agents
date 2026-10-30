@@ -60,6 +60,7 @@ import {
   type PaintCheck,
 } from "../art/paint.js";
 import { LOOK_SIZE, SCENE_SIZE, cgPrompt, lookPrompt, type ImagePrompt } from "../art/prompts.js";
+import { memoryArtBrief } from "../content-contract.js";
 import { generateJson, readOrGenerate } from "../generation.js";
 import { itemView } from "../items/open.js";
 import { OtomeForgeError, type RouteDeps } from "../http.js";
@@ -77,6 +78,8 @@ import {
   BANNER_PLAN_TOKENS,
   BannerPlanSchema,
   bannerPlanMessages,
+  explicitMemoryArt,
+  momentBriefs,
   normalizeBannerPlan,
   type BannerPlan,
 } from "./prompts.js";
@@ -314,6 +317,7 @@ function itemsOf(
     ...base(`a${index + 1}` as ItemSlot, kinds.four, entry.li, entry.title),
     ...(entry.premise ? { premise: entry.premise } : {}),
     ...(entry.look ? { look: entry.look } : {}),
+    ...(entry.cg ? { cg: entry.cg } : {}),
   }));
   const three = plan.snapshots.map((entry, index): Item => ({
     ...base(`s${index + 1}` as ItemSlot, kinds.three, entry.li, entry.title),
@@ -395,7 +399,14 @@ async function createBanner(
     const title = earlierItems.get(banner.items.five[0]!)?.title;
     if (title) earlierTitles.push(title);
   }
-  const context = { kind, units: cast, featured, playerName: run.player.name };
+  const context = {
+    kind,
+    units: cast,
+    featured,
+    playerName: run.player.name,
+    moments: momentBriefs(kind, run.world),
+    explicitArt: explicitMemoryArt(kind, run.world),
+  };
   const { value, connectionId, model } = await generateJson(deps, {
     runId,
     job: "structured",
@@ -535,14 +546,17 @@ async function buildBannerArt(deps: WishDeps, runId: string, banner: Banner, edi
   const style = await worldStyle(images, run.world.images);
   if (banner.kind === "memories") {
     const subjects = cgSubjects(five.cg?.cast ?? [], run.units, run.player);
+    // Banner art stays clothed (at most Suggestive) unless its brief is marked explicit and the world allows that now;
+    // a lowered world paints the clothed brief written beside it.
+    const { brief, explicit } = memoryArtBrief(five.cg, five.title, run.world);
     const prompt = cgPrompt(
       {
-        brief: five.cg?.brief ?? five.title,
+        brief,
         people: subjects.map((subject) => subject.person),
         world: run.world,
         style,
-        // Banner art stays clothed (at most Suggestive): its Character Story is not written yet.
-        use: "clothed",
+        use: explicit ? "cg" : "clothed",
+        explicit,
       },
       edited,
     );

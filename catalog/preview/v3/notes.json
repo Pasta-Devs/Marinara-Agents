@@ -78,6 +78,12 @@
           "highlight": false
         },
         {
+          "version": "0.5.2",
+          "date": "2026-10-30",
+          "notes": "- Memories banners follow your Heat: under NSFW: Fade their Memories and Moments mix SFW and suggestive situations, and under NSFW: Explicit explicit ones too. Snapshots stay SFW.\n- An explicit Memory's art can now be explicit under NSFW: Explicit with the Explicit image rating. Lower either setting before it's painted, and it shows the same moment clothed. Other Memory art stays clothed, as before.",
+          "highlight": false
+        },
+        {
           "version": "0.5.1",
           "date": "2026-10-30",
           "notes": "- Chapters no longer all end the same way. Each one builds differently, and its closing choice is a different kind of decision from the last few, not a love interest stepping in again to ask whom you'll go with. A rival love interest competes over more than just you, too.",
@@ -183,12 +189,6 @@
           "version": "0.1.9",
           "date": "2026-10-29",
           "notes": "- Chapter, scene, route and date writers now receive the selected persona’s full Description, Personality, Backstory and authored Appearance, including on existing runs. The same saved identity fields also ground item stories and outfit reactions, phone replies, Home notes and touch lines, Caring messages, and Read Him. Their authored facts stay distinct from image-only appearance overrides; roleplay scenarios, greetings and dialogue examples are excluded.",
-          "highlight": false
-        },
-        {
-          "version": "0.1.8",
-          "date": "2026-10-29",
-          "notes": "- Music settings can give every chapter its own saved theme. Enable chapter themes with music generation on; each theme is generated when reading starts and reused on replay.",
           "highlight": false
         }
       ]
