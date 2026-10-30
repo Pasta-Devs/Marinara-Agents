@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.5.18 — 2026-10-30
+
+- The memory page now uses the same header as every other agent page: store banner, logo, name, the Active switch for the open chat and Manage package. Add memories and the setup guide stay in that header. This needs a Marinara version with Capability API 1.390; on older versions nothing changes.
+
 ## 1.5.17 — 2026-10-30
 
 - Other packages can no longer read Long-Term Memory's internal runtime service, which only Marinara itself uses. This needs a Marinara version with Capability API 1.388; on older versions nothing changes. Recall for Slurp and Noodle is unaffected.

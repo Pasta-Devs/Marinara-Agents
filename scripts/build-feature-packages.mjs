@@ -87,7 +87,8 @@ const PACKAGE_BUILT_AGAINST = Object.freeze({
 });
 // Capability API 1.387 ships Engine E2 (no built-in recall where Long-Term Memory is on) with E3, so only an Engine
 // that leaves recall to this package installs the version that learns from chat messages (Pasta-Devs/Marinara-Agents#1744).
-const LONG_TERM_MEMORY_CAPABILITY_API = Object.freeze({ major: 1, minor: 387 });
+// Capability API 1.390 lets the Engine draw the agent page header (agentDetail.header: "engine").
+const LONG_TERM_MEMORY_CAPABILITY_API = Object.freeze({ major: 1, minor: 390 });
 const hierarchicalMapsOwnedSourcePaths = [
   "packages/server/src/routes/spatial-context.routes.ts",
   "packages/server/src/services/spatial-context",
@@ -569,7 +570,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.5.17",
+    version: "1.5.18",
     minEngineVersion: "2.5.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -588,7 +589,7 @@ const features = [
     boundaryDisplayName: "Long-Term Memory",
     capabilityApi: LONG_TERM_MEMORY_CAPABILITY_API,
     contributions: {
-      agentDetail: { agentIds: ["long-term-memory"] },
+      agentDetail: { agentIds: ["long-term-memory"], header: "engine" },
       slots: ["chat-settings"],
     },
   },
