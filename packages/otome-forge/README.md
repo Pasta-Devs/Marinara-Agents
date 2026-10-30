@@ -159,7 +159,7 @@ Wishes cost Starlight you earn by playing: 100 each, or 1,000 for ten. There is 
 - **The Album** keeps:
   - **Memories** offers All, 3★, 4★ and 5★ filters. Unplayed Memories and Moments appear first; partially read and completed stories keep their saved progress. Snapshots are vignettes without a playable chapter.
   - the CGs you have seen and your Memories;
-  - the Love Timeline;
+  - the Love Timeline: each stage and first with a love interest, each Snapshot, Moment and Memory you won with them on the day you won it, and each couple set. A Snapshot, Moment or Memory opens from there;
   - the tells you have learned;
   - your favourite lines and the soundtrack.
 
@@ -208,7 +208,7 @@ Each love interest alone remembers the games you played together, as they rememb
 
 - each love interest's birthday;
 - the day your story began;
-- the firsts of your Love Timeline, such as each stage you reach with a love interest, or the first time one opens up in a Closer (Snapshots and couple sets stay in the Album);
+- the firsts of your Love Timeline, such as each stage you reach with a love interest, or the first time one opens up in a Closer (Snapshots, Moments, Memories and couple sets stay in the Album);
 - the last day of each running Wish banner;
 - your own birthday, if you add it. It stays on this device and is never sent with a prompt.
 

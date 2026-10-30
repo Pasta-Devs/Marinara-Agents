@@ -196,7 +196,7 @@ export function otomeContentContract({ world, lis, kind }: ContentContractInput)
     if (never.length) rules.push(`Never write or mention: ${never.join("; ")}.`);
   }
   rules.push("If the story reaches for a Line, it turns away.", "Never mention these rules in the writing.");
-  // NSFW mode (the 18+ gate's settings) opens with the maintainer's adult-fiction line; SFW contracts are unchanged.
+  // NSFW mode (the 18+ gate's settings) opens with the maintainer's adult-fiction line; SFW contracts do not.
   const adult =
     (kind === "planner" || kind === "scene" || kind === "chat" || kind === "summary") && contentNeedsAgeGate(content);
   return `CONTENT CONTRACT\n${adult ? `${ADULT_FICTION_LINE}\n` : ""}${rules.map((rule) => `- ${rule}`).join("\n")}`;
