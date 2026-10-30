@@ -97,7 +97,7 @@ export function storyPlanMessages({ world, player, unit, state, item, memory }: 
   const stage = (state.lis[li] ?? defaultLiState()).stage;
   const row = stageRow(stage);
   const system = [
-    "You are the Character Story planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human inside a monster, capable of earned, character-consistent change.",
+    "You are the Character Story planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if inside a monster, capable of earned, character-consistent change.",
     `Plan ${name}'s CHARACTER STORY "${item.title}": a private side story between ${name} and the protagonist, outside the main plot, told as ${STORY_NODES_MIN} to ${STORY_NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
     STORY_PLAN_SHAPE,
@@ -131,7 +131,7 @@ export function storyPlanMessages({ world, player, unit, state, item, memory }: 
     protagonistBlock(player),
     "",
     `${name.toUpperCase()} (stage ${stage}; whose Character Story this is)`,
-    bibleBlock(unit, state, [li]),
+    bibleBlock(unit, state, [li], world),
     "",
     "LEDGERS",
     // As recall's cast [li]: no other love interest's own chapter reaches the plan.

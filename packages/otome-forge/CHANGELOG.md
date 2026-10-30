@@ -2,9 +2,12 @@
 
 ## 0.3.0 — 2026-10-30
 
-- Add optional adult intimacy preferences to love-interest Bibles, with an explicit action to fill missing details in existing casts.
-- Add an optional Sub, Dom or Switch preference for the protagonist beside the NSFW Content controls.
-- Keep these preferences occasional and flexible, preserving vanilla intimacy and wholesome scenes.
+- NSFW stories (Fade or Explicit) give each new love interest's bible their tastes in sex and intimacy: what they are into, kinks included, and what draws them. Intimate scenes and banner stories bring them in when they fit, not every time; your content settings still decide what a scene may hold.
+- An older cast gets **Add intimacy preferences** on Your cast: 1 call that writes only that part and keeps the rest of the bible and your progress.
+- An optional Sub, Dom or Switch preference for your protagonist sits beside Heat. It is unspecified by default and never sets the love interests'.
+- SFW stories never write or send any of it.
+- The planners no longer call every love interest a monster: each is a human, even if inside a monster.
+- A date inside a chapter can go as hoped: it stumbles only when the story gives it a reason, like Date Night.
 
 ## 0.2.2 — 2026-10-30
 

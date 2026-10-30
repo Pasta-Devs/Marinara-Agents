@@ -29,6 +29,7 @@ import { patchRun, runQueryKey, useRun, useSampledAccents } from "../hooks/use-r
 import { accentOf } from "../lib/accent";
 import { useOtomeProps } from "../props";
 import type { ForgeStatus, ForgeStep, ForgeStepState, Paint, RunLiView, RunView } from "../shared/api-types";
+import { intimacyOpen } from "../shared/content";
 import { FACES, type Face } from "../shared/faces";
 import { TextField } from "./setup/parts";
 import { SaveBar } from "./settings/ContentSettings";
@@ -535,6 +536,9 @@ function CastList({ view, onOpenBible }: { view: RunView; onOpenBible: (li: stri
               <span className="of-cast-name">{li.name}</span>
               <span className="of-hint">{`${li.pronouns.subject}/${li.pronouns.object}`}</span>
               <ImageAppearanceEditor key={`${view.runKey}:${li.id}`} runKey={view.runKey} li={li} />
+              {intimacyOpen(view.world.content) && !li.intimacy ? (
+                <IntimacyFill key={`${view.runKey}:${li.id}:intimacy`} runKey={view.runKey} li={li} />
+              ) : null}
               <button
                 type="button"
                 className="of-button of-button--text of-button--small"
@@ -549,6 +553,52 @@ function CastList({ view, onOpenBible }: { view: RunView; onOpenBible: (li: stri
         })}
       </ul>
     </section>
+  );
+}
+
+/**
+ * An adult NSFW story's way to give an older bible its intimacy preferences (#1936): one call writes that block alone,
+ * keeping the rest of the bible, the story and its progress. Its text stays in the spoiler-gated bible.
+ */
+function IntimacyFill({ runKey, li }: { runKey: string; li: RunLiView }) {
+  const { t } = useTranslation();
+  const otome = useOtomeApi();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fill = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await otome.post(`/runs/${encodeURIComponent(runKey)}/lis/${encodeURIComponent(li.id)}/intimacy`);
+      patchRun(queryClient, runKey, (view) => ({
+        ...view,
+        lis: view.lis.map((entry) => (entry.id === li.id ? { ...entry, intimacy: true as const } : entry)),
+      }));
+    } catch (failure) {
+      setError(otome.errorMessage(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="of-intimacy-fill">
+      <button
+        type="button"
+        className="of-button of-button--quiet of-glass of-button--small"
+        aria-disabled={busy || undefined}
+        aria-label={t("ui.otomeForge.setup.intimacyFillOf", { name: li.name })}
+        onClick={() => void fill()}
+      >
+        <Sparkles size={14} strokeWidth={2} aria-hidden="true" />
+        {busy ? t("ui.otomeForge.setup.intimacyFilling") : t("ui.otomeForge.setup.intimacyFill")}
+      </button>
+      <p className="of-hint">{t("ui.otomeForge.setup.intimacyFillHint")}</p>
+      <div role="alert" className="of-live">
+        {error ? <p className="of-notice of-notice--error">{error}</p> : null}
+      </div>
+    </div>
   );
 }
 

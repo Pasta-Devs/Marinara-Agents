@@ -12,6 +12,7 @@ import {
   CUSTOM_LIMIT_TEXT_MAX,
   CUSTOM_LIMITS_MAX,
   imageRatingNeedsAgeGate,
+  intimacyOpen,
   LIMIT_IDS,
   limitIsFixed,
   limitsForDarkness,
@@ -22,6 +23,7 @@ import {
   type ImageRating,
   type LimitId,
   type LimitLevel,
+  type McRole,
 } from "../../shared/content";
 import type { SetupDraft } from "./draft";
 import { ChoiceCards, Pills, Section, type Choice } from "./parts";
@@ -60,6 +62,12 @@ interface ContentControlsProps {
   content: ContentSettings;
   onChange: (content: ContentSettings) => void;
   gate: AgeGate;
+}
+
+/** The content without the protagonist's role: unspecified, or Heat back at SFW (#1936). */
+function withoutRole(content: ContentSettings): ContentSettings {
+  const { mcRole: _role, ...rest } = content;
+  return rest;
 }
 
 export function ContentControls({ content, onChange, gate }: ContentControlsProps) {
@@ -141,7 +149,7 @@ export function ContentControls({ content, onChange, gate }: ContentControlsProp
         legend={t("ui.otomeForge.setup.heatLegend")}
         value={content.heat}
         choices={heats}
-        onChange={(heat) => void change({ ...content, heat })}
+        onChange={(heat) => void change(heat === "sfw" ? { ...withoutRole(content), heat } : { ...content, heat })}
       />
       <ChoiceCards
         legend={t("ui.otomeForge.setup.darknessLegend")}
@@ -150,6 +158,22 @@ export function ContentControls({ content, onChange, gate }: ContentControlsProp
         onChange={(darkness) => void change({ ...content, darkness, limits: limitsForDarkness(darkness, picks) })}
       />
       {content.darkness === "dark" ? <p className="of-notice">{t("ui.otomeForge.setup.darkPromise")}</p> : null}
+      {intimacyOpen(content) ? (
+        <>
+          <Pills<McRole | "none">
+            legend={t("ui.otomeForge.setup.mcRoleLegend")}
+            value={content.mcRole ?? "none"}
+            options={[
+              { value: "none", label: t("ui.otomeForge.setup.mcRoleNone") },
+              { value: "sub", label: t("ui.otomeForge.setup.mcRoleSub") },
+              { value: "dom", label: t("ui.otomeForge.setup.mcRoleDom") },
+              { value: "switch", label: t("ui.otomeForge.setup.mcRoleSwitch") },
+            ]}
+            onChange={(role) => onChange(role === "none" ? withoutRole(content) : { ...content, mcRole: role })}
+          />
+          <p className="of-hint">{t("ui.otomeForge.setup.mcRoleHint")}</p>
+        </>
+      ) : null}
       <Section title={t("ui.otomeForge.setup.limitsLegend")} hint={t("ui.otomeForge.setup.limitsHint")}>
         <ul className="of-limits">
           {LIMIT_IDS.map((limit) => {

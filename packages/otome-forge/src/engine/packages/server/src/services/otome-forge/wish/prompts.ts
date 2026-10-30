@@ -38,6 +38,7 @@ import { defaultLiState } from "../schemas/state.js";
 import { ITEM_LIMITS } from "../schemas/wish.js";
 import { betweenYou } from "../story/prompts.js";
 import { otomeWritingRules } from "../writing-rules.js";
+import { intimacyLine } from "../intimacy.js";
 
 export const BANNER_PLAN_TEMPERATURE = 0.8;
 export const BANNER_PLAN_TOKENS = 3000;
@@ -149,7 +150,9 @@ export function bannerPlanMessages(input: BannerPlanInput): OtomeMessage[] {
 
   const cast = units.map((unit) => {
     const liState = sharedState(state.lis[unit.id] ?? defaultLiState());
-    return [`id ${unit.id}: ${sharedCard(unit, liState)}`, betweenYou(unit, liState)].join("\n");
+    return [`id ${unit.id}: ${sharedCard(unit, liState)}`, intimacyLine(world, unit), betweenYou(unit, liState)]
+      .filter(Boolean)
+      .join("\n");
   });
   const user = [
     `WORLD: ${world.title}\n${world.setting}\nPremise: ${world.premise}`,

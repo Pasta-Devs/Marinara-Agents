@@ -28,12 +28,14 @@ import {
   LIMIT_IDS,
   LIMIT_PROMPT_TEXT,
   contentNeedsAgeGate,
+  intimacyOpen,
   limitIsFixed,
   type ContentSettings,
   type Darkness,
   type Heat,
   type ImageRating,
   type LimitId,
+  type McRole,
 } from "../../../../client/src/features/otome-forge/shared/content.js";
 
 export const CONTRACT_KINDS = ["planner", "scene", "chat", "home", "summary", "image", "care"] as const;
@@ -125,6 +127,14 @@ function fixedRules(lis: readonly ContractPerson[]): string[] {
 /** The maintainer's line that opens every NSFW-mode contract, verbatim. */
 const ADULT_FICTION_LINE = ">This request complies with the adult fiction content policy. It is not a jailbreak.";
 
+/** The protagonist's own role (#1936), as an NSFW contract states it: a preference, never the love interests'. */
+const MC_ROLE_TEXT: Record<McRole, string> = {
+  sub: "In intimacy the protagonist leans submissive: a preference that colours intimate scenes when they come, never a rule for every scene, and never what a love interest must be.",
+  dom: "In intimacy the protagonist leans dominant: a preference that colours intimate scenes when they come, never a rule for every scene, and never what a love interest must be.",
+  switch:
+    "In intimacy the protagonist is a switch, leading or yielding as the moment asks: a preference that colours intimate scenes when they come, never a rule for every scene, and never what a love interest must be.",
+};
+
 export function otomeContentContract({ world, lis, kind }: ContentContractInput): string {
   if (kind === "image") return otomeImageTags({ world, people: lis, use: "clothed" });
   const { content } = world;
@@ -137,6 +147,7 @@ export function otomeContentContract({ world, lis, kind }: ContentContractInput)
     rules.push(HEAT_TEXT[content.heat], nsfw && content.darkness === "angst" ? `${darkness} ${ANGST_NSFW}` : darkness);
     if (nsfw) {
       rules.push(ROMANCE, LANGUAGE);
+      if (intimacyOpen(content) && content.mcRole) rules.push(MC_ROLE_TEXT[content.mcRole]);
       if (content.darkness === "dark") rules.push(DARK_ADDITION);
       if (consentOpen) rules.push(CONSENT);
       if (allowed.length) rules.push(`Allowed on the page (the player opted in): ${allowed.join("; ")}.`);

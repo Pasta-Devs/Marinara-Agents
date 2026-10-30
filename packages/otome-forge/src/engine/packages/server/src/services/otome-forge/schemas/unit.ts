@@ -8,6 +8,7 @@
 // A stored bible is read field by field (readFields), so one damaged field keeps its default and not the whole bible.
 import { z, type ZodType } from "zod";
 import type {
+  BibleIntimacy,
   ArcStageKey,
   Bible,
   FixedLines,
@@ -46,6 +47,28 @@ export const ACCENT_PATTERN = /^#[0-9a-f]{6}$/i;
 export const DEFAULT_ACCENT = "#E7A6B8";
 
 const ArcStepSchema = z.object({ wantsFromHer: text().optional(), seed: text().optional() });
+
+/** How many preferences and attractions a bible's intimacy block holds: a handful, never an exhaustive list. */
+export const INTIMACY_ITEMS_MAX = 6;
+export const IntimacySchema: ZodType<BibleIntimacy> = z.object({
+  preferences: textList(INTIMACY_ITEMS_MAX),
+  attractions: textList(INTIMACY_ITEMS_MAX),
+});
+
+const INTIMACY_ITEM_MAX = 120;
+
+/** The block trimmed to a handful of short labels, or the problem when nothing usable is left. */
+export function normalizeIntimacy(value: BibleIntimacy): BibleIntimacy | string {
+  const clean = (items: readonly string[]) =>
+    items
+      .map((item) => item.replace(/\s+/g, " ").trim().slice(0, INTIMACY_ITEM_MAX))
+      .filter(Boolean)
+      .slice(0, INTIMACY_ITEMS_MAX);
+  const intimacy = { preferences: clean(value.preferences), attractions: clean(value.attractions) };
+  return intimacy.preferences.length || intimacy.attractions.length
+    ? intimacy
+    : "intimacy needs at least one preference or attraction";
+}
 
 /** One zod schema per bible field: BibleSchema checks them all, normalizeBible falls back field by field. */
 const BIBLE_FIELDS: { [K in keyof Bible]-?: ZodType<Bible[K]> } = {
@@ -109,6 +132,7 @@ const BIBLE_FIELDS: { [K in keyof Bible]-?: ZodType<Bible[K]> } = {
     presentation: z.enum(["man", "woman", "person"]),
   }),
   play: z.object({ style: text(300), cheat: z.enum(["steady", "nudge", "extra", "freeze", "calculate"]) }),
+  intimacy: IntimacySchema.optional(),
 };
 
 export const BibleSchema: ZodType<Bible> = z.object(BIBLE_FIELDS);

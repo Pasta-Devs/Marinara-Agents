@@ -51,6 +51,7 @@ import { defaultLiState } from "../schemas/state.js";
 import { STORY_PACING_INSTRUCTION, otomeWritingRules } from "../writing-rules.js";
 import { prologueFraming } from "./prologue.js";
 import { aboutLine } from "../schemas/player.js";
+import { intimacyLine } from "../intimacy.js";
 
 /** The sentence forgeChoiceMessages replaces when choices are on; P6's system text must contain it exactly. */
 export const NO_CHOICES_SENTENCE =
@@ -232,12 +233,14 @@ export function ledgerBlock(state: RunState, units: readonly Unit[], knows: read
  * A love interest's full bible for the planner (it authors the hidden truth), without the drawing and claw fields, and
  * what stands between them as a planner for `knows` may see it (seenBy).
  */
-export function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[]): string {
+export function bibleBlock(unit: Unit, state: RunState, knows: readonly LiId[], world: Pick<World, "content">): string {
   const liState = seenBy(liStateOf(state, unit.id), unit.id, knows);
-  const { look: _look, play: _play, ...bible } = unit.bible ?? ({} as NonNullable<Unit["bible"]>);
+  // Intimacy (#1936) never rides in the bible's JSON: only an NSFW story gets it, as its own guarded line.
+  const { look: _look, play: _play, intimacy: _intimacy, ...bible } = unit.bible ?? ({} as NonNullable<Unit["bible"]>);
   return [
     `id ${unit.id}: ${unit.name} (${pronounText(unit.pronouns)}), stage ${liState.stage}.`,
     `BIBLE: ${JSON.stringify(bible)}`,
+    ...[intimacyLine(world, unit)].filter(Boolean),
     // Every unresolved grievance, so a node may resolve any of them. ponytail: the ceiling is GRIEVANCES_MAX (60) at
     // up to 300 characters each; the upgrade path is clipping those older than the newest three to an id and excerpt.
     betweenYou(unit, liState, "all"),
@@ -350,14 +353,14 @@ export function chapterPlanMessages({
   const leadUnit = units.find((unit) => unit.id === lead);
   const others = units.filter((unit) => unit.id !== lead);
   const system = [
-    "You are the chapter planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human inside a monster, capable of earned, character-consistent change.",
+    "You are the chapter planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if inside a monster, capable of earned, character-consistent change.",
     `Plan main chapter ${number}: one Lead love interest (given) and one Foil you pick from the others. The chapter is told as ${NODES_MIN} to ${NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
     '{"title": "...", "tags": ["..."], "foil": "<love interest id>", "summary": "...", "nodes": [{"kind": "beat|moment|confrontation", "moment": "read-him|call|date", "guide": "...", "cast": ["<love interest id>"], "place": "...", "cg": true, "resolves": ["<grievance id>"]}], "ledger": {"relationship": [{"li": "<id>", "line": "..."}], "conflict": [{"id": "<conflict id>", "li": "<id>", "type": "...", "action": "plant|escalate|complicate|resolve"}], "offscreen": [{"li": "<id>", "line": "..."}]}}',
     "FIELDS",
     "- title: the chapter's name, 2 to 6 words. summary: one or two lines on what the chapter is about, without giving away its turns (the player reads it).",
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the chapter really holds; [] when none apply.`,
-    "- nodes: kind beat is an ordinary scene. kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads one love interest's face to see what they really feel), call (a call from afar, only voices), date (a date that goes wrong). kind confrontation is the climax: an argument in which something true comes out.",
+    "- nodes: kind beat is an ordinary scene. Kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads one love interest's face to see what they really feel), call (a call from afar, only voices), date (time together that may go as hoped, or stumble on something real when the story gives it a reason). Kind confrontation is the climax: an argument in which something true comes out.",
     `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: the ids of the love interests present. place: where it opens (optional). cg: true only for a node holding a story-defining image (a confession, a revelation, a rescue${firstNightCg(world) ? ", or under this Heat a first night together" : ""}). resolves: ids of open grievances this node may resolve.`,
     "- ledger.relationship: one line per love interest present on what moved between them and the protagonist. ledger.conflict: conflict seeds: plant a new one (type from: " +
       ANGST_TYPES.join(", ") +
@@ -391,11 +394,11 @@ export function chapterPlanMessages({
     protagonistBlock(player),
     "",
     leadUnit
-      ? `THE LEAD (stage ${stageOf(state, lead)}; this chapter does not move the stage)\n${bibleBlock(leadUnit, state, [lead])}`
+      ? `THE LEAD (stage ${stageOf(state, lead)}; this chapter does not move the stage)\n${bibleBlock(leadUnit, state, [lead], world)}`
       : "",
     "",
     "THE OTHERS (full bibles; pick the Foil from these)",
-    others.map((unit) => bibleBlock(unit, state, [lead])).join("\n\n"),
+    others.map((unit) => bibleBlock(unit, state, [lead], world)).join("\n\n"),
     world.web.length ? `\nTHE WEB BETWEEN THEM\n${webBlock(world, units)}` : "",
     "",
     "LEDGERS",
@@ -448,7 +451,7 @@ const MOMENT_FRAMING: Record<NonNullable<ChapterNode["moment"]>, string> = {
   "read-him":
     "This node is a READ HIM moment: the protagonist studies one love interest's face and body to work out what they really feel. Linger on their tells; let their face contradict their words; leave the truth readable but unsaid.",
   call: "This node is a CALL FROM AFAR: only voices, carried by a phone where the world has them and otherwise by whatever carries voices there. Narrate what the protagonist hears and imagines; nobody else is in the room with the caller.",
-  date: "This node is a DATE THAT GOES WRONG: it starts as time together and turns on something real between them.",
+  date: "This node is a DATE: time together. It goes as hoped unless the chapter's guide or the story so far gives a reason for it to turn on something real between them.",
 };
 
 const CONFRONTATION_FRAMING =
@@ -573,7 +576,13 @@ export function beatMessages({
     protagonistBlock(player),
     "",
     present.length ? "LOVE INTERESTS IN THIS NODE" : "No love interest is in this node.",
-    present.map((unit) => sceneCardBlock(unit, cardState(unit.id), node.resolves ?? [])).join("\n\n"),
+    present
+      .map((unit) =>
+        [sceneCardBlock(unit, cardState(unit.id), node.resolves ?? []), intimacyLine(world, unit)]
+          .filter(Boolean)
+          .join("\n"),
+      )
+      .join("\n\n"),
     "",
     memory.trim() ? `STORY MEMORY\n${memory.trim()}` : "",
     "",
@@ -750,7 +759,7 @@ function arcPlanFields(world: Pick<World, "content">): string[] {
     "FIELDS",
     "- title: the chapter's name, 2 to 6 words. summary: one or two lines on what the chapter is about, without giving away its turns (the player reads it).",
     `- tags: content tags a reader should see before it starts, from: ${CHAPTER_TAGS.join(", ")}. Only what the chapter really holds; [] when none apply.`,
-    "- nodes: kind beat is an ordinary scene. kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a call from afar, only voices), date (a date that goes wrong). kind confrontation is an argument that comes to a head, played as three rounds of stances.",
+    "- nodes: kind beat is an ordinary scene. Kind moment is a scene with a special framing, set by moment: read-him (the protagonist reads their face to see what they really feel), call (a call from afar, only voices), date (time together that may go as hoped, or stumble on something real when the story gives it a reason). Kind confrontation is an argument that comes to a head, played as three rounds of stances.",
     `- guide: what happens in that node, 2 to 4 sentences, for the narrator: who wants what, what changes, where it leaves things. cast: the ids of the love interests present. place: where it opens (optional). cg: true only for a node holding a story-defining image${firstNightCg(world) ? " (under this Heat, a first night together counts)" : ""}. resolves: ids of open grievances this node may resolve.`,
     `- ledger.relationship: one line on what moved between them and the protagonist. ledger.conflict: plant a new conflict seed (type from: ${ANGST_TYPES.join(", ")}), or escalate, complicate or resolve an open one by its id. ledger.offscreen: optional lines for love interests not in this chapter.`,
   ];
@@ -775,7 +784,7 @@ function arcPlanUser(input: ArcPlanInput, heading: string, task: string[]): stri
     "PROTAGONIST",
     protagonistBlock(player),
     "",
-    unit ? `${heading}\n${bibleBlock(unit, state, [li])}` : "",
+    unit ? `${heading}\n${bibleBlock(unit, state, [li], input.world)}` : "",
     "",
     units.length > 1 ? "THE OTHERS (scene cards; they may appear, but this chapter is not theirs)" : "",
     othersBlock(units, state, li),
@@ -811,7 +820,7 @@ export function routePlanMessages(input: RoutePlanInput): OtomeMessage[] {
     (unit?.bible?.secrets ?? []).filter((secret) => secret.revealAt.stage === stage).map((secret) => secret.id),
   );
   const system = [
-    "You are the route planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human inside a monster, capable of earned, character-consistent change.",
+    "You are the route planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if inside a monster, capable of earned, character-consistent change.",
     `Plan one ROUTE CHAPTER of ${name}'s own story: a chapter for ${name} and the protagonist, told as ${ROUTE_NODES_MIN} to ${ROUTE_NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
     PLAN_SHAPE,
@@ -868,7 +877,7 @@ export function repairPlanMessages(input: RepairPlanInput): OtomeMessage[] {
   const name = units.find((item) => item.id === li)?.name ?? li;
   const holder = grievance.by === "li" ? name : "the protagonist";
   const system = [
-    "You are the repair planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human inside a monster, capable of earned, character-consistent change.",
+    "You are the repair planner of an otome visual novel: a character-driven romance mystery. The love interests are flawed and dynamic, with real conflicts and angst; each is a human, even if inside a monster, capable of earned, character-consistent change.",
     `Plan one REPAIR chapter between ${name} and the protagonist after a rupture, told as ${REPAIR_NODES_MIN} to ${REPAIR_NODES_MAX} nodes in play order; a narrator writes each node later as one scene the player reads.`,
     "Reply with ONLY a JSON object of this shape:",
     PLAN_SHAPE,

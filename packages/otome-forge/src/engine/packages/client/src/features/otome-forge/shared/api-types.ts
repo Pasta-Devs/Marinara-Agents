@@ -252,6 +252,17 @@ export interface BibleSecret {
 }
 
 /** An LI's hidden character bible (behind the spoiler gate). For a card LI it never contradicts the card. */
+/**
+ * A love interest's own intimacy preferences (#1936): adult, NSFW stories only. Story context, never consent or a
+ * script: short, non-graphic labels, drawn on now and then.
+ */
+export interface BibleIntimacy {
+  /** What they enjoy in intimacy (tastes and non-graphic kink labels). */
+  preferences: string[];
+  /** Physical traits or moments that draw them. */
+  attractions: string[];
+}
+
 export interface Bible {
   /** 18 or older, always. */
   age: number;
@@ -295,6 +306,8 @@ export interface Bible {
   /** English, visual-only tags. */
   look: { identityLine: string; outfitLine: string; presentation: Presentation };
   play: { style: string; cheat: ClawCheat };
+  /** Optional (#1936): written for adult NSFW stories only, and added to an older bible only on request. */
+  intimacy?: BibleIntimacy;
 }
 
 /** `${R}:unit:${li}`: the fields the forge kit expects of a character, plus the bible. */
@@ -1066,6 +1079,8 @@ export interface RunLiView {
   art?: Paint;
   /** Which of this view's images are cut-outs (no backdrop): shown whole rather than cropped and faded. */
   cut?: string[];
+  /** His bible has its intimacy block (#1936): only that it exists, never its text. */
+  intimacy?: true;
   level: number;
   /** Current-level progress only; optional while a pre-update run view remains cached. */
   affectionProgress?: { current: number; required: number };
