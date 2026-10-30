@@ -1479,6 +1479,32 @@ test("Otome Hearth imageless play: old locations and key moments can be painted 
   expect(posts(calls, "/api/audio/generate")).toEqual([]);
 });
 
+test("Otome Hearth story header: a painted picture whose file fails to load gets its description back (#1941)", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const fixture = createSceneStub({ audio: false });
+  const broken = (name: string) => `/api/global-gallery/file/${name}.png`;
+  fixture.stub.view.world.places["the-observation-room"].art = { state: "ready", at: now(), url: broken("lost-place") };
+  fixture.beat0.cg.art = { state: "ready", at: now(), url: broken("lost-cg") };
+  await page.route("**/api/global-gallery/file/lost-*", (route) => route.fulfill({ status: 404, body: "gone" }));
+  const calls: Call[] = [];
+  await stubRoutes(page, fixture.answer, calls);
+  const root = await openStory(page);
+  await root.getByRole("button", { name: "Continue", exact: true }).first().click();
+  await expect(displayedLine(root)).toHaveText("Rain needles the glass dome.");
+  // Painted, but nothing on screen: the description stands in for the background.
+  const description = root.locator(".of-reader-head .of-image-description");
+  await expect(description).toContainText("glass dome, night");
+  // The key image's file is gone too: its brief stands in for it, as for one never painted.
+  await next(root);
+  await next(root);
+  await next(root);
+  await expect(description).toContainText("Two figures under a glass dome");
+  expect(posts(calls, "/art/place")).toEqual([]);
+  expect(posts(calls, "/art/cg")).toEqual([]);
+});
+
 test("Otome Hearth imageless play: full visual descriptions keep reading controls reachable and keyboard scroll does not advance", async ({
   page,
 }, testInfo) => {

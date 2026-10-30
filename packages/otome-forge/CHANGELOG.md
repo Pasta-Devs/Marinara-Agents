@@ -2,7 +2,7 @@
 
 ## 0.3.1 — 2026-10-30
 
-- The story's **Image description** shows only for a picture that isn't painted: a painted background or key image no longer has its description under the chapter title.
+- The story's **Image description** shows only for a picture that isn't on screen: a painted background or key image no longer has its description under the chapter title, and one whose file fails to load gets it back.
 
 ## 0.3.0 — 2026-10-30
 
